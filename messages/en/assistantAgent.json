@@ -119,8 +119,6 @@
   },
   "cards": {
     "projectPhase": "Project Phase",
-    "storyboards": "Storyboards {count}",
-    "panels": "Panels {count}",
     "projectContext": "Project Context",
     "projectLabel": "Project",
     "episodeLabel": "Episode",
@@ -135,8 +133,6 @@
     "totalLabelWithCount": "Total: {count}",
     "batchTaskAndTargetTotals": "Tasks: {tasks} · Targets: {targets}",
     "biblePreview": "Bible Preview",
-    "storyboardPreview": "Storyboard Preview",
-    "panelsLabel": "Panels {count}",
     "maxSteps": "Maximum steps reached",
     "stepUsage": "Current steps {stepCount} / limit {maxSteps}",
     "awaitingExternalTask": "Waiting for background task",

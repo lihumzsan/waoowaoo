@@ -55,30 +55,3 @@ export function refineTaskBatchSubmitOperationOutputSchema<
 }
 
 export const taskBatchSubmitOperationOutputSchema = refineTaskBatchSubmitOperationOutputSchema(taskBatchSubmitOperationOutputSchemaBase)
-
-export const storyboardMutationOperationOutputSchemaBase = z.object({
-  success: z.boolean(),
-  mutationBatchId: z.string().min(1).optional(),
-  noop: z.boolean().optional(),
-}).passthrough()
-
-export function refineStoryboardMutationOperationOutputSchema<
-  TSchema extends z.ZodTypeAny,
->(schema: TSchema) {
-  return schema.refine((value) => {
-    const record = asRecord(value)
-    return record?.success === true
-  }, {
-    message: 'STORYBOARD_MUTATION_OUTPUT_EXPECTS_SUCCESS_TRUE',
-    path: ['success'],
-  }).refine((value) => {
-    const record = asRecord(value)
-    if (!record) return false
-    return record.noop === true || typeof record.mutationBatchId === 'string'
-  }, {
-    message: 'STORYBOARD_MUTATION_OUTPUT_MISSING_MUTATION_BATCH_ID (expected mutationBatchId unless noop=true)',
-    path: ['mutationBatchId'],
-  })
-}
-
-export const storyboardMutationOperationOutputSchema = refineStoryboardMutationOperationOutputSchema(storyboardMutationOperationOutputSchemaBase)

@@ -1,14 +1,13 @@
 import { z } from 'zod'
 import { AppError } from '@/lib/errors/app-error'
 import {
-  EDIT_CHARACTER_ROLES,
-  EDIT_CHARACTER_VISIBILITIES,
   EDIT_SHOT_PURPOSES,
   editScriptCoreSchema,
   editScriptPerformanceSchema,
 } from '@/lib/edit-script/types'
 import { ledgerEventSchema, ledgerSnapshotSchema } from '@/lib/edit-ledger/schemas'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
+import { editSegmentModelRef } from '@/lib/edit-script/model-references'
 
 const assetMenuItemSchema = z.object({
   id: z.string().trim().min(1),
@@ -65,19 +64,13 @@ export const chapterPlanRawShotSchema = z.object({
   action: z.string().trim().min(1),
   characters: z.array(z.object({
     characterName: z.string().trim().min(1),
-    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-    role: z.enum(EDIT_CHARACTER_ROLES),
     performance: editScriptPerformanceSchema,
-  }).strict()).min(0).max(20),
-  keyObjects: z.array(z.object({
-    name: z.string().trim().min(1),
-    role: z.string().trim().min(1),
   }).strict()).min(0).max(20),
   dialogue: z.array(z.object({
     speakerName: z.string().trim().min(1),
     line: z.string().trim().min(1),
   }).strict()).min(0).max(20),
-  sound: z.string().trim().min(1),
+  synchronousSound: z.string().trim().min(1),
 }).strict()
 
 export const chapterPlanRawGenerationSegmentSchema = z.object({
@@ -166,7 +159,6 @@ export function resolveChapterPlanOutputReferences(raw: unknown, assetMenu: Chap
             name: asset.name,
           }
         }),
-        keyObjects: shot.keyObjects,
         dialogue: shot.dialogue.map(({ speakerName, line }) => {
           const speaker = characterByName.get(speakerName)
           if (!speaker) {
@@ -176,10 +168,11 @@ export function resolveChapterPlanOutputReferences(raw: unknown, assetMenu: Chap
           }
           return { characterId: speaker.id, line }
         }),
-        sound: shot.sound,
+        synchronousSound: shot.synchronousSound,
       }
     }),
-    generationSegments: parsed.generationSegments.map((segment) => ({
+    generationSegments: parsed.generationSegments.map((segment, index) => ({
+      segmentId: editSegmentModelRef(index),
       shotIds: segment.shotRefs,
       continuity: segment.continuity,
     })),

@@ -1,106 +1,53 @@
 <!-- architecture-module: canvas-node -->
 
-# Canvas 节点与流式状态
+# Canvas 节点与投影
 
 ## 设计理念
 
-Canvas 节点是业务资源与任务生命周期的投影，不是独立的状态来源。新增节点必须继承同类节点的完整行为：稳定身份、范围、流式输出、展开态、focus-follow、失败与重试、事件重放和防旧状态覆盖。
-
-节点“能显示”不等于节点已经完成。任何缺失都属于同类实例架构不一致。
+Canvas 是正式领域 View 的可视化投影，不是业务状态机。节点 identity、存在性、生命周期、动作许可和内容都必须来自生产 registry、正式 Query、WorkflowView 与 Task owner；UI 只消费最终 View。
 
 ## 不变量
 
-- **CN-01 — 稳定身份与范围。** 节点 ID 必须由持久业务资源和明确 scope 派生；禁止用名称、数组下标、渲染顺序或临时 stream id 作为身份。episode 全部范围与 chapter 范围必须先规范化为同一个 scoped resource collection，再由同一 projector 枚举节点；禁止全局统计消费集合、具体节点却继续消费 nullable 单实例。
-- **CN-02 — 业务状态单一。** DB/Task 的终态与明确 runtime 状态才是节点业务状态来源；不得从历史消息、DOM 或文案反推流程是否运行。
-- **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格方案、视觉风格候选图必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditBible/EDIT_STYLE_PREVIEW_OPTIONS_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。方案文本 Task 原子创建 pending 候选并保留来源 taskId；媒体批准事务再把每个候选一一切换到 direct image Task，不存在父媒体 Task 或以 Bible id 伪造图片运行目标。Canvas 可把这些明确 target 聚合进同一个业务节点，但不得丢失任一 target 的失败、重试或终态。
-- **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。方案文本 Task 提交后 Canvas 必须立即投影 `editStyleBible:${ProjectEditBible.id}`，不得等待候选行落库；同一节点继续聚合候选图片 Task，全部成功且未确认时为等待选择，确认后原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
-- **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
-- **CN-02D — Task 启动即物化稳定节点。** 当 active Task target 已携带足以派生 canonical node identity 的持久资源 ID 时，节点 registry 必须声明该 Task materialization capability，projector 必须在 workflow context 刷新和首个 structured stream item 之前投影同一节点。需要先产生持久子资源才能确定 identity 的 kind 必须显式声明不适用，禁止伪造临时 ID。Task target 只提供节点存在与运行事实，最终业务状态仍由 CN-07 的唯一 lifecycle resolver 裁决；不得用 timer、refetch 或 workflow 到达顺序承担正确性。
-- **CN-02F — 节点物化单调。** canonical identity 已由持久记录、单调 Workflow 阶段、Task target 或 stream 任一事实建立后，终态交接不得因 active Task 与 stream 先于正式 Query 消失而撤销节点。持久记录存在与最终内容成功必须分别进入 materialization 与 lifecycle，不得把“内容未完成”解释成“节点不存在”。
-- **CN-02E — 下游节点只消费 Workflow 能力。** BGM 与 Soundscape 节点只在规范化 Workflow step 到达 `audio_plan` 后进入普通 Canvas 投影；最终时间线只在 step 到达 `final_render` 后进入普通投影。Canvas 只能读取 `WorkflowView.capabilities`，不得维护 stage rank、operation-id 列表或从 recommended action 反推节点可见性。若音频/最终渲染 Task、正式资源或 stream 已经存在，则仍由 CN-02D 的统一 materialization resolver 以 episode identity 投影同一节点，但动作只能读取 `WorkflowView.operationPolicy.allowedOperationIds`；每个音频节点的规划与生成 TaskType 必须聚合到同一个 episode target，禁止为阶段拆分复制节点或重新引入 Task 启动空窗。
-- **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
-- **CN-03A — Canvas 不解释或展示领域 ID。** Structured preview 只能展示 raw 协议中的名称、短 ref 对应的顺序或 clip order；正式节点只消费服务端已投影的 current-name View。renderer 不得维护资产映射、按名称反查 identity，也不得用 characterId/locationId/shotId/sourceId 等内部标识作为缺失文案 fallback。引用缺失必须由 projector 明确拒绝。
-- **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
-- **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
-- **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
-- **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。structured stream 只提供可丢弃的 presentation/content，预览解析失败只能跳过该预览项，绝不能写入节点业务失败；运行中的失败只来自真实 Task `failed` 终态，持久资源失败只来自正式 Query。组合节点必须由同一个 runtime target collector 穷尽收集父节点和子项声明的 target，再由同一个 resolver 同时投影组与子项；多个 target 的终态聚合策略必须由节点 registry 显式声明，单资源使用失败优先，资源集合在无运行 Task 后由正式 Query 的集合成功/失败事实裁决，禁止让一个非权威子项失败覆盖已有可用集合或正式成功资源。projection 不得把 `generating`、`taskRunning` 或缺少预览图解释成失败。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
-- **CN-08 — 资源通知后精确接力正式 Query。** Canvas Task 必须先持久化业务资源及其 owner task identity，再由 Terminal Service 按 TaskDefinition 的显式 impact 提交携带 `affectedResources` 的 completed/failed/canceled Event。同步写 Operation 必须由 registry 声明 impact，并在业务写入与输出校验同一事务创建可 replay 的 Resource Outbox；Redis 只做实时运输。客户端只把两类显式资源集合交给 `resource-change-sync.ts`，以一次 invalidate + active refetch 重新读取；不得从 Task payload、TaskType、target、Operation ID/output 或局部提交状态直接写/猜业务 Query Cache。Query fetch 是 Canvas 稳定内容和 owner task identity 的唯一 Cache writer。completed structured stream 只可转成有界、同 task identity 的 terminal presentation handoff；该 presentation 必须保持内容和展开态，直到正式 Query 同时满足 `resource.ownerTaskId === stream.taskId` 与 succeeded/failed/canceled，才由唯一 handoff resolver 原子接管并立即释放。仅凭相同 node identity、Workflow 阶段或旧资源已成功不得释放；失败/取消和新 retry 必须拒绝旧 stream。该 handoff无权把 Task payload 变成持久资源、不得建立第二 lifecycle，也不得依赖 Effect、timer 或 refetch 到达顺序。网络失败保持 Query stale/invalidated 与最后 presentation，交给正常重试或刷新，不得伪造成 Task 失败。
-- **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。definition 必须显式声明 identity、resource/runtime/materialization/stream/terminal handoff、renderer、presentation、projection owner 与 focus capability；不适用能力必须给出原因。共享 shell、renderer host 与 focus hook 只能消费这些 policy，不得再按 kind 维护第二份 switch/list。新增 kind 缺任一层或新增 Canvas action 缺 icon policy 必须在 TypeScript 或 conformance 失败。
-- **CN-16 — Projector 与 renderer 按稳定责任真实模块化。** `workspace-node-canvas-projection.ts` 是唯一 projector 编排入口，只依次组合 planning、asset/execution、storyboard/video、audio/final 四个 builder；builder 可以共享无业务判断的 node/layout/parse primitives，但不得跨模块复制 materialization、identity、edge 或生命周期分支。renderer registry 必须直接引用包含真实实现的领域模块，禁止恢复巨型 renderer/projector、每个文件仅 re-export 的薄 wrapper，或在共享 helper 中重新堆积各领域实现。
-- **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。单一 raw/final 形状不得携带没有 parser 分流语义的固定版本标记；不得恢复重复的 `scriptText + structure` 输出。
-- **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
-- **CN-12 — Renderer 本地动效不得驱动渲染或永久合成。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。`data-workspace-canvas-motion-active` 是动画窗口的唯一事实；窗口结算后必须恢复 `animation: none`、`transform: none` 和 `will-change: auto`，不得让 React Flow viewport scale 再放大内部持久 compositor layer。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
-- **CN-13 — ReactFlow 测量单向。** `useWorkspaceNodeCanvasProjection` 只从领域事实和持久 layout 产生节点 View；`ProjectWorkspaceCanvas` 只把明确的用户拖拽写入本地/持久 position layout。ReactFlow 的 `dimensions`、ResizeObserver 或 DOM 尺寸只属于 ReactFlow 内部测量，绝不得回写 `WorkspaceCanvasNodeData.width/height`、projection node 或受控 business node state。streaming 重投影、用户 layout 与 transient measurement 必须是三个单向输入，不能构成 render feedback loop。
-- **CN-15 — 收费 action 只有一个 Canvas surface。** projection 与 detail renderer 只声明 typed `WorkspaceCanvasNodeAction`；`CanvasActionButton` 是收费 action 唯一交互入口，按钮正文统一展示紧凑的“动作 + 格式化价格”，完整 quote 只进入 title/可访问标签，并由同一 plan snapshot 完成批准和通用 execute。renderer 不得直接创建普通收费按钮，Workspace runtime 不得为图片、视频、配乐、音效或规划资产保留第二 mutation handler。已有媒体事实必须把动作投影为“重新生成”，不得用固定“生成”文案掩盖 overwrite 语义。
-- **CN-14 — Canvas 媒体生成 View 单一。** 图片/视频媒体槽位只能把最终 `lifecycle`、当前正式输出和可选 Style Bible 图片交给 `CanvasMediaGenerationSurface`；其纯 resolver 穷尽 empty、generating、regenerating、ready、failed 与 contract-error。renderer 只能提供媒体内容、画幅和占位图标，不得自行组合 Style Bible 背景、普通占位、loading、失败遮罩或 `showBackground` 分支。Style Bible 图片只是一项可选展示素材：有则作为模糊背景，无则使用 neutral 背景，绝不能把尚未确认或仍在生成解释成媒体错误。首次生成必须隐藏普通占位并只显示背景与品牌进度；重生成保留当前正式输出并叠加同一进度层；只有任务成功却缺少媒体结果才显示 contract error。品牌 Logo、进度环和百分比的纯展示只能复用全局 `MediaGenerationLoadingView`。`useEstimatedTaskProgress` 只是本地 UI 时钟：只能以规范化 progress key、phase 和 updatedAt 等原始事实同步缓存，禁止让调用方临时对象 identity 驱动 effect 状态写入或反向解释业务生命周期。
-- **CN-14A — 镜头面板与图片成功分离。** `ProjectPanel` 存在只代表分镜面板已规划并负责物化稳定 `shot:${panel.id}` 节点，不代表图片生成成功。镜头媒体 persisted phase 只能由正式图片 URL、明确媒体错误或 canceled 事实决定；没有图片、错误和运行 Task 时必须是 pending，图片 Task 的 queued/processing/failed 只由统一 runtime target overlay。禁止从面板存在、镜头执行计划完成、Workflow 阶段或 Assistant 文案推导图片 succeeded。
+- **CN-01 — 节点种类穷尽注册。** 每种 kind 的 identity、layout、renderer、stream capability、Task-start materialization 与 conformance fixture 只由 `WORKSPACE_CANVAS_NODE_REGISTRY` 声明。新节点不得通过分散 switch 接入。
+- **CN-02 — canonical identity 只来自领域事实。** 计划节点使用持久资源 identity；Video Segment 节点使用 `ProjectVideoSegment.id`，其领域唯一性由 `(editScriptId, segmentId)` 保证。禁止使用数组位置、最近记录、Prompt、DOM 或历史消息推导 identity。
+- **CN-02A — Task 启动只提供物化与运行事实。** active Task target 已携带稳定资源 ID 时，projector 在正式 Query 到达前也必须物化同一节点。Task target 不得替代最终内容或领域成功事实。
+- **CN-02B — 节点物化单调。** canonical identity 一旦由持久记录、Task target 或 structured stream 建立，不得因 stream/Task 先于 Query 消失而撤销节点。交接只能由相同 owner task identity 的正式资源完成。
+- **CN-02C — 下游节点只消费 Workflow 能力。** 普通投影中，BGM/Ambient Sound 只在 `audio_plan`，最终时间线只在 `final_render`。历史资源或 active Task 可以稳定物化节点，但动作必须仍来自 `WorkflowView.operationPolicy.allowedOperationIds`。
+- **CN-03 — 流式预览无裁决权。** 每种 stream payload 必须复用 worker 接收的 production raw schema，并声明 stable item key 与 merge rule。stream parse 失败不写业务失败，completed stream 只是可丢弃 presentation handoff。跨“规划 → 媒体生成”的两阶段资源必须用正式资源保存的规划 owner identity 完成规划 stream 交接，不得用已被生成 Task 覆盖的当前执行 owner 猜测。
+- **CN-04 — 生命周期只有一个 resolver。** 持久资源、Task runtime、stream presentation 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据 `generating`、有无字段、timer 或 refetch 推断 succeeded/failed。
+- **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
+- **CN-06 — 视频节点只有 Segment。** Canvas 不存在 Storyboard、Panel Image、Shot Image、VideoGroup 或单镜头/连续/全能参考模式分支。每个 `videoPlan` 节点只投影一个 `ProjectVideoSegment`，展示时长、所属镜头、continuity 和成品视频。
+- **CN-07 — 镜头执行节点只展示三项决策。** 只有景别、运镜方式与运镜稳定性。机位、焦段、构图、灯光、blocking、站位、物体与空间档案不得投影。
+- **CN-08 — 同步与异步写入都精确交接 Query。** Task Terminal 与同步 Operation 只通过注册的 `affectedResources` 发布可 replay 事实；客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 
 ## 权威入口
 
-- 节点稳定 ID：`src/features/project-workspace/canvas/workspace-canvas-node-ids.ts`。
-- Workflow 到 Canvas 的唯一边界：`src/lib/project-workflow/edit-first-view.ts` 生成 `WorkflowView.capabilities` 与 `operationPolicy`；projector 不再解释 workflow 位置，也不得导入服务端事实装配器。
-- 节点能力总契约：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`；操作聚焦 policy：`src/features/project-workspace/canvas/registry/workspace-canvas-focus-policy.ts`。
-- 生命周期状态机：`src/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle.ts`；最终节点解析：`src/features/project-workspace/canvas/workspace-node-runtime.ts`。
-- 流式 schema 与 adapter：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`。
-- 增量 JSON 边界：`src/lib/structured-stream/incremental-json.ts` 只提取完整 raw item，字段合法性仍由 adapter 复用的生产 raw schema 裁决。
-- 流式事实收集：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`；该模块无权合并最终节点生命周期。
-- 正式资源 owner task identity：`src/lib/edit-bible/service.ts`、`src/lib/edit-script/service.ts`、Music Score 与 Soundscape Project Data View；projector 只把该持久事实传给唯一 runtime handoff resolver。
-- renderer 运行态只读取最终 `data.lifecycle`；禁止恢复 `__running`、operationId pending switch 或把 DB `generating` 本地改写为 `ready`。
-- DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`；唯一编排入口：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`；真实领域 builder：同目录的 `workspace-node-{planning,asset-execution,storyboard,audio-final}-projection.ts`；`workspace-node-projection-shared.ts` 只保存跨 builder 的 typed context 与无领域裁决 primitives。
-- Task/Operation 受影响资源契约：`src/lib/workspace-resource/resource-impact.ts`；同步资源事件持久化/replay：`src/lib/workspace-resource/resource-change-events.ts`；禁止从 TaskType、target、Operation output 或文案猜测 Query。
-- 视觉风格候选集合的共享纯 View：`src/lib/edit-script/style-preview-set-view.ts`；Assistant 与 Canvas 不得各自重新解释候选可见性、生成、完成、确认和失败语义。
-- 终态通知到正式 Query：`src/lib/query/workspace-sse-event-sync.ts` 与 `src/lib/query/resource-change-sync.ts`；SSE 不直接调用 `setQueryData` 写业务资源。
-- SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
-- 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
-- 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
-- Canvas composition 与用户 position overlay：`src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx`；它不得订阅或写回 ReactFlow measurement。
-- 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；真实领域 renderer：`src/features/project-workspace/canvas/nodes/renderers/`；穷尽 action icon policy：`src/features/project-workspace/canvas/nodes/workspace-node-action-policy.ts`。renderer 只消费最终 View，不参与生命周期判定。
-- 本地 Presence transition：`src/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence.ts`；唯一 renderer host：`src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx`。
-- Canvas 收费 action 计划与按钮：`src/features/project-workspace/canvas/hooks/useWorkspaceCanvasBillableAction.ts`、`src/features/project-workspace/canvas/nodes/CanvasActionButton.tsx`；执行 context：`src/features/project-workspace/canvas/WorkspaceCanvasBillingContext.tsx`。
-- Canvas 媒体生成纯 View：`src/features/project-workspace/canvas/nodes/canvas-media-generation-view.ts`；唯一槽位入口：`src/features/project-workspace/canvas/nodes/CanvasMediaGenerationSurface.tsx`；跨业务共享的品牌加载视觉：`src/components/media/MediaGenerationLoading.tsx` 的 `MediaGenerationLoadingView`；共享估算进度时钟：`src/lib/query/hooks/useEstimatedTaskProgress.ts`。
+- 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
+- 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
+- 计划/资产/执行投影：`workspace-node-{planning,asset-execution}-projection.ts`。
+- Segment 投影：`workspace-node-video-segment-projection.ts`；音频/成片：`workspace-node-audio-final-projection.ts`。
+- 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
+- structured stream：`src/features/project-workspace/canvas/structured-stream/**`。
+- 资源通知契约：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`。
 
 ## 验证
 
-- `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；主 Journey 还必须在音频规划窗口证明最终时间线不存在、最终输出完成后同一 episode 节点存在。console/page error、重复 identity、终态缺口、reload divergence 或稳定展开内容仍持有 animation/transform/will-change 都是场景失败。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，证明它不含媒体 loading surface，并验证资产审核只保留整组确认动作；对每个已观察到的 structured-stream canonical node，还必须连续拒绝节点移除、非终态 presentation 空窗、terminal handoff 提前折叠，以及与本次 stream Task 不同 owner 的正式资源接管。只检查流式与正式 Query 两个端点不构成终态接力覆盖。
-- `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature,multi-chapter-shot-execution-projection}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition、canonical projection signature，以及全部范围中逐章镜头计划/视频节点的稳定枚举、关联与布局。
-- `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
-- `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
-- Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
-- 视觉风格主链必须在真实文本 Task processing 窗口同时观察 Assistant 通用运行卡和单一运行中 Style Bible 占位节点，再在 direct image Task processing 窗口观察同一节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
-- `tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 穷尽最终 lifecycle × 是否已有输出的纯 View；真实 planned-asset 与 storyboard-image processing 窗口必须在唯一主 Journey 观察 Style Bible 背景、品牌 progressbar 和隐藏的普通占位。
+- `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture。
+- `tests/unit/project-workspace/**` 验证纯 projection、lifecycle、stream handoff 与多章节 Segment 物化。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 在真实主链中对齐 `ProjectVideoSegment` 数量、节点/播放器数量、Ambient Sound/BGM/最终时间线和刷新后 identity。
+
 ## 历史回归
 
-- `854c888cd` 建立了正确的 node registry 与统一 lifecycle，但把原本的巨型实现整体搬入 2231 行 `WorkspaceNodeRenderers.tsx` 和 1795 行 projector，并为每个 kind 留下只转发六行的 wrapper；后续多个修复仍必须进入同一热点文件，模块名没有形成真实所有权。当前删除巨型 renderer 与全部薄 wrapper，registry 直接指向真实领域实现；projector 收敛为 17 行唯一编排入口和四个领域 builder，presentation/projection/focus/action policy 都由穷尽契约声明。现有 Canvas conformance、projection Logic 与 Golden Journey 共同拒绝漏接 kind、identity/edge 漂移和真实组合路径回归。
+- BGM/Ambient Sound 的生成 Task 曾覆盖资源 `taskId`，Canvas 又把该字段当作规划 stream 的终态 owner，导致正式资源虽已成功，规划 presentation 仍会在交接时短暂清空。现在资源分别保存 `planTaskId` 与当前执行 `taskId`，音频节点只用前者交接规划 stream、用 runtime target 投影后者的执行生命周期；主 Journey 的同一 observer 对 Task identity、presentation 与正式资源交接连续性 fail closed。
 
-- 角色/场景批量生成曾由 Canvas、Asset Library 与局部 mutation 同时维护 generation key、baseline、90 秒 timer 和 Task target terminal Effect；终态资源刷新又按 target/operation ID 猜 Query，形成多个竞争解释者。集中 helper 只把猜测搬到一个文件，没有删除输入歧义。Asset Library shell 还曾在 Workspace 挂载时主动 refetch，并在打开时通过 `setTimeout(0)` 再次 refetch，即使 Canvas 与 Asset Library 已订阅同一正式 Query。当前 UI 只保留带精确 taskId/taskType 的提交 receipt 与正式 Task overlay；Task/Operation 的资源影响由后端 registry 显式声明并通过持久 SSE 交接，客户端共享 resource sync，Asset Library 打开只改变纯 UI 状态，旧 target invalidator、baseline helper、timer、挂载/打开 refetch 与手工下游列表已删除。
-
-- Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
-- `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
-- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后又采用终态立即清 runtime，使内容读取正确性依赖 Query 返回速度。两者都不是有效交接：不得恢复 timer 或 terminal payload Cache writer，completed stream 只保留为由精确持久 owner task identity 结束的 presentation handoff。
-- `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle。
-- `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write。
-- `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint。
-- 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
-- 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
-- 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
-- `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但 Canvas 曾先把 `editScript=null` 传给单实例 projector，修复为全章节投影后又保留了 workflow visibility 外层门禁；因此 Assistant 已显示整批运行时，Canvas 仍要等待 context 刷新或后续 stream 才出现节点。同时 owner-fenced worker 的 `generating + {}` 行曾被正式 Query 当作 ready payload 解析，reload 触发 schema 失败。上一版 Logic 规格预先把 workflow 放到可见阶段，主 Journey 又先 reload 再观察，均绕过“Task 已运行、刷新前”的真实窗口。当前防线是正式 Query 只暴露 ready materialization、registry 穷尽声明 Task-start materialization、projector 从全部 editScripts 与 active target 生成稳定节点；唯一多章节主 Journey 必须在刷新前逐一匹配至少两个运行 target，并在 processing reload 后保持相同 identity。
-- `BUG-CN-005`：`BUG-CN-004` 收敛逐章镜头执行计划后，视频计划仍只枚举 nullable `editScript`，而 episode “全部”范围按设计把该单实例置空；最终时间线直接统计 `videoGroups`，于是同一 Canvas 同时显示“视频 2”和零视频节点，切到单章又恢复正常。上一版 Logic fixture 的 `generationSegments` 为空，只反证镜头执行节点；主 Journey 虽生成多章视频，却没有把正式 `project_video_groups` 纳入只读 Oracle，也没有断言 `video-plan` 节点、播放器和 plan request，因此同根因换节点类型复发。恢复节点后还暴露出旧 action 只传 episodeId、未传所属 chapterId，全部范围立即预取计费计划时被多章节 planner 正确拒绝。当前唯一 projector 从规范化 `projectedEditScripts` 展平全部 generation segment，以 `editScriptId + segmentIndex` 保持 canonical identity、以全局投影序号布局、以所属 editScript 的执行节点连边，并让最终时间线消费同一集合；VideoPlan View/action 同时携带所属 chapterId，单段连续视频与资产参考视频的唯一 plan request 原样保留该 scope，registry 在 planner 前拒绝缺失 chapterId。已有 Logic 规格直接反证旧单实例分支与 scope 丢失，主 Journey 在默认全部范围把正式完成视频组数量与节点/播放器数量对齐，并要求浏览器网络观测保持 clean。
-- 视觉风格方案迁入 `ProjectEditBible` 文本 Task 后，Assistant 已显示通用运行卡，但 Canvas 建节点条件仍只认已落库候选，导致文本生成成功前没有 Style Bible 占位节点。上一版只扩展了图片 processing Golden，没有把新文本 target 纳入同一 projector。当前防线从生产 runtime target registry 订阅方案 Task，并在真实文本 processing 窗口断言同一 canonical Style Bible identity 已出现。
-- 媒体生成 UI 曾以 `MediaGenerationLoading` 统一品牌圆环和估算进度，却把空态背景、普通占位、重生成和失败组合留给各 renderer；镜头卡随后用 `showBackground=false` 保留自己的占位层，导致生成时普通图片图标与品牌 Logo 重叠，而规划资产卡另行隐藏普通图标。旧组件测试只证明共享 overlay 自身 markup，Canvas conformance/Golden 只观察 lifecycle 和节点身份，没有执行真实镜头/资产 processing 的视觉状态组合。当前防线把最终 lifecycle 与媒体事实收敛进唯一 Surface，删除 renderer 的第二解释权，并在真实 processing 窗口断言普通占位已隐藏。
-- 统一媒体 Surface 首次直接在自身 render 中调用 `workspaceCanvasLifecycleTaskState` 后，每次 render 都得到新的临时对象；共享 `useEstimatedTaskProgress` 又把整个对象作为 effect 依赖并在 effect 中写本地 start state，流式 patch、Task overlay 与正式 Query 连续投影时形成 `render → 新对象 → effect → setState` 反馈并偶发触发 React maximum update depth。旧 Logic 只验证 lifecycle 和 Surface 纯 resolver，主 Journey 虽能捕获页面错误，但该版本没有到达新增资产 processing 观察窗。当前防线从共享 hook 删除对象 identity 依赖，只以规范化原始事实同步一次本地时钟；主 Journey 继续在真实并行资产 processing 窗口观察统一 Surface，并把 console/page render error 作为失败。
-- 统一 Surface 首版又把下游 Style Bible 背景声明成 required contract，导致合法的“资产需求已出现、Style Bible 仍在生成”顺序被渲染成红色“缺少已确认 Style Bible 图片”。根因是把可选展示素材误当成业务前置事实；现删除背景 policy 和该错误状态，Style Bible 缺席只选择 neutral 背景，不再解释生命周期。按本次明确范围未修改测试，真实并行 pending 组合仍是验证盲区。
-- Style Bible 收敛成单一 Canvas 节点后，projector 已能从正式 `styleBibleJson` 投影成功，但 runtime 又把全部候选 Task 交给通用“任一失败优先” reducer；真实出现“两张完成、一张被内容审核拦截”时，失败候选先让待选择节点误报整体失败，确认成功后仍继续覆盖正式成功资源，形成同一卡片顶部失败、正文成功和媒体失败遮罩并存。旧 Logic 只覆盖“部分完成且其余运行”和“三张都成功后确认”，Golden provider 也没有注入候选级失败，因此组合路径逃过防线。当前由生产节点 registry 穷尽声明单资源与资源集合的 runtime 聚合策略，共享 Style Preview View 提供“至少一个可用候选”事实，唯一 runtime resolver 在资源集合无运行 Task 后回到正式 Query 裁决；现有 Logic/Conformance 直接拒绝混合终态回归。真实浏览器中的候选级 provider 失败注入仍是未验证盲区。
-- 分镜面板生成后、图片审批前，18 个镜头节点曾全部显示“成功 / 任务已完成但媒体结果缺失”。真实浏览器证明图片 Operation 仍为待处理且没有图片 Task；projector 却沿用“无 panel error 即 succeeded”的旧分支，把面板记录存在误当成媒体成功，统一 lifecycle resolver 只能忠实消费这个错误 persisted fact。当前防线改为 error → failed、正式图片 URL → succeeded、否则 pending；面板只物化节点，runtime target 独占运行态。按本次明确范围未修改测试，审批前刷新组合仍作为验证盲区记录。
-- 多章节主 Journey 首次完整到达成片时，刷新窗口内项目资产尚未返回，projector 回退到各章节 requirement；同一个 canonical 角色/场景因此出现两次，并被绑定成相同 requirement key，React 持续报错。旧单章节 Journey 未触发该组合。当前 projector 在正式资产和 requirement fallback 两条输入上都按 `kind + persistent asset id` 唯一化，章节 requirement 只负责绑定镜头与运行 target，不再决定资产卡实例数量；主 Journey 的 browser observation 必须保持零 console error。
-- Canvas 尾部节点最初只有视频、BGM 和最终渲染，BGM 因而直接以 `ready_to_generate_videos` 为可见阈值；后续加入章节渲染和独立 Soundscape 阶段时沿用了该阈值，导致音乐与音效早于真实能力阶段出现。现在两者统一从 `ready_to_plan_audio_layers` 开始普通投影，并以 active episode Task 作为 context 滞后时的稳定物化事实；规划 Task 流式结束后继续由同一资源节点承接 `planned`，付费生成 Task 再覆盖其运行态，不创建第二节点。主 Journey 在视频批准前断言两者不存在，在音频规划阶段断言两者各有且仅有一个节点。
-- 最终时间线曾把 `render_chapters` 也当作可见能力，并无条件附带 `render_final_video` 动作；章节成片为空、音乐/声场尚不存在时，用户仍可从 Canvas 提交最终 Task。旧失败资源又必须按 CN-02F 保持可见，因此不能用隐藏节点掩盖问题。当前投影只在 `ready_to_render_final` 普通展示最终时间线；历史 Task/资源仍物化同一节点，但动作严格消费当前 Workflow 的 `allowedOperationIds`，缺失前置事实时只展示旧失败而不重提。
-- structured stream 终态曾先后采用 8 秒保留和立即清除两种策略；前者依赖 timer，后者又让 active Task、stream 与正式 Query 的到达顺序决定节点是否短暂消失。`4150ff928` 首次引入 terminal handoff，但只保留 accumulator 正文和节点 identity：最终 lifecycle 仍排除了 terminal stream，disclosure 因此先折叠；释放条件又只检查“同 node 已有任意 terminal 资源”，重生成时旧 succeeded 资源可以提前释放新 stream。旧 Logic 只断言 body，Golden 只记录整个 `article` 是否移除，所以两条防线都接受了真实闪烁。当前防线是持久 identity/单调 Workflow 保持 canonical 节点，completed accumulator 作为非业务的 presentation handoff 继续展开，正式 Query 必须以相同 owner task identity 和终态一次性接管；Logic 直接反证旧资源接管与提前折叠，主 Journey 连续观察节点、presentation、disclosure 和 owner identity 四个维度。
+- Storyboard/Panel 曾把“文本镜头记录存在”误解释为“图片已成功”，18 个未提交图片 Task 的节点因此同时显示成功。首次修正只分离 Panel 与媒体 lifecycle，仍保留了不再需要的分镜图阶段。当前防线直接删除 Panel/图片节点与全部入口。
+- 多章节“全部”范围曾因 nullable 单实例 `editScript` 而不投影任何 VideoGroup，最终时间线却另外统计到视频；后续修复又依赖 `segmentIndex/gridMode`。当前投影从正式 `ProjectVideoSegment` 集合展平，identity 不再来自位置或生成模式。
+- BGM 节点曾早于真实音频能力阶段出现；后续加入独立环境音时复用了旧可见性阈值。当前 BGM 与 Ambient Sound 统一只消费 Workflow `audio_plan` capability，两者保持独立节点与生命周期。
+- 正式 View 曾在名称缺失时回显 locationId/characterId/shotId/sourceId；当前 projector 必须从 canonical identity 投影当前名称或显式拒绝，renderer 永不显示领域 ID。
 
 ## 修改检查表
 
-1. 参照物是哪一个已有节点？为什么最接近？
-2. 节点的 canonical ID 和 scope 是什么？
-3. stream schema、adapter、item key、乱序合并和终态优先级在哪里定义？
-4. 展开态、focus-follow、失败/重试、重放是否逐项对齐？
-5. 是否新增真实时序测试，而非只断言静态完整节点？
+1. 新节点是否完整注册且 identity 来自正式资源？
+2. materialization、lifecycle、stream presentation 和 UI disclosure 是否仍为独立输入？
+3. 是否重新引入 Panel/Image/VideoGroup、历史推断、timer/refetch 正确性或 ID fallback？
+4. 受影响的 Golden observable 是否已同步？

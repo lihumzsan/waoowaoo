@@ -1,8 +1,7 @@
 'use client'
 
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import { usePlanBgmScore, usePlanSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
-import { useUpdateProjectPanelVideoPrompt, useUpdateProjectConfig } from '@/lib/query/hooks'
+import { logInfo as _ulogInfo } from '@/lib/logging/core'
+import { usePlanBgmScore, usePlanAmbientSound, useRenderFinalVideo } from '@/lib/query/hooks/useFinalMedia'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -26,10 +25,8 @@ export function useWorkspaceVideoActions({
   t,
 }: UseWorkspaceVideoActionsParams) {
   const planBgmScoreMutation = usePlanBgmScore(projectId, episodeId || null)
-  const planSoundscapeMutation = usePlanSoundscape(projectId, episodeId || null)
+  const planAmbientSoundMutation = usePlanAmbientSound(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
-  const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId, episodeId || null)
-  const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
 
   const handleRenderFinalVideo = async () => {
     if (!episodeId) {
@@ -65,50 +62,26 @@ export function useWorkspaceVideoActions({
     }
   }
 
-  const handlePlanSoundscape = async () => {
+  const handlePlanAmbientSound = async () => {
     if (!episodeId) {
       alert(t('execution.selectEpisode'))
       return
     }
     try {
-      await planSoundscapeMutation.mutateAsync()
+      await planAmbientSoundMutation.mutateAsync()
     } catch (err: unknown) {
       if (isAbortError(err)) {
         _ulogInfo(t('execution.requestAborted'))
         return
       }
-      alert(`${t('execution.soundscapeFailed')}: ${getErrorMessage(err)}`)
+      alert(`${t('execution.ambientSoundFailed')}: ${getErrorMessage(err)}`)
       throw err
-    }
-  }
-
-  const handleUpdateVideoPrompt = async (
-    storyboardId: string,
-    panelIndex: number,
-    value: string,
-    field: 'imagePrompt' | 'videoPrompt' = 'videoPrompt',
-  ) => {
-    await updateProjectPanelVideoPromptMutation.mutateAsync({ storyboardId, panelIndex, value, field })
-  }
-
-  const handleUpdatePanelVideoModel = async (_storyboardId: string, _panelIndex: number, model: string) => {
-    const normalizedModel = model.trim()
-    if (!normalizedModel) return
-    try {
-      await updateProjectConfigMutation.mutateAsync({
-        key: 'singleShotVideoModel',
-        value: normalizedModel,
-      })
-    } catch (err: unknown) {
-      _ulogError(`${t('execution.updateFailed')}:`, err)
     }
   }
 
   return {
     handlePlanBgmScore,
-    handlePlanSoundscape,
+    handlePlanAmbientSound,
     handleRenderFinalVideo,
-    handleUpdateVideoPrompt,
-    handleUpdatePanelVideoModel,
   }
 }

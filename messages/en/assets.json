@@ -100,13 +100,6 @@
     "generating": "Generating",
     "regenerating": "Regenerating",
     "generatingPlaceholder": "Waiting",
-    "spatialProfileStatus": {
-      "pending": "Spatial Pending",
-      "analyzing": "Analyzing Space",
-      "ready": "Spatial Ready",
-      "failed": "Spatial Failed",
-      "stale": "Spatial Stale"
-    },
     "selectTip": "Once selected and confirmed, you can edit and modify the image",
     "selectFirst": "Please select an image first",
     "useThis": "Use this option",
@@ -233,11 +226,6 @@
       "editPrompt": "Edit Prompt"
     }
   },
-  "storyboard": {
-    "group": {
-      "generating": "Generating..."
-    }
-  },
   "errors": {
     "saveFailed": "Save Failed, please retry",
     "failed": "failed, please retry",
@@ -272,7 +260,6 @@
     "characterPlaceholder": "Describe what you want to change, e.g.: Change hair to blonde, add glasses, change to casual clothes...",
     "locationPlaceholder": "Describe what you want to change, e.g.: Add more trees, change to night scene...",
     "propPlaceholder": "Describe what you want to change, e.g.: change to brushed silver metal, add carved patterns to the handle, remove gem decoration...",
-    "storyboardPlaceholder": "Describe what you want to change, e.g.: Change background color, adjust character expression...",
     "noAssetHint": "No assets, click \"Add Asset\" to select",
     "referenceImages": "Reference Images",
     "referenceImagesHint": "(optional, paste supported)",

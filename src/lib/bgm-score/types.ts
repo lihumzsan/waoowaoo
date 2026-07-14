@@ -123,6 +123,7 @@ export interface BgmScoreCue {
 export interface BgmScoreProjectData {
   readonly status: BgmScoreStatus
   readonly taskId: string
+  readonly planTaskId?: string
   readonly editScriptId: string
   readonly timelineSignature: string
   readonly durationSeconds: number

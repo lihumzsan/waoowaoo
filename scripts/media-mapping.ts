@@ -26,23 +26,8 @@ export const MEDIA_MODEL_MAPPINGS: MediaModelMapping[] = [
     fields: [{ legacyField: 'audioUrl', mediaIdField: 'audioMediaId' }],
   },
   {
-    model: 'projectPanel',
-    tableName: 'project_panels',
-    fields: [
-      { legacyField: 'imageUrl', mediaIdField: 'imageMediaId' },
-      { legacyField: 'videoUrl', mediaIdField: 'videoMediaId' },
-      { legacyField: 'sketchImageUrl', mediaIdField: 'sketchImageMediaId' },
-      { legacyField: 'previousImageUrl', mediaIdField: 'previousImageMediaId' },
-    ],
-  },
-  {
     model: 'projectShot',
     tableName: 'project_shots',
-    fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
-  },
-  {
-    model: 'supplementaryPanel',
-    tableName: 'supplementary_panels',
     fields: [{ legacyField: 'imageUrl', mediaIdField: 'imageMediaId' }],
   },
   {

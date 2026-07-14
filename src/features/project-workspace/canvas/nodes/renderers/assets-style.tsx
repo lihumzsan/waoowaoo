@@ -22,13 +22,9 @@ import {
   hasText,
   nodeContentInteractionClass,
   nodeIsRunning,
-  renderJsonBlock,
   renderSection,
-  renderSubsection,
   renderTextBlock,
   renderTextSection,
-  renderValue,
-  spatialProfileStatusLabel,
 } from './renderer-shared'
 import { nodeActionIconName } from '../workspace-node-action-policy'
 import { MediaPreview, editAssetPlaceholderIconName, mediaLoadingStyleImageUrl, renderChips } from './media'
@@ -284,7 +280,7 @@ export function StyleBibleContent({
     </div>
   )
 
-  // 二级（展开）：预览图 + 总结 + 分组属性网格
+  // 二级（展开）：预览图 + 视频视觉风格 + 资产图片风格
   const groups: readonly {
     readonly name: string
     readonly glyph: string
@@ -294,47 +290,24 @@ export function StyleBibleContent({
       name: labels('visualPolicy'),
       glyph: 'eye',
       fields: [
-        { label: labels('colorPrompt'), value: details.visual.colorPrompt },
+        { label: labels('visualStyle'), value: details.visualStyle },
+      ],
+    },
+    {
+      name: labels('assetImageStyle'),
+      glyph: 'image',
+      fields: [
         {
           label: labels('lightingPrompt'),
-          value: details.visual.lightingPrompt,
+          value: details.assetImageStyle?.lighting,
         },
-        { label: labels('texturePrompt'), value: details.visual.texturePrompt },
+        {
+          label: labels('texturePrompt'),
+          value: details.assetImageStyle?.texture,
+        },
         {
           label: labels('compositionPrompt'),
-          value: details.visual.compositionPrompt,
-        },
-        {
-          label: labels('imageFilterPrompt'),
-          value: details.visual.imageFilterPrompt,
-        },
-      ],
-    },
-    {
-      name: labels('cameraPolicy'),
-      glyph: 'camera',
-      fields: [
-        {
-          label: labels('movementPrompt'),
-          value: details.camera.movementPrompt,
-        },
-        {
-          label: labels('lensAndDepthPrompt'),
-          value: details.camera.lensAndDepthPrompt,
-        },
-        {
-          label: labels('videoRhythmPrompt'),
-          value: details.camera.videoRhythmPrompt,
-        },
-      ],
-    },
-    {
-      name: labels('soundPolicy'),
-      glyph: 'sound',
-      fields: [
-        {
-          label: labels('soundFilterPrompt'),
-          value: details.sound.soundFilterPrompt,
+          value: details.assetImageStyle?.composition,
         },
       ],
     },
@@ -422,20 +395,6 @@ export function EditAssetContent({
         labels('linkedShots'),
         details.shotNumbers.map((shotNumber) => String(shotNumber)),
       )}
-      {details.kind === 'location'
-        ? renderSection(
-            labels('spatialProfile'),
-            <div className="space-y-1">
-              {renderValue(labels('status'), spatialProfileStatusLabel(labels, details.spatialProfileStatus))}
-              {renderValue(labels('spatialProfileAnalyzedAt'), typeof details.spatialProfileAnalyzedAt === 'string' ? details.spatialProfileAnalyzedAt : null)}
-              {renderValue(labels('spatialProfileModel'), details.spatialProfileModel)}
-              {details.spatialProfileError ? renderSubsection(labels('spatialProfileError'), renderTextBlock(details.spatialProfileError)) : null}
-              <WorkspaceCanvasMotionPresence visible={expanded && Boolean(details.spatialProfileJson)}>
-                {renderSubsection(labels('spatialProfileJson'), renderJsonBlock(details.spatialProfileJson))}
-              </WorkspaceCanvasMotionPresence>
-            </div>,
-          )
-        : null}
       <WorkspaceCanvasMotionPresence visible={expanded && hasText(details.errorMessage)}>
         {renderSection(labels('error'), renderTextBlock(details.errorMessage))}
       </WorkspaceCanvasMotionPresence>

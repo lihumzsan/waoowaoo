@@ -22,11 +22,10 @@ describe('project agent operation registry', () => {
           'edit_pipeline',
           'edit_pipeline_assets',
           'edit_style_preview',
-          'storyboards',
           'project_assets',
           'scoped_assets',
           'global_assets',
-          'videos',
+          'video_segments',
           'episode',
           'project_data',
           'project_workspace',
@@ -57,49 +56,11 @@ describe('project agent operation registry', () => {
     }
   })
 
-  it('keeps storyboard tools atomic and assistant-visible', () => {
+  it('exposes one canonical full-reference video operation', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.mutate_storyboard).toBeUndefined()
-    expect(registry.modify_asset_image).toBeUndefined()
-    expect(registry.generate_video).toBeUndefined()
-    expect(registry.modify_character_image).toBeUndefined()
-    expect(registry.modify_location_image).toBeUndefined()
-    expect(registry.delete_storyboard_panel).toBeUndefined()
-    expect(registry.list_plan_runs).toBeUndefined()
-    expect(registry.create_plan_run).toBeUndefined()
-    expect(registry.get_plan_run_snapshot).toBeUndefined()
-    expect(registry.list_plan_run_events).toBeUndefined()
-    expect(registry.cancel_plan_run).toBeUndefined()
-    expect(registry.retry_plan_step).toBeUndefined()
-    expect(registry.update_storyboard_panel_prompt?.channels?.tool ?? true).toBe(true)
-    expect(registry.generate_panel_video?.channels).toEqual({
-      tool: false,
-      api: true,
-    })
-    expect(registry.generate_episode_videos?.channels?.api ?? false).toBe(true)
-    expect(registry.generate_episode_videos?.channels).toEqual({
+    expect(registry.generate_video_segments?.channels).toEqual({
       tool: true,
-      api: true,
-    })
-    expect(registry.generate_video_group?.channels).toEqual({
-      tool: false,
-      api: true,
-    })
-    expect(registry.generate_episode_video_groups?.channels).toEqual({
-      tool: false,
-      api: true,
-    })
-    expect(registry.generate_episode_videos_auto?.channels).toEqual({
-      tool: false,
-      api: true,
-    })
-    expect(registry.generate_asset_reference_video?.channels).toEqual({
-      tool: false,
-      api: true,
-    })
-    expect(registry.generate_episode_asset_reference_videos?.channels).toEqual({
-      tool: false,
       api: true,
     })
     expect(registry.render_final_video?.channels).toEqual({
@@ -127,7 +88,6 @@ describe('project agent operation registry', () => {
       tool: true,
       api: true,
     })
-    expect('generate_edit_script_storyboard' in registry).toBe(false)
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.channels).toEqual({
         tool: true,
@@ -138,7 +98,6 @@ describe('project agent operation registry', () => {
       expect(registry[operationId]?.agentFlow).toEqual({ suspendsFor: 'choice' })
     }
 
-    expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])
     expect(registry.ingest_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.revise_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.generate_bible_from_script?.groupPath).toEqual(['edit-bible'])
@@ -153,7 +112,7 @@ describe('project agent operation registry', () => {
 
     for (const operation of Object.values(registry)) {
       if (!operation.channels.tool) continue
-      expect(operation.groupPath).not.toEqual(['storyboard'])
+      expect(operation.groupPath).not.toEqual(['legacy-video'])
     }
   })
 
@@ -165,7 +124,7 @@ describe('project agent operation registry', () => {
     expect(contextOperation).toBeDefined()
     expect(contextOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
     expect(contextOperation.summary).toContain(
-      'full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields',
+      'full bible text, historical operation results, failure details, active task details, assets, or video segments',
     )
     expect(contextOperation.summary).toContain(
       'Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters',
@@ -176,7 +135,7 @@ describe('project agent operation registry', () => {
       'Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters',
     )
     expect(snapshotOperation.summary).toContain(
-      'Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed',
+      'Use detail=full only when video segment status or output identity is explicitly needed',
     )
   })
 
@@ -218,7 +177,7 @@ describe('project agent operation registry', () => {
 
   it('requires real media approval for edit-first image and sound_effect generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    for (const operationId of ['generate_edit_style_preview_images', 'generate_episode_soundscape'] as const) {
+    for (const operationId of ['generate_edit_style_preview_images', 'generate_episode_ambient_sound'] as const) {
       const operation = registry[operationId]
       expect(operation).toBeDefined()
       expect(operation.channels).toEqual({ tool: true, api: true })

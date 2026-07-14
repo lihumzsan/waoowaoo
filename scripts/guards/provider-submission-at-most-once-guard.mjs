@@ -127,9 +127,9 @@ function runCli() {
     if (!engine.includes(required)) violations.push(`src/lib/ai-exec/engine.ts missing ${required}`)
   }
   violations.push(...inspectTaskLlmInvocationIdentity(engine))
-  const panelImageHandler = fs.readFileSync(path.join(root, 'src/lib/workers/handlers/panel-image-task-handler.ts'), 'utf8')
-  if (!panelImageHandler.includes('invocationKey: createImageCandidateInvocationKey(i)')) {
-    violations.push('src/lib/workers/handlers/panel-image-task-handler.ts must give every candidate a stable distinct provider invocation key')
+  const workerUtils = fs.readFileSync(path.join(root, 'src/lib/workers/utils.ts'), 'utf8')
+  if (!workerUtils.includes("{ key: 'media:video:primary' }")) {
+    violations.push('src/lib/workers/utils.ts must give the single Video Segment provider submission a stable invocation key')
   }
   for (const required of [
     'executeTaskDurableInvocation',

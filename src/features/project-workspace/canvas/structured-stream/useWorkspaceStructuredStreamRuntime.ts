@@ -29,7 +29,7 @@ import type {
   WorkspaceCanvasStreamPatchData,
   WorkspaceCanvasStreamTarget,
 } from './workspace-structured-stream-runtime-types'
-import { buildSoundscapeStreamView } from './soundscape-stream-view'
+import { buildAmbientSoundStreamView } from './ambient-sound-stream-view'
 import {
   areAllTerminalHandoffs,
   markTaskEntriesForTerminalHandoff,
@@ -305,19 +305,9 @@ function pipelineItemsFromShotExecutionPlan(
   return items.map(({ shot }, index) => ({
     title: translate('nodeFields.shotIndex', { index: index + 1 }),
     fields: [
-      { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
-      { label: translate('nodeFields.lens'), value: shot.camera.lens },
-      { label: translate('nodeFields.focus'), value: shot.camera.focus },
-      { label: translate('nodeFields.cameraHeight'), value: shot.camera.height },
-      { label: translate('nodeFields.cameraAngle'), value: shot.camera.angle },
-      { label: translate('nodeFields.movement'), value: shot.camera.movement },
-      { label: translate('nodeFields.lighting'), value: shot.camera.lighting },
-      { label: translate('nodeFields.axisAndEyeline'), value: shot.blocking.axis.screenDirection },
-    ],
-    body: shot.blocking.spatialNote,
-    chips: [
-      ...shot.blocking.characters.map((character) => `${character.characterName}/${character.visibility}`),
-      ...shot.blocking.objects.map((object) => object.name),
+      { label: translate('nodeFields.shotScale'), value: shot.shotScale },
+      { label: translate('nodeFields.movement'), value: shot.cameraMovement.movement },
+      { label: translate('nodeFields.cameraStability'), value: shot.cameraMovement.stability },
     ],
   }))
 }
@@ -545,13 +535,9 @@ function buildEditScriptRuntimeEntries(
               durationSec: shot.durationSec,
               sceneName: shot.scene.locationName,
               action: shot.action,
-              characters: shot.characters.map((character) => `${character.characterName} / ${character.visibility} / ${character.role}`),
-              keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
-              imagePrompt: null,
+              characters: shot.characters.map((character) => `${character.characterName} / ${character.performance}`),
               dialogue: shot.dialogue.map((line) => `${line.speakerName}: ${line.line}`),
-              sound: shot.sound,
-              imageUrl: null,
-              videoUrl: null,
+              synchronousSound: shot.synchronousSound,
             })),
         } : undefined,
       },
@@ -661,43 +647,43 @@ function buildBgmRuntimeEntry(
   })
 }
 
-function buildSoundscapeRuntimeEntry(
+function buildAmbientSoundRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const sources = itemsOfKind(snapshots, 'soundscape.sources', 'soundscapeSource').map((item) => item.source)
-  const sections = itemsOfKind(snapshots, 'soundscape.sections', 'soundscapeSection').map((item) => item.section)
-  const soundscapeView = buildSoundscapeStreamView(sources, sections)
+  const sources = itemsOfKind(snapshots, 'ambientSound.sources', 'ambientSoundSource').map((item) => item.source)
+  const sections = itemsOfKind(snapshots, 'ambientSound.sections', 'ambientSoundSection').map((item) => item.section)
+  const ambientSoundView = buildAmbientSoundStreamView(sources, sections)
   const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.'))
+    .filter((snapshot) => snapshot.adapterKey.startsWith('ambientSound.'))
     .flatMap((snapshot) => snapshot.items)
   if (sources.length === 0 && sections.length === 0) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('soundscape.')) ?? null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('ambientSound.')) ?? null
   if (!firstSnapshot) return null
-  const nodeId = workspaceNodeId.soundscape(episodeId)
+  const nodeId = workspaceNodeId.ambientSound(episodeId)
   return createStreamRuntimeEntry({
     nodeId,
-    streamKind: 'soundscape',
+    streamKind: 'ambientSound',
     taskId: firstSnapshot.taskId,
     taskType: firstSnapshot.taskType,
     targetType: firstSnapshot.targetType,
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     terminalHandoff: areAllTerminalHandoffs(
-      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.')),
+      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('ambientSound.')),
     ),
     presentation: streamPresentation(rawItems),
     data: {
-      body: translate('nodes.soundscape.body', { videos: 0 }),
-      meta: translate('nodes.soundscape.ready', { sources: sources.length, sections: sections.length }),
-      soundscapeDetails: {
+      body: translate('nodes.ambientSound.body', { videos: 0 }),
+      meta: translate('nodes.ambientSound.ready', { sources: sources.length, sections: sections.length }),
+      ambientSoundDetails: {
         status: 'planning',
         decision: null,
         soundEffectModel: null,
         sourceCount: sources.length,
         sectionCount: sections.length,
-        ...soundscapeView,
+        ...ambientSoundView,
         mixUrl: null,
         errorMessage: null,
       },
@@ -716,7 +702,7 @@ export function buildStreamRuntimeEntries(
     ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
-    buildSoundscapeRuntimeEntry(snapshots, episodeId, translate),
+    buildAmbientSoundRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 

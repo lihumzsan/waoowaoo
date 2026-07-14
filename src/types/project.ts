@@ -1,5 +1,4 @@
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type ProjectVideoGenerationOptionValue = string | number | boolean
 export type ProjectVideoGenerationOptions = Record<string, ProjectVideoGenerationOptionValue>
@@ -78,11 +77,6 @@ export interface LocationImage {
   imageIndex: number              // 图片索引：0, 1, 2
   description: string | null
   imageUrl: string | null
-  spatialProfileJson?: unknown | null
-  spatialProfileStatus?: LocationSpatialProfileStatus | null
-  spatialProfileError?: string | null
-  spatialProfileAnalyzedAt?: string | Date | null
-  spatialProfileModel?: string | null
   media?: MediaRef | null
   previousImageUrl: string | null // 上一次的图片URL（用于撤回）
   previousMedia?: MediaRef | null
@@ -133,59 +127,6 @@ export interface AssetLibraryLocation {
 // 项目工作流类型
 // ============================================
 
-export interface ProjectPanel {
-  id: string
-  storyboardId: string
-  panelIndex: number
-  panelNumber: number | null
-  shotType: string | null
-  cameraMove: string | null
-  description: string | null
-  location: string | null
-  characters: string | null
-  props: string | null
-  srtSegment: string | null
-  srtStart: number | null
-  srtEnd: number | null
-  duration: number | null
-  imagePrompt: string | null
-  imageUrl: string | null
-  candidateImages?: string | null
-  media?: MediaRef | null
-  videoPrompt: string | null
-  videoUrl: string | null
-  videoModel?: string | null
-  videoErrorCode?: string | null
-  videoErrorMessage?: string | null
-  lastVideoGenerationOptions?: ProjectVideoGenerationOptions | null
-  videoMedia?: MediaRef | null
-  sourceShotId?: string | null
-  sourceGenerationSegmentId?: string | null
-  executionSnapshotJson?: unknown | null
-  renderFactsJson?: unknown | null
-  actingNotes: string | null        // 演技指导数据JSON
-  // 任务态字段（由 tasks + hook 派生，不再依赖数据库持久化）
-  imageTaskRunning?: boolean
-  videoTaskRunning?: boolean
-  imageErrorMessage?: string | null  // 图片生成错误消息
-}
-
-export interface ProjectStoryboard {
-  id: string
-  episodeId: string
-  chapterId?: string
-  editScriptId: string | null
-  createdAt?: string | Date
-  updatedAt?: string | Date
-  storyboardTextJson: string | null
-  panelCount: number
-  storyboardImageUrl: string | null
-  media?: MediaRef | null
-  storyboardTaskRunning?: boolean
-  lastError?: string | null  // 最后一次生成失败的错误信息
-  panels?: ProjectPanel[]
-}
-
 export type ProjectEditAssetKind = 'character' | 'location'
 export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'failed'
 
@@ -203,19 +144,13 @@ export interface ProjectEditScriptShot {
   characters: Array<{
     characterId: string
     name: string
-    visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
-    role: 'focus' | 'supporting' | 'listener' | 'hidden_subject' | 'background'
     performance: string
-  }>
-  keyObjects: Array<{
-    name: string
-    role: string
   }>
   dialogue: Array<{
     characterId: string
     line: string
   }>
-  sound: string
+  synchronousSound: string
 }
 
 export interface ProjectEditAssetRequirement {
@@ -230,11 +165,6 @@ export interface ProjectEditAssetRequirement {
   taskTargetId?: string | null
   errorMessage: string | null
   previewImageUrl?: string | null
-  spatialProfileJson?: unknown | null
-  spatialProfileStatus?: LocationSpatialProfileStatus | null
-  spatialProfileError?: string | null
-  spatialProfileAnalyzedAt?: string | Date | null
-  spatialProfileModel?: string | null
 }
 
 export interface ProjectEditBible {
@@ -305,45 +235,17 @@ export interface ProjectEditShotExecutionPlan {
   editScriptId: string
   status: string
   generationTaskId?: string | null
-  shots: {
-    shotId: string
-    shotNumber: number
-    camera: {
+  generationSegments: Array<{
+    segmentId: string
+    shots: Array<{
+      shotId: string
+      shotNumber: number
       shotScale: string
-      lens: string
-      focus: string
-      height: string
-      angle: string
-      movement: string
-      composition: string
-      lighting: string
-    }
-    blocking: {
-      axis: {
-        type: string
-        subjects: string[]
-        screenDirection: string
+      cameraMovement: {
+        movement: string
+        stability: 'locked' | 'stable' | 'smooth' | 'subtle_shake' | 'handheld'
       }
-      characters: Array<{
-        characterId: string
-        visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
-        position: string
-        screenPosition: string
-        facing: string
-        eyeline: string
-      }>
-      objects: Array<{
-        name: string
-        position: string
-        screenPosition: string
-      }>
-      spatialNote: string
-    }
-    videoPrompt: string
-  }[]
-  generationSegmentExecutions?: Array<{
-    shotIds: string[]
-    continuousVideoPrompt: string
+    }>
   }>
 }
 
@@ -371,6 +273,7 @@ export interface ProjectEditScript {
 }
 
 export interface ProjectEditScriptGenerationSegment {
+  segmentId: string
   shotIds: string[]
   continuity: string
 }
@@ -413,6 +316,7 @@ export interface ProjectMusicScore {
   id?: string | null
   status: ProjectMusicScoreStatus
   taskId?: string | null
+  planTaskId?: string | null
   timelineSignature?: string | null
   durationSeconds?: number | null
   musicModel?: string | null
@@ -429,7 +333,7 @@ export interface ProjectMusicScore {
   errorMessage?: string | null
 }
 
-export type ProjectSoundscapeStatus =
+export type ProjectAmbientSoundStatus =
   | 'pending'
   | 'planning'
   | 'planned'
@@ -438,7 +342,7 @@ export type ProjectSoundscapeStatus =
   | 'failed'
   | string
 
-export interface ProjectSoundscapePlanSource {
+export interface ProjectAmbientSoundPlanSource {
   sourceId: string
   environmentFingerprint: string
   prompt: string
@@ -446,7 +350,7 @@ export interface ProjectSoundscapePlanSource {
   promptInfluence: number
 }
 
-export interface ProjectSoundscapePlanSection {
+export interface ProjectAmbientSoundPlanSection {
   sourceId: string
   fromShotId: string
   toShotId: string
@@ -456,22 +360,23 @@ export interface ProjectSoundscapePlanSection {
   transitionOut: 'cut' | 'fade' | 'crossfade'
 }
 
-export interface ProjectSoundscapePlan {
-  decision: 'soundscape' | 'none_needed'
-  sources: ProjectSoundscapePlanSource[]
-  sections: ProjectSoundscapePlanSection[]
+export interface ProjectAmbientSoundPlan {
+  decision: 'ambient_sound' | 'none_needed'
+  sources: ProjectAmbientSoundPlanSource[]
+  sections: ProjectAmbientSoundPlanSection[]
 }
 
-export interface ProjectSoundscape {
+export interface ProjectAmbientSound {
   id?: string | null
-  status: ProjectSoundscapeStatus
+  status: ProjectAmbientSoundStatus
   taskId?: string | null
+  planTaskId?: string | null
   timelineSignature?: string | null
   soundEffectModel?: string | null
-  decision?: 'soundscape' | 'none_needed' | null
+  decision?: 'ambient_sound' | 'none_needed' | null
   sourceCount: number
   sectionCount: number
-  plan?: ProjectSoundscapePlan | null
+  plan?: ProjectAmbientSoundPlan | null
   sources?: unknown
   mix?: {
     mediaId: string
@@ -492,25 +397,21 @@ export interface ProjectFinalVideo {
   outputUrl: string | null
   updatedAt: string | null
   musicScore?: ProjectMusicScore | null
-  soundscape?: ProjectSoundscape | null
+  ambientSound?: ProjectAmbientSound | null
 }
 
-export interface ProjectVideoGroup {
+export interface ProjectVideoSegment {
   id: string
   projectId: string
   episodeId: string
-  chapterId?: string
-  gridMode: '2x2' | '3x3' | string
-  shotIds: string[] | unknown
+  chapterId: string
+  editScriptId: string
+  segmentId: string
+  inputSignature: string
   durationSec: number
-  prompt: string | null
   status: string
-  taskId: string | null
-  errorCode: string | null
+  generationTaskId: string | null
   errorMessage: string | null
-  referenceImageUrl: string | null
-  referenceImageMedia?: MediaRef | null
-  videoUrl: string | null
   videoMedia?: MediaRef | null
 }
 
@@ -527,7 +428,7 @@ export interface ProjectEpisodeSummary {
   updatedAt: Date
   editScript?: ProjectEditScript | null
   finalVideo?: ProjectFinalVideo | null
-  videoGroups?: ProjectVideoGroup[]
+  videoSegments?: ProjectVideoSegment[]
 }
 
 export interface ProjectWorkflowData {
@@ -536,11 +437,8 @@ export interface ProjectWorkflowData {
   imageModel: string | null
   characterModel: string | null
   locationModel: string | null
-  storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
-  singleShotVideoModel: string | null
-  sequenceVideoModel: string | null
   musicModel: string | null
   soundEffectModel: string | null
   videoRatio: string | null
@@ -552,8 +450,7 @@ export interface ProjectWorkflowData {
   locations?: Location[]
   props?: Prop[]
   episodes?: ProjectEpisodeSummary[]
-  storyboards?: ProjectStoryboard[]
-  videoGroups?: ProjectVideoGroup[]
+  videoSegments?: ProjectVideoSegment[]
 }
 
 // ============================================

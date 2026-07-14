@@ -45,17 +45,9 @@ export const queryKeys = {
         detail: (projectId: string) => ['project-assets', projectId, 'detail'] as const,
     },
 
-    // ============ 分镜（Storyboard）============
-    storyboards: {
-        all: (episodeId: string) => ['storyboards', episodeId] as const,
-        panels: (episodeId: string) => ['storyboards', episodeId, 'panels'] as const,
-        groups: (episodeId: string) => ['storyboards', episodeId, 'groups'] as const,
-    },
-
-    // ============ 视频生成 ============
-    videos: {
-        all: (episodeId: string) => ['videos', episodeId] as const,
-        panels: (episodeId: string) => ['videos', episodeId, 'panels'] as const,
+    // ============ 视频片段 ============
+    videoSegments: {
+        all: (episodeId: string) => ['video-segments', episodeId] as const,
     },
 
     // ============ 用户模型 ============

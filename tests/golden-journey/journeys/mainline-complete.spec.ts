@@ -120,6 +120,11 @@ async function installCanvasStreamContinuityObserver(page: import('@playwright/t
           const disclosureMode = node.getAttribute('data-disclosure-mode')
           const pendingHandoffTaskId = documentPendingHandoffTaskIdsByNodeId.get(nodeId)
           if (!pendingHandoffTaskId) return
+          const lifecycleTaskId = node.getAttribute('data-lifecycle-task-id')
+          if (lifecycleTaskId && lifecycleTaskId !== pendingHandoffTaskId) {
+            documentPendingHandoffTaskIdsByNodeId.delete(nodeId)
+            return
+          }
           const isTerminal = phase === 'succeeded' || phase === 'failed' || phase === 'canceled'
           if (!isTerminal && streamPresentation === 'none') presentationGapIds.add(nodeId)
           if (!isTerminal && disclosureMode === 'collapsed') prematureCollapseIds.add(nodeId)
@@ -255,30 +260,37 @@ async function assertStylePreviewGeneration(input: {
   await expect(input.page.locator('article[data-node-id^="edit-style-preview:"]')).toHaveCount(0)
 }
 
-async function assertParallelPlanning(input: {
+function oracleTimestamp(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+async function assertChapterPlanningPrecedesAssetGeneration(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
 }): Promise<void> {
   await expect.poll(async () => {
     const snapshot = await readGoldenOracleSnapshot(input.scope)
-    const groupedTasks = snapshot.tasks.filter((task) => (
-      task.operationId === 'plan_chapters' || task.operationId === 'generate_edit_script_assets'
+    const planningTasks = snapshot.tasks.filter((task) => (
+      task.operationId === 'plan_chapters' && task.type === TASK_TYPE.EDIT_SCRIPT_GENERATE
     ))
-    const operationIds = new Set(groupedTasks.map((task) => task.operationId))
-    const taskIds = new Set(groupedTasks.flatMap((task) => typeof task.id === 'string' ? [task.id] : []))
-    const matchingWaits = snapshot.waits.filter((wait) => {
-      const rawTaskIds = typeof wait.taskIds === 'string' ? JSON.parse(wait.taskIds) as unknown : wait.taskIds
-      return Array.isArray(rawTaskIds)
-        && rawTaskIds.length === taskIds.size
-        && rawTaskIds.every((taskId) => typeof taskId === 'string' && taskIds.has(taskId))
-    })
-    return operationIds.has('plan_chapters')
-      && operationIds.has('generate_edit_script_assets')
-      && taskIds.size >= 2
-      && matchingWaits.length === 1
+    const assetTasks = snapshot.tasks.filter((task) => (
+      task.operationId === 'generate_edit_script_assets'
+      && (task.type === TASK_TYPE.IMAGE_CHARACTER || task.type === TASK_TYPE.IMAGE_LOCATION)
+    ))
+    const planningFinishedAt = planningTasks.map((task) => oracleTimestamp(task.finishedAt))
+    const assetsCreatedAt = assetTasks.map((task) => oracleTimestamp(task.createdAt))
+    return planningTasks.length >= 2
+      && planningTasks.every((task) => task.status === 'completed')
+      && assetTasks.length > 0
+      && assetTasks.every((task) => task.status === 'queued' || task.status === 'processing')
+      && planningFinishedAt.every((timestamp) => timestamp !== null)
+      && assetsCreatedAt.every((timestamp) => timestamp !== null)
+      && Math.min(...assetsCreatedAt as number[]) >= Math.max(...planningFinishedAt as number[])
   }, {
     timeout: 90_000,
-    message: 'core planning and planned assets must share one durable Wait',
+    message: 'all chapter plans must finish durably before required asset Tasks are created',
   }).toBe(true)
 
   const surfaces = input.page.locator(
@@ -295,15 +307,6 @@ async function assertParallelPlanning(input: {
   }, {
     timeout: 60_000,
     message: 'running planned assets must use the shared Style Bible progress surface',
-  }).toBe(true)
-
-  const editScriptNodes = input.page.locator('article[data-node-id^="edit-script:"]')
-  await expect.poll(async () => await editScriptNodes.evaluateAll((nodes) => nodes.some((node) => (
-    node.getAttribute('data-lifecycle-phase') === 'streaming'
-    && node.querySelector('.workspace-node-loading-surface') === null
-  ))), {
-    timeout: 60_000,
-    message: 'core edit scripts must use structured text streaming without a media loading fallback',
   }).toBe(true)
 }
 
@@ -345,28 +348,12 @@ async function assertShotExecutionPlansMaterializeAndSurviveReload(input: {
   await assertRunningNodes()
 }
 
-async function assertRunningShotMediaSurfaces(page: import('@playwright/test').Page): Promise<void> {
-  const surfaces = page.locator('article[data-node-id^="shot:"] [data-canvas-media-surface="true"]')
-  await expect.poll(async () => {
-    if (await surfaces.count() === 0) return false
-    return await surfaces.evaluateAll((items) => items.every((surface) => (
-      surface.getAttribute('data-canvas-media-phase') === 'generating'
-      && surface.getAttribute('data-canvas-media-background') === 'style-bible'
-      && surface.getAttribute('data-canvas-media-placeholder-visible') === 'false'
-      && surface.querySelector('[role="progressbar"]') !== null
-    )))
-  }, {
-    timeout: 60_000,
-    message: 'running shot media must use the shared Style Bible progress surface',
-  }).toBe(true)
-}
-
 async function assertAudioNodeVisibility(
   page: import('@playwright/test').Page,
   expectedCount: 0 | 1,
 ): Promise<void> {
   await expect(page.locator('article[data-node-id^="bgm-score:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
-  await expect(page.locator('article[data-node-id^="soundscape:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+  await expect(page.locator('article[data-node-id^="ambientSound:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
 }
 
 async function assertFinalTimelineVisibility(
@@ -378,18 +365,18 @@ async function assertFinalTimelineVisibility(
 
 async function assertAllScopeVideoProjection(
   page: import('@playwright/test').Page,
-  videoGroups: readonly Record<string, unknown>[],
+  videoSegments: readonly Record<string, unknown>[],
 ): Promise<void> {
-  expect(videoGroups.length, 'main Journey must persist at least one continuous video group').toBeGreaterThan(0)
-  expect(videoGroups.every((group) => (
-    group.status === 'completed'
-    && typeof group.videoUrl === 'string'
-    && group.videoUrl.length > 0
-    && typeof group.videoMediaId === 'string'
-    && group.videoMediaId.length > 0
-  )), 'every durable video group must have a completed media output').toBe(true)
-  await expect(page.locator('article[data-node-id^="video-plan:"]')).toHaveCount(videoGroups.length)
-  await expect(page.locator('article[data-node-id^="video-plan:"] video[src]')).toHaveCount(videoGroups.length)
+  expect(videoSegments.length, 'main Journey must persist at least one video segment').toBeGreaterThan(0)
+  expect(videoSegments.every((segment) => (
+    segment.status === 'completed'
+    && typeof segment.videoMediaId === 'string'
+    && segment.videoMediaId.length > 0
+    && typeof segment.inputSignature === 'string'
+    && segment.inputSignature.length === 64
+  )), 'every durable video segment must have a completed media output and frozen input signature').toBe(true)
+  await expect(page.locator('article[data-node-id^="video-plan:"]')).toHaveCount(videoSegments.length)
+  await expect(page.locator('article[data-node-id^="video-plan:"] video[src]')).toHaveCount(videoSegments.length)
 }
 
 async function submitObservedBoundary(input: {
@@ -460,24 +447,25 @@ async function submitObservedBoundary(input: {
 
   if (input.boundary === 'approval' && pendingOperationId === 'generate_edit_script_assets') {
     await setGoldenMediaStatusDelay(15_000)
-    await setGoldenStreamPacing({ chunkSize: 5, delayMs: 10 })
     try {
       await submitGoldenBoundary(input.page, input.boundary)
-      await assertParallelPlanning(input)
+      await assertChapterPlanningPrecedesAssetGeneration(input)
     } finally {
-      await setGoldenStreamPacing(null)
       await setGoldenMediaStatusDelay(0)
     }
     return
   }
 
-  if (input.boundary === 'approval' && pendingOperationId === 'generate_edit_script_storyboard_images') {
-    await setGoldenMediaStatusDelay(15_000)
+  if (input.boundary === 'approval' && pendingOperationId === 'generate_video_segments') {
+    await setGoldenStreamPacing({ chunkSize: 5, delayMs: 15 })
     try {
       await submitGoldenBoundary(input.page, input.boundary)
-      await assertRunningShotMediaSurfaces(input.page)
+      await expect.poll(async () => (await readCanvasStreamContinuity(input.page)).seenIds.length, {
+        timeout: 45_000,
+        message: 'the paced audio-plan handoff must expose at least one structured-stream Canvas node',
+      }).toBeGreaterThan(0)
     } finally {
-      await setGoldenMediaStatusDelay(0)
+      await setGoldenStreamPacing(null)
     }
     return
   }
@@ -504,6 +492,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   let observedAudioVisibleAtAudioStage = false
   let observedFinalTimelineHiddenBeforeAudioCompletion = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
+  let missingChoiceSurfaceSince: number | null = null
   const deadline = Date.now() + 25 * 60_000
 
   while (Date.now() < deadline) {
@@ -552,6 +541,15 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
     }
 
     const boundary = await readGoldenMainlineBoundary(page)
+    if (workflow.status === 'needs_user_choice' && boundary === 'waiting') {
+      missingChoiceSurfaceSince ??= Date.now()
+      if (Date.now() - missingChoiceSurfaceSince >= 15_000) {
+        await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-choice-surface-missing')
+        throw new Error(`GOLDEN_MAINLINE_CHOICE_SURFACE_MISSING:${workflowPosition}`)
+      }
+    } else {
+      missingChoiceSurfaceSince = null
+    }
     if (boundary !== 'waiting' && boundary !== lastBoundary) {
       visitedBoundaries.push(boundary)
       lastBoundary = boundary
@@ -565,35 +563,42 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(oracle.domain.chapters.length, 'main Journey must exercise multiple chapters').toBeGreaterThanOrEqual(2)
       expect(oracle.domain.editScripts.length, 'each chapter must have a durable edit script').toBe(oracle.domain.chapters.length)
       expect(oracle.domain.shotExecutionPlans.length, 'each chapter must have a durable shot plan').toBe(oracle.domain.chapters.length)
-      expect(oracle.domain.storyboards.length, 'each ready shot plan must atomically materialize one storyboard').toBe(oracle.domain.chapters.length)
-      expect(oracle.domain.panels.length, 'automatic storyboard projection must materialize multiple panels').toBeGreaterThan(oracle.domain.chapters.length)
-      await assertAllScopeVideoProjection(page, oracle.domain.videoGroups)
+      await assertAllScopeVideoProjection(page, oracle.domain.videoSegments)
       expect(
-        oracle.tasks.some((task) => task.operationId === 'generate_edit_script_storyboard'),
-        'automatic storyboard projection must not create the removed standalone panel Task',
+        oracle.tasks.some((task) => task.targetType === 'ProjectVideoSegment' && task.type !== TASK_TYPE.VIDEO_SEGMENT),
+        'every video segment must use the canonical video_segment Task',
       ).toBe(false)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
       const audioPlanTasks = assertOperationGroupWait(oracle, [
         'plan_episode_bgm_score',
-        'plan_episode_soundscape',
+        'plan_episode_ambient_sound',
       ])
       expect(audioPlanTasks.map((task) => task.type).sort()).toEqual([
         TASK_TYPE.MUSIC_SCORE_PLAN,
-        TASK_TYPE.SOUNDSCAPE_PLAN,
+        TASK_TYPE.AMBIENT_SOUND_PLAN,
       ].sort())
       expect(audioPlanTasks.every((task) => task.approvalGrantId === null)).toBe(true)
       const audioGenerationTasks = assertOperationGroupWait(oracle, [
         'generate_episode_bgm_score',
-        'generate_episode_soundscape',
+        'generate_episode_ambient_sound',
       ])
       expect(audioGenerationTasks.map((task) => task.type).sort()).toEqual([
         TASK_TYPE.MUSIC_SCORE_GENERATE,
-        TASK_TYPE.SOUNDSCAPE_GENERATE,
+        TASK_TYPE.AMBIENT_SOUND_GENERATE,
       ].sort())
       expect(audioGenerationTasks.every((task) => typeof task.approvalGrantId === 'string')).toBe(true)
+      expect(audioPlanTasks.every((task) => task.status === 'completed')).toBe(true)
+      expect(audioGenerationTasks.every((task) => task.status === 'completed')).toBe(true)
+      const audioPlanFinishedAt = audioPlanTasks.map((task) => oracleTimestamp(task.finishedAt))
+      const audioGenerationCreatedAt = audioGenerationTasks.map((task) => oracleTimestamp(task.createdAt))
+      expect(audioPlanFinishedAt.every((timestamp) => timestamp !== null)).toBe(true)
+      expect(audioGenerationCreatedAt.every((timestamp) => timestamp !== null)).toBe(true)
+      expect(Math.min(...audioGenerationCreatedAt as number[])).toBeGreaterThanOrEqual(
+        Math.max(...audioPlanFinishedAt as number[]),
+      )
       const audioGenerationOperationIds = [
         'generate_episode_bgm_score',
-        'generate_episode_soundscape',
+        'generate_episode_ambient_sound',
       ]
       expect(oracle.approvalGrants
         .flatMap((grant) => typeof grant.operationId === 'string' && audioGenerationOperationIds.includes(grant.operationId)
@@ -611,11 +616,11 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(musicScore).toMatchObject({ status: 'completed' })
       expect(asRecord(musicScoreData?.plan)).not.toBeNull()
       expect(asRecord(musicScore?.mixJson)).not.toBeNull()
-      const soundscape = oracle.domain.soundscapes[0]
-      expect(oracle.domain.soundscapes).toHaveLength(1)
-      expect(soundscape).toMatchObject({ status: 'completed' })
-      expect(asRecord(soundscape?.planJson)).toMatchObject({ decision: 'soundscape' })
-      expect(asRecord(soundscape?.mixJson)).not.toBeNull()
+      const ambientSound = oracle.domain.ambientSounds[0]
+      expect(oracle.domain.ambientSounds).toHaveLength(1)
+      expect(ambientSound).toMatchObject({ status: 'completed' })
+      expect(asRecord(ambientSound?.planJson)).toMatchObject({ decision: 'ambient_sound' })
+      expect(asRecord(ambientSound?.mixJson)).not.toBeNull()
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
       await assertFinalTimelineVisibility(page, 1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)

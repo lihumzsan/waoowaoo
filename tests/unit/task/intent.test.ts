@@ -7,7 +7,7 @@ describe('resolveTaskIntent', () => {
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_CHARACTER)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_LOCATION)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)).toBe('generate')
-    expect(resolveTaskIntent(TASK_TYPE.VIDEO_PANEL)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.VIDEO_SEGMENT)).toBe('generate')
   })
 
   it('maps regenerate and modify task types', () => {

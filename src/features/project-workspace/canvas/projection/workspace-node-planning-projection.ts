@@ -17,7 +17,6 @@ import {
   hasStreamTarget,
   isEditFirstWorkflowPosition,
   layoutPosition,
-  primaryPanelImageUrl,
   readJsonRecord,
   resolveWorkspaceCanvasNodeMaterialization,
   resourcePresentationFromStatus,
@@ -36,7 +35,12 @@ export interface WorkspacePlanningProjection {
 }
 
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
-  return [details.rawUserStyle, details.styleSummary, ...Object.values(details.visual), ...Object.values(details.camera), ...Object.values(details.sound)].some(
+  return [
+    details.rawUserStyle,
+    details.styleSummary,
+    details.visualStyle,
+    ...Object.values(details.assetImageStyle ?? {}),
+  ].some(
     (value) => typeof value === 'string' && value.trim().length > 0,
   )
 }
@@ -44,28 +48,18 @@ function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boo
 function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetails | null {
   const root = readJsonRecord(value)
   if (!root) return null
-  const stylePolicy = readJsonRecord(root.stylePolicy) ?? {}
-  const visual = readJsonRecord(stylePolicy.visual) ?? {}
-  const camera = readJsonRecord(stylePolicy.camera) ?? {}
-  const sound = readJsonRecord(stylePolicy.sound) ?? {}
+  const assetImageStyle = readJsonRecord(root.assetImageStyle)
   const details: WorkspaceCanvasStyleBibleDetails = {
     rawUserStyle: stringValue(root.rawUserStyle),
     styleSummary: stringValue(root.styleSummary),
-    visual: {
-      imageFilterPrompt: stringValue(visual.imageFilterPrompt),
-      lightingPrompt: stringValue(visual.lightingPrompt),
-      colorPrompt: stringValue(visual.colorPrompt),
-      texturePrompt: stringValue(visual.texturePrompt),
-      compositionPrompt: stringValue(visual.compositionPrompt),
-    },
-    camera: {
-      movementPrompt: stringValue(camera.movementPrompt),
-      lensAndDepthPrompt: stringValue(camera.lensAndDepthPrompt),
-      videoRhythmPrompt: stringValue(camera.videoRhythmPrompt),
-    },
-    sound: {
-      soundFilterPrompt: stringValue(sound.soundFilterPrompt),
-    },
+    visualStyle: stringValue(root.visualStyle),
+    assetImageStyle: assetImageStyle
+      ? {
+          lighting: stringValue(assetImageStyle.lighting) ?? '',
+          texture: stringValue(assetImageStyle.texture) ?? '',
+          composition: stringValue(assetImageStyle.composition) ?? '',
+        }
+      : null,
   }
   return styleBibleHasPolicyText(details) ? details : null
 }
@@ -82,11 +76,7 @@ function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): s
 }
 
 function shotCharacters(shot: ProjectEditScriptShot): string[] {
-  return shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`)
-}
-
-function shotKeyObjects(shot: ProjectEditScriptShot): string[] {
-  return shot.keyObjects.map((object) => `${object.name} / ${object.role}`)
+  return shot.characters.map((character) => `${character.name} / ${character.performance}`)
 }
 
 function shotDialogue(shot: ProjectEditScriptShot): string[] {
@@ -119,7 +109,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
     onAction,
     nodes,
     edges,
-    panelsByShot,
     projectedEditScripts,
     chapterIndexById,
     editFirstCanvasVisibility,
@@ -367,23 +356,16 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
           bibleText: script.sourceText ?? '',
           durationSec: script.durationSec,
           shotCount: script.shotCount,
-          shots: script.shots.map((shot) => {
-            const panel = panelsByShot.get(shot.shotId) ?? null
-            return {
+          shots: script.shots.map((shot) => ({
               shotId: shot.shotId,
               shotNumber: shot.shotNumber,
               durationSec: shot.durationSec,
               sceneName: shot.scene.name,
               action: shot.action,
               characters: shotCharacters(shot),
-              keyObjects: shotKeyObjects(shot),
-              imagePrompt: panel?.imagePrompt ?? null,
               dialogue: shotDialogue(shot),
-              sound: shot.sound,
-              imageUrl: primaryPanelImageUrl(panel),
-              videoUrl: panel?.videoMedia?.url ?? panel?.videoUrl ?? null,
-            }
-          }),
+              synchronousSound: shot.synchronousSound,
+            })),
         }
         nodes.push(
           createNode({

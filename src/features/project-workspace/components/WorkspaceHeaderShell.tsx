@@ -4,7 +4,7 @@ import { useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { EpisodeSelector } from '@/components/ui/CapsuleNav'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
-import type { ProjectEditChapter, ProjectPanel } from '@/types/project'
+import type { ProjectEditChapter, ProjectVideoSegment } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
@@ -33,9 +33,7 @@ interface EpisodeSummary {
     scriptText?: string | null
     bible?: string | null
   } | null
-  storyboards?: Array<{
-    panels?: ProjectPanel[] | null
-  }>
+  videoSegments?: ProjectVideoSegment[]
 }
 
 interface UserModelOption {
@@ -64,11 +62,8 @@ interface WorkspaceHeaderShellProps {
   analysisModel: string | null | undefined
   characterModel: string | null | undefined
   locationModel: string | null | undefined
-  storyboardModel: string | null | undefined
   editModel: string | null | undefined
   videoModel: string | null | undefined
-  singleShotVideoModel: string | null | undefined
-  sequenceVideoModel: string | null | undefined
   musicModel: string | null | undefined
   soundEffectModel: string | null | undefined
   capabilityOverrides: CapabilitySelections
@@ -147,11 +142,8 @@ export default function WorkspaceHeaderShell({
   analysisModel,
   characterModel,
   locationModel,
-  storyboardModel,
   editModel,
   videoModel,
-  singleShotVideoModel,
-  sequenceVideoModel,
   musicModel,
   soundEffectModel,
   capabilityOverrides,
@@ -254,11 +246,8 @@ export default function WorkspaceHeaderShell({
           analysisModel={analysisModel ?? undefined}
           characterModel={characterModel ?? undefined}
           locationModel={locationModel ?? undefined}
-          imageModel={storyboardModel ?? undefined}
           editModel={editModel ?? undefined}
           videoModel={videoModel ?? undefined}
-          singleShotVideoModel={singleShotVideoModel ?? videoModel ?? undefined}
-          sequenceVideoModel={sequenceVideoModel ?? undefined}
           musicModel={musicModel ?? undefined}
           soundEffectModel={soundEffectModel ?? undefined}
           videoRatio={videoRatio ?? undefined}
@@ -266,11 +255,8 @@ export default function WorkspaceHeaderShell({
           onAnalysisModelChange={(value) => { onUpdateConfig('analysisModel', value) }}
           onCharacterModelChange={(value) => { onUpdateConfig('characterModel', value) }}
           onLocationModelChange={(value) => { onUpdateConfig('locationModel', value) }}
-          onImageModelChange={(value) => { onUpdateConfig('storyboardModel', value) }}
           onEditModelChange={(value) => { onUpdateConfig('editModel', value) }}
           onVideoModelChange={(value) => { onUpdateConfig('videoModel', value) }}
-          onSingleShotVideoModelChange={(value) => { onUpdateConfig('singleShotVideoModel', value) }}
-          onSequenceVideoModelChange={(value) => { onUpdateConfig('sequenceVideoModel', value) }}
           onMusicModelChange={(value) => { onUpdateConfig('musicModel', value) }}
           onSoundEffectModelChange={(value) => { onUpdateConfig('soundEffectModel', value) }}
           onVideoRatioChange={(value) => { onUpdateConfig('videoRatio', value) }}
@@ -312,7 +298,7 @@ export default function WorkspaceHeaderShell({
                 novelText: ep.novelText ?? null,
                 editScript: ep.editScript ?? null,
                 editBible: ep.editBible ?? null,
-                storyboards: ep.storyboards || [],
+                videoSegments: ep.videoSegments || [],
               })
               return {
                 id: ep.id,

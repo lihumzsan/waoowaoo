@@ -55,23 +55,13 @@ const mustIncludeRules: Rule[] = [
   },
   {
     file: 'src/lib/workers/video.worker.ts',
-    pattern: /const\s+sourceImageBase64\s*=\s*await\s+normalizeToBase64ForGeneration\(sourceImageUrl\)/,
-    message: 'video.worker.ts must normalize source frame to base64',
-  },
-  {
-    file: 'src/lib/workers/video.worker.ts',
-    pattern: /lastFrameImageBase64\s*=\s*await\s+normalizeToBase64ForGeneration\(lastFrameUrl\)/,
-    message: 'video.worker.ts must normalize last frame to base64',
+    pattern: /payload\.referenceImages\.map\(async \(reference\) => \(\{[\s\S]*?normalizeToBase64ForGeneration\(reference\.source\)/,
+    message: 'video.worker.ts must normalize every frozen segment reference before outbound generation',
   },
   {
     file: 'src/lib/assets/services/asset-actions.ts',
     pattern: /sanitizeImageInputsForTaskPayload/,
     message: 'asset modify service must sanitize image inputs before task payload creation',
-  },
-  {
-    file: 'src/lib/operations/domains/media/media-ops.ts',
-    pattern: /sanitizeImageInputsForTaskPayload/,
-    message: 'modify_storyboard_image operation must sanitize image inputs before task payload creation',
   },
   {
     file: 'src/components/ui/ImagePreviewModal.tsx',
@@ -88,8 +78,8 @@ const mustNotIncludeRules: Rule[] = [
   },
   {
     file: 'src/lib/workers/video.worker.ts',
-    pattern: /imageUrl:\s*sourceImageUrl/,
-    message: 'video.worker.ts must not pass raw sourceImageUrl to generator',
+    pattern: /url:\s*reference\.source/,
+    message: 'video.worker.ts must not pass raw frozen reference storage keys to the provider',
   },
   {
     file: 'src/lib/media/outbound-image.ts',

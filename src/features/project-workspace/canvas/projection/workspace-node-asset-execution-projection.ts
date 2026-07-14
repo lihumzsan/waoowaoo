@@ -46,28 +46,20 @@ function planningEntityNameSet(value: unknown, key: 'characters' | 'locations'):
 }
 
 function executionItems(plan: ProjectEditShotExecutionPlan, editScript: ProjectEditScript, translate: Translate): WorkspaceCanvasEditPipelineStepItem[] {
-  const characterNameById = new Map(editScript.shots.flatMap((shot) => shot.characters.map((character) => [character.characterId, character.name] as const)))
-  return plan.shots.map((shot) => ({
+  const shotById = new Map(editScript.shots.map((shot) => [shot.shotId, shot] as const))
+  return plan.generationSegments.flatMap((segment) => segment.shots.map((execution) => {
+    const shot = shotById.get(execution.shotId)
+    if (!shot) throw new Error(`EDIT_SHOT_EXECUTION_SHOT_UNKNOWN:${execution.shotId}`)
+    return {
     title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
     fields: [
-      { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
-      { label: translate('nodeFields.lens'), value: shot.camera.lens },
-      { label: translate('nodeFields.focus'), value: shot.camera.focus },
-      { label: translate('nodeFields.cameraHeight'), value: shot.camera.height },
-      { label: translate('nodeFields.cameraAngle'), value: shot.camera.angle },
-      { label: translate('nodeFields.composition'), value: shot.camera.composition },
-      { label: translate('nodeFields.lighting'), value: shot.camera.lighting },
-      { label: translate('nodeFields.axisAndEyeline'), value: shot.blocking.axis.screenDirection },
+      { label: translate('nodeFields.shotScale'), value: execution.shotScale },
+      { label: translate('nodeFields.cameraMovement'), value: execution.cameraMovement.movement },
+      { label: translate('nodeFields.cameraStability'), value: execution.cameraMovement.stability },
     ],
-    body: shot.blocking.spatialNote,
-    chips: [
-      ...shot.blocking.characters.map((character) => {
-        const name = characterNameById.get(character.characterId)
-        if (!name) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_UNKNOWN:${shot.shotNumber}:${character.characterId}`)
-        return `${name} / ${character.visibility}`
-      }),
-      ...shot.blocking.objects.map((object) => object.name),
-    ],
+    body: shot.action,
+    chips: shot.characters.map((character) => character.name),
+  }
   }))
 }
 
@@ -96,6 +88,7 @@ export function appendWorkspaceAssetExecutionProjection(
     chapterIndexById,
     editFirstCanvasVisibility,
     stylePreviewImageUrl,
+    editFirstWorkflow,
   } = context
   const { bibleNodeId, editScriptNodeIdsByScriptId } = planning
 
@@ -137,7 +130,7 @@ export function appendWorkspaceAssetExecutionProjection(
           name: location.name,
           description: location.summary || image?.description || location.name,
           previewImageUrl: image?.imageUrl || image?.media?.url || null,
-          errorMessage: image?.imageErrorMessage ?? image?.spatialProfileError ?? null,
+          errorMessage: image?.imageErrorMessage ?? null,
           taskTargetType: 'LocationImage' as const,
           taskTargetId: location.id,
         }
@@ -178,6 +171,7 @@ export function appendWorkspaceAssetExecutionProjection(
     })
   }
   const displayedAssets = plannedAssets.length > 0 ? plannedAssets : [...fallbackAssetsByIdentity.values()]
+  const assetGenerationAvailable = editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_edit_script_assets')
   if (editFirstCanvasVisibility.editAssetGroup && displayedAssets.length > 0) {
     const nodeId = workspaceNodeId.editAssetGroup(episodeId)
     assetGroupNodeId = nodeId
@@ -217,8 +211,10 @@ export function appendWorkspaceAssetExecutionProjection(
             locations: locationRequirements,
           }),
           ...(assetGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          actionLabel: !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
-          action: !assetsReady && primaryScript ? { type: 'generate_edit_assets', editScriptId: primaryScript.id } : undefined,
+          actionLabel: assetGenerationAvailable && !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
+          action: assetGenerationAvailable && !assetsReady && primaryScript
+            ? { type: 'generate_edit_assets', editScriptId: primaryScript.id }
+            : undefined,
           editAssetGroupDetails: {
             editScriptId: primaryScript?.id ?? episodeId,
             assets: displayedAssets.map((asset) => {
@@ -246,12 +242,12 @@ export function appendWorkspaceAssetExecutionProjection(
                 runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType, asset.taskTargetId),
                 action: asset.previewImageUrl
                   ? { type: 'regenerate_edit_asset_image', assetId: asset.id, kind: asset.kind }
-                  : requirement && script
+                  : assetGenerationAvailable && requirement && script
                     ? { type: 'generate_edit_asset', editScriptId: script.id, requirementId: requirement.id }
                     : undefined,
                 actionLabel: asset.previewImageUrl
                   ? translate('actions.regenerateImage')
-                  : requirement && script
+                  : assetGenerationAvailable && requirement && script
                     ? translate('actions.generateEditAsset')
                     : undefined,
               }
@@ -313,12 +309,16 @@ export function appendWorkspaceAssetExecutionProjection(
               : translate('nodes.editShotExecutionPlan.titleWithChapterNumber', { chapter: chapterIndex + 1 }),
           eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
           body: matchingExecutionPlan
-            ? matchingExecutionPlan.shots
+            ? matchingExecutionPlan.generationSegments.flatMap((segment) => segment.shots)
                 .slice(0, 4)
-                .map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`)
+                .map((shot) => `${shot.shotNumber}. ${shot.shotScale} / ${shot.cameraMovement.movement}`)
                 .join('\n')
             : translate('nodes.editShotExecutionPlan.pendingBody'),
-          meta: matchingExecutionPlan ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length }) : '',
+          meta: matchingExecutionPlan
+            ? translate('nodes.editShotExecutionPlan.meta', {
+                shots: matchingExecutionPlan.generationSegments.reduce((total, segment) => total + segment.shots.length, 0),
+              })
+            : '',
           ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
           terminalHandoffTaskId: matchingExecutionPlan?.generationTaskId ?? null,
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(script.id)),

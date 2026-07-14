@@ -24,10 +24,9 @@ import { normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
 import { buildShotExecutionPlanPromptStructure } from '@/lib/edit-script/shot-execution-plan-prompt'
 import { normalizeChapterPlanOutput } from '@/lib/edit-chapter'
 import { parseLocationCandidatePrompt } from '@/lib/asset-generation/location-candidate-prompts'
-import { parseLocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import { bgmScorePlanSchema } from '@/lib/bgm-score/types'
-import { soundscapeRawPlanSchema } from '@/lib/soundscape/types'
-import { resolveSoundscapePlanReferences } from '@/lib/soundscape/plan-contract'
+import { ambientSoundRawPlanSchema } from '@/lib/ambient-sound/types'
+import { resolveAmbientSoundPlanReferences } from '@/lib/ambient-sound/plan-contract'
 import {
   applyGoldenRuntimeIdentity,
   resolveGoldenRuntimeIdentity,
@@ -147,7 +146,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'user',
-          content: '{"voiceProfile":"固有声线","worldRules":[],"stylePreviews":[{"stylePolicy":{},"gridImagePrompt":"string"}]}',
+          content: '{"stylePreviews":[{"visualStyle":"string","assetImageStyle":{"lighting":"string","texture":"string","composition":"string"},"gridImagePrompt":"string"}]}',
         }],
       },
     })
@@ -206,35 +205,6 @@ describe('Golden local model provider', () => {
     expect(prompt).not.toContain('旅人')
   })
 
-  it('honors the production location spatial-profile vision contract expressed only in the prompt', () => {
-    const decision = decideGoldenModelResponse({
-      scenarioId: 'normal-mainline',
-      requestOrdinal: 21,
-      request: {
-        model: 'golden-model',
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: '你负责分析场景图片的空间结构。只输出 {"sceneSummary": "string", "anchors": []}。',
-            },
-            {
-              type: 'image_url',
-              image_url: { url: 'data:image/png;base64,Z29sZGVu' },
-            },
-          ],
-        }],
-      },
-    })
-
-    expect(decision.kind).toBe('text')
-    if (decision.kind !== 'text') return
-    const profile = parseLocationSpatialProfile(JSON.parse(decision.text) as unknown)
-    expect(profile.anchors.length).toBeGreaterThan(0)
-    expect(profile.depthLayout.midground).toContain('祭台')
-  })
-
   it('covers the exact production shots and segments in the prompt-only shot execution plan', () => {
     const core = editScriptCoreSchema.parse({
       shots: [
@@ -246,9 +216,8 @@ describe('Golden local model provider', () => {
           scene: { locationId: 'location-real-1', name: '废弃祭坛', subScene: '祭坛全貌' },
           action: '暮色笼罩祭坛。',
           characters: [],
-          keyObjects: [{ name: '祭坛石碑', role: '空间地标' }],
           dialogue: [],
-          sound: '一次短促石块碰撞声。',
+          synchronousSound: '一次短促石块碰撞声。',
         },
         {
           shotId: 'shot-real-2',
@@ -260,16 +229,14 @@ describe('Golden local model provider', () => {
           characters: [{
             characterId: 'character-real-1',
             name: '旅人',
-            visibility: 'visible',
-            role: 'focus',
             performance: '谨慎靠近',
           }],
-          keyObjects: [{ name: '石碑', role: '异常规则载体' }],
           dialogue: [],
-          sound: '一次脚步声。',
+          synchronousSound: '一次脚步声。',
         },
       ],
       generationSegments: [{
+        segmentId: 'segment-real-1',
         shotIds: ['shot-real-1', 'shot-real-2'],
         continuity: '共享祭坛空间与连续动作。',
       }],
@@ -288,7 +255,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'user',
-          content: `核心剪辑计划：\n${JSON.stringify(productionPromptInput)}\n\n只输出包含 "generationSegmentExecutions" 和 "continuousVideoPrompt" 的 JSON。`,
+          content: `核心剪辑计划：\n${JSON.stringify(productionPromptInput)}\n\n只输出包含 "generationSegments" 和 "cameraMovement" 的 JSON。`,
         }],
       },
     })
@@ -300,8 +267,8 @@ describe('Golden local model provider', () => {
       core.shots,
       core.generationSegments,
     )
-    expect(normalized.shots.map((shot) => shot.shotId)).toEqual(['shot-real-1', 'shot-real-2'])
-    expect(normalized.generationSegmentExecutions[0]?.shotIds).toEqual(['shot-real-1', 'shot-real-2'])
+    expect(normalized.generationSegments[0]?.shots.map((shot) => shot.shotId)).toEqual(['shot-real-1', 'shot-real-2'])
+    expect(normalized.generationSegments[0]?.shots.every((shot) => shot.cameraMovement.stability === 'smooth')).toBe(true)
   })
 
   it('honors the production BGM score plan contract expressed only in the prompt', () => {
@@ -325,7 +292,7 @@ describe('Golden local model provider', () => {
     expect(plan.scoreDesign.sections).toHaveLength(1)
   })
 
-  it('uses short clip orders in the production soundscape model contract', () => {
+  it('uses short clip orders in the production ambientSound model contract', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 24,
@@ -340,16 +307,18 @@ describe('Golden local model provider', () => {
 
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const rawPlan = soundscapeRawPlanSchema.parse(JSON.parse(decision.text))
+    const rawPlan = ambientSoundRawPlanSchema.parse(JSON.parse(decision.text))
     expect(rawPlan.sections[0]).toMatchObject({
       fromClipOrder: 1,
       toClipOrder: 2,
     })
-    const plan = resolveSoundscapePlanReferences(rawPlan, [
+    const plan = resolveAmbientSoundPlanReferences(rawPlan, [
       {
-        panelId: 'panel-1',
-        groupId: null,
-        sourceKind: 'panel',
+        clipId: 'clip-1',
+        sourceKind: 'videoSegment',
+        sourceId: 'video-segment-1',
+        videoSegmentId: 'video-segment-1',
+        segmentId: 'segment-1',
         source: 'clip-1.mp4',
         durationSeconds: 4,
         order: 1,
@@ -358,12 +327,14 @@ describe('Golden local model provider', () => {
         shotId: 'shot-real-1',
         shotIds: ['shot-real-1'],
         description: null,
-        sound: null,
+        synchronousSound: null,
       },
       {
-        panelId: 'panel-2',
-        groupId: null,
-        sourceKind: 'panel',
+        clipId: 'clip-2',
+        sourceKind: 'videoSegment',
+        sourceId: 'video-segment-2',
+        videoSegmentId: 'video-segment-2',
+        segmentId: 'segment-2',
         source: 'clip-2.mp4',
         durationSeconds: 4,
         order: 2,
@@ -372,7 +343,7 @@ describe('Golden local model provider', () => {
         shotId: 'shot-real-2',
         shotIds: ['shot-real-2'],
         description: null,
-        sound: null,
+        synchronousSound: null,
       },
     ])
     expect(plan.sections[0]).toMatchObject({

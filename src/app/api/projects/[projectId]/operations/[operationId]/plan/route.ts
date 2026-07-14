@@ -29,7 +29,6 @@ export const POST = apiHandler(async (
       locale: typeof routeContext.locale === 'string' ? routeContext.locale : null,
       episodeId: typeof routeContext.episodeId === 'string' ? routeContext.episodeId : null,
       selectedScopeRef: typeof routeContext.selectedScopeRef === 'string' ? routeContext.selectedScopeRef : null,
-      selectedPanelId: typeof routeContext.selectedPanelId === 'string' ? routeContext.selectedPanelId : null,
       selectedAssetId: typeof routeContext.selectedAssetId === 'string' ? routeContext.selectedAssetId : null,
     },
     input,

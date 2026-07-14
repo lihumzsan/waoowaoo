@@ -17,11 +17,8 @@ const MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
-  'singleShotVideoModel',
-  'sequenceVideoModel',
   'musicModel',
   'soundEffectModel',
 ] as const
@@ -32,11 +29,8 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',
-  storyboardModel: 'image',
   editModel: 'image',
   videoModel: 'video',
-  singleShotVideoModel: 'video',
-  sequenceVideoModel: 'video',
   musicModel: 'music',
   soundEffectModel: 'soundEffect',
 }
@@ -155,11 +149,8 @@ function getNextProjectModelMap(
     analysisModel: string | null
     characterModel: string | null
     locationModel: string | null
-    storyboardModel: string | null
     editModel: string | null
     videoModel: string | null
-    singleShotVideoModel: string | null
-    sequenceVideoModel: string | null
     musicModel: string | null
     soundEffectModel: string | null
   },
@@ -265,11 +256,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
               analysisModel: true,
             characterModel: true,
             locationModel: true,
-            storyboardModel: true,
             editModel: true,
             videoModel: true,
-            singleShotVideoModel: true,
-            sequenceVideoModel: true,
             musicModel: true,
             soundEffectModel: true,
           },
@@ -285,11 +273,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           analysisModel: projectData.analysisModel,
           characterModel: projectData.characterModel,
           locationModel: projectData.locationModel,
-          storyboardModel: projectData.storyboardModel,
           editModel: projectData.editModel,
           videoModel: projectData.videoModel,
-          singleShotVideoModel: projectData.singleShotVideoModel,
-          sequenceVideoModel: projectData.sequenceVideoModel,
           musicModel: projectData.musicModel,
           soundEffectModel: projectData.soundEffectModel,
         }, {})
@@ -322,11 +307,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         analysisModel: z.string().nullable().optional(),
         characterModel: z.string().nullable().optional(),
         locationModel: z.string().nullable().optional(),
-        storyboardModel: z.string().nullable().optional(),
         editModel: z.string().nullable().optional(),
         videoModel: z.string().nullable().optional(),
-        singleShotVideoModel: z.string().nullable().optional(),
-        sequenceVideoModel: z.string().nullable().optional(),
         musicModel: z.string().nullable().optional(),
         soundEffectModel: z.string().nullable().optional(),
         videoRatio: z.string().optional(),
@@ -350,11 +332,8 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             analysisModel: true,
             characterModel: true,
             locationModel: true,
-            storyboardModel: true,
             editModel: true,
             videoModel: true,
-            singleShotVideoModel: true,
-            sequenceVideoModel: true,
             musicModel: true,
             soundEffectModel: true,
           },

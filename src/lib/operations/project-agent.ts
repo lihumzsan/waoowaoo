@@ -1,19 +1,16 @@
 import { createReadOperations } from './domains/project/read-ops'
 import { createGovernanceOperations } from './domains/governance/governance-ops'
-import { createEditOperations } from './domains/storyboard/edit-ops'
-import { createStoryboardPanelEditOperations } from './domains/storyboard/panel-edit-ops'
-import { createStoryboardPanelImageOperations } from './domains/storyboard/generation/image'
+import { createEditOperations } from './domains/assets/edit-ops'
 import { createGuiOperations } from './domains/gui/gui-ops'
 import { createExtraOperations } from './domains/extra/extra-ops'
 import { createLlmTaskOperations } from './domains/llm/llm-task-ops'
 import { createMediaOperations } from './domains/media/media-ops'
 import { createVideoOperations } from './domains/media/video-ops'
-import { createVideoGenerationOperations } from './domains/storyboard/generation/video'
+import { createVideoSegmentOperations } from './domains/video-segments'
 import { createMusicGenerationOperations } from './domains/music/generation/music-generation-ops'
 import { createFinalRenderOperations } from './domains/render/final-video/final-render-ops'
 import { createBibleOperations } from './domains/media/bible-ops'
 import { createEditScriptOperations } from './domains/media/edit-script-ops'
-import { createDownloadOperations } from './domains/media/download-ops'
 import { createConfigOperations } from './domains/config/config-ops'
 import { createProjectDataOperations } from './domains/project/project-data-ops'
 import { createProjectCrudOperations } from './domains/project/project-crud-ops'
@@ -144,7 +141,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createVideoGenerationOperations(), {
+    ...withOperationPack(createVideoSegmentOperations(), {
       groupPath: ['media', 'video'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
@@ -174,12 +171,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createDownloadOperations(), {
-      groupPath: ['media', 'download'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createGovernanceOperations(), {
       groupPath: ['governance'],
       channels: CHANNELS_TOOL_API,
@@ -188,10 +179,8 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack({
       ...createEditOperations(),
-      ...createStoryboardPanelEditOperations(),
-      ...createStoryboardPanelImageOperations(),
     }, {
-      groupPath: ['storyboard', 'edit'],
+      groupPath: ['asset', 'edit'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

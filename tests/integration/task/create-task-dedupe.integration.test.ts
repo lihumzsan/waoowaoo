@@ -73,13 +73,13 @@ describe('transactional Task batch dedupe', () => {
     const input: CreateTaskInput = {
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.IMAGE_PANEL,
-      targetType: 'ProjectPanel',
-      targetId: 'panel-invalid-scope',
-      payload: { panelId: 'panel-invalid-scope', meta: { locale: 'en' } },
+      type: TASK_TYPE.VIDEO_SEGMENT,
+      targetType: 'ProjectVideoSegment',
+      targetId: 'video-segment-invalid-scope',
+      payload: { segmentId: 'segment-invalid-scope', meta: { locale: 'en' } },
     }
 
-    await expect(persistBatch([input])).rejects.toThrow('WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:storyboards')
+    await expect(persistBatch([input])).rejects.toThrow('WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:video_segments')
     await expect(persistBatch([{ ...input, episodeId: otherEpisode.id }])).rejects.toThrow(
       `TASK_EPISODE_SCOPE_MISMATCH:${project.id}:${otherEpisode.id}`,
     )
@@ -177,7 +177,7 @@ describe('transactional Task batch dedupe', () => {
 
     await expect(persistBatch([{
       ...input,
-      payload: { panelId: 'panel-conflict', prompt: 'different', meta: { locale: 'en' } },
+      payload: { appearanceId: 'panel-conflict', prompt: 'different', meta: { locale: 'en' } },
     }])).rejects.toThrow('TASK_BATCH_IDENTITY_CONFLICT')
   })
 
@@ -206,17 +206,17 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.IMAGE_PANEL,
-        targetType: 'ProjectPanel',
-        targetId: 'panel-progress',
+        type: TASK_TYPE.IMAGE_CHARACTER,
+        targetType: 'CharacterAppearance',
+        targetId: 'appearance-progress',
         status: TASK_STATUS.PROCESSING,
         attempt: 1,
         progress: 5,
         payload: {
-          panelId: 'panel-progress',
+          appearanceId: 'appearance-progress',
           imageModel: 'fal::image-model',
           referenceMode: 'asset',
-          meta: { locale: 'zh', flowId: 'single:image_panel' },
+          meta: { locale: 'zh', flowId: 'single:image_character' },
           ui: { intent: 'generate', hasOutputAtStart: true },
         },
         queuedAt: new Date(),
@@ -225,7 +225,7 @@ describe('transactional Task batch dedupe', () => {
     })
 
     expect(await tryUpdateTaskProgress(task.id, 1, 18, {
-      stage: 'generate_panel_image',
+      stage: 'generate_character_image',
       meta: { locale: 'zh' },
     })).toBe(true)
     const stored = await prisma.task.findUnique({
@@ -235,10 +235,10 @@ describe('transactional Task batch dedupe', () => {
     const payload = asRecord(stored?.payload)
     expect(stored?.progress).toBe(18)
     expect(payload).toMatchObject({
-      stage: 'generate_panel_image',
+      stage: 'generate_character_image',
       imageModel: 'fal::image-model',
       referenceMode: 'asset',
-      meta: { locale: 'zh', flowId: 'single:image_panel' },
+      meta: { locale: 'zh', flowId: 'single:image_character' },
       ui: { intent: 'generate', hasOutputAtStart: true },
     })
   })
@@ -250,9 +250,9 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.IMAGE_PANEL,
-        targetType: 'ProjectPanel',
-        targetId: 'panel-stale-attempt',
+        type: TASK_TYPE.IMAGE_CHARACTER,
+        targetType: 'CharacterAppearance',
+        targetId: 'appearance-stale-attempt',
         status: TASK_STATUS.PROCESSING,
         attempt: 2,
         progress: 40,

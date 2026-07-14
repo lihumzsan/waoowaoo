@@ -114,7 +114,7 @@ function matchesTaskTypeWhitelist(
 }
 
 function shouldTraceMergeTarget(targetType: string) {
-  return targetType === 'ProjectPanel'
+  return targetType === 'ProjectVideoSegment'
 }
 
 function normalizedIdentity(value: string | null | undefined): string | null {

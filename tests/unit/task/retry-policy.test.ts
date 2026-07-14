@@ -25,7 +25,7 @@ describe('task retry policy', () => {
 
   it('does not retry output validation failures from non-LLM tasks', () => {
     expect(shouldRetryTaskFailure({
-      taskType: TASK_TYPE.IMAGE_PANEL,
+      taskType: TASK_TYPE.IMAGE_CHARACTER,
       failureClass: ERROR_FAILURE_CLASS.OUTPUT_VALIDATION,
     })).toBe(false)
   })

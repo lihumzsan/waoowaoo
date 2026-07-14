@@ -205,10 +205,9 @@ function summarizeChapters(chapters: ReadonlyArray<{
 }
 
 function hasGeneratedVideoOutput(group: {
-  readonly videoUrl?: string | null
   readonly videoMediaId?: string | null
 }): boolean {
-  return Boolean(group.videoUrl?.trim() || group.videoMediaId?.trim())
+  return Boolean(group.videoMediaId?.trim())
 }
 
 function isProcessingStatus(status: string | null | undefined): boolean {
@@ -299,25 +298,13 @@ async function readChapterDetail(input: {
           errorMessage: true,
         },
       },
-      storyboards: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          editScriptId: true,
-          panelCount: true,
-          lastError: true,
-          updatedAt: true,
-          _count: { select: { panels: true } },
-        },
-      },
-      videoGroups: {
+      videoSegments: {
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
+          segmentId: true,
           status: true,
-          shotIds: true,
           durationSec: true,
-          videoUrl: true,
           videoMediaId: true,
           errorCode: true,
           errorMessage: true,
@@ -519,10 +506,10 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: episodeOverviewOutputSchema,
       execute: async (ctx, input) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const [editBible, chapters, videoGroups] = await Promise.all([
+        const [editBible, chapters, videoSegments] = await Promise.all([
           readEpisodeEditBible({ projectId: ctx.projectId, episodeId }),
           readEpisodeEditChapters({ projectId: ctx.projectId, episodeId }),
-          prisma.projectVideoGroup.findMany({
+          prisma.projectVideoSegment.findMany({
             where: {
               projectId: ctx.projectId,
               episodeId,
@@ -530,7 +517,6 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
             select: {
               status: true,
               durationSec: true,
-              videoUrl: true,
               videoMediaId: true,
             },
           }),
@@ -539,13 +525,13 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           editBible,
           chapters,
           chapterSummary: summarizeChapters(chapters),
-          videoSegmentSummary: summarizeVideoSegments(videoGroups),
+          videoSegmentSummary: summarizeVideoSegments(videoSegments),
         })
       },
     }),
     get_chapter_detail: defineOperation({
       id: 'get_chapter_detail',
-      summary: 'Read lightweight details for one chapter, including plan metadata, storyboard status, video group status, asset requirements, and chapter render output.',
+      summary: 'Read lightweight details for one chapter, including plan metadata, video segment status, asset requirements, and chapter render output.',
       intent: 'query',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_QUERY,

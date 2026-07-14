@@ -35,7 +35,6 @@ export interface ProjectAgentContext {
   executionSegmentId?: string | null
   choiceDecision?: EditFirstChoiceDecision | null
   selectedScopeRef?: string | null
-  selectedPanelId?: string | null
   selectedAssetId?: string | null
   approvedInvocationByOperationId?: Record<string, PlannedOperationInvocation>
 }
@@ -264,7 +263,6 @@ export interface ProjectAssistantContextSnapshot {
   episodeId?: string | null
   episodeName?: string | null
   selectedScopeRef?: string | null
-  selectedPanelId?: string | null
   selectedAssetId?: string | null
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']
   recentOperationResults: ProjectContextSnapshot['recentOperationResults']

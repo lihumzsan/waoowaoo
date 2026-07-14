@@ -13,7 +13,6 @@ export const EDIT_FIRST_WORKFLOW_STEPS = [
   'chapter_plan',
   'planned_assets',
   'shot_execution',
-  'storyboard_images',
   'video_segments',
   'chapter_render',
   'audio_plan',
@@ -68,10 +67,9 @@ export interface EditFirstWorkflowCapabilities {
   readonly editScript: boolean
   readonly editAssetGroup: boolean
   readonly editShotExecutionPlan: boolean
-  readonly storyboardPanels: boolean
   readonly videoPlan: boolean
   readonly bgmScore: boolean
-  readonly soundscape: boolean
+  readonly ambientSound: boolean
   readonly finalTimeline: boolean
 }
 
@@ -101,9 +99,6 @@ export interface EditFirstWorkflowSnapshot {
   confirmedStylePreviewCount: number
   failedStylePreviewCount: number
   activeStylePreviewTaskCount: number
-  plannedAssetCount: number
-  pendingPlannedAssetCount: number
-  activePlannedAssetTaskCount: number
   hasEditScript: boolean
   activeEditScriptTaskCount: number
   editScriptStatus: string | null
@@ -111,19 +106,9 @@ export interface EditFirstWorkflowSnapshot {
   editAssetRequirementCount: number
   pendingAssetRequirementCount: number
   generatingAssetRequirementCount: number
-  requiredLocationSpatialProfileCount: number
-  readyLocationSpatialProfileCount: number
   hasShotExecutionPlan: boolean
   activeShotExecutionPlanTaskCount: number
   shotExecutionPlanStatus: string | null
-  storyboardCount: number
-  panelCount: number
-  storyboardPanelImagePromptMissingCount: number
-  storyboardPanelVideoPromptMissingCount: number
-  storyboardPanelImageReadyCount: number
-  storyboardPanelImageMissingCount: number
-  storyboardPanelImageFailedCount: number
-  activeStoryboardImageTaskCount: number
   videoPlanSegmentCount: number
   completedVideoSegmentCount: number
   failedVideoSegmentCount: number
@@ -138,11 +123,11 @@ export interface EditFirstWorkflowSnapshot {
   bgmScoreHasMix: boolean
   activeBgmScorePlanTaskCount: number
   activeBgmScoreGenerationTaskCount: number
-  soundscapeStatus: string | null
-  soundscapeHasMix: boolean
-  soundscapeDecision: 'soundscape' | 'none_needed' | null
-  activeSoundscapePlanTaskCount: number
-  activeSoundscapeGenerationTaskCount: number
+  ambientSoundStatus: string | null
+  ambientSoundHasMix: boolean
+  ambientSoundDecision: 'ambient_sound' | 'none_needed' | null
+  activeAmbientSoundPlanTaskCount: number
+  activeAmbientSoundGenerationTaskCount: number
   finalRenderStatus: string | null
   finalRenderHasOutput: boolean
   activeFinalRenderTaskCount: number
@@ -158,10 +143,9 @@ const EDIT_FIRST_WORKFLOW_CAPABILITY_UNLOCK_STEP = {
   editScript: 'chapter_plan',
   editAssetGroup: 'visual_style',
   editShotExecutionPlan: 'shot_execution',
-  storyboardPanels: 'storyboard_images',
   videoPlan: 'video_segments',
   bgmScore: 'audio_plan',
-  soundscape: 'audio_plan',
+  ambientSound: 'audio_plan',
   finalTimeline: 'final_render',
 } as const satisfies Record<keyof EditFirstWorkflowCapabilities, EditFirstWorkflowStep>
 
@@ -424,24 +408,8 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
   }
 
   if (!snapshot.hasEditScript) {
-    if (snapshot.activeEditScriptTaskCount > 0 || snapshot.activePlannedAssetTaskCount > 0) {
-      return processingWorkflowView(
-        'chapter_plan',
-        'chapter edit planning and planned asset tasks are still running',
-      )
-    }
-    if (snapshot.plannedAssetCount > 0 && snapshot.pendingPlannedAssetCount > 0) {
-      const operationIds = ['generate_edit_script_assets', 'plan_chapters'] as const
-      return readyWorkflowView({
-        step: 'chapter_plan',
-        recommendedAction: workflowAction('plan_chapters', 'Plan chapters and generate planned assets'),
-        allowedOperationIds: operationIds,
-        group: {
-          id: 'edit_first_core_and_planned_assets',
-          operationIds,
-          approvalOperationIds: ['generate_edit_script_assets'],
-        },
-      })
+    if (snapshot.activeEditScriptTaskCount > 0) {
+      return processingWorkflowView('chapter_plan', 'chapter edit planning is still running')
     }
     return readyWorkflowView({
       step: 'chapter_plan',
@@ -470,10 +438,9 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     return processingWorkflowView('chapter_plan', 'edit core table is still generating')
   }
 
-  const missingSpatialProfileCount = Math.max(0, snapshot.requiredLocationSpatialProfileCount - snapshot.readyLocationSpatialProfileCount)
-  if (snapshot.pendingAssetRequirementCount > 0 || missingSpatialProfileCount > 0) {
+  if (snapshot.pendingAssetRequirementCount > 0) {
     if (snapshot.generatingAssetRequirementCount > 0) {
-      return processingWorkflowView('planned_assets', 'required assets or spatial profiles are still generating')
+      return processingWorkflowView('planned_assets', 'required assets are still generating')
     }
     return readyWorkflowView({
       step: 'planned_assets',
@@ -513,38 +480,6 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     return processingWorkflowView('shot_execution', 'shot execution plan is not ready')
   }
 
-  if (snapshot.panelCount === 0 || snapshot.storyboardCount < snapshot.chapterCount) {
-    return failedWorkflowView({
-      step: 'shot_execution',
-      reason: 'ready shot execution plan is missing its automatic storyboard projection',
-    })
-  }
-
-  if (snapshot.storyboardPanelImagePromptMissingCount > 0 || snapshot.storyboardPanelVideoPromptMissingCount > 0) {
-    return failedWorkflowView({
-      step: 'storyboard_images',
-      reason: 'storyboard panel prompt facts are incomplete',
-    })
-  }
-
-  if (snapshot.storyboardPanelImageMissingCount > 0) {
-    const recommendedAction = workflowAction('generate_edit_script_storyboard_images', 'Generate storyboard images')
-    if (snapshot.activeStoryboardImageTaskCount > 0) {
-      return processingWorkflowView('storyboard_images', 'storyboard panel images are still generating')
-    }
-    if (snapshot.storyboardPanelImageFailedCount > 0) {
-      return failedWorkflowView({
-        step: 'storyboard_images',
-        reason: 'storyboard panel image generation failed',
-        recommendedAction,
-      })
-    }
-    return readyWorkflowView({
-      step: 'storyboard_images',
-      recommendedAction,
-    })
-  }
-
   if (snapshot.videoPlanSegmentCount === 0) {
     return failedWorkflowView({
       step: 'video_segments',
@@ -560,13 +495,13 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
   const bgmPlanning = snapshot.activeBgmScorePlanTaskCount > 0 || snapshot.bgmScoreStatus === 'planning'
   const bgmGenerating = snapshot.activeBgmScoreGenerationTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
   const bgmFailed = snapshot.bgmScoreStatus === 'failed'
-  const soundscapePlanReady = snapshot.soundscapeDecision !== null
-  const soundscapeSatisfied = snapshot.soundscapeDecision === 'none_needed' || snapshot.soundscapeHasMix
-  const soundscapePlanning = snapshot.activeSoundscapePlanTaskCount > 0
-    || snapshot.soundscapeStatus === 'planning'
-  const soundscapeGenerating = snapshot.activeSoundscapeGenerationTaskCount > 0
-    || snapshot.soundscapeStatus === 'generating'
-  const soundscapeFailed = snapshot.soundscapeStatus === 'failed'
+  const ambientSoundPlanReady = snapshot.ambientSoundDecision !== null
+  const ambientSoundSatisfied = snapshot.ambientSoundDecision === 'none_needed' || snapshot.ambientSoundHasMix
+  const ambientSoundPlanning = snapshot.activeAmbientSoundPlanTaskCount > 0
+    || snapshot.ambientSoundStatus === 'planning'
+  const ambientSoundGenerating = snapshot.activeAmbientSoundGenerationTaskCount > 0
+    || snapshot.ambientSoundStatus === 'generating'
+  const ambientSoundFailed = snapshot.ambientSoundStatus === 'failed'
   const finalRendering = snapshot.activeFinalRenderTaskCount > 0 || isActiveWorkflowStatus(snapshot.finalRenderStatus)
 
   if (snapshot.finalRenderHasOutput && snapshot.finalRenderStatus === 'completed') {
@@ -584,7 +519,7 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     return failedWorkflowView({
       step: 'video_segments',
       reason: 'one or more video segments failed',
-      recommendedAction: workflowAction('generate_episode_videos', 'Regenerate videos'),
+      recommendedAction: workflowAction('generate_video_segments', 'Regenerate videos'),
     })
   }
 
@@ -597,7 +532,7 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
   }
 
   if (!videoReady) {
-    const videoAction = workflowAction('generate_episode_videos', 'Generate videos')
+    const videoAction = workflowAction('generate_video_segments', 'Generate videos')
     const chapterAction = workflowAction('render_chapters', 'Render chapter videos')
     const hasRenderableUnrenderedChapter = snapshot.renderableChapterCount > snapshot.completedChapterRenderCount
     const recommendedAction = hasRenderableUnrenderedChapter ? chapterAction : videoAction
@@ -638,27 +573,27 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     })
   }
 
-  if (soundscapeFailed) {
-    const operationId: EditFirstWorkflowOperationId = soundscapePlanReady
-      ? 'generate_episode_soundscape'
-      : 'plan_episode_soundscape'
+  if (ambientSoundFailed) {
+    const operationId: EditFirstWorkflowOperationId = ambientSoundPlanReady
+      ? 'generate_episode_ambient_sound'
+      : 'plan_episode_ambient_sound'
     return failedWorkflowView({
-      step: soundscapePlanReady ? 'audio_generation' : 'audio_plan',
-      reason: 'soundscape generation failed',
+      step: ambientSoundPlanReady ? 'audio_generation' : 'audio_plan',
+      reason: 'ambient sound generation failed',
       recommendedAction: workflowAction(
         operationId,
-        operationId === 'generate_episode_soundscape'
-          ? 'Regenerate soundscape audio'
-          : 'Replan soundscape',
+        operationId === 'generate_episode_ambient_sound'
+          ? 'Regenerate ambient sound audio'
+          : 'Replan ambient sound',
       ),
     })
   }
 
-  if (!bgmPlanReady || !soundscapePlanReady) {
+  if (!bgmPlanReady || !ambientSoundPlanReady) {
     const missingPlanActions: EditFirstWorkflowOperationId[] = []
     if (!bgmPlanReady) missingPlanActions.push('plan_episode_bgm_score')
-    if (!soundscapePlanReady) missingPlanActions.push('plan_episode_soundscape')
-    if (bgmPlanning || soundscapePlanning) {
+    if (!ambientSoundPlanReady) missingPlanActions.push('plan_episode_ambient_sound')
+    if (bgmPlanning || ambientSoundPlanning) {
       return processingWorkflowView('audio_plan', 'audio layer planning is still running')
     }
     const nextOperationId = missingPlanActions[0]
@@ -667,7 +602,7 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
       step: 'audio_plan',
       recommendedAction: workflowAction(
         nextOperationId,
-        nextOperationId === 'plan_episode_bgm_score' ? 'Plan BGM score' : 'Plan soundscape',
+        nextOperationId === 'plan_episode_bgm_score' ? 'Plan BGM score' : 'Plan ambient sound',
       ),
       allowedOperationIds: missingPlanActions,
       group: missingPlanActions.length > 1
@@ -680,14 +615,14 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     })
   }
 
-  if (bgmGenerating || soundscapeGenerating) {
+  if (bgmGenerating || ambientSoundGenerating) {
     return processingWorkflowView('audio_generation', 'audio layer generation is still running')
   }
 
-  if (!bgmReady || !soundscapeSatisfied) {
+  if (!bgmReady || !ambientSoundSatisfied) {
     const missingGenerationActions: EditFirstWorkflowOperationId[] = []
     if (!bgmReady) missingGenerationActions.push('generate_episode_bgm_score')
-    if (!soundscapeSatisfied) missingGenerationActions.push('generate_episode_soundscape')
+    if (!ambientSoundSatisfied) missingGenerationActions.push('generate_episode_ambient_sound')
     const nextOperationId = missingGenerationActions[0]
     if (!nextOperationId) {
       throw new Error('EDIT_FIRST_AUDIO_LAYER_GENERATION_ACTION_REQUIRED')
@@ -696,9 +631,9 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
       nextOperationId,
       nextOperationId === 'generate_episode_bgm_score'
         ? 'Generate BGM score'
-        : nextOperationId === 'plan_episode_soundscape'
-          ? 'Plan soundscape'
-          : 'Generate soundscape audio',
+        : nextOperationId === 'plan_episode_ambient_sound'
+          ? 'Plan ambient sound'
+          : 'Generate ambient sound audio',
     )
     return readyWorkflowView({
       step: 'audio_generation',

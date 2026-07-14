@@ -14,7 +14,7 @@ const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
 const originalBillingMode = process.env.BILLING_MODE
 
 function mediaBillingInfo(params: {
-  taskType: typeof TASK_TYPE.IMAGE_PANEL | typeof TASK_TYPE.VIDEO_PANEL | typeof TASK_TYPE.MUSIC_GENERATE
+  taskType: typeof TASK_TYPE.IMAGE_CHARACTER | typeof TASK_TYPE.VIDEO_SEGMENT | typeof TASK_TYPE.MUSIC_GENERATE
   apiType: 'image' | 'video' | 'music'
   model: string
   maxFrozenCost: number
@@ -52,17 +52,17 @@ function textBillingInfo(): TaskBillingInfo {
 function buildPlan(): OperationPlan {
   return {
     kind: 'task_submission',
-    operationId: 'regenerate_panel_image',
+    operationId: 'generate_video_segments',
     projectId: 'project-1',
     userId: 'user-1',
     tasks: [
       {
         id: 'image-task',
-        taskType: TASK_TYPE.IMAGE_PANEL,
-        target: { targetType: 'ProjectPanel', targetId: 'panel-1' },
+        taskType: TASK_TYPE.IMAGE_CHARACTER,
+        target: { targetType: 'CharacterAppearance', targetId: 'appearance-1' },
         payload: { model: 'payload-should-not-drive-quote' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.IMAGE_PANEL,
+          taskType: TASK_TYPE.IMAGE_CHARACTER,
           apiType: 'image',
           model: 'planned-image-model',
           maxFrozenCost: 3.5,
@@ -73,11 +73,11 @@ function buildPlan(): OperationPlan {
       },
       {
         id: 'video-task',
-        taskType: TASK_TYPE.VIDEO_PANEL,
-        target: { targetType: 'ProjectPanel', targetId: 'panel-2' },
+        taskType: TASK_TYPE.VIDEO_SEGMENT,
+        target: { targetType: 'ProjectVideoSegment', targetId: 'segment-2' },
         payload: { model: 'different-payload-model' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.VIDEO_PANEL,
+          taskType: TASK_TYPE.VIDEO_SEGMENT,
           apiType: 'video',
           model: 'planned-video-model',
           maxFrozenCost: 6.25,
@@ -155,10 +155,10 @@ describe('operation planning billing quote', () => {
    */
   it('rejects an approval plan whose Task omits registry-required resource scope', async () => {
     const plan = buildPlan()
-    plan.tasks[0] = { ...plan.tasks[0]!, episodeId: null }
+    plan.tasks[1] = { ...plan.tasks[1]!, episodeId: null }
 
     await expect(quoteOperationPlan(plan)).rejects.toThrow(
-      'WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:storyboards',
+      'WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:video_segments',
     )
   })
 
@@ -180,20 +180,20 @@ describe('operation planning billing quote', () => {
       operationId: 'generate_episode_bgm_score' as const,
       planSnapshotId: 'music-snapshot',
     }
-    const soundscape = {
+    const ambientSound = {
       ...await toOperationPlanView(buildPlan()),
-      operationId: 'generate_episode_soundscape' as const,
-      planSnapshotId: 'soundscape-snapshot',
-      tasks: music.tasks.map((task) => ({ ...task, id: `soundscape:${task.id}` })),
+      operationId: 'generate_episode_ambient_sound' as const,
+      planSnapshotId: 'ambientSound-snapshot',
+      tasks: music.tasks.map((task) => ({ ...task, id: `ambientSound:${task.id}` })),
       quote: {
         ...music.quote,
-        items: music.quote.items.map((item) => ({ ...item, id: `soundscape:${item.id}` })),
+        items: music.quote.items.map((item) => ({ ...item, id: `ambientSound:${item.id}` })),
       },
     }
 
     const approval = mergeOperationPlanViewsForApproval(
       'generate_episode_bgm_score',
-      [music, soundscape],
+      [music, ambientSound],
     )
 
     expect(approval).toMatchObject({

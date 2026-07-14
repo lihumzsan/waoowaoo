@@ -15,11 +15,8 @@ interface ProjectSnapshotInput {
   analysisModel: string | undefined
   characterModel: string | undefined
   locationModel: string | undefined
-  storyboardModel: string | undefined
   editModel: string | undefined
   videoModel: string | undefined
-  singleShotVideoModel: string | undefined
-  sequenceVideoModel: string | undefined
   musicModel: string | undefined
   soundEffectModel: string | undefined
   videoRatio: string | undefined
@@ -68,15 +65,6 @@ interface BuildWorkspaceControllerViewModelParams {
     requestAssistantGuidance: () => Promise<void>
     showCreatingToast: boolean
   }
-  videoState: {
-    handleUpdateVideoPrompt: (
-      storyboardId: string,
-      panelIndex: number,
-      value: string,
-      field?: 'imagePrompt' | 'videoPrompt',
-    ) => Promise<void>
-    handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
-  }
   workspaceRuntime: WorkspaceRuntimeValue
   actionsState: {
     handleUpdateConfig: (key: string, value: unknown) => Promise<void>
@@ -93,7 +81,6 @@ export function buildWorkspaceControllerViewModel({
   uiState,
   rebuildState,
   executionState,
-  videoState,
   workspaceRuntime,
   actionsState,
 }: BuildWorkspaceControllerViewModelParams) {
@@ -103,7 +90,6 @@ export function buildWorkspaceControllerViewModel({
     ui: uiState,
     rebuild: rebuildState,
     execution: executionState,
-    video: videoState,
     runtime: { workspaceRuntime },
     actions: actionsState,
   }

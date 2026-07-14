@@ -8,7 +8,7 @@ const root = process.cwd()
 const guardedRoots = [
   path.join(root, 'src/lib/workers'),
   path.join(root, 'src/lib/bgm-score'),
-  path.join(root, 'src/lib/soundscape'),
+  path.join(root, 'src/lib/ambient-sound'),
 ]
 const guardedFiles = [
   path.join(root, 'src/lib/edit-script/service.ts'),

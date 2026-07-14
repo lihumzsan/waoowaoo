@@ -19,10 +19,6 @@ const fileScanRoots = [
 
 const lineRules = [
   {
-    name: 'shadow state localStoryboards',
-    test: (line) => /const\s*\[\s*localStoryboards\s*,\s*setLocalStoryboards\s*\]\s*=\s*useState/.test(line),
-  },
-  {
     name: 'hardcoded queryKey array',
     test: (line) => /queryKey\s*:\s*\[/.test(line),
   },

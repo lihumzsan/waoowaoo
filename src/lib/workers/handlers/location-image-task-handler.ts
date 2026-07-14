@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { type TaskJobData } from '@/lib/task/types'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import {
@@ -28,7 +29,6 @@ import {
   appendStyleBiblePromptBlock,
   resolveEditScriptStyleBibleForTask,
 } from '@/lib/edit-script/style-bible-prompt'
-import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 import { markEditAssetRequirementsCompletedForTargets } from '@/lib/edit-script/asset-requirement-status'
 
 interface LocationImageRecord {
@@ -99,8 +99,8 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   const modelId = models.locationModel
   if (!modelId) throw new Error('Location model not configured')
   const assetType = payload.type === 'prop' ? 'prop' : 'location'
-  const spatialProfileModel = models.analysisModel
-  if (assetType === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+  const analysisModel = models.analysisModel
+  if (assetType === 'location' && !analysisModel) throw new Error('LOCATION_CANDIDATE_PROMPT_MODEL_REQUIRED')
   if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
     throw new Error('LEGACY_ART_STYLE_REMOVED')
   }
@@ -179,8 +179,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
       })
       const strategy = strategies[item.imageIndex % strategies.length]
       if (!strategy) throw new Error('LOCATION_CANDIDATE_STRATEGY_NOT_FOUND')
-      const profileModel = spatialProfileModel
-      if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+      if (!analysisModel) throw new Error('LOCATION_CANDIDATE_PROMPT_MODEL_REQUIRED')
       await reportTaskProgress(job, 12 + Math.floor((i / Math.max(locationImages.length, 1)) * 8), {
         stage: 'generate_location_candidate_prompt',
         imageId: item.id,
@@ -189,7 +188,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
       const candidatePrompt = await generateLocationCandidatePrompt({
         userId,
         projectId,
-        analysisModel: profileModel,
+        analysisModel,
         locale,
         strategy,
       })
@@ -229,35 +228,17 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
         context: assetType === 'prop' ? 'prop_image' : 'location_image',
       }),
     })
+    const imageMedia = await ensureMediaObjectFromStorageKey(imageKey)
 
     await assertTaskActive(job, 'persist_location_image')
     await db.locationImage.update({
       where: { id: item.id },
       data: {
         imageUrl: imageKey,
-        ...(assetType === 'location'
-          ? {
-            spatialProfileStatus: 'stale',
-            spatialProfileError: null,
-          }
-          : {}),
+        imageMediaId: imageMedia.id,
       },
     })
     if (assetType === 'location') {
-      const profileModel = spatialProfileModel
-      if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-      await assertTaskActive(job, 'analyze_location_spatial_profile')
-      await reportTaskProgress(job, 78 + Math.floor((i / Math.max(locationImages.length, 1)) * 15), {
-        stage: 'analyze_location_spatial_profile',
-        imageId: item.id,
-      })
-      await analyzeAndPersistProjectLocationImageSpatialProfile({
-        imageId: item.id,
-        userId,
-        projectId,
-        model: profileModel,
-        locale: job.data.locale === 'en' ? 'en' : 'zh',
-      })
       if (!selectedLocationImageIds.has(item.locationId)) {
         selectedLocationImageIds.set(item.locationId, item.id)
       }

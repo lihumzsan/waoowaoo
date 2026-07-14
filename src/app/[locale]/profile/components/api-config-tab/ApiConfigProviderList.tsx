@@ -27,7 +27,6 @@ interface DefaultModels {
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string

@@ -245,6 +245,17 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
   })
 
   describe('asset-reference multi-reference video capability comes from the catalog', () => {
+    it('declares the platform OpenRouter Seedance Fast model with its explicit reference limit', () => {
+      const modelKey = 'openrouter::bytedance/seedance-2.0-fast'
+      expect(supportsAssetReferenceMultiReferenceVideoModel(modelKey)).toBe(true)
+      const entry = listBuiltinCapabilityCatalog().find((candidate) => (
+        candidate.modelType === 'video'
+        && candidate.provider === 'openrouter'
+        && candidate.modelId === 'bytedance/seedance-2.0-fast'
+      ))
+      expect(entry?.capabilities?.video?.maxReferenceImages).toBe(8)
+    })
+
     it('declares all Ark video models as multi-reference capable', () => {
       expect(supportsAssetReferenceMultiReferenceVideoModel('ark::doubao-seedance-2-0-260128')).toBe(true)
       expect(supportsAssetReferenceMultiReferenceVideoModel('ark::doubao-seedance-2-0-fast-260128')).toBe(true)

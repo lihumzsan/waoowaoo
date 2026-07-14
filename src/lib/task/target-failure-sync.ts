@@ -140,46 +140,45 @@ async function projectStylePreview(
   )
 }
 
-async function projectVideoGroup(
+async function projectVideoSegment(
   tx: Prisma.TransactionClient,
   input: TaskTargetTerminalProjection,
 ): Promise<TaskTargetTerminalProjectionResult> {
-  if (input.targetType !== 'ProjectVideoGroup') {
-    throw new Error(`VIDEO_GROUP_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
+  if (input.targetType !== 'ProjectVideoSegment') {
+    throw new Error(`VIDEO_SEGMENT_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
   }
   const failure = input.kind === 'failed' ? requireFailure(input) : null
-  const projected = await tx.projectVideoGroup.updateMany({
+  const projected = await tx.projectVideoSegment.updateMany({
     where: {
       id: input.targetId,
-      taskId: input.taskId,
-      status: { in: ['pending', 'generating', 'processing'] },
+      generationTaskId: input.taskId,
+      status: { in: ['queued', 'pending', 'generating', 'processing'] },
     },
     data: failure
       ? {
           status: 'failed',
-          taskId: null,
           errorCode: truncate(failure.errorCode, 80),
           errorMessage: truncate(failure.errorMessage, 2000),
         }
       : {
           status: 'pending',
-          taskId: null,
+          generationTaskId: null,
           errorCode: null,
           errorMessage: null,
         },
   })
   if (projected.count === 1) return 'applied'
-  const owner = await tx.projectVideoGroup.findUnique({
+  const owner = await tx.projectVideoSegment.findUnique({
     where: { id: input.targetId },
-    select: { taskId: true, status: true },
+    select: { generationTaskId: true, status: true },
   })
-  if (owner?.taskId !== input.taskId) return 'stale_owner'
+  if (owner?.generationTaskId !== input.taskId) return 'stale_owner'
   if (owner.status === 'completed') return 'success_materialized'
-  if (owner.status === 'pending' || owner.status === 'generating' || owner.status === 'processing') {
-    throw new Error(`VIDEO_GROUP_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
+  if (owner.status === 'queued' || owner.status === 'pending' || owner.status === 'generating' || owner.status === 'processing') {
+    throw new Error(`VIDEO_SEGMENT_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
   }
   throw new Error(
-    `VIDEO_GROUP_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`,
+    `VIDEO_SEGMENT_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`,
   )
 }
 
@@ -296,20 +295,20 @@ async function projectMusicScore(
   )
 }
 
-async function projectSoundscape(
+async function projectAmbientSound(
   tx: Prisma.TransactionClient,
   input: TaskTargetTerminalProjection,
 ): Promise<TaskTargetTerminalProjectionResult> {
   if (
     input.targetType !== 'ProjectEpisode' ||
-    (input.type !== TASK_TYPE.SOUNDSCAPE_PLAN && input.type !== TASK_TYPE.SOUNDSCAPE_GENERATE)
+    (input.type !== TASK_TYPE.AMBIENT_SOUND_PLAN && input.type !== TASK_TYPE.AMBIENT_SOUND_GENERATE)
   ) {
-    throw new Error(`SOUNDSCAPE_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
+    throw new Error(`AMBIENT_SOUND_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
   }
-  const activeStatuses = input.type === TASK_TYPE.SOUNDSCAPE_PLAN ? ['planning'] : ['generating']
+  const activeStatuses = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? ['planning'] : ['generating']
   const failure = input.kind === 'failed' ? requireFailure(input) : null
-  const canceledStatus = input.type === TASK_TYPE.SOUNDSCAPE_PLAN ? 'pending' : 'planned'
-  const projected = await tx.projectEditSoundscape.updateMany({
+  const canceledStatus = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? 'pending' : 'planned'
+  const projected = await tx.projectEditAmbientSound.updateMany({
     where: {
       episodeId: input.targetId,
       taskId: input.taskId,
@@ -330,18 +329,18 @@ async function projectSoundscape(
         },
   })
   if (projected.count === 1) return 'applied'
-  const owner = await tx.projectEditSoundscape.findUnique({
+  const owner = await tx.projectEditAmbientSound.findUnique({
     where: { episodeId: input.targetId },
     select: { taskId: true, status: true },
   })
   if (owner?.taskId !== input.taskId) return 'stale_owner'
-  const successStatus = input.type === TASK_TYPE.SOUNDSCAPE_PLAN ? 'planned' : 'completed'
+  const successStatus = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? 'planned' : 'completed'
   if (owner.status === successStatus) return 'success_materialized'
   if (activeStatuses.includes(owner.status)) {
-    throw new Error(`SOUNDSCAPE_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
+    throw new Error(`AMBIENT_SOUND_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
   }
   throw new Error(
-    `SOUNDSCAPE_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`,
+    `AMBIENT_SOUND_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`,
   )
 }
 
@@ -421,11 +420,11 @@ export async function projectTaskTargetTerminalInTransaction(
   }
   if (projector === 'edit_bible') return await projectEditBible(tx, input)
   if (projector === 'edit_style_preview') return await projectStylePreview(tx, input)
-  if (projector === 'video_group') return await projectVideoGroup(tx, input)
+  if (projector === 'video_segment') return await projectVideoSegment(tx, input)
   if (projector === 'chapter_render') return await projectChapterRender(tx, input)
   if (projector === 'final_video_render') return await projectFinalVideoRender(tx, input)
   if (projector === 'music_score') return await projectMusicScore(tx, input)
-  if (projector === 'soundscape') return await projectSoundscape(tx, input)
+  if (projector === 'ambient_sound') return await projectAmbientSound(tx, input)
   if (projector === 'edit_script') return await projectEditScript(tx, input)
   if (projector === 'edit_shot_execution_plan') return await projectEditShotExecutionPlan(tx, input)
   const exhaustive: never = projector

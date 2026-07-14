@@ -57,9 +57,11 @@ export async function loadEpisodeChapterOutputClips(input: {
       corePlanJson: chapter.editScript?.corePlanJson ?? null,
     })
     return {
-      panelId: chapter.id,
-      groupId: null,
-      sourceKind: 'panel',
+      clipId: chapter.id,
+      sourceKind: 'chapter',
+      sourceId: chapter.id,
+      videoSegmentId: null,
+      segmentId: null,
       source: {
         storageKey: chapter.outputMedia.storageKey,
       },
@@ -73,7 +75,7 @@ export async function loadEpisodeChapterOutputClips(input: {
         .map((value) => value?.trim() ?? '')
         .filter(Boolean)
         .join('\n') || null,
-      sound: null,
+      synchronousSound: null,
     }
   })
 }

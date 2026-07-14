@@ -5,6 +5,7 @@ import { addCharacterPromptSuffix, PRIMARY_APPEARANCE_INDEX } from '@/lib/consta
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import type { EditScriptStyleBible } from '@/lib/edit-script/types'
 import {
@@ -250,6 +251,9 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   const mainImage = selectedIndex !== null && selectedIndex !== undefined && nextImageUrls[selectedIndex]
     ? nextImageUrls[selectedIndex]
     : fallbackMain
+  const mainImageMedia = mainImage
+    ? await ensureMediaObjectFromStorageKey(mainImage)
+    : null
 
   await assertTaskActive(job, 'persist_character_image')
   await db.characterAppearance.update({
@@ -257,6 +261,7 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
     data: {
       imageUrls: encodeImageUrls(nextImageUrls),
       imageUrl: mainImage || null,
+      imageMediaId: mainImageMedia?.id ?? null,
       ...(generatedCandidateDescriptions
         ? { descriptions: JSON.stringify(generatedCandidateDescriptions) }
         : {}),

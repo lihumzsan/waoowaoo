@@ -15,7 +15,7 @@ function createDisplayRow(
     type: 'consume',
     amount: -1.14,
     balanceAfter: 10 - index * 1.14,
-    description: 'image_panel - gpt-image-2',
+    description: 'image_character - gpt-image-2',
     relatedId: `freeze_${index}`,
     freezeId: `freeze_${index}`,
     operatorId: null,
@@ -23,7 +23,7 @@ function createDisplayRow(
     idempotencyKey: `aggregation_${index}`,
     projectId: 'project_aggregation',
     episodeId: 'episode_aggregation',
-    taskType: TASK_TYPE.IMAGE_PANEL,
+    taskType: TASK_TYPE.IMAGE_CHARACTER,
     billingMeta: {
       quantity: 1,
       unit: 'image',
@@ -33,18 +33,18 @@ function createDisplayRow(
       chargedCost: 1.14,
     },
     createdAt: new Date(`2026-07-01T12:00:0${index}.000Z`),
-    action: TASK_TYPE.IMAGE_PANEL,
+    action: TASK_TYPE.IMAGE_CHARACTER,
     projectName: 'Aggregation Project',
     episodeNumber: 1,
     episodeName: 'Pilot',
     target: {
-      targetType: 'ProjectPanel',
-      targetId: `panel_${index}`,
-      labelKey: 'transactionTargets.projectPanel',
-      labelParams: { number: index },
+      targetType: 'CharacterAppearance',
+      targetId: `appearance_${index}`,
+      labelKey: 'transactionTargets.characterAppearance',
+      labelParams: { name: 'Character', index },
     },
-    operationId: 'generate_panel_images',
-    operationRequestId: 'request_generate_panel_images',
+    operationId: 'generate_character_images',
+    operationRequestId: 'request_generate_character_images',
     ...overrides,
   }
 }
@@ -59,7 +59,7 @@ describe('billing transaction display aggregation', () => {
 
     expect(result).toHaveLength(1)
     const group = result[0]
-    expect(group.id).toBe('group:request_generate_panel_images:generate_panel_images:transaction_3')
+    expect(group.id).toBe('group:request_generate_character_images:generate_character_images:transaction_3')
     expect(group.amount).toBeCloseTo(-3.42, 8)
     expect(group.balanceAfter).toBeCloseTo(6.58, 8)
     expect(group.transactionCount).toBe(3)
@@ -71,9 +71,9 @@ describe('billing transaction display aggregation', () => {
       resolution: '1K',
     })
     expect(group.target).toMatchObject({
-      targetType: 'ProjectPanel',
-      targetId: 'group:ProjectPanel',
-      labelKey: 'transactionTargets.projectPanelGroup',
+      targetType: 'CharacterAppearance',
+      targetId: 'group:CharacterAppearance',
+      labelKey: 'transactionTargets.characterAppearanceGroup',
       labelParams: { count: 3 },
     })
   })

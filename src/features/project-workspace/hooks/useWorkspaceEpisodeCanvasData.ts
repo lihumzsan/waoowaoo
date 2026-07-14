@@ -5,8 +5,7 @@ import type {
   ProjectEditScript,
   ProjectEditShotExecutionPlan,
   ProjectFinalVideo,
-  ProjectStoryboard,
-  ProjectVideoGroup,
+  ProjectVideoSegment,
 } from '@/types/project'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 
@@ -15,12 +14,11 @@ interface EpisodeCanvasPayload {
   novelText?: string | null
   audioUrl?: string | null
   srtContent?: string | null
-  storyboards?: ProjectStoryboard[]
   editScript?: ProjectEditScript | null
   editScripts?: ProjectEditScript[]
   editShotExecutionPlans?: ProjectEditShotExecutionPlan[]
   finalVideo?: ProjectFinalVideo | null
-  videoGroups?: ProjectVideoGroup[]
+  videoSegments?: ProjectVideoSegment[]
 }
 
 export function useWorkspaceEpisodeCanvasData() {
@@ -33,11 +31,10 @@ export function useWorkspaceEpisodeCanvasData() {
     novelText: payload?.novelText || '',
     audioUrl: payload?.audioUrl || null,
     srtContent: payload?.srtContent || null,
-    storyboards: payload?.storyboards || [],
     editScript: payload?.editScript || null,
     editScripts: payload?.editScripts || [],
     editShotExecutionPlans: payload?.editShotExecutionPlans || [],
     finalVideo: payload?.finalVideo || null,
-    videoGroups: payload?.videoGroups || [],
+    videoSegments: payload?.videoSegments || [],
   }
 }

@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import {
   assignTargetView,
-  formatShotIds,
   groupTargetRefs,
   idsFor,
   type BillingTransactionTargetView,
@@ -16,12 +15,11 @@ export async function resolveBillingTransactionTargets(
 
   const { refsByKey, idsByType } = groupTargetRefs(tasks)
 
-  const panelIds = idsFor(idsByType, 'ProjectPanel')
   const projectCharacterIds = idsFor(idsByType, 'ProjectCharacter')
   const characterAppearanceIds = idsFor(idsByType, 'CharacterAppearance')
   const projectLocationIds = idsFor(idsByType, 'ProjectLocation')
   const locationImageIds = idsFor(idsByType, 'LocationImage')
-  const videoGroupIds = idsFor(idsByType, 'ProjectVideoGroup')
+  const videoSegmentIds = idsFor(idsByType, 'ProjectVideoSegment')
   const stylePreviewIds = idsFor(idsByType, 'ProjectEditStylePreview')
   const episodeIds = idsFor(idsByType, 'ProjectEpisode')
   const editSourceScriptIds = idsFor(idsByType, 'ProjectEditSourceScript')
@@ -35,12 +33,11 @@ export async function resolveBillingTransactionTargets(
   const globalLocationIds = idsFor(idsByType, 'GlobalLocation')
   const globalLocationImageIds = idsFor(idsByType, 'GlobalLocationImage')
   const [
-    panels,
     projectCharacters,
     characterAppearances,
     projectLocations,
     locationImages,
-    videoGroups,
+    videoSegments,
     stylePreviews,
     episodes,
     editBibles,
@@ -52,12 +49,6 @@ export async function resolveBillingTransactionTargets(
     globalLocations,
     globalLocationImages,
   ] = await Promise.all([
-    panelIds.length > 0
-      ? prisma.projectPanel.findMany({
-        where: { id: { in: panelIds } },
-        select: { id: true, panelNumber: true, panelIndex: true },
-      })
-      : Promise.resolve([]),
     projectCharacterIds.length > 0
       ? prisma.projectCharacter.findMany({
         where: { id: { in: projectCharacterIds } },
@@ -82,10 +73,10 @@ export async function resolveBillingTransactionTargets(
         select: { id: true, imageIndex: true, location: { select: { name: true } } },
       })
       : Promise.resolve([]),
-    videoGroupIds.length > 0
-      ? prisma.projectVideoGroup.findMany({
-        where: { id: { in: videoGroupIds } },
-        select: { id: true, shotIds: true, durationSec: true },
+    videoSegmentIds.length > 0
+      ? prisma.projectVideoSegment.findMany({
+        where: { id: { in: videoSegmentIds } },
+        select: { id: true, segmentId: true },
       })
       : Promise.resolve([]),
     stylePreviewIds.length > 0
@@ -150,15 +141,6 @@ export async function resolveBillingTransactionTargets(
       : Promise.resolve([]),
   ])
 
-  for (const panel of panels) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectPanel',
-      targetId: panel.id,
-      labelKey: 'transactionTargets.projectPanel',
-      labelParams: { number: panel.panelNumber ?? panel.panelIndex + 1 },
-    })
-  }
-
   for (const character of projectCharacters) {
     assignTargetView(result, refsByKey, {
       targetType: 'ProjectCharacter',
@@ -195,13 +177,12 @@ export async function resolveBillingTransactionTargets(
     })
   }
 
-  for (const group of videoGroups) {
-    const shots = formatShotIds(group.shotIds)
+  for (const segment of videoSegments) {
     assignTargetView(result, refsByKey, {
-      targetType: 'ProjectVideoGroup',
-      targetId: group.id,
-      labelKey: shots ? 'transactionTargets.projectVideoGroup' : 'transactionTargets.projectVideoGroupGeneric',
-      labelParams: shots ? { shots } : {},
+      targetType: 'ProjectVideoSegment',
+      targetId: segment.id,
+      labelKey: 'transactionTargets.projectVideoSegment',
+      labelParams: { segment: segment.segmentId },
     })
   }
 

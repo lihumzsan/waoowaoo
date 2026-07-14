@@ -74,7 +74,6 @@ describe('Canvas terminal handoff', () => {
     const sourceProjection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'source_script',
         status: { kind: 'processing', reason: 'source generation is running' },
@@ -88,7 +87,6 @@ describe('Canvas terminal handoff', () => {
     const bibleProjection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'episode_plan',
         status: { kind: 'processing', reason: 'planning is running' },

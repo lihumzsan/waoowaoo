@@ -41,7 +41,6 @@ export function inspectTerminalResourceRefetchContract(input) {
     'extractWorkspaceResourceRefsFromTaskLifecycleEvent',
     'extractWorkspaceResourceRefsFromWriteResult',
     'isEditPipelineTaskType',
-    'isStoryboardTargetType',
     'readWriteResultData',
   ]) {
     if (input.resourceImpact.includes(forbidden)) violations.push(`resource impact restores heuristic interpreter: ${forbidden}`)

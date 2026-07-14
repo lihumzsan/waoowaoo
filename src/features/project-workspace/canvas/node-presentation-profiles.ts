@@ -37,11 +37,6 @@ export const WORKSPACE_CANVAS_DEFAULT_NODE_SIZE: WorkspaceCanvasNodeSize = {
   height: 214,
 }
 
-export const WORKSPACE_CANVAS_SHOT_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 380,
-  height: 560,
-}
-
 export const WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE: WorkspaceCanvasNodeSize = {
   width: 420,
   height: 560,
@@ -96,24 +91,6 @@ export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
 }
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
-  shot: {
-    collapsed: WORKSPACE_CANVAS_SHOT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: true,
-    disclosure: ALWAYS_EXPANDED_NODE_DISCLOSURE,
-  },
-  imageAsset: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
-  },
-  videoClip: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
-  },
   finalTimeline: {
     collapsed: WORKSPACE_CANVAS_FINAL_NODE_SIZE,
     expandedLayout: 'stack',
@@ -205,7 +182,7 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
-  soundscape: {
+  ambientSound: {
     collapsed: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
     expanded: {
       width: 720,

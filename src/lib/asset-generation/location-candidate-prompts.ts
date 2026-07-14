@@ -34,7 +34,7 @@ function outputRule(locale: Locale): string {
       'Output JSON only: {"prompt":"final image-generation prompt"}.',
       'The prompt value must be the final image prompt only. It must not include analysis notes, strategy names, hidden reasoning, the original full input, or instructions to choose a scene.',
       'The final image prompt must directly describe one empty reusable scene asset image: visible space, production design, lighting, color, material, atmosphere, composition, stable anchors, and usable open floor or open space for later character placement.',
-      'Final composition requirement: 4:3 landscape aspect ratio, centered composition, complete full-scene establishing view, clear foreground/midground/background, not a storyboard frame or narrative action beat.',
+      'Final composition requirement: 4:3 landscape aspect ratio, centered composition, complete full-scene establishing view, clear foreground/midground/background, not a narrative action beat.',
       'No named main characters, dialogue, readable subtitles, labels, arrows, watermark, or logo.',
     ])
   }
@@ -53,8 +53,8 @@ function sharedContext(input: { readonly description: string; readonly locale: L
   if (input.locale === 'en') {
     return [
       `Scene source input: ${description}`,
-      'Infer scene identity, story phase, implied genre, emotional direction, reusable storyboard needs, and visible production-design requirements only from this input plus any style block appended later by the system.',
-      'Choose the most useful single scene asset for later storyboard inheritance; do not merely repeat the first mentioned location if another visible space better carries the story.',
+      'Infer scene identity, story phase, implied genre, emotional direction, reusable video-reference needs, and visible production-design requirements only from this input plus any style block appended later by the system.',
+      'Choose the most useful single scene asset for later full-reference video generation; do not merely repeat the first mentioned location if another visible space better carries the story.',
     ]
   }
   return [

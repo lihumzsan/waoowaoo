@@ -8,7 +8,6 @@ export const AI_PROMPT_IDS = {
   CHARACTER_REFERENCE_TO_SHEET: 'character-reference-to-sheet',
   LOCATION_CREATE: 'location-create',
   LOCATION_MODIFY: 'location-modify',
-  LOCATION_SPATIAL_PROFILE: 'location-spatial-profile',
   LOCATION_UPDATE_DESCRIPTION: 'location-update-description',
   PROP_UPDATE_DESCRIPTION: 'prop-update-description',
   MUSIC_FINAL_RENDER_BGM: 'music-final-render-bgm',

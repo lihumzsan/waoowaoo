@@ -5,16 +5,15 @@ export type TaskTargetTerminalProjector =
   | 'none'
   | 'edit_bible'
   | 'edit_style_preview'
-  | 'video_group'
+  | 'video_segment'
   | 'chapter_render'
   | 'final_video_render'
   | 'music_score'
-  | 'soundscape'
+  | 'ambient_sound'
   | 'edit_script'
   | 'edit_shot_execution_plan'
 
 export type ImageTaskHandlerKey =
-  | 'image_panel'
   | 'edit_style_preview'
   | 'image_character'
   | 'image_location'
@@ -23,8 +22,8 @@ export type ImageTaskHandlerKey =
   | 'asset_hub_image'
   | 'asset_hub_modify'
 
-export type VideoTaskHandlerKey = 'video_panel' | 'video_group' | 'final_video_render' | 'chapter_render'
-export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate' | 'soundscape_plan' | 'soundscape_generate'
+export type VideoTaskHandlerKey = 'video_segment' | 'final_video_render' | 'chapter_render'
+export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate' | 'ambient_sound_plan' | 'ambient_sound_generate'
 export type TextTaskHandlerKey =
   | 'music_score_plan'
   | 'edit_bible_generate'
@@ -86,7 +85,6 @@ function definition<Q extends QueueType>(
 }
 
 export const TASK_DEFINITIONS = {
-  [TASK_TYPE.IMAGE_PANEL]: definition('image', 'image_panel', 'image', 3, 'storyboards', 'none', 'none', 'none'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE]: definition('text', 'edit_style_preview_options_generate', 'text', 3, 'edit_style_preview', 'none', 'none', 'none'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: definition('image', 'edit_style_preview', 'image', 3, 'edit_style_preview', 'edit_style_preview', 'edit_style_preview', 'none'),
   [TASK_TYPE.IMAGE_CHARACTER]: definition('image', 'image_character', 'image', 3, 'project_assets', 'none', 'none', 'none'),
@@ -94,14 +92,13 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.MUSIC_GENERATE]: definition('music', 'music_generate', 'music', 3, 'none', 'none', 'none', 'none'),
   [TASK_TYPE.MUSIC_SCORE_PLAN]: definition('text', 'music_score_plan', 'text', 3, 'episode', 'music_score', 'music_score', 'none'),
   [TASK_TYPE.MUSIC_SCORE_GENERATE]: definition('music', 'music_score_generate', 'music', 3, 'episode', 'music_score', 'music_score', 'none'),
-  [TASK_TYPE.SOUNDSCAPE_PLAN]: definition('music', 'soundscape_plan', 'text', 3, 'episode', 'soundscape', 'soundscape', 'none'),
-  [TASK_TYPE.SOUNDSCAPE_GENERATE]: definition('music', 'soundscape_generate', 'sound_effect', 3, 'episode', 'soundscape', 'soundscape', 'none'),
-  [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 1, 'videos', 'final_video_render', 'final_video_render', 'final_video_render'),
-  [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 1, 'videos', 'chapter_render', 'chapter_render', 'chapter_render'),
-  [TASK_TYPE.VIDEO_PANEL]: definition('video', 'video_panel', 'video', 3, 'videos', 'none', 'none', 'none'),
-  [TASK_TYPE.VIDEO_GROUP]: definition('video', 'video_group', 'video', 3, 'videos', 'video_group', 'video_group', 'none'),
+  [TASK_TYPE.AMBIENT_SOUND_PLAN]: definition('music', 'ambient_sound_plan', 'text', 3, 'episode', 'ambient_sound', 'ambient_sound', 'none'),
+  [TASK_TYPE.AMBIENT_SOUND_GENERATE]: definition('music', 'ambient_sound_generate', 'sound_effect', 3, 'episode', 'ambient_sound', 'ambient_sound', 'none'),
+  [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 1, 'video_segments', 'final_video_render', 'final_video_render', 'final_video_render'),
+  [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 1, 'video_segments', 'chapter_render', 'chapter_render', 'chapter_render'),
+  [TASK_TYPE.VIDEO_SEGMENT]: definition('video', 'video_segment', 'video', 3, 'video_segments', 'video_segment', 'video_segment', 'none'),
   [TASK_TYPE.MODIFY_ASSET_IMAGE]: definition('image', 'modify_asset_image', 'image', 3, 'project_assets', 'none', 'none', 'none'),
-  [TASK_TYPE.REGENERATE_GROUP]: definition('image', 'regenerate_group', 'image', 3, 'storyboards', 'none', 'none', 'none'),
+  [TASK_TYPE.REGENERATE_GROUP]: definition('image', 'regenerate_group', 'image', 3, 'project_assets', 'none', 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_IMAGE]: definition('image', 'asset_hub_image', 'image', 3, 'global_assets', 'none', 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_MODIFY]: definition('image', 'asset_hub_modify', 'image', 3, 'global_assets', 'none', 'none', 'none'),
   [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: definition('text', 'edit_bible_generate', 'text', 3, 'edit_pipeline', 'edit_bible', 'edit_bible', 'none'),

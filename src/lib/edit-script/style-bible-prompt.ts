@@ -3,23 +3,12 @@ import type { Locale } from '@/i18n/routing'
 import { prisma } from '@/lib/prisma'
 import { editScriptStyleBibleSchema, type EditScriptStyleBible } from './types'
 
-export type StyleBiblePromptUsage = 'assetImage' | 'storyboardImage' | 'video'
-
-type StyleBibleCarrier = {
-  readonly styleBibleJson: unknown
-} | null
+export type StyleBiblePromptUsage = 'assetImage' | 'video'
 
 function trimText(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
-}
-
-function joinLines(lines: ReadonlyArray<string | null | undefined>): string {
-  return lines
-    .map((line) => trimText(line))
-    .filter((line): line is string => line !== null)
-    .join('\n')
 }
 
 function appendBlock(base: string, block: string): string {
@@ -33,15 +22,8 @@ function appendBlock(base: string, block: string): string {
 export function parseNullableEditScriptStyleBible(value: unknown): EditScriptStyleBible | null {
   if (value === null || value === undefined) return null
   const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
-  if (!parsed.success) {
-    throw new Error('EDIT_SCRIPT_STYLE_BIBLE_INVALID')
-  }
+  if (!parsed.success) throw new Error('EDIT_SCRIPT_STYLE_BIBLE_INVALID')
   return parsed.data.styleBible
-}
-
-function styleBibleFromCarrier(carrier: StyleBibleCarrier): EditScriptStyleBible | null {
-  if (!carrier) return null
-  return parseNullableEditScriptStyleBible(carrier.styleBibleJson)
 }
 
 export async function resolveEditScriptStyleBibleForTask(input: {
@@ -50,110 +32,21 @@ export async function resolveEditScriptStyleBibleForTask(input: {
 }): Promise<EditScriptStyleBible | null> {
   const episodeId = trimText(input.episodeId)
   if (!episodeId) return null
-
   const editBible = await prisma.projectEditBible.findFirst({
-    where: {
-      episodeId,
-      episode: { projectId: input.projectId },
-    },
-    select: {
-      styleBibleJson: true,
-    },
+    where: { episodeId, episode: { projectId: input.projectId } },
+    select: { styleBibleJson: true },
   })
-  return styleBibleFromCarrier(editBible)
-}
-
-export async function resolveEditScriptStyleBibleForStoryboardTask(input: {
-  readonly projectId: string
-  readonly episodeId?: string | null
-  readonly storyboardId?: string | null
-}): Promise<EditScriptStyleBible | null> {
-  const episodeId = trimText(input.episodeId)
-  if (episodeId) {
-    return await resolveEditScriptStyleBibleForTask({
-      projectId: input.projectId,
-      episodeId,
-    })
-  }
-
-  const storyboardId = trimText(input.storyboardId)
-  if (!storyboardId) return null
-  const storyboard = await prisma.projectStoryboard.findUnique({
-    where: { id: storyboardId },
-    select: { episodeId: true },
-  })
-  return await resolveEditScriptStyleBibleForTask({
-    projectId: input.projectId,
-    episodeId: storyboard?.episodeId ?? null,
-  })
+  return parseNullableEditScriptStyleBible(editBible?.styleBibleJson)
 }
 
 export async function resolveEditScriptStyleBibleSignatureForTask(input: {
   readonly projectId: string
   readonly episodeId?: string | null
-  readonly storyboardId?: string | null
 }): Promise<string> {
-  const styleBible = await resolveEditScriptStyleBibleForStoryboardTask(input)
+  const styleBible = await resolveEditScriptStyleBibleForTask(input)
   if (!styleBible) return 'style-bible:none'
-  const digest = createHash('sha1')
-    .update(JSON.stringify(styleBible))
-    .digest('hex')
-    .slice(0, 16)
+  const digest = createHash('sha1').update(JSON.stringify(styleBible)).digest('hex').slice(0, 16)
   return `style-bible:${digest}`
-}
-
-function renderVisualLines(styleBible: EditScriptStyleBible, locale: Locale, usage: StyleBiblePromptUsage): string[] {
-  const visual = styleBible.stylePolicy.visual
-  if (locale === 'en') {
-    const base = [
-      `Image filter: ${visual.imageFilterPrompt}`,
-      `Lighting: ${visual.lightingPrompt}`,
-      `Color: ${visual.colorPrompt}`,
-      usage === 'assetImage' ? `Texture: ${visual.texturePrompt}` : null,
-      usage === 'video' ? null : `Composition: ${visual.compositionPrompt}`,
-    ]
-    return base.filter((line): line is string => typeof line === 'string')
-  }
-  const base = [
-    `画面滤镜：${visual.imageFilterPrompt}`,
-    `光线：${visual.lightingPrompt}`,
-    `色彩：${visual.colorPrompt}`,
-    usage === 'assetImage' ? `质感：${visual.texturePrompt}` : null,
-    usage === 'video' ? null : `构图：${visual.compositionPrompt}`,
-  ]
-  return base.filter((line): line is string => typeof line === 'string')
-}
-
-function renderCameraLines(styleBible: EditScriptStyleBible, locale: Locale, usage: StyleBiblePromptUsage): string[] {
-  const camera = styleBible.stylePolicy.camera
-  if (locale === 'en') {
-    const base = [
-      `Camera movement: ${camera.movementPrompt}`,
-      `Lens and depth: ${camera.lensAndDepthPrompt}`,
-      usage === 'video' ? `Video rhythm: ${camera.videoRhythmPrompt}` : null,
-    ]
-    return base.filter((line): line is string => typeof line === 'string')
-  }
-  const base = [
-    `运镜：${camera.movementPrompt}`,
-    `镜头与景深：${camera.lensAndDepthPrompt}`,
-  ]
-  if (usage === 'video') base.push(`视频节奏：${camera.videoRhythmPrompt}`)
-  return base
-}
-
-function renderSoundLines(styleBible: EditScriptStyleBible, locale: Locale): string[] {
-  const sound = styleBible.stylePolicy.sound
-  if (locale === 'en') {
-    return [
-      `Sound filter: ${sound.soundFilterPrompt}`,
-      'Sound boundary: apply this only to dialogue and short synchronized on-screen sounds; do not generate continuous ambience beds, room tone, white noise, city hum, wind, rain, crowd bed, machinery hum, or music.',
-    ]
-  }
-  return [
-    `声音滤镜：${sound.soundFilterPrompt}`,
-    '声音边界：此滤镜只作用于对白和画面同步短声音；不得生成连续氛围底噪、room tone、白噪音、城市底噪、风声、雨声、人群底噪、机械低鸣或音乐。',
-  ]
 }
 
 export function renderStyleBiblePromptBlock(input: {
@@ -163,28 +56,20 @@ export function renderStyleBiblePromptBlock(input: {
 }): string {
   const { styleBible, usage, locale } = input
   const title = locale === 'en'
-    ? 'System Style Bible requirements, fixed append, must follow:'
-    : '系统 Style Bible 视觉要求（固定追加，必须遵守）：'
-  const usageLine = (() => {
-    if (locale === 'en') {
-      if (usage === 'assetImage') return 'Usage: asset image generation. Apply these visual rules to the generated asset itself.'
-      if (usage === 'storyboardImage') return 'Usage: storyboard image generation. Apply these visual and camera rules to the whole frame.'
-      return 'Usage: final video generation. Apply these visual, camera, and sound-filter rules to the generated video.'
-    }
-    if (usage === 'assetImage') return '用途：资产图生成。将这些视觉规则应用到资产本身。'
-    if (usage === 'storyboardImage') return '用途：分镜图生成。将这些视觉与镜头规则应用到整张画面。'
-    return '用途：最终视频生成。将这些视觉、镜头与声音滤镜规则应用到生成视频。'
-  })()
-
-  const lines = [
+    ? 'System visual style requirements, must follow:'
+    : '系统画面风格要求（必须遵守）：'
+  const visual = locale === 'en'
+    ? `Visual style: ${styleBible.visualStyle}`
+    : `画面风格：${styleBible.visualStyle}`
+  if (usage === 'video') return [title, visual].join('\n')
+  const asset = styleBible.assetImageStyle
+  return [
     title,
-    usageLine,
-    ...renderVisualLines(styleBible, locale, usage),
-    ...(usage === 'assetImage' ? [] : renderCameraLines(styleBible, locale, usage)),
-    ...(usage === 'video' ? renderSoundLines(styleBible, locale) : []),
-  ]
-
-  return joinLines(lines)
+    visual,
+    locale === 'en' ? `Asset lighting: ${asset.lighting}` : `资产图光线：${asset.lighting}`,
+    locale === 'en' ? `Asset texture: ${asset.texture}` : `资产图材质：${asset.texture}`,
+    locale === 'en' ? `Asset composition: ${asset.composition}` : `资产图构图：${asset.composition}`,
+  ].join('\n')
 }
 
 export function appendStyleBiblePromptBlock(input: {

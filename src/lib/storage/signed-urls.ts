@@ -26,32 +26,11 @@ export interface LocationLike {
   [key: string]: unknown
 }
 
-export interface ShotLike {
-  imageUrl: string | null
-  videoUrl: string | null
-  [key: string]: unknown
-}
-
-export interface PanelLike {
-  imageUrl: string | null
-  videoUrl: string | null
-  candidateImages: string | null
-  [key: string]: unknown
-}
-
-export interface StoryboardLike {
-  panels?: PanelLike[]
-  storyboardImageUrl: string | null
-  [key: string]: unknown
-}
-
 export interface ProjectLike {
   audioUrl?: string | null
   characters?: CharacterLike[]
   locations?: LocationLike[]
   props?: LocationLike[]
-  shots?: ShotLike[]
-  storyboards?: StoryboardLike[]
   [key: string]: unknown
 }
 
@@ -109,14 +88,6 @@ export function addSignedUrlToLocation(location: LocationLike) {
   }
 }
 
-export function addSignedUrlsToShot(shot: ShotLike) {
-  return {
-    ...shot,
-    imageUrl: keyToSignedUrl(shot.imageUrl),
-    videoUrl: keyToSignedUrl(shot.videoUrl),
-  }
-}
-
 export function addSignedUrlToAssetCharacter(character: { imageUrl: string | null } & UnknownRecord) {
   return {
     ...character,
@@ -131,45 +102,6 @@ export function addSignedUrlToAssetLocation(location: { imageUrl: string | null 
   }
 }
 
-export function addSignedUrlsToStoryboard(storyboard: StoryboardLike) {
-  let panels: PanelLike[] = []
-  if (storyboard.panels && Array.isArray(storyboard.panels)) {
-    panels = storyboard.panels.map((dbPanel) => {
-      let signedCandidateImages = dbPanel.candidateImages
-      if (signedCandidateImages) {
-        try {
-          const candidates = JSON.parse(signedCandidateImages)
-          if (Array.isArray(candidates)) {
-            const signedCandidates = candidates.map((candidate) => {
-              if (typeof candidate !== 'string') return candidate
-              if (candidate.startsWith('PENDING:')) return candidate
-              return keyToSignedUrl(candidate) || candidate
-            })
-            signedCandidateImages = JSON.stringify(signedCandidates)
-          }
-        } catch {
-          signedCandidateImages = dbPanel.candidateImages
-        }
-      }
-
-      return {
-        ...dbPanel,
-        imageUrl: dbPanel.imageUrl ? keyToSignedUrl(dbPanel.imageUrl) : null,
-        videoUrl: dbPanel.videoUrl && !dbPanel.videoUrl.startsWith('http')
-          ? getSignedUrl(dbPanel.videoUrl, 7200)
-          : dbPanel.videoUrl,
-        candidateImages: signedCandidateImages,
-      }
-    })
-  }
-
-  return {
-    ...storyboard,
-    storyboardImageUrl: keyToSignedUrl(storyboard.storyboardImageUrl),
-    panels,
-  }
-}
-
 export function addSignedUrlsToProject(project: ProjectLike) {
   return {
     ...project,
@@ -177,7 +109,5 @@ export function addSignedUrlsToProject(project: ProjectLike) {
     characters: project.characters?.map(addSignedUrlsToCharacter) || [],
     locations: project.locations?.map(addSignedUrlToLocation) || [],
     props: project.props?.map(addSignedUrlToLocation) || [],
-    shots: project.shots?.map(addSignedUrlsToShot) || [],
-    storyboards: project.storyboards?.map(addSignedUrlsToStoryboard) || [],
   }
 }

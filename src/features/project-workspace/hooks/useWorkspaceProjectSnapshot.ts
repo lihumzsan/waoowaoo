@@ -29,21 +29,17 @@ export function useWorkspaceProjectSnapshot({
       projectData: project,
       projectCharacters: project.characters || [],
       projectLocations: project.locations || [],
-      episodeStoryboards: episode?.storyboards || [],
       globalAssetText: project.globalAssetText || '',
       novelText: episode?.novelText || '',
       analysisModel: project.analysisModel ?? undefined,
       characterModel: project.characterModel ?? undefined,
       locationModel: project.locationModel ?? undefined,
-      storyboardModel: project.storyboardModel ?? undefined,
       editModel: project.editModel ?? undefined,
       videoModel: project.videoModel ?? undefined,
-      singleShotVideoModel: project.singleShotVideoModel ?? project.videoModel ?? undefined,
-      sequenceVideoModel: project.sequenceVideoModel ?? project.videoModel ?? undefined,
       musicModel: project.musicModel ?? undefined,
       soundEffectModel: project.soundEffectModel ?? undefined,
       videoRatio: project.videoRatio ?? undefined,
       capabilityOverrides,
     }
-  }, [episode?.novelText, episode?.storyboards, project])
+  }, [episode?.novelText, project])
 }

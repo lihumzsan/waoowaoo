@@ -2,7 +2,7 @@ import type { WorkspaceCanvasProjection } from '../node-canvas-types'
 import { createWorkspaceNodeProjectionContext, type BuildWorkspaceNodeCanvasProjectionInput } from './workspace-node-projection-shared'
 import { appendWorkspacePlanningProjection } from './workspace-node-planning-projection'
 import { appendWorkspaceAssetExecutionProjection } from './workspace-node-asset-execution-projection'
-import { appendWorkspaceStoryboardProjection } from './workspace-node-storyboard-projection'
+import { appendWorkspaceVideoSegmentProjection } from './workspace-node-video-segment-projection'
 import { appendWorkspaceAudioFinalProjection } from './workspace-node-audio-final-projection'
 
 export type { BuildWorkspaceNodeCanvasProjectionInput } from './workspace-node-projection-shared'
@@ -11,7 +11,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const context = createWorkspaceNodeProjectionContext(input)
   const planning = appendWorkspacePlanningProjection(context)
   const assetExecution = appendWorkspaceAssetExecutionProjection(context, planning)
-  const storyboard = appendWorkspaceStoryboardProjection(context, planning, assetExecution)
-  appendWorkspaceAudioFinalProjection(context, storyboard)
+  const videoSegments = appendWorkspaceVideoSegmentProjection(context, planning, assetExecution)
+  appendWorkspaceAudioFinalProjection(context, videoSegments)
   return { nodes: context.nodes, edges: context.edges }
 }

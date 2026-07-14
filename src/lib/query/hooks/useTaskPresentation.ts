@@ -121,14 +121,6 @@ export function useAssetTaskPresentation(
   return useTaskPresentationInternal(projectId, targets, options)
 }
 
-export function useStoryboardTaskPresentation(
-  projectId: string | null | undefined,
-  targets: TaskPresentationTarget[],
-  options: TaskPresentationOptions = true,
-) {
-  return useTaskPresentationInternal(projectId, targets, options)
-}
-
 export function useVideoTaskPresentation(
   projectId: string | null | undefined,
   targets: TaskPresentationTarget[],

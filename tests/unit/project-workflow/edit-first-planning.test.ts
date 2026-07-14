@@ -7,23 +7,18 @@ import {
 } from './edit-first-workflow.fixture'
 
 describe('edit-first workflow state', () => {
-  it('declares core planning and planned asset generation as one parallel operation group', () => {
+  it('finishes every chapter plan before required asset generation can begin', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
       confirmedStylePreviewCount: 1,
-      plannedAssetCount: 3,
-      pendingPlannedAssetCount: 2,
     }))
 
     expect(state.step).toBe('chapter_plan')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_edit_script_assets', 'plan_chapters'])
-    expect(state.operationPolicy.group).toEqual({
-      id: 'edit_first_core_and_planned_assets',
-      operationIds: ['generate_edit_script_assets', 'plan_chapters'],
-      approvalOperationIds: ['generate_edit_script_assets'],
-    })
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['plan_chapters'])
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_chapters')
+    expect(state.operationPolicy.group).toBeNull()
   })
 
   it('recovers missing chapter planning when no planning task is active', () => {
@@ -73,7 +68,7 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.allowedOperationIds).toEqual(['replan_chapter', 'plan_chapters'])
   })
 
-  it('waits for required assets and spatial profiles before shot execution planning', () => {
+  it('waits for required asset images before shot execution planning', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -83,8 +78,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       pendingAssetRequirementCount: 1,
       generatingAssetRequirementCount: 1,
-      requiredLocationSpatialProfileCount: 1,
-      readyLocationSpatialProfileCount: 0,
     }))
 
     expect(state.step).toBe('planned_assets')
@@ -103,8 +96,6 @@ describe('edit-first workflow state', () => {
       editScriptAssetReviewStatus: 'pending',
       editAssetRequirementCount: 2,
       pendingAssetRequirementCount: 0,
-      requiredLocationSpatialProfileCount: 1,
-      readyLocationSpatialProfileCount: 1,
     }))
 
     expect(state.step).toBe('planned_assets')
@@ -112,7 +103,7 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
-  it('generates shot execution plan after core plan, assets, and spatial profiles are ready', () => {
+  it('generates the shot execution plan after the core plan and asset images are ready', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -123,8 +114,6 @@ describe('edit-first workflow state', () => {
       editScriptAssetReviewStatus: 'approved',
       editAssetRequirementCount: 2,
       pendingAssetRequirementCount: 0,
-      requiredLocationSpatialProfileCount: 1,
-      readyLocationSpatialProfileCount: 1,
     }))
 
     expect(state.step).toBe('shot_execution')

@@ -45,7 +45,6 @@ describe('platform model catalog', () => {
       analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
       characterModel: 'fal::gpt-image-2',
       locationModel: 'fal::gpt-image-2',
-      storyboardModel: 'fal::gpt-image-2',
       editModel: 'fal::gpt-image-2',
       videoModel: 'openrouter::bytedance/seedance-2.0-fast',
       musicModel: 'fal::fal-ai/lyria3/pro',

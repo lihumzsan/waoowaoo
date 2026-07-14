@@ -38,10 +38,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'location/modify',
     variableKeys: ['location_name', 'location_input', 'user_input'],
   },
-  [AI_PROMPT_IDS.LOCATION_SPATIAL_PROFILE]: {
-    pathStem: 'location/spatial-profile',
-    variableKeys: ['location_name', 'location_description'],
-  },
   [AI_PROMPT_IDS.LOCATION_UPDATE_DESCRIPTION]: {
     pathStem: 'location/update-description',
     variableKeys: ['location_name', 'original_description', 'modify_instruction', 'image_context'],
@@ -88,12 +84,9 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN]: {
     pathStem: 'edit-script/shot-execution-plan',
     variableKeys: [
-      'style_bible_json',
       'structure_json',
-      'character_voice_profiles_json',
-      'dialogue_voice_context_json',
-      'asset_context_json',
-      'spatial_profiles_json',
+      'visual_style',
+      'aspect_ratio',
     ],
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT]: {

@@ -92,7 +92,6 @@ const WORKSPACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true } as const
 
 export interface WorkspaceAssistantSelectionContext {
   selectedScopeRef?: string | null
-  selectedPanelId?: string | null
   selectedAssetId?: string | null
 }
 
@@ -228,12 +227,11 @@ function ProjectWorkspaceCanvasContent({
   const runtime = useWorkspaceRuntime()
   const {
     episodeName,
-    storyboards,
     editScript,
     editScripts,
     editShotExecutionPlans,
     finalVideo,
-    videoGroups,
+    videoSegments,
   } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: projectAssets } = useProjectAssets(projectId)
@@ -242,16 +240,11 @@ function ProjectWorkspaceCanvasContent({
   const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_WORKFLOW_EMPTY_VIEW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
-  const scopedStoryboards = useMemo(() => (
+  const scopedVideoSegments = useMemo(() => (
     workspaceScope.kind === 'chapter'
-      ? storyboards.filter((storyboard) => storyboard.chapterId === workspaceScope.chapterId)
-      : storyboards
-  ), [storyboards, workspaceScope])
-  const scopedVideoGroups = useMemo(() => (
-    workspaceScope.kind === 'chapter'
-      ? videoGroups.filter((group) => group.chapterId === workspaceScope.chapterId)
-      : videoGroups
-  ), [videoGroups, workspaceScope])
+      ? videoSegments.filter((segment) => segment.chapterId === workspaceScope.chapterId)
+      : videoSegments
+  ), [videoSegments, workspaceScope])
   const scopedEditScript = useMemo(() => {
     if (workspaceScope.kind === 'chapter') {
       return editScripts.find((script) => script.chapterId === workspaceScope.chapterId)
@@ -461,7 +454,6 @@ function ProjectWorkspaceCanvasContent({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
-    storyboards: scopedStoryboards,
     editFirstWorkflow,
     editBible,
     editScript: projectedEditScript,
@@ -473,9 +465,8 @@ function ProjectWorkspaceCanvasContent({
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,
     finalVideo,
-    videoGroups: scopedVideoGroups,
-    defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
-    defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
+    videoSegments: scopedVideoSegments,
+    defaultVideoModel: runtime.videoModel ?? null,
     savedLayouts: savedNodeLayouts,
     translate: t,
     onAction: onNodeAction,
@@ -844,7 +835,6 @@ function ProjectWorkspaceCanvasContent({
     const targetId = selectedNode.data.targetId
     return {
       selectedScopeRef: `${targetType}:${targetId}`,
-      selectedPanelId: targetType === 'panel' ? targetId : null,
       selectedAssetId: null,
     }
   }, [selectedNode])

@@ -17,8 +17,7 @@ export interface ProjectPolicyOverrideInput {
 
 export interface ProjectContextEpisodeSnapshot {
   novelText: string | null
-  storyboardCount: number
-  panelCount: number
+  videoSegmentCount: number
 }
 
 export interface ProjectContextEditBibleSnapshot {
@@ -55,19 +54,15 @@ export interface ProjectContextEditChapterSnapshot {
   outputMediaId: string | null
 }
 
-export interface ProjectContextPanelSnapshot {
-  panelId: string
-  editScriptId: string | null
-  storyboardId: string
-  panelIndex: number
-  description: string | null
-  imagePrompt: string | null
-  imageUrl: string | null
-  imageMediaId: string | null
-  candidateImages: string | null
-  videoPrompt: string | null
-  videoUrl: string | null
+export interface ProjectContextVideoSegmentSnapshot {
+  id: string
+  editScriptId: string
+  segmentId: string
+  status: string
+  durationSec: number
   videoMediaId: string | null
+  errorCode: string | null
+  errorMessage: string | null
   updatedAt: string
 }
 
@@ -77,7 +72,7 @@ export interface ProjectContextEpisodeDetailSnapshot {
   chapters: ProjectContextEditChapterSnapshot[]
   editScript: ProjectContextEditScriptSnapshot | null
   editScripts: ProjectContextEditScriptSnapshot[]
-  panels: ProjectContextPanelSnapshot[]
+  videoSegments: ProjectContextVideoSegmentSnapshot[]
 }
 
 export interface ProjectContextSnapshot {
@@ -86,7 +81,6 @@ export interface ProjectContextSnapshot {
   episodeId?: string | null
   episodeName?: string | null
   selectedScopeRef?: string | null
-  selectedPanelId?: string | null
   selectedAssetId?: string | null
   activeOperationTasks: RecentOperationResult[]
   recentOperationResults: RecentOperationResult[]

@@ -315,11 +315,8 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         analysisModel?: string | null
         characterModel?: string | null
         locationModel?: string | null
-        storyboardModel?: string | null
         editModel?: string | null
         videoModel?: string | null
-        singleShotVideoModel?: string | null
-        sequenceVideoModel?: string | null
         musicModel?: string | null
         soundEffectModel?: string | null
         characters?: AuthCharacterLike[]
@@ -332,11 +329,8 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         analysisModel: extractModelKey(rawProjectData.analysisModel),
         characterModel: extractModelKey(rawProjectData.characterModel),
         locationModel: extractModelKey(rawProjectData.locationModel),
-        storyboardModel: extractModelKey(rawProjectData.storyboardModel),
         editModel: extractModelKey(rawProjectData.editModel),
         videoModel: extractModelKey(rawProjectData.videoModel),
-        singleShotVideoModel: extractModelKey(rawProjectData.singleShotVideoModel) || extractModelKey(rawProjectData.videoModel),
-        sequenceVideoModel: extractModelKey(rawProjectData.sequenceVideoModel),
         musicModel: extractModelKey(rawProjectData.musicModel),
         soundEffectModel: extractModelKey(rawProjectData.soundEffectModel),
         ...(rawProjectData.characters ? { characters: rawProjectData.characters } : {}),

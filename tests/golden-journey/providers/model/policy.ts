@@ -26,13 +26,12 @@ const WRITE_TOOL_PRIORITY = [
   'request_edit_asset_review_choice',
   'approve_edit_script_assets',
   'generate_edit_shot_execution_plan',
-  'generate_edit_script_storyboard_images',
-  'generate_episode_videos',
+  'generate_video_segments',
   'render_chapters',
   'plan_episode_bgm_score',
   'generate_episode_bgm_score',
-  'plan_episode_soundscape',
-  'generate_episode_soundscape',
+  'plan_episode_ambient_sound',
+  'generate_episode_ambient_sound',
   'render_final_video',
 ] as const
 
@@ -65,13 +64,12 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   request_edit_asset_review_choice: {},
   approve_edit_script_assets: {},
   generate_edit_shot_execution_plan: { chapterId: null },
-  generate_edit_script_storyboard_images: {},
-  generate_episode_videos: { chapterId: null },
+  generate_video_segments: { chapterId: null },
   render_chapters: { chapterId: null },
   plan_episode_bgm_score: {},
   generate_episode_bgm_score: {},
-  plan_episode_soundscape: {},
-  generate_episode_soundscape: {},
+  plan_episode_ambient_sound: {},
+  generate_episode_ambient_sound: {},
   render_final_video: {},
 }
 
@@ -302,35 +300,19 @@ function generateStylePreviewPromptContract(prompt: string): string | null {
   if (
     !prompt.includes('"stylePreviews"')
     || !prompt.includes('"gridImagePrompt"')
-    || !prompt.includes('"stylePolicy"')
+    || !prompt.includes('"visualStyle"')
+    || !prompt.includes('"assetImageStyle"')
   ) {
     return null
   }
   const buildStyleBible = (medium: string, mood: string) => ({
     rawUserStyle: null,
     styleSummary: `${medium}，${mood}`,
-    stylePolicy: {
-      directing: {
-        pointOfViewPrompt: '以受困旅人的主观视角观察循环空间',
-        performancePrompt: '非真人角色以克制肢体动作表现恐惧',
-        informationReleasePrompt: '逐步揭示道路与祭坛重复出现的事实',
-        rhythmPrompt: '以重复动作建立闭环并在结尾收紧节奏',
-      },
-      visual: {
-        imageFilterPrompt: medium,
-        lightingPrompt: '暮色环境光与祭坛微光形成方向明确的反差',
-        colorPrompt: '低饱和蓝灰背景配少量暗红警示色',
-        texturePrompt: '保留石材、尘土与风蚀表面的可见纹理',
-        compositionPrompt: '用重复地标和封闭纵深强调无法逃离的空间',
-      },
-      camera: {
-        movementPrompt: '缓慢推进与短促回望交替',
-        lensAndDepthPrompt: '中广角纵深配清晰前中后景层次',
-        videoRhythmPrompt: '重复机位逐次缩短停留时间',
-      },
-      sound: {
-        soundFilterPrompt: '干涩、空旷、带轻微远距回响的声音质感',
-      },
+    visualStyle: `${medium}，${mood}，低饱和蓝灰背景配少量暗红警示色，画面质感克制清晰。`,
+    assetImageStyle: {
+      lighting: '暮色环境光与祭坛微光形成方向明确的反差',
+      texture: '保留石材、尘土与风蚀表面的可见纹理',
+      composition: '用重复地标和封闭纵深强调无法逃离的空间',
     },
   })
   return JSON.stringify({
@@ -372,8 +354,6 @@ function generateEditScriptPromptContract(prompt: string): string | null {
   if (!locationName || !characterName) return null
   const presentCharacter = {
     characterName,
-    visibility: 'visible',
-    role: 'focus',
     performance: '拖着受伤的脚谨慎靠近祭坛并观察石碑变化',
   }
   return JSON.stringify({
@@ -386,9 +366,8 @@ function generateEditScriptPromptContract(prompt: string): string | null {
         scene: { locationName, subScene: '暮色荒野中的废弃祭坛全貌' },
         action: '暮色笼罩荒野，废弃祭坛立在唯一小路尽头。',
         characters: [],
-        keyObjects: [{ name: '祭坛石碑', role: '建立循环发生的固定地标' }],
         dialogue: [],
-        sound: '低沉风声与远处空旷回响。',
+        synchronousSound: '低沉风声与远处空旷回响。',
       },
       {
         shotRef: 'shot-002',
@@ -398,9 +377,8 @@ function generateEditScriptPromptContract(prompt: string): string | null {
         scene: { locationName, subScene: '祭坛前的石碑旁' },
         action: '旅人拖着受伤的脚靠近石碑，死字突然闪烁成数字四。',
         characters: [presentCharacter],
-        keyObjects: [{ name: '石碑上的数字四', role: '揭示祭坛异常规则' }],
         dialogue: [],
-        sound: '脚步摩擦地面，石碑发出短促异响。',
+        synchronousSound: '脚步摩擦地面，石碑发出短促异响。',
       },
       {
         shotRef: 'shot-003',
@@ -410,9 +388,8 @@ function generateEditScriptPromptContract(prompt: string): string | null {
         scene: { locationName, subScene: '祭坛与唯一小路交界处' },
         action: '旅人沿小路狂奔后再次回到祭坛，看见脚边仍留着自己的血迹。',
         characters: [presentCharacter],
-        keyObjects: [{ name: '血迹', role: '证明旅人回到了同一地点' }],
         dialogue: [],
-        sound: '奔跑喘息骤停，远处响起相同的喘息声。',
+        synchronousSound: '奔跑喘息骤停，远处响起相同的喘息声。',
       },
     ],
     generationSegments: [{
@@ -440,133 +417,32 @@ function generateLocationCandidatePromptContract(prompt: string): string | null 
   })
 }
 
-function generateLocationSpatialProfileContract(prompt: string): string | null {
-  const isSpatialProfile = (
-    (prompt.includes('分析场景图片的空间结构') && prompt.includes('"sceneSummary"'))
-    || (prompt.includes('spatial structure of a location image') && prompt.includes('"sceneSummary"'))
-  )
-  if (!isSpatialProfile) return null
-  return JSON.stringify({
-    sceneSummary: '弯曲小路从碎石前景通向画面中央的废弃石质祭坛，残柱与枯树围合出封闭的荒野空间。',
-    anchors: [
-      {
-        id: 'anchor_shrine',
-        label: '中央石质祭坛',
-        screenArea: '画面中央偏后',
-        depthLayer: '中景',
-        spatialRelations: ['弯曲小路止于祭坛前方', '三根残柱分布在祭坛两侧'],
-      },
-      {
-        id: 'anchor_stela',
-        label: '倾斜石碑',
-        screenArea: '祭坛中央',
-        depthLayer: '中景',
-        spatialRelations: ['石碑立在祭台后缘', '石碑后方是低矮荒坡'],
-      },
-    ],
-    depthLayout: {
-      foreground: '风蚀碎石和留有空地的弯曲小路占据前景。',
-      midground: '青灰石质祭台、倾斜石碑与残柱构成中景主体。',
-      background: '低矮荒坡、枯树和封闭地平线位于背景。',
-    },
-    lightingDirection: '暮色从画面左后方照入，祭坛缝隙有微弱暗红光。',
-  })
-}
-
 function generateShotExecutionPlanContract(prompt: string): string | null {
-  if (!prompt.includes('"generationSegmentExecutions"') || !prompt.includes('"continuousVideoPrompt"')) return null
+  if (!prompt.includes('"generationSegments"') || !prompt.includes('"cameraMovement"')) return null
   const corePlan = readJsonObjectAfterMarker(prompt, ['核心剪辑计划：', 'Core Edit Plan:'])
-  const coreShots = Array.isArray(corePlan?.shots) ? corePlan.shots : []
-  const coreSegments = Array.isArray(corePlan?.videoGenerationSegments)
-    ? corePlan.videoGenerationSegments
-    : Array.isArray(corePlan?.generationSegments)
-      ? corePlan.generationSegments
-      : []
-  if (coreShots.length === 0 || coreSegments.length === 0) return null
-  const shots = coreShots.flatMap((value) => {
-    const shot = asRecord(value)
-    if (typeof shot?.shotRef !== 'string' || typeof shot.shotNumber !== 'number') return []
-    const characters = Array.isArray(shot.characters) ? shot.characters : []
-    const keyObjects = Array.isArray(shot.keyObjects) ? shot.keyObjects : []
-    const scene = asRecord(shot.scene)
-    const blockingCharacters = characters.flatMap((characterValue) => {
-      const character = asRecord(characterValue)
-      if (typeof character?.characterName !== 'string') return []
-      const visibility = typeof character.visibility === 'string' ? character.visibility : 'visible'
-      return [{
-        characterName: character.characterName,
-        visibility,
-        position: '祭坛前方的弯曲小路附近',
-        screenPosition: '画面中部',
-        facing: '朝向祭坛石碑',
-        eyeline: '视线落在石碑与前方道路之间',
-      }]
-    })
-    const blockingObjects = keyObjects.flatMap((objectValue) => {
-      const object = asRecord(objectValue)
-      if (typeof object?.name !== 'string') return []
-      return [{
-        name: object.name,
-        position: '祭坛主体空间内的稳定位置',
-        screenPosition: '画面视觉中心附近',
-      }]
-    })
-    const subjects = [
-      ...blockingCharacters.map((character) => character.characterName),
-      ...blockingObjects.map((object) => object.name),
-    ]
-    const action = typeof shot.action === 'string' ? shot.action : '保持核心剪辑计划中的镜头动作。'
-    return [{
-      shotRef: shot.shotRef,
-      camera: {
-        shotScale: shot.shotNumber === 1 ? '大全景' : '中景',
-        lens: '28mm 中广角',
-        focus: '主体清晰，保留前中后景层次',
-        height: '平视高度',
-        angle: '轻微低角度',
-        movement: shot.shotNumber === 1 ? '缓慢推进建立空间' : '跟随主体动作短促移动',
-        composition: '小路形成纵深引导线，祭坛与石碑保持为视觉中心',
-        lighting: '暮色从左后方照入，祭坛缝隙的暗红光勾勒主体边缘',
-      },
-      blocking: {
-        axis: {
-          type: '祭坛与小路之间的行动轴线',
-          subjects: subjects.length > 0
-            ? subjects
-            : [typeof scene?.locationName === 'string' ? scene.locationName : '祭坛空间'],
-          screenDirection: '主体沿小路向画面中央祭坛移动，左右关系保持稳定',
-        },
-        characters: blockingCharacters,
-        objects: blockingObjects,
-        spatialNote: '保持弯曲小路、中央祭坛、石碑和背景荒坡的前中后景关系。',
-      },
-      videoPrompt: `${action} 镜头运动与动作同步，使用短促脚步或物体触碰声，不增加对白或连续氛围底噪。`,
-    }]
-  })
-  const shotByRef = new Map(shots.map((shot) => [shot.shotRef, shot]))
-  const generationSegmentExecutions = coreSegments.flatMap((value) => {
+  const coreSegments = Array.isArray(corePlan?.generationSegments) ? corePlan.generationSegments : []
+  if (coreSegments.length === 0) return null
+  const generationSegments = coreSegments.flatMap((value) => {
     const segment = asRecord(value)
     const shotRefs = Array.isArray(segment?.shotRefs)
       ? segment.shotRefs.filter((shotRef): shotRef is string => typeof shotRef === 'string')
       : []
     const segmentRef = typeof segment?.segmentRef === 'string' ? segment.segmentRef : null
-    if (!segmentRef || shotRefs.length === 0 || shotRefs.some((shotRef) => !shotByRef.has(shotRef))) return []
-    let elapsed = 0
-    const timedSections = shotRefs.map((shotRef, index) => {
-      const sourceShot = asRecord(coreShots.find((candidate) => asRecord(candidate)?.shotRef === shotRef))
-      const duration = typeof sourceShot?.durationSec === 'number' ? sourceShot.durationSec : 3
-      const start = elapsed
-      elapsed += duration
-      const execution = shotByRef.get(shotRef)
-      return `[00:${String(start).padStart(2, '0')}-00:${String(elapsed).padStart(2, '0')}] 镜头${String(index + 1)}：${execution?.videoPrompt ?? ''}`
-    })
+    if (!segmentRef || shotRefs.length === 0) return []
     return [{
       segmentRef,
-      continuousVideoPrompt: `16:9 二维手绘连续片段，低饱和蓝灰与暗红微光，镜头节奏逐步收紧。${timedSections.join(' ')}`,
+      shots: shotRefs.map((shotRef, index) => ({
+        shotRef,
+        shotScale: index === 0 ? '大全景' : '中景',
+        cameraMovement: {
+          movement: index === 0 ? '缓慢推进' : '平滑跟拍',
+          stability: 'smooth',
+        },
+      })),
     }]
   })
-  if (shots.length !== coreShots.length || generationSegmentExecutions.length !== coreSegments.length) return null
-  return JSON.stringify({ shots, generationSegmentExecutions })
+  if (generationSegments.length !== coreSegments.length) return null
+  return JSON.stringify({ generationSegments })
 }
 
 function generateBgmScorePlanContract(prompt: string): string | null {
@@ -615,7 +491,7 @@ function generateBgmScorePlanContract(prompt: string): string | null {
   })
 }
 
-function generateSoundscapePlanContract(prompt: string): string | null {
+function generateAmbientSoundPlanContract(prompt: string): string | null {
   if (
     !prompt.includes('"environmentFingerprint"')
     || !prompt.includes('"transitionIn"')
@@ -628,7 +504,7 @@ function generateSoundscapePlanContract(prompt: string): string | null {
   const lastClipOrder = clipOrders.at(-1)
   if (!firstClipOrder || !lastClipOrder) return null
   return JSON.stringify({
-    decision: 'soundscape',
+    decision: 'ambient_sound',
     sources: [{
       sourceId: 'source-001',
       environmentFingerprint: 'twilight_forbidden_shrine_dry_wind',
@@ -710,14 +586,12 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
   if (stylePreviewContract) return stylePreviewContract
   const editScriptContract = generateEditScriptPromptContract(prompt)
   if (editScriptContract) return editScriptContract
-  const locationSpatialProfileContract = generateLocationSpatialProfileContract(prompt)
-  if (locationSpatialProfileContract) return locationSpatialProfileContract
   const shotExecutionPlanContract = generateShotExecutionPlanContract(prompt)
   if (shotExecutionPlanContract) return shotExecutionPlanContract
   const bgmScorePlanContract = generateBgmScorePlanContract(prompt)
   if (bgmScorePlanContract) return bgmScorePlanContract
-  const soundscapePlanContract = generateSoundscapePlanContract(prompt)
-  if (soundscapePlanContract) return soundscapePlanContract
+  const ambientSoundPlanContract = generateAmbientSoundPlanContract(prompt)
+  if (ambientSoundPlanContract) return ambientSoundPlanContract
   const locationCandidateContract = generateLocationCandidatePromptContract(prompt)
   if (locationCandidateContract) return locationCandidateContract
   return generateEditBiblePromptContract(prompt)

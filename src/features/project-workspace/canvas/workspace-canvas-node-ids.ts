@@ -6,10 +6,9 @@ export const workspaceNodeId = {
   editScript: (episodeId: string, chapterId?: string | null): string => `edit-script:${episodeId}:${chapterId?.trim() || 'episode'}`,
   editAssetGroup: (editScriptId: string): string => `edit-asset-group:${editScriptId}`,
   editShotExecutionPlan: (editScriptId: string): string => `edit-shot-execution-plan:edit-script:${editScriptId}`,
-  shot: (panelId: string): string => `shot:${panelId}`,
   videoPlan: (editScriptId: string, blockNumber: number): string => `video-plan:${editScriptId}:${blockNumber}`,
   bgmScore: (episodeId: string): string => `bgm-score:${episodeId}`,
-  soundscape: (episodeId: string): string => `soundscape:${episodeId}`,
+  ambientSound: (episodeId: string): string => `ambientSound:${episodeId}`,
   finalTimeline: (episodeId: string): string => `final:${episodeId}`,
 } as const
 

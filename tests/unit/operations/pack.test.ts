@@ -39,7 +39,7 @@ describe('withOperationPack', () => {
   it('throws when operation groupPath folder differs from pack defaults', () => {
     const draft: ProjectAgentOperationRegistryDraft = {
       ok: createNoopOperation({ id: 'ok', groupPath: ['asset', 'edit'] }),
-      bad: createNoopOperation({ id: 'bad', groupPath: ['storyboard', 'edit'] }),
+      bad: createNoopOperation({ id: 'bad', groupPath: ['unknown', 'edit'] }),
     }
 
     const defaults: OperationPackDefaults = {

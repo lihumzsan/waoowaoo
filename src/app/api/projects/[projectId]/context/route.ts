@@ -13,7 +13,6 @@ export const GET = apiHandler(async (
 
   const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || null
   const scopeRef = request.nextUrl.searchParams.get('scopeRef')?.trim() || null
-  const selectedPanelId = request.nextUrl.searchParams.get('selectedPanelId')?.trim() || null
   const selectedAssetId = request.nextUrl.searchParams.get('selectedAssetId')?.trim() || null
 
   const projectContext = await executeProjectAgentOperationFromApi({
@@ -27,7 +26,6 @@ export const GET = apiHandler(async (
     input: {
       detail: 'full',
       ...(scopeRef ? { selectedScopeRef: scopeRef } : {}),
-      ...(selectedPanelId ? { selectedPanelId } : {}),
       ...(selectedAssetId ? { selectedAssetId } : {}),
     },
     source: 'project-ui',

@@ -119,8 +119,6 @@
   },
   "cards": {
     "projectPhase": "项目阶段",
-    "storyboards": "分镜 {count}",
-    "panels": "镜头 {count}",
     "projectContext": "项目上下文",
     "projectLabel": "项目",
     "episodeLabel": "剧集",
@@ -135,8 +133,6 @@
     "totalLabelWithCount": "总数: {count}",
     "batchTaskAndTargetTotals": "任务: {tasks} · 目标: {targets}",
     "biblePreview": "剧本预览",
-    "storyboardPreview": "分镜预览",
-    "panelsLabel": "分镜 {count}",
     "maxSteps": "已达到最大步数",
     "stepUsage": "当前步数 {stepCount} / 上限 {maxSteps}",
     "awaitingExternalTask": "等待后台任务",

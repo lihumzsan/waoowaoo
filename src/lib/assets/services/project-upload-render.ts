@@ -1,13 +1,7 @@
 import sharp from 'sharp'
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import {
-  analyzeLocationSpatialProfile,
-  locationSpatialProfileToJson,
-} from '@/lib/location-spatial-profile/service'
-import { parseLocationSpatialProfile, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import { prisma } from '@/lib/prisma'
 import { deleteObject, generateUniqueKey, uploadObject } from '@/lib/storage'
 import type { AssetKind } from '@/lib/assets/contracts'
@@ -55,8 +49,6 @@ type PreparedProjectLocationRender = {
   readonly existingImageId: string | null
   readonly existingImageUpdatedAtMs: number | null
   readonly locationUpdatedAtMs: number
-  readonly profile: LocationSpatialProfile
-  readonly profileModel: string
 }
 
 export type PreparedProjectAssetRender =
@@ -142,13 +134,6 @@ export async function prepareProjectAssetRenderUpload(
     : null
   if (input.kind === 'location' && !location) throw new ApiError('NOT_FOUND')
 
-  const analysisModel = input.kind === 'location'
-    ? (await getProjectModelConfig(input.projectId, input.userId)).analysisModel
-    : null
-  if (input.kind === 'location' && !analysisModel) {
-    throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-  }
-
   const processed = await sharp(input.imageBuffer)
     .jpeg({ quality: 90, mozjpeg: true })
     .toBuffer()
@@ -167,18 +152,9 @@ export async function prepareProjectAssetRenderUpload(
         appearanceUpdatedAtMs: appearance.updatedAt.getTime(),
       }
     }
-    if (!location || !analysisModel) throw new Error('PROJECT_LOCATION_UPLOAD_PREPARE_INVALID')
+    if (!location) throw new Error('PROJECT_LOCATION_UPLOAD_PREPARE_INVALID')
     const imageIndex = input.imageIndex ?? location.images.length
     const existingImage = location.images.find((image) => image.imageIndex === imageIndex) ?? null
-    const profile = await analyzeLocationSpatialProfile({
-      userId: input.userId,
-      projectId: input.projectId,
-      model: analysisModel,
-      locale: input.locale,
-      locationName: location.name,
-      locationDescription: existingImage?.description ?? null,
-      imageUrl: imageKey,
-    })
     return {
       kind: input.kind,
       imageKey,
@@ -186,8 +162,6 @@ export async function prepareProjectAssetRenderUpload(
       existingImageId: existingImage?.id ?? null,
       existingImageUpdatedAtMs: existingImage?.updatedAt.getTime() ?? null,
       locationUpdatedAtMs: location.updatedAt.getTime(),
-      profile,
-      profileModel: analysisModel,
     }
   } catch (error) {
     return await deletePreparedImageOrThrow(
@@ -241,8 +215,6 @@ export function parsePreparedProjectAssetRender(value: unknown): PreparedProject
     || ((existingImageId === null) !== (candidate.existingImageUpdatedAtMs === null))
     || typeof candidate.locationUpdatedAtMs !== 'number'
     || !Number.isFinite(candidate.locationUpdatedAtMs)
-    || typeof candidate.profileModel !== 'string'
-    || !candidate.profileModel.trim()
   ) {
     throw new Error('PROJECT_ASSET_UPLOAD_PREPARED_INVALID')
   }
@@ -253,8 +225,6 @@ export function parsePreparedProjectAssetRender(value: unknown): PreparedProject
     existingImageId,
     existingImageUpdatedAtMs: candidate.existingImageUpdatedAtMs,
     locationUpdatedAtMs: candidate.locationUpdatedAtMs,
-    profile: parseLocationSpatialProfile(candidate.profile),
-    profileModel: candidate.profileModel.trim(),
   }
 }
 
@@ -407,11 +377,6 @@ async function commitProjectLocationRender(
       },
       data: {
         imageUrl: prepared.imageKey,
-        spatialProfileJson: locationSpatialProfileToJson(prepared.profile),
-        spatialProfileStatus: 'ready',
-        spatialProfileError: null,
-        spatialProfileAnalyzedAt: new Date(),
-        spatialProfileModel: prepared.profileModel,
         updatedAt: new Date(Math.max(Date.now(), (prepared.existingImageUpdatedAtMs ?? 0) + 1)),
       },
     })
@@ -428,11 +393,6 @@ async function commitProjectLocationRender(
         locationId: input.assetId,
         imageIndex: prepared.imageIndex,
         imageUrl: prepared.imageKey,
-        spatialProfileJson: locationSpatialProfileToJson(prepared.profile),
-        spatialProfileStatus: 'ready',
-        spatialProfileError: null,
-        spatialProfileAnalyzedAt: new Date(),
-        spatialProfileModel: prepared.profileModel,
         description: null,
         isSelected: prepared.imageIndex === 0,
       },

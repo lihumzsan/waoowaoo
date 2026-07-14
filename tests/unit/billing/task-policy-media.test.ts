@@ -17,7 +17,7 @@ describe('billing/task-policy', () => {
   })
 
   it('honors candidateCount/count for image tasks', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {
       candidateCount: 4,
       imageModel: 'fal::gpt-image-2',
       generationOptions: {
@@ -38,7 +38,7 @@ describe('billing/task-policy', () => {
   })
 
   it('does not use top-level image sizing fields as billing metadata', () => {
-    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {
+    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {
       candidateCount: 1,
       imageModel: 'fal::gpt-image-2',
       resolution: '1K',
@@ -48,7 +48,7 @@ describe('billing/task-policy', () => {
   })
 
   it('builds video billing info from the explicit video model', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_SEGMENT, {
       videoModel: 'openrouter::bytedance/seedance-2.0-fast',
       duration: 8,
     }))
@@ -69,7 +69,7 @@ describe('billing/task-policy', () => {
   })
 
   it('builds sound effect billing info from explicit sound effect model and source count', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.AMBIENT_SOUND_GENERATE, {
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
       durationSeconds: 30,
       sourceCount: 3,

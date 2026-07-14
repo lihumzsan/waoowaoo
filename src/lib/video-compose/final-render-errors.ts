@@ -4,8 +4,8 @@ export type FinalRenderErrorLocale = 'zh' | 'en'
 
 export type MissingFinalRenderVideo = {
   readonly sourceKind: FinalRenderClipPlan['sourceKind']
-  readonly panelId: string
-  readonly groupId: string | null
+  readonly sourceId: string
+  readonly segmentId: string | null
   readonly shotNumbers: readonly number[]
 }
 
@@ -44,10 +44,10 @@ function compressShotNumbers(shotNumbers: readonly number[]): string {
 function missingVideoLabel(input: MissingFinalRenderVideo, locale: FinalRenderErrorLocale): string {
   const shotNumbersText = compressShotNumbers(input.shotNumbers)
   if (locale === 'zh') {
-    const target = input.sourceKind === 'videoGroup' ? '分组视频' : '单镜头视频'
+    const target = input.sourceKind === 'videoSegment' ? '视频分段' : '章节视频'
     return shotNumbersText ? `${target}（镜头 ${shotNumbersText}）` : target
   }
-  const target = input.sourceKind === 'videoGroup' ? 'group video' : 'single-shot video'
+  const target = input.sourceKind === 'videoSegment' ? 'video segment' : 'chapter video'
   return shotNumbersText ? `${target} (shots ${shotNumbersText})` : target
 }
 
@@ -91,8 +91,8 @@ function hasClipSource(clip: FinalRenderClipPlan): boolean {
 function toMissingFinalRenderVideo(clip: FinalRenderClipPlan): MissingFinalRenderVideo {
   return {
     sourceKind: clip.sourceKind,
-    panelId: clip.panelId,
-    groupId: clip.groupId ?? null,
+    sourceId: clip.sourceId,
+    segmentId: clip.segmentId,
     shotNumbers: clip.shotNumbers,
   }
 }

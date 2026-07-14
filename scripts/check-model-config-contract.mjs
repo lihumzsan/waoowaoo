@@ -5,7 +5,6 @@ const PROJECT_MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
 ]
@@ -319,7 +318,6 @@ async function main() {
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
     },
@@ -413,7 +411,6 @@ async function main() {
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
     },

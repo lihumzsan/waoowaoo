@@ -57,7 +57,6 @@ export async function getUserApiConfig(userId: string) {
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
       musicModel: true,
@@ -86,7 +85,6 @@ export async function getUserApiConfig(userId: string) {
     analysisModel: pref?.analysisModel || '',
     characterModel: pref?.characterModel || '',
     locationModel: pref?.locationModel || '',
-    storyboardModel: pref?.storyboardModel || '',
     editModel: pref?.editModel || '',
     videoModel: pref?.videoModel || '',
     musicModel: pref?.musicModel || '',
@@ -160,7 +158,6 @@ export async function putUserApiConfig(
       analysisModel: true,
       characterModel: true,
       locationModel: true,
-      storyboardModel: true,
       editModel: true,
       videoModel: true,
       musicModel: true,
@@ -230,9 +227,6 @@ export async function putUserApiConfig(
     if (normalizedDefaults.locationModel !== undefined) {
       updateData.locationModel = normalizedDefaults.locationModel || null
     }
-    if (normalizedDefaults.storyboardModel !== undefined) {
-      updateData.storyboardModel = normalizedDefaults.storyboardModel || null
-    }
     if (normalizedDefaults.editModel !== undefined) {
       updateData.editModel = normalizedDefaults.editModel || null
     }
@@ -256,7 +250,6 @@ export async function putUserApiConfig(
       analysisModel: existingPref?.analysisModel || '',
       characterModel: existingPref?.characterModel || '',
       locationModel: existingPref?.locationModel || '',
-      storyboardModel: existingPref?.storyboardModel || '',
       editModel: existingPref?.editModel || '',
       videoModel: existingPref?.videoModel || '',
       musicModel: existingPref?.musicModel || '',

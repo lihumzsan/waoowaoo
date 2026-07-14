@@ -8,20 +8,20 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
-    zh: '读取项目或剧集的具体内容：完整 Bible 正文、历史生成结果、失败原因、正在运行的任务详情，以及资产、分镜、面板的字段。当你需要这些具体内容来回答用户、或用来填好某个工具的创作参数，而 project_state_snapshot 和当前对话里都没有时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。',
-    en: 'Read concrete project or episode content: the full Bible text, past generation results, failure reasons, running task details, and asset, storyboard, and panel fields. Call it when you need that content to answer the user or to fill another tool\'s creative input, and project_state_snapshot and the conversation do not already contain it. The current stage, progress, next step, projectId, episodeId, and approval state are already in project_state_snapshot — do not call it just to read those.',
+    zh: '读取项目或剧集的具体内容：完整 Bible 正文、历史生成结果、失败原因、正在运行的任务详情，以及资产和视频片段字段。当你需要这些具体内容来回答用户、或用来填好某个工具的创作参数，而 project_state_snapshot 和当前对话里都没有时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。',
+    en: 'Read concrete project or episode content: the full Bible text, past generation results, failure reasons, running task details, assets, and video segments. Call it when you need that content to answer the user or fill another tool\'s creative input, and project_state_snapshot and the conversation do not already contain it. The current stage, progress, next step, projectId, episodeId, and approval state are already in project_state_snapshot — do not call it just to read those.',
   },
   get_project_snapshot: {
-    zh: '读取整个项目的结构化投影，用来了解项目全貌。当 project_state_snapshot 和当前对话不足以回答用户的具体请求、或不足以填好某个工具的创作参数时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。只有确实需要面板字段、提示词、描述文本或媒体 URL 时，才传 detail=full。',
-    en: 'Read a structured projection of the whole project to understand its overall state. Call it when project_state_snapshot and the conversation are not enough to answer the user\'s concrete request or to fill another tool\'s creative input. The current stage, progress, next step, projectId, episodeId, and approval state are already in project_state_snapshot — do not call it just to read those. Pass detail=full only when you actually need panel fields, prompts, descriptions, or media URLs.',
+    zh: '读取整个项目的结构化投影，用来了解项目全貌。当 project_state_snapshot 和当前对话不足以回答用户的具体请求、或不足以填好某个工具的创作参数时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。只有确实需要视频片段状态或输出媒体 identity 时，才传 detail=full。',
+    en: 'Read a structured projection of the whole project to understand its overall state. Call it when project_state_snapshot and the conversation are not enough to answer the user\'s concrete request or fill another tool\'s creative input. Pass detail=full only when video-segment state or output media identity is actually needed.',
   },
   get_episode_overview: {
     zh: '读取当前剧集的轻量总览：Bible、章节列表和各章进度统计。当用户在问某个章节或整体规划的问题、需要这份总览来回答时调用。',
     en: 'Read a lightweight overview of the current episode: the Bible, the chapter list, and per-chapter progress counts. Call it when the user asks about a chapter or overall planning and you need this overview to answer.',
   },
   get_chapter_detail: {
-    zh: '读取单个章节的轻量详情：核心剪辑计划状态、分镜状态、视频片段状态、资产需求和章节成片输出。当用户在讨论某一章的细节、或某一章需要修复时调用。',
-    en: 'Read lightweight details for one chapter: core edit plan status, storyboard status, video group status, asset requirements, and chapter render output. Call it when the user discusses a specific chapter\'s details or a chapter needs to be repaired.',
+    zh: '读取单个章节的轻量详情：核心剪辑计划、镜头执行计划、视频片段状态、资产需求和章节成片输出。当用户在讨论某一章的细节、或某一章需要修复时调用。',
+    en: 'Read lightweight details for one chapter: core edit plan, shot execution plan, video-segment status, asset requirements, and chapter render output. Call it when the user discusses a specific chapter or a chapter needs repair.',
   },
   asset_hub_list_folders: {
     zh: '列出当前用户的全局资产文件夹。',
@@ -60,8 +60,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Show the generated visual style candidates to the user and let them pick one as the film\'s style. Use it only to choose the style — do not use it as a generic execution gate, and do not describe the underlying card mechanism to the user.',
   },
   request_edit_asset_review_choice: {
-    zh: '把生成好的资产和空间档案展示给用户，让用户审核并确认是否继续。它只用于资产审核这一步，不要拿它当通用的执行许可，也不要向用户描述背后的卡片机制。',
-    en: 'Show the generated assets and spatial profiles to the user for review and a go/no-go decision. Use it only for asset review — do not use it as a generic execution gate, and do not describe the underlying card mechanism to the user.',
+    zh: '把生成好的角色与场景资产展示给用户，让用户审核并确认是否继续。它只用于资产审核这一步，不要拿它当通用的执行许可，也不要向用户描述背后的卡片机制。',
+    en: 'Show the generated character and location assets for review and a go/no-go decision. Use it only for asset review, not as a generic execution gate.',
   },
   request_script_intake_choice: {
     zh: '当用户的输入缺少剧本的基础结构信息（时代与背景、主角与人物动机、核心冲突、关键人物关系、类型基调、结局走向等标准剧本要素）时，用它发起扩写前创作问诊，让用户先把这些基本结构补齐，再进入扩写。在绝大部分情况下，除非用户直接给出了完整可拍剧本，否则都要先调用这个工具来问诊；只有用户已经贴出完整可拍剧本时才跳过它。',
@@ -116,16 +116,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'When asset review did not pass, rework the current required asset images according to the user\'s notes. The system decides which assets to rework based on the current review scope. Do not tell the user the tasks were resubmitted until this tool actually returns successfully.',
   },
   generate_edit_shot_execution_plan: {
-    zh: '生成镜头执行计划；系统会在同一成功事务中自动构建对应的正式分镜面板。计划统一包含镜头语言、空间 blocking、轴线、光线，以及人物和物体的位置。',
-    en: 'Generate the shot execution plan and automatically materialize its formal storyboard panels in the same successful transaction. The plan covers cinematography, spatial blocking, the axis, lighting, and character and object positions.',
+    zh: '生成镜头执行计划。它只为核心剪辑表中的每个镜头决定景别、运镜动作和运镜稳定性，不创建分镜图片或第二套剧情事实。',
+    en: 'Generate the shot execution plan. It decides only shot scale, camera movement, and camera stability for each shot in the core edit table; it creates no intermediate images or second narrative source.',
   },
-  generate_edit_script_storyboard_images: {
-    zh: '为已经生成、但还缺图片的分镜面板批量生成分镜图片。它只生成分镜图片，不要用 generate_episode_videos 来代替。',
-    en: 'Batch-generate storyboard images for storyboard panels that already exist but still have no image. It only produces storyboard images — do not use generate_episode_videos in its place.',
-  },
-  generate_episode_videos: {
-    zh: '为当前还缺视频的连续片段提交视频生成任务。需要生成哪些片段，由系统根据当前剧本、分镜图片和已有视频状态自动决定，你只需发起调用。',
-    en: 'Submit video generation tasks for the continuous segments that still lack video. The system decides which segments to generate from the current script, storyboard images, and existing video state — you just make the call.',
+  generate_video_segments: {
+    zh: '按核心剪辑表和镜头执行计划生成连续视频片段。系统自动冻结完整提示词与全能参考图，并始终启用模型原生音频。',
+    en: 'Generate continuous video segments from the core edit table and shot execution plan. The system freezes the complete prompt and full-reference images and always enables native model audio.',
   },
   reference_to_character: {
     zh: '根据参考图片生成角色形象。该操作会先生成不可变图片任务与报价，只有用户批准后才提交。',
@@ -257,10 +253,6 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成镜头执行计划',
     en: 'Generate shot execution plan',
   },
-  generate_edit_script_storyboard_images: {
-    zh: '生成分镜图片',
-    en: 'Generate storyboard images',
-  },
   plan_episode_bgm_score: {
     zh: '规划配乐',
     en: 'Plan music score',
@@ -269,15 +261,15 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成配乐',
     en: 'Generate music score',
   },
-  plan_episode_soundscape: {
+  plan_episode_ambient_sound: {
     zh: '规划环境音层',
-    en: 'Plan soundscape layer',
+    en: 'Plan ambientSound layer',
   },
-  generate_episode_soundscape: {
+  generate_episode_ambient_sound: {
     zh: '生成环境音层',
-    en: 'Generate soundscape layer',
+    en: 'Generate ambientSound layer',
   },
-  generate_episode_videos: {
+  generate_video_segments: {
     zh: '生成视频片段',
     en: 'Generate video clips',
   },

@@ -52,8 +52,8 @@ describe('project agent task follow-up input', () => {
       failedTaskIds: ['task-failed-1'],
       failedTasks: [{
         taskId: 'task-failed-1',
-        taskType: 'video_group',
-        targetType: 'ProjectVideoGroup',
+        taskType: 'video_segment',
+        targetType: 'ProjectVideoSegment',
         targetId: 'group-1',
         status: 'failed',
         errorCode: 'INTERNAL_ERROR',

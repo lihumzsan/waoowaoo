@@ -262,7 +262,7 @@ describe('approved operation plan Task batch integration', () => {
       userId: user.id,
     })
     const unauthorized = await persistEmptyPlan({
-      operationId: 'generate_episode_soundscape',
+      operationId: 'generate_episode_ambient_sound',
       projectId: otherProject.id,
       userId: otherUser.id,
     })

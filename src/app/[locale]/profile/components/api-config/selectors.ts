@@ -19,7 +19,6 @@ export interface DefaultModels {
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string
@@ -36,7 +35,6 @@ export const DEFAULT_MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
   'musicModel',

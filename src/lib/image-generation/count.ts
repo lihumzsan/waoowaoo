@@ -1,7 +1,6 @@
 export type ImageGenerationCountScope =
   | 'character'
   | 'location'
-  | 'storyboard-candidates'
   | 'reference-to-character'
 
 interface ImageGenerationCountConfig {
@@ -23,12 +22,6 @@ const IMAGE_GENERATION_COUNT_CONFIG: Record<ImageGenerationCountScope, ImageGene
     min: 1,
     max: 6,
     storageKey: 'image-count:location',
-  },
-  'storyboard-candidates': {
-    defaultValue: 1,
-    min: 1,
-    max: 4,
-    storageKey: 'image-count:storyboard-candidates',
   },
   'reference-to-character': {
     defaultValue: 3,

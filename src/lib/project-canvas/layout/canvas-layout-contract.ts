@@ -4,9 +4,6 @@ import type { CanvasNodeLayout, CanvasViewportLayout } from '@/lib/project-canva
 export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 
 export const projectCanvasNodeTypeSchema = z.enum([
-  'shot',
-  'imageAsset',
-  'videoClip',
   'finalTimeline',
   'editSourceScript',
   'editBible',
@@ -17,7 +14,7 @@ export const projectCanvasNodeTypeSchema = z.enum([
   'editShotExecutionPlan',
   'videoPlan',
   'bgmScore',
-  'soundscape',
+  'ambientSound',
   'editRequiredAsset',
   'editAssetGroup',
 ])
@@ -27,10 +24,7 @@ export type CanvasLayoutNodeType = z.infer<typeof projectCanvasNodeTypeSchema>
 export const projectCanvasTargetTypeSchema = z.enum([
   'project',
   'episode',
-  'clip',
-  'storyboard',
-  'panel',
-  'videoGroup',
+  'videoSegment',
   'editSourceScript',
   'editBible',
   'editStyleBible',

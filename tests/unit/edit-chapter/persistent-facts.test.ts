@@ -41,13 +41,10 @@ describe('projectChapterPersistentFacts', () => {
         action: '阿杰推门进入。',
         characters: [{
           characterName: '阿杰',
-          visibility: 'visible',
-          role: 'focus',
           performance: '谨慎前进',
         }],
-        keyObjects: [{ name: '铁门', role: '入口' }],
         dialogue: [],
-        sound: '铁门摩擦声',
+        synchronousSound: '铁门摩擦声',
       }],
       generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
       persistentFactsIntroduced: ['阿杰进入密室。'],
@@ -56,7 +53,7 @@ describe('projectChapterPersistentFacts', () => {
     expect(result.success).toBe(false)
   })
 
-  it('accepts an empty performance in the asset-scoped chapter output', () => {
+  it('rejects an empty performance in the asset-scoped chapter output', () => {
     const schema = buildChapterPlanOutputSchema({
       locations: [{ id: 'location-1', name: '密室', description: '章节场景' }],
       characters: [{ id: 'character-1', name: '阿杰', description: '主角' }],
@@ -72,17 +69,14 @@ describe('projectChapterPersistentFacts', () => {
         action: '阿杰推门进入。',
         characters: [{
           characterName: '阿杰',
-          visibility: 'visible',
-          role: 'focus',
           performance: '',
         }],
-        keyObjects: [],
         dialogue: [],
-        sound: '铁门摩擦声',
+        synchronousSound: '铁门摩擦声',
       }],
       generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
     })
 
-    expect(result.success).toBe(true)
+    expect(result.success).toBe(false)
   })
 })

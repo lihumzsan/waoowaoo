@@ -6,10 +6,9 @@ export const WORKSPACE_RESOURCE_KIND = {
   EDIT_BIBLE: 'editBible',
   EDIT_SCRIPT: 'editScript',
   EDIT_SHOT_EXECUTION_PLAN: 'editShotExecutionPlan',
-  STORYBOARDS: 'storyboards',
   PROJECT_ASSETS: 'projectAssets',
   GLOBAL_ASSETS: 'globalAssets',
-  VIDEOS: 'videos',
+  VIDEO_SEGMENTS: 'videoSegments',
   EPISODE_DATA: 'episodeData',
   PROJECT_DATA: 'projectData',
   PROJECT_CONTEXT: 'projectContext',
@@ -22,11 +21,10 @@ export const WORKSPACE_RESOURCE_IMPACT = {
   EDIT_PIPELINE: 'edit_pipeline',
   EDIT_PIPELINE_ASSETS: 'edit_pipeline_assets',
   EDIT_STYLE_PREVIEW: 'edit_style_preview',
-  STORYBOARDS: 'storyboards',
   PROJECT_ASSETS: 'project_assets',
   SCOPED_ASSETS: 'scoped_assets',
   GLOBAL_ASSETS: 'global_assets',
-  VIDEOS: 'videos',
+  VIDEO_SEGMENTS: 'video_segments',
   EPISODE: 'episode',
   PROJECT_DATA: 'project_data',
   PROJECT_WORKSPACE: 'project_workspace',
@@ -99,7 +97,6 @@ function editPipelineRefs(projectId: string, episodeId: string): WorkspaceResour
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.STORYBOARDS, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId),
@@ -115,20 +112,11 @@ function editStylePreviewRefs(projectId: string, episodeId: string): WorkspaceRe
   ]
 }
 
-function storyboardRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
+function videoSegmentRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
   return [
-    resourceRef(WORKSPACE_RESOURCE_KIND.STORYBOARDS, projectId, episodeId),
+    resourceRef(WORKSPACE_RESOURCE_KIND.VIDEO_SEGMENTS, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId),
-  ]
-}
-
-function videoRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
-  return [
-    resourceRef(WORKSPACE_RESOURCE_KIND.VIDEOS, projectId, episodeId),
-    resourceRef(WORKSPACE_RESOURCE_KIND.STORYBOARDS, projectId, episodeId),
+    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId),
@@ -181,8 +169,6 @@ export function resolveWorkspaceResourceRefs(params: {
     }
     case WORKSPACE_RESOURCE_IMPACT.EDIT_STYLE_PREVIEW:
       return editStylePreviewRefs(projectId, requireEpisodeId(impact, episodeId))
-    case WORKSPACE_RESOURCE_IMPACT.STORYBOARDS:
-      return storyboardRefs(projectId, requireEpisodeId(impact, episodeId))
     case WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS:
       return projectAssetRefs(projectId, episodeId)
     case WORKSPACE_RESOURCE_IMPACT.SCOPED_ASSETS:
@@ -191,8 +177,8 @@ export function resolveWorkspaceResourceRefs(params: {
         : projectAssetRefs(projectId, episodeId)
     case WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS:
       return [resourceRef(WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS, projectId)]
-    case WORKSPACE_RESOURCE_IMPACT.VIDEOS:
-      return videoRefs(projectId, requireEpisodeId(impact, episodeId))
+    case WORKSPACE_RESOURCE_IMPACT.VIDEO_SEGMENTS:
+      return videoSegmentRefs(projectId, requireEpisodeId(impact, episodeId))
     case WORKSPACE_RESOURCE_IMPACT.EPISODE:
       return episodeRefs(projectId, requireEpisodeId(impact, episodeId))
     case WORKSPACE_RESOURCE_IMPACT.PROJECT_DATA:
@@ -202,7 +188,7 @@ export function resolveWorkspaceResourceRefs(params: {
         ? dedupeWorkspaceResourceRefs([
             ...editPipelineRefs(projectId, episodeId),
             ...projectAssetRefs(projectId, episodeId),
-            ...videoRefs(projectId, episodeId),
+            ...videoSegmentRefs(projectId, episodeId),
           ])
         : projectAssetRefs(projectId, null)
   }

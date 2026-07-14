@@ -109,11 +109,8 @@ export interface ProjectModelConfig {
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
-  storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
-  singleShotVideoModel: string | null
-  sequenceVideoModel: string | null
   musicModel: string | null
   soundEffectModel: string | null
   videoRatio: string | null
@@ -126,7 +123,6 @@ export interface UserModelConfig {
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
-  storyboardModel: string | null
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
@@ -173,11 +169,8 @@ export async function getProjectModelConfig(
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
-      storyboardModel: platformDefaults.storyboardModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
-      singleShotVideoModel: platformDefaults.videoModel,
-      sequenceVideoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
       soundEffectModel: platformDefaults.soundEffectModel,
       videoRatio: projectData?.videoRatio || '9:16',
@@ -195,19 +188,8 @@ export async function getProjectModelConfig(
     analysisModel: extractModelKey(projectData?.analysisModel) || extractModelKey(userPref?.analysisModel) || null,
     characterModel: extractModelKey(projectData?.characterModel) || extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(projectData?.locationModel) || extractModelKey(userPref?.locationModel) || null,
-    storyboardModel: extractModelKey(projectData?.storyboardModel) || extractModelKey(userPref?.storyboardModel) || null,
     editModel: extractModelKey(projectData?.editModel) || extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
-    singleShotVideoModel:
-      extractModelKey(projectData?.singleShotVideoModel)
-      || extractModelKey(projectData?.videoModel)
-      || extractModelKey(userPref?.videoModel)
-      || null,
-    sequenceVideoModel:
-      extractModelKey(projectData?.sequenceVideoModel)
-      || extractModelKey(projectData?.videoModel)
-      || extractModelKey(userPref?.videoModel)
-      || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     soundEffectModel: extractModelKey(projectData?.soundEffectModel) || extractModelKey(userPref?.soundEffectModel) || null,
     videoRatio: projectData?.videoRatio || '9:16',
@@ -229,7 +211,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
-      storyboardModel: platformDefaults.storyboardModel,
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
@@ -247,7 +228,6 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     analysisModel: extractModelKey(userPref?.analysisModel) || null,
     characterModel: extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(userPref?.locationModel) || null,
-    storyboardModel: extractModelKey(userPref?.storyboardModel) || null,
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
@@ -319,11 +299,8 @@ export function checkRequiredModels(
     assistantModel: 'Assistant 对话模型',
     characterModel: '角色图像模型',
     locationModel: '场景图像模型',
-    storyboardModel: '分镜图像模型',
     editModel: '修图/编辑模型',
     videoModel: '视频模型',
-    singleShotVideoModel: '单镜头视频模型',
-    sequenceVideoModel: '编排视频模型',
     musicModel: '音乐模型',
   }
 

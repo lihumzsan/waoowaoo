@@ -36,7 +36,6 @@ import {
   normalizeEditShotExecutionPlan,
   parsePersistedEditShotExecutionPlan,
 } from './normalize'
-import { resolveEditScriptDialogueVoiceContext } from './voice-profiles'
 import type {
   EditAssetKind,
   EditAssetRequirement,
@@ -59,11 +58,6 @@ import {
   EDIT_STYLE_PREVIEW_MAX_COUNT,
   editScriptStyleBibleSchema,
 } from './types'
-import {
-  assembleStoryboardConsistencySourceSnapshot,
-  buildAssetSnapshots,
-} from './storyboard-consistency/source-snapshot'
-import { materializeEditScriptStoryboard } from './storyboard-consistency/service'
 import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
 import { buildShotExecutionPlanPromptStructure } from './shot-execution-plan-prompt'
 import { projectEditScriptCoreNames } from './core-view'
@@ -238,6 +232,10 @@ function createSystemShotId(): string {
   return `shot_${createShotCuid()}`
 }
 
+function createSystemSegmentId(): string {
+  return `segment_${createShotCuid()}`
+}
+
 function rewriteStructureWithSystemShotIds(structure: NormalizedChapterPlanOutput): NormalizedChapterPlanOutput {
   const shotIdMap = new Map<string, string>()
   const shots = structure.shots.map((shot): EditScriptShot => {
@@ -250,6 +248,7 @@ function rewriteStructureWithSystemShotIds(structure: NormalizedChapterPlanOutpu
   })
   const generationSegments = structure.generationSegments.map((segment) => ({
     ...segment,
+    segmentId: createSystemSegmentId(),
     shotIds: segment.shotIds.map((shotId) => {
       const systemShotId = shotIdMap.get(shotId)
       if (!systemShotId) throw new Error(`EDIT_SCRIPT_SYSTEM_SHOT_ID_REWRITE_MISSING:${shotId}`)
@@ -327,11 +326,6 @@ function buildProjectedAssetRequirements(input: {
       taskTargetType: knownAsset.asset.taskTargetType,
       taskTargetId: knownAsset.asset.taskTargetId,
       previewImageUrl: knownAsset.asset.previewImageUrl,
-      spatialProfileJson: knownAsset.asset.spatialProfileJson ?? null,
-      spatialProfileStatus: knownAsset.asset.spatialProfileStatus ?? null,
-      spatialProfileError: knownAsset.asset.spatialProfileError ?? null,
-      spatialProfileAnalyzedAt: knownAsset.asset.spatialProfileAnalyzedAt ?? null,
-      spatialProfileModel: knownAsset.asset.spatialProfileModel ?? null,
     }
   })
 }
@@ -373,10 +367,10 @@ function buildStylePreviewPersistenceKey(
 }
 
 function resolveStylePreviewImageModel(config: Awaited<ReturnType<typeof getProjectModelConfig>>): string {
-  if (config.storyboardModel) return config.storyboardModel
+  if (config.locationModel) return config.locationModel
   throw new ApiError('INVALID_PARAMS', {
-    code: 'PROJECT_STORYBOARD_MODEL_REQUIRED',
-    message: 'Project storyboard image model is required before edit style preview generation',
+    code: 'PROJECT_LOCATION_MODEL_REQUIRED',
+    message: 'Project location image model is required before visual style preview generation',
   })
 }
 
@@ -727,11 +721,6 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
       taskTargetId: resolvedAsset?.taskTargetId ?? null,
       errorMessage: status === 'failed' ? taskFailure || requirement.errorMessage : null,
       previewImageUrl: resolvedAsset?.previewImageUrl ?? null,
-      spatialProfileJson: resolvedAsset?.spatialProfileJson ?? null,
-      spatialProfileStatus: resolvedAsset?.spatialProfileStatus ?? null,
-      spatialProfileError: resolvedAsset?.spatialProfileError ?? null,
-      spatialProfileAnalyzedAt: resolvedAsset?.spatialProfileAnalyzedAt ?? null,
-      spatialProfileModel: resolvedAsset?.spatialProfileModel ?? null,
     }
   }))
 
@@ -770,8 +759,7 @@ async function mapPersistedEditShotExecutionPlan(plan: PersistedEditShotExecutio
     editScriptId: plan.editScriptId,
     status: plan.status,
     generationTaskId: plan.generationTaskId,
-    shots: parsed.shots,
-    generationSegmentExecutions: parsed.generationSegmentExecutions,
+    generationSegments: parsed.generationSegments,
   }
 }
 
@@ -1821,16 +1809,6 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
       generationTaskId: input.taskId,
     },
   })
-  const editBible = await prisma.projectEditBible.findUnique({
-    where: { episodeId: input.episodeId },
-    select: { bibleJson: true },
-  })
-  if (!editBible?.bibleJson) throw new Error('EDIT_SCRIPT_STORY_BIBLE_REQUIRED')
-  const dialogueVoiceContext = resolveEditScriptDialogueVoiceContext({
-    storyBibleJson: editBible.bibleJson,
-    shots: mappedEditScript.shots,
-  })
-  const assets = await buildAssetSnapshots(mappedEditScript.requirements)
   const model = resolveTextModel(config)
   const parsed = await runStructuredPromptStep({
     userId: input.userId,
@@ -1839,7 +1817,8 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     locale,
     promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
     variables: {
-      style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
+      visual_style: mappedEditScript.styleBible.visualStyle,
+      aspect_ratio: project.videoRatio,
       structure_json: stringifyForPrompt(buildShotExecutionPlanPromptStructure({
         durationSec: mappedEditScript.durationSec,
         shotCount: mappedEditScript.shotCount,
@@ -1847,18 +1826,6 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
         shots: mappedEditScript.shots,
         generationSegments: mappedEditScript.generationSegments,
       })),
-      character_voice_profiles_json: stringifyForPrompt(dialogueVoiceContext.characters),
-      dialogue_voice_context_json: stringifyForPrompt(dialogueVoiceContext.shots),
-      asset_context_json: stringifyForPrompt(assets),
-      spatial_profiles_json: stringifyForPrompt(assets
-        .filter((asset) => asset.kind === 'location')
-        .map((asset) => ({
-          requirementId: asset.requirementId,
-          name: asset.name,
-          targetId: asset.targetId,
-          shotIds: asset.shotIds,
-          spatialProfile: asset.spatialProfile ?? null,
-        }))),
     },
     stepTitle: 'Edit shot execution plan',
     stepIndex: 1,
@@ -1866,17 +1833,8 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     validate: (raw) => normalizeEditShotExecutionPlan(raw, mappedEditScript.shots, mappedEditScript.generationSegments),
   })
   const executionPlanJson = {
-    shots: parsed.shots,
-    generationSegmentExecutions: parsed.generationSegmentExecutions,
+    generationSegments: parsed.generationSegments,
   }
-  const sourceSnapshot = assembleStoryboardConsistencySourceSnapshot({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    videoRatio: project.videoRatio,
-    editScript: mappedEditScript,
-    shotExecutionPlan: executionPlanJson,
-    assets,
-  })
   await prisma.$transaction(async (tx) => {
     const projected = await tx.projectEditShotExecutionPlan.updateMany({
       where: {
@@ -1894,10 +1852,6 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     if (projected.count !== 1) {
       throw new Error(`EDIT_SHOT_EXECUTION_PLAN_TASK_OWNERSHIP_STALE:${editScript.id}:${input.taskId}`)
     }
-    await materializeEditScriptStoryboard({
-      client: tx,
-      sourceSnapshot,
-    })
   })
   const saved = await prisma.projectEditShotExecutionPlan.findUniqueOrThrow({ where: { chapterId } })
   return await mapPersistedEditShotExecutionPlan(saved)

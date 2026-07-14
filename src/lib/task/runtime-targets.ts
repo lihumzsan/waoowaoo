@@ -115,23 +115,14 @@ export const TASK_RUNTIME_TARGETS = {
       TASK_TYPE.MUSIC_SCORE_GENERATE,
     ])
   },
-  projectEpisodeSoundscape(episodeId: string | null | undefined) {
+  projectEpisodeAmbientSound(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [
-      TASK_TYPE.SOUNDSCAPE_PLAN,
-      TASK_TYPE.SOUNDSCAPE_GENERATE,
+      TASK_TYPE.AMBIENT_SOUND_PLAN,
+      TASK_TYPE.AMBIENT_SOUND_GENERATE,
     ])
   },
   projectEditChapterRender(chapterId: string | null | undefined) {
     return target('ProjectEditChapter', chapterId, [TASK_TYPE.CHAPTER_RENDER])
-  },
-  projectPanelImage(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [TASK_TYPE.IMAGE_PANEL])
-  },
-  projectPanelImageOperations(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [
-      TASK_TYPE.IMAGE_PANEL,
-      TASK_TYPE.MODIFY_ASSET_IMAGE,
-    ])
   },
   projectEditAssetImage(
     targetType: 'CharacterAppearance' | 'LocationImage' | null | undefined,
@@ -151,10 +142,7 @@ export const TASK_RUNTIME_TARGETS = {
     }
     return null
   },
-  projectPanelVideo(panelId: string | null | undefined) {
-    return target('ProjectPanel', panelId, [TASK_TYPE.VIDEO_PANEL])
-  },
-  projectVideoGroup(groupId: string | null | undefined) {
-    return target('ProjectVideoGroup', groupId, [TASK_TYPE.VIDEO_GROUP])
+  projectVideoSegment(segmentId: string | null | undefined) {
+    return target('ProjectVideoSegment', segmentId, [TASK_TYPE.VIDEO_SEGMENT])
   },
 } as const

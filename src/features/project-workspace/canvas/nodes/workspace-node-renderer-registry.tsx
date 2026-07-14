@@ -1,9 +1,9 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { EditAssetContent, EditAssetGroupContent, StyleBibleContent } from './renderers/assets-style'
-import { BgmScoreContent, FinalContent, SoundscapeContent } from './renderers/audio-final'
+import { BgmScoreContent, FinalContent, AmbientSoundContent } from './renderers/audio-final'
 import { EditBibleContent, SourceScriptContent } from './renderers/bible'
 import { EditScriptContent, EditShotExecutionPlanContent } from './renderers/edit-plans'
-import { ImageContent, MediaPreview, ShotContent, VideoContent } from './renderers/media'
+import { MediaPreview } from './renderers/media'
 import { EditPipelineStepContent, ProcessGroupContent } from './renderers/pipeline'
 import { nodeIsRunning } from './renderers/renderer-shared'
 import type { WorkspaceCanvasNodeRenderer, WorkspaceCanvasNodeRendererProps } from './renderers/types'
@@ -11,9 +11,6 @@ import { VideoPlanContent } from './renderers/video-plan'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 
 export const WORKSPACE_CANVAS_NODE_RENDERERS = {
-  shot: ShotContent,
-  imageAsset: ImageContent,
-  videoClip: VideoContent,
   finalTimeline: FinalContent,
   editSourceScript: SourceScriptContent,
   editBible: EditBibleContent,
@@ -24,7 +21,7 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
   editShotExecutionPlan: EditShotExecutionPlanContent,
   videoPlan: VideoPlanContent,
   bgmScore: BgmScoreContent,
-  soundscape: SoundscapeContent,
+  ambientSound: AmbientSoundContent,
   editRequiredAsset: EditAssetContent,
   editAssetGroup: EditAssetGroupContent,
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>

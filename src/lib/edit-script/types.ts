@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 export const EDIT_ASSET_KINDS = ['character', 'location'] as const
 export type EditAssetKind = (typeof EDIT_ASSET_KINDS)[number]
 
@@ -72,28 +71,15 @@ export interface EditStylePreviewGenerationPayload {
   readonly stylePreviews: readonly EditStylePreviewGenerationItem[]
 }
 
-export const EDIT_CHARACTER_VISIBILITIES = ['visible', 'partial', 'hidden', 'occluded', 'offscreen'] as const
-export type EditCharacterVisibility = (typeof EDIT_CHARACTER_VISIBILITIES)[number]
-
-export const EDIT_CHARACTER_ROLES = ['focus', 'supporting', 'listener', 'hidden_subject', 'background'] as const
-export type EditCharacterRole = (typeof EDIT_CHARACTER_ROLES)[number]
-
 export const EDIT_SHOT_PURPOSES = ['establishing', 'action', 'reaction', 'insert', 'atmosphere', 'transition'] as const
 export type EditShotPurpose = (typeof EDIT_SHOT_PURPOSES)[number]
 
-export const editScriptPerformanceSchema = z.string().trim()
+export const editScriptPerformanceSchema = z.string().trim().min(1)
 
 export interface EditScriptCharacter {
   readonly characterId: string
   readonly name: string
-  readonly visibility: EditCharacterVisibility
-  readonly role: EditCharacterRole
   readonly performance: string
-}
-
-export interface EditScriptKeyObject {
-  readonly name: string
-  readonly role: string
 }
 
 export interface EditScriptDialogueLine {
@@ -113,19 +99,14 @@ export interface EditScriptShot {
   }
   readonly action: string
   readonly characters: readonly EditScriptCharacter[]
-  readonly keyObjects: readonly EditScriptKeyObject[]
   readonly dialogue: readonly EditScriptDialogueLine[]
-  readonly sound: string
+  readonly synchronousSound: string
 }
 
 export interface EditGenerationSegment {
+  readonly segmentId: string
   readonly shotIds: readonly string[]
   readonly continuity: string
-}
-
-export interface EditGenerationSegmentExecution {
-  readonly shotIds: readonly string[]
-  readonly continuousVideoPrompt: string
 }
 
 export interface EditAssetRequirement {
@@ -140,11 +121,6 @@ export interface EditAssetRequirement {
   readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
   readonly previewImageUrl?: string | null
-  readonly spatialProfileJson?: unknown | null
-  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
-  readonly spatialProfileError?: string | null
-  readonly spatialProfileAnalyzedAt?: string | Date | null
-  readonly spatialProfileModel?: string | null
 }
 
 export interface EditScriptAssetGenerationTask {
@@ -229,51 +205,24 @@ export interface EditScriptAssetRevisionPayload {
   readonly editScript: EditScriptPayload
 }
 
-export interface EditShotExecutionCamera {
-  readonly shotScale: string
-  readonly lens: string
-  readonly focus: string
-  readonly height: string
-  readonly angle: string
+export const EDIT_CAMERA_STABILITIES = ['locked', 'stable', 'smooth', 'subtle_shake', 'handheld'] as const
+export type EditCameraStability = (typeof EDIT_CAMERA_STABILITIES)[number]
+
+export interface EditShotCameraMovement {
   readonly movement: string
-  readonly composition: string
-  readonly lighting: string
-}
-
-export interface EditShotExecutionAxis {
-  readonly type: string
-  readonly subjects: readonly string[]
-  readonly screenDirection: string
-}
-
-export interface EditShotExecutionCharacter {
-  readonly characterId: string
-  readonly visibility: EditCharacterVisibility
-  readonly position: string
-  readonly screenPosition: string
-  readonly facing: string
-  readonly eyeline: string
-}
-
-export interface EditShotExecutionObject {
-  readonly name: string
-  readonly position: string
-  readonly screenPosition: string
-}
-
-export interface EditShotExecutionBlocking {
-  readonly axis: EditShotExecutionAxis
-  readonly characters: readonly EditShotExecutionCharacter[]
-  readonly objects: readonly EditShotExecutionObject[]
-  readonly spatialNote: string
+  readonly stability: EditCameraStability
 }
 
 export interface EditShotExecution {
   readonly shotId: string
   readonly shotNumber: number
-  readonly camera: EditShotExecutionCamera
-  readonly blocking: EditShotExecutionBlocking
-  readonly videoPrompt: string
+  readonly shotScale: string
+  readonly cameraMovement: EditShotCameraMovement
+}
+
+export interface EditGenerationSegmentExecution {
+  readonly segmentId: string
+  readonly shots: readonly EditShotExecution[]
 }
 
 export interface EditShotExecutionPlanPayload {
@@ -284,24 +233,14 @@ export interface EditShotExecutionPlanPayload {
   readonly editScriptId: string
   readonly status: string
   readonly generationTaskId?: string | null
-  readonly shots: readonly EditShotExecution[]
-  readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
+  readonly generationSegments: readonly EditGenerationSegmentExecution[]
 }
 
 export const editScriptCharacterSchema = z
   .object({
     characterId: z.string().trim().min(1),
     name: z.string().trim().min(1),
-    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-    role: z.enum(EDIT_CHARACTER_ROLES),
     performance: editScriptPerformanceSchema,
-  })
-  .strict()
-
-export const editScriptKeyObjectSchema = z
-  .object({
-    name: z.string().trim().min(1),
-    role: z.string().trim().min(1),
   })
   .strict()
 
@@ -327,14 +266,14 @@ export const editScriptShotSchema = z
       .strict(),
     action: z.string().trim().min(1),
     characters: z.array(editScriptCharacterSchema).min(0).max(20),
-    keyObjects: z.array(editScriptKeyObjectSchema).min(0).max(20),
     dialogue: z.array(editScriptDialogueLineSchema).min(0).max(20),
-    sound: z.string().trim().min(1),
+    synchronousSound: z.string().trim().min(1),
   })
   .strict()
 
 export const editGenerationSegmentSchema = z
   .object({
+    segmentId: z.string().trim().min(1),
     shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
     continuity: z.string().trim().min(1),
   })
@@ -351,75 +290,20 @@ export const editScriptStructureSchema = editScriptCoreSchema
 
 export const editShotExecutionPlanSchema = z
   .object({
-    shots: z
+    generationSegments: z
       .array(
         z
           .object({
-            shotId: z.string().trim().min(1),
-            shotNumber: z.number().int().positive(),
-            camera: z
-              .object({
-                shotScale: z.string().trim().min(1),
-                lens: z.string().trim().min(1),
-                focus: z.string().trim().min(1),
-                height: z.string().trim().min(1),
-                angle: z.string().trim().min(1),
+            segmentId: z.string().trim().min(1),
+            shots: z.array(z.object({
+              shotId: z.string().trim().min(1),
+              shotNumber: z.number().int().positive(),
+              shotScale: z.string().trim().min(1),
+              cameraMovement: z.object({
                 movement: z.string().trim().min(1),
-                composition: z.string().trim().min(1),
-                lighting: z.string().trim().min(1),
-              })
-              .strict(),
-            blocking: z
-              .object({
-                axis: z
-                  .object({
-                    type: z.string().trim().min(1),
-                    subjects: z.array(z.string().trim().min(1)).min(1).max(10),
-                    screenDirection: z.string().trim().min(1),
-                  })
-                  .strict(),
-                characters: z
-                  .array(
-                    z
-                      .object({
-                        characterId: z.string().trim().min(1),
-                        visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-                        position: z.string().trim().min(1),
-                        screenPosition: z.string().trim().min(1),
-                        facing: z.string().trim().min(1),
-                        eyeline: z.string().trim().min(1),
-                      })
-                      .strict(),
-                  )
-                  .min(0)
-                  .max(20),
-                objects: z
-                  .array(
-                    z
-                      .object({
-                        name: z.string().trim().min(1),
-                        position: z.string().trim().min(1),
-                        screenPosition: z.string().trim().min(1),
-                      })
-                      .strict(),
-                  )
-                  .min(0)
-                  .max(20),
-                spatialNote: z.string().trim().min(1),
-              })
-              .strict(),
-            videoPrompt: z.string().trim().min(1),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(60),
-    generationSegmentExecutions: z
-      .array(
-        z
-          .object({
-            shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
-            continuousVideoPrompt: z.string().trim().min(1),
+                stability: z.enum(EDIT_CAMERA_STABILITIES),
+              }).strict(),
+            }).strict()).min(1).max(9),
           })
           .strict(),
       )
@@ -430,65 +314,35 @@ export const editShotExecutionPlanSchema = z
 
 export const rawEditShotExecutionPlanShotSchema = z.object({
   shotRef: z.string().trim().min(1),
-  camera: editShotExecutionPlanSchema.shape.shots.element.shape.camera,
-  blocking: z.object({
-    axis: editShotExecutionPlanSchema.shape.shots.element.shape.blocking.shape.axis,
-    characters: z.array(z.object({
-      characterName: z.string().trim().min(1),
-      visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-      position: z.string().trim().min(1),
-      screenPosition: z.string().trim().min(1),
-      facing: z.string().trim().min(1),
-      eyeline: z.string().trim().min(1),
-    }).strict()).min(0).max(20),
-    objects: editShotExecutionPlanSchema.shape.shots.element.shape.blocking.shape.objects,
-    spatialNote: z.string().trim().min(1),
+  shotScale: z.string().trim().min(1),
+  cameraMovement: z.object({
+    movement: z.string().trim().min(1),
+    stability: z.enum(EDIT_CAMERA_STABILITIES),
   }).strict(),
-  videoPrompt: z.string().trim().min(1),
 }).strict()
 
 export const rawEditShotExecutionPlanSchema = z.object({
-  shots: z.array(rawEditShotExecutionPlanShotSchema).min(1).max(60),
-  generationSegmentExecutions: z.array(z.object({
+  generationSegments: z.array(z.object({
     segmentRef: z.string().trim().min(1),
-    continuousVideoPrompt: z.string().trim().min(1),
+    shots: z.array(rawEditShotExecutionPlanShotSchema).min(1).max(9),
   }).strict()).min(1).max(60),
 }).strict()
 
 export type RawEditShotExecutionPlanShot = z.infer<typeof rawEditShotExecutionPlanShotSchema>
-
-export const editScriptStylePolicySchema = z.object({
-  directing: z.object({
-    pointOfViewPrompt: z.string().trim().min(1),
-    performancePrompt: z.string().trim().min(1),
-    informationReleasePrompt: z.string().trim().min(1),
-    rhythmPrompt: z.string().trim().min(1),
-  }),
-  visual: z.object({
-    imageFilterPrompt: z.string().trim().min(1),
-    lightingPrompt: z.string().trim().min(1),
-    colorPrompt: z.string().trim().min(1),
-    texturePrompt: z.string().trim().min(1),
-    compositionPrompt: z.string().trim().min(1),
-  }),
-  camera: z.object({
-    movementPrompt: z.string().trim().min(1),
-    lensAndDepthPrompt: z.string().trim().min(1),
-    videoRhythmPrompt: z.string().trim().min(1),
-  }),
-  sound: z.object({
-    soundFilterPrompt: z.string().trim().min(1),
-  }),
-})
 
 export const editScriptStyleBibleSchema = z.object({
   styleBible: z
     .object({
       rawUserStyle: z.string().trim().nullable(),
       styleSummary: z.string().trim().min(1),
-      stylePolicy: editScriptStylePolicySchema,
+      visualStyle: z.string().trim().min(1),
+      assetImageStyle: z.object({
+        lighting: z.string().trim().min(1),
+        texture: z.string().trim().min(1),
+        composition: z.string().trim().min(1),
+      }).strict(),
     })
-    .passthrough(),
+    .strict(),
 })
 
 export const editStylePreviewOptionSchema = z.object({

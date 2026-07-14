@@ -26,6 +26,7 @@ export function normalizeMusicScoreSummary(value: unknown) {
     id: normalizeNullableString(score.id),
     status,
     taskId: normalizeNullableString(score.taskId),
+    planTaskId: normalizeNullableString(score.planTaskId),
     timelineSignature: normalizeNullableString(score.timelineSignature),
     musicModel: normalizeNullableString(score.musicModel),
     durationSeconds: typeof cues.durationSeconds === 'number' ? cues.durationSeconds : null,
@@ -40,36 +41,37 @@ export function normalizeMusicScoreSummary(value: unknown) {
   }
 }
 
-export function normalizeSoundscapeSummary(value: unknown) {
-  const soundscape = toObject(value)
-  const status = normalizeString(soundscape.status)
+export function normalizeAmbientSoundSummary(value: unknown) {
+  const ambientSound = toObject(value)
+  const status = normalizeString(ambientSound.status)
   if (!status) return null
-  const plan = toObject(soundscape.planJson)
-  const diagnostics = toObject(soundscape.diagnosticsJson)
-  const decision = plan.decision === 'soundscape' || plan.decision === 'none_needed'
+  const plan = toObject(ambientSound.planJson)
+  const diagnostics = toObject(ambientSound.diagnosticsJson)
+  const decision = plan.decision === 'ambient_sound' || plan.decision === 'none_needed'
     ? plan.decision
     : null
   return {
-    id: normalizeNullableString(soundscape.id),
+    id: normalizeNullableString(ambientSound.id),
     status,
-    taskId: normalizeNullableString(soundscape.taskId),
-    timelineSignature: normalizeNullableString(soundscape.timelineSignature),
-    soundEffectModel: normalizeNullableString(soundscape.soundEffectModel),
+    taskId: normalizeNullableString(ambientSound.taskId),
+    planTaskId: normalizeNullableString(ambientSound.planTaskId),
+    timelineSignature: normalizeNullableString(ambientSound.timelineSignature),
+    soundEffectModel: normalizeNullableString(ambientSound.soundEffectModel),
     decision,
     sourceCount: arrayLength(plan.sources),
     sectionCount: arrayLength(plan.sections),
-    plan: soundscape.planJson ?? null,
-    sources: soundscape.sourcesJson ?? null,
-    mix: soundscape.mixJson ?? null,
-    diagnostics: soundscape.diagnosticsJson ?? null,
+    plan: ambientSound.planJson ?? null,
+    sources: ambientSound.sourcesJson ?? null,
+    mix: ambientSound.mixJson ?? null,
+    diagnostics: ambientSound.diagnosticsJson ?? null,
     errorMessage: normalizeNullableString(diagnostics.errorMessage),
-    updatedAt: soundscape.updatedAt instanceof Date
-      ? soundscape.updatedAt.toISOString()
-      : normalizeNullableString(soundscape.updatedAt),
+    updatedAt: ambientSound.updatedAt instanceof Date
+      ? ambientSound.updatedAt.toISOString()
+      : normalizeNullableString(ambientSound.updatedAt),
   }
 }
 
-export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, soundscape?: unknown) {
+export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, ambientSound?: unknown) {
   const record = toObject(value)
   const id = normalizeString(record.id)
   const episodeId = normalizeString(record.episodeId)
@@ -82,7 +84,7 @@ export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown,
     renderTaskId: normalizeNullableString(record.renderTaskId),
     outputUrl: normalizeNullableString(record.outputUrl),
     musicScore: normalizeMusicScoreSummary(musicScore),
-    soundscape: normalizeSoundscapeSummary(soundscape),
+    ambientSound: normalizeAmbientSoundSummary(ambientSound),
     updatedAt: record.updatedAt instanceof Date
       ? record.updatedAt.toISOString()
       : normalizeNullableString(record.updatedAt),

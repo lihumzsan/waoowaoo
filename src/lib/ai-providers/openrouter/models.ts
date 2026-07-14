@@ -183,6 +183,8 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: [...OPENROUTER_SEEDANCE_2_FAST_RESOLUTION_OPTIONS],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
+        maxReferenceImages: 8,
       },
     },
   },

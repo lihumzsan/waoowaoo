@@ -34,30 +34,8 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'update_panel') {
-      throw new Error('update_panel must be handled by the canvas detail command bridge')
-    }
-
-    if (action.type === 'delete_panel') {
-      throw new Error('delete_panel must be handled by the canvas detail command bridge')
-    }
-
-    if (action.type === 'copy_panel') {
-      throw new Error('copy_panel must be handled by the canvas detail command bridge')
-    }
-
-    if (action.type === 'update_video_prompt') {
-      await runtime.onUpdateVideoPrompt(action.storyboardId, action.panelIndex, action.value, action.field)
-      return
-    }
-
     if (action.type === 'update_edit_asset_requirement_description') {
       await runtime.onUpdateEditAssetRequirementDescription(action.editScriptId, action.requirementId, action.description)
-      return
-    }
-
-    if (action.type === 'update_panel_video_model') {
-      await runtime.onUpdatePanelVideoModel(action.storyboardId, action.panelIndex, action.model)
       return
     }
 
@@ -66,8 +44,8 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'plan_soundscape') {
-      await runtime.onPlanSoundscape()
+    if (action.type === 'plan_ambient_sound') {
+      await runtime.onPlanAmbientSound()
       return
     }
 

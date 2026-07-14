@@ -3,7 +3,6 @@
 import { logError as _ulogError } from '@/lib/logging/core'
 import { useCallback } from 'react'
 import {
-  useGetProjectStoryboardStats,
   useUpdateProjectConfig,
   useUpdateProjectEpisodeField,
 } from '@/lib/query/hooks'
@@ -19,7 +18,6 @@ export function useWorkspaceConfigActions({
 }: UseWorkspaceConfigActionsParams) {
   const { mutateAsync: updateProjectConfig } = useUpdateProjectConfig(projectId)
   const { mutateAsync: updateProjectEpisode } = useUpdateProjectEpisodeField(projectId)
-  const { mutateAsync: getProjectStoryboardStatsMutation } = useGetProjectStoryboardStats(projectId)
 
   const handleUpdateConfig = useCallback(async (key: string, value: unknown) => {
     try {
@@ -50,14 +48,9 @@ export function useWorkspaceConfigActions({
     }
   }, [episodeId, updateProjectEpisode])
 
-  const getProjectStoryboardStats = useCallback(async (targetEpisodeId: string) => {
-    return getProjectStoryboardStatsMutation({ episodeId: targetEpisodeId })
-  }, [getProjectStoryboardStatsMutation])
-
   return {
     handleUpdateConfig,
     handleUpdateConfigPatch,
     handleUpdateEpisode,
-    getProjectStoryboardStats,
   }
 }

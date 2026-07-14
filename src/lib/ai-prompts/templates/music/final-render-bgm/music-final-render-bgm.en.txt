@@ -41,7 +41,7 @@ Arrangement and structure:
 Use the timestamped structure below. For each time range, describe the musical event, intensity level, transition behavior, and how the segment connects to the previous and next segment. Keep a coherent theme across the whole piece while allowing meaningful rises, releases, drops, rests, and texture changes.
 Explicitly reflect generationSegments continuity: inside a segment, allow subtle musical events but preserve one section theme and motion inertia; between segments, if time, space, or mood jumps, design a clear musical cut, rest, transition, or motif change.
 
-Soundscape and ambiance:
+Ambient sound:
 Infer any appropriate ambience, space, reverb, texture, or environmental color from the visual action and story context. Use these as musical texture, not literal sound effects, unless the core edit plan's sound direction clearly asks for that.
 
 Shot-by-shot emotional and rhythm map:

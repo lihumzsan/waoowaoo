@@ -78,35 +78,35 @@ describe('Task target terminal projector ownership', () => {
       .resolves.toMatchObject({ status: 'planned', taskId: null })
   })
 
-  it('projects soundscape plan/generation terminal edges with distinct cancel states', async () => {
+  it('projects ambientSound plan/generation terminal edges with distinct cancel states', async () => {
     const { episode } = await seedEpisode()
-    await prisma.projectEditSoundscape.create({
+    await prisma.projectEditAmbientSound.create({
       data: { episodeId: episode.id, status: 'planning', taskId: 'plan-task' },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'failed',
       taskId: 'plan-task',
-      type: TASK_TYPE.SOUNDSCAPE_PLAN,
+      type: TASK_TYPE.AMBIENT_SOUND_PLAN,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
       errorCode: 'PLAN_FAILED',
       errorMessage: 'plan rejected',
     }))
-    await expect(prisma.projectEditSoundscape.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+    await expect(prisma.projectEditAmbientSound.findUniqueOrThrow({ where: { episodeId: episode.id } }))
       .resolves.toMatchObject({ status: 'failed', taskId: 'plan-task' })
 
-    await prisma.projectEditSoundscape.update({
+    await prisma.projectEditAmbientSound.update({
       where: { episodeId: episode.id },
       data: { status: 'generating', taskId: 'generate-task' },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'canceled',
       taskId: 'generate-task',
-      type: TASK_TYPE.SOUNDSCAPE_GENERATE,
+      type: TASK_TYPE.AMBIENT_SOUND_GENERATE,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
     }))
-    await expect(prisma.projectEditSoundscape.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+    await expect(prisma.projectEditAmbientSound.findUniqueOrThrow({ where: { episodeId: episode.id } }))
       .resolves.toMatchObject({ status: 'planned', taskId: null })
   })
 

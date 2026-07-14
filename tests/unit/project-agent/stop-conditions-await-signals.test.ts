@@ -33,16 +33,16 @@ describe('project agent business stop signals', () => {
   it('[SubmittedTasks batch] -> carries the durable task identities', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      submittedTasksOutput('generate_episode_videos', ['task-video-1']),
+      submittedTasksOutput('generate_video_segments', ['task-video-1']),
     ])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_external_task',
       stepCount: 1,
-      operationIds: ['generate_episode_videos'],
+      operationIds: ['generate_video_segments'],
       taskIds: ['task-video-1'],
       phases: [],
-      taskWaits: [{ operationId: 'generate_episode_videos', taskIds: ['task-video-1'], phases: [] }],
+      taskWaits: [{ operationId: 'generate_video_segments', taskIds: ['task-video-1'], phases: [] }],
     })
   })
 
@@ -50,16 +50,16 @@ describe('project agent business stop signals', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
       submittedTasksOutput('generate_edit_script', ['task-script-1']),
-      submittedTasksOutput('generate_episode_videos', ['task-video-1', 'task-video-2']),
+      submittedTasksOutput('generate_video_segments', ['task-video-1', 'task-video-2']),
     ])).toEqual({
       reason: 'awaiting_external_task',
       stepCount: 2,
-      operationIds: ['generate_edit_script', 'generate_episode_videos'],
+      operationIds: ['generate_edit_script', 'generate_video_segments'],
       taskIds: ['task-script-1', 'task-video-1', 'task-video-2'],
       phases: [],
       taskWaits: [
         { operationId: 'generate_edit_script', taskIds: ['task-script-1'], phases: [] },
-        { operationId: 'generate_episode_videos', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
+        { operationId: 'generate_video_segments', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
       ],
     })
   })

@@ -64,7 +64,6 @@ export async function assembleProjectContext(params: {
   userId: string
   episodeId?: string | null
   selectedScopeRef?: string | null
-  selectedPanelId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
   const [project, episode, editBible, editChapters, editScripts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
@@ -75,25 +74,18 @@ export async function assembleProjectContext(params: {
       ? prisma.projectEpisode.findUnique({
           where: { id: params.episodeId },
           include: {
-            storyboards: {
+            videoSegments: {
               orderBy: { createdAt: 'asc' },
-              include: {
-                panels: {
-                  orderBy: { panelIndex: 'asc' },
-                  select: {
-                    id: true,
-                    panelIndex: true,
-                    description: true,
-                    imagePrompt: true,
-                    imageUrl: true,
-                    imageMediaId: true,
-                    candidateImages: true,
-                    videoPrompt: true,
-                    videoUrl: true,
-                    videoMediaId: true,
-                    updatedAt: true,
-                  },
-                },
+              select: {
+                id: true,
+                editScriptId: true,
+                segmentId: true,
+                status: true,
+                durationSec: true,
+                videoMediaId: true,
+                errorCode: true,
+                errorMessage: true,
+                updatedAt: true,
               },
             },
           },
@@ -179,25 +171,10 @@ export async function assembleProjectContext(params: {
     },
   })
 
-  const panelSnapshots = (episode?.storyboards || []).flatMap((storyboard) =>
-    storyboard.panels.map((panel) => ({
-      panelId: panel.id,
-      editScriptId: storyboard.editScriptId,
-      storyboardId: storyboard.id,
-      panelIndex: panel.panelIndex,
-      description: panel.description,
-      imagePrompt: panel.imagePrompt ?? null,
-      imageUrl: panel.imageUrl ?? null,
-      imageMediaId: panel.imageMediaId ?? null,
-      candidateImages: panel.candidateImages ?? null,
-      videoPrompt: panel.videoPrompt ?? null,
-      videoUrl: panel.videoUrl ?? null,
-      videoMediaId: panel.videoMediaId ?? null,
-      updatedAt: panel.updatedAt.toISOString(),
-    })),
-  )
-  const storyboardCount = episode?.storyboards.length || 0
-  const panelCount = panelSnapshots.length
+  const videoSegmentSnapshots = (episode?.videoSegments ?? []).map((segment) => ({
+    ...segment,
+    updatedAt: segment.updatedAt.toISOString(),
+  }))
   const editScriptSnapshots: ProjectContextEditScriptSnapshot[] = editScripts.map((script) => {
     const generationSegmentCount = script.status === 'ready' && script.corePlanJson
       ? countGenerationSegments(script.corePlanJson)
@@ -223,7 +200,6 @@ export async function assembleProjectContext(params: {
     episodeId: episode?.id || null,
     episodeName: episode?.name || null,
     selectedScopeRef: params.selectedScopeRef || null,
-    selectedPanelId: params.selectedPanelId || null,
     selectedAssetId: params.selectedAssetId || null,
     activeOperationTasks,
     recentOperationResults,
@@ -231,10 +207,9 @@ export async function assembleProjectContext(params: {
     editFirstWorkflow,
     episodeDetail: {
       episode: episode
-        ? {
+          ? {
             novelText: episode.novelText || null,
-            storyboardCount,
-            panelCount,
+            videoSegmentCount: videoSegmentSnapshots.length,
           }
         : null,
       editBible: editBible
@@ -260,7 +235,7 @@ export async function assembleProjectContext(params: {
       })),
       editScript: singleEditScript,
       editScripts: editScriptSnapshots,
-      panels: panelSnapshots,
+      videoSegments: videoSegmentSnapshots,
     },
   }
 }

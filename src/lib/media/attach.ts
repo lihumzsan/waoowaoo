@@ -6,18 +6,6 @@ import {
 } from './service'
 import type { MediaRef } from './types'
 
-function parseStringArray(value: unknown): string[] {
-  if (!value) return []
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
-  } catch {
-    return []
-  }
-}
-
 async function resolveAppearanceImageArray(
   raw: unknown,
   fieldName: string,
@@ -94,47 +82,6 @@ export async function attachMediaFieldsToGlobalLocation<T extends Record<string,
   }
 }
 
-async function attachMediaFieldsToPanel<T extends Record<string, unknown>>(panel: T) {
-  const imageMedia = await resolveMediaRef(panel.imageMediaId, panel.imageUrl)
-  const videoMedia = await resolveMediaRef(panel.videoMediaId, panel.videoUrl)
-
-  const candidateRaw = parseStringArray(panel.candidateImages)
-  const candidateMediaUrls: string[] = []
-  for (const candidate of candidateRaw) {
-    if (candidate.startsWith('PENDING:')) {
-      candidateMediaUrls.push(candidate)
-      continue
-    }
-    const media = await resolveMediaRefFromLegacyValue(candidate)
-    candidateMediaUrls.push(media?.url || candidate)
-  }
-
-  return {
-    ...panel,
-    media: imageMedia,
-    imageMedia,
-    videoMedia,
-    imageUrl: imageMedia?.url || panel.imageUrl || null,
-    videoUrl: videoMedia?.url || panel.videoUrl || null,
-    candidateImages: candidateRaw.length > 0 ? JSON.stringify(candidateMediaUrls) : panel.candidateImages,
-  }
-}
-
-async function attachMediaFieldsToStoryboard<T extends Record<string, unknown>>(storyboard: T) {
-  const storyboardImageMedia = await resolveMediaRefFromLegacyValue(storyboard.storyboardImageUrl)
-  const panels = await Promise.all(
-    ((storyboard.panels as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToPanel),
-  )
-
-  return {
-    ...storyboard,
-    media: storyboardImageMedia,
-    storyboardImageMedia,
-    storyboardImageUrl: storyboardImageMedia?.url || storyboard.storyboardImageUrl || null,
-    panels,
-  }
-}
-
 async function attachMediaFieldsToProjectCharacter<T extends Record<string, unknown>>(character: T) {
   const appearances = await Promise.all(
     ((character.appearances as Array<Record<string, unknown>>) || [])
@@ -185,15 +132,11 @@ async function attachMediaFieldsToShot<T extends Record<string, unknown>>(shot: 
   }
 }
 
-async function attachMediaFieldsToVideoGroup<T extends Record<string, unknown>>(group: T) {
-  const referenceImageMedia = await resolveMediaRef(group.referenceImageMediaId, group.referenceImageUrl)
-  const videoMedia = await resolveMediaRef(group.videoMediaId, group.videoUrl)
+async function attachMediaFieldsToVideoSegment<T extends Record<string, unknown>>(segment: T) {
+  const videoMedia = await resolveMediaRef(segment.videoMediaId, null)
   return {
-    ...group,
-    referenceImageMedia,
+    ...segment,
     videoMedia,
-    referenceImageUrl: referenceImageMedia?.url || group.referenceImageUrl || null,
-    videoUrl: videoMedia?.url || group.videoUrl || null,
   }
 }
 
@@ -211,11 +154,8 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
   const shots = await Promise.all(
     ((projectLike.shots as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToShot),
   )
-  const storyboards = await Promise.all(
-    ((projectLike.storyboards as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToStoryboard),
-  )
-  const videoGroups = await Promise.all(
-    ((projectLike.videoGroups as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVideoGroup),
+  const videoSegments = await Promise.all(
+    ((projectLike.videoSegments as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVideoSegment),
   )
 
   return {
@@ -227,8 +167,7 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
     locations,
     props,
     shots,
-    storyboards,
-    videoGroups,
+    videoSegments,
   }
 }
 

@@ -93,7 +93,7 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
       <div className="ml-5 mt-1 text-[11px] leading-5">
-        {t('cards.storyboards', { count: data.snapshot.progress.storyboardCount })} · {t('cards.panels', { count: data.snapshot.progress.panelCount })}
+        {t('cards.videoSegments', { completed: data.snapshot.progress.completedVideoSegmentCount, total: data.snapshot.progress.plannedVideoSegmentCount })}
       </div>
     </details>
   )

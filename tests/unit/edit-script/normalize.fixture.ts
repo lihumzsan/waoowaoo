@@ -5,8 +5,6 @@ import {
   normalizeEditShotExecutionPlan,
 } from '@/lib/edit-script/normalize'
 
-import type { EditScriptShot } from '@/lib/edit-script/types'
-
 function corePlan() {
   return {
     shots: [
@@ -18,26 +16,11 @@ function corePlan() {
         scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'chair corner' },
         action: 'Anna studies the high-backed chair.',
         characters: [
-          {
-            characterId: 'character-anna',
-            name: 'Anna',
-            visibility: 'visible',
-            role: 'focus',
-            performance: 'steps closer with caution',
-          },
-          {
-            characterId: 'character-grandmother',
-            name: 'Disguised Grandmother',
-            visibility: 'hidden',
-            role: 'hidden_subject',
-            performance: 'sits silently inside the high-backed chair',
-          },
-        ],
-        keyObjects: [
-          { name: 'High-backed chair', role: 'reveal_device' },
+          { characterId: 'character-anna', name: 'Anna', performance: 'steps closer with caution' },
+          { characterId: 'character-grandmother', name: 'Disguised Grandmother', performance: 'sits silently inside the high-backed chair' },
         ],
         dialogue: [],
-        sound: 'Soft floor creak.',
+        synchronousSound: 'Soft floor creak.',
       },
       {
         shotId: 'shot-2',
@@ -47,34 +30,18 @@ function corePlan() {
         scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'beside the chair' },
         action: 'Anna reaches the chair.',
         characters: [
-          {
-            characterId: 'character-anna',
-            name: 'Anna',
-            visibility: 'partial',
-            role: 'focus',
-            performance: 'leans toward the chair',
-          },
-          {
-            characterId: 'character-grandmother',
-            name: 'Disguised Grandmother',
-            visibility: 'hidden',
-            role: 'hidden_subject',
-            performance: 'remains seated behind the chair back',
-          },
+          { characterId: 'character-anna', name: 'Anna', performance: 'leans toward the chair' },
+          { characterId: 'character-grandmother', name: 'Disguised Grandmother', performance: 'remains seated behind the chair back' },
         ],
-        keyObjects: [
-          { name: 'High-backed chair', role: 'reveal_device' },
-        ],
-        dialogue: [
-          { characterId: 'character-anna', line: 'Who is sitting there?' },
-        ],
-        sound: 'Chair hinge starts to groan.',
+        dialogue: [{ characterId: 'character-anna', line: 'Who is sitting there?' }],
+        synchronousSound: 'Chair hinge starts to groan.',
       },
     ],
     generationSegments: [
       {
+        segmentId: 'segment-1',
         shotIds: ['shot-1', 'shot-2'],
-        continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
+        continuity: 'Anna approaches the same high-backed chair in one continuous space.',
       },
     ],
   } as const
@@ -82,112 +49,26 @@ function corePlan() {
 
 function executionPlan() {
   return {
-    shots: [
-      {
-        shotRef: 'shot-001',
-        camera: {
-          shotScale: 'medium',
-          lens: '35mm',
-          focus: 'chair area sharp',
-          height: 'eye level',
-          angle: 'slightly low frontal',
-          movement: 'locked off',
-          composition: 'chair centered',
-          lighting: 'cold top light hides the seated figure in shadow',
-        },
-        blocking: {
-          axis: {
-            type: 'subject_line',
-            subjects: ['Anna', 'High-backed chair'],
-            screenDirection: 'chair remains center; Anna approaches from screen left',
-          },
-          characters: [
-            {
-              characterName: 'Anna',
-              visibility: 'visible',
-              position: 'near the doorway',
-              screenPosition: 'left foreground',
-              facing: 'toward the chair',
-              eyeline: 'chair center',
-            },
-            {
-              characterName: 'Disguised Grandmother',
-              visibility: 'hidden',
-              position: 'seated inside the high-backed chair',
-              screenPosition: 'behind the chair back',
-              facing: 'away from the doorway',
-              eyeline: 'not visible',
-            },
-          ],
-          objects: [
-            {
-              name: 'High-backed chair',
-              position: 'center of the cabin',
-              screenPosition: 'frame center',
-            },
-          ],
-          spatialNote: 'The hidden subject remains present but concealed by the chair back.',
-        },
-        videoPrompt: 'Single-shot video prompt: Anna remains near the doorway while the high-backed chair hides the seated subject in shadow.',
-      },
-      {
-        shotRef: 'shot-002',
-        camera: {
-          shotScale: 'medium close',
-          lens: '50mm',
-          focus: 'Anna and chair edge sharp',
-          height: 'eye level',
-          angle: 'frontal',
-          movement: 'slow push',
-          composition: 'Anna left, chair center',
-          lighting: 'top light still keeps the seated figure hidden',
-        },
-        blocking: {
-          axis: {
-            type: 'subject_line',
-            subjects: ['Anna', 'High-backed chair'],
-            screenDirection: 'Anna remains screen left and chair remains center',
-          },
-          characters: [
-            {
-              characterName: 'Anna',
-              visibility: 'partial',
-              position: 'beside the chair',
-              screenPosition: 'left midground',
-              facing: 'toward the chair',
-              eyeline: 'chair back',
-            },
-            {
-              characterName: 'Disguised Grandmother',
-              visibility: 'hidden',
-              position: 'seated inside the high-backed chair',
-              screenPosition: 'behind the chair back',
-              facing: 'away from Anna',
-              eyeline: 'not visible',
-            },
-          ],
-          objects: [
-            {
-              name: 'High-backed chair',
-              position: 'center of the cabin',
-              screenPosition: 'frame center',
-            },
-          ],
-          spatialNote: 'The hidden subject remains physically in the chair.',
-        },
-        videoPrompt: 'Single-shot video prompt: Anna stays screen left beside the high-backed chair and says "Who is sitting there?", the hidden subject remains physically seated behind the chair back, floor creak continues.',
-      },
-    ],
-    generationSegmentExecutions: [
+    generationSegments: [
       {
         segmentRef: 'segment-001',
-        continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and says "Who is sitting there?", while the hidden subject stays physically present. <chair hinge begins>',
+        shots: [
+          {
+            shotRef: 'shot-001',
+            shotScale: 'medium',
+            cameraMovement: { movement: 'locked off', stability: 'locked' },
+          },
+          {
+            shotRef: 'shot-002',
+            shotScale: 'medium close',
+            cameraMovement: { movement: 'slow push', stability: 'smooth' },
+          },
+        ],
       },
     ],
   } as const
 }
 
-export { describe, expect, it } from 'vitest'
-export { normalizeEditScriptCore, normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
-export type { EditScriptShot } from '@/lib/edit-script/types'
+export { describe, expect, it }
+export { normalizeEditScriptCore, normalizeEditShotExecutionPlan }
 export { corePlan, executionPlan }

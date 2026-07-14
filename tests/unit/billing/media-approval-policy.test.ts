@@ -10,13 +10,13 @@ function buildBillingInfo(apiType: Extract<TaskBillingInfo, { billable: true }>[
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+    taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
     apiType,
     model: 'provider::model',
     quantity: 1,
     unit: 'call',
     maxFrozenCost: 1,
-    action: TASK_TYPE.SOUNDSCAPE_GENERATE,
+    action: TASK_TYPE.AMBIENT_SOUND_GENERATE,
     status: 'quoted',
   }
 }

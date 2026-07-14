@@ -36,14 +36,14 @@ describe('resolveCanvasMediaSurfacePhase', () => {
 /**
  * Logic Specification
  * Authority: CN-01 and BA-18 explicit resource scope.
- * Rejects: planning one chapter-owned video segment with only episode scope, which makes
- * the server infer a default chapter and fail for multi-chapter episodes.
+ * Rejects: restoring separate grid and asset-reference video modes instead of the single
+ * canonical full-reference segment operation.
  * Production entry: resolveWorkspaceCanvasBillableActionRequest.
- * Oracle: both grid and asset-reference requests preserve the action's exact chapterId.
+ * Oracle: the Canvas submits only the episode-scoped canonical segment operation.
  * Command: npx vitest run tests/unit/project-workspace/canvas-media-generation-surface.test.ts
  */
 describe('resolveWorkspaceCanvasBillableActionRequest', () => {
-  it('preserves explicit chapter scope for both single-segment video modes', () => {
+  it('submits the single full-reference segment operation', () => {
     const shared = {
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -51,36 +51,9 @@ describe('resolveWorkspaceCanvasBillableActionRequest', () => {
 
     expect(resolveWorkspaceCanvasBillableActionRequest({
       ...shared,
-      action: {
-        type: 'generate_video_group',
-        chapterId: 'chapter-2',
-        gridMode: '2x2',
-        shotIds: ['shot-3', 'shot-4'],
-      },
+      action: { type: 'generate_video_segments' },
     })?.input).toEqual({
-      all: false,
       episodeId: 'episode-1',
-      chapterId: 'chapter-2',
-      mode: 'grid',
-      gridMode: '2x2',
-      shotIds: ['shot-3', 'shot-4'],
-    })
-
-    expect(resolveWorkspaceCanvasBillableActionRequest({
-      ...shared,
-      action: {
-        type: 'generate_asset_reference_video',
-        chapterId: 'chapter-2',
-        segmentIndex: 1,
-        referenceImageUrls: ['/m/reference-1'],
-      },
-    })?.input).toEqual({
-      all: false,
-      episodeId: 'episode-1',
-      chapterId: 'chapter-2',
-      mode: 'asset-reference',
-      segmentIndex: 1,
-      referenceImageUrls: ['/m/reference-1'],
     })
   })
 })

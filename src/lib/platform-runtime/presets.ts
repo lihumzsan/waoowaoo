@@ -2,7 +2,7 @@ import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/ty
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 
-export type PlatformRuntimePurpose = Exclude<SystemModelPurpose, 'single-shot-video' | 'sequence-video'>
+export type PlatformRuntimePurpose = SystemModelPurpose
 
 export interface PlatformRuntimePlan {
   purpose: PlatformRuntimePurpose
@@ -15,15 +15,6 @@ function readEnvString(name: string): string | null {
   if (typeof raw !== 'string') return null
   const trimmed = raw.trim()
   return trimmed || null
-}
-
-function readEnvBoolean(name: string): boolean | null {
-  const raw = readEnvString(name)
-  if (raw === null) return null
-  const normalized = raw.toLowerCase()
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
-  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
-  throw new Error(`PLATFORM_RUNTIME_BOOLEAN_INVALID: ${name}=${raw}`)
 }
 
 function readEnvPositiveInteger(name: string): number | null {
@@ -58,7 +49,7 @@ function platformImageOptions(): Record<string, CapabilityValue> {
 export function getPlatformVideoGenerationOptions(): Record<string, CapabilityValue> {
   const options: Record<string, CapabilityValue> = {
     resolution: readEnvString('PLATFORM_VIDEO_RESOLUTION') || '720p',
-    generateAudio: readEnvBoolean('PLATFORM_VIDEO_GENERATE_AUDIO') ?? true,
+    generateAudio: true,
   }
   return options
 }
@@ -81,8 +72,6 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
       return defaults.characterModel
     case 'location-image':
       return defaults.locationModel
-    case 'storyboard-image':
-      return defaults.storyboardModel
     case 'edit-image':
       return defaults.editModel
     case 'video':
@@ -98,7 +87,6 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
   switch (purpose) {
     case 'character-image':
     case 'location-image':
-    case 'storyboard-image':
     case 'edit-image':
       return platformImageOptions()
     case 'video':
@@ -139,7 +127,6 @@ export function getPlatformCapabilityDefaults(): CapabilitySelections {
 
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('character-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('location-image').modelKey, imageOptions)
-  assignCapabilityDefault(defaults, getPlatformRuntimePlan('storyboard-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('edit-image').modelKey, imageOptions)
   assignCapabilityDefault(defaults, getPlatformRuntimePlan('video').modelKey, videoOptions)
 

@@ -513,9 +513,8 @@ async function assertNoDownstreamChapterArtifacts(input: {
       OR: [
         { editScript: { isNot: null } },
         { shotExecutionPlan: { isNot: null } },
-        { storyboards: { some: {} } },
         { requirements: { some: {} } },
-        { videoGroups: { some: {} } },
+        { videoSegments: { some: {} } },
       ],
     },
     select: { id: true, chapterIndex: true },

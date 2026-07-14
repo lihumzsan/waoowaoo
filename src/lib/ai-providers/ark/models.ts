@@ -33,12 +33,13 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     capabilities: {
       video: {
         generationModeOptions: ['normal', 'firstlastframe'],
-        generateAudioOptions: [true, false],
+        generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         resolutionOptions: ['480p', '720p'],
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
+        maxReferenceImages: 8,
       },
     },
   },
@@ -49,12 +50,13 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     capabilities: {
       video: {
         generationModeOptions: ['normal', 'firstlastframe'],
-        generateAudioOptions: [true, false],
+        generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         resolutionOptions: ['480p', '720p'],
         firstlastframe: true,
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
+        maxReferenceImages: 8,
       },
     },
   },

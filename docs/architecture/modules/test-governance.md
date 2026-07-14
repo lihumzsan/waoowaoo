@@ -53,7 +53,7 @@
 
 主 Journey setup 后只走生产写入路径。它使用稳定产品 selector，不使用 Browser Use、视觉模型或 AI 元素选择作为可重复证据。固定 sleep 只能形成可观察窗口，不能证明成功；成功必须收口到浏览器结果和只读持久事实。
 
-外部模型替身生成最小但不平凡的数据：至少两个可独立锚定的故事块，派生两个章节与多个资产。核心 processing 阶段刷新后必须恢复或前进；Style Bible、并行章节/资产、逐章镜头计划和媒体生成必须观察其 canonical Canvas identity。最终只允许一个 durable final output。
+外部模型替身生成最小但不平凡的数据：至少两个可独立锚定的故事块，派生两个章节与多个资产。核心 processing 阶段刷新后必须恢复或前进；Style Bible、先完成全部章节计划再生成资产的持久时序、逐章镜头计划和媒体生成必须观察其 canonical Canvas identity。最终只允许一个 durable final output。
 
 基础设施不可用、场景 skip/todo、浏览器崩溃或 paid provider 泄漏都属于失败，不得以“未发现产品错误”宣称通过。
 

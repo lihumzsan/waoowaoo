@@ -57,23 +57,17 @@ describe('billing/user transactions integration', () => {
         name: '第三集',
       },
     })
-    const chapter = await prisma.projectEditChapter.create({
+    const character = await prisma.projectCharacter.create({
       data: {
-        episodeId: episode.id,
-        chapterIndex: 0,
+        projectId: project.id,
+        name: '阿遥',
       },
     })
-    const storyboard = await prisma.projectStoryboard.create({
+    const appearance = await prisma.characterAppearance.create({
       data: {
-        episodeId: episode.id,
-        chapterId: chapter.id,
-      },
-    })
-    const panel = await prisma.projectPanel.create({
-      data: {
-        storyboardId: storyboard.id,
-        panelIndex: 4,
-        panelNumber: 12,
+        characterId: character.id,
+        appearanceIndex: 0,
+        changeReason: 'default',
       },
     })
     const task = await createQueuedTask({
@@ -81,9 +75,9 @@ describe('billing/user transactions integration', () => {
       userId: user.id,
       projectId: project.id,
       episodeId: episode.id,
-      type: TASK_TYPE.IMAGE_PANEL,
-      targetType: 'ProjectPanel',
-      targetId: panel.id,
+      type: TASK_TYPE.IMAGE_CHARACTER,
+      targetType: 'CharacterAppearance',
+      targetId: appearance.id,
     })
 
     const freezeId = requireFreezeId(
@@ -99,8 +93,8 @@ describe('billing/user transactions integration', () => {
       {
         projectId: project.id,
         episodeId: episode.id,
-        taskType: TASK_TYPE.IMAGE_PANEL,
-        action: TASK_TYPE.IMAGE_PANEL,
+        taskType: TASK_TYPE.IMAGE_CHARACTER,
+        action: TASK_TYPE.IMAGE_CHARACTER,
         apiType: 'image',
         model: 'ark::doubao-seedream-4-5-251128',
         quantity: 1,
@@ -127,7 +121,7 @@ describe('billing/user transactions integration', () => {
     const transaction = readRecord(transactions[0])
     expect(transaction.type).toBe('consume')
     expect(transaction.amount).toBeCloseTo(-1.25, 8)
-    expect(transaction.action).toBe(TASK_TYPE.IMAGE_PANEL)
+    expect(transaction.action).toBe(TASK_TYPE.IMAGE_CHARACTER)
     expect(transaction.projectId).toBe(project.id)
     expect(transaction.projectName).toBe(project.name)
     expect(transaction.episodeId).toBe(episode.id)
@@ -147,10 +141,10 @@ describe('billing/user transactions integration', () => {
 
     const target = readRecord(transaction.target)
     expect(target).toMatchObject({
-      targetType: 'ProjectPanel',
-      targetId: panel.id,
-      labelKey: 'transactionTargets.projectPanel',
-      labelParams: { number: 12 },
+      targetType: 'CharacterAppearance',
+      targetId: appearance.id,
+      labelKey: 'transactionTargets.characterAppearance',
+      labelParams: { name: '阿遥', index: 1 },
     })
   })
 
@@ -166,37 +160,31 @@ describe('billing/user transactions integration', () => {
         name: '批量生图集',
       },
     })
-    const chapter = await prisma.projectEditChapter.create({
+    const character = await prisma.projectCharacter.create({
       data: {
-        episodeId: episode.id,
-        chapterIndex: 0,
-      },
-    })
-    const storyboard = await prisma.projectStoryboard.create({
-      data: {
-        episodeId: episode.id,
-        chapterId: chapter.id,
+        projectId: project.id,
+        name: '批量角色',
       },
     })
 
     for (let index = 0; index < 3; index += 1) {
-      const panelNumber = index + 1
-      const panel = await prisma.projectPanel.create({
+      const appearanceNumber = index + 1
+      const appearance = await prisma.characterAppearance.create({
         data: {
-          storyboardId: storyboard.id,
-          panelIndex: index,
-          panelNumber,
+          characterId: character.id,
+          appearanceIndex: index,
+          changeReason: `appearance-${appearanceNumber}`,
         },
       })
       const task = await createQueuedTask({
-        id: `task_user_transactions_batch_image_${panelNumber}`,
+        id: `task_user_transactions_batch_image_${appearanceNumber}`,
         userId: user.id,
         projectId: project.id,
         episodeId: episode.id,
-        type: TASK_TYPE.IMAGE_PANEL,
-        targetType: 'ProjectPanel',
-        targetId: panel.id,
-        operationId: 'generate_panel_images',
+        type: TASK_TYPE.IMAGE_CHARACTER,
+        targetType: 'CharacterAppearance',
+        targetId: appearance.id,
+        operationId: 'generate_character_images',
         operationRequestId: 'request_user_transactions_batch_image',
       })
 
@@ -204,7 +192,7 @@ describe('billing/user transactions integration', () => {
         await freezeBalance(user.id, 1.14, {
           source: 'task',
           taskId: task.id,
-          idempotencyKey: `user_transactions_batch_image_${panelNumber}`,
+          idempotencyKey: `user_transactions_batch_image_${appearanceNumber}`,
         }),
       )
 
@@ -213,8 +201,8 @@ describe('billing/user transactions integration', () => {
         {
           projectId: project.id,
           episodeId: episode.id,
-          taskType: TASK_TYPE.IMAGE_PANEL,
-          action: TASK_TYPE.IMAGE_PANEL,
+          taskType: TASK_TYPE.IMAGE_CHARACTER,
+          action: TASK_TYPE.IMAGE_CHARACTER,
           apiType: 'image',
           model: 'openai::gpt-image-2',
           quantity: 1,
@@ -245,7 +233,7 @@ describe('billing/user transactions integration', () => {
     expect(transaction.type).toBe('consume')
     expect(transaction.amount).toBeCloseTo(-3.42, 8)
     expect(transaction.balanceAfter).toBeCloseTo(6.58, 8)
-    expect(transaction.action).toBe(TASK_TYPE.IMAGE_PANEL)
+    expect(transaction.action).toBe(TASK_TYPE.IMAGE_CHARACTER)
     expect(transaction.projectId).toBe(project.id)
     expect(transaction.projectName).toBe(project.name)
     expect(transaction.episodeId).toBe(episode.id)
@@ -265,9 +253,9 @@ describe('billing/user transactions integration', () => {
 
     const target = readRecord(transaction.target)
     expect(target).toMatchObject({
-      targetType: 'ProjectPanel',
-      targetId: 'group:ProjectPanel',
-      labelKey: 'transactionTargets.projectPanelGroup',
+      targetType: 'CharacterAppearance',
+      targetId: 'group:CharacterAppearance',
+      labelKey: 'transactionTargets.characterAppearanceGroup',
       labelParams: { count: 3 },
     })
   })

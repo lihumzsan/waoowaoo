@@ -30,7 +30,6 @@ interface ProjectStats {
   episodes: number
   images: number
   videos: number
-  panels: number
   firstEpisodePreview: string | null
 }
 

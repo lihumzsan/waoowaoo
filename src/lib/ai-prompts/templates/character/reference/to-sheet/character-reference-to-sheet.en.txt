@@ -14,7 +14,7 @@ Only if no explicit style instruction is provided, you may preserve the original
 4. Do not copy blur, noise, compression artifacts, or defects
 5. Output must be clear, sharp, and production-quality
 6. Character expression should be neutral and calm
-7. Output must be useful as a storyboard reference asset: stable character identity anchors, with background serving style only and not binding the character to a specific plot location
+7. Output must be useful as a full-reference video asset: stable character identity anchors, with background serving style only and not binding the character to a specific plot location
 
 ## Missing-part completion
 If only half body or partial body is visible, infer and complete hidden parts consistently:

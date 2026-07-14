@@ -92,29 +92,3 @@ export function useUpdateProjectConfig(projectId: string) {
         },
     })
 }
-
-/**
- * 获取下游分镜统计（用于重建确认）
- */
-
-export function useGetProjectStoryboardStats(projectId: string) {
-    return useMutation({
-        mutationFn: async ({ episodeId }: { episodeId: string }) => {
-            const data = await requestJsonWithError<{ storyboards?: Array<{ panels?: unknown[] }> }>(
-                `/api/projects/${projectId}/storyboards?episodeId=${encodeURIComponent(episodeId)}`,
-                { method: 'GET' },
-                'storyboards check failed',
-            )
-            const storyboards = Array.isArray(data?.storyboards) ? data.storyboards : []
-            const storyboardCount = storyboards.length
-            const panelCount = storyboards.reduce((sum: number, storyboard) => {
-                const panels = Array.isArray(storyboard?.panels) ? storyboard.panels.length : 0
-                return sum + panels
-            }, 0)
-            return {
-                storyboardCount,
-                panelCount,
-            }
-        },
-    })
-}

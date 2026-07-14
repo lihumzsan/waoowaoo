@@ -67,7 +67,7 @@ export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobDa
       episodeId,
       chapterId: shotExecutionPlan.chapterId,
       editScriptId: shotExecutionPlan.editScriptId,
-      shotCount: shotExecutionPlan.shots.length,
+      shotCount: shotExecutionPlan.generationSegments.reduce((total, segment) => total + segment.shots.length, 0),
     }
   } finally {
     await streamCallbacks.flush()

@@ -11,10 +11,10 @@ import {
   readMusicScoreTimelineSignature,
 } from '@/lib/music-score/project-data'
 import {
-  readCompletedSoundscapeMix,
-  readSoundscapeDecision,
-  readSoundscapeTimelineSignature,
-} from '@/lib/soundscape/project-data'
+  readCompletedAmbientSoundMix,
+  readAmbientSoundDecision,
+  readAmbientSoundTimelineSignature,
+} from '@/lib/ambient-sound/project-data'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey, getMediaObjectById, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
@@ -58,7 +58,7 @@ type CommandResult = {
 const execFileAsync = promisify(execFile)
 const DEFAULT_FINAL_RENDER_BGM_VOLUME = 1
 const FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS = 0.25
-const FINAL_RENDER_SOUNDSCAPE_DURATION_TOLERANCE_SECONDS = 0.25
+const FINAL_RENDER_AMBIENT_SOUND_DURATION_TOLERANCE_SECONDS = 0.25
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -111,49 +111,49 @@ function assertMusicScoreReadyForFinalRender(input: {
   }
 }
 
-function assertSoundscapeMixMatchesTimeline(input: {
-  readonly soundscape: {
+function assertAmbientSoundMixMatchesTimeline(input: {
+  readonly ambientSound: {
     readonly status: string | null
     readonly timelineSignature?: string | null
   } | null
   readonly currentTimelineSignature: string
-  readonly soundscapeDurationMs?: number | null
+  readonly ambientSoundDurationMs?: number | null
   readonly renderDurationSeconds: number
 }): void {
-  const soundscapeSignature = readSoundscapeTimelineSignature(input.soundscape)
-  if (!soundscapeSignature) {
-    throw new Error('FINAL_VIDEO_RENDER_SOUNDSCAPE_TIMELINE_SIGNATURE_MISSING')
+  const ambientSoundSignature = readAmbientSoundTimelineSignature(input.ambientSound)
+  if (!ambientSoundSignature) {
+    throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_TIMELINE_SIGNATURE_MISSING')
   }
-  if (soundscapeSignature !== input.currentTimelineSignature) {
-    throw new Error(`FINAL_VIDEO_RENDER_SOUNDSCAPE_TIMELINE_STALE:${soundscapeSignature}:${input.currentTimelineSignature}`)
+  if (ambientSoundSignature !== input.currentTimelineSignature) {
+    throw new Error(`FINAL_VIDEO_RENDER_AMBIENT_SOUND_TIMELINE_STALE:${ambientSoundSignature}:${input.currentTimelineSignature}`)
   }
-  if (typeof input.soundscapeDurationMs !== 'number') return
-  const soundscapeDurationSeconds = input.soundscapeDurationMs / 1000
-  if (soundscapeDurationSeconds + FINAL_RENDER_SOUNDSCAPE_DURATION_TOLERANCE_SECONDS < input.renderDurationSeconds) {
-    throw new Error(`FINAL_VIDEO_RENDER_SOUNDSCAPE_DURATION_SHORT:${soundscapeDurationSeconds.toFixed(3)}:${input.renderDurationSeconds.toFixed(3)}`)
+  if (typeof input.ambientSoundDurationMs !== 'number') return
+  const ambientSoundDurationSeconds = input.ambientSoundDurationMs / 1000
+  if (ambientSoundDurationSeconds + FINAL_RENDER_AMBIENT_SOUND_DURATION_TOLERANCE_SECONDS < input.renderDurationSeconds) {
+    throw new Error(`FINAL_VIDEO_RENDER_AMBIENT_SOUND_DURATION_SHORT:${ambientSoundDurationSeconds.toFixed(3)}:${input.renderDurationSeconds.toFixed(3)}`)
   }
 }
 
-function assertSoundscapeReadyForFinalRender(input: {
-  readonly soundscape: {
+function assertAmbientSoundReadyForFinalRender(input: {
+  readonly ambientSound: {
     readonly status: string | null
     readonly planJson?: unknown
   } | null
   readonly hasMix: boolean
 }): void {
-  if (!input.soundscape) {
-    throw new Error('FINAL_VIDEO_RENDER_SOUNDSCAPE_REQUIRED')
+  if (!input.ambientSound) {
+    throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_REQUIRED')
   }
-  if (input.soundscape.status !== 'completed') {
-    throw new Error(`FINAL_VIDEO_RENDER_SOUNDSCAPE_NOT_READY:${input.soundscape.status ?? 'unknown'}`)
+  if (input.ambientSound.status !== 'completed') {
+    throw new Error(`FINAL_VIDEO_RENDER_AMBIENT_SOUND_NOT_READY:${input.ambientSound.status ?? 'unknown'}`)
   }
-  const decision = readSoundscapeDecision(input.soundscape)
+  const decision = readAmbientSoundDecision(input.ambientSound)
   if (decision === 'none_needed') return
-  if (decision !== 'soundscape') {
-    throw new Error('FINAL_VIDEO_RENDER_SOUNDSCAPE_PLAN_INVALID')
+  if (decision !== 'ambient_sound') {
+    throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_PLAN_INVALID')
   }
   if (!input.hasMix) {
-    throw new Error('FINAL_VIDEO_RENDER_SOUNDSCAPE_MIX_INVALID')
+    throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_MIX_INVALID')
   }
 }
 
@@ -390,7 +390,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
     ])
     if (!project) throw new Error('FINAL_VIDEO_RENDER_PROJECT_NOT_FOUND')
     if (!episode) throw new Error('FINAL_VIDEO_RENDER_EPISODE_NOT_FOUND')
-    const [clips, musicScore, soundscape] = await Promise.all([
+    const [clips, musicScore, ambientSound] = await Promise.all([
       loadEpisodeChapterOutputClips({
         episodeId,
         projectId: job.data.projectId,
@@ -399,20 +399,20 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { episodeId },
         select: { status: true, mixJson: true, timelineSignature: true },
       }),
-      prisma.projectEditSoundscape.findUnique({
+      prisma.projectEditAmbientSound.findUnique({
         where: { episodeId },
         select: { status: true, planJson: true, mixJson: true, timelineSignature: true },
       }),
     ])
     const bgmMix = readCompletedMusicScoreMix(musicScore)
-    const soundscapeMix = readCompletedSoundscapeMix(soundscape)
+    const ambientSoundMix = readCompletedAmbientSoundMix(ambientSound)
     assertMusicScoreReadyForFinalRender({
       musicScore,
       hasMix: Boolean(bgmMix),
     })
-    assertSoundscapeReadyForFinalRender({
-      soundscape,
-      hasMix: Boolean(soundscapeMix),
+    assertAmbientSoundReadyForFinalRender({
+      ambientSound,
+      hasMix: Boolean(ambientSoundMix),
     })
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
     assertFinalRenderClipsHaveSources({
@@ -472,19 +472,19 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         bgmDurationMs: bgmMix.durationMs,
         renderDurationSeconds: stitchedDurationSeconds,
       })
-      assertSoundscapeMixMatchesTimeline({
-        soundscape,
+      assertAmbientSoundMixMatchesTimeline({
+        ambientSound,
         currentTimelineSignature,
-        soundscapeDurationMs: soundscapeMix?.durationMs ?? null,
+        ambientSoundDurationMs: ambientSoundMix?.durationMs ?? null,
         renderDurationSeconds: stitchedDurationSeconds,
       })
       const musicPath = path.join(workspaceDir, `bgm.${extensionFromMimeType(bgmMix.mimeType)}`)
       await writeFile(musicPath, await getObjectBuffer(bgmMix.storageKey))
-      const soundscapePath = soundscapeMix
-        ? path.join(workspaceDir, `soundscape.${extensionFromMimeType(soundscapeMix.mimeType)}`)
+      const ambientSoundPath = ambientSoundMix
+        ? path.join(workspaceDir, `ambientSound.${extensionFromMimeType(ambientSoundMix.mimeType)}`)
         : null
-      if (soundscapeMix && soundscapePath) {
-        await writeFile(soundscapePath, await getObjectBuffer(soundscapeMix.storageKey))
+      if (ambientSoundMix && ambientSoundPath) {
+        await writeFile(ambientSoundPath, await getObjectBuffer(ambientSoundMix.storageKey))
       }
       await muxFinalRenderAudio({
         runCommand,
@@ -492,7 +492,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         mainAudioPath,
         hasSourceAudio,
         musicPath,
-        soundscapePath,
+        ambientSoundPath,
         outputPath: finalPath,
         durationSeconds: stitchedDurationSeconds,
         volume: readBgmVolume(payload.bgmVolume),

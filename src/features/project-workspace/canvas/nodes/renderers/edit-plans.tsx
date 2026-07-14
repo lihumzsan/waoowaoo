@@ -41,17 +41,6 @@ export function numericChipValue(values: readonly string[] | undefined): string 
 export function executionPlanShotKey(item: EditPipelineStepCardSource, index: number): string {
   return numericChipValue(item.chips) ?? item.title.match(/\d+/)?.[0] ?? String(index + 1)
 }
-export function executionPlanCharacterNames(item: EditPipelineStepCardSource): readonly string[] {
-  return uniqueCompactEntityNames((item.chips ?? []).filter((chip) => chip.includes('/')))
-}
-export function executionPlanObjectNames(item: EditPipelineStepCardSource): readonly string[] {
-  return uniqueCompactEntityNames(
-    (item.chips ?? []).filter((chip) => {
-      const trimmed = chip.trim()
-      return trimmed.length > 0 && !trimmed.includes('/') && !/^\d+$/.test(trimmed)
-    }),
-  )
-}
 export function EditScriptContent({
   data,
   labels,
@@ -83,7 +72,6 @@ export function EditScriptContent({
 
   const cards: ShotGridCard[] = details.shots.map((shot) => {
     const characterNames = editScriptShotCharacterNames(shot)
-    const keyObjectNames = uniqueCompactEntityNames(shot.keyObjects)
     return {
       key: shot.shotId,
       badge: shot.shotNumber,
@@ -101,15 +89,11 @@ export function EditScriptContent({
               value: compactList(characterNames, '\n'),
             },
             {
-              label: labels('keyObjects'),
-              value: compactList(keyObjectNames, '\n'),
-            },
-            {
               label: labels('dialogue'),
               value: compactList(shot.dialogue, '\n'),
             },
             { label: labels('duration'), value: `${shot.durationSec}s` },
-            { label: labels('sound'), value: shot.sound },
+            { label: labels('sound'), value: shot.synchronousSound },
           ])}
         </div>
       ),
@@ -152,15 +136,7 @@ export function EditShotExecutionPlanContent({
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
 
-  const listSeparator = labels('listSeparator')
-  const allCharacterNames = uniqueCompactEntityNames(details.items.flatMap((item) => executionPlanCharacterNames(item)))
-  const summaryText =
-    allCharacterNames.length > 0
-      ? labels('editScriptCompactSummaryWithCharacters', {
-          count: details.items.length,
-          characters: compactList(allCharacterNames.slice(0, 4), listSeparator),
-        })
-      : labels('editScriptCompactSummary', { count: details.items.length })
+  const summaryText = labels('editScriptCompactSummary', { count: details.items.length })
   const summaryLine = (
     <div className="flex items-center gap-2.5 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
       <AppIcon name="image" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
@@ -171,25 +147,17 @@ export function EditShotExecutionPlanContent({
   const cards: ShotGridCard[] = details.items.map((item, index) => {
     const fields = item.fields
     const shotScale = fieldValue(fields, labels('shotScale'))
-    const lens = fieldValue(fields, labels('lens'))
-    const focus = fieldValue(fields, labels('focus'))
-    const cameraHeight = fieldValue(fields, labels('cameraHeight'))
-    const cameraAngle = fieldValue(fields, labels('cameraAngle'))
-    const movement = fieldValue(fields, labels('movement'))
-    const composition = fieldValue(fields, labels('composition'))
-    const lighting = fieldValue(fields, labels('lighting'))
-    const axisAndEyeline = fieldValue(fields, labels('axisAndEyeline'))
-    const characterNames = executionPlanCharacterNames(item)
-    const objectNames = executionPlanObjectNames(item)
-    const titleParts = [shotScale, lens].filter(hasText)
-    const metaParts = [movement ?? composition, lighting].filter(hasText)
+    const movement = fieldValue(fields, labels('cameraMovement'))
+    const stability = fieldValue(fields, labels('cameraStability'))
+    const titleParts = [shotScale].filter(hasText)
+    const metaParts = [movement, stability].filter(hasText)
     return {
       key: executionPlanShotKey(item, index),
       badge: index + 1,
       title: titleParts.length > 0 ? compactList(titleParts, ' · ') : item.title,
       subtitle: item.body ?? undefined,
       meta: metaParts.length > 0 ? compactList(metaParts, ' · ') : undefined,
-      characterCount: characterNames.length,
+      characterCount: 0,
       detailTitle: labels('shotIndex', { index: index + 1 }),
       detailMeta: titleParts.length > 0 ? compactList(titleParts, ' · ') : item.title,
       detail: (
@@ -197,22 +165,8 @@ export function EditShotExecutionPlanContent({
           {shotDetailIconGrid(
             [
               { label: labels('shotScale'), value: shotScale },
-              { label: labels('lens'), value: lens },
-              { label: labels('focus'), value: focus },
-              { label: labels('cameraHeight'), value: cameraHeight },
-              { label: labels('cameraAngle'), value: cameraAngle },
-              { label: labels('movement'), value: movement },
-              { label: labels('composition'), value: composition },
-              { label: labels('lighting'), value: lighting },
-              { label: labels('axisAndEyeline'), value: axisAndEyeline },
-              {
-                label: labels('characters'),
-                value: compactList(characterNames, '\n'),
-              },
-              {
-                label: labels('keyObjects'),
-                value: compactList(objectNames, '\n'),
-              },
+              { label: labels('cameraMovement'), value: movement },
+              { label: labels('cameraStability'), value: stability },
               { label: labels('description'), value: item.body },
             ],
             { fixedColumns: true, allowWideFields: false },

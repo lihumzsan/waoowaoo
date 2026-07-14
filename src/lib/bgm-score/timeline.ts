@@ -78,8 +78,8 @@ export function buildBgmTimelineSignature(clips: readonly FinalRenderClipPlan[])
   const payload = clips.map((clip) => ({
     order: clip.order,
     sourceKind: clip.sourceKind,
-    panelId: clip.panelId,
-    groupId: clip.groupId ?? null,
+    sourceId: clip.sourceId,
+    segmentId: clip.segmentId,
     shotIds: clip.shotIds,
     shotNumbers: clip.shotNumbers,
     durationSeconds: clip.durationSeconds,

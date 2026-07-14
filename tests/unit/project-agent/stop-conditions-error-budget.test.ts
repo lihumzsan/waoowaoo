@@ -90,12 +90,12 @@ describe('project agent business stop signals', () => {
   it('[operation plan changed] -> cancels the approved attempt without retrying the stale Grant', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      toolErrorOutput('generate_edit_script_storyboard_images', 'OPERATION_PLAN_CHANGED'),
+      toolErrorOutput('generate_video_segments', 'OPERATION_PLAN_CHANGED'),
     ])
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 1,
-      operationIds: ['generate_edit_script_storyboard_images'],
+      operationIds: ['generate_video_segments'],
       codes: ['OPERATION_PLAN_CHANGED'],
     })
   })

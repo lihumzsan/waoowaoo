@@ -15,8 +15,6 @@ interface UseWorkspaceRuntimeParams {
   isAssistantWorkflowStarting: boolean
   videoRatio: string | undefined
   videoModel: string | undefined
-  singleShotVideoModel: string | undefined
-  sequenceVideoModel: string | undefined
   capabilityOverrides: CapabilitySelections
   userVideoModels: Array<{
     value: string
@@ -33,17 +31,10 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null) => void
   handlePlanBgmScore: () => Promise<void>
-  handlePlanSoundscape: () => Promise<void>
+  handlePlanAmbientSound: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
-  handleUpdateVideoPrompt: (
-    storyboardId: string,
-    panelIndex: number,
-    value: string,
-    field?: 'imagePrompt' | 'videoPrompt',
-  ) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
-  handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
 }
 
 export function useWorkspaceRuntime({
@@ -53,8 +44,6 @@ export function useWorkspaceRuntime({
   isAssistantWorkflowStarting,
   videoRatio,
   videoModel,
-  singleShotVideoModel,
-  sequenceVideoModel,
   capabilityOverrides,
   userVideoModels,
   handleUpdateEpisode,
@@ -64,12 +53,10 @@ export function useWorkspaceRuntime({
   handleGenerateEditScript,
   openAssetLibrary,
   handlePlanBgmScore,
-  handlePlanSoundscape,
+  handlePlanAmbientSound,
   handleRenderFinalVideo,
   handleGenerateEditShotExecutionPlan,
-  handleUpdateVideoPrompt,
   handleUpdateEditAssetRequirementDescription,
-  handleUpdatePanelVideoModel,
 }: UseWorkspaceRuntimeParams) {
   const resolvedUserVideoModels = useMemo(
     () => userVideoModels || [],
@@ -83,8 +70,6 @@ export function useWorkspaceRuntime({
     isAssistantWorkflowStarting,
     videoRatio,
     videoModel,
-    singleShotVideoModel,
-    sequenceVideoModel,
     capabilityOverrides,
     userVideoModels: resolvedUserVideoModels,
     onNovelTextChange: (value) => handleUpdateEpisode('novelText', value),
@@ -94,26 +79,22 @@ export function useWorkspaceRuntime({
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onPlanBgmScore: handlePlanBgmScore,
-    onPlanSoundscape: handlePlanSoundscape,
+    onPlanAmbientSound: handlePlanAmbientSound,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
-    onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
-    onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onOpenAssetLibraryForCharacter: (characterId) => openAssetLibrary(characterId),
   }), [
     assetsLoading,
     handlePlanBgmScore,
-    handlePlanSoundscape,
+    handlePlanAmbientSound,
     handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditBible,
     handleGenerateEditScript,
-    handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,
-    handleUpdateVideoPrompt,
     isConfirmingAssets,
     isAssistantWorkflowStarting,
     isTransitioning,
@@ -121,8 +102,6 @@ export function useWorkspaceRuntime({
     onRequestAssistantGuidance,
     resolvedUserVideoModels,
     capabilityOverrides,
-    singleShotVideoModel,
-    sequenceVideoModel,
     videoModel,
     videoRatio,
   ])

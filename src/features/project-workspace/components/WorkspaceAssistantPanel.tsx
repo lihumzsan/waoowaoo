@@ -107,7 +107,6 @@ export default function WorkspaceAssistantPanel({
     projectId,
     episodeId,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
-    selectedPanelId: selection?.selectedPanelId ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
     assistantPermissionMode,
   })

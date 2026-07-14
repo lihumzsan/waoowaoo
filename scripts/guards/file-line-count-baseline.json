@@ -1,20 +1,18 @@
 {
-  "src/app/[locale]/profile/components/api-config-tab/DefaultModelCards.tsx": 574,
-  "src/app/[locale]/profile/components/api-config/provider-card/hooks/useProviderCardState.ts": 482,
+  "src/app/[locale]/profile/components/api-config-tab/DefaultModelCards.tsx": 571,
+  "src/app/[locale]/profile/components/api-config/provider-card/hooks/useProviderCardState.ts": 481,
   "src/components/ui/CapsuleNav.tsx": 679,
-  "src/components/ui/config-modals/ConfigEditModal.tsx": 685,
+  "src/components/ui/config-modals/ConfigEditModal.tsx": 610,
   "src/components/ui/icons/custom.tsx": 733,
   "src/components/ui/model-dropdown-innovative.tsx": 588,
   "src/components/ui/model-dropdown-variants.tsx": 543,
-  "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts": 793,
+  "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts": 779,
   "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 833,
-  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 599,
+  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 596,
   "src/lib/query/hooks/useAssets.ts": 442,
   "src/lib/query/hooks/useTaskTargetStateMap.ts": 461,
   "src/lib/query/mutations/asset-hub-character-mutations.ts": 403,
   "src/lib/query/mutations/asset-hub-location-mutations.ts": 357,
   "src/lib/query/mutations/character-base-mutations.ts": 380,
-  "src/lib/query/mutations/location-image-mutations.ts": 341,
-  "src/lib/workers/handlers/asset-hub-image-task-handler.ts": 312,
-  "src/lib/workers/handlers/image-task-handler-shared.ts": 526
+  "src/lib/query/mutations/location-image-mutations.ts": 341
 }

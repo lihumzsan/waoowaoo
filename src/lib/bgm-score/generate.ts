@@ -163,7 +163,7 @@ function ensureSchedulableTimeline(clips: readonly FinalRenderClipPlan[]): void 
   if (clips.length === 0) throw new Error('BGM_SCORE_VIDEO_TIMELINE_INCOMPLETE')
   const invalidClip = clips.find((clip) => !Number.isFinite(clip.durationSeconds) || clip.durationSeconds <= 0)
   if (invalidClip) {
-    throw new Error(`BGM_SCORE_VIDEO_TIMELINE_INCOMPLETE:${invalidClip.groupId ?? invalidClip.panelId}`)
+    throw new Error(`BGM_SCORE_VIDEO_TIMELINE_INCOMPLETE:${invalidClip.sourceId}`)
   }
 }
 
@@ -207,6 +207,7 @@ async function writeBgmScoreProjectData(input: {
       diagnosticsJson,
       status: input.bgmScore.status,
       taskId: input.bgmScore.taskId,
+      planTaskId: input.bgmScore.planTaskId,
       timelineSignature: input.bgmScore.timelineSignature,
       musicModel: input.bgmScore.musicModel,
     },
@@ -216,6 +217,7 @@ async function writeBgmScoreProjectData(input: {
       diagnosticsJson,
       status: input.bgmScore.status,
       taskId: input.bgmScore.taskId,
+      planTaskId: input.bgmScore.planTaskId,
       timelineSignature: input.bgmScore.timelineSignature,
       musicModel: input.bgmScore.musicModel,
     },
@@ -414,6 +416,7 @@ export async function handleBgmScorePlanTask(job: Job<TaskJobData>) {
     bgmScore: {
       status: BGM_SCORE_STATUS.PLANNING,
       taskId: job.data.taskId,
+      planTaskId: job.data.taskId,
       editScriptId,
       timelineSignature,
       durationSeconds,
@@ -466,6 +469,7 @@ export async function handleBgmScorePlanTask(job: Job<TaskJobData>) {
     bgmScore: {
       status: BGM_SCORE_STATUS.PLANNED,
       taskId: job.data.taskId,
+      planTaskId: job.data.taskId,
       editScriptId,
       timelineSignature,
       durationSeconds,

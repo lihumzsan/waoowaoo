@@ -8,22 +8,21 @@ import {
 import { projectEditScriptCoreNames } from '@/lib/edit-script/core-view'
 
 describe('edit-first core plan normalization', () => {
-  it('normalizes the compact core plan and preserves hidden_subject characters', () => {
+  it('normalizes the compact core plan and preserves character performances', () => {
     const normalized = normalizeEditScriptCore(corePlan())
 
     expect(normalized.shotCount).toBe(2)
     expect(normalized.durationSec).toBe(6)
     expect(normalized.generationSegments).toEqual([
       {
+        segmentId: 'segment-1',
         shotIds: ['shot-1', 'shot-2'],
-        continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
+        continuity: 'Anna approaches the same high-backed chair in one continuous space.',
       },
     ])
     expect(normalized.shots[0]?.characters).toContainEqual({
       characterId: 'character-grandmother',
       name: 'Disguised Grandmother',
-      visibility: 'hidden',
-      role: 'hidden_subject',
       performance: 'sits silently inside the high-backed chair',
     })
     expect(normalized.shots[1]?.dialogue).toEqual([
@@ -32,12 +31,12 @@ describe('edit-first core plan normalization', () => {
     expect(normalized.shots.map((shot) => shot.shotPurpose)).toEqual(['establishing', 'action'])
   })
 
-  it('accepts and normalizes an empty character performance', () => {
+  it('rejects an empty character performance', () => {
     const plan = corePlan()
     const character = plan.shots[0]?.characters[0]
     expect(character).toBeDefined()
 
-    const normalized = normalizeEditScriptCore({
+    expect(() => normalizeEditScriptCore({
       ...plan,
       shots: [
         {
@@ -46,9 +45,7 @@ describe('edit-first core plan normalization', () => {
         },
         plan.shots[1],
       ],
-    })
-
-    expect(normalized.shots[0]?.characters[0]?.performance).toBe('')
+    })).toThrow()
   })
 
   it('projects current asset names from canonical ids', () => {
@@ -131,7 +128,7 @@ describe('edit-first core plan normalization', () => {
 
     const reordered = {
       ...plan,
-      generationSegments: [{ shotIds: ['shot-2', 'shot-1'], continuity: 'wrong order' }],
+      generationSegments: [{ segmentId: 'segment-1', shotIds: ['shot-2', 'shot-1'], continuity: 'wrong order' }],
     }
     expect(() => normalizeEditScriptCore(reordered)).toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID')
   })
@@ -162,6 +159,7 @@ describe('edit-first core plan normalization', () => {
       ],
       generationSegments: [
         {
+          segmentId: 'segment-1',
           shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
           continuity: 'One continuous reveal movement that is too long for a single video segment.',
         },

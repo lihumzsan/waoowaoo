@@ -117,7 +117,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-stale-1',
       type: 'approval',
       status: 'consumed',
-      operationId: 'generate_edit_script_storyboard_images',
+      operationId: 'generate_video_segments',
       approvalId: 'approval-stale-1',
       toolCallId: 'tool-stale-1',
       payload: {},

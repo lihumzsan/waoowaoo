@@ -142,8 +142,6 @@ export function useProjectWorkspaceController({
     isAssistantWorkflowStarting: createEditBible.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     videoModel: projectSnapshot.videoModel,
-    singleShotVideoModel: projectSnapshot.singleShotVideoModel,
-    sequenceVideoModel: projectSnapshot.sequenceVideoModel,
     capabilityOverrides: projectSnapshot.capabilityOverrides,
     userVideoModels: userModels.userVideoModels || [],
     handleUpdateEpisode: configActions.handleUpdateEpisode,
@@ -153,12 +151,10 @@ export function useProjectWorkspaceController({
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handlePlanBgmScore: videoActions.handlePlanBgmScore,
-    handlePlanSoundscape: videoActions.handlePlanSoundscape,
+    handlePlanAmbientSound: videoActions.handlePlanAmbientSound,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
-    handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateEditAssetRequirementDescription,
-    handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
   })
 
   const uiState = {
@@ -188,11 +184,6 @@ export function useProjectWorkspaceController({
     showCreatingToast: execution.showCreatingToast,
   }
 
-  const videoState = {
-    handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
-    handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
-  }
-
   const actionsState = {
     handleUpdateConfig: configActions.handleUpdateConfig,
     handleUpdateConfigPatch: configActions.handleUpdateConfigPatch,
@@ -207,7 +198,6 @@ export function useProjectWorkspaceController({
     uiState,
     rebuildState,
     executionState,
-    videoState,
     workspaceRuntime,
     actionsState,
   })

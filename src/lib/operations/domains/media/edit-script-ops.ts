@@ -13,7 +13,7 @@ import {
   submitProjectEditScriptGenerationTask,
   submitProjectEditShotExecutionPlanTask,
 } from '@/lib/edit-script/task-submission'
-import { assertChapterReplanHasNoRunningVideoGroups } from '@/lib/edit-script/replan-guard'
+import { assertChapterReplanHasNoRunningVideoSegments } from '@/lib/edit-script/replan-guard'
 import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -571,7 +571,7 @@ const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
   style:
     'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review:
-    'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+    'Request required asset review after character and location images are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
 }
 
 function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
@@ -984,7 +984,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: ReplanChapterInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        await assertChapterReplanHasNoRunningVideoGroups({
+        await assertChapterReplanHasNoRunningVideoSegments({
           projectId: ctx.projectId,
           episodeId,
           chapterId: input.chapterId,
@@ -1110,14 +1110,14 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     generate_edit_script_assets: defineOperation({
       id: 'generate_edit_script_assets',
       summary:
-        'Generate missing images and spatial profiles for the character/location assets created from the confirmed production plan. After core planning exists, the same operation can repair its bound asset requirements.',
+        'Generate missing character and location images for the assets created from the confirmed production plan. After core planning exists, the same operation can repair its bound asset requirements.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将为制作规划确认时已创建的角色与场景资产补齐图片和空间档案；用户批准当前不可变计费计划后执行。',
+        summary: '将为制作规划确认时已创建的角色与场景资产补齐图片；用户批准当前不可变计费计划后执行。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,
@@ -1220,7 +1220,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_shot_execution_plan: defineOperation({
       id: 'generate_edit_shot_execution_plan',
-      summary: 'Generate the full shot execution plan from the ready core edit plan, completed assets, spatial profiles, and Style Bible.',
+      summary: 'Generate shot scale, camera movement, and camera stability from the ready core edit plan and Style Bible.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,

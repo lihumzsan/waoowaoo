@@ -39,7 +39,7 @@ function facts(overrides: Partial<WorkspaceCanvasLifecycleFacts> = {}): Workspac
 }
 
 function runtimeNode(
-  kind: Extract<WorkspaceCanvasNodeKind, 'editStyleBible' | 'shot'>,
+  kind: Extract<WorkspaceCanvasNodeKind, 'editStyleBible' | 'videoPlan'>,
   runtimeTargets: readonly TaskRuntimeTarget[],
 ): WorkspaceCanvasFlowNode {
   return {
@@ -50,7 +50,7 @@ function runtimeNode(
       nodeId: `${kind}:resource-1`,
       kind,
       layoutNodeType: kind,
-      targetType: kind === 'editStyleBible' ? 'editStyleBible' : 'panel',
+      targetType: kind === 'editStyleBible' ? 'editStyleBible' : 'videoSegment',
       targetId: 'resource-1',
       title: 'Runtime node',
       eyebrow: 'Runtime',
@@ -94,7 +94,7 @@ describe('workspace Canvas lifecycle resolver', () => {
       submitting: false,
     })
     const failureDominant = resolveWorkspaceCanvasNodeData({
-      node: runtimeNode('shot', runtimeTargets),
+      node: runtimeNode('videoPlan', runtimeTargets),
       statesByQueryKey: states,
       streamPatch: null,
       submitting: false,
@@ -113,12 +113,12 @@ describe('workspace Canvas lifecycle resolver', () => {
         phase: 'queued',
         taskId: '  durable-task  ',
         runningTaskId: 'running-task',
-        runningTaskType: '  image_panel  ',
+        runningTaskType: '  image_character  ',
       },
     }))).toEqual({
       phase: 'queued',
       taskId: 'durable-task',
-      taskType: 'image_panel',
+      taskType: 'image_character',
       progress: null,
       error: null,
       stream: null,
@@ -233,9 +233,9 @@ describe('workspace Canvas lifecycle resolver', () => {
     for (const persistedPhase of ['succeeded', 'failed', 'canceled'] as const) {
       expect(resolveWorkspaceCanvasLifecycle(facts({
         persistedPhase,
-        task: { phase: 'completed', taskId: 'task-1', runningTaskType: 'video_group' },
+        task: { phase: 'completed', taskId: 'task-1', runningTaskType: 'video_segment' },
       }))).toEqual({
-        phase: persistedPhase, taskId: 'task-1', taskType: 'video_group', progress: null,
+        phase: persistedPhase, taskId: 'task-1', taskType: 'video_segment', progress: null,
         error: null, stream: null,
       })
     }
@@ -272,9 +272,9 @@ describe('workspace Canvas lifecycle resolver', () => {
     for (const phase of ['canceled', 'dismissed'] as const) {
       expect(resolveWorkspaceCanvasLifecycle(facts({
         persistedPhase: 'succeeded',
-        task: { phase, taskId: 'task-cancel', runningTaskType: 'image_panel', progress: 33 },
+        task: { phase, taskId: 'task-cancel', runningTaskType: 'image_character', progress: 33 },
       }))).toEqual({
-        phase: 'canceled', taskId: 'task-cancel', taskType: 'image_panel', progress: 33,
+        phase: 'canceled', taskId: 'task-cancel', taskType: 'image_character', progress: 33,
         error: null, stream: null,
       })
     }
@@ -287,7 +287,7 @@ describe('workspace Canvas lifecycle resolver', () => {
       const value: WorkspaceCanvasLifecycle = {
         phase,
         taskId: phase === 'pending' ? null : 'task-1',
-        taskType: 'image_panel',
+        taskType: 'image_character',
         progress: 40,
         error: phase === 'failed' ? { code: 'FAILED', message: 'Failed' } : null,
         stream: phase === 'streaming' ? presentation : null,
@@ -300,7 +300,7 @@ describe('workspace Canvas lifecycle resolver', () => {
       expect(workspaceCanvasLifecycleTaskState(value)).toEqual(phase === 'pending' ? null : {
         phase: phase === 'streaming' ? 'processing' : phase,
         runningTaskId: 'task-1',
-        runningTaskType: 'image_panel',
+        runningTaskType: 'image_character',
         progress: 40,
         lastError: value.error,
       })

@@ -27,7 +27,6 @@ type DefaultModelField =
     | 'analysisModel'
     | 'characterModel'
     | 'locationModel'
-    | 'storyboardModel'
     | 'editModel'
     | 'videoModel'
     | 'musicModel'
@@ -40,7 +39,6 @@ interface DefaultModelCardsProps {
         analysisModel?: string
         characterModel?: string
         locationModel?: string
-        storyboardModel?: string
         editModel?: string
         videoModel?: string
         musicModel?: string
@@ -329,7 +327,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     setPipelineGlobalKey(newModelKey)
     setPipelineGlobalCapOverrides({})
     if (newModelKey) {
-      const pipelineFields = ['characterModel', 'locationModel', 'storyboardModel', 'editModel']
+      const pipelineFields = ['characterModel', 'locationModel', 'editModel']
       const newModel = pipelineGlobalOptions.find((option) => option.modelKey === newModelKey) ?? null
       const newCapabilityFields = computeCapabilityFields(newModel, 'image')
       batchUpdateDefaultModels(pipelineFields, newModelKey, newCapabilityFields)
@@ -341,7 +339,7 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
         const parsed = allProps.parseBySample(rawValue, sample)
         setPipelineGlobalCapOverrides((prev) => ({ ...prev, [field]: parsed }))
         // Batch update all 4 pipeline fields
-        const pipelineFields = ['characterModel', 'locationModel', 'storyboardModel', 'editModel']
+        const pipelineFields = ['characterModel', 'locationModel', 'editModel']
         for (const pField of pipelineFields) {
             allProps.updateCapabilityDefault(pipelineGlobalCurrent.modelKey, field, parsed)
             // Also update each individual pipeline model's capability if they share the same model
@@ -367,7 +365,6 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     }> = [
             { field: 'characterModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineCharacter', icon: 'user' },
             { field: 'locationModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineLocation', icon: 'image' },
-            { field: 'storyboardModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineStoryboard', icon: 'film' },
             { field: 'editModel', modelType: 'image', titleKey: 'defaultModelSection.pipelineEdit', icon: 'edit' },
         ]
 

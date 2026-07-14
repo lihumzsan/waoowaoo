@@ -22,7 +22,6 @@ export const TASK_INTENTS: TaskIntent[] = [
 const TASK_INTENT_SET = new Set<string>(TASK_INTENTS)
 
 const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
-  [TASK_TYPE.IMAGE_PANEL]: 'generate',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'generate',
   [TASK_TYPE.IMAGE_CHARACTER]: 'generate',
@@ -30,12 +29,11 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.MUSIC_GENERATE]: 'generate',
   [TASK_TYPE.MUSIC_SCORE_PLAN]: 'generate',
   [TASK_TYPE.MUSIC_SCORE_GENERATE]: 'generate',
-  [TASK_TYPE.SOUNDSCAPE_PLAN]: 'generate',
-  [TASK_TYPE.SOUNDSCAPE_GENERATE]: 'generate',
+  [TASK_TYPE.AMBIENT_SOUND_PLAN]: 'generate',
+  [TASK_TYPE.AMBIENT_SOUND_GENERATE]: 'generate',
   [TASK_TYPE.FINAL_VIDEO_RENDER]: 'process',
   [TASK_TYPE.CHAPTER_RENDER]: 'process',
-  [TASK_TYPE.VIDEO_PANEL]: 'generate',
-  [TASK_TYPE.VIDEO_GROUP]: 'generate',
+  [TASK_TYPE.VIDEO_SEGMENT]: 'generate',
   [TASK_TYPE.MODIFY_ASSET_IMAGE]: 'modify',
   [TASK_TYPE.REGENERATE_GROUP]: 'regenerate',
   [TASK_TYPE.ASSET_HUB_IMAGE]: 'generate',

@@ -202,7 +202,7 @@ export async function readGoldenMainlineBoundary(page: Page): Promise<GoldenMain
     && await page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true }).count() === 1
     && await page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true }).count() === 0
   ) return 'style_choice'
-  if (await visible(page, '审核分镜资产')) return 'asset_review'
+  if (await visible(page, '审核角色与场景资产')) return 'asset_review'
   if (await visible(page, '需要确认')) return 'approval'
   if (await page.getByLabel('成片时间线', { exact: true }).count() > 0) return 'final_output'
   if (await visible(page, /最终成片|最终视频已完成|制作完成/, false)) return 'final_output'

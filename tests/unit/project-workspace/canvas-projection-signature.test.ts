@@ -20,12 +20,12 @@ function createNode(input: {
     type: 'workspaceNode',
     position: { x: input.x ?? 1, y: 2 },
     data: {
-      kind: 'shot',
+      kind: 'videoPlan',
       mediaLoadingContext: { styleImageUrl: null },
-      layoutNodeType: 'shot',
-      targetType: 'panel',
-      targetId: 'panel-1',
-      title: input.title ?? 'Shot',
+      layoutNodeType: 'videoPlan',
+      targetType: 'videoSegment',
+      targetId: 'segment-1',
+      title: input.title ?? 'Video segment',
       eyebrow: 'eyebrow',
       body: 'body',
       meta: 'meta',
@@ -49,19 +49,19 @@ function createEdge(id: string): WorkspaceCanvasFlowEdge {
 describe('canvas projection signature', () => {
   it('keeps node signatures stable when only action handler identity changes', () => {
     const left = buildWorkspaceCanvasNodeSignature([
-      createNode({ id: 'shot:1', onAction: () => undefined }),
+      createNode({ id: 'video-segment:1', onAction: () => undefined }),
     ])
     const right = buildWorkspaceCanvasNodeSignature([
-      createNode({ id: 'shot:1', onAction: () => undefined }),
+      createNode({ id: 'video-segment:1', onAction: () => undefined }),
     ])
 
     expect(right).toBe(left)
   })
 
   it('changes node signatures for visible node content or layout changes', () => {
-    const base = buildWorkspaceCanvasNodeSignature([createNode({ id: 'shot:1' })])
-    const renamed = buildWorkspaceCanvasNodeSignature([createNode({ id: 'shot:1', title: 'New shot' })])
-    const moved = buildWorkspaceCanvasNodeSignature([createNode({ id: 'shot:1', x: 42 })])
+    const base = buildWorkspaceCanvasNodeSignature([createNode({ id: 'video-segment:1' })])
+    const renamed = buildWorkspaceCanvasNodeSignature([createNode({ id: 'video-segment:1', title: 'New shot' })])
+    const moved = buildWorkspaceCanvasNodeSignature([createNode({ id: 'video-segment:1', x: 42 })])
 
     expect(renamed).not.toBe(base)
     expect(moved).not.toBe(base)

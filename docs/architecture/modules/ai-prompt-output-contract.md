@@ -12,7 +12,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 
 - **AP-01 — Prompt identity 唯一。** Prompt identity、模板路径、变量集合与 operation 绑定由 `AI_PROMPT_CATALOG` 声明；调用方不得直接读取模板、复制 Prompt 或根据文案猜 Prompt 类型。
 - **AP-02 — 结构化 raw schema 唯一。** 结构化模型输出必须有一个生产 raw schema 作为接受边界。worker parser 与 structured-stream adapter 必须复用同一 raw schema；持久化 final schema 不得倒充 raw stream schema。只有一个当前形状且 parser 不分流时，不得要求模型输出固定 `version/schemaVersion` 装饰字段。
-- **AP-03 — 协议变更整体审计。** 修改结构化输出字段、类型、层级、必填性、枚举或 identity 语义时，必须在同一变更中审计 Prompt、生产 raw schema、parser/normalizer、stream adapter、stable item key、持久化 projector、UI consumer 与外部 provider fixture；不适用项必须说明原因。持久化 JSON 的不兼容变化必须一次性迁移并切换唯一 strict parser，不得通过双 schema、fallback 或默认值兼容。禁止只修改 Prompt 并假定其他层自动适配。
+- **AP-03 — 协议变更整体审计。** 修改结构化输出字段、类型、层级、必填性、枚举或 identity 语义时，必须在同一变更中审计 Prompt、生产 raw schema、parser/normalizer、stream adapter、stable item key、持久化 projector、UI consumer 与外部 provider fixture；不适用项必须说明原因。持久 JSON 的不兼容变化必须排空并废弃旧实例，或一次性迁移后切换唯一 strict parser；不得使用双 schema、fallback 或默认值兼容。禁止只修改 Prompt 并假定其他层自动适配。
 - **AP-04 — Prompt 不写领域事实 identity。** 模型描述不得成为持久事实、资产、scope、生命周期或关联 identity 的权威；identity 必须来自领域输入、registry 或服务端 projector。禁止 substring、字符重合、历史消息或 UI 文案补认 canonical identity。
 - **AP-04A — 模型只使用有界短引用。** 人物与场景使用输入动态枚举中的精确名称，镜头/分段/时间线使用仅在单次响应内有效的短 ref、序号或 clip order；服务端 resolver 是名称/短引用到 canonical UUID/系统 identity 的唯一解释者。Prompt 不得要求模型抄写数据库 UUID，持久化 final schema 也不得直接作为 raw model schema。关联失败必须拒绝整份输出，禁止猜测、旧协议 fallback 或把内部 ID 作为用户可见文案。
 - **AP-05 — 未知输出显式失败。** 结构化 raw schema 应在协议边界拒绝未知或缺失字段；不得静默删除、补默认、降级成自由文本或让下游消费者各自容错。协议失败与 Task retry/terminal 继续服从异步生命周期模块。
@@ -42,8 +42,9 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - 核心剪辑 Prompt 曾让模型重复输出 ledger persistent facts，再用字符重合率校验，形成第二事实 writer；现在模型只写镜头结构，事实由 ledger projector 独占。
 - Golden provider 曾因 generic JSON、错误 prompt 路由或旧字段无法通过生产 parser；fixture 修复只能证明协议替身，不能成为 Prompt schema owner。
 - Prompt 根目录曾没有通用架构路由，字段变化依赖人工记住 Schema/stream/fixture；现在所有 Prompt 先命中本模块，再沿实际调用链审计适用消费者。
-- location spatial profile、soundscape plan 与 source script 曾要求模型重复输出固定的版本标记，但系统没有第二协议或任何 reader 分支；这些字段既不能提供迁移能力，又扩大了 Prompt/schema/fixture 漂移面，现只保留真实形状字段。
-- 核心剪辑、摄影执行计划与 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback，使协议抄写错误直接泄漏到 UI。现在三条链统一为 raw 名称/短引用/clip order，服务端解析成 final identity；BGM 与最终配乐的模型输入也只保留镜头号和 clip order。
+- 已删除的 location spatial profile、旧 Soundscape plan 与 source script 曾要求模型重复输出固定版本标记，但系统没有第二协议或 reader 分支；这些字段只会扩大 Prompt/schema/fixture 漂移面。当前 Ambient Sound 只保留真实规划形状。
+- 核心剪辑、镜头执行计划与旧 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback。当前核心计划与 Ambient Sound 统一使用 raw 名称/短引用/clip order，服务端解析成 final identity。
+- 2026-07 的分镜协议曾同时保留 Panel 图片链与全能参考旁路，Prompt owner 仍绑在旧链。当前核心镜头输出已缩减为动作/表演/对白/同步声音/连续性，执行计划只输出景别、运镜方式和运镜稳定性，视频 Prompt 只由 `src/lib/video-segments/prompt.ts` 构建。
 - 一分钟创作简报曾生成 1757 字源剧本并被全局规划估成 275 秒；首次纠正只强化源剧本 Prompt，又用“每个 Beat 通常 15-45 秒”的通用区间估时。真实复发中，源剧本已压缩为单场、4 个 Beat、509 字，但全局规划仍按固定区间估成 115 秒，证明旧防线没有覆盖“紧凑剧本 + 多 Beat”的真实组合。当前防线让源剧本按用户时长控制全部正文规模，同时要求 Beat 时长只从对白、动作、反应、停顿和转场的实际表演时间派生；Beat 数量不得成为扩大片长的第二解释源。尚未用真实模型重复生成该案例，模型服从性仍是未验证盲区。
 
 ## 修改检查表

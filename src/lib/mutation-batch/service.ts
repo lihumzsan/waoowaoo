@@ -82,7 +82,7 @@ async function publishMutationBatchEvent(params: Parameters<typeof buildMutation
 
 function resolveReplayEpisodeId(entries: Array<{ targetType: string }>, episodeId: string | null) {
   const hasEpisodeScopedTarget = entries.some(
-    (entry) => entry.targetType === 'ProjectPanel' || entry.targetType === 'ProjectStoryboard' || entry.targetType === 'ProjectEpisode',
+    (entry) => entry.targetType === 'ProjectVideoSegment' || entry.targetType === 'ProjectEpisode',
   )
   return hasEpisodeScopedTarget ? episodeId : null
 }

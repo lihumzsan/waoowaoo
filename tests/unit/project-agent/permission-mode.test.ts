@@ -38,7 +38,7 @@ describe('assistant permission mode', () => {
       shouldRequireAssistantToolApproval({
         mode: 'ask',
         operation: makeTestOperation({
-          id: 'generate_episode_videos',
+          id: 'generate_video_segments',
           intent: 'act',
           effects: EFFECTS_BILLABLE,
           confirmation: { kind: 'billable_media', required: true },
@@ -46,7 +46,7 @@ describe('assistant permission mode', () => {
           outputSchema: z.object({ ok: z.boolean() }),
           plan: async () => ({
             kind: 'task_submission',
-            operationId: 'generate_episode_videos',
+            operationId: 'generate_video_segments',
             projectId: 'project-1',
             userId: 'user-1',
             tasks: [],

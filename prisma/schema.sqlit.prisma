@@ -59,11 +59,6 @@ model LocationImage {
   imageIndex          Int
   description         String?
   imageUrl            String?
-  spatialProfileJson  Json?
-  spatialProfileStatus String                  @default("pending")
-  spatialProfileError String?
-  spatialProfileAnalyzedAt DateTime?
-  spatialProfileModel String?
   isSelected          Boolean                @default(false)
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @default(now()) @updatedAt
@@ -133,16 +128,15 @@ model ProjectEpisode {
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  storyboards             ProjectStoryboard[]
   musicScore              ProjectEditMusicScore?
-  soundscape              ProjectEditSoundscape?
+  ambientSound            ProjectEditAmbientSound?
   finalOutput             ProjectEpisodeFinalOutput?
   editBible          ProjectEditBible?
   editStylePreviews       ProjectEditStylePreview[]
   editScript              ProjectEditScript?
   editShotExecutionPlan   ProjectEditShotExecutionPlan?
   editAssetRequirements   ProjectEditAssetRequirement[]
-  videoGroups             ProjectVideoGroup[]
+  videoSegments           ProjectVideoSegment[]
 
   @@unique([projectId, episodeNumber])
   @@index([projectId])
@@ -216,7 +210,7 @@ model ProjectEditScript {
   editBible ProjectEditBible          @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
   shotExecutionPlan ProjectEditShotExecutionPlan?
   requirements   ProjectEditAssetRequirement[]
-  storyboard      ProjectStoryboard?
+  videoSegments   ProjectVideoSegment[]
 
   @@index([projectId])
   @@index([episodeId])
@@ -294,6 +288,7 @@ model ProjectEditMusicScore {
   version           Int            @default(1)
   status            String         @default("pending")
   taskId            String?
+  planTaskId        String?
   timelineSignature String?
   musicModel        String?
   createdAt         DateTime       @default(now())
@@ -302,10 +297,11 @@ model ProjectEditMusicScore {
 
   @@index([episodeId])
   @@index([taskId])
+  @@index([planTaskId])
   @@map("project_edit_music_scores")
 }
 
-model ProjectEditSoundscape {
+model ProjectEditAmbientSound {
   id                String         @id @default(uuid())
   episodeId         String         @unique
   planJson          Json?
@@ -315,6 +311,7 @@ model ProjectEditSoundscape {
   version           Int            @default(1)
   status            String         @default("pending")
   taskId            String?
+  planTaskId        String?
   timelineSignature String?
   soundEffectModel  String?
   createdAt         DateTime       @default(now())
@@ -323,121 +320,37 @@ model ProjectEditSoundscape {
 
   @@index([episodeId])
   @@index([taskId])
-  @@map("project_edit_soundscapes")
+  @@index([planTaskId])
+  @@map("project_edit_ambient_sounds")
 }
 
-model ProjectVideoGroup {
-  id                    String          @id @default(uuid())
-  projectId             String
-  episodeId             String
-  gridMode              String
-  shotNumbers           Json
-  durationSec           Int
-  prompt                String?
-  status                String          @default("pending")
-  taskId                String?
-  errorCode             String?
-  errorMessage          String?
-  referenceImageUrl     String?
-  referenceImageMediaId String?
-  referenceImageMedia   MediaObject?    @relation("ProjectVideoGroupReferenceImageMedia", fields: [referenceImageMediaId], references: [id], onDelete: SetNull)
-  videoUrl              String?
-  videoMediaId          String?
-  videoMedia            MediaObject?    @relation("ProjectVideoGroupVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @default(now()) @updatedAt
-  project               Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode               ProjectEpisode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+model ProjectVideoSegment {
+  id               String            @id @default(uuid())
+  projectId        String
+  episodeId        String
+  editScriptId     String
+  segmentId        String
+  inputSignature   String
+  durationSec      Int
+  status           String            @default("pending")
+  generationTaskId String?
+  errorCode        String?
+  errorMessage     String?
+  videoMediaId     String?
+  videoMedia       MediaObject?      @relation("ProjectVideoSegmentVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @default(now()) @updatedAt
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode          ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  editScript       ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
 
+  @@unique([editScriptId, segmentId])
   @@index([projectId])
   @@index([episodeId])
-  @@index([referenceImageMediaId])
-  @@index([videoMediaId])
-  @@index([taskId])
-  @@map("project_video_groups")
-}
-
-model ProjectPanel {
-  id                String                    @id @default(uuid())
-  storyboardId      String
-  panelIndex        Int
-  panelNumber       Int?
-  shotType          String?
-  cameraMove        String?
-  description       String?
-  location          String?
-  characters        String?
-  srtSegment        String?
-  srtStart          Float?
-  srtEnd            Float?
-  duration          Float?
-  imagePrompt       String?
-  imageUrl          String?
-  imageMediaId      String?
-  imageMedia        MediaObject?              @relation("ProjectPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  videoPrompt       String?
-  videoUrl          String?
-  lastVideoGenerationOptions Json?
-  videoMediaId      String?
-  videoMedia        MediaObject?              @relation("ProjectPanelVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @default(now()) @updatedAt
-  sceneType         String?
-  candidateImages   String?
-  sourceShotNumber  Int?
-  sourceGenerationSegmentId String?
-  executionSnapshotJson Json?
-  renderFactsJson   Json?
-  actingNotes       String? // 演技指导数据 JSON
-  storyboard        ProjectStoryboard  @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
-
-  @@unique([storyboardId, panelIndex])
-  @@index([storyboardId])
-  @@index([imageMediaId])
-  @@index([videoMediaId])
-  @@index([sourceShotNumber])
-  @@map("project_panels")
-}
-
-model ProjectStoryboard {
-  id                  String                @id @default(uuid())
-  episodeId           String
-  editScriptId        String?               @unique
-  storyboardImageUrl  String?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @default(now()) @updatedAt
-  panelCount          Int                   @default(9)
-  storyboardTextJson  String?
-  lastError           String?
-  panels              ProjectPanel[]
-  editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
-  episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  supplementaryPanels SupplementaryPanel[]
-
   @@index([editScriptId])
-  @@index([episodeId])
-  @@map("project_storyboards")
-}
-
-model SupplementaryPanel {
-  id            String                   @id @default(uuid())
-  storyboardId  String
-  sourceType    String
-  sourcePanelId String?
-  description   String?
-  imagePrompt   String?
-  imageUrl      String?
-  imageMediaId  String?
-  imageMedia    MediaObject?             @relation("SupplementaryPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  characters    String?
-  location      String?
-  createdAt     DateTime                 @default(now())
-  updatedAt     DateTime                 @default(now()) @updatedAt
-  storyboard    ProjectStoryboard @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
-
-  @@index([storyboardId])
-  @@index([imageMediaId])
-  @@map("supplementary_panels")
+  @@index([videoMediaId])
+  @@index([generationTaskId])
+  @@map("project_video_segments")
 }
 
 model Project {
@@ -448,15 +361,12 @@ model Project {
   analysisModel      String?
   imageModel         String?
   videoModel         String?
-  singleShotVideoModel String?
-  sequenceVideoModel String?
   musicModel         String?
   soundEffectModel   String?
   videoRatio         String                 @default("9:16")
   globalAssetText    String?
   characterModel     String?
   locationModel      String?
-  storyboardModel    String?
   editModel          String?
   videoResolution    String                 @default("720p")
   capabilityOverrides String?
@@ -475,7 +385,7 @@ model Project {
   editScripts        ProjectEditScript[]
   editShotExecutionPlans ProjectEditShotExecutionPlan[]
   editAssetRequirements ProjectEditAssetRequirement[]
-  videoGroups        ProjectVideoGroup[]
+  videoSegments      ProjectVideoSegment[]
 
   @@index([userId])
   @@map("projects")
@@ -548,7 +458,6 @@ model UserPreference {
   analysisModel   String? // 用户配置的分析模型（nullable，必须配置后才能使用）
   characterModel  String? // 用户配置的角色图片模型
   locationModel   String? // 用户配置的场景图片模型
-  storyboardModel String? // 用户配置的分镜图片模型
   editModel       String? // 用户配置的修图模型
   videoModel      String? // 用户配置的视频模型
   musicModel      String? // 用户配置的音乐/配乐模型
@@ -844,11 +753,6 @@ model GlobalLocationImage {
   imageIndex          Int
   description         String?
   imageUrl            String?
-  spatialProfileJson  Json?
-  spatialProfileStatus String   @default("pending")
-  spatialProfileError String?
-  spatialProfileAnalyzedAt DateTime?
-  spatialProfileModel String?
   imageMediaId        String?
   imageMedia          MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
   isSelected          Boolean  @default(false)
@@ -884,11 +788,7 @@ model MediaObject {
   characterAppearanceImages             CharacterAppearance[]       @relation("CharacterAppearanceImageMedia")
   locationImages                        LocationImage[]             @relation("LocationImageMedia")
   projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
-  projectPanelImages             ProjectPanel[]       @relation("ProjectPanelImageMedia")
-  projectPanelVideos             ProjectPanel[]       @relation("ProjectPanelVideoMedia")
-  projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
-  projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
-  supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
+  projectVideoSegmentVideos             ProjectVideoSegment[]        @relation("ProjectVideoSegmentVideoMedia")
   projectEpisodeFinalOutputVideos        ProjectEpisodeFinalOutput[] @relation("ProjectEpisodeFinalOutputMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")

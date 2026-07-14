@@ -1,6 +1,6 @@
 export type VideoReferenceImageRole = 'reference' | 'first_frame' | 'last_frame'
 
-export type VideoReferenceImageSource = 'storyboard' | 'asset' | 'upload' | 'generated'
+export type VideoReferenceImageSource = 'asset' | 'upload' | 'generated'
 
 export interface VideoReferenceImageInput {
   readonly url: string

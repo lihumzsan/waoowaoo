@@ -20,20 +20,14 @@ function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): 
   return {
     userPrompt: editScript.userPrompt,
     durationSec: editScript.durationSec,
-    styleBible: editScript.styleBible ?? null,
+    visualStyle: editScript.styleBible?.visualStyle ?? null,
     shots: editScript.shots.map((shot) => ({
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: { name: shot.scene.name, subScene: shot.scene.subScene },
       action: shot.action,
-      characters: shot.characters.map(({ name, visibility, role, performance }) => ({
-        name,
-        visibility,
-        role,
-        performance,
-      })),
-      keyObjects: shot.keyObjects,
-      sound: shot.sound,
+      characters: shot.characters.map(({ name, performance }) => ({ name, performance })),
+      synchronousSound: shot.synchronousSound,
     })),
     generationSegments: editScript.generationSegments.map((segment, index) => ({
       segmentNumber: index + 1,
@@ -62,7 +56,7 @@ function buildTimelinePayload(clips: readonly FinalRenderClipPlan[]): unknown {
     shotNumbers: clip.shotNumbers,
     durationSeconds: clip.durationSeconds,
     visualSummary: clip.description,
-    videoSoundDirection: clip.sound,
+    synchronizedSound: clip.synchronousSound,
   }))
 }
 
@@ -76,7 +70,7 @@ export function buildBgmScorePlanPrompt(input: {
   if (input.locale === 'zh') {
     return [
       '你是专业影视作曲师，只为 AI 生成视频设计连续背景配乐。',
-      '视频模型已经负责对白、角色声音、环境声和事件音效。不要设计拟音、配音、环境声替代、字面环境音或字面音效。',
+      '视频模型已经负责对白、角色声音和画面同期短音效；连续环境声由独立 Ambient Sound 层负责。不要设计拟音、配音、环境声替代、字面环境音或字面音效。',
       '最终输出会作为一整条完整纯器乐背景音乐生成，不是多个分轨或孤立片段。',
       '',
       '请先创建灵活的配乐设计，再把设计压缩成一段优秀的音乐生成提示词。',

@@ -15,13 +15,12 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'approve_edit_script_assets',
   'revise_edit_script_assets',
   'generate_edit_shot_execution_plan',
-  'generate_edit_script_storyboard_images',
-  'generate_episode_videos',
+  'generate_video_segments',
   'render_chapters',
   'plan_episode_bgm_score',
   'generate_episode_bgm_score',
-  'plan_episode_soundscape',
-  'generate_episode_soundscape',
+  'plan_episode_ambient_sound',
+  'generate_episode_ambient_sound',
   'render_final_video',
 ] as const
 

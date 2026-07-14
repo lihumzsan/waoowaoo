@@ -48,7 +48,7 @@ async function seedClaimedContinuation() {
       scopeRef: `project:${project.id}`,
       type: 'task_follow_up',
       status: 'running',
-      sourceOperationId: 'generate_episode_videos',
+      sourceOperationId: 'generate_video_segments',
     },
   })
   await prisma.projectAgentWait.create({
@@ -59,7 +59,7 @@ async function seedClaimedContinuation() {
       userId: user.id,
       assistantId: 'workspace-command',
       scopeRef: `project:${project.id}`,
-      operationId: 'generate_episode_videos',
+      operationId: 'generate_video_segments',
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',
       status: 'claimed',

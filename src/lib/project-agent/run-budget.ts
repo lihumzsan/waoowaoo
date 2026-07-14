@@ -36,8 +36,7 @@ export function buildProjectAgentOperationTargetKey(input: {
     'batchKey',
     'stylePreviewId',
     'requirementId',
-    'panelId',
-    'storyboardId',
+    'segmentId',
     'assetId',
     'editScriptId',
   ] as const

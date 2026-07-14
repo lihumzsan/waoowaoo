@@ -5,13 +5,13 @@ import {
   type EditFirstWorkflowView,
 } from '@/lib/project-workflow/edit-first-view'
 import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
+import type { ProjectProjectionProgress } from '@/lib/project-projection/types'
 
 export const PROJECT_PHASE = {
   DRAFT: 'draft',
-  SCRIPT_ANALYZING: 'script_analyzing',
   SCRIPT_READY: 'script_ready',
-  STORYBOARD_GENERATING: 'storyboard_generating',
-  STORYBOARD_READY: 'storyboard_ready',
+  VIDEO_GENERATING: 'video_generating',
+  VIDEO_READY: 'video_ready',
 } as const
 
 export type ProjectPhase = (typeof PROJECT_PHASE)[keyof typeof PROJECT_PHASE]
@@ -22,120 +22,75 @@ export interface ProjectPhaseSnapshot {
     editBibleStatus: string | null
     chapterCount: number
   }
-  progress: {
-    storyboardCount: number
-    panelCount: number
-  }
+  progress: ProjectProjectionProgress
   staleArtifacts: string[]
   availableActions: string[]
   editFirstWorkflow: EditFirstWorkflowView
 }
 
 async function resolveEpisodePlanningState(episodeId: string | null): Promise<ProjectPhaseSnapshot['planning']> {
-  if (!episodeId) {
-    return {
-      editBibleStatus: null,
-      chapterCount: 0,
-    }
-  }
-
+  if (!episodeId) return { editBibleStatus: null, chapterCount: 0 }
   const [editBible, chapterCount] = await Promise.all([
     prisma.projectEditBible.findUnique({
       where: { episodeId },
       select: { status: true },
     }),
-    prisma.projectEditChapter.count({
-      where: { episodeId },
-    }),
+    prisma.projectEditChapter.count({ where: { episodeId } }),
   ])
-
-  return {
-    editBibleStatus: editBible?.status ?? null,
-    chapterCount,
-  }
+  return { editBibleStatus: editBible?.status ?? null, chapterCount }
 }
 
 function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): ProjectPhaseSnapshot['availableActions'] {
-  if (!hasEpisode) {
-    return []
-  }
-
+  if (!hasEpisode) return []
   switch (phase) {
     case PROJECT_PHASE.DRAFT:
-      return ['screenwriting', 'story-structure']
+      return ['ingest_script']
     case PROJECT_PHASE.SCRIPT_READY:
-      return ['storyboard-direction', 'visual-continuity']
-    case PROJECT_PHASE.STORYBOARD_READY:
-      return [
-        'generate_character_image',
-        'generate_location_image',
-        'regenerate_panel_image',
-        'generate_edit_script_storyboard_images',
-        'generate_episode_videos',
-      ]
-    default:
-      return []
+      return ['generate_edit_script_assets', 'generate_edit_shot_execution_plan', 'generate_video_segments']
+    case PROJECT_PHASE.VIDEO_GENERATING:
+      return ['generate_video_segments']
+    case PROJECT_PHASE.VIDEO_READY:
+      return ['render_chapters', 'render_final_video']
   }
-}
-
-function maxDate(dates: Array<Date | null | undefined>): Date | null {
-  let latest: Date | null = null
-  for (const date of dates) {
-    if (!date) continue
-    if (!latest || date.getTime() > latest.getTime()) latest = date
-  }
-  return latest
 }
 
 async function resolveStaleArtifactsForEpisode(params: {
   episodeId: string
-  progress: ProjectPhaseSnapshot['progress']
+  progress: ProjectProjectionProgress
 }): Promise<string[]> {
-  const episodeId = params.episodeId
-  const [episode, editBibleMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
+  const [episode, editBibleMax, editScriptMax, videoSegmentMax] = await Promise.all([
     prisma.projectEpisode.findUnique({
-      where: { id: episodeId },
+      where: { id: params.episodeId },
       select: { updatedAt: true },
     }),
     prisma.projectEditBible.aggregate({
-      where: { episodeId },
+      where: { episodeId: params.episodeId },
       _max: { updatedAt: true },
     }),
     prisma.projectEditScript.aggregate({
-      where: { episodeId },
+      where: { episodeId: params.episodeId },
       _max: { updatedAt: true },
     }),
-    prisma.projectStoryboard.aggregate({
-      where: {
-        episodeId,
-      },
-      _max: { updatedAt: true },
-    }),
-    prisma.projectPanel.aggregate({
-      where: {
-        storyboard: {
-          episodeId,
-        },
-      },
+    prisma.projectVideoSegment.aggregate({
+      where: { episodeId: params.episodeId },
       _max: { updatedAt: true },
     }),
   ])
 
-  const storyUpdatedAt = maxDate([episode?.updatedAt ?? null])
-  const scriptUpdatedAt = maxDate([editBibleMax._max.updatedAt, editScriptMax._max.updatedAt])
-  const storyboardUpdatedAt = maxDate([storyboardMax._max.updatedAt, panelMax._max.updatedAt])
-
+  const storyUpdatedAt = episode?.updatedAt ?? null
+  const scriptUpdatedAt = [editBibleMax._max.updatedAt, editScriptMax._max.updatedAt]
+    .filter((value): value is Date => value instanceof Date)
+    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null
+  const videoUpdatedAt = videoSegmentMax._max.updatedAt
   const stale: string[] = []
-  if (scriptUpdatedAt && storyUpdatedAt && storyUpdatedAt > scriptUpdatedAt) {
-    stale.push('bible')
-  }
+  if (scriptUpdatedAt && storyUpdatedAt && storyUpdatedAt > scriptUpdatedAt) stale.push('bible')
   if (
-    (params.progress.storyboardCount > 0 || params.progress.panelCount > 0)
+    params.progress.plannedVideoSegmentCount > 0
     && scriptUpdatedAt
-    && storyboardUpdatedAt
-    && scriptUpdatedAt > storyboardUpdatedAt
+    && videoUpdatedAt
+    && scriptUpdatedAt > videoUpdatedAt
   ) {
-    stale.push('storyboard')
+    stale.push('video_segments')
   }
   return stale
 }
@@ -151,13 +106,9 @@ export async function resolveProjectPhase(params: {
     episodeId: params.episodeId || null,
   })
   const progress = projection.progress
-
   const [staleArtifacts, editFirstWorkflow, planning] = await Promise.all([
     projection.episodeId
-      ? resolveStaleArtifactsForEpisode({
-          episodeId: projection.episodeId,
-          progress,
-        })
+      ? resolveStaleArtifactsForEpisode({ episodeId: projection.episodeId, progress })
       : Promise.resolve([] as string[]),
     resolveEditFirstWorkflowView({
       projectId: params.projectId,
@@ -168,8 +119,10 @@ export async function resolveProjectPhase(params: {
   ])
 
   let phase: ProjectPhase = PROJECT_PHASE.DRAFT
-  if (progress.storyboardCount > 0 || progress.panelCount > 0) {
-    phase = PROJECT_PHASE.STORYBOARD_READY
+  if (progress.plannedVideoSegmentCount > 0) {
+    phase = progress.completedVideoSegmentCount === progress.plannedVideoSegmentCount
+      ? PROJECT_PHASE.VIDEO_READY
+      : PROJECT_PHASE.VIDEO_GENERATING
   } else if (
     editFirstWorkflow.step !== 'unavailable'
     && editFirstWorkflow.step !== 'script_intake'
@@ -183,7 +136,7 @@ export async function resolveProjectPhase(params: {
     planning,
     progress,
     staleArtifacts,
-    availableActions: resolveAvailableActions(phase, !!projection.episodeId),
+    availableActions: resolveAvailableActions(phase, Boolean(projection.episodeId)),
     editFirstWorkflow,
   }
 }

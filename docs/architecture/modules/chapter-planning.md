@@ -4,53 +4,48 @@
 
 ## 设计理念
 
-章节核心剪辑计划把已确认剧本与章节事件组织成 shots 和 generationSegments。模型是镜头结构生成者，不是剧情事实、资产 identity 或生命周期事实的 owner。章节 ledger 是持久剧情事实的唯一权威；模型不得复制、改写、选择或补造第二份事实台账。
+章节计划把已确认剧本与章节事件组织成镜头和视频 Segment。模型是镜头结构与运镜决策者，不是剧情事实、资产 identity、资源生命周期或空间站位的第二 owner。系统不再生成分镜图；“分镜”只指最终直接提交给视频模型的镜头与 Segment 计划。
 
 ## 不变量
 
-- **CP-00A — 规划资产可与核心剪辑并行。** 制作规划确认事务已经创建的 ProjectCharacter/ProjectLocation 是章节规划的资产菜单来源；确认视觉风格后，资产图片/空间档案任务可与 `plan_chapters` 并行。核心规划不得要求资产图片先完成，只要求角色与场景 identity/description 已存在；生成结果落库前必须重新读取资产状态，使并行期间已完成的图片投影为 completed requirement，避免事件先后顺序造成永久 pending。资产审核面向本集这一组共享 canonical 资产，章节 requirement 只参与完整性与受审 fingerprint，不产生“选择某章资产”的第二语义；用户动作只有确认整组资产或提交整组修改意见。
-
-- **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。`persistentFactsIntroduced` 等 provenance 投影必须由服务端直接从本章 events 构造，模型输出不得包含事实台账字段。
-- **CP-02 — 模型只写镜头结构。** structure prompt/schema 只允许 `shots` 与 `generationSegments`；额外字段必须由 strict schema 显式拒绝，不得静默删除。
-- **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、字符/token overlap、embedding 或其他语义相似度把模型文本解释为 canonical fact。
-- **CP-04 — 资产 identity 由服务端解析。** 模型只从已确认 asset menu 的动态名称枚举输出 `locationName`、`characterName` 与 `speakerName`，并用本次响应内的短 `shotRef` 组织分段；模型输入和输出都不携带数据库 UUID。服务端唯一 resolver 以精确名称映射 ProjectLocation/ProjectCharacter UUID、校验对白归属，再把短 shotRef 一次性重写为系统 shot identity。未知名称、重复名称、未知引用或覆盖/顺序不完整必须原地失败，禁止模糊匹配、ID 回显或兼容旧 UUID 协议。subScene、performance、keyObjects 等描述无权创建新资产 identity。`performance` 字段必须存在，但允许规范化为空字符串，不能因缺少表演描述阻断整章计划。
-- **CP-04A — UUID 是关联权威，名称只属于 View。** 持久化计划、资产 requirement、摄影执行计划、Storyboard、视频分组和 Soundscape 的业务关联只使用服务端生成或解析的 canonical identity。持久 JSON 中已有的名称字段不是关联或显示权威；服务端对外 View 必须按当前 UUID 重新投影人物/场景名称，因此重命名不得改变关联。消费者找不到 UUID 时必须显式失败，禁止退回历史名称 join、数组位置或直接显示 UUID。
-- **CP-05 — 成功写入受 Task owner 约束。** EditScript 正式资源与 provenance 在同一 owner-fenced 成功事务提交；失败 attempt 不得写最终章节事实或计划。
-- **CP-06 — 分镜面板是镜头执行计划的确定性投影。** 镜头执行计划模型只生成 `shots + generationSegmentExecutions`；服务端必须用核心镜头、ready 资产、Style Bible 与该执行计划确定性构造 Storyboard、Panel、图片 Prompt 和视频 Prompt。`ProjectEditShotExecutionPlan.status=ready`、Storyboard 与全部 Panel 必须在同一事务提交，任一物化失败都不得暴露 ready 计划。禁止独立 Assistant Tool、route、TaskType、worker 或 Workflow 阶段再次“生成分镜面板”；Task 重试只能重放同一镜头计划 provider checkpoint 后重试确定性物化。收费分镜图片仍由独立 `billable_media` 计划、报价和批准入口提交，不得把自动面板投影解释成媒体授权。
+- **CP-00A — 章节需求先于资产生成完成。** `plan_chapters` 必须先完成本集全部章节的 EditScript 与资产 requirement 持久化，Workflow 才能开放 `generate_edit_script_assets`。二者禁止并行或共享 Operation Group；否则图片完成投影可能早于迟到 requirement，留下永久 pending。Canvas 可以提前投影已知资产，但只有 Workflow 的 `allowedOperationIds` 明确开放该 Operation 后才能展示动作或预取收费计划。资产审核面向本集唯一共享资产集。
+- **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。provenance 只能由服务端投影，模型不得输出第二份事实台账。
+- **CP-02 — 核心镜头契约最小且严格。** structure 输出只包含场景、动作、人物表演、对白、同步声音、时长、连续性与 `generationSegments`。`visibility`、`role`、`keyObjects`、lighting、空间站位、blocking、机位与生成 Prompt 都不属于该契约；strict schema 必须拒绝未知字段。
+- **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、token overlap、embedding 或数组位置将模型文本解释为 canonical fact。
+- **CP-04 — 资产 identity 由服务端解析。** 模型只从动态名称枚举输出 `locationName`/`characterName`/`speakerName`，并使用本次响应内的短 `shotRef` 组织 Segment。唯一 resolver 精确映射 UUID、校验对白归属并生成系统 shot identity。未知名称、重名、未知引用、顺序或覆盖不完整必须整份失败。
+- **CP-04A — UUID 是关联权威，名称只属于 View。** 持久计划、requirement、镜头执行计划、Video Segment 与 Ambient Sound 关联只使用 canonical identity。对外 View 必须按当前 UUID 重新投影名称；缺失关联显式失败，禁止回退到历史名称、位置或 UUID 文案。
+- **CP-05 — 成功写入受 Task owner 围栏。** EditScript 与 ShotExecutionPlan 的正式资源在 owner-fenced 事务中提交；失败或晚到 attempt 不得改写章节事实。
+- **CP-06 — 镜头执行计划只决定三个字段。** 模型输入只是 `structure_json + visual_style + aspect_ratio`；每个 shot 只输出 `shotScale` 与 `cameraMovement.{movement,stability}`。`stability` 是镜头动态的稳定程度，只能是 `locked/stable/smooth/subtle_shake/handheld`。焦段、景深、机位、角度、构图、灯光、轴线、站位、道具位置与 Prompt 都不得输出。
+- **CP-07 — Video Segment 是唯一视频资源。** `ProjectVideoSegment` 以 `(editScriptId, segmentId)` 作为 canonical identity，只由 `generate_video_segments` 计划/批准链提交。参考图只来自已确认的角色与场景资产；最终 Prompt、有序参考图与 `inputSignature` 在批准时冻结进 Task payload，不得在资源表建立第二可编辑事实。超过模型 `maxReferenceImages` 必须整段失败，禁止截断。
+- **CP-08 — 视频原生音频永远开启。** Segment 计划与 worker 都必须把 `generateAudio=true` 写入 provider 选项；缺失或 false 原地失败。原生片段音频、连续 Ambient Sound 和 BGM 是三条独立音轨，最终合成时才混合。
 
 ## 权威入口
 
 - 章节输入与 ledger：`src/lib/edit-chapter/input-assembler.ts`。
-- 模型输出契约：`src/lib/edit-chapter/schemas.ts` 与 `src/lib/ai-prompts/templates/edit-script/structure/`。
-- 模型引用解析与系统 shot identity：`src/lib/edit-chapter/schemas.ts`、`src/lib/edit-script/model-references.ts` 与 `src/lib/edit-script/service.ts`。
-- 当前名称 View：`src/lib/edit-script/core-view.ts`；摄影执行计划的 raw 名称/短引用到 canonical identity 解析：`src/lib/edit-script/normalize.ts`。
-- 镜头计划与分镜面板的原子物化：`src/lib/edit-script/service.ts`、`src/lib/edit-script/storyboard-consistency/service.ts`、`model-generation.ts` 与 `persistence.ts`；唯一 Task handler 是 `src/lib/workers/handlers/edit-script-structured-generate.ts`。
-- 持久事实投影：`src/lib/edit-chapter/persistent-facts.ts`。
-- 核心计划生成与成功事务：`src/lib/edit-script/service.ts`。
-- Task lifecycle、provider invocation 与重试仍分别服从 `async-task-lifecycle` 和 `provider-gateway`。
+- 核心计划契约与解析：`src/lib/edit-chapter/schemas.ts`、`src/lib/edit-script/types.ts`、`src/lib/edit-script/normalize.ts`。
+- 核心计划与镜头执行计划 Prompt：`src/lib/ai-prompts/templates/edit-script/structure/**`、`shot-execution-plan/**`。
+- Style Bible：`src/lib/edit-script/style-bible-prompt.ts`；视频使用 `visualStyle`，资产图使用 `assetImageStyle.{lighting,texture,composition}`。
+- 核心计划、镜头执行计划与 owner-fenced 持久化：`src/lib/edit-script/service.ts`、`src/lib/workers/handlers/edit-script-structured-generate.ts`。
+- Video Segment 计划、Prompt 与 Task：`src/lib/video-segments/{planning,prompt,types}.ts`、`src/lib/operations/domains/video-segments/index.ts`、`src/lib/workers/video.worker.ts`。
+- Ambient Sound 规划/生成：`src/lib/ambient-sound/**`。
 
 ## 验证
 
-- `tests/unit/edit-chapter/persistent-facts.test.ts` 是 Logic Specification：验证 ledger event facts 的确定性顺序、去重和 exact projection。
-- `tests/golden-journey/self-tests/model-provider.test.ts` 验证协议替身输出可被生产 strict schema 消费；它不代替真实模型行为。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 从空项目生成至少两个章节，验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见、逐章镜头计划稳定投影、每个 ready 计划自动拥有一个 Storyboard 与多个 Panel、没有独立面板 Task，以及最终资产审核没有章节选择语义。
-- `scripts/guards/chapter-plan-fact-authority-guard.mjs` 只反证模型事实字段、第二 provenance constructor 或旧自然语言 validator 被重新接回；它不证明用户行为。
+- `tests/unit/edit-script/shot-execution-normalize.test.ts` 反证旧执行字段和非法稳定性枚举。
+- `tests/golden-journey/self-tests/model-provider.test.ts` 让受控 provider 输出通过生产 strict schema；它不证明真实模型必然服从 Prompt。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 验证多章节从计划到 `ProjectVideoSegment`、原生音频、Ambient Sound、BGM 和成片的真实主链，并拒绝独立分镜图 Task/Panel/VideoGroup 回流。
 
 ## 历史回归
 
-- `994b738981` 已把原先第二次 LLM 生成的分镜最终 Prompt 改成纯函数 `generateStoryboardPanelPrompts`，但旧 `generate_edit_script_storyboard` Operation、route、TaskType、worker 与 Workflow `nextAction` 没有删除。真实项目因此在镜头计划完成后再次唤醒 Assistant，提交一个约 220ms、只有 `__handler_result__` 而没有 provider checkpoint 的“生成分镜面板”Task；现有 Logic 还把这个两阶段残留固定成期望。当前防线把确定性 Panel 物化并入镜头计划 Task 的 owner-fenced 成功事务，删除全部旧入口与阶段；主 Journey 同时断言逐章 Storyboard/Panel 已存在且历史独立 operation 从未创建。
-
-- 多章节主 Journey 首次运行时，独立的 `generate_edit_script_storyboard(chapterId=null)` 每次都按 `updatedAt desc` 选择同一份 edit script；Task dedupe 成功返回第一章旧结果，Workflow 因 `storyboardCount < chapterCount` 永远停在同一阶段。旧单章节 Journey 无法反证。该独立 scope、Operation 与 Task 已删除；现在每个章节的镜头计划 Task 只在自己的 owner-fenced 成功事务物化同章 Storyboard，主 Journey 逐章断言 plan、Storyboard 与 Panel 数量。
-
-- `d14404a5c8` 引入模型事实字段与字符相似度 validator；中文改写与跨 event 合并在真实任务中触发误拒。
-- `0ad107b247` 让错误显式进入 `PLAN_VALIDATION_FAILED`，但显式失败没有消除 ledger 与模型的双 writer。
-- `0ad107b247`（2026-07-07）把核心规划切到模型直接回传资产 UUID；`8d5af4421e`（2026-07-08）又在 Canvas raw stream 中用 `name ?? id` 展示，最终让模型 UUID 直接成为用户可见标题和人物字段。旧防线只校验 ID 是否在菜单，无法反证模型抄错长 UUID，也没有约束 View 不得回显 identity。
-- `4790562e89`、`7ffddcb88c` 与 `b742159568` 随后在对白、最终时间线和 Soundscape 中重复了“找不到名称就显示 ID”的同根因。当前防线是单一 raw schema + 服务端 exact resolver + UUID-only association + current-name View；部署时必须排空仍使用旧 raw UUID 协议的核心规划、摄影执行计划和 Soundscape planning attempt，禁止双协议并存。
+- `994b738981` 曾把第二次 LLM 分镜 Prompt 改成纯函数，但保留了独立 Operation、route、TaskType、worker、Workflow 阶段与 Panel 实体；只替换实现没有删除旧解释权。后续“全能参考”又作为旁路追加，使图片 Panel 与资产参考同时能生成视频。本次防线是一次性删除 Storyboard/Panel/图片阶段、空间档案和旧双模式，只保留唯一 `ProjectVideoSegment` 入口。
+- 多章节旧链曾通过 `updatedAt desc`、数组位置与 panel fallback 推断归属，导致异步顺序改变时停在无法推进的阶段。当前计划、Segment、Task 与媒体全程显式传递 `editScriptId + segmentId`。
+- 核心计划曾让模型回传 UUID，Canvas、对白、最终时间线与环境音又以 ID 作为缺名 fallback；当前 raw 模型协议只使用名称/短引用，服务端是唯一 identity resolver，UI 不回显 ID。
+- 章节规划与共享资产生成曾被放进同一并行 Operation Group；图片 Task 完成时，另一个章节的 requirement 可能尚未提交，完成投影只能更新当时已存在的行，迟到行永久停在 pending。首次改为串行后，Canvas 仍根据“已出现一个资产/脚本”提前挂载生成按钮并预取收费 plan，服务端只能以 episode gate 的 500 拒绝。旧 Golden 只证明 Task 时序，没有保持浏览器错误清洁。当前防线删除并行组，并让 Canvas 动作只消费 Workflow `allowedOperationIds`；完整 Journey 同时断言资产 Task 创建时间与零浏览器 5xx。
+- 本次是不兼容的 D 类协议切换。用户已决定废弃旧项目与旧数据，因此不提供 migration、backfill、fallback 或双轨 parser；新系统对旧形状显式失败。
 
 ## 修改检查表
 
-1. 新字段属于镜头结构还是 ledger 事实？
-2. 是否让模型、UI 或 prompt 文案获得了事实 identity 解释权？
-3. provenance 是否完全由当前 chapter events 确定性投影？
-4. strict schema 是否拒绝旧字段和未知字段？
-5. 成功持久化是否仍受 `generationTaskId` owner fence 保护？
+1. 字段是否属于动作/表演/声音/连续性或三项镜头执行决策？
+2. 是否重新引入 Panel、分镜图、空间档案、双视频模式或第二可编辑 Prompt？
+3. Segment identity、`inputSignature`、参考图顺序和 Task owner 是否稳定且 fail closed？
+4. 参考图超限是否显式失败，`generateAudio` 是否始终为 true？

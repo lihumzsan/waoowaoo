@@ -326,12 +326,10 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       chapters,
       editScripts,
       shotExecutionPlans,
-      storyboards,
-      panels,
-      videoGroups,
+      videoSegments,
       assetRequirements,
       musicScores,
-      soundscapes,
+      ambientSounds,
       finalOutputs,
     ] = await Promise.all([
       queryRows(connection, 'SELECT id, userId, name, videoRatio, createdAt, updatedAt FROM projects WHERE id = ?', projectScope),
@@ -355,12 +353,10 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_scripts WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_storyboards WHERE episodeId = ?', [scope.episodeId]),
-      queryRows(connection, 'SELECT p.* FROM project_panels p JOIN project_storyboards s ON s.id = p.storyboardId WHERE s.episodeId = ?', [scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_video_groups WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_video_segments WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_music_scores WHERE episodeId = ?', [scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_edit_soundscapes WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_ambient_sounds WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
     ])
     const parsedThreads = threads.map((thread) => ({
@@ -392,9 +388,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         chapters: sortOracleRows(chapters, 'chapterIndex', 'id'),
         editScripts: sortOracleRows(editScripts, 'createdAt', 'id'),
         shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
-        storyboards: sortOracleRows(storyboards, 'createdAt', 'id'),
-        panels: sortOracleRows(panels, 'createdAt', 'id'),
-        videoGroups: sortOracleRows(videoGroups, 'createdAt', 'id'),
+        videoSegments: sortOracleRows(videoSegments, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
         musicScores: musicScores.map((item) => ({
           ...item,
@@ -402,7 +396,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
           mixJson: parseJson(item.mixJson),
           diagnosticsJson: parseJson(item.diagnosticsJson),
         })),
-        soundscapes: soundscapes.map((item) => ({
+        ambientSounds: ambientSounds.map((item) => ({
           ...item,
           planJson: parseJson(item.planJson),
           sourcesJson: parseJson(item.sourcesJson),

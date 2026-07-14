@@ -8,13 +8,6 @@ import { buildCharacterDescriptionFields } from '@/lib/assets/description-fields
 import { deleteObject, generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { getUserModelConfig } from '@/lib/config-service'
-import { resolveOperationLocale } from '@/lib/operations/environment-input'
-import {
-  analyzeLocationSpatialProfile,
-  locationSpatialProfileToJson,
-} from '@/lib/location-spatial-profile/service'
-import { locationSpatialProfileSchema } from '@/lib/location-spatial-profile/types'
 import {
   requireOwnedAssetTarget,
   requireOwnedAssetVariant,
@@ -87,8 +80,6 @@ const preparedAssetHubUploadSchema = z.discriminatedUnion('kind', [
     existingImageUpdatedAtMs: z.number().int().nonnegative().nullable(),
     labelText: z.string().min(1),
     locationUpdatedAtMs: z.number().int().nonnegative(),
-    profile: locationSpatialProfileSchema,
-    profileModel: z.string().min(1),
   }).strict(),
 ]).superRefine((prepared, ctx) => {
   if (
@@ -121,7 +112,6 @@ async function deletePreparedAssetHubImageOrThrow(
 async function prepareAssetHubImageUpload(
   userId: string,
   request: Request,
-  locale: ReturnType<typeof resolveOperationLocale>,
 ): Promise<PreparedAssetHubUpload> {
   let formData: FormData
   try {
@@ -181,11 +171,6 @@ async function prepareAssetHubImageUpload(
     : null
   if (type === 'location' && !location) throw new ApiError('NOT_FOUND')
 
-  const userConfig = type === 'location' ? await getUserModelConfig(userId) : null
-  if (type === 'location' && !userConfig?.analysisModel) {
-    throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-  }
-
   const buffer = Buffer.from(await file.arrayBuffer())
   const processed = await sharp(buffer)
     .jpeg({ quality: 90, mozjpeg: true })
@@ -208,19 +193,11 @@ async function prepareAssetHubImageUpload(
       }
     }
 
-    if (!location || !userConfig?.analysisModel) {
+    if (!location) {
       throw new Error('ASSET_HUB_LOCATION_UPLOAD_PREPARE_INVALID')
     }
     const imageIndex = requestedImageIndex ?? location.images.length
     const existingImage = location.images.find((image) => image.imageIndex === imageIndex) ?? null
-    const profile = await analyzeLocationSpatialProfile({
-      userId,
-      model: userConfig.analysisModel,
-      locale,
-      locationName: location.name,
-      locationDescription: existingImage?.description ?? labelText,
-      imageUrl: imageKey,
-    })
     return {
       kind: type,
       assetId,
@@ -230,8 +207,6 @@ async function prepareAssetHubImageUpload(
       existingImageUpdatedAtMs: existingImage?.updatedAt.getTime() ?? null,
       labelText,
       locationUpdatedAtMs: location.updatedAt.getTime(),
-      profile,
-      profileModel: userConfig.analysisModel,
     }
   } catch (error) {
     return await deletePreparedAssetHubImageOrThrow(
@@ -333,11 +308,6 @@ async function commitPreparedAssetHubImageUpload(
       data: {
         ...(existingImage.imageUrl ? { previousImageUrl: existingImage.imageUrl } : {}),
         imageUrl: prepared.imageKey,
-        spatialProfileJson: locationSpatialProfileToJson(prepared.profile),
-        spatialProfileStatus: 'ready',
-        spatialProfileError: null,
-        spatialProfileAnalyzedAt: new Date(),
-        spatialProfileModel: prepared.profileModel,
         updatedAt: new Date(Math.max(Date.now(), (prepared.existingImageUpdatedAtMs ?? 0) + 1)),
       },
     })
@@ -353,11 +323,6 @@ async function commitPreparedAssetHubImageUpload(
         locationId: prepared.assetId,
         imageIndex: prepared.imageIndex,
         imageUrl: prepared.imageKey,
-        spatialProfileJson: locationSpatialProfileToJson(prepared.profile),
-        spatialProfileStatus: 'ready',
-        spatialProfileError: null,
-        spatialProfileAnalyzedAt: new Date(),
-        spatialProfileModel: prepared.profileModel,
         description: prepared.labelText,
         isSelected: prepared.imageIndex === 0,
       },
@@ -614,7 +579,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
         return await prepareAssetHubImageUpload(
           ctx.userId,
           ctx.request,
-          resolveOperationLocale(ctx.context),
         )
       },
       executeInTransaction: async (ctx, _input, transaction, prepared) => {

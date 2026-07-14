@@ -183,7 +183,7 @@ export function BgmScoreContent({
     </>
   )
 }
-export function SoundscapeContent({
+export function AmbientSoundContent({
   data,
   labels,
   expanded,
@@ -192,31 +192,31 @@ export function SoundscapeContent({
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
-  const details = data.soundscapeDetails
+  const details = data.ambientSoundDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const displayMixUrl = toDisplayImageUrl(details.mixUrl) ?? details.mixUrl ?? null
   const mixSection = displayMixUrl ? (
     <div className="nodrag nowheel space-y-1.5 rounded-[14px] border border-slate-200 bg-white p-2">
-      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('soundscapeMix')}</p>
+      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('ambientSoundMix')}</p>
       <audio src={displayMixUrl} controls preload="metadata" className="w-full" />
     </div>
   ) : null
   const statsSection = renderSection(
-    labels('soundscapeStats'),
+    labels('ambientSoundStats'),
     <div className="space-y-1">
       {renderValue(labels('status'), details.status)}
-      {renderValue(labels('soundscapeDecision'), details.decision)}
-      {renderValue(labels('soundscapeSourceCount'), details.sourceCount)}
-      {renderValue(labels('soundscapeSectionCount'), details.sectionCount)}
+      {renderValue(labels('ambientSoundDecision'), details.decision)}
+      {renderValue(labels('ambientSoundSourceCount'), details.sourceCount)}
+      {renderValue(labels('ambientSoundSectionCount'), details.sectionCount)}
       {renderValue(labels('soundEffectModel'), details.soundEffectModel)}
     </div>,
   )
   const noneNeededSection =
-    details.decision === 'none_needed' ? renderTextSection(labels('soundscapeNoneNeeded'), labels('soundscapeNoneNeededDescription')) : null
+    details.decision === 'none_needed' ? renderTextSection(labels('ambientSoundNoneNeeded'), labels('ambientSoundNoneNeededDescription')) : null
   const sourceSections =
     details.sources.length > 0 ? (
       <div className="space-y-2">
-        <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('soundscapeSources')}</p>
+        <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('ambientSoundSources')}</p>
         {details.sources.map((source) => (
           <section
             key={source.key}
@@ -239,7 +239,7 @@ export function SoundscapeContent({
   const timelineSections =
     details.sections.length > 0 ? (
       <div className="space-y-2">
-        <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('soundscapeSections')}</p>
+        <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('ambientSoundSections')}</p>
         {details.sections.map((section, index) => {
           const transition = `${section.transitionIn} / ${section.transitionOut}`
           const range = `${section.rangeStart} - ${section.rangeEnd}`

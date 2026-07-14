@@ -438,10 +438,10 @@ export async function buildAssetReviewChoiceCard(params: {
     choiceType: 'asset_review',
     replyMode: 'whole_card',
     variant: 'confirm_or_reply',
-    title: isEnglish ? 'Review Required Assets' : '审核分镜资产',
+    title: isEnglish ? 'Review Required Assets' : '审核角色与场景资产',
     description: isEnglish
-      ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
-      : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成镜头执行计划。',
+      ? 'Check the generated characters and locations. Continue only when the required asset images are ready for shot planning.'
+      : '请检查已生成的人物与场景图片。确认满意后将继续生成镜头执行计划。',
     groups: [],
     submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
     submit: {
@@ -450,8 +450,8 @@ export async function buildAssetReviewChoiceCard(params: {
     },
     replyLabel: isEnglish ? 'Need changes' : '需要调整',
     replyPlaceholder: isEnglish
-      ? 'Describe the character, location, spatial, or visual issues to adjust...'
-      : '输入你希望调整的人物、场景、空间关系或视觉问题...',
+      ? 'Describe the character, location, or visual issues to adjust...'
+      : '输入你希望调整的人物、场景或视觉问题...',
     replySubmitLabel: isEnglish ? 'Submit changes' : '提交调整意见',
     replyToolOutputKey: 'revisionNotes',
   }

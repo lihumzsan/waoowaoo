@@ -91,43 +91,13 @@ export async function hasLocationImageOutput(params: {
   return isNonEmptyString(row.imageUrl) || !!row.imageMediaId
 }
 
-export async function hasPanelImageOutput(panelId: string | null | undefined) {
-  if (!isNonEmptyString(panelId)) return false
-  const panel = await prisma.projectPanel.findUnique({
-    where: { id: panelId },
-    select: {
-      imageUrl: true,
-      imageMediaId: true,
-    },
+export async function hasVideoSegmentOutput(segmentId: string | null | undefined) {
+  if (!isNonEmptyString(segmentId)) return false
+  const segment = await prisma.projectVideoSegment.findUnique({
+    where: { id: segmentId },
+    select: { status: true, videoMediaId: true },
   })
-  if (!panel) return false
-  return isNonEmptyString(panel.imageUrl) || !!panel.imageMediaId
-}
-
-export async function hasPanelVideoOutput(panelId: string | null | undefined) {
-  if (!isNonEmptyString(panelId)) return false
-  const panel = await prisma.projectPanel.findUnique({
-    where: { id: panelId },
-    select: {
-      videoUrl: true,
-      videoMediaId: true,
-    },
-  })
-  if (!panel) return false
-  return isNonEmptyString(panel.videoUrl) || !!panel.videoMediaId
-}
-
-export async function hasVideoGroupOutput(groupId: string | null | undefined) {
-  if (!isNonEmptyString(groupId)) return false
-  const group = await prisma.projectVideoGroup.findUnique({
-    where: { id: groupId },
-    select: {
-      videoUrl: true,
-      videoMediaId: true,
-    },
-  })
-  if (!group) return false
-  return isNonEmptyString(group.videoUrl) || !!group.videoMediaId
+  return segment?.status === 'completed' && Boolean(segment.videoMediaId)
 }
 
 export async function hasGlobalCharacterOutput(params: {

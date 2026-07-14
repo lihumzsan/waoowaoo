@@ -60,11 +60,6 @@ export interface Episode {
     srtContent?: string | null
     createdAt: string
     finalVideo?: ProjectFinalVideo | null
-    storyboardData?: StoryboardData
-}
-
-interface StoryboardData {
-    panels: unknown[]
 }
 
 /**
@@ -129,9 +124,6 @@ export function useRefreshAll(projectId: string | null, episodeId: string | null
         if (projectId && episodeId) {
             promises.push(queryClient.invalidateQueries({
                 queryKey: queryKeys.episodeData(projectId, episodeId)
-            }))
-            promises.push(queryClient.invalidateQueries({
-                queryKey: queryKeys.storyboards.all(episodeId)
             }))
         }
         return Promise.all(promises).then(() => undefined)

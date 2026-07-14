@@ -32,16 +32,13 @@ function shotWithDialogue(): EditScriptShot {
       {
         characterId: 'project-character-lin-xiao',
         name: '林晓',
-        visibility: 'visible',
-        role: 'focus',
         performance: '压低声音提醒同伴',
       },
     ],
-    keyObjects: [],
     dialogue: [
       { characterId: 'project-character-lin-xiao', line: '别开灯。' },
     ],
-    sound: '远处脚步声。',
+    synchronousSound: '远处脚步声。',
   }
 }
 

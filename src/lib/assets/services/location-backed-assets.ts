@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export type LocationBackedAssetKind = 'location' | 'prop'
 
@@ -29,11 +28,6 @@ type LocationBackedImageRow = {
   imageIndex: number
   description: string | null
   imageUrl: string | null
-  spatialProfileJson: unknown | null
-  spatialProfileStatus: LocationSpatialProfileStatus | null
-  spatialProfileError: string | null
-  spatialProfileAnalyzedAt: Date | null
-  spatialProfileModel: string | null
   imageMediaId: string | null
   previousImageUrl: string | null
   previousImageMediaId: string | null
@@ -94,11 +88,6 @@ async function readProjectLocationBackedImages(locationIds: string[]): Promise<M
       imageIndex,
       description,
       imageUrl,
-      spatialProfileJson,
-      spatialProfileStatus,
-      spatialProfileError,
-      spatialProfileAnalyzedAt,
-      spatialProfileModel,
       imageMediaId,
       previousImageUrl,
       NULL AS previousImageMediaId,
@@ -122,11 +111,6 @@ async function readGlobalLocationBackedImages(locationIds: string[]): Promise<Ma
       imageIndex,
       description,
       imageUrl,
-      spatialProfileJson,
-      spatialProfileStatus,
-      spatialProfileError,
-      spatialProfileAnalyzedAt,
-      spatialProfileModel,
       imageMediaId,
       previousImageUrl,
       previousImageMediaId,

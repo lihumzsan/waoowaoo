@@ -104,7 +104,7 @@ describe('tool input schema compatibility', () => {
       'generate_edit_script_assets',
       'revise_edit_script_assets',
       'generate_edit_shot_execution_plan',
-      'generate_episode_videos',
+      'generate_video_segments',
       'render_chapters',
     ]) {
       expect(Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})).toContain('chapterId')
@@ -122,14 +122,14 @@ describe('tool input schema compatibility', () => {
       'generate_edit_script_assets',
       'revise_edit_script_assets',
       'generate_edit_shot_execution_plan',
-      'generate_episode_videos',
+      'generate_video_segments',
       'render_chapters',
     ]) {
       const properties = Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})
       expect(properties).not.toContain('episodeId')
       expect(properties).not.toContain('bibleId')
       expect(properties).not.toContain('editScriptId')
-      expect(properties).not.toContain('storyboardId')
+      expect(properties).not.toContain('gridMode')
       expect(properties).not.toContain('panelId')
       expect(properties).not.toContain('requirementId')
       expect(properties).not.toContain('count')
@@ -147,7 +147,6 @@ describe('tool input schema compatibility', () => {
       'request_edit_style_choice',
       'request_edit_asset_review_choice',
       'generate_bible_from_script',
-      'generate_edit_script_storyboard_images',
       'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'render_final_video',

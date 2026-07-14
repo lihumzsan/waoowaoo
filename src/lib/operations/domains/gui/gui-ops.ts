@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
-import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
@@ -673,57 +672,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
 	      },
 	    }),
-	    clear_storyboard_error: defineOperation({
-	      id: 'clear_storyboard_error',
-	      summary: 'Clear storyboard lastError field.',
-	      intent: 'act',
-	      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'storyboards' },
-	      inputSchema: z.object({
-	        storyboardId: z.string().min(1),
-	      }),
-      outputSchema: z.object({ success: z.boolean() }),
-      executeInTransaction: async (ctx, input, transaction) => {
-        const storyboard = await transaction.projectStoryboard.findFirst({
-          where: { id: input.storyboardId, episode: { projectId: ctx.projectId } },
-          select: { id: true },
-        })
-        if (!storyboard) throw new ApiError('NOT_FOUND')
-        await transaction.projectStoryboard.update({
-          where: { id: input.storyboardId },
-          data: { lastError: null },
-	        })
-	        return { success: true }
-	      },
-	    }),
-    list_storyboards: defineOperation({
-      id: 'list_storyboards',
-      summary: 'List storyboards and panels for an episode.',
-      intent: 'query',
-      effects: EFFECTS_QUERY,
-      inputSchema: z.object({
-        episodeId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
-        const storyboards = await prisma.projectStoryboard.findMany({
-          where: { episodeId: input.episodeId },
-          include: {
-            panels: { orderBy: { panelIndex: 'asc' } },
-          },
-          orderBy: { createdAt: 'asc' },
-        })
-
-        const withMedia = await attachMediaFieldsToProject({ storyboards })
-        const processedStoryboards = withMedia.storyboards || storyboards
-        return { storyboards: processedStoryboards }
-      },
-    }),
     revert_asset_render: defineOperation({
       id: 'revert_asset_render',
       summary: 'Revert an asset render (undo regenerate) for character/location assets.',
@@ -817,7 +765,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_episode_detail: defineOperation({
       id: 'get_episode_detail',
-      summary: 'Get full episode data with storyboards.',
+      summary: 'Get full episode data with edit plans and video segments.',
       intent: 'query',
       effects: EFFECTS_QUERY,
       inputSchema: z.object({

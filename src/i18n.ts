@@ -18,7 +18,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
     // 加载所有模块化的翻译文件
     const [
         common,
-        stages,
         assetLibrary,
         nav,
         apiConfig,
@@ -31,9 +30,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         profile,
         billing,
         apiTypes,
-        actions,
         video,
-        storyboard,
         assets,
         errors,
         projectWorkflow,
@@ -52,7 +49,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
         contact
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
-        import(`../messages/${locale}/stages.json`),
         import(`../messages/${locale}/assetLibrary.json`),
         import(`../messages/${locale}/nav.json`),
         import(`../messages/${locale}/apiConfig.json`),
@@ -65,9 +61,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/profile.json`),
         import(`../messages/${locale}/billing.json`),
         import(`../messages/${locale}/apiTypes.json`),
-        import(`../messages/${locale}/actions.json`),
         import(`../messages/${locale}/video.json`),
-        import(`../messages/${locale}/storyboard.json`),
         import(`../messages/${locale}/assets.json`),
         import(`../messages/${locale}/errors.json`),
         import(`../messages/${locale}/project-workflow.json`),
@@ -90,7 +84,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
         locale,
         messages: {
             common: common.default,
-            stages: stages.default,
             assetLibrary: assetLibrary.default,
             nav: nav.default,
             apiConfig: apiConfig.default,
@@ -103,9 +96,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
             profile: profile.default,
             billing: billing.default,
             apiTypes: apiTypes.default,
-            actions: actions.default,
             video: video.default,
-            storyboard: storyboard.default,
             assets: assets.default,
             errors: errors.default,
             projectWorkflow: projectWorkflow.default,

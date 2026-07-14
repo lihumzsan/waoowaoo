@@ -43,7 +43,7 @@ describe('billing/task-policy', () => {
       if (
         taskType === TASK_TYPE.MUSIC_GENERATE
         || taskType === TASK_TYPE.MUSIC_SCORE_GENERATE
-        || taskType === TASK_TYPE.SOUNDSCAPE_GENERATE
+        || taskType === TASK_TYPE.AMBIENT_SOUND_GENERATE
       ) {
         continue
       }
@@ -92,12 +92,12 @@ describe('billing/task-policy', () => {
   it('returns null for missing required models in text/image/video tasks', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_BIBLE_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_PANEL, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_SEGMENT, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.AMBIENT_SOUND_GENERATE, {})).toBeNull()
   })
 
   it('builds music billing info for built-in Lyria models', () => {

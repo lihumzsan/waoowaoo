@@ -30,7 +30,6 @@ import {
   generateCleanImageToStorage,
   parseJsonStringArray,
 } from './image-task-handler-shared'
-import { analyzeAndPersistGlobalLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 
 interface GlobalCharacterAppearanceRecord {
   id: string
@@ -218,8 +217,8 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
 
     const modelId = userModels.locationModel
     if (!modelId) throw new Error('User location model not configured')
-    const spatialProfileModel = userModels.analysisModel
-    if (payload.type === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+    const analysisModel = userModels.analysisModel
+    if (payload.type === 'location' && !analysisModel) throw new Error('LOCATION_CANDIDATE_PROMPT_MODEL_REQUIRED')
 
     const count = normalizeImageGenerationCount('location', payload.count)
     const targetImages = Object.prototype.hasOwnProperty.call(payload, 'count')
@@ -245,11 +244,10 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         })
         const strategy = strategies[targetImages.indexOf(image) % strategies.length]
         if (!strategy) throw new Error('LOCATION_CANDIDATE_STRATEGY_NOT_FOUND')
-        const profileModel = spatialProfileModel
-        if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+        if (!analysisModel) throw new Error('LOCATION_CANDIDATE_PROMPT_MODEL_REQUIRED')
         const candidatePrompt = await generateGlobalLocationCandidatePrompt({
           userId,
-          analysisModel: profileModel,
+          analysisModel,
           locale,
           strategy,
         })
@@ -283,25 +281,8 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         where: { id: image.id },
         data: {
           imageUrl: imageKey,
-          ...(payload.type === 'location'
-            ? {
-              spatialProfileStatus: 'stale',
-              spatialProfileError: null,
-            }
-            : {}),
         },
       })
-      if (payload.type === 'location') {
-        const profileModel = spatialProfileModel
-        if (!profileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
-        await assertTaskActive(job, 'asset_hub_location_spatial_profile')
-        await analyzeAndPersistGlobalLocationImageSpatialProfile({
-          imageId: image.id,
-          userId,
-          model: profileModel,
-          locale: job.data.locale === 'en' ? 'en' : 'zh',
-        })
-      }
     }
 
     return { type: payload.type, locationId: location.id, imageCount: targetImages.length }

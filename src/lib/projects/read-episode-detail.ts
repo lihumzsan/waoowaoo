@@ -11,13 +11,8 @@ export async function readProjectEpisodeDetail(input: {
   const episode = await prisma.projectEpisode.findFirst({
     where: { id: input.episodeId, projectId: input.projectId },
     include: {
-      storyboards: {
-        include: {
-          panels: { orderBy: { panelIndex: 'asc' } },
-        },
-        orderBy: { createdAt: 'asc' },
-      },
-      videoGroups: {
+      videoSegments: {
+        include: { videoMedia: true },
         orderBy: { createdAt: 'asc' },
       },
       finalOutput: {
@@ -35,6 +30,7 @@ export async function readProjectEpisodeDetail(input: {
           id: true,
           status: true,
           taskId: true,
+          planTaskId: true,
           timelineSignature: true,
           musicModel: true,
           cuesJson: true,
@@ -43,11 +39,12 @@ export async function readProjectEpisodeDetail(input: {
           updatedAt: true,
         },
       },
-      soundscape: {
+      ambientSound: {
         select: {
           id: true,
           status: true,
           taskId: true,
+          planTaskId: true,
           timelineSignature: true,
           soundEffectModel: true,
           planJson: true,
@@ -71,6 +68,6 @@ export async function readProjectEpisodeDetail(input: {
     editScript: editScripts.length === 1 ? editScripts[0] : null,
     editScripts,
     editShotExecutionPlans,
-    finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.soundscape),
+    finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.ambientSound),
   }
 }

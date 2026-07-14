@@ -13,7 +13,7 @@ function canvasNode(input: {
   readonly targetType?: WorkspaceCanvasFlowNode['data']['targetType']
   readonly targetId?: string
 }): WorkspaceCanvasFlowNode {
-  const kind = input.kind ?? 'shot'
+  const kind = input.kind ?? 'videoPlan'
   return {
     id: input.id,
     type: 'workspaceNode',
@@ -23,7 +23,7 @@ function canvasNode(input: {
       kind,
       mediaLoadingContext: null,
       layoutNodeType: kind,
-      targetType: input.targetType ?? 'panel',
+      targetType: input.targetType ?? 'videoSegment',
       targetId: input.targetId ?? input.id,
       title: input.id,
       eyebrow: '',
@@ -40,15 +40,15 @@ describe('workspace canvas layout input', () => {
   it('does not persist local pan or zoom into the shared layout payload', () => {
     const input = buildWorkspaceCanvasLayoutInput({
       episodeId: 'episode-1',
-      nodes: [canvasNode({ id: 'shot:panel-1', x: 120, y: 240, zIndex: 7 })],
+      nodes: [canvasNode({ id: 'video-segment:segment-1', x: 120, y: 240, zIndex: 7 })],
     })
 
     expect(input.viewport).toEqual(DEFAULT_WORKSPACE_CANVAS_VIEWPORT)
     expect(input.nodeLayouts).toEqual([{
-      nodeKey: 'shot:panel-1',
-      nodeType: 'shot',
-      targetType: 'panel',
-      targetId: 'shot:panel-1',
+      nodeKey: 'video-segment:segment-1',
+      nodeType: 'videoPlan',
+      targetType: 'videoSegment',
+      targetId: 'video-segment:segment-1',
       x: 120,
       y: 240,
       width: 320,

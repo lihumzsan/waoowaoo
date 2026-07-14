@@ -3,9 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
-import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon } from '@/components/ui/icons'
-import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import type { WorkspaceCanvasEditScriptDetails } from '../node-canvas-types'
 
@@ -23,12 +21,8 @@ interface PreviewShot {
   readonly sceneName: string
   readonly action: string
   readonly characters: readonly string[]
-  readonly keyObjects: readonly string[]
-  readonly imagePrompt: string | null
   readonly dialogue: readonly string[]
-  readonly sound: string
-  readonly imageUrl: string | null
-  readonly videoUrl: string | null
+  readonly synchronousSound: string
 }
 
 function DetailSection({
@@ -46,7 +40,7 @@ function DetailSection({
   )
 }
 
-export type PreviewShotMediaKind = 'video' | 'image' | 'text' | 'empty'
+export type PreviewShotMediaKind = 'text' | 'empty'
 
 function formatSeconds(value: number): string {
   return `${Number(value.toFixed(1))}s`
@@ -56,8 +50,6 @@ export function previewShotMediaKind(
   shot: (Partial<PreviewShot> & Pick<PreviewShot, 'action'>) | null,
 ): PreviewShotMediaKind {
   if (!shot) return 'empty'
-  if (shot.videoUrl) return 'video'
-  if (shot.imageUrl) return 'image'
   return shot.action.trim() ? 'text' : 'empty'
 }
 
@@ -85,12 +77,8 @@ function buildPreviewShots(details: WorkspaceCanvasEditScriptDetails): readonly 
       sceneName: shot.sceneName,
       action: shot.action,
       characters: shot.characters,
-      keyObjects: shot.keyObjects,
-      imagePrompt: shot.imagePrompt ?? null,
       dialogue: shot.dialogue,
-      sound: shot.sound,
-      imageUrl: shot.imageUrl ?? null,
-      videoUrl: shot.videoUrl ?? null,
+      synchronousSound: shot.synchronousSound,
     }
   })
 }
@@ -105,7 +93,6 @@ export default function EditScriptPreviewDetail({
   const [elapsedSec, setElapsedSec] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [detailsExpanded, setDetailsExpanded] = useState(initialPreviewDetailsExpanded)
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const activeShot = findActiveShot(shots, elapsedSec)
   const activeShotMediaKind = previewShotMediaKind(activeShot)
   const progressPercent = totalDurationSec > 0 ? Math.min(100, Math.max(0, (elapsedSec / totalDurationSec) * 100)) : 0
@@ -180,32 +167,7 @@ export default function EditScriptPreviewDetail({
               <div className="flex min-h-0 flex-col gap-3">
                 <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
                   <div className="flex h-[calc(100%-58px)] min-h-[220px] items-center justify-center bg-black">
-                    {activeShotMediaKind === 'video' && activeShot?.videoUrl ? (
-                      <video
-                        key={activeShot.videoUrl}
-                        src={toDisplayImageUrl(activeShot.videoUrl) ?? activeShot.videoUrl}
-                        controls
-                        preload="metadata"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : activeShotMediaKind === 'image' && activeShot?.imageUrl ? (
-                      <button
-                        type="button"
-                        className="h-full w-full cursor-zoom-in border-0 bg-transparent p-0"
-                        onMouseDown={(event) => event.stopPropagation()}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setPreviewImageUrl(activeShot.imageUrl)
-                        }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={toDisplayImageUrl(activeShot.imageUrl) ?? activeShot.imageUrl}
-                          alt={t('labels.previewShotAlt', { number: activeShot.shotNumber })}
-                          className="h-full w-full object-contain"
-                        />
-                      </button>
-                    ) : activeShotMediaKind === 'text' && activeShot ? (
+                    {activeShotMediaKind === 'text' && activeShot ? (
                       <div className="flex h-full w-full items-center justify-center px-8 text-center">
                         <div className="max-w-2xl space-y-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
@@ -291,16 +253,12 @@ export default function EditScriptPreviewDetail({
                         {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
                       >
                         <div className="grid gap-3 md:grid-cols-2">
-                          <PromptBlock title={t('fields.imagePrompt')} value={activeShot.imagePrompt} emptyText={t('empty.noImagePrompt')} />
                           <PromptBlock title={t('fields.scene')} value={activeShot.sceneName} emptyText={t('empty.noPreviewShot')} />
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
                           <PromptBlock title={t('fields.characters')} value={activeShot.characters.join('\n')} emptyText={t('empty.noPreviewShot')} />
-                          <PromptBlock title={t('fields.keyObjects')} value={activeShot.keyObjects.join('\n')} emptyText={t('empty.noPreviewShot')} />
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
                           <PromptBlock title={t('fields.dialogue')} value={activeShot.dialogue.join('\n')} emptyText={t('empty.noPreviewShot')} />
-                          <PromptBlock title={t('fields.sound')} value={activeShot.sound} emptyText={t('empty.noPreviewShot')} />
+                          <PromptBlock title={t('fields.sound')} value={activeShot.synchronousSound} emptyText={t('empty.noPreviewShot')} />
                         </div>
                       </div>
                     ) : null}
@@ -345,14 +303,7 @@ export default function EditScriptPreviewDetail({
   )
 
   if (typeof document === 'undefined') return null
-  return (
-    <>
-      {createPortal(modal, document.body)}
-      {previewImageUrl ? (
-        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
-      ) : null}
-    </>
-  )
+  return createPortal(modal, document.body)
 }
 
 function PromptBlock({

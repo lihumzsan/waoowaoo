@@ -100,13 +100,9 @@ export {
     useCopyProjectAssetFromGlobal,
     useUpdateProjectConfig,
     useUpdateProjectEpisodeField,
-    useGetProjectStoryboardStats,
-    useUpdateProjectPanelVideoPrompt,
     useConfirmProjectCharacterSelection,
     useConfirmProjectLocationSelection,
-    useUpdateProjectPanelActingNotes,
     useDownloadRemoteBlob,
-    useClearProjectStoryboardError,
 } from '../mutations/useProjectMutations'
 
 export type {
@@ -118,16 +114,11 @@ export type {
     PropImage,
 } from '@/types/project'
 
-// 分镜
 export {
-    useStoryboards,
-    useSelectPanelCandidate,
-    useRefreshStoryboards,
-    type StoryboardPanel,
-    type StoryboardGroup,
-    type StoryboardData,
-    type PanelCandidate,
-} from './useStoryboards'
+    useRenderFinalVideo,
+    usePlanBgmScore,
+    usePlanAmbientSound,
+} from './useFinalMedia'
 
 // 实时任务
 export {
@@ -136,7 +127,6 @@ export {
 
 export {
     useAssetTaskPresentation,
-    useStoryboardTaskPresentation,
     useVideoTaskPresentation,
     type TaskPresentationTarget,
 } from './useTaskPresentation'

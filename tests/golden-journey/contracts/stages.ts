@@ -12,7 +12,6 @@ export const GOLDEN_EDIT_FIRST_WORKFLOW_STEPS = [
   'chapter_plan',
   'planned_assets',
   'shot_execution',
-  'storyboard_images',
   'video_segments',
   'chapter_render',
   'audio_plan',

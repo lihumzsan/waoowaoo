@@ -16,7 +16,6 @@ const roots = [
 
 const banned = [
   'story-to-script',
-  'script-to-storyboard',
   'create_workflow_plan',
   'approve_plan',
   'reject_plan',
@@ -26,7 +25,6 @@ const banned = [
   'workflowVersion',
   'workflowId',
   'STORY_TO_SCRIPT_RUN',
-  'SCRIPT_TO_STORYBOARD_RUN',
   '/api/runs',
   'WORKFLOW.md',
   'WorkflowPackage',

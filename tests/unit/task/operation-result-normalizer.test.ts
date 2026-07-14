@@ -57,9 +57,9 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes completed image result without exposing data urls', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.IMAGE_PANEL,
+      type: TASK_TYPE.IMAGE_CHARACTER,
       operationId: 'regenerate_panel_image',
-      targetType: 'ProjectPanel',
+      targetType: 'CharacterAppearance',
       targetId: 'panel-1',
       payload: { imageModel: 'openai::image-model' },
       result: {
@@ -77,36 +77,36 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes completed video urls', () => {
     const video = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.VIDEO_PANEL,
-      operationId: 'generate_panel_video',
+      type: TASK_TYPE.VIDEO_SEGMENT,
+      operationId: 'generate_video_segments',
       result: { videoUrl: 'videos/panel.mp4' },
     }))
 
     expect(video?.media).toEqual({ mediaType: 'video', url: 'videos/panel.mp4' })
   })
 
-  it('normalizes completed soundscape generation as audio media with sound effect model', () => {
+  it('normalizes completed ambientSound generation as audio media with sound effect model', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.SOUNDSCAPE_GENERATE,
-      operationId: 'generate_episode_soundscape',
+      type: TASK_TYPE.AMBIENT_SOUND_GENERATE,
+      operationId: 'generate_episode_ambient_sound',
       payload: { soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2' },
       result: {
-        mediaId: 'media-soundscape',
-        audioUrl: '/m/soundscape',
-        storageKey: 'soundscape/mix.m4a',
+        mediaId: 'media-ambientSound',
+        audioUrl: '/m/ambientSound',
+        storageKey: 'ambientSound/mix.m4a',
         durationMs: 30000,
       },
     }))
 
     expect(result).toEqual(expect.objectContaining({
-      operationId: 'generate_episode_soundscape',
+      operationId: 'generate_episode_ambient_sound',
       provider: 'elevenlabs',
       model: 'elevenlabs::eleven_text_to_sound_v2',
       media: {
         mediaType: 'audio',
-        mediaId: 'media-soundscape',
-        url: '/m/soundscape',
-        storageKey: 'soundscape/mix.m4a',
+        mediaId: 'media-ambientSound',
+        url: '/m/ambientSound',
+        storageKey: 'ambientSound/mix.m4a',
         durationMs: 30000,
       },
     }))
@@ -114,7 +114,7 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes failed task error from task columns', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.IMAGE_PANEL,
+      type: TASK_TYPE.IMAGE_CHARACTER,
       operationId: 'regenerate_panel_image',
       status: 'failed',
       result: null,
@@ -132,8 +132,8 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes processing task as active operation without result media', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.VIDEO_PANEL,
-      operationId: 'generate_panel_video',
+      type: TASK_TYPE.VIDEO_SEGMENT,
+      operationId: 'generate_video_segments',
       status: 'processing',
       result: null,
       finishedAt: null,

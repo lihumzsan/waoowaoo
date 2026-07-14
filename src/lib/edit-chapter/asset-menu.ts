@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import type { EditAssetKind } from '@/lib/edit-script/types'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import { AppError } from '@/lib/errors/app-error'
 import type { ChapterPlanAssetMenu } from './schemas'
 
@@ -13,11 +12,6 @@ export interface ExistingAssetRef {
   readonly hasOutput: boolean
   readonly taskTargetType: 'CharacterAppearance' | 'LocationImage'
   readonly taskTargetId: string
-  readonly spatialProfileJson?: unknown | null
-  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
-  readonly spatialProfileError?: string | null
-  readonly spatialProfileAnalyzedAt?: Date | null
-  readonly spatialProfileModel?: string | null
 }
 
 export interface KnownPlanAsset {
@@ -71,11 +65,6 @@ export async function loadKnownPlanAssets(
           imageUrl: true,
           imageMediaId: true,
           isSelected: true,
-          spatialProfileJson: true,
-          spatialProfileStatus: true,
-          spatialProfileError: true,
-          spatialProfileAnalyzedAt: true,
-          spatialProfileModel: true,
         },
       },
     },
@@ -120,11 +109,6 @@ export async function loadKnownPlanAssets(
         hasOutput: Boolean(image?.imageMediaId || image?.imageUrl),
         taskTargetType: 'LocationImage',
         taskTargetId: location.id,
-        spatialProfileJson: image?.spatialProfileJson ?? null,
-        spatialProfileStatus: image?.spatialProfileStatus as LocationSpatialProfileStatus | null,
-        spatialProfileError: image?.spatialProfileError ?? null,
-        spatialProfileAnalyzedAt: image?.spatialProfileAnalyzedAt ?? null,
-        spatialProfileModel: image?.spatialProfileModel ?? null,
       },
     }
   })

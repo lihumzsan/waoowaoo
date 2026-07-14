@@ -21,9 +21,9 @@ import { buildBgmScorePlanFingerprint } from '@/lib/bgm-score/plan-contract'
 import { buildBgmScoreCueWindows, buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
 import { readPersistedMusicScorePlan } from '@/lib/music-score/project-data'
 import { resolveMusicScoreMaxCueDurationSeconds } from '@/lib/music-score/constraints'
-import { SOUNDSCAPE_OUTPUT_FORMAT } from '@/lib/soundscape/types'
-import { buildSoundscapePlanFingerprint, parseSoundscapePlanStrict } from '@/lib/soundscape/plan-contract'
-import { buildSoundscapeTimelineSignature } from '@/lib/soundscape/timeline'
+import { AMBIENT_SOUND_OUTPUT_FORMAT } from '@/lib/ambient-sound/types'
+import { buildAmbientSoundPlanFingerprint, parseAmbientSoundPlanStrict } from '@/lib/ambient-sound/plan-contract'
+import { buildAmbientSoundTimelineSignature } from '@/lib/ambient-sound/timeline'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 
 const vocalModeSchema = z.enum(['instrumental', 'vocal'])
@@ -55,23 +55,23 @@ const bgmScoreGenerationInputSchema = z
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
 type BgmScorePlanningInput = BgmScoreGenerationInput
 
-const soundscapePlanningInputSchema = z
+const ambientSoundPlanningInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
     soundEffectModel: z.string().min(1).optional(),
   })
   .passthrough()
 
-type SoundscapePlanningInput = z.infer<typeof soundscapePlanningInputSchema>
+type AmbientSoundPlanningInput = z.infer<typeof ambientSoundPlanningInputSchema>
 
-const soundscapeGenerationInputSchema = z
+const ambientSoundGenerationInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
     soundEffectModel: z.string().min(1).optional(),
   })
   .passthrough()
 
-type SoundscapeGenerationInput = z.infer<typeof soundscapeGenerationInputSchema>
+type AmbientSoundGenerationInput = z.infer<typeof ambientSoundGenerationInputSchema>
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -174,8 +174,8 @@ async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, project
   return requireModelKey(configured)
 }
 
-async function resolveSoundscapeSoundEffectModel(
-  input: SoundscapePlanningInput | SoundscapeGenerationInput,
+async function resolveAmbientSoundSoundEffectModel(
+  input: AmbientSoundPlanningInput | AmbientSoundGenerationInput,
   projectId: string,
   userId: string,
 ): Promise<string> {
@@ -193,7 +193,7 @@ async function resolveSoundscapeSoundEffectModel(
 
   const projectModelConfig = await getProjectModelConfig(projectId, userId)
   const configured = normalizeString(projectModelConfig.soundEffectModel)
-  if (!configured) throw new Error('PROJECT_AGENT_SOUNDSCAPE_SOUND_EFFECT_MODEL_REQUIRED')
+  if (!configured) throw new Error('PROJECT_AGENT_AMBIENT_SOUND_SOUND_EFFECT_MODEL_REQUIRED')
   return requireModelKey(configured)
 }
 
@@ -428,10 +428,10 @@ async function planGenerateEpisodeBgmScoreOperation(
   }
 }
 
-async function planEpisodeSoundscapeOperation(ctx: ProjectAgentOperationContext, input: SoundscapePlanningInput): Promise<OperationPlan> {
+async function planEpisodeAmbientSoundOperation(ctx: ProjectAgentOperationContext, input: AmbientSoundPlanningInput): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const soundEffectModel = await resolveSoundscapeSoundEffectModel(input, ctx.projectId, ctx.userId)
+  const soundEffectModel = await resolveAmbientSoundSoundEffectModel(input, ctx.projectId, ctx.userId)
   const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
   const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
   const payload: Record<string, unknown> = {
@@ -444,21 +444,21 @@ async function planEpisodeSoundscapeOperation(ctx: ProjectAgentOperationContext,
 
   return {
     kind: 'task_submission',
-    operationId: 'plan_episode_soundscape',
+    operationId: 'plan_episode_ambient_sound',
     projectId: ctx.projectId,
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `plan_episode_soundscape:${episodeId}`,
-        taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+        id: `plan_episode_ambient_sound:${episodeId}`,
+        taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
         locale: resolveOperationLocale(ctx.context),
         episodeId,
-        dedupeKey: `soundscape_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
+        dedupeKey: `ambient_sound_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
-          taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+          taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
           payload,
           allowedApiTypes: ['text'],
         }),
@@ -471,14 +471,14 @@ async function planEpisodeSoundscapeOperation(ctx: ProjectAgentOperationContext,
   }
 }
 
-async function planGenerateEpisodeSoundscapeOperation(
+async function planGenerateEpisodeAmbientSoundOperation(
   ctx: ProjectAgentOperationContext,
-  input: SoundscapeGenerationInput,
+  input: AmbientSoundGenerationInput,
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const soundEffectModel = await resolveSoundscapeSoundEffectModel(input, ctx.projectId, ctx.userId)
-  const soundscape = await prisma.projectEditSoundscape.findFirst({
+  const soundEffectModel = await resolveAmbientSoundSoundEffectModel(input, ctx.projectId, ctx.userId)
+  const ambientSound = await prisma.projectEditAmbientSound.findFirst({
     where: {
       episodeId,
       episode: { projectId: ctx.projectId },
@@ -488,26 +488,26 @@ async function planGenerateEpisodeSoundscapeOperation(
       timelineSignature: true,
     },
   })
-  if (!soundscape) throw new Error('SOUNDSCAPE_PLAN_REQUIRED')
-  const plan = parseSoundscapePlanStrict(soundscape.planJson)
-  if (plan.decision !== 'soundscape') {
-    throw new Error(`SOUNDSCAPE_GENERATE_NOT_REQUIRED:${plan.decision}`)
+  if (!ambientSound) throw new Error('AMBIENT_SOUND_PLAN_REQUIRED')
+  const plan = parseAmbientSoundPlanStrict(ambientSound.planJson)
+  if (plan.decision !== 'ambient_sound') {
+    throw new Error(`AMBIENT_SOUND_GENERATE_NOT_REQUIRED:${plan.decision}`)
   }
-  const timelineSignature = normalizeString(soundscape.timelineSignature)
-  if (!timelineSignature) throw new Error('SOUNDSCAPE_TIMELINE_SIGNATURE_REQUIRED')
+  const timelineSignature = normalizeString(ambientSound.timelineSignature)
+  if (!timelineSignature) throw new Error('AMBIENT_SOUND_TIMELINE_SIGNATURE_REQUIRED')
   const clips = await loadEpisodeChapterOutputClips({
     episodeId,
     projectId: ctx.projectId,
   })
-  const currentTimelineSignature = buildSoundscapeTimelineSignature(clips)
+  const currentTimelineSignature = buildAmbientSoundTimelineSignature(clips)
   if (currentTimelineSignature !== timelineSignature) {
-    throw new Error(`SOUNDSCAPE_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
+    throw new Error(`AMBIENT_SOUND_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
   }
   const durationSeconds = plan.sources.reduce((total, source) => total + source.loopDurationSeconds, 0)
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-    throw new Error('SOUNDSCAPE_SOURCE_DURATION_REQUIRED')
+    throw new Error('AMBIENT_SOUND_SOURCE_DURATION_REQUIRED')
   }
-  const soundscapePlanHash = buildSoundscapePlanFingerprint({
+  const ambientSoundPlanHash = buildAmbientSoundPlanFingerprint({
     plan,
     timelineSignature,
     soundEffectModel,
@@ -515,32 +515,32 @@ async function planGenerateEpisodeSoundscapeOperation(
   const payload: Record<string, unknown> = {
     episodeId,
     soundEffectModel,
-    soundscapePlan: plan,
-    soundscapePlanHash,
+    ambientSoundPlan: plan,
+    ambientSoundPlanHash,
     timelineSignature,
     durationSeconds,
     sourceCount: plan.sources.length,
     loop: true,
-    outputFormat: SOUNDSCAPE_OUTPUT_FORMAT,
+    outputFormat: AMBIENT_SOUND_OUTPUT_FORMAT,
   }
 
   return {
     kind: 'task_submission',
-    operationId: 'generate_episode_soundscape',
+    operationId: 'generate_episode_ambient_sound',
     projectId: ctx.projectId,
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_episode_soundscape:${episodeId}:${soundscapePlanHash}`,
-        taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+        id: `generate_episode_ambient_sound:${episodeId}:${ambientSoundPlanHash}`,
+        taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
         locale: resolveOperationLocale(ctx.context),
         episodeId,
-        dedupeKey: `soundscape_generate:${ctx.projectId}:${episodeId}:${soundscapePlanHash}`,
+        dedupeKey: `ambient_sound_generate:${ctx.projectId}:${episodeId}:${ambientSoundPlanHash}`,
         billingInfo: requirePlannedTaskBillingInfo({
-          taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+          taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
           payload,
           allowedApiTypes: ['sound_effect'],
         }),
@@ -549,7 +549,7 @@ async function planGenerateEpisodeSoundscapeOperation(
     metadata: {
       episodeId,
       soundEffectModel,
-      soundscapePlanHash,
+      ambientSoundPlanHash,
     },
   }
 }
@@ -650,9 +650,9 @@ async function commitGenerateEpisodeBgmScoreOperation(
   }
 }
 
-async function commitPlanEpisodeSoundscapeOperation(
+async function commitPlanEpisodeAmbientSoundOperation(
   ctx: ProjectAgentOperationContext,
-  input: SoundscapePlanningInput,
+  input: AmbientSoundPlanningInput,
   plan: OperationPlan,
 ) {
   const task = plan.tasks[0]
@@ -671,7 +671,7 @@ async function commitPlanEpisodeSoundscapeOperation(
     type: task.taskType,
     targetType: task.target.targetType,
     targetId: task.target.targetId,
-    operationId: 'plan_episode_soundscape',
+    operationId: 'plan_episode_ambient_sound',
     source: ctx.source,
     payload: task.payload,
     dedupeKey: task.dedupeKey,
@@ -682,7 +682,7 @@ async function commitPlanEpisodeSoundscapeOperation(
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-    operationId: 'plan_episode_soundscape',
+    operationId: 'plan_episode_ambient_sound',
     taskId: result.taskId,
     status: result.status,
     runId: result.runId || null,
@@ -690,7 +690,7 @@ async function commitPlanEpisodeSoundscapeOperation(
     billingReceipt: result.billingReceiptView,
     projectId: ctx.projectId,
     episodeId,
-    taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   })
@@ -698,15 +698,15 @@ async function commitPlanEpisodeSoundscapeOperation(
   return {
     ...result,
     soundEffectModel,
-    taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
 }
 
-async function commitGenerateEpisodeSoundscapeOperation(
+async function commitGenerateEpisodeAmbientSoundOperation(
   ctx: ProjectAgentOperationContext,
-  input: SoundscapeGenerationInput,
+  input: AmbientSoundGenerationInput,
   plan: OperationPlan,
 ) {
   const task = plan.tasks[0]
@@ -720,11 +720,11 @@ async function commitGenerateEpisodeSoundscapeOperation(
   const result = await submitPlannedOperationTask({
     ctx,
     task,
-    operationId: 'generate_episode_soundscape',
+    operationId: 'generate_episode_ambient_sound',
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-    operationId: 'generate_episode_soundscape',
+    operationId: 'generate_episode_ambient_sound',
     taskId: result.taskId,
     status: result.status,
     runId: result.runId || null,
@@ -732,7 +732,7 @@ async function commitGenerateEpisodeSoundscapeOperation(
     billingReceipt: result.billingReceiptView,
     projectId: ctx.projectId,
     episodeId,
-    taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+    taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   })
@@ -740,7 +740,7 @@ async function commitGenerateEpisodeSoundscapeOperation(
   return {
     ...result,
     soundEffectModel,
-    taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+    taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
@@ -754,7 +754,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       })
       .passthrough(),
   )
-  const soundscapeTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
+  const ambientSoundTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase
       .extend({
         soundEffectModel: z.string().min(1),
@@ -841,9 +841,9 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateEpisodeBgmScoreOperation(ctx, input, plan),
     }),
-    plan_episode_soundscape: defineOperation({
-      id: 'plan_episode_soundscape',
-      summary: 'Plan the episode soundscape from rendered chapter outputs without submitting paid sound effects.',
+    plan_episode_ambient_sound: defineOperation({
+      id: 'plan_episode_ambient_sound',
+      summary: 'Plan the episode ambient sound from rendered chapter outputs without submitting paid sound effects.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -862,16 +862,16 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         required: false,
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: soundscapePlanningInputSchema,
-      outputSchema: soundscapeTaskSubmitOutput,
+      inputSchema: ambientSoundPlanningInputSchema,
+      outputSchema: ambientSoundTaskSubmitOutput,
       execute: async (ctx, input) => {
-        const plan = await planEpisodeSoundscapeOperation(ctx, input)
-        return await commitPlanEpisodeSoundscapeOperation(ctx, input, plan)
+        const plan = await planEpisodeAmbientSoundOperation(ctx, input)
+        return await commitPlanEpisodeAmbientSoundOperation(ctx, input, plan)
       },
     }),
-    generate_episode_soundscape: defineOperation({
-      id: 'generate_episode_soundscape',
-      summary: 'Generate the exact approved episode soundscape plan using the configured paid sound-effect provider.',
+    generate_episode_ambient_sound: defineOperation({
+      id: 'generate_episode_ambient_sound',
+      summary: 'Generate the exact approved episode ambient sound plan using the configured paid sound-effect provider.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -890,10 +890,10 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         summary: '将按当前集的声场计划提交付费环境音生成任务。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: soundscapeGenerationInputSchema,
-      outputSchema: soundscapeTaskSubmitOutput,
-      plan: async (ctx, input) => planGenerateEpisodeSoundscapeOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeSoundscapeOperation(ctx, input, plan),
+      inputSchema: ambientSoundGenerationInputSchema,
+      outputSchema: ambientSoundTaskSubmitOutput,
+      plan: async (ctx, input) => planGenerateEpisodeAmbientSoundOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeAmbientSoundOperation(ctx, input, plan),
     }),
   }
 }

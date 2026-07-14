@@ -12,7 +12,6 @@ const modelFields = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
 ]

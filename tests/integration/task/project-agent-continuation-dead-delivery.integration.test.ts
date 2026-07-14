@@ -54,7 +54,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
       scopeRef,
       type: 'waiting_task',
       status: 'completed',
-      operationId: 'generate_episode_videos',
+      operationId: 'generate_video_segments',
       completedAt: new Date(),
     },
   })
@@ -67,7 +67,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
       userId: user.id,
       assistantId: 'workspace-command',
       scopeRef,
-      operationId: 'generate_episode_videos',
+      operationId: 'generate_video_segments',
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',
       status,

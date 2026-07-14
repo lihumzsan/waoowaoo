@@ -4,8 +4,7 @@ import type {
   ProjectEpisodeSummary,
   ProjectWorkflowData,
   Prop,
-  ProjectStoryboard,
-  ProjectVideoGroup,
+  ProjectVideoSegment,
 } from '@/types/project'
 
 type ProjectLikeRecord = {
@@ -26,11 +25,8 @@ type ProjectWorkflowSource = {
   imageModel?: string | null
   characterModel?: string | null
   locationModel?: string | null
-  storyboardModel?: string | null
   editModel?: string | null
   videoModel?: string | null
-  singleShotVideoModel?: string | null
-  sequenceVideoModel?: string | null
   musicModel?: string | null
   soundEffectModel?: string | null
   videoRatio?: string | null
@@ -41,8 +37,7 @@ type ProjectWorkflowSource = {
   characters?: ProjectRecord[]
   locations?: ProjectLocationLike[]
   episodes?: ProjectRecord[]
-  storyboards?: ProjectRecord[]
-  videoGroups?: ProjectRecord[]
+  videoSegments?: ProjectRecord[]
 }
 
 function splitProjectLocations(locations: ProjectLocationLike[] | undefined): Pick<ProjectWorkflowData, 'locations' | 'props'> {
@@ -62,11 +57,8 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     imageModel: source.imageModel ?? null,
     characterModel: source.characterModel ?? null,
     locationModel: source.locationModel ?? null,
-    storyboardModel: source.storyboardModel ?? null,
     editModel: source.editModel ?? null,
     videoModel: source.videoModel ?? null,
-    singleShotVideoModel: source.singleShotVideoModel ?? source.videoModel ?? null,
-    sequenceVideoModel: source.sequenceVideoModel ?? null,
     musicModel: source.musicModel ?? null,
     soundEffectModel: source.soundEffectModel ?? null,
     videoRatio: source.videoRatio ?? null,
@@ -78,8 +70,7 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     locations: assets.locations || [],
     props: assets.props || [],
     episodes: (source.episodes || []) as unknown as ProjectEpisodeSummary[],
-    storyboards: (source.storyboards || []) as unknown as ProjectStoryboard[],
-    videoGroups: (source.videoGroups || []) as unknown as ProjectVideoGroup[],
+    videoSegments: (source.videoSegments || []) as unknown as ProjectVideoSegment[],
   }
 }
 

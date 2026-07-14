@@ -24,8 +24,6 @@ export interface WorkspaceRuntimeValue {
   isAssistantWorkflowStarting: boolean
   videoRatio: string | null | undefined
   videoModel: string | null | undefined
-  singleShotVideoModel: string | null | undefined
-  sequenceVideoModel: string | null | undefined
   capabilityOverrides: CapabilitySelections
   userVideoModels: WorkspaceVideoModelOption[]
   onNovelTextChange: (value: string) => Promise<void>
@@ -35,17 +33,10 @@ export interface WorkspaceRuntimeValue {
   onGenerateEditScript: () => Promise<void>
   onOpenAssetLibrary: () => void
   onPlanBgmScore: () => Promise<void>
-  onPlanSoundscape: () => Promise<void>
+  onPlanAmbientSound: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
-  onUpdateVideoPrompt: (
-    storyboardId: string,
-    panelIndex: number,
-    value: string,
-    field?: 'imagePrompt' | 'videoPrompt',
-  ) => Promise<void>
   onUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
-  onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onOpenAssetLibraryForCharacter: (characterId?: string | null) => void
 }
 

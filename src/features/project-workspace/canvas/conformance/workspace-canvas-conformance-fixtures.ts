@@ -26,9 +26,6 @@ const taskTarget = {
 } as const
 
 export const WORKSPACE_CANVAS_CONFORMANCE_FIXTURES = {
-  shot: fixture('shot', taskTarget),
-  imageAsset: fixture('imageAsset', taskTarget),
-  videoClip: fixture('videoClip', taskTarget),
   finalTimeline: fixture('finalTimeline', taskTarget),
   editSourceScript: fixture('editSourceScript', taskTarget),
   editBible: fixture('editBible', taskTarget),
@@ -39,7 +36,7 @@ export const WORKSPACE_CANVAS_CONFORMANCE_FIXTURES = {
   editShotExecutionPlan: fixture('editShotExecutionPlan', taskTarget),
   videoPlan: fixture('videoPlan', taskTarget),
   bgmScore: fixture('bgmScore', taskTarget),
-  soundscape: fixture('soundscape', taskTarget),
+  ambientSound: fixture('ambientSound', taskTarget),
   editRequiredAsset: fixture('editRequiredAsset', taskTarget),
   editAssetGroup: fixture('editAssetGroup', taskTarget),
 } as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasConformanceFixture>

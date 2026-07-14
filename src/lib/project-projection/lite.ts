@@ -6,29 +6,21 @@ import type { ProjectProjectionLite, ProjectProjectionProgress } from './types'
 async function resolveEpisodeProgress(episodeId: string | null): Promise<ProjectProjectionProgress> {
   if (!episodeId) {
     return {
-      storyboardCount: 0,
-      panelCount: 0,
+      plannedVideoSegmentCount: 0,
+      completedVideoSegmentCount: 0,
     }
   }
 
-  const [storyboardCount, panelCount] = await Promise.all([
-    prisma.projectStoryboard.count({
-      where: {
-        episodeId,
-      },
-    }),
-    prisma.projectPanel.count({
-      where: {
-        storyboard: {
-          episodeId,
-        },
-      },
+  const [plannedVideoSegmentCount, completedVideoSegmentCount] = await Promise.all([
+    prisma.projectVideoSegment.count({ where: { episodeId } }),
+    prisma.projectVideoSegment.count({
+      where: { episodeId, status: 'completed', videoMediaId: { not: null } },
     }),
   ])
 
   return {
-    storyboardCount,
-    panelCount,
+    plannedVideoSegmentCount,
+    completedVideoSegmentCount,
   }
 }
 

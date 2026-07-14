@@ -60,10 +60,9 @@ type AggregationEntry =
   | { kind: 'group'; key: string }
 
 const GROUP_TARGET_LABEL_BY_TYPE: Record<string, string> = {
-  ProjectPanel: 'transactionTargets.projectPanelGroup',
   CharacterAppearance: 'transactionTargets.characterAppearanceGroup',
   LocationImage: 'transactionTargets.locationImageGroup',
-  ProjectVideoGroup: 'transactionTargets.projectVideoGroupGroup',
+  ProjectVideoSegment: 'transactionTargets.projectVideoSegmentGroup',
 }
 
 function readNumber(value: unknown): number | null {

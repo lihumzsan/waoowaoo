@@ -31,7 +31,7 @@ export function buildCharacterCandidatePromptInstruction(input: {
 
   if (input.locale === 'en') {
     return joinLines([
-      'You are a casting-aware character visual designer for a film storyboard asset pipeline.',
+      'You are a casting-aware character visual designer for a full-reference video asset pipeline.',
       'Generate three distinct image-generation prompts for the same character. These prompts will be used to create three candidate character asset boards, then a user will choose one default reference.',
       `Base character input: ${description}`,
       styleBlock ? `Project Style Bible:\n${styleBlock}` : null,
@@ -39,7 +39,7 @@ export function buildCharacterCandidatePromptInstruction(input: {
       '- Output exactly three prompts for the same character identity, not three different characters.',
       '- Each prompt must be a final image prompt fragment only: character identity, silhouette, age impression, body type, face/hair direction, clothing design, wearable accessories, material texture, and reusable role-specific pose/context samples.',
       '- Let the AI image model keep reasonable design freedom. Do not lock every facial feature, exact hair strand, color swatch, or accessory unless the input requires it.',
-      '- The three prompts must differ by design emphasis: 1) faithful identity and silhouette, 2) wardrobe/material/era texture, 3) role energy and storyboard usability.',
+      '- The three prompts must differ by design emphasis: 1) faithful identity and silhouette, 2) wardrobe/material/era texture, 3) role energy and video-reference usability.',
       '- If a Style Bible is provided, make the casting, clothing, palette, texture, and atmosphere compatible with it inside the prompt wording.',
       '- Do not include layout instructions, aspect ratio, watermark rules, text labels, or image count. The system suffix will add the asset-board structure later.',
       'Output JSON only: {"prompts":["prompt 1","prompt 2","prompt 3"]}.',

@@ -51,14 +51,19 @@ export function inspectTaskTargetOwnershipContract(input) {
     'generationTaskId  String?',
     'model ProjectEditShotExecutionPlan {',
     'generationTaskId  String?',
+    'model ProjectVideoSegment {',
+    'generationTaskId String?',
+    'model ProjectEditAmbientSound {',
+    'taskId            String?',
   ]) {
     if (!input.schema.includes(required)) violations.push(`schema missing Task ownership contract: ${required}`)
   }
   const registeredProjectors = readTerminalProjectors(input.definitions)
   for (const [taskType, projector] of [
     ['MUSIC_SCORE_PLAN', 'music_score'],
-    ['SOUNDSCAPE_PLAN', 'soundscape'],
-    ['SOUNDSCAPE_GENERATE', 'soundscape'],
+    ['AMBIENT_SOUND_PLAN', 'ambient_sound'],
+    ['AMBIENT_SOUND_GENERATE', 'ambient_sound'],
+    ['VIDEO_SEGMENT', 'video_segment'],
     ['EDIT_SCRIPT_GENERATE', 'edit_script'],
     ['EDIT_SHOT_EXECUTION_PLAN_GENERATE', 'edit_shot_execution_plan'],
   ]) {
@@ -99,7 +104,8 @@ export function inspectTaskTargetOwnershipContract(input) {
   }
   for (const required of [
     'projectMusicScore',
-    'projectSoundscape',
+    'projectEditAmbientSound',
+    'projectVideoSegment',
     'projectEditScript',
     'projectEditShotExecutionPlan',
     'generationTaskId: input.taskId',
@@ -122,18 +128,18 @@ export function inspectTaskTargetOwnershipContract(input) {
     violations.push('EditScript success must retain the terminal Task ownership watermark')
   }
   for (const [source, required, label] of [
-    [input.videoWorker, 'readCompletedVideoGroupForTask', 'VideoGroup'],
+    [input.videoWorker, "current.status === 'completed'", 'VideoSegment'],
     [input.stylePreviewWorker, "preview.status === 'completed'", 'StylePreview'],
     [input.editBibleWorker, 'alreadyPersisted', 'EditBible'],
     [input.chapterRender, "chapter.renderStatus === 'completed'", 'ChapterRender'],
     [input.finalRender, 'FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING', 'FinalRender'],
     [input.bgmWorker, 'readCompletedMusicScoreMix', 'MusicScore'],
-    [input.soundscapeWorker, 'readCompletedSoundscapeMix', 'Soundscape'],
+    [input.ambientSoundWorker, 'readCompletedAmbientSoundMix', 'AmbientSound'],
   ]) {
     if (!source.includes(required)) violations.push(`${label} success replay fence missing: ${required}`)
   }
   if (input.videoWorker.includes('taskId: null')) {
-    violations.push('VideoGroup success must retain the terminal Task ownership watermark')
+    violations.push('VideoSegment success must retain the terminal Task ownership watermark')
   }
   if (!input.terminalService.includes("reason: 'completion_pending'")) {
     violations.push('Terminal Service must preserve a formal resource success that won the terminal race')
@@ -164,7 +170,7 @@ function runCli() {
     chapterRender: read('src/lib/workers/chapter-render.ts'),
     finalRender: read('src/lib/workers/final-video-render.ts'),
     bgmWorker: read('src/lib/bgm-score/generate.ts'),
-    soundscapeWorker: read('src/lib/soundscape/generate.ts'),
+    ambientSoundWorker: read('src/lib/ambient-sound/generate.ts'),
     terminalService: read('src/lib/task/terminal/service.ts'),
     reconciler: read('src/lib/task/reconcile.ts'),
   })

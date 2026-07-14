@@ -114,11 +114,8 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         analysisModel={vm.project.analysisModel}
         characterModel={vm.project.characterModel}
         locationModel={vm.project.locationModel}
-        storyboardModel={vm.project.storyboardModel}
         editModel={vm.project.editModel}
         videoModel={vm.project.videoModel}
-        singleShotVideoModel={vm.project.singleShotVideoModel}
-        sequenceVideoModel={vm.project.sequenceVideoModel}
         musicModel={vm.project.musicModel}
         soundEffectModel={vm.project.soundEffectModel}
         capabilityOverrides={vm.project.capabilityOverrides}

@@ -1,5 +1,4 @@
 import type { Project } from '@/types/project'
-import type { ProjectStoryboard } from '@/types/project'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 export interface Episode {
@@ -10,7 +9,6 @@ export interface Episode {
   novelText?: string | null
   audioUrl?: string | null
   srtContent?: string | null
-  storyboards?: ProjectStoryboard[]
   createdAt: string
 }
 

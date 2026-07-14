@@ -221,13 +221,11 @@ function normalizeProjectAgentContext(raw: unknown): ProjectAgentContext {
   const locale = typeof record.locale === 'string' ? record.locale.trim() : ''
   const episodeId = typeof record.episodeId === 'string' ? record.episodeId.trim() : ''
   const selectedScopeRef = typeof record.selectedScopeRef === 'string' ? record.selectedScopeRef.trim() : ''
-  const selectedPanelId = typeof record.selectedPanelId === 'string' ? record.selectedPanelId.trim() : ''
   const selectedAssetId = typeof record.selectedAssetId === 'string' ? record.selectedAssetId.trim() : ''
   return {
     ...(locale ? { locale } : {}),
     ...(episodeId ? { episodeId } : {}),
     ...(selectedScopeRef ? { selectedScopeRef } : {}),
-    ...(selectedPanelId ? { selectedPanelId } : {}),
     ...(selectedAssetId ? { selectedAssetId } : {}),
   }
 }
@@ -439,8 +437,8 @@ function buildProjectStateVersion(params: {
     workflow.operationPolicy.group?.id ?? 'none',
     params.phase.planning.editBibleStatus ?? 'none',
     String(params.phase.planning.chapterCount),
-    String(params.phase.progress.storyboardCount),
-    String(params.phase.progress.panelCount),
+    String(params.phase.progress.plannedVideoSegmentCount),
+    String(params.phase.progress.completedVideoSegmentCount),
     params.enabledOperationIds.join('|') || 'none',
   ].map(formatRuntimeStateValue).join(':')
 }
@@ -474,8 +472,8 @@ function buildProjectStateInputItem(params: {
     `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
     `planning.editBibleStatus=${formatRuntimeStateValue(params.phase.planning.editBibleStatus)}`,
     `planning.chapterCount=${String(params.phase.planning.chapterCount)}`,
-    `progress.storyboardCount=${String(params.phase.progress.storyboardCount)}`,
-    `progress.panelCount=${String(params.phase.progress.panelCount)}`,
+    `progress.plannedVideoSegmentCount=${String(params.phase.progress.plannedVideoSegmentCount)}`,
+    `progress.completedVideoSegmentCount=${String(params.phase.progress.completedVideoSegmentCount)}`,
     '[/project_state_snapshot]',
   ]
   return {

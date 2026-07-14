@@ -62,7 +62,6 @@ export function isTaskTerminalEventType(value: string | null | undefined): value
 }
 
 export const TASK_TYPE = {
-  IMAGE_PANEL: 'image_panel',
   EDIT_STYLE_PREVIEW_OPTIONS_GENERATE: 'edit_style_preview_options_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   IMAGE_CHARACTER: 'image_character',
@@ -70,12 +69,11 @@ export const TASK_TYPE = {
   MUSIC_GENERATE: 'music_generate',
   MUSIC_SCORE_PLAN: 'music_score_plan',
   MUSIC_SCORE_GENERATE: 'music_score_generate',
-  SOUNDSCAPE_PLAN: 'soundscape_plan',
-  SOUNDSCAPE_GENERATE: 'soundscape_generate',
+  AMBIENT_SOUND_PLAN: 'ambient_sound_plan',
+  AMBIENT_SOUND_GENERATE: 'ambient_sound_generate',
   FINAL_VIDEO_RENDER: 'final_video_render',
   CHAPTER_RENDER: 'chapter_render',
-  VIDEO_PANEL: 'video_panel',
-  VIDEO_GROUP: 'video_group',
+  VIDEO_SEGMENT: 'video_segment',
   MODIFY_ASSET_IMAGE: 'modify_asset_image',
   REGENERATE_GROUP: 'regenerate_group',
   ASSET_HUB_IMAGE: 'asset_hub_image',
@@ -200,10 +198,9 @@ export type WorkspaceResourceName =
   | 'editBible'
   | 'editScript'
   | 'editShotExecutionPlan'
-  | 'storyboards'
   | 'projectAssets'
   | 'globalAssets'
-  | 'videos'
+  | 'videoSegments'
   | 'episodeData'
   | 'projectData'
   | 'projectContext'

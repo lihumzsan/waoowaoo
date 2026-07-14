@@ -1,13 +1,9 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
 
 export type WorkspaceCanvasNodeKind =
-  | 'shot'
-  | 'imageAsset'
-  | 'videoClip'
   | 'finalTimeline'
   | 'editSourceScript'
   | 'editBible'
@@ -18,19 +14,16 @@ export type WorkspaceCanvasNodeKind =
   | 'editShotExecutionPlan'
   | 'videoPlan'
   | 'bgmScore'
-  | 'soundscape'
+  | 'ambientSound'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
 export type WorkspaceCanvasMediaNodeKind = Extract<WorkspaceCanvasNodeKind,
-  | 'shot'
-  | 'imageAsset'
-  | 'videoClip'
   | 'finalTimeline'
   | 'editStyleBible'
   | 'videoPlan'
   | 'bgmScore'
-  | 'soundscape'
+  | 'ambientSound'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 >
@@ -39,7 +32,7 @@ export interface MediaLoadingContext {
   readonly styleImageUrl: string | null
 }
 
-export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editSourceScript' | 'editBible' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'videoSegment' | 'editSourceScript' | 'editBible' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {
@@ -50,59 +43,17 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_shot_execution_plan'; readonly editScriptId: string }
   | { readonly type: 'open_asset_library'; readonly characterId?: string | null }
   | {
-      readonly type: 'update_panel'
-      readonly storyboardId: string
-      readonly panelIndex: number
-      readonly panelId: string
-      readonly data: Record<string, unknown>
-    }
-  | { readonly type: 'delete_panel'; readonly storyboardId: string; readonly panelId: string }
-  | { readonly type: 'copy_panel'; readonly panelId: string }
-  | { readonly type: 'generate_image'; readonly panelId: string }
-  | {
-      readonly type: 'generate_video'
-      readonly storyboardId: string
-      readonly panelIndex: number
-      readonly panelId: string
-      readonly generationOptions?: Record<string, string | number | boolean>
-    }
-  | {
-      readonly type: 'update_video_prompt'
-      readonly storyboardId: string
-      readonly panelIndex: number
-      readonly value: string
-      readonly field?: 'imagePrompt' | 'videoPrompt'
-    }
-  | {
       readonly type: 'update_edit_asset_requirement_description'
       readonly editScriptId: string
       readonly requirementId: string
       readonly description: string
     }
-  | { readonly type: 'update_panel_video_model'; readonly storyboardId: string; readonly panelIndex: number; readonly model: string }
-  | {
-      readonly type: 'generate_all_videos'
-      readonly generationOptions?: Record<string, string | number | boolean>
-    }
-  | {
-      readonly type: 'generate_video_group'
-      readonly chapterId: string
-      readonly gridMode: '2x2' | '3x3'
-      readonly shotIds: readonly string[]
-      readonly generationOptions?: Record<string, string | number | boolean>
-    }
-  | {
-      readonly type: 'generate_asset_reference_video'
-      readonly chapterId: string
-      readonly segmentIndex: number
-      readonly referenceImageUrls: readonly string[]
-      readonly generationOptions?: Record<string, string | number | boolean>
-    }
+  | { readonly type: 'generate_video_segments' }
   | { readonly type: 'render_final_video' }
   | { readonly type: 'plan_bgm_score' }
   | { readonly type: 'generate_bgm_score' }
-  | { readonly type: 'plan_soundscape' }
-  | { readonly type: 'generate_soundscape' }
+  | { readonly type: 'plan_ambient_sound' }
+  | { readonly type: 'generate_ambient_sound' }
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
@@ -121,39 +72,6 @@ export interface WorkspaceCanvasTextLine {
   readonly kind: 'action' | 'dialogue' | 'voiceover' | 'text'
   readonly speaker?: string | null
   readonly text: string
-}
-
-export interface WorkspaceCanvasShotDetails {
-  readonly shotType?: string | null
-  readonly cameraMove?: string | null
-  readonly characters: readonly WorkspaceCanvasAssetRef[]
-  readonly location?: string | null
-  readonly props: readonly string[]
-  readonly srtSegment?: string | null
-  readonly timeRange?: string | null
-  readonly duration?: number | null
-  readonly imagePrompt?: string | null
-  readonly videoPrompt?: string | null
-  readonly executionSnapshot?: Record<string, unknown> | null
-  readonly renderFacts?: Record<string, unknown> | null
-  readonly actingNotes?: string | null
-  readonly storyboardTextJson?: string | null
-  readonly errorMessage?: string | null
-}
-
-export interface WorkspaceCanvasImageDetails {
-  readonly imagePrompt?: string | null
-  readonly description?: string | null
-  readonly candidateImages: readonly string[]
-  readonly errorMessage?: string | null
-}
-
-export interface WorkspaceCanvasVideoDetails {
-  readonly videoPrompt?: string | null
-  readonly lastVideoGenerationOptions?: readonly WorkspaceCanvasTextLine[]
-  readonly videoUrl?: string | null
-  readonly videoModel?: string | null
-  readonly errorMessage?: string | null
 }
 
 export interface WorkspaceCanvasFinalDetails {
@@ -188,9 +106,9 @@ export interface WorkspaceCanvasBgmScoreDetails {
   readonly finalPrompt?: string | null
 }
 
-export interface WorkspaceCanvasSoundscapeDetails {
+export interface WorkspaceCanvasAmbientSoundDetails {
   readonly status?: string | null
-  readonly decision?: 'soundscape' | 'none_needed' | null
+  readonly decision?: 'ambient_sound' | 'none_needed' | null
   readonly soundEffectModel?: string | null
   readonly sourceCount: number
   readonly sectionCount: number
@@ -236,12 +154,8 @@ export interface WorkspaceCanvasEditScriptDetails {
     readonly sceneName: string
     readonly action: string
     readonly characters: readonly string[]
-    readonly keyObjects: readonly string[]
-    readonly imagePrompt?: string | null
     readonly dialogue: readonly string[]
-    readonly sound: string
-    readonly imageUrl?: string | null
-    readonly videoUrl?: string | null
+    readonly synchronousSound: string
   }[]
 }
 
@@ -295,65 +209,30 @@ export interface WorkspaceCanvasSourceScriptDetails {
   readonly scriptStructure?: unknown | null
 }
 
-export interface WorkspaceCanvasStyleBibleVisualPolicy {
-  readonly imageFilterPrompt?: string | null
-  readonly lightingPrompt?: string | null
-  readonly colorPrompt?: string | null
-  readonly texturePrompt?: string | null
-  readonly compositionPrompt?: string | null
-}
-
-export interface WorkspaceCanvasStyleBibleCameraPolicy {
-  readonly movementPrompt?: string | null
-  readonly lensAndDepthPrompt?: string | null
-  readonly videoRhythmPrompt?: string | null
-}
-
-export interface WorkspaceCanvasStyleBibleSoundPolicy {
-  readonly soundFilterPrompt?: string | null
-}
-
 export interface WorkspaceCanvasStyleBibleDetails {
   readonly rawUserStyle?: string | null
   readonly styleSummary?: string | null
-  readonly visual: WorkspaceCanvasStyleBibleVisualPolicy
-  readonly camera: WorkspaceCanvasStyleBibleCameraPolicy
-  readonly sound: WorkspaceCanvasStyleBibleSoundPolicy
+  readonly visualStyle?: string | null
+  readonly assetImageStyle?: {
+    readonly lighting: string
+    readonly texture: string
+    readonly composition: string
+  } | null
 }
 
 export interface WorkspaceCanvasVideoPlanDetails {
   readonly editScriptId: string
   readonly chapterId: string
+  readonly segmentId: string
   readonly segmentIndex: number
-  readonly kind: 'group'
-  readonly videoGroupId?: string | null
+  readonly videoSegmentId?: string | null
   readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
   readonly durationSec: number
-  readonly gridMode?: '2x2' | '3x3'
   readonly continuity: string
-  readonly prompt?: string | null
-  readonly assetReferenceVideoModel?: string | null
   readonly outputUrl?: string | null
   readonly outputAspectRatio?: number | null
   readonly errorMessage?: string | null
-  readonly sourceImages: readonly {
-    readonly panelId?: string | null
-    readonly storyboardId?: string | null
-    readonly panelIndex?: number | null
-    readonly shotNumber: number
-    readonly imageUrl?: string | null
-    readonly aspectRatio?: number | null
-  }[]
-  readonly assetReferences?: readonly {
-    readonly id: string
-    readonly name: string
-    readonly kind: 'character' | 'location'
-    readonly imageUrl?: string | null
-    readonly shotIds: readonly string[]
-    readonly shotNumbers: readonly number[]
-  }[]
-  readonly validationMessage?: string | null
 }
 
 export interface WorkspaceCanvasEditAssetDetails {
@@ -367,11 +246,6 @@ export interface WorkspaceCanvasEditAssetDetails {
   readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
   readonly taskTargetId?: string | null
   readonly errorMessage?: string | null
-  readonly spatialProfileJson?: unknown | null
-  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
-  readonly spatialProfileError?: string | null
-  readonly spatialProfileAnalyzedAt?: string | Date | null
-  readonly spatialProfileModel?: string | null
 }
 
 export interface WorkspaceCanvasEditAssetGroupItem {
@@ -420,8 +294,6 @@ export interface WorkspaceCanvasNodeData {
   readonly layoutNodeType: CanvasLayoutNodeType
   readonly targetType: WorkspaceCanvasTargetType
   readonly targetId: string
-  readonly storyboardId?: string
-  readonly panelIndex?: number
   readonly title: string
   readonly eyebrow: string
   readonly body: string
@@ -455,12 +327,9 @@ export interface WorkspaceCanvasNodeData {
   readonly previewAspectRatio?: number | null
   readonly previewDisplayHeight?: number | null
   readonly mediaLoadingContext: MediaLoadingContext | null
-  readonly shotDetails?: WorkspaceCanvasShotDetails
-  readonly imageDetails?: WorkspaceCanvasImageDetails
-  readonly videoDetails?: WorkspaceCanvasVideoDetails
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
-  readonly soundscapeDetails?: WorkspaceCanvasSoundscapeDetails
+  readonly ambientSoundDetails?: WorkspaceCanvasAmbientSoundDetails
   readonly sourceScriptDetails?: WorkspaceCanvasSourceScriptDetails
   readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails

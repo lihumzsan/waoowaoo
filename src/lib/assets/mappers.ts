@@ -10,7 +10,6 @@ import {
 } from '@/lib/assets/contracts'
 import { getAssetKindRegistration } from '@/lib/assets/kinds/registry'
 import type { MediaRef } from '@/types/project'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 type CharacterAppearanceRecord = {
   id: string
@@ -63,11 +62,6 @@ type LocationImageRecord = {
   imageIndex: number
   description: string | null
   imageUrl: string | null
-  spatialProfileJson?: unknown | null
-  spatialProfileStatus?: LocationSpatialProfileStatus | null
-  spatialProfileError?: string | null
-  spatialProfileAnalyzedAt?: string | Date | null
-  spatialProfileModel?: string | null
   media?: MediaRef | null
   previousImageUrl: string | null
   previousMedia?: MediaRef | null
@@ -108,11 +102,6 @@ function createRender(params: {
   id: string
   index: number
   imageUrl: string | null
-  spatialProfileJson?: unknown | null
-  spatialProfileStatus?: LocationSpatialProfileStatus | null
-  spatialProfileError?: string | null
-  spatialProfileAnalyzedAt?: string | Date | null
-  spatialProfileModel?: string | null
   media: MediaRef | null
   isSelected: boolean
   previousImageUrl: string | null
@@ -287,11 +276,6 @@ function buildLocationVariants(
           id: image.id,
           index: 0,
           imageUrl: image.imageUrl,
-          spatialProfileJson: image.spatialProfileJson ?? null,
-          spatialProfileStatus: image.spatialProfileStatus ?? null,
-          spatialProfileError: image.spatialProfileError ?? null,
-          spatialProfileAnalyzedAt: image.spatialProfileAnalyzedAt ?? null,
-          spatialProfileModel: image.spatialProfileModel ?? null,
           media: image.media ?? null,
           isSelected: image.isSelected,
           previousImageUrl: image.previousImageUrl,

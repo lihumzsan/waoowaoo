@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import type { ProjectEditScript, ProjectVideoGroup } from '@/types/project'
+import type { ProjectEditScript, ProjectVideoSegment } from '@/types/project'
 import {
   createEditFirstWorkflowOperationPolicy,
   createEditFirstWorkflowView,
@@ -53,37 +53,34 @@ function editScriptWithVideoSegment(
       },
       action: `action-${chapterId}`,
       characters: [],
-      keyObjects: [],
       dialogue: [],
-      sound: '',
+      synchronousSound: 'room tone',
     }],
     generationSegments: [{
+      segmentId: `segment-${chapterId}`,
       shotIds: [shotId],
       continuity: `continuity-${chapterId}`,
     }],
   }
 }
 
-function completedVideoGroup(
+function completedVideoSegment(
   id: string,
+  editScriptId: string,
   chapterId: string,
-  shotId: string,
-): ProjectVideoGroup {
+): ProjectVideoSegment {
   return {
     id,
     projectId: 'project-1',
     episodeId: 'episode-1',
     chapterId,
-    gridMode: '2x2',
-    shotIds: [shotId],
+    editScriptId,
+    segmentId: `segment-${chapterId}`,
+    inputSignature: 'a'.repeat(64),
     durationSec: 6,
-    prompt: `prompt-${chapterId}`,
     status: 'completed',
-    taskId: `task-${id}`,
-    errorCode: null,
+    generationTaskId: `task-${id}`,
     errorMessage: null,
-    referenceImageUrl: null,
-    videoUrl: `/m/${id}`,
     videoMedia: {
       id: `media-${id}`,
       publicId: id,
@@ -106,7 +103,6 @@ describe('multi-chapter shot execution Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'planned_assets',
         status: { kind: 'needs_user_choice', reason: 'cached workflow has not observed the submitted Tasks' },
@@ -149,14 +145,13 @@ describe('multi-chapter shot execution Canvas projection', () => {
       editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1'),
       editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2'),
     ]
-    const videoGroups = [
-      completedVideoGroup('video-group-1', 'chapter-1', 'shot-1'),
-      completedVideoGroup('video-group-2', 'chapter-2', 'shot-2'),
+    const videoSegments = [
+      completedVideoSegment('video-segment-1', 'edit-script-1', 'chapter-1'),
+      completedVideoSegment('video-segment-2', 'edit-script-2', 'chapter-2'),
     ]
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'final_render',
         status: { kind: 'ready', reason: null },
@@ -167,7 +162,7 @@ describe('multi-chapter shot execution Canvas projection', () => {
       editScript: null,
       editScripts: scripts,
       editShotExecutionPlans: [],
-      videoGroups,
+      videoSegments,
       savedLayouts: [],
       translate: (key) => key,
     })
@@ -178,16 +173,16 @@ describe('multi-chapter shot execution Canvas projection', () => {
       workspaceNodeId.videoPlan('edit-script-2', 1),
     ])
     expect(nodes.map((node) => node.data.videoPlanDetails?.outputUrl)).toEqual([
-      '/m/video-group-1',
-      '/m/video-group-2',
+      '/m/video-segment-1',
+      '/m/video-segment-2',
     ])
     expect(nodes.map((node) => node.data.videoPlanDetails?.chapterId)).toEqual([
       'chapter-1',
       'chapter-2',
     ])
     expect(nodes.map((node) => node.data.runtimeTargets)).toEqual([
-      [{ targetType: 'ProjectVideoGroup', targetId: 'video-group-1', types: ['video_group'] }],
-      [{ targetType: 'ProjectVideoGroup', targetId: 'video-group-2', types: ['video_group'] }],
+      [{ targetType: 'ProjectVideoSegment', targetId: 'video-segment-1', types: ['video_segment'] }],
+      [{ targetType: 'ProjectVideoSegment', targetId: 'video-segment-2', types: ['video_segment'] }],
     ])
     expect(nodes[0]?.position).not.toEqual(nodes[1]?.position)
     expect(projection.edges).toEqual(expect.arrayContaining([

@@ -51,7 +51,6 @@ describe('Style Bible text Task Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'visual_style',
         status: { kind: 'processing', reason: 'visual style generation is still running' },
@@ -87,7 +86,6 @@ describe('Style Bible text Task Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'visual_style',
         status: { kind: 'needs_user_choice', reason: 'visual style choice is required' },

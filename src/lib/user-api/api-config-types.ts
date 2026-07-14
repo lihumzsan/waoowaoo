@@ -4,7 +4,6 @@ export type DefaultModelField =
   | 'analysisModel'
   | 'characterModel'
   | 'locationModel'
-  | 'storyboardModel'
   | 'editModel'
   | 'videoModel'
   | 'musicModel'
@@ -49,7 +48,6 @@ export interface DefaultModelsPayload {
   analysisModel?: string
   characterModel?: string
   locationModel?: string
-  storyboardModel?: string
   editModel?: string
   videoModel?: string
   musicModel?: string
@@ -75,7 +73,6 @@ export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
   'analysisModel',
   'characterModel',
   'locationModel',
-  'storyboardModel',
   'editModel',
   'videoModel',
   'musicModel',

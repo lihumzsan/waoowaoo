@@ -92,13 +92,7 @@ describe('tool input schema compatibility', () => {
   it('does not expose system-managed video model fields in model-facing video tool schemas', () => {
     const registry = createProjectAgentOperationRegistry()
     const operationIds = [
-      'generate_panel_video',
-      'generate_episode_videos',
-      'generate_video_group',
-      'generate_episode_video_groups',
-      'generate_episode_videos_auto',
-      'generate_asset_reference_video',
-      'generate_episode_asset_reference_videos',
+      'generate_video_segments',
     ]
 
     for (const operationId of operationIds) {
@@ -111,30 +105,15 @@ describe('tool input schema compatibility', () => {
     }
   })
 
-  it('requires explicit chapter scope for chapter-owned video segment plans', () => {
+  it('accepts only canonical chapter scope for video segment generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    const scopedInputs = {
-      generate_video_group: {
-        gridMode: '2x2',
-        shotIds: ['shot-1'],
-      },
-      generate_episode_video_groups: {
-        gridMode: '2x2',
-      },
-      generate_asset_reference_video: {
-        segmentIndex: 0,
-        referenceImageUrls: ['/m/reference-1'],
-      },
-      generate_episode_asset_reference_videos: {
-        referenceImageUrls: ['/m/reference-1'],
-      },
-    } as const
-
-    for (const [operationId, input] of Object.entries(scopedInputs)) {
-      const operation = registry[operationId]
-      expect(operation.inputSchema.safeParse(input).success, operationId).toBe(false)
-      expect(operation.inputSchema.safeParse({ ...input, chapterId: 'chapter-1' }).success, operationId).toBe(true)
-    }
+    const operation = registry.generate_video_segments
+    expect(operation.inputSchema.safeParse({ chapterId: null }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({ chapterId: 'chapter-1' }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      chapterId: 'chapter-1',
+      gridMode: '2x2',
+    }).success).toBe(false)
   })
 
   it('makes every model-facing tool property required for OpenAI strict schema conversion', () => {

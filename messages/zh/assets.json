@@ -100,13 +100,6 @@
     "generating": "生成中",
     "regenerating": "重新生成中",
     "generatingPlaceholder": "待生成",
-    "spatialProfileStatus": {
-      "pending": "空间待分析",
-      "analyzing": "空间分析中",
-      "ready": "空间已就绪",
-      "failed": "空间分析失败",
-      "stale": "空间需重析"
-    },
     "selectTip": "选择并确认后，可对图片进行编辑和修改",
     "selectFirst": "请选择一张图片",
     "useThis": "选择此方案",
@@ -233,11 +226,6 @@
       "editPrompt": "编辑提示词"
     }
   },
-  "storyboard": {
-    "group": {
-      "generating": "生成中..."
-    }
-  },
   "errors": {
     "saveFailed": "保存失败，请重试",
     "failed": "失败，请重试",
@@ -272,7 +260,6 @@
     "characterPlaceholder": "描述你想要修改的内容，例如：把头发改成金色、添加眼镜、换成休闲装...",
     "locationPlaceholder": "描述你想要修改的内容，例如：添加更多树木、改成夜晚场景...",
     "propPlaceholder": "描述你想要修改的内容，例如：改成银色金属材质、刀柄增加雕纹、去掉宝石装饰...",
-    "storyboardPlaceholder": "描述你想要修改的内容，例如：改变背景颜色、调整人物表情...",
     "noAssetHint": "暂无资产，点击\"添加资产\"选择",
     "referenceImages": "参考图片",
     "referenceImagesHint": "(可选，支持粘贴)",

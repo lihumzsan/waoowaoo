@@ -7,7 +7,6 @@ import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { isWorkspaceCanvasLifecycleRunning } from '../../lifecycle/workspace-canvas-lifecycle'
 import { WorkspaceCanvasMotionPresence } from '../workspace-node-motion'
 import type { WorkspaceCanvasFlowNode, WorkspaceCanvasNodeAction } from '../../node-canvas-types'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 
 export function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -96,9 +95,6 @@ export function renderTextBlock(value: string | null | undefined) {
 export function renderJsonBlock(value: unknown) {
   if (value === null || value === undefined) return null
   return renderTextBlock(JSON.stringify(value, null, 2))
-}
-export function spatialProfileStatusLabel(labels: ReturnType<typeof useTranslations>, status: LocationSpatialProfileStatus | null | undefined): string | null {
-  return status ? labels(`spatialProfileStatus.${status}`) : null
 }
 export function renderTextSection(title: string, value: string | null | undefined) {
   const content = renderTextBlock(value)
@@ -270,24 +266,6 @@ export function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
 export async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
   await Promise.resolve(data.onAction?.(action, data.nodeId))
 }
-export function panelPromptSaveHandler(
-  data: WorkspaceCanvasFlowNode['data'],
-  field: 'imagePrompt' | 'videoPrompt',
-): ((nextValue: string) => Promise<void>) | undefined {
-  if (!data.onAction) return undefined
-  if (typeof data.storyboardId !== 'string' || typeof data.panelIndex !== 'number') return undefined
-  const storyboardId = data.storyboardId
-  const panelIndex = data.panelIndex
-  return async (nextValue) => {
-    await dispatchNodeAction(data, {
-      type: 'update_video_prompt',
-      storyboardId,
-      panelIndex,
-      value: nextValue,
-      field,
-    })
-  }
-}
 export function editAssetDescriptionSaveHandler(data: WorkspaceCanvasFlowNode['data']): ((nextValue: string) => Promise<void>) | undefined {
   if (!data.onAction) return undefined
   const details = data.editAssetDetails
@@ -300,23 +278,6 @@ export function editAssetDescriptionSaveHandler(data: WorkspaceCanvasFlowNode['d
       description: nextValue,
     })
   }
-}
-export function videoPlanGenerationOptions(data: WorkspaceCanvasFlowNode['data']): Record<string, string | number | boolean> | undefined {
-  const action = data.action
-  if (!action) return undefined
-  if (action.type === 'generate_video_group' || action.type === 'generate_video') {
-    return action.generationOptions
-  }
-  return undefined
-}
-export function videoPlanModel(data: WorkspaceCanvasFlowNode['data']): string {
-  const assetReferenceVideoModel = data.videoPlanDetails?.assetReferenceVideoModel
-  if (typeof assetReferenceVideoModel === 'string' && assetReferenceVideoModel.trim()) {
-    return assetReferenceVideoModel.trim()
-  }
-  const action = data.action
-  if (!action) return ''
-  return ''
 }
 export function LoadingSpinner() {
   return <AppIcon name="loader" className="h-4 w-4 animate-spin" />

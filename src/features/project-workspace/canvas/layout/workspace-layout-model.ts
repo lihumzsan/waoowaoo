@@ -6,10 +6,9 @@ export type WorkspaceCanvasLayoutLane =
   | 'editScript'
   | 'assets'
   | 'execution'
-  | 'shots'
   | 'videoPlan'
   | 'bgm'
-  | 'soundscape'
+  | 'ambientSound'
   | 'final'
 
 export type WorkspaceCanvasAnchorMode = 'none' | 'fixed' | 'manual'
@@ -88,19 +87,15 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
       return 'editScript'
     case 'editRequiredAsset':
     case 'editAssetGroup':
-    case 'imageAsset':
       return 'assets'
     case 'editShotExecutionPlan':
       return 'execution'
-    case 'shot':
-      return 'shots'
     case 'videoPlan':
-    case 'videoClip':
       return 'videoPlan'
     case 'bgmScore':
       return 'bgm'
-    case 'soundscape':
-      return 'soundscape'
+    case 'ambientSound':
+      return 'ambientSound'
     case 'finalTimeline':
       return 'final'
   }
@@ -113,15 +108,13 @@ function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: Work
     case 'editScript':
     case 'execution':
     case 'bgm':
-    case 'soundscape':
+    case 'ambientSound':
     case 'final':
       return lane
     case 'assets':
       return node.data.editAssetDetails?.editScriptId
         ? `assets:${node.data.editAssetDetails.editScriptId}`
         : `assets:${node.data.targetType}`
-    case 'shots':
-      return node.data.storyboardId ? `shots:${node.data.storyboardId}` : 'shots'
     case 'videoPlan':
       return node.data.videoPlanDetails?.editScriptId
         ? `videoPlan:${node.data.videoPlanDetails.editScriptId}`

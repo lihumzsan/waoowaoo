@@ -888,8 +888,6 @@ async function revertGlobalAssetRender(
         data: {
           imageUrl: image.previousImageUrl,
           previousImageUrl: null,
-          spatialProfileStatus: 'stale',
-          spatialProfileError: null,
           description: image.previousDescription ?? image.description,
           previousDescription: null,
         },
@@ -942,8 +940,6 @@ async function revertProjectAssetRender(
         data: {
           imageUrl: image.previousImageUrl,
           previousImageUrl: null,
-          spatialProfileStatus: 'stale',
-          spatialProfileError: null,
           description: image.previousDescription ?? image.description,
           previousDescription: null,
         },
@@ -1060,12 +1056,6 @@ async function copyLocationFromGlobal(
         imageIndex: image.imageIndex,
         description: image.description,
         imageUrl: image.imageUrl,
-        spatialProfileJson:
-          input.kind === 'location' && image.spatialProfileJson !== null ? (image.spatialProfileJson as Prisma.InputJsonValue) : undefined,
-        spatialProfileStatus: input.kind === 'location' ? image.spatialProfileStatus : undefined,
-        spatialProfileError: input.kind === 'location' ? image.spatialProfileError : undefined,
-        spatialProfileAnalyzedAt: input.kind === 'location' ? image.spatialProfileAnalyzedAt : undefined,
-        spatialProfileModel: input.kind === 'location' ? image.spatialProfileModel : undefined,
         isSelected: image.isSelected,
       },
     })

@@ -10,7 +10,6 @@ export const OPERATION_ENVIRONMENT_INPUT_KEYS = [
   'episodeId',
   'locale',
   'selectedScopeRef',
-  'selectedPanelId',
   'selectedAssetId',
 ] as const
 

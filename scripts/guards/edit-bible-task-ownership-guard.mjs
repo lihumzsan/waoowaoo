@@ -49,8 +49,8 @@ export function inspectEditBibleTaskOwnershipContract(input) {
   for (const required of ['taskId: job.data.taskId', 'EDIT_STYLE_PREVIEW_TASK_OWNERSHIP_STALE']) {
     if (!input.stylePreviewWorker.includes(required)) violations.push(`style preview success fence missing: ${required}`)
   }
-  for (const required of ['taskId: job.data.taskId', 'VIDEO_GROUP_TASK_OWNERSHIP_STALE']) {
-    if (!input.videoWorker.includes(required)) violations.push(`video group success fence missing: ${required}`)
+  for (const required of ['generationTaskId: job.data.taskId', 'VIDEO_SEGMENT_TASK_OWNERSHIP_STALE']) {
+    if (!input.videoWorker.includes(required)) violations.push(`video segment success fence missing: ${required}`)
   }
   return violations
 }

@@ -107,27 +107,28 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
                 where: { id: { in: projectIds } },
                 select: {
                   id: true,
+                  characters: {
+                    select: {
+                      appearances: {
+                        select: { imageMediaId: true, imageUrl: true },
+                      },
+                    },
+                  },
+                  locations: {
+                    select: {
+                      images: {
+                        select: { imageMediaId: true, imageUrl: true },
+                      },
+                    },
+                  },
                   episodes: {
                     orderBy: { episodeNumber: 'asc' },
                     select: {
                       episodeNumber: true,
                       novelText: true,
-                      storyboards: {
-                        select: {
-                          _count: { select: { panels: true } },
-                          panels: {
-                            where: {
-                              OR: [
-                                { imageUrl: { not: null } },
-                                { videoUrl: { not: null } },
-                              ],
-                            },
-                            select: {
-                              imageUrl: true,
-                              videoUrl: true,
-                            },
-                          },
-                        },
+                      videoSegments: {
+                        where: { videoMediaId: { not: null } },
+                        select: { id: true },
                       },
                     },
                   },
@@ -146,22 +147,17 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
           episodes: number
           images: number
           videos: number
-          panels: number
           firstEpisodePreview: string | null
         }>(
           projectEpisodes.map((projectEntry) => {
-            let imageCount = 0
-            let videoCount = 0
-            let panelCount = 0
-            for (const episode of projectEntry.episodes) {
-              for (const storyboard of episode.storyboards) {
-                panelCount += storyboard._count.panels
-                for (const panel of storyboard.panels) {
-                  if (panel.imageUrl) imageCount += 1
-                  if (panel.videoUrl) videoCount += 1
-                }
-              }
-            }
+            const imageCount = projectEntry.characters.reduce(
+              (total, character) => total + character.appearances.filter((appearance) => appearance.imageMediaId || appearance.imageUrl).length,
+              0,
+            ) + projectEntry.locations.reduce(
+              (total, location) => total + location.images.filter((image) => image.imageMediaId || image.imageUrl).length,
+              0,
+            )
+            const videoCount = projectEntry.episodes.reduce((total, episode) => total + episode.videoSegments.length, 0)
             const firstEpisode = projectEntry.episodes[0]
             const preview = firstEpisode?.novelText ? firstEpisode.novelText.slice(0, 100) : null
             return [
@@ -170,7 +166,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
                 episodes: projectEntry.episodes.length,
                 images: imageCount,
                 videos: videoCount,
-                panels: panelCount,
                 firstEpisodePreview: preview,
               },
             ]
@@ -184,7 +179,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
             episodes: 0,
             images: 0,
             videos: 0,
-            panels: 0,
             firstEpisodePreview: null,
           },
         }))
@@ -244,11 +238,8 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               analysisModel: platformDefaults.analysisModel,
               characterModel: platformDefaults.characterModel,
               locationModel: platformDefaults.locationModel,
-              storyboardModel: platformDefaults.storyboardModel,
               editModel: platformDefaults.editModel,
               videoModel: platformDefaults.videoModel,
-              singleShotVideoModel: platformDefaults.videoModel,
-              sequenceVideoModel: platformDefaults.videoModel,
               musicModel: platformDefaults.musicModel,
               soundEffectModel: platformDefaults.soundEffectModel,
             }),
@@ -256,11 +247,8 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               analysisModel: userPreference.analysisModel,
               characterModel: userPreference.characterModel,
               locationModel: userPreference.locationModel,
-              storyboardModel: userPreference.storyboardModel,
               editModel: userPreference.editModel,
               videoModel: userPreference.videoModel,
-              singleShotVideoModel: userPreference.videoModel,
-              sequenceVideoModel: userPreference.videoModel,
               musicModel: userPreference.musicModel,
               soundEffectModel: userPreference.soundEffectModel,
               videoRatio: userPreference.videoRatio,

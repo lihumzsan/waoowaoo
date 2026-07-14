@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import type { MediaRef } from '@/types/project'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import { apiFetch } from '@/lib/api-fetch'
 import { useAssets } from './useAssets'
 import { groupAssetsByKind } from '@/lib/assets/grouping'
@@ -41,11 +40,6 @@ export interface GlobalLocationImage {
     imageIndex: number
     description: string | null
     imageUrl: string | null
-    spatialProfileJson?: unknown | null
-    spatialProfileStatus?: LocationSpatialProfileStatus | null
-    spatialProfileError?: string | null
-    spatialProfileAnalyzedAt?: string | Date | null
-    spatialProfileModel?: string | null
     media?: MediaRef | null
     previousImageUrl: string | null
     previousMedia?: MediaRef | null
@@ -143,11 +137,6 @@ export function useGlobalLocations(folderId?: string | null) {
                     imageIndex: variant.index,
                     description: variant.description,
                     imageUrl: render?.imageUrl ?? null,
-                    spatialProfileJson: render?.spatialProfileJson ?? null,
-                    spatialProfileStatus: render?.spatialProfileStatus ?? null,
-                    spatialProfileError: render?.spatialProfileError ?? null,
-                    spatialProfileAnalyzedAt: render?.spatialProfileAnalyzedAt ?? null,
-                    spatialProfileModel: render?.spatialProfileModel ?? null,
                     media: render?.media ?? null,
                     previousImageUrl: render?.previousImageUrl ?? null,
                     previousMedia: render?.previousMedia ?? null,
@@ -180,11 +169,6 @@ export function useGlobalProps(folderId?: string | null) {
                     imageIndex: variant.index,
                     description: variant.description,
                     imageUrl: render?.imageUrl ?? null,
-                    spatialProfileJson: render?.spatialProfileJson ?? null,
-                    spatialProfileStatus: render?.spatialProfileStatus ?? null,
-                    spatialProfileError: render?.spatialProfileError ?? null,
-                    spatialProfileAnalyzedAt: render?.spatialProfileAnalyzedAt ?? null,
-                    spatialProfileModel: render?.spatialProfileModel ?? null,
                     media: render?.media ?? null,
                     previousImageUrl: render?.previousImageUrl ?? null,
                     previousMedia: render?.previousMedia ?? null,

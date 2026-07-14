@@ -12,15 +12,9 @@ const singlePlaceholderPattern = /\{([A-Za-z0-9_]+)\}/g
 const doublePlaceholderPattern = /\{\{([A-Za-z0-9_]+)\}\}/g
 
 const criticalTemplateTokens = new Map([
-  ['project-workflow/agent_storyboard_plan', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],
-  ['project-workflow/agent_storyboard_detail', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],
-  ['project-workflow/agent_storyboard_insert', ['"panel_number"', '"description"', '"characters"', '"location"', '"scene_type"', '"source_text"', '"shot_type"', '"camera_move"', '"video_prompt"']],
-  ['project-workflow/screenplay_conversion', ['"clip_id"', '"scenes"', '"heading"', '"content"', '"dialogue"', '"voiceover"']],
-  ['project-workflow/select_location', ['"locations"', '"name"', '"summary"', '"descriptions"']],
-  ['project-workflow/episode_split', ['"analysis"', '"episodes"', '"startMarker"', '"endMarker"', '"validation"']],
-  ['project-workflow/image_prompt_modify', ['"image_prompt"', '"video_prompt"']],
-  ['project-workflow/character_create', ['"prompt"']],
-  ['project-workflow/location_create', ['"prompt"']],
+  ['edit-script/style-bible', ['"rawUserStyle"', '"styleSummary"', '"visualStyle"', '"assetImageStyle"']],
+  ['edit-script/structure', ['"generationSegments"', '"scene"', '"action"', '"performance"', '"dialogue"', '"synchronousSound"', '"continuity"']],
+  ['edit-script/shot-execution-plan', ['"shotScale"', '"cameraMovement"', '"movement"', '"stability"']],
 ])
 
 function fail(title, details = []) {

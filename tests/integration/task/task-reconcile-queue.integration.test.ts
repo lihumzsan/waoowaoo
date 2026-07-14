@@ -43,13 +43,13 @@ describe('task reconciler DB and Redis integration', () => {
     const billingInfo = {
       billable: true as const,
       source: 'task' as const,
-      taskType: TASK_TYPE.VIDEO_GROUP,
+      taskType: TASK_TYPE.VIDEO_SEGMENT,
       apiType: 'video' as const,
       model: 'kling::video-model',
       quantity: 2,
       unit: 'video' as const,
       maxFrozenCost: 4,
-      action: 'generate_video_group',
+      action: 'generate_video_segments',
       freezeId: 'freeze-recovery-1',
       status: 'frozen' as const,
     }
@@ -66,15 +66,15 @@ describe('task reconciler DB and Redis integration', () => {
         projectId: project.id,
         parentTaskId: parent.id,
         episodeId: null,
-        type: TASK_TYPE.VIDEO_GROUP,
-        targetType: 'ProjectVideoGroup',
+        type: TASK_TYPE.VIDEO_SEGMENT,
+        targetType: 'ProjectVideoSegment',
         targetId: 'group-recovery-1',
         status: TASK_STATUS.QUEUED,
         payload,
         batchKey: 'batch-recovery-1',
         billingInfo,
         priority: 8,
-        operationId: 'generate_video_group',
+        operationId: 'generate_video_segments',
         operationSource: 'assistant',
         approvalGrantId: null,
         operationExecutionId: null,
@@ -111,17 +111,17 @@ describe('task reconciler DB and Redis integration', () => {
     expect(job?.data).toEqual({
       taskId: task.id,
       parentTaskId: parent.id,
-      type: TASK_TYPE.VIDEO_GROUP,
+      type: TASK_TYPE.VIDEO_SEGMENT,
       locale: 'zh',
       projectId: project.id,
       episodeId: null,
-      targetType: 'ProjectVideoGroup',
+      targetType: 'ProjectVideoSegment',
       targetId: 'group-recovery-1',
       payload,
       batchKey: 'batch-recovery-1',
       billingInfo,
       userId: user.id,
-      operationId: 'generate_video_group',
+      operationId: 'generate_video_segments',
       operationSource: 'assistant',
       approvalGrantId: null,
       operationExecutionId: null,
@@ -166,16 +166,25 @@ describe('task reconciler DB and Redis integration', () => {
         chapterIndex: 0,
       },
     })
-    const group = await prisma.projectVideoGroup.create({
+    const editScript = await prisma.projectEditScript.create({
       data: {
         projectId: project.id,
         episodeId: episode.id,
         chapterId: chapter.id,
-        gridMode: '2x2',
-        shotIds: ['shot-1', 'shot-2'],
-        shotNumbers: [1, 2],
+        corePlanJson: {},
         durationSec: 6,
-        prompt: 'Keep the two shots visually continuous.',
+        shotCount: 2,
+      },
+    })
+    const segment = await prisma.projectVideoSegment.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        chapterId: chapter.id,
+        editScriptId: editScript.id,
+        segmentId: 'segment-1',
+        inputSignature: 'a'.repeat(64),
+        durationSec: 6,
         status: 'processing',
       },
     })
@@ -185,19 +194,18 @@ describe('task reconciler DB and Redis integration', () => {
         userId: user.id,
         projectId: project.id,
         episodeId: episode.id,
-        type: TASK_TYPE.VIDEO_GROUP,
-        targetType: 'ProjectVideoGroup',
-        targetId: group.id,
+        type: TASK_TYPE.VIDEO_SEGMENT,
+        targetType: 'ProjectVideoSegment',
+        targetId: segment.id,
         status: TASK_STATUS.PROCESSING,
         progress: 51,
         attempt: 1,
         externalId: 'OPENROUTER:VIDEO:provider-completed-task',
         payload: {
-          groupId: group.id,
+          segmentId: 'segment-1',
           episodeId: episode.id,
           chapterId: chapter.id,
-          gridMode: '2x2',
-          shotIds: ['shot-1', 'shot-2'],
+          editScriptId: editScript.id,
           videoModel: 'openrouter::video-model',
           meta: { locale: 'zh' },
         },
@@ -208,9 +216,9 @@ describe('task reconciler DB and Redis integration', () => {
         heartbeatAt: staleAt,
       },
     })
-    await prisma.projectVideoGroup.update({
-      where: { id: group.id },
-      data: { taskId: task.id },
+    await prisma.projectVideoSegment.update({
+      where: { id: segment.id },
+      data: { generationTaskId: task.id },
     })
     queuedJobIds.push(task.id)
 
@@ -241,7 +249,7 @@ describe('task reconciler DB and Redis integration', () => {
 
       const result = await reconcileActiveTasks([queue])
       const recoveredTask = await prisma.task.findUniqueOrThrow({ where: { id: task.id } })
-      const recoveredGroup = await prisma.projectVideoGroup.findUniqueOrThrow({ where: { id: group.id } })
+      const recoveredSegment = await prisma.projectVideoSegment.findUniqueOrThrow({ where: { id: segment.id } })
       const recoveredJob = await queue.getJob(task.id)
 
       expect(result).toEqual({
@@ -261,10 +269,9 @@ describe('task reconciler DB and Redis integration', () => {
         errorMessage: null,
         billingInfo: { billable: false, source: 'task', status: 'skipped' },
       })
-      expect(recoveredGroup).toMatchObject({
+      expect(recoveredSegment).toMatchObject({
         status: 'processing',
-        taskId: task.id,
-        videoUrl: null,
+        generationTaskId: task.id,
         videoMediaId: null,
         errorCode: null,
         errorMessage: null,

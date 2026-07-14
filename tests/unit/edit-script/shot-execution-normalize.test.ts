@@ -6,145 +6,81 @@ import {
   it,
   normalizeEditScriptCore,
   normalizeEditShotExecutionPlan,
-  type EditScriptShot,
 } from './normalize.fixture'
 
 describe('shot execution plan normalization', () => {
-  it('requires execution blocking to cover every core character and object', () => {
+  it('keeps execution output limited to shot scale and camera movement', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
-    const normalizedExecution = normalizeEditShotExecutionPlan(
+    const normalized = normalizeEditShotExecutionPlan(
       executionPlan(),
       normalizedCore.shots,
       normalizedCore.generationSegments,
     )
 
-    expect(normalizedExecution.shots).toHaveLength(2)
-    expect(normalizedExecution.shots[0]?.blocking.characters.map((character) => character.characterId)).toEqual([
-      'character-anna',
-      'character-grandmother',
-    ])
-    expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
-    expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
-    expect(normalizedExecution.shots[0]?.videoPrompt).toContain('Single-shot video prompt')
-    expect(normalizedExecution.generationSegmentExecutions[0]?.continuousVideoPrompt).toContain('Cabin reveal continuous segment')
-    expect(normalizedExecution.generationSegmentExecutions[0]).toEqual({
-      shotIds: ['shot-1', 'shot-2'],
-      continuousVideoPrompt: expect.stringContaining('hidden subject'),
-    })
-  })
-
-  it('rejects redundant generation segment continuity fields', () => {
-    const normalizedCore = normalizeEditScriptCore(corePlan())
-    const plan = executionPlan()
-    const redundantPlan = {
-      ...plan,
-      generationSegmentExecutions: [
+    expect(normalized.generationSegments).toEqual([{
+      segmentId: 'segment-1',
+      shots: [
         {
-          ...plan.generationSegmentExecutions[0],
-          motionFlow: 'redundant split continuity field',
+          shotId: 'shot-1',
+          shotNumber: 1,
+          shotScale: 'medium',
+          cameraMovement: { movement: 'locked off', stability: 'locked' },
+        },
+        {
+          shotId: 'shot-2',
+          shotNumber: 2,
+          shotScale: 'medium close',
+          cameraMovement: { movement: 'slow push', stability: 'smooth' },
         },
       ],
+    }])
+  })
+
+  it('rejects removed execution fields instead of silently accepting them', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const plan = executionPlan()
+    const withLighting = {
+      generationSegments: [{ ...plan.generationSegments[0], lighting: 'forbidden' }],
     }
 
     expect(() => normalizeEditShotExecutionPlan(
-      redundantPlan,
+      withLighting,
       normalizedCore.shots,
       normalizedCore.generationSegments,
-    ))
-      .toThrow(/Unrecognized key[\s\S]*motionFlow/)
+    )).toThrow(/Unrecognized key[\s\S]*lighting/)
   })
 
-  it('rejects copied input-only identity and role fields', () => {
+  it('rejects execution plans that drop a core shot', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
-    const plan = executionPlan()
-    const copiedInputFieldsPlan = {
-      ...plan,
-      shots: plan.shots.map((shot) => ({
-        ...shot,
-        blocking: {
-          ...shot.blocking,
-          characters: shot.blocking.characters.map((character) => ({
-            ...character,
-            role: 'copied-input-character-role',
-          })),
-          objects: shot.blocking.objects.map((object) => ({
-            ...object,
-            role: 'copied-input-object-role',
-          })),
-        },
-      })),
-      generationSegmentExecutions: plan.generationSegmentExecutions,
+    const segment = executionPlan().generationSegments[0]
+    const missingShot = {
+      generationSegments: [{ ...segment, shots: [segment.shots[0]] }],
     }
 
     expect(() => normalizeEditShotExecutionPlan(
-      copiedInputFieldsPlan,
+      missingShot,
       normalizedCore.shots,
       normalizedCore.generationSegments,
-    )).toThrow(/Unrecognized key[\s\S]*role/)
+    )).toThrow('EDIT_SHOT_EXECUTION_PLAN_COVERAGE_INVALID')
   })
 
-  it('rejects execution plans that drop in-scene characters or required objects', () => {
+  it('rejects unknown movement stability values', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
-    const missingCharacter = {
-      generationSegmentExecutions: executionPlan().generationSegmentExecutions,
-      shots: [
-        {
-          ...executionPlan().shots[0],
-          blocking: {
-            ...executionPlan().shots[0].blocking,
-            characters: [executionPlan().shots[0].blocking.characters[0]],
-          },
-        },
-        executionPlan().shots[1],
-      ],
-    }
-    expect(() => normalizeEditShotExecutionPlan(
-      missingCharacter,
-      normalizedCore.shots as readonly EditScriptShot[],
-      normalizedCore.generationSegments,
-    ))
-      .toThrow('EDIT_SHOT_EXECUTION_CHARACTER_MISSING')
-
-    const missingObject = {
-      generationSegmentExecutions: executionPlan().generationSegmentExecutions,
-      shots: [
-        {
-          ...executionPlan().shots[0],
-          blocking: {
-            ...executionPlan().shots[0].blocking,
-            objects: [],
-          },
-        },
-        executionPlan().shots[1],
-      ],
-    }
-    expect(() => normalizeEditShotExecutionPlan(
-      missingObject,
-      normalizedCore.shots as readonly EditScriptShot[],
-      normalizedCore.generationSegments,
-    ))
-      .toThrow('EDIT_SHOT_EXECUTION_OBJECT_MISSING')
-  })
-
-  it('rejects execution plans that omit verbatim dialogue from video prompts', () => {
-    const normalizedCore = normalizeEditScriptCore(corePlan())
-    const plan = executionPlan()
-    const missingDialogue = {
-      ...plan,
-      shots: [
-        plan.shots[0],
-        {
-          ...plan.shots[1],
-          videoPrompt: 'Single-shot video prompt: Anna reaches the chair without quoting the line.',
-        },
-      ],
+    const segment = executionPlan().generationSegments[0]
+    const invalidStability = {
+      generationSegments: [{
+        ...segment,
+        shots: segment.shots.map((shot) => ({
+          ...shot,
+          cameraMovement: { ...shot.cameraMovement, stability: 'cinematic' },
+        })),
+      }],
     }
 
     expect(() => normalizeEditShotExecutionPlan(
-      missingDialogue,
-      normalizedCore.shots as readonly EditScriptShot[],
+      invalidStability,
+      normalizedCore.shots,
       normalizedCore.generationSegments,
-    ))
-      .toThrow('EDIT_SHOT_EXECUTION_DIALOGUE_MISSING:2:character-anna')
+    )).toThrow()
   })
 })

@@ -196,7 +196,6 @@ export function useProviderCardState({
     if (model.type === 'image') {
       if (matchesModelKey(defaultModels.characterModel, model.provider, model.modelId)) return true
       if (matchesModelKey(defaultModels.locationModel, model.provider, model.modelId)) return true
-      if (matchesModelKey(defaultModels.storyboardModel, model.provider, model.modelId)) return true
       if (matchesModelKey(defaultModels.editModel, model.provider, model.modelId)) return true
     }
 

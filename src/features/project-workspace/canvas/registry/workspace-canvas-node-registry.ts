@@ -12,7 +12,7 @@ interface WorkspaceCanvasTaskMaterialization {
 }
 
 export type WorkspaceCanvasRuntimeAggregation = 'failureDominant' | 'resourceAggregate'
-export type WorkspaceCanvasProjectionOwner = 'planning' | 'assetExecution' | 'storyboardVideo' | 'audioFinal'
+export type WorkspaceCanvasProjectionOwner = 'planning' | 'assetExecution' | 'videoSegment' | 'audioFinal'
 
 interface WorkspaceCanvasTaskRuntime {
   readonly source: 'taskTarget'
@@ -35,7 +35,7 @@ export interface WorkspaceCanvasMaterialization<T extends TaskRuntimeTarget> {
 
 export interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind = WorkspaceCanvasNodeKind> {
   readonly kind: K
-  readonly identityScope: 'episode' | 'resource' | 'panel' | 'videoGroup' | 'aggregate'
+  readonly identityScope: 'episode' | 'resource' | 'videoSegment' | 'aggregate'
   readonly resource: Capability<WorkspaceResourceName>
   readonly runtime: Capability<WorkspaceCanvasTaskRuntime>
   readonly materializeFromTask: Capability<WorkspaceCanvasTaskMaterialization>
@@ -67,78 +67,6 @@ const materializeFromTask = (targetType: string, ...taskTypes: readonly TaskType
 const resourceRequired = (reason: string): Capability<WorkspaceCanvasTaskMaterialization> => notApplicable(reason)
 
 export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
-  shot: {
-    kind: 'shot',
-    identityScope: 'panel',
-    resource: supported('episodeData'),
-    runtime: taskRuntime(),
-    materializeFromTask: resourceRequired('A persisted panel is required before projecting a shot node.'),
-    stream: notApplicable('Panel generation streams provider progress, not structured card content.'),
-    terminalHandoff: supported('episodeData'),
-    rendererKey: 'shot',
-    presentation: {
-      iconName: 'clapperboard',
-      showsMetaFooter: true,
-      hasSourceHandle: true,
-      usesInlineTaskProgress: false,
-      actionPlacement: 'footer',
-      showsLargeTitle: false,
-      usesGridAutoHeightShell: false,
-      showsMetaText: true,
-      runningRenderer: 'default',
-    },
-    projection: supported('storyboardVideo'),
-    focus: supported('operation'),
-    conformanceFixture: 'shot',
-  },
-  imageAsset: {
-    kind: 'imageAsset',
-    identityScope: 'resource',
-    resource: supported('episodeData'),
-    runtime: taskRuntime(),
-    materializeFromTask: resourceRequired('A persisted image asset is required before projecting its node.'),
-    stream: notApplicable('Image assets have no structured text stream.'),
-    terminalHandoff: supported('episodeData'),
-    rendererKey: 'imageAsset',
-    presentation: {
-      iconName: 'image',
-      showsMetaFooter: true,
-      hasSourceHandle: true,
-      usesInlineTaskProgress: false,
-      actionPlacement: 'footer',
-      showsLargeTitle: true,
-      usesGridAutoHeightShell: false,
-      showsMetaText: true,
-      runningRenderer: 'mediaPreview',
-    },
-    projection: notApplicable('Image assets are embedded compatibility node data and have no production projector.'),
-    focus: supported('operation'),
-    conformanceFixture: 'imageAsset',
-  },
-  videoClip: {
-    kind: 'videoClip',
-    identityScope: 'resource',
-    resource: supported('episodeData'),
-    runtime: taskRuntime(),
-    materializeFromTask: resourceRequired('A persisted video clip is required before projecting its node.'),
-    stream: notApplicable('Video clips have provider progress but no structured text stream.'),
-    terminalHandoff: supported('episodeData'),
-    rendererKey: 'videoClip',
-    presentation: {
-      iconName: 'video',
-      showsMetaFooter: true,
-      hasSourceHandle: true,
-      usesInlineTaskProgress: false,
-      actionPlacement: 'footer',
-      showsLargeTitle: true,
-      usesGridAutoHeightShell: false,
-      showsMetaText: true,
-      runningRenderer: 'mediaPreview',
-    },
-    projection: notApplicable('Video clips are embedded in shot and video-plan projections.'),
-    focus: supported('operation'),
-    conformanceFixture: 'videoClip',
-  },
   finalTimeline: {
     kind: 'finalTimeline',
     identityScope: 'episode',
@@ -333,7 +261,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
   },
   videoPlan: {
     kind: 'videoPlan',
-    identityScope: 'videoGroup',
+    identityScope: 'videoSegment',
     resource: supported('episodeData'),
     runtime: taskRuntime(),
     materializeFromTask: resourceRequired('Generation segments establish video-plan nodes before video Tasks run.'),
@@ -351,7 +279,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
       showsMetaText: true,
       runningRenderer: 'default',
     },
-    projection: supported('storyboardVideo'),
+    projection: supported('videoSegment'),
     focus: supported('operation'),
     conformanceFixture: 'videoPlan',
   },
@@ -379,15 +307,15 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     focus: supported('operation'),
     conformanceFixture: 'bgmScore',
   },
-  soundscape: {
-    kind: 'soundscape',
+  ambientSound: {
+    kind: 'ambientSound',
     identityScope: 'episode',
     resource: supported('episodeData'),
     runtime: taskRuntime(),
-    materializeFromTask: materializeFromTask('ProjectEpisode', TASK_TYPE.SOUNDSCAPE_PLAN, TASK_TYPE.SOUNDSCAPE_GENERATE),
-    stream: supported('soundscape'),
+    materializeFromTask: materializeFromTask('ProjectEpisode', TASK_TYPE.AMBIENT_SOUND_PLAN, TASK_TYPE.AMBIENT_SOUND_GENERATE),
+    stream: supported('ambientSound'),
     terminalHandoff: supported('episodeData'),
-    rendererKey: 'soundscape',
+    rendererKey: 'ambientSound',
     presentation: {
       iconName: 'audioWave',
       showsMetaFooter: true,
@@ -401,7 +329,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     },
     projection: supported('audioFinal'),
     focus: supported('operation'),
-    conformanceFixture: 'soundscape',
+    conformanceFixture: 'ambientSound',
   },
   editRequiredAsset: {
     kind: 'editRequiredAsset',

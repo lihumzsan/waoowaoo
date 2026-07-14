@@ -62,19 +62,13 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
       characters: shot.characters.map((character) => ({
         characterId: character.characterId.trim(),
         name: character.name.trim(),
-        visibility: character.visibility,
-        role: character.role,
         performance: character.performance.trim(),
-      })),
-      keyObjects: shot.keyObjects.map((object) => ({
-        name: object.name.trim(),
-        role: object.role.trim(),
       })),
       dialogue: shot.dialogue.map((line) => ({
         characterId: line.characterId.trim(),
         line: line.line.trim(),
       })),
-      sound: shot.sound.trim(),
+      synchronousSound: shot.synchronousSound.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
   assertContinuousShotNumbers(normalized)
@@ -93,6 +87,7 @@ function assertGenerationSegments(
 ): readonly EditGenerationSegment[] {
   const shotIds = shots.map((shot) => shot.shotId)
   const shotOrder = new Map(shotIds.map((shotId, index) => [shotId, index]))
+  const segmentIds = new Set<string>()
   const flattened = segments.flatMap((segment) => segment.shotIds)
   if (flattened.length !== shotIds.length) {
     throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID:${flattened.length}:${shotIds.length}`)
@@ -103,6 +98,9 @@ function assertGenerationSegments(
     }
   })
   const normalized = segments.map((segment) => {
+    const segmentId = segment.segmentId.trim()
+    if (segmentIds.has(segmentId)) throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_ID_DUPLICATE:${segmentId}`)
+    segmentIds.add(segmentId)
     segment.shotIds.forEach((shotId, index) => {
       const order = shotOrder.get(shotId)
       if (order === undefined) throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_UNKNOWN_SHOT:${shotId}`)
@@ -114,6 +112,7 @@ function assertGenerationSegments(
       }
     })
     return {
+      segmentId,
       shotIds: [...segment.shotIds],
       continuity: segment.continuity.trim(),
     }
@@ -142,40 +141,12 @@ export function normalizeEditScriptCore(
 
 export const normalizeEditScriptStructure = normalizeEditScriptCore
 
-function normalizedNames(values: readonly { readonly name: string }[]): Set<string> {
-  return new Set(values.map((value) => value.name.trim().toLocaleLowerCase()))
-}
-
-function assertPromptContainsDialogueLines(input: {
-  readonly coreShotById: ReadonlyMap<string, EditScriptShot>
-  readonly executionShots: readonly EditShotExecution[]
-  readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
-}): void {
-  for (const shot of input.executionShots) {
-    const coreShot = input.coreShotById.get(shot.shotId)
-    if (!coreShot) continue
-    for (const dialogue of coreShot.dialogue) {
-      if (!shot.videoPrompt.includes(dialogue.line)) {
-        throw new Error(`EDIT_SHOT_EXECUTION_DIALOGUE_MISSING:${shot.shotNumber}:${dialogue.characterId}`)
-      }
-    }
-  }
-  for (const segment of input.generationSegmentExecutions) {
-    const dialogueLines = segment.shotIds.flatMap((shotId) => input.coreShotById.get(shotId)?.dialogue ?? [])
-    for (const dialogue of dialogueLines) {
-      if (!segment.continuousVideoPrompt.includes(dialogue.line)) {
-        throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_DIALOGUE_MISSING:${segment.shotIds.join(',')}:${dialogue.characterId}`)
-      }
-    }
-  }
-}
-
 function validateEditShotExecutionPlan(
-  shots: readonly EditShotExecution[],
-  generationSegmentExecutions: readonly EditGenerationSegmentExecution[],
+  generationSegments: readonly EditGenerationSegmentExecution[],
   coreShots: readonly EditScriptShot[],
   coreGenerationSegments: readonly EditGenerationSegment[],
 ): void {
+  const shots = generationSegments.flatMap((segment) => segment.shots)
   assertContinuousShotNumbers(shots)
   if (shots.length !== coreShots.length) {
     throw new Error(`EDIT_SHOT_EXECUTION_PLAN_COVERAGE_INVALID:${shots.length}:${coreShots.length}`)
@@ -185,38 +156,23 @@ function validateEditShotExecutionPlan(
     if (!coreShot || shot.shotId !== coreShot.shotId || shot.shotNumber !== coreShot.shotNumber) {
       throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_MISMATCH:${shot.shotId}:${coreShot?.shotId ?? 'missing'}`)
     }
-    const coreCharacters = new Set(coreShot.characters.map((character) => character.characterId))
-    const executionCharacters = new Set(shot.blocking.characters.map((character) => character.characterId))
-    coreCharacters.forEach((characterId) => {
-      if (!executionCharacters.has(characterId)) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_MISSING:${shot.shotNumber}:${characterId}`)
-    })
-    executionCharacters.forEach((characterId) => {
-      if (!coreCharacters.has(characterId)) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_UNKNOWN:${shot.shotNumber}:${characterId}`)
-    })
-    const executionObjects = normalizedNames(shot.blocking.objects)
-    coreShot.keyObjects.forEach((object) => {
-      if (!executionObjects.has(object.name.trim().toLocaleLowerCase())) {
-        throw new Error(`EDIT_SHOT_EXECUTION_OBJECT_MISSING:${shot.shotNumber}:${object.name}`)
-      }
-    })
   })
-  if (generationSegmentExecutions.length !== coreGenerationSegments.length) {
-    throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_COVERAGE_INVALID:${generationSegmentExecutions.length}:${coreGenerationSegments.length}`)
+  if (generationSegments.length !== coreGenerationSegments.length) {
+    throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_COVERAGE_INVALID:${generationSegments.length}:${coreGenerationSegments.length}`)
   }
-  generationSegmentExecutions.forEach((segmentExecution, index) => {
+  generationSegments.forEach((segmentExecution, index) => {
     const coreSegment = coreGenerationSegments[index]
     if (!coreSegment) throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_MISSING:${index}`)
-    if (
-      segmentExecution.shotIds.length !== coreSegment.shotIds.length ||
-      segmentExecution.shotIds.some((shotId, shotIndex) => shotId !== coreSegment.shotIds[shotIndex])
-    ) {
-      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${segmentExecution.shotIds.join(',')}:${coreSegment.shotIds.join(',')}`)
+    if (segmentExecution.segmentId !== coreSegment.segmentId) {
+      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_ID_MISMATCH:${segmentExecution.segmentId}:${coreSegment.segmentId}`)
     }
-  })
-  assertPromptContainsDialogueLines({
-    coreShotById: new Map(coreShots.map((shot) => [shot.shotId, shot])),
-    executionShots: shots,
-    generationSegmentExecutions,
+    const executionShotIds = segmentExecution.shots.map((shot) => shot.shotId)
+    if (
+      executionShotIds.length !== coreSegment.shotIds.length ||
+      executionShotIds.some((shotId, shotIndex) => shotId !== coreSegment.shotIds[shotIndex])
+    ) {
+      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${executionShotIds.join(',')}:${coreSegment.shotIds.join(',')}`)
+    }
   })
 }
 
@@ -227,40 +183,30 @@ export function normalizeEditShotExecutionPlan(
 ): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId' | 'status'> {
   const parsed = rawEditShotExecutionPlanSchema.parse(raw)
   const coreShotByRef = new Map(coreShots.map((shot) => [editShotModelRef(shot.shotNumber), shot]))
-  const shots = parsed.shots.map((shot): EditShotExecution => {
-    const coreShot = coreShotByRef.get(shot.shotRef)
-    if (!coreShot) throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_REF_UNKNOWN:${shot.shotRef}`)
-    const characterByName = new Map(coreShot.characters.map((character) => [character.name, character]))
-    return {
-      shotId: coreShot.shotId,
-      shotNumber: coreShot.shotNumber,
-      camera: shot.camera,
-      blocking: {
-        axis: shot.blocking.axis,
-        characters: shot.blocking.characters.map(({ characterName, ...character }) => {
-          const coreCharacter = characterByName.get(characterName)
-          if (!coreCharacter) {
-            throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_NAME_UNKNOWN:${coreShot.shotNumber}:${characterName}`)
-          }
-          return { characterId: coreCharacter.characterId, ...character }
-        }),
-        objects: shot.blocking.objects,
-        spatialNote: shot.blocking.spatialNote,
-      },
-      videoPrompt: shot.videoPrompt,
-    }
-  }).sort((left, right) => left.shotNumber - right.shotNumber)
   const segmentByRef = new Map(coreGenerationSegments.map((segment, index) => [editSegmentModelRef(index), segment]))
-  const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment): EditGenerationSegmentExecution => {
+  const generationSegments = parsed.generationSegments.map((segment): EditGenerationSegmentExecution => {
     const coreSegment = segmentByRef.get(segment.segmentRef)
     if (!coreSegment) throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_REF_UNKNOWN:${segment.segmentRef}`)
+    const shots = segment.shots.map((shot): EditShotExecution => {
+      const coreShot = coreShotByRef.get(shot.shotRef)
+      if (!coreShot) throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_REF_UNKNOWN:${shot.shotRef}`)
+      if (!coreSegment.shotIds.includes(coreShot.shotId)) {
+        throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_SEGMENT_MISMATCH:${segment.segmentRef}:${shot.shotRef}`)
+      }
+      return {
+        shotId: coreShot.shotId,
+        shotNumber: coreShot.shotNumber,
+        shotScale: shot.shotScale,
+        cameraMovement: shot.cameraMovement,
+      }
+    })
     return {
-      shotIds: [...coreSegment.shotIds],
-      continuousVideoPrompt: segment.continuousVideoPrompt,
+      segmentId: coreSegment.segmentId,
+      shots,
     }
   })
-  validateEditShotExecutionPlan(shots, generationSegmentExecutions, coreShots, coreGenerationSegments)
-  return { shots, generationSegmentExecutions }
+  validateEditShotExecutionPlan(generationSegments, coreShots, coreGenerationSegments)
+  return { generationSegments }
 }
 
 export function parsePersistedEditShotExecutionPlan(
@@ -269,13 +215,12 @@ export function parsePersistedEditShotExecutionPlan(
   coreGenerationSegments: readonly EditGenerationSegment[],
 ): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId' | 'status'> {
   const parsed = editShotExecutionPlanSchema.parse(value)
-  const shots = [...parsed.shots].sort((left, right) => left.shotNumber - right.shotNumber)
-  const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment) => ({
-    shotIds: [...segment.shotIds],
-    continuousVideoPrompt: segment.continuousVideoPrompt,
+  const generationSegments = parsed.generationSegments.map((segment) => ({
+    segmentId: segment.segmentId,
+    shots: [...segment.shots].sort((left, right) => left.shotNumber - right.shotNumber),
   }))
-  validateEditShotExecutionPlan(shots, generationSegmentExecutions, coreShots, coreGenerationSegments)
-  return { shots, generationSegmentExecutions }
+  validateEditShotExecutionPlan(generationSegments, coreShots, coreGenerationSegments)
+  return { generationSegments }
 }
 
 export function normalizeEditAssetRequirements(

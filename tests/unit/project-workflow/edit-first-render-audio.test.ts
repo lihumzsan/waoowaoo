@@ -24,15 +24,15 @@ describe('edit-first workflow state', () => {
   /**
    * Logic Specification
    * Authority: CN-02/CN-07 and the canonical edit-first semantic step order.
-   * Rejects: showing BGM or soundscape nodes before video and chapter rendering finish.
+   * Rejects: showing BGM or ambientSound nodes before video and chapter rendering finish.
    * Production entry: createEditFirstWorkflowView.
    * Oracle: audio nodes are hidden through chapter rendering and visible when audio planning starts.
    * Command: npx vitest run tests/unit/project-workflow/edit-first-render-audio.test.ts
    */
   it('reveals audio nodes only when the workflow reaches audio planning', () => {
-    expect(capabilitiesAt('video_segments')).toMatchObject({ bgmScore: false, soundscape: false })
-    expect(capabilitiesAt('chapter_render')).toMatchObject({ bgmScore: false, soundscape: false })
-    expect(capabilitiesAt('audio_plan')).toMatchObject({ bgmScore: true, soundscape: true })
+    expect(capabilitiesAt('video_segments')).toMatchObject({ bgmScore: false, ambientSound: false })
+    expect(capabilitiesAt('chapter_render')).toMatchObject({ bgmScore: false, ambientSound: false })
+    expect(capabilitiesAt('audio_plan')).toMatchObject({ bgmScore: true, ambientSound: true })
     expect(capabilitiesAt('chapter_render').finalTimeline).toBe(false)
     expect(capabilitiesAt('audio_plan').finalTimeline).toBe(false)
     expect(capabilitiesAt('final_render').finalTimeline).toBe(true)
@@ -42,7 +42,6 @@ describe('edit-first workflow state', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       editFirstWorkflow: createEditFirstWorkflowView({
         step: 'chapter_render',
         status: { kind: 'processing', reason: 'chapter renders are still running' },
@@ -55,10 +54,10 @@ describe('edit-first workflow state', () => {
           types: ['music_score_plan'],
         },
         {
-          taskId: 'soundscape-task-1',
+          taskId: 'ambientSound-task-1',
           targetType: 'ProjectEpisode',
           targetId: 'episode-1',
-          types: ['soundscape_plan'],
+          types: ['ambient_sound_plan'],
         },
       ],
       savedLayouts: [],
@@ -66,10 +65,10 @@ describe('edit-first workflow state', () => {
     })
 
     expect(projection.nodes.filter((node) => (
-      node.data.kind === 'bgmScore' || node.data.kind === 'soundscape'
+      node.data.kind === 'bgmScore' || node.data.kind === 'ambientSound'
     )).map((node) => node.id)).toEqual([
       workspaceNodeId.bgmScore('episode-1'),
-      workspaceNodeId.soundscape('episode-1'),
+      workspaceNodeId.ambientSound('episode-1'),
     ])
   })
 
@@ -83,10 +82,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -108,9 +103,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -130,9 +122,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -143,7 +132,7 @@ describe('edit-first workflow state', () => {
     expect(beforeAudioPlanning.step).toBe('audio_plan')
     expect(beforeAudioPlanning.operationPolicy.allowedOperationIds).toEqual([
       'plan_episode_bgm_score',
-      'plan_episode_soundscape',
+      'plan_episode_ambient_sound',
     ])
   })
 
@@ -151,7 +140,6 @@ describe('edit-first workflow state', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      storyboards: [],
       finalVideo: {
         id: 'final-1',
         episodeId: 'episode-1',
@@ -190,10 +178,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 2,
-      panelCount: 6,
-      storyboardPanelImageReadyCount: 6,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 4,
       completedVideoSegmentCount: 2,
       chapterCount: 2,
@@ -205,11 +189,11 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_chapters')
     expect(state.operationPolicy.allowedOperationIds).toEqual([
       'render_chapters',
-      'generate_episode_videos',
+      'generate_video_segments',
     ])
   })
 
-  it('groups music and soundscape planning after all chapter renders are ready', () => {
+  it('groups music and ambientSound planning after all chapter renders are ready', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -219,10 +203,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -233,11 +213,11 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_episode_bgm_score')
     expect(state.operationPolicy.allowedOperationIds).toEqual([
       'plan_episode_bgm_score',
-      'plan_episode_soundscape',
+      'plan_episode_ambient_sound',
     ])
     expect(state.operationPolicy.group).toEqual({
       id: 'edit_first_audio_layer_planning',
-      operationIds: ['plan_episode_bgm_score', 'plan_episode_soundscape'],
+      operationIds: ['plan_episode_bgm_score', 'plan_episode_ambient_sound'],
       approvalOperationIds: [],
     })
   })
@@ -252,10 +232,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -263,8 +239,8 @@ describe('edit-first workflow state', () => {
       bgmScoreHasPlan: true,
       bgmScoreStatus: 'generating',
       activeBgmScoreGenerationTaskCount: 1,
-      soundscapeStatus: 'completed',
-      soundscapeDecision: 'none_needed',
+      ambientSoundStatus: 'completed',
+      ambientSoundDecision: 'none_needed',
     }))
 
     expect(state.step).toBe('audio_generation')
@@ -283,10 +259,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -311,29 +283,25 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
       bgmScoreStatus: 'planned',
       bgmScoreHasPlan: true,
-      soundscapeStatus: 'planned',
-      soundscapeDecision: 'soundscape',
+      ambientSoundStatus: 'planned',
+      ambientSoundDecision: 'ambient_sound',
     }))
 
     expect(state.step).toBe('audio_generation')
     expect(state.operationPolicy.allowedOperationIds).toEqual([
       'generate_episode_bgm_score',
-      'generate_episode_soundscape',
+      'generate_episode_ambient_sound',
     ])
     expect(state.operationPolicy.group).toEqual({
       id: 'edit_first_audio_layer_generation',
-      operationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
-      approvalOperationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
+      operationIds: ['generate_episode_bgm_score', 'generate_episode_ambient_sound'],
+      approvalOperationIds: ['generate_episode_bgm_score', 'generate_episode_ambient_sound'],
     })
   })
 
@@ -347,10 +315,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       chapterCount: 1,
@@ -358,8 +322,8 @@ describe('edit-first workflow state', () => {
       bgmScoreStatus: 'completed',
       bgmScoreHasPlan: true,
       bgmScoreHasMix: true,
-      soundscapeStatus: 'completed',
-      soundscapeDecision: 'none_needed',
+      ambientSoundStatus: 'completed',
+      ambientSoundDecision: 'none_needed',
     }))
 
     expect(state.step).toBe('final_render')
@@ -377,10 +341,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       bgmScoreStatus: 'completed',
@@ -403,10 +363,6 @@ describe('edit-first workflow state', () => {
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
       shotExecutionPlanStatus: 'ready',
-      storyboardCount: 1,
-      panelCount: 3,
-      storyboardPanelImageReadyCount: 3,
-      storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
       bgmScoreStatus: 'completed',

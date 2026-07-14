@@ -38,30 +38,22 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function parseProjectionScope(scopeRef: string | undefined): { storyboardId?: string | null; panelId?: string | null } | null {
+function parseProjectionSegmentId(scopeRef: string | undefined): string | null {
   const normalized = normalizeString(scopeRef)
   if (!normalized) return null
-  if (normalized.startsWith('storyboard:')) {
-    const storyboardId = normalized.slice('storyboard:'.length).trim()
-    return storyboardId ? { storyboardId } : null
-  }
-  if (normalized.startsWith('panel:')) {
-    const panelId = normalized.slice('panel:'.length).trim()
-    return panelId ? { panelId } : null
-  }
-  return null
+  if (!normalized.startsWith('video-segment:')) return null
+  return normalizeString(normalized.slice('video-segment:'.length)) || null
 }
 
 export function createReadOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_snapshot: defineOperation({
       id: 'get_project_snapshot',
-      summary: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete user request or user-intent tool input. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
+      summary: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete user request or user-intent tool input. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters. Use detail=full only when video segment status or output identity is explicitly needed.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
         detail: z.enum(['lite', 'full']).optional(),
-        panelLimit: z.number().int().positive().max(1000).optional(),
         scopeRef: z.string().optional(),
       }),
       outputSchema: z.unknown(),
@@ -70,8 +62,8 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId: ctx.context.episodeId || null,
-            panelLimit: input.panelLimit,
-            scope: parseProjectionScope(input.scopeRef) ?? null,
+            selectedScopeRef: input.scopeRef,
+            segmentId: parseProjectionSegmentId(input.scopeRef),
           })
         : assembleProjectProjectionLite({
             projectId: ctx.projectId,
@@ -81,13 +73,12 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or user-intent tool input, such as full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters.',
+      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or user-intent tool input, such as full bible text, historical operation results, failure details, active task details, assets, or video segments. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
         detail: z.enum(['snapshot', 'full']).optional(),
         selectedScopeRef: z.string().optional(),
-        selectedPanelId: z.string().optional(),
         selectedAssetId: z.string().optional(),
       }),
       outputSchema: z.unknown(),
@@ -97,7 +88,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           userId: ctx.userId,
           episodeId: ctx.context.episodeId || null,
           selectedScopeRef: normalizeString(input.selectedScopeRef) || ctx.context.selectedScopeRef || null,
-          selectedPanelId: normalizeString(input.selectedPanelId) || ctx.context.selectedPanelId || null,
           selectedAssetId: normalizeString(input.selectedAssetId) || ctx.context.selectedAssetId || null,
         })
         const snapshot = buildAssistantProjectContextSnapshot(projectContext)

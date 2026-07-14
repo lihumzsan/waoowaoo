@@ -35,26 +35,6 @@ export type ProfileTransactionScopeInput = {
   target?: unknown | null
 }
 
-const LEGACY_PROFILE_ACTION_KEYS = [
-  'regenerate_storyboard_text',
-  'story_to_script_run',
-  'script_to_storyboard_run',
-  'clips_build',
-  'bible_convert',
-  'storyboard',
-  'storyboard_candidate',
-  'character',
-  'location',
-  'video',
-  'analyze',
-  'analyze_character',
-  'analyze_location',
-  'clips',
-  'storyboard_text_plan',
-  'storyboard_text_detail',
-  'regenerate',
-] as const
-
 const SYNC_PROFILE_ACTION_KEYS = [
   AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
   AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
@@ -68,8 +48,6 @@ const SYNC_PROFILE_ACTION_KEYS = [
 ] as const
 
 const WORKER_USAGE_ACTION_KEYS = [
-  'panel_image_generate',
-  'panel_grid_image_generate',
   'character_candidate_prompts',
   'location_candidate_prompt',
   'global_character_candidate_prompts',
@@ -78,7 +56,6 @@ const WORKER_USAGE_ACTION_KEYS = [
 
 export const PROFILE_ACTION_KEY_LIST: readonly string[] = [
   ...Object.values(TASK_TYPE),
-  ...LEGACY_PROFILE_ACTION_KEYS,
   ...SYNC_PROFILE_ACTION_KEYS,
   ...WORKER_USAGE_ACTION_KEYS,
 ]

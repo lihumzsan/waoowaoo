@@ -17,13 +17,13 @@ describe('image generation count helpers', () => {
   it('normalizes values within each scope range', () => {
     expect(normalizeImageGenerationCount('character', 0)).toBe(1)
     expect(normalizeImageGenerationCount('character', 8)).toBe(6)
-    expect(normalizeImageGenerationCount('storyboard-candidates', 0)).toBe(1)
-    expect(normalizeImageGenerationCount('storyboard-candidates', 9)).toBe(4)
+    expect(normalizeImageGenerationCount('reference-to-character', 0)).toBe(1)
+    expect(normalizeImageGenerationCount('reference-to-character', 9)).toBe(6)
   })
 
   it('returns ordered options for each scope', () => {
     expect(getImageGenerationCountOptions('character')).toEqual([1, 2, 3, 4, 5, 6])
-    expect(getImageGenerationCountOptions('storyboard-candidates')).toEqual([1, 2, 3, 4])
+    expect(getImageGenerationCountOptions('reference-to-character')).toEqual([1, 2, 3, 4, 5, 6])
   })
 
   it('reads and writes client preference with scope isolation', () => {
@@ -39,10 +39,10 @@ describe('image generation count helpers', () => {
 
     expect(getImageGenerationCount('character')).toBe(5)
     expect(getImageGenerationCount('location')).toBe(2)
-    expect(setImageGenerationCount('storyboard-candidates', 8)).toBe(4)
+    expect(setImageGenerationCount('reference-to-character', 8)).toBe(6)
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      getImageGenerationCountConfig('storyboard-candidates').storageKey,
-      '4',
+      getImageGenerationCountConfig('reference-to-character').storageKey,
+      '6',
     )
   })
 })

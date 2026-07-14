@@ -12,9 +12,9 @@
       "title": "角色工坊",
       "description": "打造独一无二的动漫角色，保持高度一致性"
     },
-    "storyboard": {
-      "title": "智能分镜",
-      "description": "文字一键转分镜，精准把控叙事节奏"
+    "shotPlanning": {
+      "title": "智能镜头规划",
+      "description": "将剧本转换为可直接生成视频的镜头与片段"
     },
     "world": {
       "title": "世界构建",

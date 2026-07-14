@@ -28,11 +28,11 @@ import {
   type BgmScoreVirtualLayer,
 } from '@/lib/bgm-score/types'
 import {
-  soundscapeRawPlanSectionSchema,
-  soundscapePlanSourceSchema,
-  type SoundscapeRawPlanSection,
-  type SoundscapePlanSource,
-} from '@/lib/soundscape/types'
+  ambientSoundRawPlanSectionSchema,
+  ambientSoundPlanSourceSchema,
+  type AmbientSoundRawPlanSection,
+  type AmbientSoundPlanSource,
+} from '@/lib/ambient-sound/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
 
@@ -52,8 +52,8 @@ export type StructuredStreamAdapterKey =
   | 'bgm.scoreDesign.sections'
   | 'bgm.promptSections'
   | 'bgm.virtualLayers'
-  | 'soundscape.sources'
-  | 'soundscape.sections'
+  | 'ambientSound.sources'
+  | 'ambientSound.sections'
 
 export type TextStreamAdapterKey =
   | 'disabled.text'
@@ -100,12 +100,12 @@ export type StructuredStreamParsedItem =
     readonly layer: BgmScoreVirtualLayer
   }
   | {
-    readonly kind: 'soundscapeSource'
-    readonly source: SoundscapePlanSource
+    readonly kind: 'ambientSoundSource'
+    readonly source: AmbientSoundPlanSource
   }
   | {
-    readonly kind: 'soundscapeSection'
-    readonly section: SoundscapeRawPlanSection
+    readonly kind: 'ambientSoundSection'
+    readonly section: AmbientSoundRawPlanSection
   }
 
 export interface StructuredStreamItem {
@@ -277,30 +277,30 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
       : String(fallbackIndex + 1),
   },
   {
-    key: 'soundscape.sources',
-    taskTypes: [TASK_TYPE.SOUNDSCAPE_PLAN],
-    stepIds: ['soundscape_plan'],
+    key: 'ambientSound.sources',
+    taskTypes: [TASK_TYPE.AMBIENT_SOUND_PLAN],
+    stepIds: ['ambientSound_plan'],
     mode: 'array',
     path: ['sources'],
     parseItem: (value) => ({
-      kind: 'soundscapeSource',
-      source: soundscapePlanSourceSchema.parse(value),
+      kind: 'ambientSoundSource',
+      source: ambientSoundPlanSourceSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'soundscapeSource'
+    itemKey: (item, fallbackIndex) => item.kind === 'ambientSoundSource'
       ? item.source.sourceId
       : String(fallbackIndex + 1),
   },
   {
-    key: 'soundscape.sections',
-    taskTypes: [TASK_TYPE.SOUNDSCAPE_PLAN],
-    stepIds: ['soundscape_plan'],
+    key: 'ambientSound.sections',
+    taskTypes: [TASK_TYPE.AMBIENT_SOUND_PLAN],
+    stepIds: ['ambientSound_plan'],
     mode: 'array',
     path: ['sections'],
     parseItem: (value) => ({
-      kind: 'soundscapeSection',
-      section: soundscapeRawPlanSectionSchema.parse(value),
+      kind: 'ambientSoundSection',
+      section: ambientSoundRawPlanSectionSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'soundscapeSection'
+    itemKey: (item, fallbackIndex) => item.kind === 'ambientSoundSection'
       ? `${item.section.sourceId}:${item.section.fromClipOrder}:${item.section.toClipOrder}:${fallbackIndex}`
       : String(fallbackIndex + 1),
   },

@@ -31,10 +31,10 @@ function node(input: TestNodeInput): WorkspaceCanvasFlowNode {
     position: { x: input.x, y: input.y },
     style: { width, height },
     data: {
-      kind: 'shot',
+      kind: 'videoPlan',
       mediaLoadingContext: { styleImageUrl: null },
-      layoutNodeType: 'shot',
-      targetType: 'panel',
+      layoutNodeType: 'videoPlan',
+      targetType: 'videoSegment',
       targetId: input.id,
       title: input.id,
       eyebrow: '',
@@ -57,8 +57,8 @@ function findNode(nodes: readonly WorkspaceCanvasFlowNode[], id: string): Worksp
 describe('workspace canvas overlap policy', () => {
   it('allows overlapping nodes without automatic collision repair', () => {
     const nodes = [
-      node({ id: 'shot:first-panel', x: 0, y: 0, width: 720, height: 560 }),
-      node({ id: 'shot:second-panel', x: 120, y: 80, width: 420, height: 360 }),
+      node({ id: 'video-segment:first-panel', x: 0, y: 0, width: 720, height: 560 }),
+      node({ id: 'video-segment:second-panel', x: 120, y: 80, width: 420, height: 360 }),
     ]
 
     const layout = composeWorkspaceCanvasLegacyLayout({
@@ -66,32 +66,32 @@ describe('workspace canvas overlap policy', () => {
       model: buildWorkspaceCanvasLegacyLayoutModel(nodes),
     })
 
-    expect(findNode(layout, 'shot:first-panel').position).toEqual({ x: 0, y: 0 })
-    expect(findNode(layout, 'shot:second-panel').position).toEqual({ x: 120, y: 80 })
+    expect(findNode(layout, 'video-segment:first-panel').position).toEqual({ x: 0, y: 0 })
+    expect(findNode(layout, 'video-segment:second-panel').position).toEqual({ x: 120, y: 80 })
   })
 
   it('captures only dragged nodes as new base positions', () => {
     const nodes = [
-      node({ id: 'shot:dragged-panel', x: 40, y: 50, baseX: 0, baseY: 0 }),
-      node({ id: 'shot:untouched-panel', x: 300, y: 200, baseX: 120, baseY: 90 }),
+      node({ id: 'video-segment:dragged-panel', x: 40, y: 50, baseX: 0, baseY: 0 }),
+      node({ id: 'video-segment:untouched-panel', x: 300, y: 200, baseX: 120, baseY: 90 }),
     ]
 
     const layout = captureLayoutBasePositions({
       nodes,
-      nodeIds: new Set(['shot:dragged-panel']),
+      nodeIds: new Set(['video-segment:dragged-panel']),
     })
 
-    expect(findNode(layout, 'shot:dragged-panel').data.layoutBasePosition).toEqual({ x: 40, y: 50 })
-    expect(findNode(layout, 'shot:untouched-panel').data.layoutBasePosition).toEqual({ x: 120, y: 90 })
+    expect(findNode(layout, 'video-segment:dragged-panel').data.layoutBasePosition).toEqual({ x: 40, y: 50 })
+    expect(findNode(layout, 'video-segment:untouched-panel').data.layoutBasePosition).toEqual({ x: 120, y: 90 })
   })
 
   it('keeps explicit preserved positions as base without moving other nodes', () => {
     const nodes = [
-      node({ id: 'shot:preserved-panel', x: 0, y: 0 }),
-      node({ id: 'shot:free-panel', x: 0, y: 0 }),
+      node({ id: 'video-segment:preserved-panel', x: 0, y: 0 }),
+      node({ id: 'video-segment:free-panel', x: 0, y: 0 }),
     ]
     const preservedNodePositions = new Map([
-      ['shot:preserved-panel', { x: 480, y: 320 }],
+      ['video-segment:preserved-panel', { x: 480, y: 320 }],
     ])
 
     const layout = composeWorkspaceCanvasLegacyLayout({
@@ -100,7 +100,7 @@ describe('workspace canvas overlap policy', () => {
       preservedNodePositions,
     })
 
-    expect(findNode(layout, 'shot:preserved-panel').position).toEqual({ x: 480, y: 320 })
-    expect(findNode(layout, 'shot:free-panel').position).toEqual({ x: 0, y: 0 })
+    expect(findNode(layout, 'video-segment:preserved-panel').position).toEqual({ x: 480, y: 320 })
+    expect(findNode(layout, 'video-segment:free-panel').position).toEqual({ x: 0, y: 0 })
   })
 })

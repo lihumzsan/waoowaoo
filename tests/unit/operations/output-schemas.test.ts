@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  storyboardMutationOperationOutputSchema,
   taskBatchSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchema,
 } from '@/lib/operations/output-schemas'
@@ -11,7 +10,7 @@ describe('operation output schemas', () => {
       success: true,
       async: true,
       taskId: 'task_1',
-      taskType: 'image_panel',
+      taskType: 'image_character',
       status: 'queued',
       runId: null,
       deduped: false,
@@ -24,7 +23,7 @@ describe('operation output schemas', () => {
       success: true,
       async: false,
       taskId: 'task_1',
-      taskType: 'image_panel',
+      taskType: 'image_character',
       status: 'queued',
       runId: null,
       deduped: false,
@@ -77,24 +76,5 @@ describe('operation output schemas', () => {
       throw new Error('expected taskBatchSubmitOperationOutputSchema to reject success=false; this would hide a batch-submit semantic bug')
     }
     expect(bad.error.issues.map((issue) => issue.message).join('\n')).toContain('TASK_BATCH_SUBMIT_OUTPUT_EXPECTS_SUCCESS_TRUE_ASYNC_TRUE')
-  })
-
-  it('requires mutationBatchId unless noop=true for storyboard mutations', () => {
-    const missingBatch = storyboardMutationOperationOutputSchema.safeParse({
-      success: true,
-      noop: false,
-    })
-    if (missingBatch.success) {
-      throw new Error('expected storyboardMutationOperationOutputSchema to require mutationBatchId when noop is not true')
-    }
-    expect(missingBatch.error.issues.map((issue) => issue.message).join('\n')).toContain('STORYBOARD_MUTATION_OUTPUT_MISSING_MUTATION_BATCH_ID')
-
-    const noopOk = storyboardMutationOperationOutputSchema.safeParse({
-      success: true,
-      noop: true,
-    })
-    if (!noopOk.success) {
-      throw new Error(`expected storyboardMutationOperationOutputSchema to allow noop=true without mutationBatchId, got: ${noopOk.error.message}`)
-    }
   })
 })

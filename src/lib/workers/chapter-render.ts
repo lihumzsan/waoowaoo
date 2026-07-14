@@ -116,29 +116,15 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-chapter-render-${randomUUID()}-`))
   try {
     await reportTaskProgress(job, 10, { stage: 'chapter_render_prepare', chapterId })
-    const [editScript, panels, videoGroups] = await Promise.all([
+    const [editScript, videoSegments] = await Promise.all([
       buildEditScript(episodeId, chapterId),
-      prisma.projectPanel.findMany({
-        where: { storyboard: { episodeId, chapterId } },
-        include: {
-          videoMedia: true,
-          storyboard: {
-            select: {
-              id: true,
-              editScriptId: true,
-              createdAt: true,
-              storyboardTextJson: true,
-            },
-          },
-        },
-      }),
-      prisma.projectVideoGroup.findMany({
+      prisma.projectVideoSegment.findMany({
         where: { episodeId, chapterId, projectId: job.data.projectId },
         include: { videoMedia: true },
       }),
     ])
     if (!editScript) throw new Error(`CHAPTER_RENDER_EDIT_SCRIPT_REQUIRED:${chapterId}`)
-    const clips = buildFinalRenderClips({ panels, videoGroups, editScript })
+    const clips = buildFinalRenderClips({ videoSegments, editScript })
     if (clips.length === 0) throw new Error(`CHAPTER_RENDER_NO_VIDEO_CLIPS:${chapterId}`)
     assertFinalRenderClipsHaveSources({
       clips,

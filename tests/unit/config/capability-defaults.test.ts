@@ -62,7 +62,7 @@ describe('config capability defaults', () => {
 
   it('builds a single config patch when switching a model with missing parameters', () => {
     const result = buildModelCapabilityConfigPatch({
-      configPatch: { sequenceVideoModel: 'fal::alibaba/happy-horse/image-to-video' },
+      configPatch: { videoModel: 'fal::alibaba/happy-horse/image-to-video' },
       capabilityOverrides: {},
       modelKey: 'fal::alibaba/happy-horse/image-to-video',
       fields: [
@@ -72,7 +72,7 @@ describe('config capability defaults', () => {
 
     expect(result.changed).toBe(true)
     expect(result.patch).toEqual({
-      sequenceVideoModel: 'fal::alibaba/happy-horse/image-to-video',
+      videoModel: 'fal::alibaba/happy-horse/image-to-video',
       capabilityOverrides: {
         'fal::alibaba/happy-horse/image-to-video': {
           resolution: '720p',
