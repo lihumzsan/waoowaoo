@@ -668,8 +668,8 @@ export function decideGoldenModelResponse(input: {
   if (groupedToolNames.length > 1) {
     return {
       kind: 'tool_calls',
-      calls: groupedToolNames.map((toolName) => ({
-        toolCallId: `golden_call_${input.requestOrdinal}_${toolName}`,
+      calls: groupedToolNames.map((toolName, index) => ({
+        toolCallId: `golden_call_${input.requestOrdinal}_${String(index + 1)}`,
         toolName,
         argumentsJson: JSON.stringify(buildToolArguments(input.request, toolName)),
       })),

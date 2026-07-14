@@ -85,7 +85,14 @@ function createTextProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
   }
 }
 
-const SYNTHETIC_TOOL_NAME = 'call'
+function isGenericToolName(toolName: string | null): boolean {
+  return toolName === 'call' || toolName === 'tool'
+}
+
+function replaceChunkToolName(chunk: ProjectAgentUiChunk, toolName: string): ProjectAgentUiChunk {
+  if (!isRecord(chunk)) return chunk
+  return { ...chunk, toolName } as unknown as ProjectAgentUiChunk
+}
 
 function createSyntheticToolInputChunks(params: {
   toolCallId: string
@@ -118,6 +125,7 @@ export function createDataChunk(type: string, data: unknown): ProjectAgentUiChun
 export function createProjectAgentUiMessageStream(params: {
   source: Parameters<typeof createAiSdkUiMessageStream>[0]
   initialChunks: ProjectAgentUiChunk[]
+  resolveToolName: (toolCallId: string) => string | null
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onChunk?: (chunk: ProjectAgentUiChunk) => void
@@ -147,19 +155,25 @@ export function createProjectAgentUiMessageStream(params: {
         params.onChunk?.(chunk)
         controller.enqueue(chunk)
       }
-      const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
+      const enqueueChunk = (rawChunk: ProjectAgentUiChunk) => {
+        let chunk = rawChunk
         assertNoTextProtocolLeak(chunk)
         const toolCallId = readChunkString(chunk, 'toolCallId')
         if (toolCallId && isToolInputChunk(chunk)) {
+          const incomingToolName = readChunkString(chunk, 'toolName')
+          const mappedToolName = params.resolveToolName(toolCallId)?.trim() || null
+          if (mappedToolName && incomingToolName && !isGenericToolName(incomingToolName) && mappedToolName !== incomingToolName) {
+            throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_CONFLICT:${toolCallId}:${mappedToolName}:${incomingToolName}`)
+          }
+          const toolName = mappedToolName ?? (isGenericToolName(incomingToolName) ? null : incomingToolName)
+          if (!toolName) throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_MISSING:${toolCallId}`)
+          if (incomingToolName !== toolName) chunk = replaceChunkToolName(chunk, toolName)
           startedToolCallIds.add(toolCallId)
         }
         if (toolCallId && (isToolApprovalRequestChunk(chunk) || isToolOutputChunk(chunk)) && !startedToolCallIds.has(toolCallId)) {
-          // The SDK requires an input chunk before approval/output. This transport-only
-          // placeholder is never projected as product identity or user-visible state.
-          for (const syntheticChunk of createSyntheticToolInputChunks({
-            toolCallId,
-            toolName: SYNTHETIC_TOOL_NAME,
-          })) {
+          const toolName = params.resolveToolName(toolCallId)?.trim() || null
+          if (!toolName) throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_MISSING:${toolCallId}`)
+          for (const syntheticChunk of createSyntheticToolInputChunks({ toolCallId, toolName })) {
             startedToolCallIds.add(toolCallId)
             emitChunk(syntheticChunk)
           }

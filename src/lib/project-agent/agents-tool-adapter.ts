@@ -29,7 +29,7 @@ import {
   buildProjectAgentOperationTargetKey,
   enforceProjectAgentOperationRunBudget,
 } from './run-budget'
-import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationSubmittedPartData } from './types'
+import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
 import type { ProjectAgentRunFence } from './run-fence'
 import {
   recordProjectAgentSuspensionReceipt,
@@ -100,6 +100,10 @@ export interface CreateProjectAgentOperationToolParams {
     toolCallId: string | null
     outcome: ProjectAgentOperationOutcome
   }) => void
+  onToolCallIdentified?: (identity: {
+    toolCallId: string
+    operationId: string
+  }) => void
   onTaskBatchBound?: (batch: {
     operationId: string
     taskIds: readonly string[]
@@ -119,29 +123,22 @@ export function createProjectAgentOperationTool(
     mode: params.assistantPermissionMode,
     operation: params.operation,
     })
-  const submittedToolCallIds = new Set<string>()
-  const requireToolCallId = (toolCallId: string | null | undefined): string => {
-    const normalizedToolCallId = toolCallId?.trim() ?? ''
-    if (!normalizedToolCallId) {
-      throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${params.operation.id}`)
+  const identifyToolCall = (toolCallId: string | null | undefined): string | null => {
+    const normalizedToolCallId = toolCallId?.trim() || null
+    if (normalizedToolCallId) {
+      params.onToolCallIdentified?.({
+        toolCallId: normalizedToolCallId,
+        operationId: params.operation.id,
+      })
     }
     return normalizedToolCallId
   }
-  const submitOperationRequestView = (toolCallId: string): void => {
-    if (!params.operation.effects.longRunning || submittedToolCallIds.has(toolCallId)) return
-    submittedToolCallIds.add(toolCallId)
-    const runId = params.context.runId?.trim() ?? ''
-    if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
-    writeOperationDataPart<ProjectAgentOperationSubmittedPartData>(params.writer, 'data-agent-operation-submitted', {
-      runId,
-      operationId: params.operation.id,
-      toolCallId,
-    })
-  }
   const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
-    const identifiedToolCallId = requireToolCallId(toolCallId)
-    submitOperationRequestView(identifiedToolCallId)
     if (!requiresApproval) return false
+    const identifiedToolCallId = identifyToolCall(toolCallId)
+    if (!identifiedToolCallId) {
+      throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${params.operation.id}`)
+    }
     if (!params.approvalPreflightStore) return true
     return await preflightProjectAgentToolApproval({
       request: params.request,
@@ -170,8 +167,7 @@ export function createProjectAgentOperationTool(
         executionSettlementReported = true
         params.onExecutionSettled?.({ toolCallId, outcome })
       }
-      const toolCallId = requireToolCallId(readToolCallId(details))
-      if (!requiresApproval) submitOperationRequestView(toolCallId)
+      const toolCallId = identifyToolCall(readToolCallId(details))
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
       const normalizedInput = normalizeProjectAgentToolInput({
@@ -342,6 +338,13 @@ export function createProjectAgentOperationTool(
         ],
       }) : null
       if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
+      if (params.operation.intent === 'act') {
+        writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
+          runId,
+          operationId: params.operation.id,
+          ...(toolCallId ? { toolCallId } : {}),
+        })
+      }
       try {
         const execution = await executeProjectAgentOperationFromTool({
           request: params.request,

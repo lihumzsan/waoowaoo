@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-ids'
-import { hasProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 
 describe('project agent operation registry', () => {
   it('keeps operation ids aligned and core fields defined', () => {
@@ -173,18 +172,6 @@ describe('project agent operation registry', () => {
       expect(operation.commit, operation.id).toBeTypeOf('function')
       expect(operation.execute, operation.id).toBeUndefined()
       expect(operation.effects.workspaceResourceImpact, operation.id).toBe('none')
-    }
-  })
-
-  it('gives every Tool-visible task-submission operation a localized presentation identity', () => {
-    const registry = createProjectAgentOperationRegistry()
-    const taskSubmissionOperations = Object.values(registry).filter((operation) => (
-      operation.channels.tool && operation.effects.longRunning
-    ))
-
-    expect(taskSubmissionOperations.length).toBeGreaterThan(0)
-    for (const operation of taskSubmissionOperations) {
-      expect(hasProjectAgentOperationTitle(operation.id), operation.id).toBe(true)
     }
   })
 

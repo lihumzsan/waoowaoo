@@ -1194,6 +1194,34 @@ export async function createProjectAgentChatResponse(input: {
   const committedSuspensions = new Map<string, ProjectAgentSuspensionReceipt>()
   const preparedChoiceHandoffs = new Map<string, ProjectAgentChoiceHandoffReceipt>()
   const outcomesByToolCall = new Map<string, ProjectAgentOperationOutcome>()
+  const operationIdByToolCallId = new Map<string, string>()
+  const registerToolCallIdentity = (identity: { toolCallId: string; operationId: string }): void => {
+    const toolCallId = identity.toolCallId.trim()
+    const operationId = identity.operationId.trim()
+    if (!toolCallId || !operationId) throw new Error('PROJECT_AGENT_TOOL_IDENTITY_INVALID')
+    const existingOperationId = operationIdByToolCallId.get(toolCallId)
+    if (existingOperationId && existingOperationId !== operationId) {
+      throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_CONFLICT:${toolCallId}:${existingOperationId}:${operationId}`)
+    }
+    operationIdByToolCallId.set(toolCallId, operationId)
+  }
+  if (control.kind === 'approval') {
+    const approvalIdentities = persistedApprovalItems.length > 0
+      ? persistedApprovalItems
+      : [{
+          toolCallId: control.interruption.toolCallId,
+          operationId: control.interruption.operationId,
+        }]
+    for (const identity of approvalIdentities) {
+      if (!identity.toolCallId) {
+        throw new Error(`PROJECT_AGENT_APPROVAL_TOOL_CALL_ID_MISSING:${identity.operationId}`)
+      }
+      registerToolCallIdentity({
+        toolCallId: identity.toolCallId,
+        operationId: identity.operationId,
+      })
+    }
+  }
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -1252,6 +1280,7 @@ export async function createProjectAgentChatResponse(input: {
         }
         liveWorkflow.invalidate()
       },
+      onToolCallIdentified: registerToolCallIdentity,
       onTaskBatchBound: (batch) => {
         if (transactionallyBoundTaskBatches.has(batch.operationId)) {
           throw new Error(`PROJECT_AGENT_TASK_BATCH_DUPLICATE_BINDING:${batch.operationId}`)
@@ -1449,6 +1478,7 @@ export async function createProjectAgentChatResponse(input: {
     const stream = createProjectAgentUiMessageStream({
       source: result,
       initialChunks,
+      resolveToolName: (toolCallId) => operationIdByToolCallId.get(toolCallId) ?? null,
       drainChunks: drainSideChannelChunks,
       onChunk: recordAssistantChunk,
       beforeFinish: async () => {
