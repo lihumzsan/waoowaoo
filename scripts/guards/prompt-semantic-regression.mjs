@@ -20,16 +20,95 @@ const criticalTemplateTokens = new Map([
 const criticalLocalizedTemplateTokens = new Map([
   ['project-agent/system', {
     en: [
+      '# Identity',
+      '# Voice and communication',
+      'Announcing tool calls:',
+      '# Operating principles',
+      'Parallel operation groups: when `workflowOperationGroupIds` is non-empty',
+      '# Authoritative state and when to read',
+      '# The turn loop',
+      'Task update: a `[task_update]`',
+      'data.noop=true',
+      '# Failure handling and retry boundaries',
+      'Transient external-service errors, network/timeouts',
+      '# Hard constraints',
+      'Visual safety: never choose or generate real-person',
+      '# Edit-first workflow',
+      '# Edit-first stage rules',
+      'Before the bible:',
+      'Script confirmation:',
+      'Production-plan confirmation:',
+      'Visual style:',
+      'Asset review:',
+      'Shot, video, and audio:',
+      '`generate_video_segments` is the only video-segment generation entry.',
+      '# Permission mode',
+      'This controls execution approval only, never content choices.',
+      '# Current context',
       'Choice tools are governed by `workflowStatus` and `enabledOperationIds`',
       'When `workflowRecommendedOperation` is non-empty and appears in both `allowedOperationIds` and `enabledOperationIds`',
       'When `workflowStatus=needs_user_choice` and `enabledOperationIds` contains the current-stage choice tool',
-      'A text-only request, presentation, or “please confirm” message is not a valid terminal condition.',
+      'A prose question, artifact presentation, or statement such as "please confirm" does not count as completion.',
     ],
     zh: [
+      '# 身份',
+      '# 文风与沟通',
+      '工具调用说明：',
+      '# 行为原则',
+      '并行操作组：当 `workflowOperationGroupIds` 非空时',
+      '# 权威状态与读取规则',
+      '# 每轮循环',
+      '任务更新：`[task_update]`',
+      'data.noop=true',
+      '# 失败处理与重试边界',
+      '临时外部服务错误、网络/超时',
+      '# 硬约束',
+      '视觉安全：不要选择或生成真人',
+      '# 剪辑先行工作流',
+      '# 剪辑先行阶段规则',
+      'Bible 前：',
+      '剧本确认：',
+      '制作规划确认：',
+      '视觉风格：',
+      '资产审核：',
+      '镜头、视频与音频：',
+      '`generate_video_segments` 是唯一视频片段生成入口。',
+      '# 权限模式',
+      '该模式只影响执行审批，不影响内容选择。',
+      '# 当前上下文',
       'Choice 工具由 `workflowStatus` 与 `enabledOperationIds` 共同约束',
       '`workflowRecommendedOperation` 非空且同时出现在 `allowedOperationIds` 与 `enabledOperationIds`',
-      '`workflowStatus=needs_user_choice` 且 `enabledOperationIds` 中存在当前阶段的 Choice 工具',
-      '纯文字提问、展示内容或“请确认”不是有效终点。',
+      '`workflowStatus=needs_user_choice` 且 `enabledOperationIds` 中存在当前阶段的选择工具',
+      '纯文字提问、展示内容或说明“请确认”不算完成。',
+    ],
+  }],
+])
+
+const forbiddenLocalizedTemplateTokens = new Map([
+  ['project-agent/system', {
+    en: [
+      'selectedPanelId',
+      'storyboardId',
+      'generate_edit_script_storyboard_images',
+      'generate_episode_videos',
+      'plan_episode_soundscape',
+      'generate_episode_soundscape',
+      'structured repair loop',
+      'spatial profiles',
+      'storyboard panels',
+      'storyboard images',
+    ],
+    zh: [
+      'selectedPanelId',
+      'storyboardId',
+      'generate_edit_script_storyboard_images',
+      'generate_episode_videos',
+      'plan_episode_soundscape',
+      'generate_episode_soundscape',
+      '结构化修复轮',
+      '空间档案',
+      '分镜面板',
+      '分镜图片',
     ],
   }],
 ])
@@ -140,6 +219,19 @@ for (const entry of entries) {
     for (const token of tokens) {
       if (!localizedTemplate.includes(token)) {
         violations.push(`missing semantic token ${token} in ${relLocalizedTemplatePath}`)
+      }
+    }
+  }
+
+  const forbiddenLocalizedTokens = forbiddenLocalizedTemplateTokens.get(entry.pathStem)
+  for (const [locale, tokens] of Object.entries(forbiddenLocalizedTokens || {})) {
+    const localizedTemplatePath = path.join(root, 'src', 'lib', 'ai-prompts', 'templates', entry.pathStem, `${entry.promptId}.${locale}.txt`)
+    const relLocalizedTemplatePath = `src/lib/ai-prompts/templates/${entry.pathStem}/${entry.promptId}.${locale}.txt`
+    if (!fs.existsSync(localizedTemplatePath)) continue
+    const localizedTemplate = fs.readFileSync(localizedTemplatePath, 'utf8')
+    for (const token of tokens) {
+      if (localizedTemplate.includes(token)) {
+        violations.push(`forbidden legacy semantic token ${token} in ${relLocalizedTemplatePath}`)
       }
     }
   }
