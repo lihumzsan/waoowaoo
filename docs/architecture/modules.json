@@ -375,6 +375,7 @@
         "tests/integration/provider/provider-gateway-capabilities.contract.test.ts",
         "tests/integration/provider/provider-gateway-connections.contract.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
+        "tests/unit/ai-exec/structured-json.test.ts",
         "tests/unit/provider/llm-stream-finalization.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts"
       ],
