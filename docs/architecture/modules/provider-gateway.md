@@ -19,6 +19,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-07 — LLM stream 与最终 completion 同源。** provider adapter 必须把 SDK stream delta 与 `finalChatCompletion()` 归一为同一次 completion。若 final text 是已发正文的严格前缀扩展，adapter 必须在 `onComplete` 前补发尚未发出的 suffix；若此前没有正文 delta，则补发完整 final text。final text 与已发正文分叉时不得拼接、猜测或重发整份内容，正式 completion 仍按 provider 返回值显式结算。该归一化只是同一 provider 响应的传输完整性，不得变成非流式重试、跨 provider fallback 或第二次模型调用。
 - **PG-08 — LLM 推理强度精确归一。** 推理强度 identity 由 `ai-registry/reasoning-effort.ts` 唯一定义，具体模型支持集合由生产 capability registry 穷尽声明，运行时只经 `ai-exec/reasoning-effort.ts` 合并显式调用参数、用户/项目 capability 配置或平台角色环境变量。最终值必须在持久化 invocation 前冻结，并由 provider adapter 原样写入外部请求；未知值、不受模型支持的值或 SDK 无法精确表达的值必须原地失败，禁止就近映射、静默默认或由不同调用链自行解释。
 - **PG-09 — 结构化输出只有一个严格解释器。** 所有声明 JSON object/array 的 LLM 与 vision 结果必须经 `ai-exec/structured-json.ts` 解析，再进入 schema 与业务校验。解释器只可去除包裹整份响应的一个完整、匹配、无额外正文的 Markdown `json` 或无标签 fence；不得截取正文中的 JSON、修复内容、接受未知 fence 标签或从说明文字中猜测结果。外层包装以外的任何协议偏差必须显式失败。
+- **PG-10 — 音乐时长能力由 registry 唯一声明。** FAL Lyria 只声明连续 `120–180` 秒能力；业务调用方必须从生产 registry 解析 provider 请求时长，不得维护固定时长枚举或复制范围。目标短于 120 秒时生成 120 秒后在本地精确贴合，目标位于范围内时按目标生成，超过 180 秒必须原地失败；`negative_prompt` 必须经 provider adapter 原样进入外部协议。
 
 ## 权威入口
 
@@ -34,6 +35,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 ## 验证
 
 - `tests/integration/provider/fal-*.contract.test.ts` 使用本地协议服务器验证真实 FAL adapter 的提交、轮询、FAILED/unknown/malformed/无媒体结果、422/500 和零隐式 retry。
+- `tests/integration/provider/fal-music-capability.contract.test.ts` 从生产 registry 验证 Lyria 连续 `120–180` 秒能力、范围外请求在 HTTP 前失败，以及 `duration_seconds` 与 `negative_prompt` 的真实 FAL wire contract。
 - `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 与 `message-content.contract.test.ts` 验证生产 registry capability、connection 和消息协议。
 - `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level streaming 协议；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、成功兄弟重放、失败 invocation/external job 仅由更高 attempt 重取，以及 `outcome_unknown` 与永久拒绝零重提。
 - `tests/unit/task/async-poll-external-id.test.ts` 只验证纯 external identity 解析。
@@ -49,6 +51,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - 结构化 LLM 输出校验曾发生在 provider checkpoint 已写 `submitted` 之后；队列虽进入更高 attempt，网关仍永久重放旧结果。逻辑 invocation 必须由结果消费者显式写回“该结果不可用”，但重新提交资格仍只由 provider fence 的 attempt CAS 裁决，不能由业务调用方另开请求入口。
 - `95254ae71` 曾把 fence 剥离与 JSON 内容修复、正文截取放在同一 `safeParseJson`；`d8a1685dc` 为恢复严格输出契约删除整条 repair 路径时，也一并删除了安全的外层 envelope 规范化。真实 `edit_style_preview_options_generate` 随后因完整合法 JSON 被 ` ```json ` 包裹而连续三次进入 `PARSE_ERROR`。当前只在唯一结构化解释器中剥离完整匹配的最外层 fence，继续拒绝所有内容修补与正文猜测。
 - OpenRouter SDK 可在 `finalChatCompletion()` 才暴露此前 delta 未完整携带的正文；旧 adapter 用该正文完成正式持久化，却没有补给同一次 stream callback，造成 Task 成功而 Canvas 没有 structured preview。现只补发 final text 相对已发正文的确定 suffix；分叉内容不做隐式拼接，也不发起第二次调用。
+- 音乐模型能力曾以少数固定秒数枚举表达，业务层因此无法为任意时间线声明明确请求。现在 FAL Lyria 在生产 registry 唯一声明连续 `120–180` 秒；短时间线统一请求 120 秒并由本地确定性 conform，范围内精确请求，超长请求拒绝。provider contract 直接观察真实 HTTP payload，防止调用方重新写死枚举、丢失负向提示词或绕过范围校验。
 
 ## 修改检查表
 

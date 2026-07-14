@@ -24,6 +24,7 @@ npm run architecture:impact -- --changed
 | 图片、视频、音乐、音效的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
 | 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection、motion presence transition |
 | 章节核心剪辑计划、镜头结构、章节 ledger 事实投影 | [章节核心剪辑规划](modules/chapter-planning.md) | chapter input、strict output schema、ledger facts projector |
+| 整集声音设计、SoundPresence、配乐/环境音候选、最终混音 | [声音设计、生成与最终混音](modules/audio-production.md) | AudioDesign strict contract、candidate QC、design/timeline fence、final mix |
 | route → queue → worker → DB 的任务提交、状态、重试、补偿 | [异步任务生命周期](modules/async-task-lifecycle.md) | task types、submitter、task service |
 | Agent run、工具调度、确认、心跳、恢复、任务完成后的继续执行 | [Assistant Run 生命周期](modules/assistant-run-lifecycle.md) | project-agent runtime、operation registry |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
