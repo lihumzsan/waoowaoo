@@ -28,9 +28,8 @@ const WRITE_TOOL_PRIORITY = [
   'generate_edit_shot_execution_plan',
   'generate_video_segments',
   'render_chapters',
-  'plan_episode_bgm_score',
+  'plan_episode_audio_design',
   'generate_episode_bgm_score',
-  'plan_episode_ambient_sound',
   'generate_episode_ambient_sound',
   'render_final_video',
 ] as const
@@ -66,9 +65,8 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   generate_edit_shot_execution_plan: { chapterId: null },
   generate_video_segments: { scope: { kind: 'pending', chapterId: null } },
   render_chapters: { chapterId: null },
-  plan_episode_bgm_score: {},
+  plan_episode_audio_design: {},
   generate_episode_bgm_score: {},
-  plan_episode_ambient_sound: {},
   generate_episode_ambient_sound: {},
   render_final_video: {},
 }
@@ -447,83 +445,10 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
   return JSON.stringify({ generationSegments })
 }
 
-function generateBgmScorePlanContract(prompt: string): string | null {
-  if (
-    !prompt.includes('"creativeBrief"')
-    || !prompt.includes('"scoreDesign"')
-    || !prompt.includes('"virtualLayers"')
-    || !prompt.includes('"finalPrompt"')
-  ) return null
-  const requiredShape = readJsonObjectAfterMarker(prompt, ['Required JSON shape:'])
-  const durationSeconds = typeof requiredShape?.durationSeconds === 'number'
-    ? requiredShape.durationSeconds
-    : 12
-  return JSON.stringify({
-    durationSeconds,
-    creativeBrief: {
-      cueType: '连续纯器乐背景配乐',
-      genre: '民俗恐怖悬疑',
-      mood: '从空旷不安逐步收紧到循环揭示',
-      narrativeFunction: '用单一低频动机连接祭坛建立、逃离失败与回到原点的剪辑连续性。',
-    },
-    scoreDesign: {
-      overview: '以克制的低音弦乐脉冲和稀疏打击构成一条连续配乐，为原生对白和环境声保留中高频空间。',
-      sections: [{
-        category: '情绪弧线',
-        title: '循环逐步闭合',
-        purpose: '让观众在结尾意识到主角重新回到同一地点。',
-        startSec: 0,
-        endSec: durationSeconds,
-        content: '开头保持空旷，中央加入低频脉冲，结尾收紧节奏但不做响亮终止。',
-      }],
-    },
-    virtualLayers: [{
-      name: '低频循环动机',
-      purpose: '维持整段的心理压迫与连续性。',
-      content: '使用低音弦乐和柔和脉冲，不覆盖对白频段，不加入拟音或环境声。',
-    }],
-    promptSections: [{
-      title: '完整情绪与编曲',
-      purpose: '把连续时长、叙事击点和混音限制压缩进最终生成提示词。',
-      startSec: 0,
-      endSec: durationSeconds,
-      content: '低饱和民俗恐怖纯器乐，从稀疏悬疑逐步收紧，以循环动机完成结尾。',
-    }],
-    finalPrompt: `生成一条 ${String(durationSeconds)} 秒完整连续的纯器乐民俗恐怖电影背景配乐：以低音弦乐、克制脉冲和稀疏打击建立空旷不安，随逃离失败逐步收紧，结尾以未解决的循环动机回到起点；不要人声、歌词、对白、拟音或环境声，为视频原生声音保留清晰中高频空间。`,
-  })
-}
-
-function generateAmbientSoundPlanContract(prompt: string): string | null {
-  if (
-    !prompt.includes('"environmentFingerprint"')
-    || !prompt.includes('"transitionIn"')
-    || !prompt.includes('Final rendered media timeline JSON:')
-  ) return null
-  const timelinePrompt = prompt.slice(prompt.indexOf('Final rendered media timeline JSON:'))
-  const clipOrders = [...timelinePrompt.matchAll(/"clipOrder"\s*:\s*(\d+)/g)]
-    .map((match) => Number(match[1]))
-  const firstClipOrder = clipOrders[0]
-  const lastClipOrder = clipOrders.at(-1)
-  if (!firstClipOrder || !lastClipOrder) return null
-  return JSON.stringify({
-    decision: 'ambient_sound',
-    sources: [{
-      sourceId: 'source-001',
-      environmentFingerprint: 'twilight_forbidden_shrine_dry_wind',
-      prompt: 'Seamless loop of dry twilight wind across an abandoned stone shrine, no music, no voices, no dialogue, no footsteps, no impacts.',
-      loopDurationSeconds: 12,
-      promptInfluence: 0.55,
-    }],
-    sections: [{
-      sourceId: 'source-001',
-      fromClipOrder: firstClipOrder,
-      toClipOrder: lastClipOrder,
-      perspective: 'exterior_near',
-      intensity: 'low',
-      transitionIn: 'fade',
-      transitionOut: 'crossfade',
-    }],
-  })
+function generateAudioDesignPlanContract(prompt: string): string | null {
+  if (!prompt.includes('Create one strict episode-level AudioDesign JSON object.')) return null
+  const example = readJsonObjectAfterMarker(prompt, ['allowed enum spellings:'])
+  return example ? JSON.stringify(example) : null
 }
 
 function generatePromptContractText(request: GoldenChatCompletionRequest): string | null {
@@ -590,10 +515,8 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
   if (editScriptContract) return editScriptContract
   const shotExecutionPlanContract = generateShotExecutionPlanContract(prompt)
   if (shotExecutionPlanContract) return shotExecutionPlanContract
-  const bgmScorePlanContract = generateBgmScorePlanContract(prompt)
-  if (bgmScorePlanContract) return bgmScorePlanContract
-  const ambientSoundPlanContract = generateAmbientSoundPlanContract(prompt)
-  if (ambientSoundPlanContract) return ambientSoundPlanContract
+  const audioDesignPlanContract = generateAudioDesignPlanContract(prompt)
+  if (audioDesignPlanContract) return audioDesignPlanContract
   const locationCandidateContract = generateLocationCandidatePromptContract(prompt)
   if (locationCandidateContract) return locationCandidateContract
   return generateEditBiblePromptContract(prompt)

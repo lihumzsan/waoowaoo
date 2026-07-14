@@ -27,9 +27,8 @@ import { normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
 import { buildShotExecutionPlanPromptStructure } from '@/lib/edit-script/shot-execution-plan-prompt'
 import { normalizeChapterPlanOutput } from '@/lib/edit-chapter'
 import { parseLocationCandidatePrompt } from '@/lib/asset-generation/location-candidate-prompts'
-import { bgmScorePlanSchema } from '@/lib/bgm-score/types'
-import { ambientSoundRawPlanSchema } from '@/lib/ambient-sound/types'
-import { resolveAmbientSoundPlanReferences } from '@/lib/ambient-sound/plan-contract'
+import { buildAudioDesignPlanPrompt } from '@/lib/audio-design/prompt'
+import { audioDesignSchema } from '@/lib/audio-design/types'
 import {
   applyGoldenRuntimeIdentity,
   resolveGoldenRuntimeIdentity,
@@ -274,85 +273,52 @@ describe('Golden local model provider', () => {
     expect(normalized.generationSegments[0]?.shots.every((shot) => shot.cameraMovement.stability === 'smooth')).toBe(true)
   })
 
-  it('honors the production BGM score plan contract expressed only in the prompt', () => {
+  it('honors the one production AudioDesign contract without media-analysis input', () => {
+    const prompt = buildAudioDesignPlanPrompt({
+      locale: 'zh',
+      planningInput: {
+        clock: { fps: 24, sampleRate: 48_000, totalFrames: 288 },
+        clips: [{
+          sourceId: 'chapter-1',
+          order: 1,
+          range: { startFrame: 0, endFrameExclusive: 288 },
+          shotIds: ['shot-1'],
+          shotNumbers: [1],
+          description: '暮色中的废弃祭坛。',
+          synchronousSound: '风声。',
+        }],
+        scriptShots: [{
+          chapterId: 'chapter-1',
+          shotId: 'shot-1',
+          shotNumber: 1,
+          range: { startFrame: 0, endFrameExclusive: 288 },
+          scene: { locationId: 'location-1', name: '废弃祭坛', subScene: '祭坛前' },
+          shotPurpose: 'establishing',
+          action: '旅人停在祭坛前。',
+          dialogue: [],
+          synchronousSound: '风声。',
+        }],
+        soundWorldBoundaryFrames: [0],
+      },
+    })
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 23,
       request: {
         model: 'golden-model',
-        messages: [{
-          role: 'user',
-          content: 'Required JSON shape:\n{"durationSeconds":12,"creativeBrief":{},"scoreDesign":{},"virtualLayers":[],"promptSections":[],"finalPrompt":"string"}\n只返回严格 JSON。',
-        }],
+        messages: [{ role: 'user', content: prompt }],
       },
     })
 
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const plan = bgmScorePlanSchema.parse(JSON.parse(decision.text))
-    expect(plan.durationSeconds).toBe(12)
-    expect(plan.finalPrompt.length).toBeGreaterThanOrEqual(80)
-    expect(plan.scoreDesign.sections).toHaveLength(1)
-  })
-
-  it('uses short clip orders in the production ambientSound model contract', () => {
-    const decision = decideGoldenModelResponse({
-      scenarioId: 'normal-mainline',
-      requestOrdinal: 24,
-      request: {
-        model: 'golden-model',
-        messages: [{
-          role: 'user',
-          content: 'Required JSON shape: {"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"clipOrder":1,"shotNumbers":[1]},{"clipOrder":2,"shotNumbers":[2]}]',
-        }],
-      },
-    })
-
-    expect(decision.kind).toBe('text')
-    if (decision.kind !== 'text') return
-    const rawPlan = ambientSoundRawPlanSchema.parse(JSON.parse(decision.text))
-    expect(rawPlan.sections[0]).toMatchObject({
-      fromClipOrder: 1,
-      toClipOrder: 2,
-    })
-    const plan = resolveAmbientSoundPlanReferences(rawPlan, [
-      {
-        clipId: 'clip-1',
-        sourceKind: 'videoSegment',
-        sourceId: 'video-segment-1',
-        videoSegmentId: 'video-segment-1',
-        segmentId: 'segment-1',
-        source: 'clip-1.mp4',
-        durationSeconds: 4,
-        order: 1,
-        shotNumber: 1,
-        shotNumbers: [1],
-        shotId: 'shot-real-1',
-        shotIds: ['shot-real-1'],
-        description: null,
-        synchronousSound: null,
-      },
-      {
-        clipId: 'clip-2',
-        sourceKind: 'videoSegment',
-        sourceId: 'video-segment-2',
-        videoSegmentId: 'video-segment-2',
-        segmentId: 'segment-2',
-        source: 'clip-2.mp4',
-        durationSeconds: 4,
-        order: 2,
-        shotNumber: 2,
-        shotNumbers: [2],
-        shotId: 'shot-real-2',
-        shotIds: ['shot-real-2'],
-        description: null,
-        synchronousSound: null,
-      },
-    ])
-    expect(plan.sections[0]).toMatchObject({
-      fromShotId: 'shot-real-1',
-      toShotId: 'shot-real-2',
-    })
+    const design = audioDesignSchema.parse(JSON.parse(decision.text))
+    expect(design.soundWorlds).toHaveLength(1)
+    expect(design.soundPresence).toHaveLength(1)
+    expect(design.ambienceSources[0]).toMatchObject({ candidateCount: 2 })
+    expect(design.scoreCues).toHaveLength(1)
+    expect(prompt).toContain('use ONLY the locked edit-script facts and rendered clip identity/duration metadata')
+    expect(prompt).toContain('Do not inspect, infer from, request, or claim analysis of video frames, native audio waveforms, final video, or final mix.')
   })
 
   it('serves a streamed OpenAI-compatible tool call over HTTP', async () => {

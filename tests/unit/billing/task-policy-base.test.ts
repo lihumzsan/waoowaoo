@@ -95,7 +95,7 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_SEGMENT, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.AUDIO_DESIGN_PLAN, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.AMBIENT_SOUND_GENERATE, {})).toBeNull()
   })

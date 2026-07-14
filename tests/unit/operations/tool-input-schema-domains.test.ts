@@ -55,10 +55,10 @@ describe('tool input schema compatibility', () => {
     })
   })
 
-  it('accepts empty execution input for context-derived BGM planning and generation', () => {
+  it('accepts empty execution input for context-derived audio design and BGM generation', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.plan_episode_bgm_score.inputSchema.safeParse({}).success).toBe(true)
+    expect(registry.plan_episode_audio_design.inputSchema.safeParse({}).success).toBe(true)
     expect(registry.generate_episode_bgm_score.inputSchema.safeParse({}).success).toBe(true)
   })
 

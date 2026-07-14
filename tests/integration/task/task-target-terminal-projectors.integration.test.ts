@@ -19,53 +19,60 @@ describe('Task target terminal projector ownership', () => {
     await resetBillingState()
   })
 
-  it('projects music score failure/cancel only for the exact active Task owner', async () => {
+  it('projects unified audio-design failure/cancel only for the exact active Task owner', async () => {
     const { episode } = await seedEpisode()
-    await prisma.projectEditMusicScore.create({
-      data: { episodeId: episode.id, status: 'planning', taskId: 'music-old' },
+    await prisma.projectEditAudioDesign.create({
+      data: { episodeId: episode.id, status: 'planning', taskId: 'audio-design-old' },
     })
 
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'failed',
-      taskId: 'music-old',
-      type: TASK_TYPE.MUSIC_SCORE_PLAN,
+      taskId: 'audio-design-old',
+      type: TASK_TYPE.AUDIO_DESIGN_PLAN,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
       errorCode: 'PROVIDER_FAILED',
-      errorMessage: 'provider rejected the score',
+      errorMessage: 'provider rejected the unified design',
     }))
-    await expect(prisma.projectEditMusicScore.findUniqueOrThrow({ where: { episodeId: episode.id } }))
-      .resolves.toMatchObject({ status: 'failed', taskId: 'music-old' })
+    await expect(prisma.projectEditAudioDesign.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+      .resolves.toMatchObject({ status: 'failed', taskId: 'audio-design-old' })
 
-    await prisma.projectEditMusicScore.update({
+    await prisma.projectEditAudioDesign.update({
       where: { episodeId: episode.id },
-      data: { status: 'planning', taskId: 'music-new' },
+      data: { status: 'planning', taskId: 'audio-design-new' },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'failed',
-      taskId: 'music-old',
-      type: TASK_TYPE.MUSIC_SCORE_PLAN,
+      taskId: 'audio-design-old',
+      type: TASK_TYPE.AUDIO_DESIGN_PLAN,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
       errorCode: 'LATE_FAILURE',
       errorMessage: 'must not overwrite new owner',
     }))
-    await expect(prisma.projectEditMusicScore.findUniqueOrThrow({ where: { episodeId: episode.id } }))
-      .resolves.toMatchObject({ status: 'planning', taskId: 'music-new' })
+    await expect(prisma.projectEditAudioDesign.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+      .resolves.toMatchObject({ status: 'planning', taskId: 'audio-design-new' })
 
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'canceled',
-      taskId: 'music-new',
-      type: TASK_TYPE.MUSIC_SCORE_PLAN,
+      taskId: 'audio-design-new',
+      type: TASK_TYPE.AUDIO_DESIGN_PLAN,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
     }))
-    await expect(prisma.projectEditMusicScore.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+    await expect(prisma.projectEditAudioDesign.findUniqueOrThrow({ where: { episodeId: episode.id } }))
       .resolves.toMatchObject({ status: 'pending', taskId: null })
+  })
 
-    await prisma.projectEditMusicScore.update({
-      where: { episodeId: episode.id },
-      data: { status: 'generating', taskId: 'music-generate' },
+  it('projects BGM and ambience generation terminals without owning the frozen design', async () => {
+    const { episode } = await seedEpisode()
+    await prisma.projectEditMusicScore.create({
+      data: {
+        episodeId: episode.id,
+        status: 'generating',
+        taskId: 'music-generate',
+        designSignature: 'design-1',
+      },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'canceled',
@@ -75,39 +82,41 @@ describe('Task target terminal projector ownership', () => {
       targetId: episode.id,
     }))
     await expect(prisma.projectEditMusicScore.findUniqueOrThrow({ where: { episodeId: episode.id } }))
-      .resolves.toMatchObject({ status: 'planned', taskId: null })
-  })
+      .resolves.toMatchObject({ status: 'pending', taskId: null, designSignature: 'design-1' })
 
-  it('projects ambientSound plan/generation terminal edges with distinct cancel states', async () => {
-    const { episode } = await seedEpisode()
-    await prisma.projectEditAmbientSound.create({
-      data: { episodeId: episode.id, status: 'planning', taskId: 'plan-task' },
+    await prisma.projectEditMusicScore.update({
+      where: { episodeId: episode.id },
+      data: { status: 'generating', taskId: 'music-generate' },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'failed',
-      taskId: 'plan-task',
-      type: TASK_TYPE.AMBIENT_SOUND_PLAN,
+      taskId: 'music-generate',
+      type: TASK_TYPE.MUSIC_SCORE_GENERATE,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
-      errorCode: 'PLAN_FAILED',
-      errorMessage: 'plan rejected',
+      errorCode: 'GENERATION_FAILED',
+      errorMessage: 'candidate generation failed',
     }))
-    await expect(prisma.projectEditAmbientSound.findUniqueOrThrow({ where: { episodeId: episode.id } }))
-      .resolves.toMatchObject({ status: 'failed', taskId: 'plan-task' })
+    await expect(prisma.projectEditMusicScore.findUniqueOrThrow({ where: { episodeId: episode.id } }))
+      .resolves.toMatchObject({ status: 'failed', taskId: 'music-generate', designSignature: 'design-1' })
 
-    await prisma.projectEditAmbientSound.update({
-      where: { episodeId: episode.id },
-      data: { status: 'generating', taskId: 'generate-task' },
+    await prisma.projectEditAmbientSound.create({
+      data: {
+        episodeId: episode.id,
+        status: 'generating',
+        taskId: 'ambient-generate',
+        designSignature: 'design-1',
+      },
     })
     await prisma.$transaction(async (tx) => await projectTaskTargetTerminalInTransaction(tx, {
       kind: 'canceled',
-      taskId: 'generate-task',
+      taskId: 'ambient-generate',
       type: TASK_TYPE.AMBIENT_SOUND_GENERATE,
       targetType: 'ProjectEpisode',
       targetId: episode.id,
     }))
     await expect(prisma.projectEditAmbientSound.findUniqueOrThrow({ where: { episodeId: episode.id } }))
-      .resolves.toMatchObject({ status: 'planned', taskId: null })
+      .resolves.toMatchObject({ status: 'pending', taskId: null, designSignature: 'design-1' })
   })
 
   it('fences EditScript and ShotExecutionPlan terminal projection by generationTaskId', async () => {

@@ -48,16 +48,10 @@ describe('edit-first workflow state', () => {
       }),
       activeTaskTargets: [
         {
-          taskId: 'bgm-task-1',
+          taskId: 'audio-design-task-1',
           targetType: 'ProjectEpisode',
           targetId: 'episode-1',
-          types: ['music_score_plan'],
-        },
-        {
-          taskId: 'ambientSound-task-1',
-          targetType: 'ProjectEpisode',
-          targetId: 'episode-1',
-          types: ['ambient_sound_plan'],
+          types: ['audio_design_plan'],
         },
       ],
       savedLayouts: [],
@@ -131,8 +125,7 @@ describe('edit-first workflow state', () => {
 
     expect(beforeAudioPlanning.step).toBe('audio_plan')
     expect(beforeAudioPlanning.operationPolicy.allowedOperationIds).toEqual([
-      'plan_episode_bgm_score',
-      'plan_episode_ambient_sound',
+      'plan_episode_audio_design',
     ])
   })
 
@@ -193,7 +186,7 @@ describe('edit-first workflow state', () => {
     ])
   })
 
-  it('groups music and ambientSound planning after all chapter renders are ready', () => {
+  it('offers one unified audio-design plan after all chapter renders are ready', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -210,16 +203,9 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('audio_plan')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_episode_bgm_score')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([
-      'plan_episode_bgm_score',
-      'plan_episode_ambient_sound',
-    ])
-    expect(state.operationPolicy.group).toEqual({
-      id: 'edit_first_audio_layer_planning',
-      operationIds: ['plan_episode_bgm_score', 'plan_episode_ambient_sound'],
-      approvalOperationIds: [],
-    })
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_episode_audio_design')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['plan_episode_audio_design'])
+    expect(state.operationPolicy.group).toBeNull()
   })
 
   it('blocks final render while required BGM is generating', () => {
@@ -236,11 +222,11 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
-      bgmScoreHasPlan: true,
+      audioDesignStatus: 'planned',
+      audioDesignHasPlan: true,
+      audioDesignHasScore: true,
       bgmScoreStatus: 'generating',
       activeBgmScoreGenerationTaskCount: 1,
-      ambientSoundStatus: 'completed',
-      ambientSoundDecision: 'none_needed',
     }))
 
     expect(state.step).toBe('audio_generation')
@@ -263,7 +249,9 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
-      bgmScoreHasPlan: true,
+      audioDesignStatus: 'planned',
+      audioDesignHasPlan: true,
+      audioDesignHasScore: true,
       bgmScoreStatus: 'failed',
     }))
 
@@ -273,7 +261,7 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
   })
 
-  it('groups the two paid audio generators after both plans are durable', () => {
+  it('groups the paid generators selected by the frozen unified audio design', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -287,10 +275,12 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
-      bgmScoreStatus: 'planned',
-      bgmScoreHasPlan: true,
-      ambientSoundStatus: 'planned',
-      ambientSoundDecision: 'ambient_sound',
+      audioDesignStatus: 'planned',
+      audioDesignHasPlan: true,
+      audioDesignHasScore: true,
+      audioDesignHasAmbience: true,
+      bgmScoreStatus: 'pending',
+      ambientSoundStatus: 'pending',
     }))
 
     expect(state.step).toBe('audio_generation')
@@ -319,11 +309,11 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
+      audioDesignStatus: 'planned',
+      audioDesignHasPlan: true,
+      audioDesignHasScore: true,
       bgmScoreStatus: 'completed',
-      bgmScoreHasPlan: true,
       bgmScoreHasMix: true,
-      ambientSoundStatus: 'completed',
-      ambientSoundDecision: 'none_needed',
     }))
 
     expect(state.step).toBe('final_render')

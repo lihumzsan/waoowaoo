@@ -34,6 +34,7 @@ export interface GoldenOracleSnapshot {
     readonly shotExecutionPlans: readonly Record<string, unknown>[]
     readonly videoSegments: readonly Record<string, unknown>[]
     readonly assetRequirements: readonly Record<string, unknown>[]
+    readonly audioDesigns: readonly Record<string, unknown>[]
     readonly musicScores: readonly Record<string, unknown>[]
     readonly ambientSounds: readonly Record<string, unknown>[]
     readonly finalOutputs: readonly Record<string, unknown>[]

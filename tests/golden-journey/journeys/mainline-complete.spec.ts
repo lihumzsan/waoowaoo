@@ -16,6 +16,7 @@ import type { GoldenOracleSnapshot } from '../oracle/types'
 import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
 import { GOLDEN_REMAINING_VIDEO_REQUEST } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
+import { audioDesignSchema } from '@/lib/audio-design/types'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const USER_BOUNDARIES = new Set<GoldenMainlineBoundary>([
@@ -692,14 +693,8 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       )
       expect(new Set(videoTasks.map((task) => task.targetId)).size).toBe(oracle.domain.videoSegments.length)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
-      const audioPlanTasks = assertOperationGroupWait(oracle, [
-        'plan_episode_bgm_score',
-        'plan_episode_ambient_sound',
-      ])
-      expect(audioPlanTasks.map((task) => task.type).sort()).toEqual([
-        TASK_TYPE.MUSIC_SCORE_PLAN,
-        TASK_TYPE.AMBIENT_SOUND_PLAN,
-      ].sort())
+      const audioPlanTasks = assertOperationGroupWait(oracle, ['plan_episode_audio_design'])
+      expect(audioPlanTasks.map((task) => task.type)).toEqual([TASK_TYPE.AUDIO_DESIGN_PLAN])
       expect(audioPlanTasks.every((task) => task.approvalGrantId === null)).toBe(true)
       const audioGenerationTasks = assertOperationGroupWait(oracle, [
         'generate_episode_bgm_score',
@@ -733,16 +728,28 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
           ? [execution.operationId]
           : [])
         .sort()).toEqual([...audioGenerationOperationIds].sort())
+      const audioDesignRow = oracle.domain.audioDesigns[0]
+      expect(oracle.domain.audioDesigns).toHaveLength(1)
+      expect(audioDesignRow).toMatchObject({ status: 'planned' })
+      const audioDesign = audioDesignSchema.parse(audioDesignRow?.designJson)
+      expect(audioDesign.soundWorlds.length).toBeGreaterThan(0)
+      expect(audioDesign.soundPresence.length).toBeGreaterThan(0)
+      expect(audioDesign.ambienceSources.every((source) => source.candidateCount === 2)).toBe(true)
+      expect(audioDesign.scoreCues).toHaveLength(1)
       const musicScore = oracle.domain.musicScores[0]
       const musicScoreData = asRecord(musicScore?.cuesJson)
       expect(oracle.domain.musicScores).toHaveLength(1)
-      expect(musicScore).toMatchObject({ status: 'completed' })
-      expect(asRecord(musicScoreData?.plan)).not.toBeNull()
+      expect(musicScore).toMatchObject({ status: 'completed', designSignature: audioDesignRow?.designSignature })
+      const musicCandidates = Array.isArray(musicScoreData?.candidates) ? musicScoreData.candidates : []
+      expect(musicCandidates).toHaveLength(2)
+      expect(musicCandidates.filter((candidate) => asRecord(candidate)?.selected === true)).toHaveLength(1)
       expect(asRecord(musicScore?.mixJson)).not.toBeNull()
       const ambientSound = oracle.domain.ambientSounds[0]
       expect(oracle.domain.ambientSounds).toHaveLength(1)
-      expect(ambientSound).toMatchObject({ status: 'completed' })
-      expect(asRecord(ambientSound?.planJson)).toMatchObject({ decision: 'ambient_sound' })
+      expect(ambientSound).toMatchObject({ status: 'completed', designSignature: audioDesignRow?.designSignature })
+      const ambienceCandidates = Array.isArray(ambientSound?.sourcesJson) ? ambientSound.sourcesJson : []
+      expect(ambienceCandidates).toHaveLength(audioDesign.ambienceSources.length * 2)
+      expect(ambienceCandidates.filter((candidate) => asRecord(candidate)?.selected === true)).toHaveLength(audioDesign.ambienceSources.length)
       expect(asRecord(ambientSound?.mixJson)).not.toBeNull()
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
       await assertFinalTimelineVisibility(page, 1)

@@ -328,6 +328,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       shotExecutionPlans,
       videoSegments,
       assetRequirements,
+      audioDesigns,
       musicScores,
       ambientSounds,
       finalOutputs,
@@ -355,6 +356,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_video_segments WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_audio_designs WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_music_scores WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_ambient_sounds WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
@@ -390,6 +392,11 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
         videoSegments: sortOracleRows(videoSegments, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
+        audioDesigns: audioDesigns.map((item) => ({
+          ...item,
+          designJson: parseJson(item.designJson),
+          diagnosticsJson: parseJson(item.diagnosticsJson),
+        })),
         musicScores: musicScores.map((item) => ({
           ...item,
           cuesJson: parseJson(item.cuesJson),
@@ -398,7 +405,6 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         })),
         ambientSounds: ambientSounds.map((item) => ({
           ...item,
-          planJson: parseJson(item.planJson),
           sourcesJson: parseJson(item.sourcesJson),
           mixJson: parseJson(item.mixJson),
           diagnosticsJson: parseJson(item.diagnosticsJson),
