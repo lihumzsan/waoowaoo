@@ -62,8 +62,12 @@ export async function executeFalMusicGeneration(input: AiProviderMusicExecutionC
 
   const prompt = buildFalLyriaPrompt(input.prompt, options)
   if (!prompt.trim()) throw new Error('FAL_MUSIC_PROMPT_REQUIRED')
+  const negativePrompt = readTrimmedString(options.negativePrompt)
 
-  const requestId = await submitFalMusic(modelId, apiKey, { prompt })
+  const requestId = await submitFalMusic(modelId, apiKey, {
+    prompt,
+    ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+  })
   return {
     success: true,
     async: true,

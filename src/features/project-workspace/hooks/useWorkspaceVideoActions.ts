@@ -1,7 +1,7 @@
 'use client'
 
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
-import { usePlanBgmScore, usePlanAmbientSound, useRenderFinalVideo } from '@/lib/query/hooks/useFinalMedia'
+import { usePlanAudioDesign, useRenderFinalVideo } from '@/lib/query/hooks/useFinalMedia'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -24,8 +24,7 @@ export function useWorkspaceVideoActions({
   episodeId,
   t,
 }: UseWorkspaceVideoActionsParams) {
-  const planBgmScoreMutation = usePlanBgmScore(projectId, episodeId || null)
-  const planAmbientSoundMutation = usePlanAmbientSound(projectId, episodeId || null)
+  const planAudioDesignMutation = usePlanAudioDesign(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
 
   const handleRenderFinalVideo = async () => {
@@ -51,7 +50,7 @@ export function useWorkspaceVideoActions({
       return
     }
     try {
-      await planBgmScoreMutation.mutateAsync()
+      await planAudioDesignMutation.mutateAsync()
     } catch (err: unknown) {
       if (isAbortError(err)) {
         _ulogInfo(t('execution.requestAborted'))
@@ -68,7 +67,7 @@ export function useWorkspaceVideoActions({
       return
     }
     try {
-      await planAmbientSoundMutation.mutateAsync()
+      await planAudioDesignMutation.mutateAsync()
     } catch (err: unknown) {
       if (isAbortError(err)) {
         _ulogInfo(t('execution.requestAborted'))

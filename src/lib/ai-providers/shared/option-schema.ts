@@ -28,6 +28,16 @@ export function integerRangeValidator(input: { min?: number; max?: number }): Ai
   }
 }
 
+export function numberRangeValidator(input: { min?: number; max?: number }): AiOptionValidator {
+  return (value) => {
+    if (value === undefined) return { ok: true }
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { ok: false, reason: 'expected_finite_number' }
+    if (input.min !== undefined && value < input.min) return { ok: false, reason: `min=${input.min}` }
+    if (input.max !== undefined && value > input.max) return { ok: false, reason: `max=${input.max}` }
+    return { ok: true }
+  }
+}
+
 export function booleanValidator(): AiOptionValidator {
   return (value) => {
     if (value === undefined) return { ok: true }
@@ -123,6 +133,7 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'provider',
       'modelId',
       'modelKey',
+      'negativePrompt',
       'durationSeconds',
       'vocalMode',
       'genre',

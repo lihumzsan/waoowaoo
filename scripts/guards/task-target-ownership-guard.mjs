@@ -55,13 +55,14 @@ export function inspectTaskTargetOwnershipContract(input) {
     'generationTaskId String?',
     'model ProjectEditAmbientSound {',
     'taskId            String?',
+    'model ProjectEditAudioDesign {',
+    'taskId            String?',
   ]) {
     if (!input.schema.includes(required)) violations.push(`schema missing Task ownership contract: ${required}`)
   }
   const registeredProjectors = readTerminalProjectors(input.definitions)
   for (const [taskType, projector] of [
-    ['MUSIC_SCORE_PLAN', 'music_score'],
-    ['AMBIENT_SOUND_PLAN', 'ambient_sound'],
+    ['AUDIO_DESIGN_PLAN', 'audio_design'],
     ['AMBIENT_SOUND_GENERATE', 'ambient_sound'],
     ['VIDEO_SEGMENT', 'video_segment'],
     ['EDIT_SCRIPT_GENERATE', 'edit_script'],
@@ -105,6 +106,7 @@ export function inspectTaskTargetOwnershipContract(input) {
   for (const required of [
     'projectMusicScore',
     'projectEditAmbientSound',
+    'projectEditAudioDesign',
     'projectVideoSegment',
     'projectEditScript',
     'projectEditShotExecutionPlan',

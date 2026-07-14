@@ -2,12 +2,11 @@ import { prisma } from '@/lib/prisma'
 import {
   readCompletedMusicScoreMix,
   readMusicScoreStatus,
-  readPersistedMusicScorePlan,
 } from '@/lib/music-score/project-data'
 import {
   readCompletedAmbientSoundMix,
-  readAmbientSoundDecision,
 } from '@/lib/ambient-sound/project-data'
+import { readPersistedAudioDesign } from '@/lib/audio-design/project-data'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getEditFirstChoiceDefinition } from '@/lib/project-agent/edit-first-choice-tools'
@@ -88,14 +87,14 @@ export async function resolveEditFirstWorkflowView(params: {
     finalOutput,
     musicScore,
     ambientSound,
+    audioDesignRow,
     activeSourceScriptTaskCount,
     activeBibleTaskCount,
     activeEditScriptTaskCount,
     activeShotExecutionPlanTaskCount,
     activeVideoTaskCount,
-    activeBgmScorePlanTaskCount,
+    activeAudioDesignPlanTaskCount,
     activeBgmScoreGenerationTaskCount,
-    activeAmbientSoundPlanTaskCount,
     activeAmbientSoundGenerationTaskCount,
     activeChapterRenderTaskCount,
     activeFinalRenderTaskCount,
@@ -149,7 +148,19 @@ export async function resolveEditFirstWorkflowView(params: {
     }),
     prisma.projectEditAmbientSound.findUnique({
       where: { episodeId: params.episodeId },
-      select: { status: true, planJson: true, mixJson: true },
+      select: { status: true, mixJson: true },
+    }),
+    prisma.projectEditAudioDesign.findUnique({
+      where: { episodeId: params.episodeId },
+      select: {
+        status: true,
+        designJson: true,
+        timelineSignature: true,
+        designSignature: true,
+        analysisModel: true,
+        musicModel: true,
+        soundEffectModel: true,
+      },
     }),
     prisma.task.count({
       where: {
@@ -197,7 +208,7 @@ export async function resolveEditFirstWorkflowView(params: {
         episodeId: params.episodeId,
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
-        type: TASK_TYPE.MUSIC_SCORE_PLAN,
+        type: TASK_TYPE.AUDIO_DESIGN_PLAN,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -208,16 +219,6 @@ export async function resolveEditFirstWorkflowView(params: {
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
         type: TASK_TYPE.MUSIC_SCORE_GENERATE,
-        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
-      },
-    }),
-    prisma.task.count({
-      where: {
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-        targetType: 'ProjectEpisode',
-        targetId: params.episodeId,
-        type: TASK_TYPE.AMBIENT_SOUND_PLAN,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -290,6 +291,7 @@ export async function resolveEditFirstWorkflowView(params: {
   }).length
   const bgmScoreStatus = readMusicScoreStatus(musicScore)
   const ambientSoundStatus = typeof ambientSound?.status === 'string' ? ambientSound.status : null
+  const audioDesign = readPersistedAudioDesign(audioDesignRow)
   const activeStylePreviewTaskCount = editBible
     ? await prisma.task.count({
       where: {
@@ -344,15 +346,16 @@ export async function resolveEditFirstWorkflowView(params: {
       chapter.renderStatus === 'completed' && hasOutputReference(chapter.outputMediaId)).length,
     failedChapterRenderCount: chapters.filter((chapter) => chapter.renderStatus === 'failed').length,
     activeChapterRenderTaskCount,
+    audioDesignStatus: audioDesignRow?.status ?? null,
+    audioDesignHasPlan: Boolean(audioDesign),
+    audioDesignHasScore: (audioDesign?.design.scoreCues.length ?? 0) > 0,
+    audioDesignHasAmbience: (audioDesign?.design.ambienceSources.length ?? 0) > 0,
+    activeAudioDesignPlanTaskCount,
     bgmScoreStatus,
-    bgmScoreHasPlan: Boolean(readPersistedMusicScorePlan(musicScore)),
     bgmScoreHasMix: Boolean(readCompletedMusicScoreMix(musicScore)),
-    activeBgmScorePlanTaskCount,
     activeBgmScoreGenerationTaskCount,
     ambientSoundStatus,
     ambientSoundHasMix: Boolean(readCompletedAmbientSoundMix(ambientSound)),
-    ambientSoundDecision: readAmbientSoundDecision(ambientSound),
-    activeAmbientSoundPlanTaskCount,
     activeAmbientSoundGenerationTaskCount,
     finalRenderStatus: finalOutput?.renderStatus ?? null,
     finalRenderHasOutput: Boolean(

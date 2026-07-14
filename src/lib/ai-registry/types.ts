@@ -261,6 +261,10 @@ export interface VideoCapabilities {
 
 export interface MusicCapabilities {
   durationSecondsOptions?: number[]
+  durationSecondsRange?: {
+    min: number
+    max: number
+  }
   vocalModeOptions?: string[]
   outputFormatOptions?: string[]
   bpmOptions?: number[]
@@ -317,6 +321,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
 
 const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'durationSecondsOptions',
+  'durationSecondsRange',
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
@@ -631,6 +636,24 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
       field: 'capabilities.music.durationSecondsOptions',
       message: 'durationSecondsOptions must be a finite number array',
     })
+  }
+
+  const durationSecondsRange = raw.durationSecondsRange
+  if (durationSecondsRange !== undefined) {
+    const validRange = isRecord(durationSecondsRange)
+      && typeof durationSecondsRange.min === 'number'
+      && Number.isFinite(durationSecondsRange.min)
+      && durationSecondsRange.min > 0
+      && typeof durationSecondsRange.max === 'number'
+      && Number.isFinite(durationSecondsRange.max)
+      && durationSecondsRange.max >= durationSecondsRange.min
+    if (!validRange) {
+      issues.push({
+        code: 'CAPABILITY_FIELD_INVALID',
+        field: 'capabilities.music.durationSecondsRange',
+        message: 'durationSecondsRange must contain finite positive min/max values with max >= min',
+      })
+    }
   }
 
   const vocalModeOptions = raw.vocalModeOptions

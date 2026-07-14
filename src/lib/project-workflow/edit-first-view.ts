@@ -118,15 +118,16 @@ export interface EditFirstWorkflowSnapshot {
   completedChapterRenderCount: number
   failedChapterRenderCount: number
   activeChapterRenderTaskCount: number
+  audioDesignStatus: string | null
+  audioDesignHasPlan: boolean
+  audioDesignHasScore: boolean
+  audioDesignHasAmbience: boolean
+  activeAudioDesignPlanTaskCount: number
   bgmScoreStatus: string | null
-  bgmScoreHasPlan: boolean
   bgmScoreHasMix: boolean
-  activeBgmScorePlanTaskCount: number
   activeBgmScoreGenerationTaskCount: number
   ambientSoundStatus: string | null
   ambientSoundHasMix: boolean
-  ambientSoundDecision: 'ambient_sound' | 'none_needed' | null
-  activeAmbientSoundPlanTaskCount: number
   activeAmbientSoundGenerationTaskCount: number
   finalRenderStatus: string | null
   finalRenderHasOutput: boolean
@@ -490,18 +491,15 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
   const videoReady = snapshot.completedVideoSegmentCount >= snapshot.videoPlanSegmentCount
   const chapterRenderReady = snapshot.chapterCount > 0 && snapshot.completedChapterRenderCount >= snapshot.chapterCount
   const chapterRenderRunning = snapshot.activeChapterRenderTaskCount > 0
-  const bgmPlanReady = snapshot.bgmScoreHasPlan
-  const bgmReady = snapshot.bgmScoreHasMix
-  const bgmPlanning = snapshot.activeBgmScorePlanTaskCount > 0 || snapshot.bgmScoreStatus === 'planning'
+  const audioDesignPlanning = snapshot.activeAudioDesignPlanTaskCount > 0 || snapshot.audioDesignStatus === 'planning'
+  const audioDesignFailed = snapshot.audioDesignStatus === 'failed'
+  const bgmSatisfied = !snapshot.audioDesignHasScore || snapshot.bgmScoreHasMix
   const bgmGenerating = snapshot.activeBgmScoreGenerationTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
-  const bgmFailed = snapshot.bgmScoreStatus === 'failed'
-  const ambientSoundPlanReady = snapshot.ambientSoundDecision !== null
-  const ambientSoundSatisfied = snapshot.ambientSoundDecision === 'none_needed' || snapshot.ambientSoundHasMix
-  const ambientSoundPlanning = snapshot.activeAmbientSoundPlanTaskCount > 0
-    || snapshot.ambientSoundStatus === 'planning'
+  const bgmFailed = snapshot.audioDesignHasScore && snapshot.bgmScoreStatus === 'failed'
+  const ambientSoundSatisfied = !snapshot.audioDesignHasAmbience || snapshot.ambientSoundHasMix
   const ambientSoundGenerating = snapshot.activeAmbientSoundGenerationTaskCount > 0
     || snapshot.ambientSoundStatus === 'generating'
-  const ambientSoundFailed = snapshot.ambientSoundStatus === 'failed'
+  const ambientSoundFailed = snapshot.audioDesignHasAmbience && snapshot.ambientSoundStatus === 'failed'
   const finalRendering = snapshot.activeFinalRenderTaskCount > 0 || isActiveWorkflowStatus(snapshot.finalRenderStatus)
 
   if (snapshot.finalRenderHasOutput && snapshot.finalRenderStatus === 'completed') {
@@ -559,59 +557,35 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     })
   }
 
-  if (bgmFailed) {
-    const operationId: EditFirstWorkflowOperationId = bgmPlanReady
-      ? 'generate_episode_bgm_score'
-      : 'plan_episode_bgm_score'
+  if (audioDesignFailed) {
     return failedWorkflowView({
-      step: bgmPlanReady ? 'audio_generation' : 'audio_plan',
-      reason: bgmPlanReady ? 'BGM score generation failed' : 'BGM score planning failed',
-      recommendedAction: workflowAction(
-        operationId,
-        bgmPlanReady ? 'Regenerate BGM score' : 'Replan BGM score',
-      ),
+      step: 'audio_plan',
+      reason: 'episode audio design planning failed',
+      recommendedAction: workflowAction('plan_episode_audio_design', 'Replan episode audio design'),
+    })
+  }
+
+  if (!snapshot.audioDesignHasPlan) {
+    if (audioDesignPlanning) return processingWorkflowView('audio_plan', 'episode audio design is still planning')
+    return readyWorkflowView({
+      step: 'audio_plan',
+      recommendedAction: workflowAction('plan_episode_audio_design', 'Plan episode audio design'),
+    })
+  }
+
+  if (bgmFailed) {
+    return failedWorkflowView({
+      step: 'audio_generation',
+      reason: 'BGM score generation failed',
+      recommendedAction: workflowAction('generate_episode_bgm_score', 'Regenerate BGM score'),
     })
   }
 
   if (ambientSoundFailed) {
-    const operationId: EditFirstWorkflowOperationId = ambientSoundPlanReady
-      ? 'generate_episode_ambient_sound'
-      : 'plan_episode_ambient_sound'
     return failedWorkflowView({
-      step: ambientSoundPlanReady ? 'audio_generation' : 'audio_plan',
+      step: 'audio_generation',
       reason: 'ambient sound generation failed',
-      recommendedAction: workflowAction(
-        operationId,
-        operationId === 'generate_episode_ambient_sound'
-          ? 'Regenerate ambient sound audio'
-          : 'Replan ambient sound',
-      ),
-    })
-  }
-
-  if (!bgmPlanReady || !ambientSoundPlanReady) {
-    const missingPlanActions: EditFirstWorkflowOperationId[] = []
-    if (!bgmPlanReady) missingPlanActions.push('plan_episode_bgm_score')
-    if (!ambientSoundPlanReady) missingPlanActions.push('plan_episode_ambient_sound')
-    if (bgmPlanning || ambientSoundPlanning) {
-      return processingWorkflowView('audio_plan', 'audio layer planning is still running')
-    }
-    const nextOperationId = missingPlanActions[0]
-    if (!nextOperationId) throw new Error('EDIT_FIRST_AUDIO_LAYER_PLAN_ACTION_REQUIRED')
-    return readyWorkflowView({
-      step: 'audio_plan',
-      recommendedAction: workflowAction(
-        nextOperationId,
-        nextOperationId === 'plan_episode_bgm_score' ? 'Plan BGM score' : 'Plan ambient sound',
-      ),
-      allowedOperationIds: missingPlanActions,
-      group: missingPlanActions.length > 1
-        ? {
-            id: 'edit_first_audio_layer_planning',
-            operationIds: missingPlanActions,
-            approvalOperationIds: [],
-          }
-        : null,
+      recommendedAction: workflowAction('generate_episode_ambient_sound', 'Regenerate ambient sound audio'),
     })
   }
 
@@ -619,9 +593,9 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     return processingWorkflowView('audio_generation', 'audio layer generation is still running')
   }
 
-  if (!bgmReady || !ambientSoundSatisfied) {
+  if (!bgmSatisfied || !ambientSoundSatisfied) {
     const missingGenerationActions: EditFirstWorkflowOperationId[] = []
-    if (!bgmReady) missingGenerationActions.push('generate_episode_bgm_score')
+    if (!bgmSatisfied) missingGenerationActions.push('generate_episode_bgm_score')
     if (!ambientSoundSatisfied) missingGenerationActions.push('generate_episode_ambient_sound')
     const nextOperationId = missingGenerationActions[0]
     if (!nextOperationId) {
@@ -629,11 +603,7 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     }
     const recommendedAction = workflowAction(
       nextOperationId,
-      nextOperationId === 'generate_episode_bgm_score'
-        ? 'Generate BGM score'
-        : nextOperationId === 'plan_episode_ambient_sound'
-          ? 'Plan ambient sound'
-          : 'Generate ambient sound audio',
+      nextOperationId === 'generate_episode_bgm_score' ? 'Generate BGM score' : 'Generate ambient sound audio',
     )
     return readyWorkflowView({
       step: 'audio_generation',

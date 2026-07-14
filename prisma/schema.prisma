@@ -132,6 +132,7 @@ model ProjectEpisode {
   editBible              ProjectEditBible?
   musicScore             ProjectEditMusicScore?
   ambientSound           ProjectEditAmbientSound?
+  audioDesign            ProjectEditAudioDesign?
   finalOutput            ProjectEpisodeFinalOutput?
   canvasLayout           ProjectCanvasLayout?
   editStylePreviews      ProjectEditStylePreview[]
@@ -361,8 +362,8 @@ model ProjectEditMusicScore {
   diagnosticsJson   Json?
   status            String         @default("pending")
   taskId            String?
-  planTaskId        String?
   timelineSignature String?
+  designSignature   String?
   musicModel        String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @default(now()) @updatedAt
@@ -370,21 +371,19 @@ model ProjectEditMusicScore {
 
   @@index([episodeId])
   @@index([taskId])
-  @@index([planTaskId])
   @@map("project_edit_music_scores")
 }
 
 model ProjectEditAmbientSound {
   id                String         @id @default(uuid())
   episodeId         String         @unique
-  planJson          Json?
   sourcesJson       Json?
   mixJson           Json?
   diagnosticsJson   Json?
   status            String         @default("pending")
   taskId            String?
-  planTaskId        String?
   timelineSignature String?
+  designSignature   String?
   soundEffectModel  String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @default(now()) @updatedAt
@@ -392,8 +391,28 @@ model ProjectEditAmbientSound {
 
   @@index([episodeId])
   @@index([taskId])
-  @@index([planTaskId])
   @@map("project_edit_ambient_sounds")
+}
+
+model ProjectEditAudioDesign {
+  id                String         @id @default(uuid())
+  episodeId         String         @unique
+  designJson        Json?
+  diagnosticsJson   Json?
+  status            String         @default("pending")
+  taskId            String?
+  timelineSignature String?
+  designSignature   String?
+  analysisModel     String?
+  musicModel        String?
+  soundEffectModel  String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId])
+  @@index([taskId])
+  @@map("project_edit_audio_designs")
 }
 
 model ProjectVideoSegment {

@@ -250,12 +250,12 @@ async function projectMusicScore(
 ): Promise<TaskTargetTerminalProjectionResult> {
   if (
     input.targetType !== 'ProjectEpisode'
-    || (input.type !== TASK_TYPE.MUSIC_SCORE_PLAN && input.type !== TASK_TYPE.MUSIC_SCORE_GENERATE)
+    || input.type !== TASK_TYPE.MUSIC_SCORE_GENERATE
   ) {
     throw new Error(`MUSIC_SCORE_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
   }
-  const activeStatus = input.type === TASK_TYPE.MUSIC_SCORE_PLAN ? 'planning' : 'generating'
-  const canceledStatus = input.type === TASK_TYPE.MUSIC_SCORE_PLAN ? 'pending' : 'planned'
+  const activeStatus = 'generating'
+  const canceledStatus = 'pending'
   const failure = input.kind === 'failed' ? requireFailure(input) : null
   const projected = await tx.projectEditMusicScore.updateMany({
     where: {
@@ -283,10 +283,7 @@ async function projectMusicScore(
     select: { taskId: true, status: true },
   })
   if (owner?.taskId !== input.taskId) return 'stale_owner'
-  if (
-    owner.status === 'completed'
-    || (input.type === TASK_TYPE.MUSIC_SCORE_PLAN && owner.status === 'planned')
-  ) return 'success_materialized'
+  if (owner.status === 'completed') return 'success_materialized'
   if (owner.status === activeStatus) {
     throw new Error(`MUSIC_SCORE_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
   }
@@ -301,13 +298,13 @@ async function projectAmbientSound(
 ): Promise<TaskTargetTerminalProjectionResult> {
   if (
     input.targetType !== 'ProjectEpisode' ||
-    (input.type !== TASK_TYPE.AMBIENT_SOUND_PLAN && input.type !== TASK_TYPE.AMBIENT_SOUND_GENERATE)
+    input.type !== TASK_TYPE.AMBIENT_SOUND_GENERATE
   ) {
     throw new Error(`AMBIENT_SOUND_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
   }
-  const activeStatuses = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? ['planning'] : ['generating']
+  const activeStatuses = ['generating']
   const failure = input.kind === 'failed' ? requireFailure(input) : null
-  const canceledStatus = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? 'pending' : 'planned'
+  const canceledStatus = 'pending'
   const projected = await tx.projectEditAmbientSound.updateMany({
     where: {
       episodeId: input.targetId,
@@ -334,14 +331,50 @@ async function projectAmbientSound(
     select: { taskId: true, status: true },
   })
   if (owner?.taskId !== input.taskId) return 'stale_owner'
-  const successStatus = input.type === TASK_TYPE.AMBIENT_SOUND_PLAN ? 'planned' : 'completed'
-  if (owner.status === successStatus) return 'success_materialized'
+  if (owner.status === 'completed') return 'success_materialized'
   if (activeStatuses.includes(owner.status)) {
     throw new Error(`AMBIENT_SOUND_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
   }
   throw new Error(
     `AMBIENT_SOUND_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`,
   )
+}
+
+async function projectAudioDesign(
+  tx: Prisma.TransactionClient,
+  input: TaskTargetTerminalProjection,
+): Promise<TaskTargetTerminalProjectionResult> {
+  if (input.targetType !== 'ProjectEpisode' || input.type !== TASK_TYPE.AUDIO_DESIGN_PLAN) {
+    throw new Error(`AUDIO_DESIGN_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
+  }
+  const failure = input.kind === 'failed' ? requireFailure(input) : null
+  const projected = await tx.projectEditAudioDesign.updateMany({
+    where: { episodeId: input.targetId, taskId: input.taskId, status: 'planning' },
+    data: failure
+      ? {
+          status: 'failed',
+          diagnosticsJson: {
+            errorCode: truncate(failure.errorCode, 80),
+            errorMessage: truncate(failure.errorMessage, 2_000),
+          } as Prisma.InputJsonValue,
+        }
+      : {
+          status: 'pending',
+          taskId: null,
+          diagnosticsJson: Prisma.JsonNull,
+        },
+  })
+  if (projected.count === 1) return 'applied'
+  const owner = await tx.projectEditAudioDesign.findUnique({
+    where: { episodeId: input.targetId },
+    select: { taskId: true, status: true },
+  })
+  if (owner?.taskId !== input.taskId) return 'stale_owner'
+  if (owner.status === 'planned') return 'success_materialized'
+  if (owner.status === 'planning') {
+    throw new Error(`AUDIO_DESIGN_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
+  }
+  throw new Error(`AUDIO_DESIGN_${input.kind.toUpperCase()}_PROJECTOR_STATE_INVALID:${input.targetId}:${input.taskId}:${owner.status}`)
 }
 
 async function projectEditScript(
@@ -425,6 +458,7 @@ export async function projectTaskTargetTerminalInTransaction(
   if (projector === 'final_video_render') return await projectFinalVideoRender(tx, input)
   if (projector === 'music_score') return await projectMusicScore(tx, input)
   if (projector === 'ambient_sound') return await projectAmbientSound(tx, input)
+  if (projector === 'audio_design') return await projectAudioDesign(tx, input)
   if (projector === 'edit_script') return await projectEditScript(tx, input)
   if (projector === 'edit_shot_execution_plan') return await projectEditShotExecutionPlan(tx, input)
   const exhaustive: never = projector

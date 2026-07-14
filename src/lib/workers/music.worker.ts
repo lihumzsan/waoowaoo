@@ -8,7 +8,7 @@ import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/
 import { QUEUE_NAME } from '@/lib/task/queues'
 import type { TaskJobData } from '@/lib/task/types'
 import { handleBgmScoreGenerateTask } from '@/lib/bgm-score/generate'
-import { handleAmbientSoundGenerateTask, handleAmbientSoundPlanTask } from '@/lib/ambient-sound/generate'
+import { handleAmbientSoundGenerateTask } from '@/lib/ambient-sound/generate'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
 
@@ -159,7 +159,6 @@ type MusicTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknow
 const MUSIC_TASK_HANDLERS = {
   music_generate: handleMusicGenerateTask,
   music_score_generate: handleBgmScoreGenerateTask,
-  ambient_sound_plan: handleAmbientSoundPlanTask,
   ambient_sound_generate: handleAmbientSoundGenerateTask,
 } satisfies Record<MusicTaskHandlerKey, MusicTaskHandler>
 

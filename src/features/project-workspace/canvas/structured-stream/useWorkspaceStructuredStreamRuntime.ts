@@ -29,7 +29,6 @@ import type {
   WorkspaceCanvasStreamPatchData,
   WorkspaceCanvasStreamTarget,
 } from './workspace-structured-stream-runtime-types'
-import { buildAmbientSoundStreamView } from './ambient-sound-stream-view'
 import {
   areAllTerminalHandoffs,
   markTaskEntriesForTerminalHandoff,
@@ -583,14 +582,12 @@ function buildBgmRuntimeEntry(
   episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const designSections = itemsOfKind(snapshots, 'bgm.scoreDesign.sections', 'bgmDesignSection').map((item) => item.section)
-  const promptSections = itemsOfKind(snapshots, 'bgm.promptSections', 'bgmPromptSection').map((item) => item.section)
-  const virtualLayers = itemsOfKind(snapshots, 'bgm.virtualLayers', 'bgmVirtualLayer').map((item) => item.layer)
+  const cues = itemsOfKind(snapshots, 'audioDesign.scoreCues', 'audioDesignScoreCue').map((item) => item.cue)
   const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey.startsWith('bgm.'))
+    .filter((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues')
     .flatMap((snapshot) => snapshot.items)
-  if (designSections.length === 0 && promptSections.length === 0 && virtualLayers.length === 0) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.')) ?? null
+  if (cues.length === 0) return null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues') ?? null
   if (!firstSnapshot) return null
   const nodeId = workspaceNodeId.bgmScore(episodeId)
   return createStreamRuntimeEntry({
@@ -602,44 +599,37 @@ function buildBgmRuntimeEntry(
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     terminalHandoff: areAllTerminalHandoffs(
-      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('bgm.')),
+      snapshots.filter((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues'),
     ),
     presentation: streamPresentation(rawItems),
     data: {
       body: translate('nodes.bgmScore.body', { videos: 0 }),
-      meta: translate('nodes.bgmScore.ready', { count: promptSections.length }),
+      meta: translate('nodes.bgmScore.ready', { count: cues.length }),
       bgmScoreDetails: {
         status: 'generating',
         durationSeconds: null,
         musicModel: null,
         hasPromptDesign: rawItems.length > 0,
         promptDesignMissing: false,
-        designSectionCount: designSections.length,
-        promptSectionCount: promptSections.length,
-        virtualLayerCount: virtualLayers.length,
+        designSectionCount: cues[0]?.musicTheorySpec.phases.length ?? 0,
+        promptSectionCount: 0,
+        virtualLayerCount: cues[0]?.musicTheorySpec.orchestration.length ?? 0,
         mixUrl: null,
         errorMessage: null,
-        scoreOverview: null,
-        designSections: designSections.map((section) => ({
-          category: section.category,
-          title: section.title,
-          purpose: section.purpose ?? null,
-          startSec: section.startSec ?? null,
-          endSec: section.endSec ?? null,
-          content: section.content,
+        scoreOverview: cues[0]?.narrativeDiagnosis.musicShouldDo ?? null,
+        designSections: (cues[0]?.musicTheorySpec.phases ?? []).map((phase) => ({
+          category: phase.function,
+          title: phase.phaseId,
+          purpose: `${phase.density} / ${phase.spectralBand}`,
+          startSec: phase.range.startFrame / 24,
+          endSec: phase.range.endFrameExclusive / 24,
+          content: `${Math.round(phase.energy * 100)}% energy`,
         })),
-        promptSections: promptSections.map((section) => ({
-          category: null,
-          title: section.title,
-          purpose: section.purpose ?? null,
-          startSec: section.startSec ?? null,
-          endSec: section.endSec ?? null,
-          content: section.content,
-        })),
-        virtualLayers: virtualLayers.map((layer) => ({
-          name: layer.name,
-          purpose: layer.purpose,
-          content: layer.content,
+        promptSections: [],
+        virtualLayers: (cues[0]?.musicTheorySpec.orchestration ?? []).map((part) => ({
+          name: part.instrument,
+          purpose: `${part.role} / ${part.register}`,
+          content: part.techniques.join(', '),
         })),
         finalPrompt: null,
       },
@@ -652,14 +642,13 @@ function buildAmbientSoundRuntimeEntry(
   episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const sources = itemsOfKind(snapshots, 'ambientSound.sources', 'ambientSoundSource').map((item) => item.source)
-  const sections = itemsOfKind(snapshots, 'ambientSound.sections', 'ambientSoundSection').map((item) => item.section)
-  const ambientSoundView = buildAmbientSoundStreamView(sources, sections)
+  const sources = itemsOfKind(snapshots, 'audioDesign.ambienceSources', 'audioDesignAmbienceSource').map((item) => item.source)
+  const worlds = itemsOfKind(snapshots, 'audioDesign.soundWorlds', 'audioDesignSoundWorld').map((item) => item.world)
   const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey.startsWith('ambientSound.'))
+    .filter((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds')
     .flatMap((snapshot) => snapshot.items)
-  if (sources.length === 0 && sections.length === 0) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('ambientSound.')) ?? null
+  if (sources.length === 0 && worlds.length === 0) return null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds') ?? null
   if (!firstSnapshot) return null
   const nodeId = workspaceNodeId.ambientSound(episodeId)
   return createStreamRuntimeEntry({
@@ -671,19 +660,26 @@ function buildAmbientSoundRuntimeEntry(
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     terminalHandoff: areAllTerminalHandoffs(
-      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('ambientSound.')),
+      snapshots.filter((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds'),
     ),
     presentation: streamPresentation(rawItems),
     data: {
       body: translate('nodes.ambientSound.body', { videos: 0 }),
-      meta: translate('nodes.ambientSound.ready', { sources: sources.length, sections: sections.length }),
+      meta: translate('nodes.ambientSound.ready', { sources: sources.length, sections: worlds.length }),
       ambientSoundDetails: {
         status: 'planning',
         decision: null,
         soundEffectModel: null,
         sourceCount: sources.length,
-        sectionCount: sections.length,
-        ...ambientSoundView,
+        sectionCount: worlds.length,
+        sources: sources.map((source, index) => ({
+          key: source.sourceId,
+          sourceIndex: index + 1,
+          prompt: source.generationPrompt,
+          loopDurationSeconds: source.loopDurationSeconds,
+          promptInfluence: source.promptInfluence,
+        })),
+        sections: [],
         mixUrl: null,
         errorMessage: null,
       },

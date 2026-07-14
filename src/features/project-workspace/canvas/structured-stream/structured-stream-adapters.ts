@@ -20,19 +20,13 @@ import {
   type ChapterPlanRawShot,
 } from '@/lib/edit-chapter/schemas'
 import {
-  bgmScoreDesignSectionSchema,
-  bgmScorePromptSectionSchema,
-  bgmScoreVirtualLayerSchema,
-  type BgmScoreDesignSection,
-  type BgmScorePromptSection,
-  type BgmScoreVirtualLayer,
-} from '@/lib/bgm-score/types'
-import {
-  ambientSoundRawPlanSectionSchema,
-  ambientSoundPlanSourceSchema,
-  type AmbientSoundRawPlanSection,
-  type AmbientSoundPlanSource,
-} from '@/lib/ambient-sound/types'
+  ambienceSourceSchema,
+  scoreCueSchema,
+  soundWorldSchema,
+  type AmbienceSource,
+  type ScoreCue,
+  type SoundWorld,
+} from '@/lib/audio-design/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
 
@@ -49,11 +43,9 @@ export type StructuredStreamAdapterKey =
   | 'productionPlanning.emotionalCues'
   | 'editScript.shots'
   | 'shotExecutionPlan.shots'
-  | 'bgm.scoreDesign.sections'
-  | 'bgm.promptSections'
-  | 'bgm.virtualLayers'
-  | 'ambientSound.sources'
-  | 'ambientSound.sections'
+  | 'audioDesign.scoreCues'
+  | 'audioDesign.ambienceSources'
+  | 'audioDesign.soundWorlds'
 
 export type TextStreamAdapterKey =
   | 'disabled.text'
@@ -87,26 +79,9 @@ export type StructuredStreamParsedItem =
     readonly kind: 'shotExecutionPlanShot'
     readonly shot: RawEditShotExecutionPlanShot
   }
-  | {
-    readonly kind: 'bgmDesignSection'
-    readonly section: BgmScoreDesignSection
-  }
-  | {
-    readonly kind: 'bgmPromptSection'
-    readonly section: BgmScorePromptSection
-  }
-  | {
-    readonly kind: 'bgmVirtualLayer'
-    readonly layer: BgmScoreVirtualLayer
-  }
-  | {
-    readonly kind: 'ambientSoundSource'
-    readonly source: AmbientSoundPlanSource
-  }
-  | {
-    readonly kind: 'ambientSoundSection'
-    readonly section: AmbientSoundRawPlanSection
-  }
+  | { readonly kind: 'audioDesignScoreCue'; readonly cue: ScoreCue }
+  | { readonly kind: 'audioDesignAmbienceSource'; readonly source: AmbienceSource }
+  | { readonly kind: 'audioDesignSoundWorld'; readonly world: SoundWorld }
 
 export interface StructuredStreamItem {
   readonly adapterKey: StructuredStreamAdapterKey
@@ -235,73 +210,45 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
       : String(fallbackIndex + 1),
   },
   {
-    key: 'bgm.scoreDesign.sections',
-    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
-    stepIds: ['bgm_score_plan'],
+    key: 'audioDesign.scoreCues',
+    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
+    stepIds: ['audio_design_plan'],
     mode: 'array',
-    path: ['scoreDesign', 'sections'],
+    path: ['scoreCues'],
     parseItem: (value) => ({
-      kind: 'bgmDesignSection',
-      section: bgmScoreDesignSectionSchema.parse(value),
+      kind: 'audioDesignScoreCue',
+      cue: scoreCueSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'bgmDesignSection'
-      ? `${item.section.title}:${fallbackIndex}`
+    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignScoreCue'
+      ? item.cue.cueId
       : String(fallbackIndex + 1),
   },
   {
-    key: 'bgm.promptSections',
-    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
-    stepIds: ['bgm_score_plan'],
+    key: 'audioDesign.ambienceSources',
+    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
+    stepIds: ['audio_design_plan'],
     mode: 'array',
-    path: ['promptSections'],
+    path: ['ambienceSources'],
     parseItem: (value) => ({
-      kind: 'bgmPromptSection',
-      section: bgmScorePromptSectionSchema.parse(value),
+      kind: 'audioDesignAmbienceSource',
+      source: ambienceSourceSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'bgmPromptSection'
-      ? `${item.section.title}:${fallbackIndex}`
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'bgm.virtualLayers',
-    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
-    stepIds: ['bgm_score_plan'],
-    mode: 'array',
-    path: ['virtualLayers'],
-    parseItem: (value) => ({
-      kind: 'bgmVirtualLayer',
-      layer: bgmScoreVirtualLayerSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'bgmVirtualLayer'
-      ? `${item.layer.name}:${fallbackIndex}`
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'ambientSound.sources',
-    taskTypes: [TASK_TYPE.AMBIENT_SOUND_PLAN],
-    stepIds: ['ambientSound_plan'],
-    mode: 'array',
-    path: ['sources'],
-    parseItem: (value) => ({
-      kind: 'ambientSoundSource',
-      source: ambientSoundPlanSourceSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'ambientSoundSource'
+    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignAmbienceSource'
       ? item.source.sourceId
       : String(fallbackIndex + 1),
   },
   {
-    key: 'ambientSound.sections',
-    taskTypes: [TASK_TYPE.AMBIENT_SOUND_PLAN],
-    stepIds: ['ambientSound_plan'],
+    key: 'audioDesign.soundWorlds',
+    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
+    stepIds: ['audio_design_plan'],
     mode: 'array',
-    path: ['sections'],
+    path: ['soundWorlds'],
     parseItem: (value) => ({
-      kind: 'ambientSoundSection',
-      section: ambientSoundRawPlanSectionSchema.parse(value),
+      kind: 'audioDesignSoundWorld',
+      world: soundWorldSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'ambientSoundSection'
-      ? `${item.section.sourceId}:${item.section.fromClipOrder}:${item.section.toClipOrder}:${fallbackIndex}`
+    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignSoundWorld'
+      ? item.world.worldId
       : String(fallbackIndex + 1),
   },
 ]

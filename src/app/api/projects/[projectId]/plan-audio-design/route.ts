@@ -14,30 +14,20 @@ export const POST = apiHandler(async (
   const { projectId } = await context.params
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
-
   const body = await request.json()
-  if (!isRecord(body)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'BODY_PARSE_FAILED',
-      field: 'body',
-    })
-  }
-
+  if (!isRecord(body)) throw new ApiError('INVALID_PARAMS', { code: 'BODY_PARSE_FAILED', field: 'body' })
   const input: Record<string, unknown> = {}
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
+  if (typeof body.musicModel === 'string') input.musicModel = body.musicModel
   if (typeof body.soundEffectModel === 'string') input.soundEffectModel = body.soundEffectModel
-
   const result = await executeProjectAgentOperationFromApi({
     request,
-    operationId: 'plan_episode_ambient_sound',
+    operationId: 'plan_episode_audio_design',
     projectId,
     userId: authResult.session.user.id,
-    context: {
-      episodeId: typeof body.episodeId === 'string' ? body.episodeId : null,
-    },
+    context: { episodeId: typeof body.episodeId === 'string' ? body.episodeId : null },
     input,
     source: 'project-ui',
   })
-
   return NextResponse.json(result)
 })

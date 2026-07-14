@@ -281,47 +281,14 @@ export interface ProjectEditScriptGenerationSegment {
 
 export type ProjectMusicScoreStatus = 'pending' | 'planning' | 'planned' | 'generating' | 'completed' | 'failed'
 
-export interface ProjectMusicScoreTimedTextSection {
-  category?: string | null
-  title: string
-  purpose?: string | null
-  startSec?: number | null
-  endSec?: number | null
-  content: string
-}
-
-export interface ProjectMusicScoreVirtualLayer {
-  name: string
-  purpose: string
-  content: string
-}
-
-export interface ProjectMusicScorePlan {
-  durationSeconds: number
-  creativeBrief: {
-    cueType: string
-    genre: string
-    mood: string
-    narrativeFunction: string
-  }
-  scoreDesign: {
-    overview: string
-    sections: ProjectMusicScoreTimedTextSection[]
-  }
-  virtualLayers: ProjectMusicScoreVirtualLayer[]
-  promptSections: ProjectMusicScoreTimedTextSection[]
-  finalPrompt: string
-}
-
 export interface ProjectMusicScore {
   id?: string | null
   status: ProjectMusicScoreStatus
   taskId?: string | null
-  planTaskId?: string | null
   timelineSignature?: string | null
+  designSignature?: string | null
   durationSeconds?: number | null
   musicModel?: string | null
-  plan?: ProjectMusicScorePlan | null
   cues?: unknown
   mix?: {
     mediaId: string
@@ -343,41 +310,15 @@ export type ProjectAmbientSoundStatus =
   | 'failed'
   | string
 
-export interface ProjectAmbientSoundPlanSource {
-  sourceId: string
-  environmentFingerprint: string
-  prompt: string
-  loopDurationSeconds: number
-  promptInfluence: number
-}
-
-export interface ProjectAmbientSoundPlanSection {
-  sourceId: string
-  fromShotId: string
-  toShotId: string
-  perspective: 'exterior_near' | 'exterior_far' | 'interior' | 'interior_behind_window'
-  intensity: 'low' | 'medium' | 'high'
-  transitionIn: 'cut' | 'fade' | 'crossfade'
-  transitionOut: 'cut' | 'fade' | 'crossfade'
-}
-
-export interface ProjectAmbientSoundPlan {
-  decision: 'ambient_sound' | 'none_needed'
-  sources: ProjectAmbientSoundPlanSource[]
-  sections: ProjectAmbientSoundPlanSection[]
-}
-
 export interface ProjectAmbientSound {
   id?: string | null
   status: ProjectAmbientSoundStatus
   taskId?: string | null
-  planTaskId?: string | null
   timelineSignature?: string | null
+  designSignature?: string | null
   soundEffectModel?: string | null
-  decision?: 'ambient_sound' | 'none_needed' | null
   sourceCount: number
   sectionCount: number
-  plan?: ProjectAmbientSoundPlan | null
   sources?: unknown
   mix?: {
     mediaId: string
@@ -399,6 +340,19 @@ export interface ProjectFinalVideo {
   updatedAt: string | null
   musicScore?: ProjectMusicScore | null
   ambientSound?: ProjectAmbientSound | null
+  audioDesign?: {
+    id: string | null
+    status: string
+    taskId: string | null
+    timelineSignature: string | null
+    designSignature: string | null
+    analysisModel: string | null
+    musicModel: string | null
+    soundEffectModel: string | null
+    design: unknown
+    diagnostics: unknown
+    updatedAt: string | null
+  } | null
 }
 
 export interface ProjectVideoSegment {

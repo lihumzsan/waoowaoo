@@ -111,13 +111,13 @@ export const TASK_RUNTIME_TARGETS = {
   },
   projectEpisodeBgmScore(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [
-      TASK_TYPE.MUSIC_SCORE_PLAN,
+      TASK_TYPE.AUDIO_DESIGN_PLAN,
       TASK_TYPE.MUSIC_SCORE_GENERATE,
     ])
   },
   projectEpisodeAmbientSound(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [
-      TASK_TYPE.AMBIENT_SOUND_PLAN,
+      TASK_TYPE.AUDIO_DESIGN_PLAN,
       TASK_TYPE.AMBIENT_SOUND_GENERATE,
     ])
   },

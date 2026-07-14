@@ -1,7 +1,8 @@
-import type { ProjectEditScript, ProjectFinalVideo } from '@/types/project'
+import type { ProjectFinalVideo } from '@/types/project'
 import type { WorkspaceCanvasBgmScoreDetails, WorkspaceCanvasAmbientSoundDetails } from '../node-canvas-types'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
 import type { WorkspaceVideoSegmentProjection } from './workspace-node-video-segment-projection'
+import { audioDesignSchema } from '@/lib/audio-design/types'
 import {
   FINAL_TIMELINE_GAP_Y,
   SHOT_GRID_GAP_X,
@@ -24,70 +25,95 @@ import {
 
 function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasBgmScoreDetails | undefined {
   const bgmScore = finalVideo?.musicScore
-  if (!bgmScore) return undefined
-  return {
+  const parsedDesign = audioDesignSchema.safeParse(finalVideo?.audioDesign?.design)
+  if (!parsedDesign.success) return bgmScore ? {
     status: bgmScore.status,
     durationSeconds: bgmScore.durationSeconds ?? null,
     musicModel: bgmScore.musicModel ?? null,
-    hasPromptDesign: Boolean(bgmScore.plan),
-    promptDesignMissing: !bgmScore.plan,
-    designSectionCount: bgmScore.plan?.scoreDesign.sections.length ?? 0,
-    promptSectionCount: bgmScore.plan?.promptSections.length ?? 0,
-    virtualLayerCount: bgmScore.plan?.virtualLayers.length ?? 0,
+    hasPromptDesign: false,
+    promptDesignMissing: true,
+    designSectionCount: 0,
+    promptSectionCount: 0,
+    virtualLayerCount: 0,
     mixUrl: bgmScore.mix?.url ?? null,
     errorMessage: bgmScore.errorMessage ?? null,
-    scoreOverview: bgmScore.plan?.scoreDesign.overview ?? null,
-    designSections: bgmScore.plan?.scoreDesign.sections ?? [],
-    promptSections: bgmScore.plan?.promptSections ?? [],
-    virtualLayers: bgmScore.plan?.virtualLayers ?? [],
-    finalPrompt: bgmScore.plan?.finalPrompt ?? null,
+    scoreOverview: null,
+    designSections: [],
+    promptSections: [],
+    virtualLayers: [],
+    finalPrompt: null,
+  } : undefined
+  const design = parsedDesign.data
+  const cue = design.scoreCues[0]
+  return {
+    status: bgmScore?.status ?? (cue ? 'planned' : 'completed'),
+    durationSeconds: design.clock.totalFrames / design.clock.fps,
+    musicModel: finalVideo?.audioDesign?.musicModel ?? bgmScore?.musicModel ?? null,
+    hasPromptDesign: Boolean(cue),
+    promptDesignMissing: !cue,
+    designSectionCount: cue?.musicTheorySpec.phases.length ?? 0,
+    promptSectionCount: 0,
+    virtualLayerCount: cue?.musicTheorySpec.orchestration.length ?? 0,
+    mixUrl: bgmScore?.mix?.url ?? null,
+    errorMessage: bgmScore?.errorMessage ?? null,
+    scoreOverview: cue?.narrativeDiagnosis.musicShouldDo ?? null,
+    designSections: (cue?.musicTheorySpec.phases ?? []).map((phase) => ({
+      category: phase.function,
+      title: phase.phaseId,
+      purpose: `${phase.density} / ${phase.spectralBand}`,
+      startSec: phase.range.startFrame / design.clock.fps,
+      endSec: phase.range.endFrameExclusive / design.clock.fps,
+      content: `${Math.round(phase.energy * 100)}% energy`,
+    })),
+    promptSections: [],
+    virtualLayers: (cue?.musicTheorySpec.orchestration ?? []).map((part) => ({
+      name: part.instrument,
+      purpose: `${part.role} / ${part.register}`,
+      content: part.techniques.join(', '),
+    })),
+    finalPrompt: null,
   }
 }
 
 function ambientSoundDetails(
   finalVideo: ProjectFinalVideo | null | undefined,
-  editScripts: readonly ProjectEditScript[],
 ): WorkspaceCanvasAmbientSoundDetails | undefined {
   const ambientSound = finalVideo?.ambientSound
-  if (!ambientSound) return undefined
-  const sources = ambientSound.plan?.sources ?? []
+  const parsedDesign = audioDesignSchema.safeParse(finalVideo?.audioDesign?.design)
+  if (!parsedDesign.success) return undefined
+  const design = parsedDesign.data
+  const sources = design.ambienceSources
   const sourceIndexById = new Map(sources.map((source, index) => [source.sourceId, index + 1]))
-  const shotNumberById = new Map(editScripts.flatMap((script) => script.shots.map((shot) => [shot.shotId, shot.shotNumber] as const)))
   return {
-    status: ambientSound.status,
-    decision: ambientSound.decision ?? null,
-    soundEffectModel: ambientSound.soundEffectModel ?? null,
-    sourceCount: ambientSound.sourceCount,
-    sectionCount: ambientSound.sectionCount,
+    status: ambientSound?.status ?? (sources.length > 0 ? 'planned' : 'completed'),
+    decision: sources.length > 0 ? 'ambient_sound' : 'none_needed',
+    soundEffectModel: finalVideo?.audioDesign?.soundEffectModel ?? ambientSound?.soundEffectModel ?? null,
+    sourceCount: sources.length,
+    sectionCount: design.soundWorlds.length,
     sources: sources.map((source, index) => ({
       key: source.sourceId,
       sourceIndex: index + 1,
-      prompt: source.prompt,
+      prompt: source.generationPrompt,
       loopDurationSeconds: source.loopDurationSeconds,
       promptInfluence: source.promptInfluence,
     })),
-    sections: (ambientSound.plan?.sections ?? []).map((section, index) => {
-      const sourceIndex = sourceIndexById.get(section.sourceId)
-      const rangeStart = shotNumberById.get(section.fromShotId)
-      const rangeEnd = shotNumberById.get(section.toShotId)
-      if (!sourceIndex) throw new Error(`AMBIENT_SOUND_SECTION_SOURCE_UNKNOWN:${section.sourceId}`)
-      if (!rangeStart || !rangeEnd) {
-        throw new Error(`AMBIENT_SOUND_SECTION_SHOT_UNKNOWN:${section.fromShotId}:${section.toShotId}`)
-      }
+    sections: sources.map((source, index) => {
+      const sourceIndex = sourceIndexById.get(source.sourceId)
+      if (!sourceIndex) throw new Error(`AMBIENT_SOUND_SECTION_SOURCE_UNKNOWN:${source.sourceId}`)
       return {
-        key: `${section.sourceId}:${section.fromShotId}:${section.toShotId}:${index}`,
+        key: `${source.sourceId}:${index}`,
         sourceIndex,
-        rangeKind: 'shot' as const,
-        rangeStart,
-        rangeEnd,
-        perspective: section.perspective,
-        intensity: section.intensity,
-        transitionIn: section.transitionIn,
-        transitionOut: section.transitionOut,
+        rangeKind: 'clip' as const,
+        rangeStart: source.range.startFrame,
+        rangeEnd: source.range.endFrameExclusive,
+        perspective: source.playbackType,
+        intensity: source.role,
+        transitionIn: source.crossfadeFrames > 0 ? 'crossfade' : 'cut',
+        transitionOut: source.crossfadeFrames > 0 ? 'crossfade' : 'cut',
       }
     }),
-    mixUrl: ambientSound.mix?.url ?? null,
-    errorMessage: ambientSound.errorMessage ?? null,
+    mixUrl: ambientSound?.mix?.url ?? null,
+    errorMessage: ambientSound?.errorMessage ?? null,
   }
 }
 
@@ -129,7 +155,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
     const bgmReadyForGeneration = bgmDetails?.hasPromptDesign === true && bgmDetails.status !== 'planning' && bgmDetails.status !== 'generating'
     const bgmActionAvailable =
       bgmReadyForGeneration ||
-      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_bgm_score') ||
+      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_audio_design') ||
       editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_bgm_score')
     nodes.push(
       createMediaNode({
@@ -150,7 +176,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
           body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoSegments.length }),
           meta: bgmDetails?.musicModel ?? '',
           ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          terminalHandoffTaskId: finalVideo?.musicScore?.planTaskId ?? null,
+          terminalHandoffTaskId: finalVideo?.audioDesign?.taskId ?? null,
           ...(bgmActionAvailable
             ? {
                 actionLabel: translate(
@@ -167,7 +193,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
     )
   }
   let ambientSoundNodeId: string | null = null
-  const projectedAmbientSoundDetails = ambientSoundDetails(finalVideo, editScripts.length > 0 ? editScripts : editScript ? [editScript] : [])
+  const projectedAmbientSoundDetails = ambientSoundDetails(finalVideo)
   const ambientSoundProjection = resolveWorkspaceCanvasNodeMaterialization('ambientSound', activeTaskTargets, {
     identityAvailable: true,
     workflowVisible: editFirstCanvasVisibility.ambientSound,
@@ -182,8 +208,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
     const ambientSoundReadyForGeneration = details?.decision === 'ambient_sound' && details.status !== 'planning' && details.status !== 'generating'
     const ambientSoundPresentation = details ? (resourcePresentationFromStatus(details.status) ?? workspaceCanvasPendingResourcePresentation()) : null
     const ambientSoundActionAvailable =
-      Boolean(details) ||
-      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_ambient_sound') ||
+      ambientSoundReadyForGeneration ||
       editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_ambient_sound')
     nodes.push(
       createMediaNode({
@@ -210,13 +235,13 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
               : translate('nodes.ambientSound.body', { videos: videoSegments.length }),
           meta: details?.soundEffectModel ?? '',
           ...(ambientSoundPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          terminalHandoffTaskId: finalVideo?.ambientSound?.planTaskId ?? null,
-          ...(ambientSoundActionAvailable
+          terminalHandoffTaskId: finalVideo?.audioDesign?.taskId ?? null,
+          ...(ambientSoundActionAvailable && ambientSoundReadyForGeneration
             ? {
                 actionLabel: translate(
-                  ambientSoundReadyForGeneration ? (details?.mixUrl ? 'actions.regenerateAmbientSound' : 'actions.generateAmbientSound') : 'actions.planAmbientSound',
+                  details?.mixUrl ? 'actions.regenerateAmbientSound' : 'actions.generateAmbientSound',
                 ),
-                action: ambientSoundReadyForGeneration ? { type: 'generate_ambient_sound' as const } : { type: 'plan_ambient_sound' as const },
+                action: { type: 'generate_ambient_sound' as const },
               }
             : {}),
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeAmbientSound(episodeId)),

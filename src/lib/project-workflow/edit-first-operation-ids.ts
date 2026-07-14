@@ -17,9 +17,8 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'generate_edit_shot_execution_plan',
   'generate_video_segments',
   'render_chapters',
-  'plan_episode_bgm_score',
+  'plan_episode_audio_design',
   'generate_episode_bgm_score',
-  'plan_episode_ambient_sound',
   'generate_episode_ambient_sound',
   'render_final_video',
 ] as const

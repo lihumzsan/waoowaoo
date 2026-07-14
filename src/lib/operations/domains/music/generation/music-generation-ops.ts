@@ -17,14 +17,11 @@ import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
-import { buildBgmScorePlanFingerprint } from '@/lib/bgm-score/plan-contract'
-import { buildBgmScoreCueWindows, buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
-import { readPersistedMusicScorePlan } from '@/lib/music-score/project-data'
-import { resolveMusicScoreMaxCueDurationSeconds } from '@/lib/music-score/constraints'
 import { AMBIENT_SOUND_OUTPUT_FORMAT } from '@/lib/ambient-sound/types'
-import { buildAmbientSoundPlanFingerprint, parseAmbientSoundPlanStrict } from '@/lib/ambient-sound/plan-contract'
-import { buildAmbientSoundTimelineSignature } from '@/lib/ambient-sound/timeline'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { buildAudioDesignTimelineSignature } from '@/lib/audio-design/contract'
+import { readPersistedAudioDesign, type PersistedAudioDesign } from '@/lib/audio-design/project-data'
+import { resolveScoreProviderDurationSeconds } from '@/lib/audio-design/score-duration'
 
 const vocalModeSchema = z.enum(['instrumental', 'vocal'])
 const outputFormatSchema = z.enum(['mp3', 'wav'])
@@ -53,16 +50,16 @@ const bgmScoreGenerationInputSchema = z
   .passthrough()
 
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
-type BgmScorePlanningInput = BgmScoreGenerationInput
 
-const ambientSoundPlanningInputSchema = z
+const audioDesignPlanningInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
+    musicModel: z.string().min(1).optional(),
     soundEffectModel: z.string().min(1).optional(),
   })
   .passthrough()
 
-type AmbientSoundPlanningInput = z.infer<typeof ambientSoundPlanningInputSchema>
+type AudioDesignPlanningInput = z.infer<typeof audioDesignPlanningInputSchema>
 
 const ambientSoundGenerationInputSchema = z
   .object({
@@ -175,7 +172,7 @@ async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, project
 }
 
 async function resolveAmbientSoundSoundEffectModel(
-  input: AmbientSoundPlanningInput | AmbientSoundGenerationInput,
+  input: AudioDesignPlanningInput | AmbientSoundGenerationInput,
   projectId: string,
   userId: string,
 ): Promise<string> {
@@ -308,49 +305,57 @@ async function commitGenerateProjectMusicOperation(ctx: ProjectAgentOperationCon
   }
 }
 
-async function planEpisodeBgmScoreOperation(
+async function loadApprovedAudioDesign(episodeId: string, projectId: string): Promise<PersistedAudioDesign> {
+  const row = await prisma.projectEditAudioDesign.findFirst({
+    where: { episodeId, episode: { projectId } },
+    select: {
+      status: true,
+      designJson: true,
+      timelineSignature: true,
+      designSignature: true,
+      analysisModel: true,
+      musicModel: true,
+      soundEffectModel: true,
+    },
+  })
+  const design = readPersistedAudioDesign(row)
+  if (!design) throw new Error('AUDIO_DESIGN_PLAN_REQUIRED')
+  const clips = await loadEpisodeChapterOutputClips({ episodeId, projectId })
+  const currentSignature = buildAudioDesignTimelineSignature(clips)
+  if (currentSignature !== design.timelineSignature) {
+    throw new Error(`AUDIO_DESIGN_TIMELINE_STALE:${design.timelineSignature}:${currentSignature}`)
+  }
+  return design
+}
+
+async function planEpisodeAudioDesignOperation(
   ctx: ProjectAgentOperationContext,
-  input: BgmScorePlanningInput,
+  input: AudioDesignPlanningInput,
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
   const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
+  const soundEffectModel = await resolveAmbientSoundSoundEffectModel(input, ctx.projectId, ctx.userId)
   const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
-  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
-  const payload: Record<string, unknown> = {
-    episodeId,
-    durationSeconds,
-    musicModel,
-    analysisModel,
-    maxInputTokens: 5000,
-  }
-
+  const payload: Record<string, unknown> = { episodeId, analysisModel, musicModel, soundEffectModel, maxInputTokens: 12_000 }
   return {
     kind: 'task_submission',
-    operationId: 'plan_episode_bgm_score',
+    operationId: 'plan_episode_audio_design',
     projectId: ctx.projectId,
     userId: ctx.userId,
-    tasks: [
-      createPlannedTask({
-        id: `plan_episode_bgm_score:${episodeId}`,
-        taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
-        targetType: 'ProjectEpisode',
-        targetId: episodeId,
-        payload,
-        locale: resolveOperationLocale(ctx.context),
-        episodeId,
-        dedupeKey: `music_score_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
-        billingInfo: requirePlannedTaskBillingInfo({
-          taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
-          payload,
-          allowedApiTypes: ['text'],
-        }),
-      }),
-    ],
-    metadata: {
+    tasks: [createPlannedTask({
+      id: `plan_episode_audio_design:${episodeId}`,
+      taskType: TASK_TYPE.AUDIO_DESIGN_PLAN,
+      targetType: 'ProjectEpisode',
+      targetId: episodeId,
+      payload,
+      locale: resolveOperationLocale(ctx.context),
       episodeId,
-      musicModel,
-    },
+      dedupeKey: `audio_design_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
+      billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.AUDIO_DESIGN_PLAN, payload, allowedApiTypes: ['text'] }),
+    })],
+    metadata: { episodeId, musicModel, soundEffectModel },
   }
 }
 
@@ -360,45 +365,26 @@ async function planGenerateEpisodeBgmScoreOperation(
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const score = await prisma.projectEditMusicScore.findFirst({
-    where: {
-      episodeId,
-      episode: { projectId: ctx.projectId },
-    },
-    select: {
-      cuesJson: true,
-      timelineSignature: true,
-      musicModel: true,
-    },
-  })
-  if (!score) throw new Error('BGM_SCORE_PLAN_REQUIRED')
-  const plan = readPersistedMusicScorePlan(score)
-  if (!plan) throw new Error('BGM_SCORE_PERSISTED_PLAN_REQUIRED')
-  const timelineSignature = normalizeString(score.timelineSignature)
-  const musicModel = normalizeString(score.musicModel)
-  if (!timelineSignature) throw new Error('BGM_SCORE_TIMELINE_SIGNATURE_REQUIRED')
-  if (!musicModel) throw new Error('BGM_SCORE_MUSIC_MODEL_REQUIRED')
+  const approved = await loadApprovedAudioDesign(episodeId, ctx.projectId)
+  const cue = approved.design.scoreCues[0]
+  if (!cue) throw new Error('BGM_SCORE_GENERATE_NOT_REQUIRED')
+  const musicModel = approved.musicModel
   const requestedMusicModel = normalizeString(input.musicModel)
   if (requestedMusicModel && requireModelKey(requestedMusicModel) !== musicModel) {
     throw new Error(`BGM_SCORE_PLANNED_MODEL_MISMATCH:${musicModel}:${requestedMusicModel}`)
   }
-  const clips = await loadEpisodeChapterOutputClips({ episodeId, projectId: ctx.projectId })
-  const currentTimelineSignature = buildBgmTimelineSignature(clips)
-  if (currentTimelineSignature !== timelineSignature) {
-    throw new Error(`BGM_SCORE_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
-  }
-  const cueCount = buildBgmScoreCueWindows(clips, resolveMusicScoreMaxCueDurationSeconds()).length
-  if (cueCount === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
+  const timelineDurationSeconds = approved.design.clock.totalFrames / approved.design.clock.fps
+  const providerDurationSeconds = resolveScoreProviderDurationSeconds({ musicModel, targetDurationSeconds: timelineDurationSeconds })
   const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
-  const bgmScorePlanHash = buildBgmScorePlanFingerprint({ plan, timelineSignature, musicModel })
   const payload: Record<string, unknown> = {
     episodeId,
     musicModel,
-    bgmScorePlan: plan,
-    bgmScorePlanHash,
-    timelineSignature,
-    durationSeconds: plan.durationSeconds,
-    count: cueCount,
+    audioDesign: approved.design,
+    designSignature: approved.designSignature,
+    timelineSignature: approved.timelineSignature,
+    timelineDurationSeconds,
+    durationSeconds: providerDurationSeconds,
+    count: 2,
     ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
   }
 
@@ -409,14 +395,14 @@ async function planGenerateEpisodeBgmScoreOperation(
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_episode_bgm_score:${episodeId}:${bgmScorePlanHash}`,
+        id: `generate_episode_bgm_score:${episodeId}:${approved.designSignature}`,
         taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
         locale: resolveOperationLocale(ctx.context),
         episodeId,
-        dedupeKey: `music_score_generate:${ctx.projectId}:${episodeId}:${bgmScorePlanHash}`,
+        dedupeKey: `music_score_generate:${ctx.projectId}:${episodeId}:${approved.designSignature}`,
         billingInfo: requirePlannedTaskBillingInfo({
           taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
           payload,
@@ -424,50 +410,7 @@ async function planGenerateEpisodeBgmScoreOperation(
         }),
       }),
     ],
-    metadata: { episodeId, musicModel, bgmScorePlanHash },
-  }
-}
-
-async function planEpisodeAmbientSoundOperation(ctx: ProjectAgentOperationContext, input: AmbientSoundPlanningInput): Promise<OperationPlan> {
-  const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
-  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const soundEffectModel = await resolveAmbientSoundSoundEffectModel(input, ctx.projectId, ctx.userId)
-  const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
-  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
-  const payload: Record<string, unknown> = {
-    episodeId,
-    durationSeconds,
-    soundEffectModel,
-    analysisModel,
-    maxInputTokens: 5000,
-  }
-
-  return {
-    kind: 'task_submission',
-    operationId: 'plan_episode_ambient_sound',
-    projectId: ctx.projectId,
-    userId: ctx.userId,
-    tasks: [
-      createPlannedTask({
-        id: `plan_episode_ambient_sound:${episodeId}`,
-        taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
-        targetType: 'ProjectEpisode',
-        targetId: episodeId,
-        payload,
-        locale: resolveOperationLocale(ctx.context),
-        episodeId,
-        dedupeKey: `ambient_sound_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
-        billingInfo: requirePlannedTaskBillingInfo({
-          taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
-          payload,
-          allowedApiTypes: ['text'],
-        }),
-      }),
-    ],
-    metadata: {
-      episodeId,
-      soundEffectModel,
-    },
+    metadata: { episodeId, musicModel, designSignature: approved.designSignature },
   }
 }
 
@@ -477,49 +420,26 @@ async function planGenerateEpisodeAmbientSoundOperation(
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const soundEffectModel = await resolveAmbientSoundSoundEffectModel(input, ctx.projectId, ctx.userId)
-  const ambientSound = await prisma.projectEditAmbientSound.findFirst({
-    where: {
-      episodeId,
-      episode: { projectId: ctx.projectId },
-    },
-    select: {
-      planJson: true,
-      timelineSignature: true,
-    },
-  })
-  if (!ambientSound) throw new Error('AMBIENT_SOUND_PLAN_REQUIRED')
-  const plan = parseAmbientSoundPlanStrict(ambientSound.planJson)
-  if (plan.decision !== 'ambient_sound') {
-    throw new Error(`AMBIENT_SOUND_GENERATE_NOT_REQUIRED:${plan.decision}`)
+  const approved = await loadApprovedAudioDesign(episodeId, ctx.projectId)
+  const soundEffectModel = approved.soundEffectModel
+  const requestedModel = normalizeString(input.soundEffectModel)
+  if (requestedModel && requireModelKey(requestedModel) !== soundEffectModel) {
+    throw new Error(`AMBIENT_SOUND_PLANNED_MODEL_MISMATCH:${soundEffectModel}:${requestedModel}`)
   }
-  const timelineSignature = normalizeString(ambientSound.timelineSignature)
-  if (!timelineSignature) throw new Error('AMBIENT_SOUND_TIMELINE_SIGNATURE_REQUIRED')
-  const clips = await loadEpisodeChapterOutputClips({
-    episodeId,
-    projectId: ctx.projectId,
-  })
-  const currentTimelineSignature = buildAmbientSoundTimelineSignature(clips)
-  if (currentTimelineSignature !== timelineSignature) {
-    throw new Error(`AMBIENT_SOUND_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
-  }
-  const durationSeconds = plan.sources.reduce((total, source) => total + source.loopDurationSeconds, 0)
+  const sources = approved.design.ambienceSources
+  if (sources.length === 0) throw new Error('AMBIENT_SOUND_GENERATE_NOT_REQUIRED')
+  const durationSeconds = Math.max(...sources.map((source) => source.loopDurationSeconds))
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error('AMBIENT_SOUND_SOURCE_DURATION_REQUIRED')
   }
-  const ambientSoundPlanHash = buildAmbientSoundPlanFingerprint({
-    plan,
-    timelineSignature,
-    soundEffectModel,
-  })
   const payload: Record<string, unknown> = {
     episodeId,
     soundEffectModel,
-    ambientSoundPlan: plan,
-    ambientSoundPlanHash,
-    timelineSignature,
+    audioDesign: approved.design,
+    designSignature: approved.designSignature,
+    timelineSignature: approved.timelineSignature,
     durationSeconds,
-    sourceCount: plan.sources.length,
+    sourceCount: sources.length * 2,
     loop: true,
     outputFormat: AMBIENT_SOUND_OUTPUT_FORMAT,
   }
@@ -531,14 +451,14 @@ async function planGenerateEpisodeAmbientSoundOperation(
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_episode_ambient_sound:${episodeId}:${ambientSoundPlanHash}`,
+        id: `generate_episode_ambient_sound:${episodeId}:${approved.designSignature}`,
         taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
         locale: resolveOperationLocale(ctx.context),
         episodeId,
-        dedupeKey: `ambient_sound_generate:${ctx.projectId}:${episodeId}:${ambientSoundPlanHash}`,
+        dedupeKey: `ambient_sound_generate:${ctx.projectId}:${episodeId}:${approved.designSignature}`,
         billingInfo: requirePlannedTaskBillingInfo({
           taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
           payload,
@@ -549,14 +469,14 @@ async function planGenerateEpisodeAmbientSoundOperation(
     metadata: {
       episodeId,
       soundEffectModel,
-      ambientSoundPlanHash,
+      designSignature: approved.designSignature,
     },
   }
 }
 
-async function commitPlanEpisodeBgmScoreOperation(
+async function commitPlanEpisodeAudioDesignOperation(
   ctx: ProjectAgentOperationContext,
-  input: BgmScorePlanningInput,
+  input: AudioDesignPlanningInput,
   plan: OperationPlan,
 ) {
   const task = plan.tasks[0]
@@ -575,7 +495,7 @@ async function commitPlanEpisodeBgmScoreOperation(
     type: task.taskType,
     targetType: task.target.targetType,
     targetId: task.target.targetId,
-    operationId: 'plan_episode_bgm_score',
+    operationId: 'plan_episode_audio_design',
     source: ctx.source,
     payload: task.payload,
     dedupeKey: task.dedupeKey,
@@ -586,7 +506,7 @@ async function commitPlanEpisodeBgmScoreOperation(
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-    operationId: 'plan_episode_bgm_score',
+    operationId: 'plan_episode_audio_design',
     taskId: result.taskId,
     status: result.status,
     runId: result.runId || null,
@@ -594,7 +514,7 @@ async function commitPlanEpisodeBgmScoreOperation(
     billingReceipt: result.billingReceiptView,
     projectId: ctx.projectId,
     episodeId,
-    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    taskType: TASK_TYPE.AUDIO_DESIGN_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   })
@@ -602,7 +522,8 @@ async function commitPlanEpisodeBgmScoreOperation(
   return {
     ...result,
     musicModel,
-    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    soundEffectModel: typeof plan.metadata?.soundEffectModel === 'string' ? plan.metadata.soundEffectModel : '',
+    taskType: TASK_TYPE.AUDIO_DESIGN_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
@@ -645,60 +566,6 @@ async function commitGenerateEpisodeBgmScoreOperation(
     ...result,
     musicModel,
     taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
-    targetType: 'ProjectEpisode',
-    targetId: episodeId,
-  }
-}
-
-async function commitPlanEpisodeAmbientSoundOperation(
-  ctx: ProjectAgentOperationContext,
-  input: AmbientSoundPlanningInput,
-  plan: OperationPlan,
-) {
-  const task = plan.tasks[0]
-  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string' ? plan.metadata.soundEffectModel : ''
-  const episodeId =
-    (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '') ||
-    normalizeString(input.episodeId) ||
-    normalizeString(ctx.context.episodeId)
-  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const result = await submitOperationTask({
-    request: ctx.request,
-    userId: ctx.userId,
-    projectId: ctx.projectId,
-    episodeId: task.episodeId,
-    type: task.taskType,
-    targetType: task.target.targetType,
-    targetId: task.target.targetId,
-    operationId: 'plan_episode_ambient_sound',
-    source: ctx.source,
-    payload: task.payload,
-    dedupeKey: task.dedupeKey,
-    priority: task.priority,
-    locale: task.locale,
-    billingInfo: task.billingInfo,
-    billingInfoSource: 'planned',
-  })
-
-  writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-    operationId: 'plan_episode_ambient_sound',
-    taskId: result.taskId,
-    status: result.status,
-    runId: result.runId || null,
-    deduped: result.deduped,
-    billingReceipt: result.billingReceiptView,
-    projectId: ctx.projectId,
-    episodeId,
-    taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
-    targetType: 'ProjectEpisode',
-    targetId: episodeId,
-  })
-
-  return {
-    ...result,
-    soundEffectModel,
-    taskType: TASK_TYPE.AMBIENT_SOUND_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
@@ -761,6 +628,14 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       })
       .passthrough(),
   )
+  const audioDesignTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        musicModel: z.string().min(1),
+        soundEffectModel: z.string().min(1),
+      })
+      .passthrough(),
+  )
 
   return {
     generate_project_music: defineOperation({
@@ -787,9 +662,9 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       plan: async (ctx, input) => planGenerateProjectMusicOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateProjectMusicOperation(ctx, input, plan),
     }),
-    plan_episode_bgm_score: defineOperation({
-      id: 'plan_episode_bgm_score',
-      summary: 'Plan the episode music score from rendered chapter outputs without submitting paid music generation.',
+    plan_episode_audio_design: defineOperation({
+      id: 'plan_episode_audio_design',
+      summary: 'Plan one episode-level sound design from locked scripts and rendered timeline metadata, without inspecting media content.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -808,11 +683,11 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         required: false,
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: bgmScoreGenerationInputSchema,
-      outputSchema: musicTaskSubmitOutput,
+      inputSchema: audioDesignPlanningInputSchema,
+      outputSchema: audioDesignTaskSubmitOutput,
       execute: async (ctx, input) => {
-        const plan = await planEpisodeBgmScoreOperation(ctx, input)
-        return await commitPlanEpisodeBgmScoreOperation(ctx, input, plan)
+        const plan = await planEpisodeAudioDesignOperation(ctx, input)
+        return await commitPlanEpisodeAudioDesignOperation(ctx, input, plan)
       },
     }),
     generate_episode_bgm_score: defineOperation({
@@ -840,34 +715,6 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: musicTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateEpisodeBgmScoreOperation(ctx, input, plan),
-    }),
-    plan_episode_ambient_sound: defineOperation({
-      id: 'plan_episode_ambient_sound',
-      summary: 'Plan the episode ambient sound from rendered chapter outputs without submitting paid sound effects.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'none',
-        billable: true,
-        destructive: false,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      assistantWriteAuthority: { kind: 'transactional_task_submission' },
-      confirmation: {
-        kind: 'none',
-        required: false,
-      },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: ambientSoundPlanningInputSchema,
-      outputSchema: ambientSoundTaskSubmitOutput,
-      execute: async (ctx, input) => {
-        const plan = await planEpisodeAmbientSoundOperation(ctx, input)
-        return await commitPlanEpisodeAmbientSoundOperation(ctx, input, plan)
-      },
     }),
     generate_episode_ambient_sound: defineOperation({
       id: 'generate_episode_ambient_sound',

@@ -116,8 +116,7 @@ export type {
 
 export {
     useRenderFinalVideo,
-    usePlanBgmScore,
-    usePlanAmbientSound,
+    usePlanAudioDesign,
 } from './useFinalMedia'
 
 // 实时任务

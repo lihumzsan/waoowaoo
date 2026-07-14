@@ -19,7 +19,7 @@ export type AudioLoudnessMeasurement = {
 export type FinalRenderAudioMixResult = {
   readonly hasSourceAudio: boolean
   readonly mainAudio?: AudioLoudnessMeasurement
-  readonly bgm: AudioLoudnessMeasurement
+  readonly bgm?: AudioLoudnessMeasurement
   readonly ambientSound?: AudioLoudnessMeasurement
 }
 
@@ -468,4 +468,67 @@ export async function muxFinalRenderSourceAudio(input: {
     hasSourceAudio: true,
     mainAudio: mainMeasurement,
   }
+}
+
+export async function renderFinalRenderAutomatedAudio(input: {
+  readonly runCommand: FinalRenderAudioCommandRunner
+  readonly inputPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+  readonly volumeFilter: string
+}): Promise<void> {
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.inputPath, '-vn', '-af',
+    `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,${input.volumeFilter},${exactAudioDurationFilter(input.durationSeconds)}`,
+    '-c:a', 'pcm_s24le', '-ar', '48000', '-ac', '2', '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
+}
+
+export async function muxFinalRenderAmbientAudio(input: {
+  readonly runCommand: FinalRenderAudioCommandRunner
+  readonly stitchedPath: string
+  readonly mainAudioPath: string
+  readonly hasSourceAudio: boolean
+  readonly ambientSoundPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+}): Promise<FinalRenderAudioMixResult> {
+  const exact = exactAudioDurationFilter(input.durationSeconds)
+  const ambience = await analyzeAudioLoudness(input.runCommand, input.ambientSoundPath, AMBIENT_SOUND_AUDIO_TARGET)
+  if (!input.hasSourceAudio) {
+    await input.runCommand('ffmpeg', [
+      '-y', '-i', input.stitchedPath, '-i', input.ambientSoundPath,
+      '-filter_complex', `[1:a]loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambience)},${exact},alimiter=limit=0.95[aout]`,
+      '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+      '-t', input.durationSeconds.toFixed(3), input.outputPath,
+    ])
+    return { hasSourceAudio: false, ambientSound: ambience }
+  }
+  const main = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.stitchedPath, '-i', input.mainAudioPath, '-i', input.ambientSoundPath,
+    '-filter_complex', [
+      `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, main)},${exact}[main_norm]`,
+      `[2:a]loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambience)},${exact}[ambient_norm]`,
+      '[main_norm][ambient_norm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
+    ].join(';'),
+    '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
+  return { hasSourceAudio: true, mainAudio: main, ambientSound: ambience }
+}
+
+export async function applyFinalRenderMasterAutomation(input: {
+  readonly runCommand: FinalRenderAudioCommandRunner
+  readonly inputPath: string
+  readonly outputPath: string
+  readonly durationSeconds: number
+  readonly volumeFilter: string
+}): Promise<void> {
+  await input.runCommand('ffmpeg', [
+    '-y', '-i', input.inputPath, '-filter_complex',
+    `[0:a]${input.volumeFilter},${exactAudioDurationFilter(input.durationSeconds)},alimiter=limit=0.95[aout]`,
+    '-map', '0:v:0', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+    '-t', input.durationSeconds.toFixed(3), input.outputPath,
+  ])
 }

@@ -1,8 +1,6 @@
 import {
   BGM_SCORE_STATUS,
-  bgmScorePlanSchema,
   type BgmScoreMix,
-  type BgmScorePlan,
 } from '@/lib/bgm-score/types'
 
 export type PersistedMusicScoreRecord = {
@@ -41,13 +39,6 @@ export function readMusicScoreStatus(score: PersistedMusicScoreRecord | null | u
 export function readMusicScoreTimelineSignature(score: PersistedMusicScoreRecord | null | undefined): string | null {
   if (!score) return null
   return readString(score.timelineSignature) || null
-}
-
-export function readPersistedMusicScorePlan(score: PersistedMusicScoreRecord | null | undefined): BgmScorePlan | null {
-  if (!score) return null
-  const data = parseRecord(score.cuesJson)
-  const result = bgmScorePlanSchema.safeParse(data?.plan)
-  return result.success ? result.data : null
 }
 
 export function readCompletedMusicScoreMix(score: PersistedMusicScoreRecord | null | undefined): BgmScoreMix | null {

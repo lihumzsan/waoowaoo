@@ -1,9 +1,6 @@
-import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import {
   AMBIENT_SOUND_STATUS,
   type AmbientSoundMix,
-  type AmbientSoundProjectData,
   type AmbientSoundSourceAsset,
 } from './types'
 
@@ -35,7 +32,7 @@ function parseAmbientSoundMix(value: unknown): AmbientSoundMix | null {
 function parseAmbientSoundSource(value: unknown): AmbientSoundSourceAsset | null {
   if (!isRecord(value)) return null
   const sourceId = readString(value, 'sourceId')
-  const environmentFingerprint = readString(value, 'environmentFingerprint')
+  const sourceContinuityId = readString(value, 'sourceContinuityId')
   const prompt = readString(value, 'prompt')
   const mediaId = readString(value, 'mediaId')
   const url = readString(value, 'url')
@@ -45,9 +42,17 @@ function parseAmbientSoundSource(value: unknown): AmbientSoundSourceAsset | null
   const loopDurationSeconds = readNumber(value, 'loopDurationSeconds')
   const promptInfluence = readNumber(value, 'promptInfluence')
   const soundEffectModel = readString(value, 'soundEffectModel')
+  const candidateIndex = readNumber(value, 'candidateIndex')
+  const selected = value.selected
+  const range = value.range
+  const loop = value.loop
+  const crossfadeFrames = readNumber(value, 'crossfadeFrames')
+  const phaseOffsetFrames = readNumber(value, 'phaseOffsetFrames')
+  const boundaryScore = readNumber(value, 'boundaryScore')
+  const quality = value.quality
   if (
     !sourceId ||
-    !environmentFingerprint ||
+    !sourceContinuityId ||
     !prompt ||
     !mediaId ||
     !url ||
@@ -58,13 +63,23 @@ function parseAmbientSoundSource(value: unknown): AmbientSoundSourceAsset | null
     loopDurationSeconds === null ||
     loopDurationSeconds <= 0 ||
     promptInfluence === null ||
-    !soundEffectModel
+    !soundEffectModel ||
+    (candidateIndex !== 0 && candidateIndex !== 1) ||
+    typeof selected !== 'boolean' ||
+    !isRecord(range) ||
+    typeof loop !== 'boolean' ||
+    crossfadeFrames === null ||
+    phaseOffsetFrames === null ||
+    boundaryScore === null ||
+    !isRecord(quality)
   ) {
     return null
   }
   return {
     sourceId,
-    environmentFingerprint,
+    sourceContinuityId,
+    candidateIndex,
+    selected,
     prompt,
     mediaId,
     url,
@@ -74,6 +89,12 @@ function parseAmbientSoundSource(value: unknown): AmbientSoundSourceAsset | null
     loopDurationSeconds,
     promptInfluence,
     soundEffectModel,
+    range: range as unknown as AmbientSoundSourceAsset['range'],
+    loop,
+    crossfadeFrames,
+    phaseOffsetFrames,
+    boundaryScore,
+    quality: quality as unknown as AmbientSoundSourceAsset['quality'],
   }
 }
 
@@ -92,15 +113,6 @@ export function readAmbientSoundTimelineSignature(input: {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-export function readAmbientSoundDecision(input: {
-  readonly planJson?: unknown
-} | null | undefined): 'ambient_sound' | 'none_needed' | null {
-  const planJson = input?.planJson
-  if (!isRecord(planJson)) return null
-  const decision = planJson.decision
-  return decision === 'ambient_sound' || decision === 'none_needed' ? decision : null
-}
-
 export function readAmbientSoundSources(value: unknown): AmbientSoundSourceAsset[] {
   if (!Array.isArray(value)) return []
   return value
@@ -115,50 +127,5 @@ export function readAmbientSoundSourcesStrict(value: unknown): AmbientSoundSourc
     const parsed = parseAmbientSoundSource(source)
     if (!parsed) throw new Error(`AMBIENT_SOUND_SOURCE_JSON_INVALID:${index}`)
     return parsed
-  })
-}
-
-export async function writeAmbientSoundProjectData(input: {
-  readonly episodeId: string
-  readonly ambientSound: AmbientSoundProjectData
-}): Promise<void> {
-  const planJson = input.ambientSound.plan
-    ? input.ambientSound.plan as unknown as Prisma.InputJsonValue
-    : Prisma.JsonNull
-  const sourcesJson = input.ambientSound.sources
-    ? input.ambientSound.sources as unknown as Prisma.InputJsonValue
-    : Prisma.JsonNull
-  const mixJson = input.ambientSound.mix
-    ? input.ambientSound.mix as unknown as Prisma.InputJsonValue
-    : Prisma.JsonNull
-  const diagnosticsJson = input.ambientSound.errorMessage
-    ? { errorMessage: input.ambientSound.errorMessage } as Prisma.InputJsonValue
-    : Prisma.JsonNull
-
-  await prisma.projectEditAmbientSound.upsert({
-    where: { episodeId: input.episodeId },
-    create: {
-      episodeId: input.episodeId,
-      planJson,
-      sourcesJson,
-      mixJson,
-      diagnosticsJson,
-      status: input.ambientSound.status,
-      taskId: input.ambientSound.taskId,
-      planTaskId: input.ambientSound.planTaskId,
-      timelineSignature: input.ambientSound.timelineSignature,
-      soundEffectModel: input.ambientSound.soundEffectModel,
-    },
-    update: {
-      planJson,
-      sourcesJson,
-      mixJson,
-      diagnosticsJson,
-      status: input.ambientSound.status,
-      taskId: input.ambientSound.taskId,
-      planTaskId: input.ambientSound.planTaskId,
-      timelineSignature: input.ambientSound.timelineSignature,
-      soundEffectModel: input.ambientSound.soundEffectModel,
-    },
   })
 }

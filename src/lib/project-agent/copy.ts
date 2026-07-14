@@ -253,17 +253,13 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成镜头执行计划',
     en: 'Generate shot execution plan',
   },
-  plan_episode_bgm_score: {
-    zh: '规划配乐',
-    en: 'Plan music score',
+  plan_episode_audio_design: {
+    zh: '规划声音设计',
+    en: 'Plan audio design',
   },
   generate_episode_bgm_score: {
     zh: '生成配乐',
     en: 'Generate music score',
-  },
-  plan_episode_ambient_sound: {
-    zh: '规划环境音层',
-    en: 'Plan ambientSound layer',
   },
   generate_episode_ambient_sound: {
     zh: '生成环境音层',
