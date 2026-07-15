@@ -53,7 +53,7 @@ Bernini 竖屏及非横屏比例继续使用现有的 480 短边、848 长边上
 - 同一节点设置 `proportional_width = 53`、`proportional_height = 29`。
 - 保持 `fit = crop`、`method = lanczos`、`round_to_multiple = 16`、`scale_to_side = longest`。
 - 节点 `417` 的最长边设置为 `848`。
-- 节点 `384`（Bernini conditioning）的 `width`、`height` 设置为 `848`、`464`。
+- 节点 `384`（Bernini conditioning）的 `width`、`height` 保留到节点 `416` 宽高输出的动态连接；节点 `416` 的精确 `53:29` 输出因此直接成为 conditioning 的 `848×464` 画布。
 
 仓库内同类 Bernini 工作流节点已经使用 `custom` 模式，因此该表达方式属于现有节点合同。禁止只设置 `aspect_ratio = 16:9`：那会让预处理裁切比例与 `848×464` 条件画布不一致。
 
@@ -82,7 +82,7 @@ Bernini 竖屏及非横屏比例继续使用现有的 480 短边、848 长边上
    - 增加或保留 LTX 回归断言，确认其尺寸传递不受影响。
 2. `tests/unit/providers/comfyui-workflow-registry.test.ts`
    - 断言横屏 Bernini 节点 `416` 使用 `custom`、`53`、`29` 和 `crop`。
-   - 断言节点 `417` 为 `848`，节点 `384` 为 `848×464`。
+   - 断言节点 `417` 为 `848`，节点 `384` 的宽高分别连接节点 `416` 的宽高输出。
    - 断言音频与非音频 Bernini 工作流都遵循同一尺寸合同。
 3. 定向验证
    - 运行上述两个 Vitest 文件。

@@ -13,7 +13,7 @@
 - LTX 工作流和其生成器请求尺寸保持不变；实测 LTX 最终 MP4 继续为 `1280×704`。
 - 新的横屏 Bernini 最终 MP4 必须为 `848×464`，两边均按 16 像素对齐，最长边不超过 848。
 - 节点 `416` 必须使用 `aspect_ratio = custom`、`proportional_width = 53`、`proportional_height = 29`、`fit = crop`。
-- 节点 `417` 必须为 848；节点 `384` 必须为 `width = 848`、`height = 464`。
+- 节点 `417` 必须为 848；节点 `384` 的宽高必须保留到节点 `416` 宽高输出的动态连接，使 conditioning 接收实际 `848×464` 画布。
 - Bernini 竖屏及非 `16:9` 比例继续使用现有 480 短边、848 长边上限和 16 像素对齐逻辑。
 - 不增加 FFmpeg 或任何服务端视频转码，不修改浏览器视频卡片预览，不迁移数据库或历史媒体。
 - 实际 MP4 尺寸或画面验收不通过时继续定位根因，不能用补黑边作为降级方案。
@@ -168,7 +168,7 @@ git commit -m "fix: align Bernini landscape video canvas"
 
 **Interfaces:**
 - Consumes: Task 1 注入的 `ComfyUiWorkflowInject.width = 848`、`height = 464`。
-- Produces: 标准和 Audio LipSync Bernini 工作流中节点 `416` 的 `custom 53:29 + crop`、节点 `417 = 848`、节点 `384 = 848×464`；其他 Bernini 尺寸继续走原有归一化。
+- Produces: 标准和 Audio LipSync Bernini 工作流中节点 `416` 的 `custom 53:29 + crop`、节点 `417 = 848`、节点 `384` 到节点 `416` 宽高输出的动态连接；其他 Bernini 尺寸继续走原有归一化。
 
 - [ ] **Step 1: 写出会失败的标准/音频 Bernini 节点合同测试**
 
@@ -201,8 +201,8 @@ git commit -m "fix: align Bernini landscape video canvas"
       expect(workflow['416']?.inputs.round_to_multiple).toBe('16')
       expect(workflow['416']?.inputs.scale_to_side).toBe('longest')
       expect(workflow['417']?.inputs.value).toBe(848)
-      expect(workflow['384']?.inputs.width).toBe(848)
-      expect(workflow['384']?.inputs.height).toBe(464)
+      expect(workflow['384']?.inputs.width).toEqual(['416', 3])
+      expect(workflow['384']?.inputs.height).toEqual(['416', 4])
     }
   })
 ```
@@ -280,7 +280,7 @@ Run:
 $env:BILLING_TEST_BOOTSTRAP='0'; npx.cmd vitest run tests/unit/providers/comfyui-workflow-registry.test.ts
 ```
 
-Expected: 文件内全部测试 `PASS`；标准和 Audio LipSync Bernini 都满足 `custom 53:29`、`417 = 848`、`384 = 848×464`。
+Expected: 文件内全部测试 `PASS`；标准和 Audio LipSync Bernini 都满足 `custom 53:29`、`417 = 848`，且 `384` 保留到 `416` 宽高输出的动态连接。
 
 - [ ] **Step 5: 提交工作流尺寸合同**
 
