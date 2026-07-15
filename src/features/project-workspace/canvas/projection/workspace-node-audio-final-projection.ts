@@ -74,12 +74,6 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
   }
 }
 
-function bgmPersistedPresentationStatus(finalVideo: ProjectFinalVideo | null | undefined): string | null {
-  const scoreStatus = finalVideo?.musicScore?.status ?? null
-  if (scoreStatus === 'completed' || scoreStatus === 'failed') return scoreStatus
-  return finalVideo?.bgmDesign?.status ?? scoreStatus
-}
-
 export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjectionContext, videoProjection: WorkspaceVideoSegmentProjection): void {
   const {
     projectId,
@@ -114,10 +108,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
   })
   if (bgmProjection.materialized) {
     bgmNodeId = workspaceNodeId.bgmScore(episodeId)
-    const bgmPresentationStatus = bgmPersistedPresentationStatus(finalVideo)
-    const bgmPresentation = bgmDetails
-      ? (resourcePresentationFromStatus(bgmPresentationStatus) ?? workspaceCanvasPendingResourcePresentation())
-      : null
+    const bgmPresentation = bgmDetails ? (resourcePresentationFromStatus(bgmDetails.status) ?? workspaceCanvasPendingResourcePresentation()) : null
     const bgmReadyForGeneration = bgmDetails?.hasPromptDesign === true && bgmDetails.status !== 'planning' && bgmDetails.status !== 'generating'
     const bgmActionAvailable =
       bgmReadyForGeneration ||

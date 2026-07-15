@@ -39,7 +39,7 @@ Canvas 是正式领域 View 的可视化投影，不是业务状态机。节点 
 ## 历史回归
 
 - BGM/环境音的生成 Task 曾覆盖资源 `taskId`，Canvas 又把该字段当作规划 stream 的终态 owner，导致正式资源虽已成功，规划 presentation 仍会在交接时短暂清空。第一次修正为两个资源分别增加 `planTaskId`，随后虽统一为 AudioDesign stream，仍保留两个节点。当前只剩 `bgm_design_plan` adapter、BGM 节点和 BgmDesign taskId 交接；主 Journey 的同一 observer 对 Task identity、presentation 与正式资源交接连续性 fail closed，并拒绝旧节点回流。
-- 环境音链删除后，BGM 节点仍顺序承载 BgmDesign 与 MusicScore。若 projector 直接用非终态 MusicScore `generating` 覆盖已终态 BgmDesign `planned`，stream release effect 可能先看到成功投影并释放 accumulator，而 DOM 在同一批更新中只看到 pending，形成 presentation 空窗。当前 persisted presentation 在 MusicScore 终态前以 BgmDesign 为权威，实际生成中的 phase/Task identity 只由 Task runtime fact 接管；Logic projector 规格和主 Golden observer 同时反证该空窗。
+- 环境音链删除后，BGM 节点仍顺序承载 BgmDesign 与 MusicScore；主 Golden 首次暴露 BGM 空窗，完整 canonical suite 又稳定复现源剧本同类空窗。根因不是领域 projector，而是共享 release effect 用尚未合并 Task runtime 的原始投影判断可释放，DOM 却消费唯一 resolver 的最终 View：原始资源已成功而 Task 仍 processing 时，旧 stream 会在最终 View 进入终态前被删除。当前 release 只读取 `resolvedProjectedNodes`，确保 Resource、Task、stream 与 submission 已由唯一 resolver 合并；BGM Logic 规格和主 Golden observer 同时反证提前释放。
 
 - Storyboard/Panel 曾把“文本镜头记录存在”误解释为“图片已成功”，18 个未提交图片 Task 的节点因此同时显示成功。首次修正只分离 Panel 与媒体 lifecycle，仍保留了不再需要的分镜图阶段。当前防线直接删除 Panel/图片节点与全部入口。
 - 多章节“全部”范围曾因 nullable 单实例 `editScript` 而不投影任何 VideoGroup，最终时间线却另外统计到视频；后续修复又依赖 `segmentIndex/gridMode`。当前投影从正式 `ProjectVideoSegment` 集合展平，identity 不再来自位置或生成模式。

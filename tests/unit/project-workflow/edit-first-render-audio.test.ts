@@ -13,6 +13,7 @@ import {
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
+import type { WorkspaceCanvasStreamPatch } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
 import { createValidBgmDesign } from '../bgm-design/bgm-design-fixture'
 import { TASK_RUNTIME_TARGETS, taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 
@@ -234,7 +235,7 @@ describe('edit-first workflow state', () => {
     expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
-  it('keeps the terminal BGM design authoritative until the generation Task takes over', () => {
+  it('keeps the BGM terminal presentation until the generation Task takes over', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -274,12 +275,37 @@ describe('edit-first workflow state', () => {
       translate: (key) => key,
     })
     const bgmNode = projection.nodes.find((node) => node.data.kind === 'bgmScore')
-    expect(bgmNode?.data.lifecycle.phase).toBe('succeeded')
+    expect(bgmNode?.data.lifecycle.phase).toBe('pending')
     expect(bgmNode?.data.terminalHandoffTaskId).toBe('bgm-design-task-1')
     expect(bgmNode?.data.bgmScoreDetails?.status).toBe('generating')
 
     const runtimeTarget = TASK_RUNTIME_TARGETS.projectEpisodeBgmScore('episode-1')
     if (!runtimeTarget) throw new Error('BGM_RUNTIME_TARGET_REQUIRED')
+    const handoffPatch = {
+      nodeId: workspaceNodeId.bgmScore('episode-1'),
+      streamKind: 'bgmScore',
+      taskId: 'bgm-design-task-1',
+      taskType: 'bgm_design_plan',
+      terminalHandoff: true,
+      presentation: {
+        isStreaming: false,
+        activeItemKey: 'score-main',
+        displayedItemKeys: ['score-main'],
+        pinnedItemKeys: [],
+        revealedFieldCountByKey: { 'score-main': 1 },
+      },
+      data: { body: 'frozen BGM design' },
+    } as WorkspaceCanvasStreamPatch & { readonly terminalHandoff: true }
+    const awaitingGenerationRuntime = resolveWorkspaceCanvasNodeData({
+      node: bgmNode!,
+      statesByQueryKey: new Map(),
+      streamPatch: handoffPatch,
+      submitting: false,
+    })
+    expect(awaitingGenerationRuntime.lifecycle).toMatchObject({ phase: 'pending' })
+    expect(awaitingGenerationRuntime.lifecycle.stream).toMatchObject({ isStreaming: false })
+    expect(awaitingGenerationRuntime.body).toBe('frozen BGM design')
+
     const resolved = resolveWorkspaceCanvasNodeData({
       node: bgmNode!,
       statesByQueryKey: new Map([[
@@ -292,7 +318,7 @@ describe('edit-first workflow state', () => {
           progress: 40,
         },
       ]]),
-      streamPatch: null,
+      streamPatch: handoffPatch,
       submitting: false,
     })
     expect(resolved.lifecycle).toMatchObject({
@@ -300,6 +326,7 @@ describe('edit-first workflow state', () => {
       taskId: 'bgm-generate-task-1',
       progress: 40,
     })
+    expect(resolved.lifecycle.stream).toBeNull()
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {

@@ -473,24 +473,6 @@ function ProjectWorkspaceCanvasContent({
   })
   const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
-  const releasableTerminalStreamTaskIds = useMemo(() => {
-    const projectedNodeById = new Map(projectedNodes.map((node) => [node.id, node] as const))
-    return structuredStreamRuntime.patches.flatMap((patch) => {
-      const projectedNode = projectedNodeById.get(patch.nodeId)
-      return projectedNode && isTerminalHandoffResourceCurrent({
-        terminalHandoff: patch.terminalHandoff === true,
-        streamTaskId: patch.taskId,
-        resourceTaskId: projectedNode.data.terminalHandoffTaskId,
-        resourcePhase: projectedNode.data.lifecycle.phase,
-      })
-        ? [patch.taskId]
-        : []
-    })
-  }, [projectedNodes, structuredStreamRuntime.patches])
-  useEffect(() => {
-    if (releasableTerminalStreamTaskIds.length === 0) return
-    releaseTerminalHandoffs(releasableTerminalStreamTaskIds)
-  }, [releasableTerminalStreamTaskIds, releaseTerminalHandoffs])
   const workspaceRuntimeTargets = useMemo(
     () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
     [projectedNodes],
@@ -568,6 +550,24 @@ function ProjectWorkspaceCanvasContent({
     () => attachNodeUiState(projectedNodes),
     [attachNodeUiState, projectedNodes],
   )
+  const releasableTerminalStreamTaskIds = useMemo(() => {
+    const resolvedNodeById = new Map(resolvedProjectedNodes.map((node) => [node.id, node] as const))
+    return structuredStreamRuntime.patches.flatMap((patch) => {
+      const resolvedNode = resolvedNodeById.get(patch.nodeId)
+      return resolvedNode && isTerminalHandoffResourceCurrent({
+        terminalHandoff: patch.terminalHandoff === true,
+        streamTaskId: patch.taskId,
+        resourceTaskId: resolvedNode.data.terminalHandoffTaskId,
+        resourcePhase: resolvedNode.data.lifecycle.phase,
+      })
+        ? [patch.taskId]
+        : []
+    })
+  }, [resolvedProjectedNodes, structuredStreamRuntime.patches])
+  useEffect(() => {
+    if (releasableTerminalStreamTaskIds.length === 0) return
+    releaseTerminalHandoffs(releasableTerminalStreamTaskIds)
+  }, [releasableTerminalStreamTaskIds, releaseTerminalHandoffs])
   resolvedProjectedNodesRef.current = resolvedProjectedNodes
   userNodePositionsRef.current = userNodePositions
   const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
