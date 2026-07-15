@@ -21,6 +21,8 @@ const ASPECT_TO_SIZE: Record<string, { w: number; h: number }> = {
   '2:3': { w: 832, h: 1216 },
 }
 
+const BERNINI_LANDSCAPE_16_9_SIZE = { w: 848, h: 464 } as const
+
 const COMFYUI_VIDEO_DIMENSION_ALIGNMENT = 32
 const BERNINI_VIDEO_DIMENSION_ALIGNMENT = 16
 
@@ -56,6 +58,25 @@ function normalizeBernini480pVideoSize(size: { w: number; h: number } | null): {
     w: shortSide,
     h: Math.min(maxLongSide, alignComfyUiVideoDimension(shortSide / ratio, BERNINI_VIDEO_DIMENSION_ALIGNMENT)),
   }
+}
+
+function resolveBernini480pVideoSize(
+  directSize: { w: number; h: number } | null,
+  aspectRatio: string | undefined,
+  aspectSize: { w: number; h: number } | undefined,
+): { w: number; h: number } {
+  if (directSize) {
+    if (directSize.w === BERNINI_LANDSCAPE_16_9_SIZE.w && directSize.h === BERNINI_LANDSCAPE_16_9_SIZE.h) {
+      return { ...BERNINI_LANDSCAPE_16_9_SIZE }
+    }
+    return normalizeBernini480pVideoSize(directSize)
+  }
+
+  if (aspectRatio === '16:9') {
+    return { ...BERNINI_LANDSCAPE_16_9_SIZE }
+  }
+
+  return normalizeBernini480pVideoSize(aspectSize || null)
 }
 
 function normalizeComfyUiReferenceImageUrls(value: unknown): string[] | undefined {
@@ -184,11 +205,14 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
     })
     const selectedWorkflowKey = selectedWorkflow.workflowKey
     const directSize = parseWxH(typeof options.size === 'string' ? options.size : undefined)
-    const aspectSize = typeof options.aspectRatio === 'string'
-      ? ASPECT_TO_SIZE[options.aspectRatio.trim()]
+    const requestedAspectRatio = typeof options.aspectRatio === 'string'
+      ? options.aspectRatio.trim()
+      : undefined
+    const aspectSize = requestedAspectRatio
+      ? ASPECT_TO_SIZE[requestedAspectRatio]
       : undefined
     const targetSize = isSeedance2BerniniWorkflowKey(selectedWorkflowKey)
-      ? normalizeBernini480pVideoSize(directSize || aspectSize || null)
+      ? resolveBernini480pVideoSize(directSize, requestedAspectRatio, aspectSize)
       : normalizeComfyUiVideoSize(directSize || aspectSize || null)
 
     try {
