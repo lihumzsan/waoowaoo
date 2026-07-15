@@ -1970,9 +1970,24 @@ function alignToMultiple(value: number, multiple: number): number {
   return Math.max(multiple, Math.round(value / multiple) * multiple)
 }
 
+const SEEDANCE2_BERNINI_LANDSCAPE_SIZE = {
+  width: 848,
+  height: 464,
+  longestSide: 848,
+} as const
+
+function isSeedance2BerniniLandscapeSize(size: { width: number; height: number }): boolean {
+  return size.width === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.width
+    && size.height === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.height
+}
+
 function resolveSeedance2BerniniSize(width?: number, height?: number): { width: number; height: number; longestSide: number } {
   const inputWidth = clampDimension(width) ?? 480
   const inputHeight = clampDimension(height) ?? 848
+  if (inputWidth === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.width
+    && inputHeight === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.height) {
+    return { ...SEEDANCE2_BERNINI_LANDSCAPE_SIZE }
+  }
   const ratio = inputWidth > 0 && inputHeight > 0 ? inputWidth / inputHeight : 480 / 848
   const shortSide = 480
   const maxLongSide = 848
@@ -2344,7 +2359,13 @@ function applySeedance2BerniniWorkflowControls(
   setNumericNodeValue(graph, '417', size.longestSide)
   const resizeNode = graph['416']
   if (resizeNode && isRecord(resizeNode.inputs)) {
-    resizeNode.inputs.aspect_ratio = formatAspectRatio(size.width, size.height)
+    if (isSeedance2BerniniLandscapeSize(size)) {
+      resizeNode.inputs.aspect_ratio = 'custom'
+      resizeNode.inputs.proportional_width = 53
+      resizeNode.inputs.proportional_height = 29
+    } else {
+      resizeNode.inputs.aspect_ratio = formatAspectRatio(size.width, size.height)
+    }
     resizeNode.inputs.fit = 'crop'
     resizeNode.inputs.method = 'lanczos'
     resizeNode.inputs.round_to_multiple = '16'

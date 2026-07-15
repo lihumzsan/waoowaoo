@@ -730,6 +730,37 @@ describe('comfyui workflow registry', () => {
     expect(userPrompt).not.toBe('hero punches forward through rain')
   })
 
+  it('keeps the exact 53:29 landscape canvas in both Bernini workflows', () => {
+    const cases: Array<{ workflowKey: string; audioFilenames?: string[] }> = [
+      { workflowKey: BERNINI_WORKFLOW_KEY },
+      { workflowKey: BERNINI_AUDIO_WORKFLOW_KEY, audioFilenames: ['voice-line.wav'] },
+    ]
+
+    for (const { workflowKey, audioFilenames } of cases) {
+      const workflow = resolveComfyUiWorkflow(workflowKey, {
+        prompt: 'hero turns toward the camera',
+        imageFilenames: ['source.png'],
+        ...(audioFilenames ? { audioFilenames } : {}),
+        width: 848,
+        height: 464,
+        durationSeconds: 5,
+        fps: 24,
+        motionStrength: 1,
+      })
+
+      expect(workflow['416']?.inputs.aspect_ratio).toBe('custom')
+      expect(workflow['416']?.inputs.proportional_width).toBe(53)
+      expect(workflow['416']?.inputs.proportional_height).toBe(29)
+      expect(workflow['416']?.inputs.fit).toBe('crop')
+      expect(workflow['416']?.inputs.method).toBe('lanczos')
+      expect(workflow['416']?.inputs.round_to_multiple).toBe('16')
+      expect(workflow['416']?.inputs.scale_to_side).toBe('longest')
+      expect(workflow['417']?.inputs.value).toBe(848)
+      expect(workflow['384']?.inputs.width).toEqual(['416', 3])
+      expect(workflow['384']?.inputs.height).toEqual(['416', 4])
+    }
+  })
+
   it('renders Seedance2 Bernini calm 5 second prompts without stale 10 second wording', () => {
     const workflow = resolveComfyUiWorkflow(BERNINI_WORKFLOW_KEY, {
       prompt: 'woman sits quietly by the window',
