@@ -13,12 +13,12 @@
 - **CP-02 — 核心镜头契约最小且严格。** structure 输出只包含场景、动作、人物表演、对白、同步声音、时长、连续性与 `generationSegments`。`visibility`、`role`、`keyObjects`、lighting、空间站位、blocking、机位与生成 Prompt 都不属于该契约；strict schema 必须拒绝未知字段。
 - **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、token overlap、embedding 或数组位置将模型文本解释为 canonical fact。
 - **CP-04 — 资产 identity 由服务端解析。** 模型只从动态名称枚举输出 `locationName`/`characterName`/`speakerName`，并使用本次响应内的短 `shotRef` 组织 Segment。唯一 resolver 精确映射 UUID、校验对白归属并生成系统 shot identity。未知名称、重名、未知引用、顺序或覆盖不完整必须整份失败。
-- **CP-04A — UUID 是关联权威，名称只属于 View。** 持久计划、requirement、镜头执行计划、Video Segment 与 Ambient Sound 关联只使用 canonical identity。对外 View 必须按当前 UUID 重新投影名称；缺失关联显式失败，禁止回退到历史名称、位置或 UUID 文案。
+- **CP-04A — UUID 是关联权威，名称只属于 View。** 持久计划、requirement、镜头执行计划与 Video Segment 关联只使用 canonical identity。对外 View 必须按当前 UUID 重新投影名称；缺失关联显式失败，禁止回退到历史名称、位置或 UUID 文案。
 - **CP-05 — 成功写入受 Task owner 围栏。** EditScript 与 ShotExecutionPlan 的正式资源在 owner-fenced 事务中提交；失败或晚到 attempt 不得改写章节事实。
 - **CP-06 — 镜头执行计划只决定三个字段。** 模型输入只是 `structure_json + visual_style + aspect_ratio`；每个 shot 只输出 `shotScale` 与 `cameraMovement.{movement,stability}`。`stability` 是镜头动态的稳定程度，只能是 `locked/stable/smooth/subtle_shake/handheld`。焦段、景深、机位、角度、构图、灯光、轴线、站位、道具位置与 Prompt 都不得输出。
 - **CP-07 — Video Segment 是唯一视频资源。** `ProjectVideoSegment` 以 `(editScriptId, segmentId)` 作为 canonical identity，只由 `generate_video_segments` 计划/批准链提交。确定性 `ProjectVideoSegment.id` 必须由同一 identity resolver 同时提供给 EditScript View 与 planner，使资源行创建前的 Canvas 节点也能声明准确 Task target；禁止使用临时 UI identity。参考图只来自已确认的角色与场景资产；最终 Prompt、有序参考图与 `inputSignature` 在批准时冻结进 Task payload，不得在资源表建立第二可编辑事实。超过模型 `maxReferenceImages` 必须整段失败，禁止截断。
 - **CP-07A — Segment 生成作用域与跳过语义唯一。** `generate_video_segments` 只接受穷尽的 `segment` 或 `pending` scope：Canvas 节点必须携带精确 `chapterId + editScriptId + segmentId`，Assistant 批量只表达待生成的 chapter/episode 范围。planner 是 `ProjectVideoSegment.status + generationTaskId + inputSignature` 的唯一解释者；同签名 active/completed Segment 必须在报价前跳过，不同签名 active Segment 必须 fail closed，`failed` 或取消后投影为 `pending` 的资源才可重新计划。禁止由客户端 submitting 集合、数组位置、Task dedupe 碰撞或批量提交顺序决定是否重复生成。
-- **CP-08 — 视频原生音频永远开启。** Segment 计划与 worker 都必须把 `generateAudio=true` 写入 provider 选项；缺失或 false 原地失败。原生片段音频、连续 Ambient Sound 和 BGM 是三条独立音轨，最终合成时才混合。
+- **CP-08 — 视频原生音频永远开启。** Segment 计划与 worker 都必须把 `generateAudio=true` 写入 provider 选项；缺失或 false 原地失败。原生片段音频与 BGM 是两类独立音轨，最终合成时才混合。
 
 ## 权威入口
 
@@ -28,13 +28,13 @@
 - Style Bible：`src/lib/edit-script/style-bible-prompt.ts`；视频使用 `visualStyle`，资产图使用 `assetImageStyle.{lighting,texture,composition}`。
 - 核心计划、镜头执行计划与 owner-fenced 持久化：`src/lib/edit-script/service.ts`、`src/lib/workers/handlers/edit-script-structured-generate.ts`。
 - Video Segment identity、scope、计划、Prompt 与 Task：`src/lib/video-segments/{identity,scope,planning-policy,planning,prompt,types}.ts`、`src/lib/operations/domains/video-segments/index.ts`、`src/lib/workers/video.worker.ts`。
-- Ambient Sound 规划/生成：`src/lib/ambient-sound/**`。
+- BGM 规划/生成：`src/lib/bgm-design/**`、`src/lib/bgm-score/**`。
 
 ## 验证
 
 - `tests/unit/edit-script/shot-execution-normalize.test.ts` 反证旧执行字段和非法稳定性枚举。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 让受控 provider 输出通过生产 strict schema；它不证明真实模型必然服从 Prompt。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 验证多章节从计划到 `ProjectVideoSegment`、原生音频、Ambient Sound、BGM 和成片的真实主链，并拒绝独立分镜图 Task/Panel/VideoGroup 回流。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 验证多章节从计划到 `ProjectVideoSegment`、原生音频、BGM 和成片的真实主链，并拒绝独立分镜图 Task/Panel/VideoGroup 与旧环境音链回流。
 - `tests/unit/video-segments/planning-policy.test.ts` 验证 active/completed/failed/pending 状态在唯一 planner policy 中的跳过、拒绝与重试语义；`tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 验证 Canvas 报价与执行携带精确 Segment scope。
 
 ## 历史回归

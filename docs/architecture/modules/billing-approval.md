@@ -80,9 +80,9 @@
 
 ## 历史回归
 
-- BGM 与 Ambient Sound 首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 `issueApprovalGrant`。这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。当前 `approvalItems` 各自保存冻结计划，`issueApprovalGrantGroup` 锁定全部 snapshot 并在同一事务签发 Grant，展示层只消费合计 quote；Golden 对两个 Grant/Execution 独立断言。
+- BGM 与环境音首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 `issueApprovalGrant`。这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。通用 `approvalItems`/`issueApprovalGrantGroup` 原子组能力仍保留并由跨媒体集成场景验证；声音阶段现在只有一个 BGM 收费 Operation，主 Golden 只允许一个对应 Grant/Execution。
 
-- 旧 Soundscape 曾使用“最多 12 个音源”的上限授权，BGM 与 Ambient Sound 又各自维护文本 plan；审批时无法证明两类声音来自同一整集设计。当前免费的 `plan_episode_audio_design / AUDIO_DESIGN_PLAN` 唯一持久化严格 AudioDesign；两个收费生成 Operation 只消费该冻结设计和签名，BGM 固定报价两个候选，Ambient Sound 以精确 `sources × 2` 报价。审批仍分别签发两个 Grant，因为音乐与音效是不同 provider capability，但不再存在两个规划 writer。
+- 旧 Soundscape 曾使用“最多 12 个音源”的上限授权，BGM 与环境音又各自维护文本 plan；统一 AudioDesign 后仍保留两种收费能力。当前免费的 `plan_episode_bgm_design / BGM_DESIGN_PLAN` 唯一持久化严格 BgmDesign；唯一收费 `generate_episode_bgm_score` 只消费该冻结设计和签名，并按恰好两个候选报价。计费 `apiType` 已删除音效类别。
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。
 - 制作规划确认曾在 `bible_review` 副作用中直接提交视觉风格任务：后端虽持有报价，UI 未清楚展示 credits，且 Task 未绑定 Agent Wait。免费结果确认与收费媒体授权必须保持两个显式边沿。
 - 视觉风格媒体 plan 曾为了得到精确图片 Prompt 而在 approval preflight 同步调用 LLM 并创建候选记录；虽然图片报价准确，却让 plan 成为第二个长任务执行器和领域 writer。现由普通文本 Task 先持久化方案，图片 plan 只读该 Task 的成功结果。

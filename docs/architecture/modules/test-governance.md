@@ -55,7 +55,7 @@
 
 外部模型替身生成最小但不平凡的数据：至少两个可独立锚定的故事块，派生两个章节与多个资产。核心 processing 阶段刷新后必须恢复或前进；Style Bible、先完成全部章节计划再生成资产的持久时序、逐章镜头计划和媒体生成必须观察其 canonical Canvas identity。最终只允许一个 durable final output。
 
-声音阶段的 Fast 证据以生产 strict schema、生产 registry 和确定性 DSP/QC 函数为 oracle，反证双规划协议、固定时长枚举、候选不足、相位被重置及连续性阈值失效；Critical 证据用真实数据库 owner fence 反证晚到规划覆盖；主 Journey 从真实 route/Task/worker/DB 链路断言每章只有一个 AudioDesign、每个所需声源恰有两个候选、选择结果绑定设计签名，且最终只产生一个 durable output。外部模型和媒体仍只在协议边界由 Harness 替代。
+声音阶段的 Fast 证据以生产 strict BgmDesign schema、生产 registry 和确定性 DSP/QC 函数为 oracle，反证旧环境音字段回流、固定时长枚举、候选不足和 BGM 时间线缺口；Critical 证据用真实数据库 owner fence 反证晚到规划覆盖；主 Journey 从真实 route/Task/worker/DB 链路断言每集只有一个 BgmDesign、恰有两个 BGM 候选、选择结果绑定设计签名，旧环境音 Task/Operation/Canvas 节点为零，且最终只产生一个 durable output。外部模型和媒体仍只在协议边界由 Harness 替代。
 
 基础设施不可用、场景 skip/todo、浏览器崩溃或 paid provider 泄漏都属于失败，不得以“未发现产品错误”宣称通过。
 
@@ -70,7 +70,7 @@
 - Style Bible 集合在 `985d1524e` 改为“已有可用候选即 succeeded”，Logic/Conformance 已同步，主 Journey 却仍要求选择前为 pending，导致完整主链在风格选择处产生假失败并永远到不了后续 Canvas/SSE 阶段。改正 phase 后又暴露旧 driver 用固定 500ms 代替选择持久化确认：下一轮 reload 会中断仍在上传的 choice POST，服务端收到截断 JSON，测试再原地循环到超时。当前 Journey 对齐生产集合 View 的 succeeded 语义，并在一次点击后以权威 Workflow 离开 `needs_style_choice` 作为提交 Oracle，随后才验证同 node identity 与 reload；不再用 phase 不变或 timer 猜测完成。
 - 旧 Journey 与本地开发进程共享 `.next`，多个 Next/Turbopack 进程会互相覆盖 manifest，出现源码页面存在但运行时报 `PageNotFoundError`。当前 Harness 用 runtime identity 隔离 `NEXT_DIST_DIR`、上传和报告目录。
 - Golden 环境曾共享 Compose identity、固定端口和全局 teardown。当前每次运行拥有独立 scope 和 loopback endpoint，停止一个 scope 不得影响另一个。
-- 声音阶段过去有 BGM 与 Ambient Sound 两个规划 Task，测试只分别证明各自能完成，无法反证同一时间线被两套计划解释。当前 Fast/Critical/主 Journey 分别锁定结构契约、并发 owner 和真实组合链：缺少任一候选、旧 owner 晚到写入、资源设计签名不一致或恢复旧规划入口都会失败；这三层证据不通过 mock 内部 route/service/DB 来制造成功。
+- 声音阶段过去有 BGM 与环境音两个规划 Task，测试只分别证明各自能完成；统一 AudioDesign 后的测试又把“两种生成都存在”当作成功，无法反证产品只保留 BGM。当前 Fast/Critical/主 Journey 分别锁定 BGM-only 结构契约、并发 owner 和真实组合链：旧环境字段、缺少任一 BGM 候选、旧 owner 晚到写入、资源设计签名不一致或恢复旧环境音入口都会失败；这三层证据不通过 mock 内部 route/service/DB 来制造成功。
 
 ## 修改检查表
 
