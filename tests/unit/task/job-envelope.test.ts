@@ -179,7 +179,7 @@ describe('task job envelope', () => {
   })
 
   it('accepts every billing enum value and non-billable metadata', () => {
-    for (const apiType of ['text', 'image', 'video', 'music', 'sound_effect'] as const) {
+    for (const apiType of ['text', 'image', 'video', 'music'] as const) {
       for (const unit of ['token', 'image', 'video', 'second', 'call'] as const) {
         expect(buildTaskJobEnvelope(validSource({
           billingInfo: { ...validBillingInfo, apiType, unit },

@@ -38,7 +38,6 @@ describe('platform model catalog', () => {
     expect(modelKeys).toContain('openrouter::openai/gpt-5.6-sol')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0-fast')
-    expect(modelKeys).toContain('elevenlabs::eleven_text_to_sound_v2')
 
     expect(getPlatformDefaultModels()).toEqual({
       assistantModel: 'openrouter::openai/gpt-5.5',
@@ -48,7 +47,6 @@ describe('platform model catalog', () => {
       editModel: 'fal::gpt-image-2',
       videoModel: 'openrouter::bytedance/seedance-2.0-fast',
       musicModel: 'fal::fal-ai/lyria3/pro',
-      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
     })
   })
 

@@ -328,9 +328,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       shotExecutionPlans,
       videoSegments,
       assetRequirements,
-      audioDesigns,
+      bgmDesigns,
       musicScores,
-      ambientSounds,
       finalOutputs,
     ] = await Promise.all([
       queryRows(connection, 'SELECT id, userId, name, videoRatio, createdAt, updatedAt FROM projects WHERE id = ?', projectScope),
@@ -356,9 +355,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_video_segments WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_edit_audio_designs WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_bgm_designs WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_music_scores WHERE episodeId = ?', [scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_edit_ambient_sounds WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
     ])
     const parsedThreads = threads.map((thread) => ({
@@ -392,7 +390,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
         videoSegments: sortOracleRows(videoSegments, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
-        audioDesigns: audioDesigns.map((item) => ({
+        bgmDesigns: bgmDesigns.map((item) => ({
           ...item,
           designJson: parseJson(item.designJson),
           diagnosticsJson: parseJson(item.diagnosticsJson),
@@ -400,12 +398,6 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         musicScores: musicScores.map((item) => ({
           ...item,
           cuesJson: parseJson(item.cuesJson),
-          mixJson: parseJson(item.mixJson),
-          diagnosticsJson: parseJson(item.diagnosticsJson),
-        })),
-        ambientSounds: ambientSounds.map((item) => ({
-          ...item,
-          sourcesJson: parseJson(item.sourcesJson),
           mixJson: parseJson(item.mixJson),
           diagnosticsJson: parseJson(item.diagnosticsJson),
         })),

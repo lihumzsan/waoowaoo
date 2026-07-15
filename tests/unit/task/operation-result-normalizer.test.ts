@@ -85,33 +85,6 @@ describe('normalizeTaskOperationResult', () => {
     expect(video?.media).toEqual({ mediaType: 'video', url: 'videos/panel.mp4' })
   })
 
-  it('normalizes completed ambientSound generation as audio media with sound effect model', () => {
-    const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.AMBIENT_SOUND_GENERATE,
-      operationId: 'generate_episode_ambient_sound',
-      payload: { soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2' },
-      result: {
-        mediaId: 'media-ambientSound',
-        audioUrl: '/m/ambientSound',
-        storageKey: 'ambientSound/mix.m4a',
-        durationMs: 30000,
-      },
-    }))
-
-    expect(result).toEqual(expect.objectContaining({
-      operationId: 'generate_episode_ambient_sound',
-      provider: 'elevenlabs',
-      model: 'elevenlabs::eleven_text_to_sound_v2',
-      media: {
-        mediaType: 'audio',
-        mediaId: 'media-ambientSound',
-        url: '/m/ambientSound',
-        storageKey: 'ambientSound/mix.m4a',
-        durationMs: 30000,
-      },
-    }))
-  })
-
   it('normalizes failed task error from task columns', () => {
     const result = normalizeTaskOperationResult(buildTask({
       type: TASK_TYPE.IMAGE_CHARACTER,

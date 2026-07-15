@@ -175,9 +175,9 @@ describe('project agent operation registry', () => {
     }
   })
 
-  it('requires real media approval for edit-first image and sound_effect generation', () => {
+  it('requires real media approval for edit-first image and BGM generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    for (const operationId of ['generate_edit_style_preview_images', 'generate_episode_ambient_sound'] as const) {
+    for (const operationId of ['generate_edit_style_preview_images', 'generate_episode_bgm_score'] as const) {
       const operation = registry[operationId]
       expect(operation).toBeDefined()
       expect(operation.channels).toEqual({ tool: true, api: true })

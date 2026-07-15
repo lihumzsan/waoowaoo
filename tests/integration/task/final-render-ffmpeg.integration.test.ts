@@ -24,14 +24,13 @@ async function probeMedia(filePath: string): Promise<ProbeResult> {
 }
 
 describe('final render FFmpeg composition', () => {
-  it('keeps the canonical video duration when source audio is shorter than M4A music layers', async () => {
+  it('keeps the canonical video duration when source audio is shorter than the M4A BGM layer', async () => {
     const workspace = await mkdtemp(path.join(tmpdir(), 'final-render-ffmpeg-'))
     const durationSeconds = 2
     const sourcePath = path.join(workspace, 'source.mp4')
     const stitchedPath = path.join(workspace, 'stitched.mp4')
     const mainAudioPath = path.join(workspace, 'main-audio.wav')
     const musicPath = path.join(workspace, 'music.m4a')
-    const ambientSoundPath = path.join(workspace, 'ambient-sound.m4a')
     const outputPath = path.join(workspace, 'final.mp4')
 
     try {
@@ -47,10 +46,6 @@ describe('final render FFmpeg composition', () => {
         runFfmpegCommand('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=44100:duration=2.040', '-c:a', 'aac', musicPath], {
           stage: 'critical_final_render_music_fixture',
           expectedDurationSeconds: 2.04,
-        }),
-        runFfmpegCommand('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=96000:duration=2.010', '-c:a', 'aac', ambientSoundPath], {
-          stage: 'critical_final_render_ambient_fixture',
-          expectedDurationSeconds: 2.01,
         }),
       ])
 
@@ -85,7 +80,6 @@ describe('final render FFmpeg composition', () => {
         mainAudioPath,
         hasSourceAudio,
         musicPath,
-        ambientSoundPath,
         outputPath,
         durationSeconds,
         volume: 1,

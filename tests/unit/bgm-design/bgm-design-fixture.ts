@@ -1,73 +1,35 @@
-import { SCORE_PROHIBITIONS, type AudioDesign } from '@/lib/audio-design/types'
+import { SCORE_PROHIBITIONS, type BgmDesign } from '@/lib/bgm-design/types'
 
-export function createValidAudioDesign(): AudioDesign {
+export function createValidBgmDesign(): BgmDesign {
   return {
     clock: { fps: 24, sampleRate: 48_000, totalFrames: 240 },
-    soundWorlds: [{
-      worldId: 'world-1',
-      continuityKey: 'room-night-air',
-      range: { startFrame: 0, endFrameExclusive: 240 },
-      location: 'interior room',
-      timeContext: 'night',
-      weatherContext: null,
-      persistentSourceIds: ['room-air'],
-      perspectives: [{
-        perspectiveId: 'perspective-1',
-        zoneId: 'room-zone',
-        range: { startFrame: 0, endFrameExclusive: 240 },
-        enclosure: 'enclosed',
-        distance: 'medium',
-        occlusion: 0.1,
-        description: 'stable enclosed perspective',
-      }],
-    }],
-    acousticTransitions: [],
-    soundPresence: [
+    scorePresence: [
       {
         segmentId: 'presence-1',
         range: { startFrame: 0, endFrameExclusive: 120 },
-        mode: 'ambience_and_score',
+        mode: 'score_on',
         fadeInFrames: 12,
         fadeOutFrames: 12,
-        reason: 'generated layers support the opening',
+        reason: 'BGM supports the opening',
       },
       {
         segmentId: 'presence-2',
         range: { startFrame: 120, endFrameExclusive: 180 },
-        mode: 'native_only',
+        mode: 'score_off',
         fadeInFrames: 8,
         fadeOutFrames: 8,
-        reason: 'preserve native dialogue without generated layers',
+        reason: 'preserve native dialogue without generated BGM',
       },
       {
         segmentId: 'presence-3',
         range: { startFrame: 180, endFrameExclusive: 240 },
-        mode: 'ambience_and_score',
+        mode: 'score_on',
         fadeInFrames: 8,
         fadeOutFrames: 8,
-        reason: 'generated layers return after dialogue',
+        reason: 'BGM returns after dialogue',
       },
     ],
-    ambienceSources: [{
-      sourceId: 'ambience-1',
-      sourceContinuityId: 'room-air',
-      worldId: 'world-1',
-      role: 'bed',
-      playbackType: 'seamless_loop',
-      semanticRole: 'neutral room tone',
-      baseGainDb: -14,
-      salience: 0.15,
-      spectralRole: 'broadband',
-      foregroundPolicy: 'background_only',
-      range: { startFrame: 0, endFrameExclusive: 240 },
-      generationPrompt: 'Steady neutral interior room tone with soft ventilation and no people.',
-      promptInfluence: 0.7,
-      candidateCount: 2,
-      loopDurationSeconds: 10,
-      crossfadeFrames: 12,
-      phaseOffsetFrames: 0,
-    }],
-    scoreCues: [{
+    scoreCue: {
       cueId: 'score-1',
       musicalContinuityId: 'score-episode',
       range: { startFrame: 0, endFrameExclusive: 240 },
@@ -131,8 +93,7 @@ export function createValidAudioDesign(): AudioDesign {
         }],
         prohibitions: [...SCORE_PROHIBITIONS],
       },
-      intentionalSilenceRanges: [],
-    }],
+    },
     automationLanes: [],
   }
 }

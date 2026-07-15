@@ -262,7 +262,7 @@ describe('approved operation plan Task batch integration', () => {
       userId: user.id,
     })
     const unauthorized = await persistEmptyPlan({
-      operationId: 'generate_episode_ambient_sound',
+      operationId: 'generate_video_segments',
       projectId: otherProject.id,
       userId: otherUser.id,
     })
@@ -270,8 +270,8 @@ describe('approved operation plan Task batch integration', () => {
     await expect(issueApprovalGrantGroup({
       userId: user.id,
       requests: [
-        { planSnapshotId: owned.id, requestId: 'audio-group-approval' },
-        { planSnapshotId: unauthorized.id, requestId: 'audio-group-approval' },
+        { planSnapshotId: owned.id, requestId: 'media-group-approval' },
+        { planSnapshotId: unauthorized.id, requestId: 'media-group-approval' },
       ],
     })).rejects.toMatchObject({
       code: 'FORBIDDEN',

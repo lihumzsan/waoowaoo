@@ -43,7 +43,6 @@ describe('billing/task-policy', () => {
       if (
         taskType === TASK_TYPE.MUSIC_GENERATE
         || taskType === TASK_TYPE.MUSIC_SCORE_GENERATE
-        || taskType === TASK_TYPE.AMBIENT_SOUND_GENERATE
       ) {
         continue
       }
@@ -95,9 +94,8 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_SEGMENT, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.AUDIO_DESIGN_PLAN, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.BGM_DESIGN_PLAN, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {})).toBeNull()
-    expect(buildDefaultTaskBillingInfo(TASK_TYPE.AMBIENT_SOUND_GENERATE, {})).toBeNull()
   })
 
   it('builds music billing info for built-in Lyria models', () => {

@@ -28,9 +28,8 @@ const WRITE_TOOL_PRIORITY = [
   'generate_edit_shot_execution_plan',
   'generate_video_segments',
   'render_chapters',
-  'plan_episode_audio_design',
+  'plan_episode_bgm_design',
   'generate_episode_bgm_score',
-  'generate_episode_ambient_sound',
   'render_final_video',
 ] as const
 
@@ -65,9 +64,8 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   generate_edit_shot_execution_plan: { chapterId: null },
   generate_video_segments: { scope: { kind: 'pending', chapterId: null } },
   render_chapters: { chapterId: null },
-  plan_episode_audio_design: {},
+  plan_episode_bgm_design: {},
   generate_episode_bgm_score: {},
-  generate_episode_ambient_sound: {},
   render_final_video: {},
 }
 
@@ -445,8 +443,8 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
   return JSON.stringify({ generationSegments })
 }
 
-function generateAudioDesignPlanContract(prompt: string): string | null {
-  if (!prompt.includes('Create one strict episode-level AudioDesign JSON object.')) return null
+function generateBgmDesignPlanContract(prompt: string): string | null {
+  if (!prompt.includes('Create one strict episode-level BgmDesign JSON object.')) return null
   const example = readJsonObjectAfterMarker(prompt, ['allowed enum spellings:'])
   return example ? JSON.stringify(example) : null
 }
@@ -515,8 +513,8 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
   if (editScriptContract) return editScriptContract
   const shotExecutionPlanContract = generateShotExecutionPlanContract(prompt)
   if (shotExecutionPlanContract) return shotExecutionPlanContract
-  const audioDesignPlanContract = generateAudioDesignPlanContract(prompt)
-  if (audioDesignPlanContract) return audioDesignPlanContract
+  const bgmDesignPlanContract = generateBgmDesignPlanContract(prompt)
+  if (bgmDesignPlanContract) return bgmDesignPlanContract
   const locationCandidateContract = generateLocationCandidatePromptContract(prompt)
   if (locationCandidateContract) return locationCandidateContract
   return generateEditBiblePromptContract(prompt)

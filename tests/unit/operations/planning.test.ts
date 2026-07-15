@@ -180,20 +180,20 @@ describe('operation planning billing quote', () => {
       operationId: 'generate_episode_bgm_score' as const,
       planSnapshotId: 'music-snapshot',
     }
-    const ambientSound = {
+    const video = {
       ...await toOperationPlanView(buildPlan()),
-      operationId: 'generate_episode_ambient_sound' as const,
-      planSnapshotId: 'ambientSound-snapshot',
-      tasks: music.tasks.map((task) => ({ ...task, id: `ambientSound:${task.id}` })),
+      operationId: 'generate_video_segments' as const,
+      planSnapshotId: 'video-snapshot',
+      tasks: music.tasks.map((task) => ({ ...task, id: `video:${task.id}` })),
       quote: {
         ...music.quote,
-        items: music.quote.items.map((item) => ({ ...item, id: `ambientSound:${item.id}` })),
+        items: music.quote.items.map((item) => ({ ...item, id: `video:${item.id}` })),
       },
     }
 
     const approval = mergeOperationPlanViewsForApproval(
       'generate_episode_bgm_score',
-      [music, ambientSound],
+      [music, video],
     )
 
     expect(approval).toMatchObject({

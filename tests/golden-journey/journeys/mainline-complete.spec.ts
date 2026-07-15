@@ -16,7 +16,7 @@ import type { GoldenOracleSnapshot } from '../oracle/types'
 import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
 import { GOLDEN_REMAINING_VIDEO_REQUEST } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import { audioDesignSchema } from '@/lib/audio-design/types'
+import { bgmDesignSchema } from '@/lib/bgm-design/types'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const USER_BOUNDARIES = new Set<GoldenMainlineBoundary>([
@@ -355,7 +355,7 @@ async function assertAudioNodeVisibility(
   expectedCount: 0 | 1,
 ): Promise<void> {
   await expect(page.locator('article[data-node-id^="bgm-score:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
-  await expect(page.locator('article[data-node-id^="ambientSound:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+  await expect(page.locator('article[data-node-id^="ambientSound:"]')).toHaveCount(0, { timeout: 30_000 })
 }
 
 async function assertFinalTimelineVisibility(
@@ -546,16 +546,14 @@ async function submitObservedBoundary(input: {
 
   if (
     input.boundary === 'approval'
-    && (pendingOperationId === 'generate_episode_bgm_score' || pendingOperationId === 'generate_episode_ambient_sound')
+    && pendingOperationId === 'generate_episode_bgm_score'
   ) {
     await expect(input.page.getByText('已提交 · 生成配乐', { exact: true })).toHaveCount(0)
-    await expect(input.page.getByText('已提交 · 生成环境音层', { exact: true })).toHaveCount(0)
     await setGoldenMediaStatusDelay(15_000)
     try {
       await submitGoldenBoundary(input.page, input.boundary)
-      await expect(input.page.getByText('进行中 · 2 个任务', { exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(input.page.getByText('进行中 · 1 个任务', { exact: true })).toBeVisible({ timeout: 30_000 })
       await expect(input.page.getByText('已提交 · 生成配乐', { exact: true })).toHaveCount(1)
-      await expect(input.page.getByText('已提交 · 生成环境音层', { exact: true })).toHaveCount(1)
       await expect(input.page.getByText('已提交 · 项目操作', { exact: true })).toHaveCount(0)
     } finally {
       await setGoldenMediaStatusDelay(0)
@@ -615,7 +613,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
         await assertAudioNodeVisibility(page, 0)
         observedAudioHiddenBeforeVideos = true
       }
-      if (workflow.step === 'audio_plan') {
+      if (workflow.step === 'audio_plan' || workflow.step === 'audio_generation') {
         await assertAudioNodeVisibility(page, 1)
         await assertFinalTimelineVisibility(page, 0)
         observedAudioVisibleAtAudioStage = true
@@ -693,71 +691,55 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       )
       expect(new Set(videoTasks.map((task) => task.targetId)).size).toBe(oracle.domain.videoSegments.length)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
-      const audioPlanTasks = assertOperationGroupWait(oracle, ['plan_episode_audio_design'])
-      expect(audioPlanTasks.map((task) => task.type)).toEqual([TASK_TYPE.AUDIO_DESIGN_PLAN])
-      expect(audioPlanTasks.every((task) => task.approvalGrantId === null)).toBe(true)
-      const audioGenerationTasks = assertOperationGroupWait(oracle, [
-        'generate_episode_bgm_score',
-        'generate_episode_ambient_sound',
-      ])
-      expect(audioGenerationTasks.map((task) => task.type).sort()).toEqual([
-        TASK_TYPE.MUSIC_SCORE_GENERATE,
-        TASK_TYPE.AMBIENT_SOUND_GENERATE,
-      ].sort())
-      expect(audioGenerationTasks.every((task) => typeof task.approvalGrantId === 'string')).toBe(true)
-      expect(audioPlanTasks.every((task) => task.status === 'completed')).toBe(true)
-      expect(audioGenerationTasks.every((task) => task.status === 'completed')).toBe(true)
-      const audioPlanFinishedAt = audioPlanTasks.map((task) => oracleTimestamp(task.finishedAt))
-      const audioGenerationCreatedAt = audioGenerationTasks.map((task) => oracleTimestamp(task.createdAt))
-      expect(audioPlanFinishedAt.every((timestamp) => timestamp !== null)).toBe(true)
-      expect(audioGenerationCreatedAt.every((timestamp) => timestamp !== null)).toBe(true)
-      expect(Math.min(...audioGenerationCreatedAt as number[])).toBeGreaterThanOrEqual(
-        Math.max(...audioPlanFinishedAt as number[]),
+      const bgmPlanTasks = assertOperationGroupWait(oracle, ['plan_episode_bgm_design'])
+      expect(bgmPlanTasks.map((task) => task.type)).toEqual([TASK_TYPE.BGM_DESIGN_PLAN])
+      expect(bgmPlanTasks.every((task) => task.approvalGrantId === null)).toBe(true)
+      const bgmGenerationTasks = assertOperationGroupWait(oracle, ['generate_episode_bgm_score'])
+      expect(bgmGenerationTasks.map((task) => task.type)).toEqual([TASK_TYPE.MUSIC_SCORE_GENERATE])
+      expect(bgmGenerationTasks.every((task) => typeof task.approvalGrantId === 'string')).toBe(true)
+      expect(bgmPlanTasks.every((task) => task.status === 'completed')).toBe(true)
+      expect(bgmGenerationTasks.every((task) => task.status === 'completed')).toBe(true)
+      const bgmPlanFinishedAt = bgmPlanTasks.map((task) => oracleTimestamp(task.finishedAt))
+      const bgmGenerationCreatedAt = bgmGenerationTasks.map((task) => oracleTimestamp(task.createdAt))
+      expect(bgmPlanFinishedAt.every((timestamp) => timestamp !== null)).toBe(true)
+      expect(bgmGenerationCreatedAt.every((timestamp) => timestamp !== null)).toBe(true)
+      expect(Math.min(...bgmGenerationCreatedAt as number[])).toBeGreaterThanOrEqual(
+        Math.max(...bgmPlanFinishedAt as number[]),
       )
-      const audioGenerationOperationIds = [
-        'generate_episode_bgm_score',
-        'generate_episode_ambient_sound',
-      ]
+      const bgmGenerationOperationIds = ['generate_episode_bgm_score']
       expect(oracle.approvalGrants
-        .flatMap((grant) => typeof grant.operationId === 'string' && audioGenerationOperationIds.includes(grant.operationId)
+        .flatMap((grant) => typeof grant.operationId === 'string' && bgmGenerationOperationIds.includes(grant.operationId)
           ? [grant.operationId]
           : [])
-        .sort()).toEqual([...audioGenerationOperationIds].sort())
+        .sort()).toEqual([...bgmGenerationOperationIds].sort())
       expect(oracle.operationExecutions
-        .flatMap((execution) => typeof execution.operationId === 'string' && audioGenerationOperationIds.includes(execution.operationId)
+        .flatMap((execution) => typeof execution.operationId === 'string' && bgmGenerationOperationIds.includes(execution.operationId)
           ? [execution.operationId]
           : [])
-        .sort()).toEqual([...audioGenerationOperationIds].sort())
-      const audioDesignRow = oracle.domain.audioDesigns[0]
-      expect(oracle.domain.audioDesigns).toHaveLength(1)
-      expect(audioDesignRow).toMatchObject({ status: 'planned' })
-      const audioDesign = audioDesignSchema.parse(audioDesignRow?.designJson)
-      expect(audioDesign.soundWorlds.length).toBeGreaterThan(0)
-      expect(audioDesign.soundPresence.length).toBeGreaterThan(0)
-      expect(audioDesign.ambienceSources.every((source) => source.candidateCount === 2)).toBe(true)
-      expect(audioDesign.scoreCues).toHaveLength(1)
+        .sort()).toEqual([...bgmGenerationOperationIds].sort())
+      expect(oracle.tasks.some((task) => task.type === 'ambient_sound_generate')).toBe(false)
+      expect(oracle.operationExecutions.some((execution) => execution.operationId === 'generate_episode_ambient_sound')).toBe(false)
+      const bgmDesignRow = oracle.domain.bgmDesigns[0]
+      expect(oracle.domain.bgmDesigns).toHaveLength(1)
+      expect(bgmDesignRow).toMatchObject({ status: 'planned' })
+      const bgmDesign = bgmDesignSchema.parse(bgmDesignRow?.designJson)
+      expect(bgmDesign.scorePresence.length).toBeGreaterThan(0)
+      expect(bgmDesign.scoreCue.range).toEqual({ startFrame: 0, endFrameExclusive: bgmDesign.clock.totalFrames })
       const musicScore = oracle.domain.musicScores[0]
       const musicScoreData = asRecord(musicScore?.cuesJson)
       expect(oracle.domain.musicScores).toHaveLength(1)
-      expect(musicScore).toMatchObject({ status: 'completed', designSignature: audioDesignRow?.designSignature })
+      expect(musicScore).toMatchObject({ status: 'completed', designSignature: bgmDesignRow?.designSignature })
       const musicCandidates = Array.isArray(musicScoreData?.candidates) ? musicScoreData.candidates : []
       expect(musicCandidates).toHaveLength(2)
       expect(musicCandidates.filter((candidate) => asRecord(candidate)?.selected === true)).toHaveLength(1)
       expect(asRecord(musicScore?.mixJson)).not.toBeNull()
-      const ambientSound = oracle.domain.ambientSounds[0]
-      expect(oracle.domain.ambientSounds).toHaveLength(1)
-      expect(ambientSound).toMatchObject({ status: 'completed', designSignature: audioDesignRow?.designSignature })
-      const ambienceCandidates = Array.isArray(ambientSound?.sourcesJson) ? ambientSound.sourcesJson : []
-      expect(ambienceCandidates).toHaveLength(audioDesign.ambienceSources.length * 2)
-      expect(ambienceCandidates.filter((candidate) => asRecord(candidate)?.selected === true)).toHaveLength(audioDesign.ambienceSources.length)
-      expect(asRecord(ambientSound?.mixJson)).not.toBeNull()
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
       await assertFinalTimelineVisibility(page, 1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)
       expect(observedAudioVisibleAtAudioStage, 'main Journey must observe audio nodes at the audio stage').toBe(true)
       expect(
         observedFinalTimelineHiddenBeforeAudioCompletion,
-        'main Journey must not expose final rendering before both audio layers are complete',
+        'main Journey must not expose final rendering before BGM is complete',
       ).toBe(true)
       const streamContinuity = await readCanvasStreamContinuity(page)
       expect(streamContinuity.seenIds.length, 'main Journey must observe at least one structured-stream Canvas node').toBeGreaterThan(0)

@@ -68,27 +68,4 @@ describe('billing/task-policy', () => {
     expect(info.unit).toBe('call')
   })
 
-  it('builds sound effect billing info from explicit sound effect model and source count', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.AMBIENT_SOUND_GENERATE, {
-      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-      durationSeconds: 30,
-      sourceCount: 3,
-      loop: true,
-      outputFormat: 'mp3_44100_128',
-      promptInfluence: 0.55,
-    }))
-
-    expect(info.apiType).toBe('sound_effect')
-    expect(info.model).toBe('elevenlabs::eleven_text_to_sound_v2')
-    expect(info.quantity).toBe(3)
-    expect(info.unit).toBe('call')
-    expect(info.maxFrozenCost).toBeCloseTo(0.36, 8)
-    expect(info.metadata).toEqual({
-      durationSeconds: 30,
-      outputFormat: 'mp3_44100_128',
-      promptInfluence: 0.55,
-      loop: true,
-      sourceCount: 3,
-    })
-  })
 })

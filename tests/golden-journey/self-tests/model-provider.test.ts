@@ -27,8 +27,8 @@ import { normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
 import { buildShotExecutionPlanPromptStructure } from '@/lib/edit-script/shot-execution-plan-prompt'
 import { normalizeChapterPlanOutput } from '@/lib/edit-chapter'
 import { parseLocationCandidatePrompt } from '@/lib/asset-generation/location-candidate-prompts'
-import { buildAudioDesignPlanPrompt } from '@/lib/audio-design/prompt'
-import { audioDesignSchema } from '@/lib/audio-design/types'
+import { buildBgmDesignPlanPrompt } from '@/lib/bgm-design/prompt'
+import { bgmDesignSchema } from '@/lib/bgm-design/types'
 import {
   applyGoldenRuntimeIdentity,
   resolveGoldenRuntimeIdentity,
@@ -273,8 +273,8 @@ describe('Golden local model provider', () => {
     expect(normalized.generationSegments[0]?.shots.every((shot) => shot.cameraMovement.stability === 'smooth')).toBe(true)
   })
 
-  it('honors the one production AudioDesign contract without media-analysis input', () => {
-    const prompt = buildAudioDesignPlanPrompt({
+  it('honors the one production BgmDesign contract without media-analysis input', () => {
+    const prompt = buildBgmDesignPlanPrompt({
       locale: 'zh',
       planningInput: {
         clock: { fps: 24, sampleRate: 48_000, totalFrames: 288 },
@@ -298,7 +298,6 @@ describe('Golden local model provider', () => {
           dialogue: [],
           synchronousSound: '风声。',
         }],
-        soundWorldBoundaryFrames: [0],
       },
     })
     const decision = decideGoldenModelResponse({
@@ -312,11 +311,9 @@ describe('Golden local model provider', () => {
 
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const design = audioDesignSchema.parse(JSON.parse(decision.text))
-    expect(design.soundWorlds).toHaveLength(1)
-    expect(design.soundPresence).toHaveLength(1)
-    expect(design.ambienceSources[0]).toMatchObject({ candidateCount: 2 })
-    expect(design.scoreCues).toHaveLength(1)
+    const design = bgmDesignSchema.parse(JSON.parse(decision.text))
+    expect(design.scorePresence).toHaveLength(1)
+    expect(design.scoreCue.range).toEqual({ startFrame: 0, endFrameExclusive: 288 })
     expect(prompt).toContain('use ONLY the locked edit-script facts and rendered clip identity/duration metadata')
     expect(prompt).toContain('Do not inspect, infer from, request, or claim analysis of video frames, native audio waveforms, final video, or final mix.')
   })

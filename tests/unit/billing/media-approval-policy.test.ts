@@ -10,20 +10,20 @@ function buildBillingInfo(apiType: Extract<TaskBillingInfo, { billable: true }>[
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.AMBIENT_SOUND_GENERATE,
+    taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
     apiType,
     model: 'provider::model',
     quantity: 1,
     unit: 'call',
     maxFrozenCost: 1,
-    action: TASK_TYPE.AMBIENT_SOUND_GENERATE,
+    action: TASK_TYPE.MUSIC_SCORE_GENERATE,
     status: 'quoted',
   }
 }
 
 describe('billable media approval policy', () => {
-  it('classifies image, video, music, and sound_effect as the complete media approval set', () => {
-    expect(BILLABLE_MEDIA_API_TYPES).toEqual(['image', 'video', 'music', 'sound_effect'])
+  it('classifies image, video, and music as the complete media approval set', () => {
+    expect(BILLABLE_MEDIA_API_TYPES).toEqual(['image', 'video', 'music'])
     for (const apiType of BILLABLE_MEDIA_API_TYPES) {
       expect(isBillableMediaApiType(apiType), apiType).toBe(true)
       expect(requiresBillableMediaApproval(buildBillingInfo(apiType)), apiType).toBe(true)
