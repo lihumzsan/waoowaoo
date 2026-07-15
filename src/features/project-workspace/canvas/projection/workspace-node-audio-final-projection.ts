@@ -1,11 +1,10 @@
 import type { ProjectFinalVideo } from '@/types/project'
-import type { WorkspaceCanvasBgmScoreDetails, WorkspaceCanvasAmbientSoundDetails } from '../node-canvas-types'
+import type { WorkspaceCanvasBgmScoreDetails } from '../node-canvas-types'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
 import type { WorkspaceVideoSegmentProjection } from './workspace-node-video-segment-projection'
-import { audioDesignSchema } from '@/lib/audio-design/types'
+import { bgmDesignSchema } from '@/lib/bgm-design/types'
 import {
   FINAL_TIMELINE_GAP_Y,
-  SHOT_GRID_GAP_X,
   SHOT_GRID_START_X,
   TASK_RUNTIME_TARGETS,
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
@@ -25,7 +24,7 @@ import {
 
 function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasBgmScoreDetails | undefined {
   const bgmScore = finalVideo?.musicScore
-  const parsedDesign = audioDesignSchema.safeParse(finalVideo?.audioDesign?.design)
+  const parsedDesign = bgmDesignSchema.safeParse(finalVideo?.bgmDesign?.design)
   if (!parsedDesign.success) return bgmScore ? {
     status: bgmScore.status,
     durationSeconds: bgmScore.durationSeconds ?? null,
@@ -44,11 +43,11 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
     finalPrompt: null,
   } : undefined
   const design = parsedDesign.data
-  const cue = design.scoreCues[0]
+  const cue = design.scoreCue
   return {
     status: bgmScore?.status ?? (cue ? 'planned' : 'completed'),
     durationSeconds: design.clock.totalFrames / design.clock.fps,
-    musicModel: finalVideo?.audioDesign?.musicModel ?? bgmScore?.musicModel ?? null,
+    musicModel: finalVideo?.bgmDesign?.musicModel ?? bgmScore?.musicModel ?? null,
     hasPromptDesign: Boolean(cue),
     promptDesignMissing: !cue,
     designSectionCount: cue?.musicTheorySpec.phases.length ?? 0,
@@ -75,46 +74,10 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
   }
 }
 
-function ambientSoundDetails(
-  finalVideo: ProjectFinalVideo | null | undefined,
-): WorkspaceCanvasAmbientSoundDetails | undefined {
-  const ambientSound = finalVideo?.ambientSound
-  const parsedDesign = audioDesignSchema.safeParse(finalVideo?.audioDesign?.design)
-  if (!parsedDesign.success) return undefined
-  const design = parsedDesign.data
-  const sources = design.ambienceSources
-  const sourceIndexById = new Map(sources.map((source, index) => [source.sourceId, index + 1]))
-  return {
-    status: ambientSound?.status ?? (sources.length > 0 ? 'planned' : 'completed'),
-    decision: sources.length > 0 ? 'ambient_sound' : 'none_needed',
-    soundEffectModel: finalVideo?.audioDesign?.soundEffectModel ?? ambientSound?.soundEffectModel ?? null,
-    sourceCount: sources.length,
-    sectionCount: design.soundWorlds.length,
-    sources: sources.map((source, index) => ({
-      key: source.sourceId,
-      sourceIndex: index + 1,
-      prompt: source.generationPrompt,
-      loopDurationSeconds: source.loopDurationSeconds,
-      promptInfluence: source.promptInfluence,
-    })),
-    sections: sources.map((source, index) => {
-      const sourceIndex = sourceIndexById.get(source.sourceId)
-      if (!sourceIndex) throw new Error(`AMBIENT_SOUND_SECTION_SOURCE_UNKNOWN:${source.sourceId}`)
-      return {
-        key: `${source.sourceId}:${index}`,
-        sourceIndex,
-        rangeKind: 'clip' as const,
-        rangeStart: source.range.startFrame,
-        rangeEnd: source.range.endFrameExclusive,
-        perspective: source.playbackType,
-        intensity: source.role,
-        transitionIn: source.crossfadeFrames > 0 ? 'crossfade' : 'cut',
-        transitionOut: source.crossfadeFrames > 0 ? 'crossfade' : 'cut',
-      }
-    }),
-    mixUrl: ambientSound?.mix?.url ?? null,
-    errorMessage: ambientSound?.errorMessage ?? null,
-  }
+function bgmPersistedPresentationStatus(finalVideo: ProjectFinalVideo | null | undefined): string | null {
+  const scoreStatus = finalVideo?.musicScore?.status ?? null
+  if (scoreStatus === 'completed' || scoreStatus === 'failed') return scoreStatus
+  return finalVideo?.bgmDesign?.status ?? scoreStatus
 }
 
 export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjectionContext, videoProjection: WorkspaceVideoSegmentProjection): void {
@@ -151,11 +114,14 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
   })
   if (bgmProjection.materialized) {
     bgmNodeId = workspaceNodeId.bgmScore(episodeId)
-    const bgmPresentation = bgmDetails ? (resourcePresentationFromStatus(bgmDetails.status) ?? workspaceCanvasPendingResourcePresentation()) : null
+    const bgmPresentationStatus = bgmPersistedPresentationStatus(finalVideo)
+    const bgmPresentation = bgmDetails
+      ? (resourcePresentationFromStatus(bgmPresentationStatus) ?? workspaceCanvasPendingResourcePresentation())
+      : null
     const bgmReadyForGeneration = bgmDetails?.hasPromptDesign === true && bgmDetails.status !== 'planning' && bgmDetails.status !== 'generating'
     const bgmActionAvailable =
       bgmReadyForGeneration ||
-      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_audio_design') ||
+      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_bgm_design') ||
       editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_bgm_score')
     nodes.push(
       createMediaNode({
@@ -176,7 +142,7 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
           body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoSegments.length }),
           meta: bgmDetails?.musicModel ?? '',
           ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          terminalHandoffTaskId: finalVideo?.audioDesign?.taskId ?? null,
+          terminalHandoffTaskId: finalVideo?.bgmDesign?.taskId ?? null,
           ...(bgmActionAvailable
             ? {
                 actionLabel: translate(
@@ -192,69 +158,8 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
       }),
     )
   }
-  let ambientSoundNodeId: string | null = null
-  const projectedAmbientSoundDetails = ambientSoundDetails(finalVideo)
-  const ambientSoundProjection = resolveWorkspaceCanvasNodeMaterialization('ambientSound', activeTaskTargets, {
-    identityAvailable: true,
-    workflowVisible: editFirstCanvasVisibility.ambientSound,
-    resourceAvailable: Boolean(projectedAmbientSoundDetails),
-    streamAvailable: hasStreamTarget(streamTargets, 'ambientSound', episodeId),
-    submissionAvailable: false,
-    targetId: episodeId,
-  })
-  if (ambientSoundProjection.materialized) {
-    ambientSoundNodeId = workspaceNodeId.ambientSound(episodeId)
-    const details = projectedAmbientSoundDetails
-    const ambientSoundReadyForGeneration = details?.decision === 'ambient_sound' && details.status !== 'planning' && details.status !== 'generating'
-    const ambientSoundPresentation = details ? (resourcePresentationFromStatus(details.status) ?? workspaceCanvasPendingResourcePresentation()) : null
-    const ambientSoundActionAvailable =
-      ambientSoundReadyForGeneration ||
-      editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_ambient_sound')
-    nodes.push(
-      createMediaNode({
-        id: ambientSoundNodeId,
-        position: layoutPosition(savedLayouts, ambientSoundNodeId, {
-          x: SHOT_GRID_START_X + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width + SHOT_GRID_GAP_X,
-          y: bgmScoreDefaultY,
-        }),
-        width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
-        loadingContext: { styleImageUrl: stylePreviewImageUrl },
-        data: {
-          projectId,
-          episodeName,
-          kind: 'ambientSound',
-          layoutNodeType: 'ambientSound',
-          targetType: 'episode',
-          targetId: episodeId,
-          title: translate('nodes.ambientSound.title'),
-          eyebrow: translate('nodes.ambientSound.eyebrow'),
-          body:
-            details?.decision === 'none_needed'
-              ? translate('nodes.ambientSound.noneNeededBody')
-              : translate('nodes.ambientSound.body', { videos: videoSegments.length }),
-          meta: details?.soundEffectModel ?? '',
-          ...(ambientSoundPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          terminalHandoffTaskId: finalVideo?.audioDesign?.taskId ?? null,
-          ...(ambientSoundActionAvailable && ambientSoundReadyForGeneration
-            ? {
-                actionLabel: translate(
-                  details?.mixUrl ? 'actions.regenerateAmbientSound' : 'actions.generateAmbientSound',
-                ),
-                action: { type: 'generate_ambient_sound' as const },
-              }
-            : {}),
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeAmbientSound(episodeId)),
-          ambientSoundDetails: details,
-          onAction,
-        },
-      }),
-    )
-  }
-  const bgmStageBottomY = Math.max(
-    maxNodeBottomY(nodes, 'bgmScore') ?? bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
-    maxNodeBottomY(nodes, 'ambientSound') ?? bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
-  )
+  const bgmStageBottomY = maxNodeBottomY(nodes, 'bgmScore')
+    ?? bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height
 
   let finalNodeId: string | null = null
   const finalTimelineProjection = resolveWorkspaceCanvasNodeMaterialization('finalTimeline', activeTaskTargets, {
@@ -336,8 +241,5 @@ export function appendWorkspaceAudioFinalProjection(context: WorkspaceNodeProjec
   }
   if (bgmNodeId && finalNodeId) {
     edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
-  }
-  if (ambientSoundNodeId && finalNodeId) {
-    edges.push(createEdge(`edge:ambientSound-final:${episodeId}`, ambientSoundNodeId, finalNodeId))
   }
 }

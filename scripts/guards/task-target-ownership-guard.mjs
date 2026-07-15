@@ -53,17 +53,17 @@ export function inspectTaskTargetOwnershipContract(input) {
     'generationTaskId  String?',
     'model ProjectVideoSegment {',
     'generationTaskId String?',
-    'model ProjectEditAmbientSound {',
+    'model ProjectEditMusicScore {',
     'taskId            String?',
-    'model ProjectEditAudioDesign {',
+    'model ProjectEditBgmDesign {',
     'taskId            String?',
   ]) {
     if (!input.schema.includes(required)) violations.push(`schema missing Task ownership contract: ${required}`)
   }
   const registeredProjectors = readTerminalProjectors(input.definitions)
   for (const [taskType, projector] of [
-    ['AUDIO_DESIGN_PLAN', 'audio_design'],
-    ['AMBIENT_SOUND_GENERATE', 'ambient_sound'],
+    ['BGM_DESIGN_PLAN', 'bgm_design'],
+    ['MUSIC_SCORE_GENERATE', 'music_score'],
     ['VIDEO_SEGMENT', 'video_segment'],
     ['EDIT_SCRIPT_GENERATE', 'edit_script'],
     ['EDIT_SHOT_EXECUTION_PLAN_GENERATE', 'edit_shot_execution_plan'],
@@ -105,8 +105,7 @@ export function inspectTaskTargetOwnershipContract(input) {
   }
   for (const required of [
     'projectMusicScore',
-    'projectEditAmbientSound',
-    'projectEditAudioDesign',
+    'projectEditBgmDesign',
     'projectVideoSegment',
     'projectEditScript',
     'projectEditShotExecutionPlan',
@@ -136,7 +135,6 @@ export function inspectTaskTargetOwnershipContract(input) {
     [input.chapterRender, "chapter.renderStatus === 'completed'", 'ChapterRender'],
     [input.finalRender, 'FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING', 'FinalRender'],
     [input.bgmWorker, 'readCompletedMusicScoreMix', 'MusicScore'],
-    [input.ambientSoundWorker, 'readCompletedAmbientSoundMix', 'AmbientSound'],
   ]) {
     if (!source.includes(required)) violations.push(`${label} success replay fence missing: ${required}`)
   }
@@ -172,7 +170,6 @@ function runCli() {
     chapterRender: read('src/lib/workers/chapter-render.ts'),
     finalRender: read('src/lib/workers/final-video-render.ts'),
     bgmWorker: read('src/lib/bgm-score/generate.ts'),
-    ambientSoundWorker: read('src/lib/ambient-sound/generate.ts'),
     terminalService: read('src/lib/task/terminal/service.ts'),
     reconciler: read('src/lib/task/reconcile.ts'),
   })

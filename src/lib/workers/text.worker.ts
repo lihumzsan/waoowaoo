@@ -15,12 +15,12 @@ import { handleEditStylePreviewOptionsTask } from './handlers/edit-style-preview
 import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
-import { handleAudioDesignPlanTask } from '@/lib/audio-design/generate'
+import { handleBgmDesignPlanTask } from '@/lib/bgm-design/generate'
 
 type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const TEXT_TASK_HANDLERS = {
-  audio_design_plan: handleAudioDesignPlanTask,
+  bgm_design_plan: handleBgmDesignPlanTask,
   edit_bible_generate: handleEditBibleGenerateTask,
   edit_style_preview_options_generate: handleEditStylePreviewOptionsTask,
   edit_script_generate: handleEditScriptGenerateTask,

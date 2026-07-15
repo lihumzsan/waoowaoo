@@ -28,7 +28,6 @@ type ProjectWorkflowSource = {
   editModel?: string | null
   videoModel?: string | null
   musicModel?: string | null
-  soundEffectModel?: string | null
   videoRatio?: string | null
   capabilityOverrides?: ProjectWorkflowData['capabilityOverrides']
   videoResolution?: string | null
@@ -60,7 +59,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     editModel: source.editModel ?? null,
     videoModel: source.videoModel ?? null,
     musicModel: source.musicModel ?? null,
-    soundEffectModel: source.soundEffectModel ?? null,
     videoRatio: source.videoRatio ?? null,
     capabilityOverrides: source.capabilityOverrides ?? null,
     videoResolution: source.videoResolution ?? null,

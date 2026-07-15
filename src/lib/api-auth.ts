@@ -318,7 +318,6 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         editModel?: string | null
         videoModel?: string | null
         musicModel?: string | null
-        soundEffectModel?: string | null
         characters?: AuthCharacterLike[]
         locations?: AuthLocationLike[]
         episodes?: AuthEpisodeLike[]
@@ -332,7 +331,6 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
         editModel: extractModelKey(rawProjectData.editModel),
         videoModel: extractModelKey(rawProjectData.videoModel),
         musicModel: extractModelKey(rawProjectData.musicModel),
-        soundEffectModel: extractModelKey(rawProjectData.soundEffectModel),
         ...(rawProjectData.characters ? { characters: rawProjectData.characters } : {}),
         ...(rawProjectData.locations ? { locations: rawProjectData.locations } : {}),
         ...(rawProjectData.episodes ? { episodes: rawProjectData.episodes } : {}),

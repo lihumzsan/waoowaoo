@@ -44,10 +44,6 @@ const TypeIcon = ({
       return (
         <AppIcon name="audioWave" className={className} />
       )
-    case 'soundEffect':
-      return (
-        <AppIcon name="audioWave" className={className} />
-      )
   }
 }
 
@@ -61,21 +57,18 @@ const typeLabel = (type: ProviderCardModelType, t: ProviderCardTranslator) => {
       return t('typeVideo')
     case 'music':
       return t('typeMusic')
-    case 'soundEffect':
-      return t('typeSoundEffect')
   }
 }
 
 type ProviderCardVisibleType = ProviderCardModelType
 
-const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'music', 'soundEffect']
+const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video', 'music']
 
 export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
   if (providerKey === 'openrouter') return ['llm', 'video']
   if (providerKey === 'fal') return ['image', 'video']
   if (providerKey === 'google') return ['llm', 'image', 'video', 'music']
-  if (providerKey === 'elevenlabs') return ['soundEffect']
   if (providerKey === 'ark') return ['llm', 'image', 'video']
   return []
 }
@@ -157,11 +150,7 @@ export function ProviderAdvancedFields({
     !!currentAddType
     && addableModelTypes.has(currentAddType)
     && state.showAddForm !== currentAddType
-  const defaultAddType: ProviderCardModelType = providerKey === 'openrouter'
-    ? 'llm'
-    : providerKey === 'elevenlabs'
-      ? 'soundEffect'
-      : 'image'
+  const defaultAddType: ProviderCardModelType = providerKey === 'openrouter' ? 'llm' : 'image'
   const useTabbedLayout = state.hasModels
   const segmentedControlOptions = useMemo(
     () =>

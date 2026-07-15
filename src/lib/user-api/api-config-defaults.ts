@@ -20,7 +20,6 @@ const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, Pric
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
-  soundEffectModel: 'sound_effect',
 }
 
 const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type'], PricingApiType | null>> = {
@@ -28,7 +27,6 @@ const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type
   image: 'image',
   video: 'video',
   music: 'music',
-  soundEffect: 'sound_effect',
 }
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
@@ -39,7 +37,6 @@ const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredMode
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
-  soundEffectModel: 'soundEffect',
 }
 
 const OPTIONAL_PRICING_PROVIDER_KEYS = new Set<string>()

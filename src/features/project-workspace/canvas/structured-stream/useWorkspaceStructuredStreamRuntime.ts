@@ -582,12 +582,12 @@ function buildBgmRuntimeEntry(
   episodeId: string,
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const cues = itemsOfKind(snapshots, 'audioDesign.scoreCues', 'audioDesignScoreCue').map((item) => item.cue)
+  const cues = itemsOfKind(snapshots, 'bgmDesign.scoreCue', 'bgmDesignScoreCue').map((item) => item.cue)
   const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues')
+    .filter((snapshot) => snapshot.adapterKey === 'bgmDesign.scoreCue')
     .flatMap((snapshot) => snapshot.items)
   if (cues.length === 0) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues') ?? null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'bgmDesign.scoreCue') ?? null
   if (!firstSnapshot) return null
   const nodeId = workspaceNodeId.bgmScore(episodeId)
   return createStreamRuntimeEntry({
@@ -599,7 +599,7 @@ function buildBgmRuntimeEntry(
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     terminalHandoff: areAllTerminalHandoffs(
-      snapshots.filter((snapshot) => snapshot.adapterKey === 'audioDesign.scoreCues'),
+      snapshots.filter((snapshot) => snapshot.adapterKey === 'bgmDesign.scoreCue'),
     ),
     presentation: streamPresentation(rawItems),
     data: {
@@ -637,56 +637,6 @@ function buildBgmRuntimeEntry(
   })
 }
 
-function buildAmbientSoundRuntimeEntry(
-  snapshots: readonly StructuredStreamSnapshot[],
-  episodeId: string,
-  translate: Translate,
-): WorkspaceCanvasStreamRuntimeEntry | null {
-  const sources = itemsOfKind(snapshots, 'audioDesign.ambienceSources', 'audioDesignAmbienceSource').map((item) => item.source)
-  const worlds = itemsOfKind(snapshots, 'audioDesign.soundWorlds', 'audioDesignSoundWorld').map((item) => item.world)
-  const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds')
-    .flatMap((snapshot) => snapshot.items)
-  if (sources.length === 0 && worlds.length === 0) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds') ?? null
-  if (!firstSnapshot) return null
-  const nodeId = workspaceNodeId.ambientSound(episodeId)
-  return createStreamRuntimeEntry({
-    nodeId,
-    streamKind: 'ambientSound',
-    taskId: firstSnapshot.taskId,
-    taskType: firstSnapshot.taskType,
-    targetType: firstSnapshot.targetType,
-    targetId: episodeId,
-    episodeId: firstSnapshot.episodeId ?? episodeId,
-    terminalHandoff: areAllTerminalHandoffs(
-      snapshots.filter((snapshot) => snapshot.adapterKey === 'audioDesign.ambienceSources' || snapshot.adapterKey === 'audioDesign.soundWorlds'),
-    ),
-    presentation: streamPresentation(rawItems),
-    data: {
-      body: translate('nodes.ambientSound.body', { videos: 0 }),
-      meta: translate('nodes.ambientSound.ready', { sources: sources.length, sections: worlds.length }),
-      ambientSoundDetails: {
-        status: 'planning',
-        decision: null,
-        soundEffectModel: null,
-        sourceCount: sources.length,
-        sectionCount: worlds.length,
-        sources: sources.map((source, index) => ({
-          key: source.sourceId,
-          sourceIndex: index + 1,
-          prompt: source.generationPrompt,
-          loopDurationSeconds: source.loopDurationSeconds,
-          promptInfluence: source.promptInfluence,
-        })),
-        sections: [],
-        mixUrl: null,
-        errorMessage: null,
-      },
-    },
-  })
-}
-
 export function buildStreamRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
@@ -698,7 +648,6 @@ export function buildStreamRuntimeEntries(
     ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
-    buildAmbientSoundRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 

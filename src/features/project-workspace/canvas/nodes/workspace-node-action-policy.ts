@@ -11,8 +11,6 @@ const WORKSPACE_NODE_ACTION_ICON_BY_TYPE = {
   render_final_video: 'film',
   plan_bgm_score: 'audioWave',
   generate_bgm_score: 'audioWave',
-  plan_ambient_sound: 'audioWave',
-  generate_ambient_sound: 'audioWave',
   generate_edit_assets: 'package',
   generate_edit_asset: 'package',
   regenerate_edit_asset_image: 'refresh',

@@ -301,36 +301,6 @@ export interface ProjectMusicScore {
   errorMessage?: string | null
 }
 
-export type ProjectAmbientSoundStatus =
-  | 'pending'
-  | 'planning'
-  | 'planned'
-  | 'generating'
-  | 'completed'
-  | 'failed'
-  | string
-
-export interface ProjectAmbientSound {
-  id?: string | null
-  status: ProjectAmbientSoundStatus
-  taskId?: string | null
-  timelineSignature?: string | null
-  designSignature?: string | null
-  soundEffectModel?: string | null
-  sourceCount: number
-  sectionCount: number
-  sources?: unknown
-  mix?: {
-    mediaId: string
-    url: string
-    storageKey: string
-    mimeType: string
-    durationMs: number
-  } | null
-  diagnostics?: unknown
-  errorMessage?: string | null
-}
-
 export interface ProjectFinalVideo {
   id: string
   episodeId: string
@@ -339,8 +309,7 @@ export interface ProjectFinalVideo {
   outputUrl: string | null
   updatedAt: string | null
   musicScore?: ProjectMusicScore | null
-  ambientSound?: ProjectAmbientSound | null
-  audioDesign?: {
+  bgmDesign?: {
     id: string | null
     status: string
     taskId: string | null
@@ -348,7 +317,6 @@ export interface ProjectFinalVideo {
     designSignature: string | null
     analysisModel: string | null
     musicModel: string | null
-    soundEffectModel: string | null
     design: unknown
     diagnostics: unknown
     updatedAt: string | null
@@ -395,7 +363,6 @@ export interface ProjectWorkflowData {
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
-  soundEffectModel: string | null
   videoRatio: string | null
   capabilityOverrides?: CapabilitySelections | string | null
   videoResolution?: string | null

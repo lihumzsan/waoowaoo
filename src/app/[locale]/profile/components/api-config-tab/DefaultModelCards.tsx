@@ -12,7 +12,7 @@ import {
 } from './default-model-empty-state'
 
 // ---------- types ----------
-type ModelType = 'llm' | 'image' | 'video' | 'music' | 'soundEffect'
+type ModelType = 'llm' | 'image' | 'video' | 'music'
 
 interface ModelOption {
     modelKey: string
@@ -30,7 +30,6 @@ type DefaultModelField =
     | 'editModel'
     | 'videoModel'
     | 'musicModel'
-    | 'soundEffectModel'
 
 interface DefaultModelCardsProps {
     t: (key: string) => string
@@ -42,7 +41,6 @@ interface DefaultModelCardsProps {
         editModel?: string
         videoModel?: string
         musicModel?: string
-        soundEffectModel?: string
     }
     getEnabledModelsByType: (type: ModelType) => ModelOption[]
     parseModelKey: (key: string | undefined | null) => { provider: string; modelId: string } | null
@@ -355,7 +353,6 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
     const analysisModel = resolveModel('analysisModel', 'llm', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const videoModel = resolveModel('videoModel', 'video', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
     const musicModel = resolveModel('musicModel', 'music', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
-    const soundEffectModel = resolveModel('soundEffectModel', 'soundEffect', defaultModels, getEnabledModelsByType, parseModelKey, encodeModelKey)
 
     const pipelineItems: Array<{
         field: DefaultModelField
@@ -554,15 +551,6 @@ export function DefaultModelCards(allProps: DefaultModelCardsProps) {
                         />
                     </div>
 
-                    <div className="glass-surface glass-card-shadow-soft p-5 rounded-2xl bg-gradient-to-br from-[var(--glass-bg-surface)] to-transparent">
-                        <h4 className="text-[13px] font-semibold text-[var(--glass-text-primary)] mb-4">{t('defaultModelSection.extSoundEffect')}</h4>
-                        <SmartSelector
-                            field="soundEffectModel" modelType="soundEffect"
-                            options={soundEffectModel.options} normalizedKey={soundEffectModel.normalizedKey} current={soundEffectModel.current}
-                            placeholder={t('defaultModelSection.extPlaceholder')}
-                            locale={locale} t={t} props={allProps}
-                        />
-                    </div>
                 </div>
             </div>
         </div>

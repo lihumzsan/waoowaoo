@@ -241,7 +241,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               editModel: platformDefaults.editModel,
               videoModel: platformDefaults.videoModel,
               musicModel: platformDefaults.musicModel,
-              soundEffectModel: platformDefaults.soundEffectModel,
             }),
             ...(!platformDefaults && userPreference && {
               analysisModel: userPreference.analysisModel,
@@ -250,7 +249,6 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               editModel: userPreference.editModel,
               videoModel: userPreference.videoModel,
               musicModel: userPreference.musicModel,
-              soundEffectModel: userPreference.soundEffectModel,
               videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,
               imageResolution: userPreference.imageResolution,

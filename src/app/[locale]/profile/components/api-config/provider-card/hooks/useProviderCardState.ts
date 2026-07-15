@@ -81,7 +81,7 @@ export function buildProviderConnectionPayload(params: {
 }
 
 function toProviderCardModelType(type: CustomModel['type']): ProviderCardModelType | null {
-  if (type === 'llm' || type === 'image' || type === 'video' || type === 'music' || type === 'soundEffect') return type
+  if (type === 'llm' || type === 'image' || type === 'video' || type === 'music') return type
   return null
 }
 
@@ -204,10 +204,6 @@ export function useProviderCardState({
     }
 
     if (model.type === 'music' && matchesModelKey(defaultModels.musicModel, model.provider, model.modelId)) {
-      return true
-    }
-
-    if (model.type === 'soundEffect' && matchesModelKey(defaultModels.soundEffectModel, model.provider, model.modelId)) {
       return true
     }
 

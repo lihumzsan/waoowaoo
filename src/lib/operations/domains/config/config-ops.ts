@@ -20,7 +20,6 @@ const MODEL_FIELDS = [
   'editModel',
   'videoModel',
   'musicModel',
-  'soundEffectModel',
 ] as const
 
 const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
@@ -32,7 +31,6 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
   editModel: 'image',
   videoModel: 'video',
   musicModel: 'music',
-  soundEffectModel: 'soundEffect',
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -152,7 +150,6 @@ function getNextProjectModelMap(
     editModel: string | null
     videoModel: string | null
     musicModel: string | null
-    soundEffectModel: string | null
   },
   updates: Record<string, unknown>,
 ): Record<string, CapabilityModelContext> {
@@ -259,7 +256,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             editModel: true,
             videoModel: true,
             musicModel: true,
-            soundEffectModel: true,
           },
         })
         if (!projectData) {
@@ -276,7 +272,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           editModel: projectData.editModel,
           videoModel: projectData.videoModel,
           musicModel: projectData.musicModel,
-          soundEffectModel: projectData.soundEffectModel,
         }, {})
         const cleanedOverrides = sanitizeCapabilityOverrides(storedOverrides, modelContextMap)
 
@@ -310,7 +305,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         editModel: z.string().nullable().optional(),
         videoModel: z.string().nullable().optional(),
         musicModel: z.string().nullable().optional(),
-        soundEffectModel: z.string().nullable().optional(),
         videoRatio: z.string().optional(),
         capabilityOverrides: z.unknown().optional(),
       }).passthrough(),
@@ -335,7 +329,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             editModel: true,
             videoModel: true,
             musicModel: true,
-            soundEffectModel: true,
           },
         })
         if (!currentProjectConfig) {

@@ -12,10 +12,6 @@ function normalizeNullableString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
-function arrayLength(value: unknown): number {
-  return Array.isArray(value) ? value.length : 0
-}
-
 export function normalizeMusicScoreSummary(value: unknown) {
   const score = toObject(value)
   const status = normalizeString(score.status)
@@ -40,31 +36,7 @@ export function normalizeMusicScoreSummary(value: unknown) {
   }
 }
 
-export function normalizeAmbientSoundSummary(value: unknown) {
-  const ambientSound = toObject(value)
-  const status = normalizeString(ambientSound.status)
-  if (!status) return null
-  const diagnostics = toObject(ambientSound.diagnosticsJson)
-  return {
-    id: normalizeNullableString(ambientSound.id),
-    status,
-    taskId: normalizeNullableString(ambientSound.taskId),
-    timelineSignature: normalizeNullableString(ambientSound.timelineSignature),
-    designSignature: normalizeNullableString(ambientSound.designSignature),
-    soundEffectModel: normalizeNullableString(ambientSound.soundEffectModel),
-    sourceCount: arrayLength(ambientSound.sourcesJson),
-    sectionCount: 0,
-    sources: ambientSound.sourcesJson ?? null,
-    mix: ambientSound.mixJson ?? null,
-    diagnostics: ambientSound.diagnosticsJson ?? null,
-    errorMessage: normalizeNullableString(diagnostics.errorMessage),
-    updatedAt: ambientSound.updatedAt instanceof Date
-      ? ambientSound.updatedAt.toISOString()
-      : normalizeNullableString(ambientSound.updatedAt),
-  }
-}
-
-export function normalizeAudioDesignSummary(value: unknown) {
+export function normalizeBgmDesignSummary(value: unknown) {
   const design = toObject(value)
   const status = normalizeString(design.status)
   if (!status) return null
@@ -76,14 +48,13 @@ export function normalizeAudioDesignSummary(value: unknown) {
     designSignature: normalizeNullableString(design.designSignature),
     analysisModel: normalizeNullableString(design.analysisModel),
     musicModel: normalizeNullableString(design.musicModel),
-    soundEffectModel: normalizeNullableString(design.soundEffectModel),
     design: design.designJson ?? null,
     diagnostics: design.diagnosticsJson ?? null,
     updatedAt: design.updatedAt instanceof Date ? design.updatedAt.toISOString() : normalizeNullableString(design.updatedAt),
   }
 }
 
-export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, ambientSound?: unknown, audioDesign?: unknown) {
+export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, bgmDesign?: unknown) {
   const record = toObject(value)
   const id = normalizeString(record.id)
   const episodeId = normalizeString(record.episodeId)
@@ -96,8 +67,7 @@ export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown,
     renderTaskId: normalizeNullableString(record.renderTaskId),
     outputUrl: normalizeNullableString(record.outputUrl),
     musicScore: normalizeMusicScoreSummary(musicScore),
-    ambientSound: normalizeAmbientSoundSummary(ambientSound),
-    audioDesign: normalizeAudioDesignSummary(audioDesign),
+    bgmDesign: normalizeBgmDesignSummary(bgmDesign),
     updatedAt: record.updatedAt instanceof Date
       ? record.updatedAt.toISOString()
       : normalizeNullableString(record.updatedAt),

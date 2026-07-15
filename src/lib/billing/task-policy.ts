@@ -1,7 +1,6 @@
 import {
   calcImage,
   calcMusic,
-  calcSoundEffect,
   calcText,
   calcVideo,
 } from './cost'
@@ -174,40 +173,6 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   }
 }
 
-function buildSoundEffectTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
-  const model = pickFirstString([payload?.soundEffectModel, payload?.modelId, payload?.model])
-  if (!model) return null
-  const durationSeconds = readNumber(payload?.durationSeconds)
-  if (durationSeconds === null || durationSeconds <= 0) return null
-  const outputFormat = readString(payload?.outputFormat)
-  const promptInfluence = readNumber(payload?.promptInfluence)
-  const loop = typeof payload?.loop === 'boolean' ? payload.loop : undefined
-  const sourceCount = Math.max(1, Math.floor(toNumber(payload?.sourceCount, 1)))
-  const metadata = {
-    durationSeconds,
-    ...(outputFormat ? { outputFormat } : {}),
-    ...(typeof promptInfluence === 'number' ? { promptInfluence } : {}),
-    ...(typeof loop === 'boolean' ? { loop } : {}),
-  }
-  return {
-    billable: true,
-    source: 'task',
-    taskType,
-    apiType: 'sound_effect',
-    model,
-    quantity: sourceCount,
-    unit: 'call',
-    maxFrozenCost: calcSoundEffect(model, sourceCount, metadata),
-    pricingVersion: BUILTIN_PRICING_VERSION,
-    action: String(taskType),
-    metadata: {
-      ...metadata,
-      sourceCount,
-    },
-    status: 'quoted',
-  }
-}
-
 export function isBillableTaskType(taskType: TaskType) {
   return getTaskDefinition(taskType).billingPolicy !== 'none'
 }
@@ -223,8 +188,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
       return buildVideoTaskInfo(taskType, payload)
     case 'music':
       return buildMusicTaskInfo(taskType, payload)
-    case 'sound_effect':
-      return buildSoundEffectTaskInfo(taskType, payload)
     case 'text':
       return buildTextTaskInfo(taskType, payload)
   }

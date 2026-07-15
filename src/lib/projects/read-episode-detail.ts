@@ -39,21 +39,7 @@ export async function readProjectEpisodeDetail(input: {
           updatedAt: true,
         },
       },
-      ambientSound: {
-        select: {
-          id: true,
-          status: true,
-          taskId: true,
-          timelineSignature: true,
-          designSignature: true,
-          soundEffectModel: true,
-          sourcesJson: true,
-          mixJson: true,
-          diagnosticsJson: true,
-          updatedAt: true,
-        },
-      },
-      audioDesign: {
+      bgmDesign: {
         select: {
           id: true,
           status: true,
@@ -62,7 +48,6 @@ export async function readProjectEpisodeDetail(input: {
           designSignature: true,
           analysisModel: true,
           musicModel: true,
-          soundEffectModel: true,
           designJson: true,
           diagnosticsJson: true,
           updatedAt: true,
@@ -82,6 +67,6 @@ export async function readProjectEpisodeDetail(input: {
     editScript: editScripts.length === 1 ? editScripts[0] : null,
     editScripts,
     editShotExecutionPlans,
-    finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.ambientSound, episode.audioDesign),
+    finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.bgmDesign),
   }
 }

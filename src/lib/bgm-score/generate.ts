@@ -4,11 +4,11 @@ import path from 'node:path'
 import type { Job } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { generateMusic } from '@/lib/ai-exec/engine'
-import { decodeMonoFloat32, loadGeneratedAudioBuffer, uploadTaskAudioArtifact } from '@/lib/audio-design/audio-assets'
-import { buildAudioDesignSignature, buildAudioDesignTimelineSignature, parseAudioDesignStrict } from '@/lib/audio-design/contract'
-import { buildLyriaPrompts } from '@/lib/audio-design/lyria-prompt'
-import { conformScoreDuration, resolveScoreProviderDurationSeconds } from '@/lib/audio-design/score-duration'
-import { analyzeScoreCandidate, selectScoreCandidate } from '@/lib/audio-design/score-quality'
+import { decodeMonoFloat32, loadGeneratedAudioBuffer, uploadTaskAudioArtifact } from '@/lib/bgm-design/audio-assets'
+import { buildBgmDesignSignature, buildBgmDesignTimelineSignature, parseBgmDesignStrict } from '@/lib/bgm-design/contract'
+import { buildLyriaPrompts } from '@/lib/bgm-design/lyria-prompt'
+import { conformScoreDuration, resolveScoreProviderDurationSeconds } from '@/lib/bgm-design/score-duration'
+import { analyzeScoreCandidate, selectScoreCandidate } from '@/lib/bgm-design/score-quality'
 import { prisma } from '@/lib/prisma'
 import { readCompletedMusicScoreMix } from '@/lib/music-score/project-data'
 import type { TaskJobData } from '@/lib/task/types'
@@ -19,7 +19,7 @@ import { BGM_SCORE_STATUS, type BgmScoreMix, type ScoreCandidateAsset } from './
 type Payload = {
   readonly episodeId?: unknown
   readonly musicModel?: unknown
-  readonly audioDesign?: unknown
+  readonly bgmDesign?: unknown
   readonly designSignature?: unknown
   readonly timelineSignature?: unknown
   readonly timelineDurationSeconds?: unknown
@@ -102,9 +102,8 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>): Promise
   if (job.data.operationId !== 'generate_episode_bgm_score' || !job.data.approvalGrantId || !job.data.operationExecutionId) {
     throw new Error('BGM_SCORE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
   }
-  const approvedDesign = parseAudioDesignStrict(payload.audioDesign)
-  const cue = approvedDesign.scoreCues[0]
-  if (!cue) throw new Error('BGM_SCORE_GENERATE_NOT_REQUIRED')
+  const approvedDesign = parseBgmDesignStrict(payload.bgmDesign)
+  const cue = approvedDesign.scoreCue
   const expectedTimelineDuration = approvedDesign.clock.totalFrames / approvedDesign.clock.fps
   if (Math.abs(expectedTimelineDuration - timelineDurationSeconds) > 0.000_001) throw new Error('BGM_SCORE_APPROVED_DURATION_INVALID')
   if (providerDurationSeconds !== resolveScoreProviderDurationSeconds({ musicModel, targetDurationSeconds: timelineDurationSeconds })) {
@@ -123,20 +122,19 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>): Promise
 
   await reportTaskProgress(job, 10, { stage: 'bgm_score_generate_prepare' })
   const [persistedDesignRow, clips, existingScore] = await Promise.all([
-    prisma.projectEditAudioDesign.findUnique({
+    prisma.projectEditBgmDesign.findUnique({
       where: { episodeId },
-      select: { status: true, designJson: true, designSignature: true, timelineSignature: true, musicModel: true, soundEffectModel: true },
+      select: { status: true, designJson: true, designSignature: true, timelineSignature: true, musicModel: true },
     }),
     loadEpisodeChapterOutputClips({ episodeId, projectId: job.data.projectId }),
     prisma.projectEditMusicScore.findUnique({ where: { episodeId }, select: { taskId: true, cuesJson: true } }),
   ])
-  if (persistedDesignRow?.status !== 'planned') throw new Error('AUDIO_DESIGN_PLAN_REQUIRED')
-  const persistedDesign = parseAudioDesignStrict(persistedDesignRow.designJson)
-  const computedSignature = buildAudioDesignSignature({
+  if (persistedDesignRow?.status !== 'planned') throw new Error('BGM_DESIGN_PLAN_REQUIRED')
+  const persistedDesign = parseBgmDesignStrict(persistedDesignRow.designJson)
+  const computedSignature = buildBgmDesignSignature({
     design: approvedDesign,
     timelineSignature: approvedTimelineSignature,
     musicModel,
-    soundEffectModel: text(persistedDesignRow.soundEffectModel),
   })
   if (computedSignature !== approvedDesignSignature || persistedDesignRow.designSignature !== approvedDesignSignature) {
     throw new Error('BGM_SCORE_APPROVED_DESIGN_STALE')
@@ -144,7 +142,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>): Promise
   if (JSON.stringify(persistedDesign) !== JSON.stringify(approvedDesign) || persistedDesignRow.musicModel !== musicModel) {
     throw new Error('BGM_SCORE_APPROVED_DESIGN_MISMATCH')
   }
-  const currentTimelineSignature = buildAudioDesignTimelineSignature(clips)
+  const currentTimelineSignature = buildBgmDesignTimelineSignature(clips)
   if (currentTimelineSignature !== approvedTimelineSignature || persistedDesignRow.timelineSignature !== approvedTimelineSignature) {
     throw new Error(`BGM_SCORE_TIMELINE_STALE:${approvedTimelineSignature}:${currentTimelineSignature}`)
   }

@@ -8,7 +8,6 @@ export const workspaceNodeId = {
   editShotExecutionPlan: (editScriptId: string): string => `edit-shot-execution-plan:edit-script:${editScriptId}`,
   videoPlan: (editScriptId: string, blockNumber: number): string => `video-plan:${editScriptId}:${blockNumber}`,
   bgmScore: (episodeId: string): string => `bgm-score:${episodeId}`,
-  ambientSound: (episodeId: string): string => `ambientSound:${episodeId}`,
   finalTimeline: (episodeId: string): string => `final:${episodeId}`,
 } as const
 

@@ -139,33 +139,14 @@ export type AiProviderMusicExecutionContext = {
   }
 }
 
-export type AiProviderSoundEffectExecutionContext = {
-  userId: string
-  selection: AiResolvedSelection & {
-    provider: string
-    modelId: string
-    modelKey: string
-  }
-  prompt: string
-  options?: {
-    durationSeconds?: number
-    loop?: boolean
-    promptInfluence?: number
-    outputFormat?: string
-    [key: string]: unknown
-  }
-}
-
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'soundEffect'> = {
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'> = {
   describe: (selection: AiResolvedSelection) => AiVariantDescriptor
   execute: (
     input: M extends 'image'
       ? AiProviderImageExecutionContext
       : M extends 'video'
         ? AiProviderVideoExecutionContext
-        : M extends 'music'
-          ? AiProviderMusicExecutionContext
-          : AiProviderSoundEffectExecutionContext,
+        : AiProviderMusicExecutionContext,
   ) => Promise<GenerateResult>
 }
 
@@ -218,7 +199,6 @@ export interface AiProviderAdapter {
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>
-  soundEffect?: AiProviderMediaModalityAdapter<'soundEffect'>
   languageModel?: AiProviderLanguageModelAdapter
   resolveLlmSessionId?: (input: AiProviderLlmSessionContext) => string | undefined
   connectionTest?: AiProviderConnectionTester

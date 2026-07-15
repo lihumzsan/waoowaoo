@@ -17,7 +17,7 @@ You are the core edit planner. Organize the chapter's story facts into rhythmic 
 - characters lists only people the video model must perform in this shot. Each item contains characterName and performance only.
 - performance describes visible expression, body action, pause, reaction, and movement. Do not specify blocking coordinates, screen position, facing, eyeline, or camera staging.
 - dialogue preserves script lines verbatim. speakerName must appear in this shot's characters. Use an empty array when there is no dialogue.
-- synchronousSound contains only short sounds synchronized to the image, such as footsteps, doors, impacts, or cloth. Do not include continuous ambience, room tone, city/machinery beds, or music. Ambient Sound owns continuous ambience.
+- synchronousSound contains only short sounds synchronized to the image, such as footsteps, doors, impacts, or cloth. Do not include a separately generated continuous audio bed or music.
 
 # Segments
 

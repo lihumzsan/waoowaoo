@@ -8,7 +8,6 @@ export type WorkspaceCanvasLayoutLane =
   | 'execution'
   | 'videoPlan'
   | 'bgm'
-  | 'ambientSound'
   | 'final'
 
 export type WorkspaceCanvasAnchorMode = 'none' | 'fixed' | 'manual'
@@ -94,8 +93,6 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
       return 'videoPlan'
     case 'bgmScore':
       return 'bgm'
-    case 'ambientSound':
-      return 'ambientSound'
     case 'finalTimeline':
       return 'final'
   }
@@ -108,7 +105,6 @@ function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: Work
     case 'editScript':
     case 'execution':
     case 'bgm':
-    case 'ambientSound':
     case 'final':
       return lane
     case 'assets':

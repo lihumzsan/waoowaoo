@@ -7,7 +7,6 @@ export type DefaultModelField =
   | 'editModel'
   | 'videoModel'
   | 'musicModel'
-  | 'soundEffectModel'
 
 export interface StoredProvider {
   id: string
@@ -51,7 +50,6 @@ export interface DefaultModelsPayload {
   editModel?: string
   videoModel?: string
   musicModel?: string
-  soundEffectModel?: string
 }
 
 export interface WorkflowConcurrencyPayload {
@@ -76,12 +74,10 @@ export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
   'editModel',
   'videoModel',
   'musicModel',
-  'soundEffectModel',
 ]
 export const CAPABILITY_MODEL_TYPES: readonly UnifiedModelType[] = [
   'image',
   'video',
   'llm',
   'music',
-  'soundEffect',
 ]

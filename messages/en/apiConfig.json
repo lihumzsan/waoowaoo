@@ -46,8 +46,7 @@
     "characterModel": "Generate character portraits and appearance references from script descriptions",
     "locationModel": "Generate scene environments and spatial references from script descriptions",
     "editModel": "Perform localized edits, style adjustments and refinements on existing images",
-    "musicModel": "Generate background music and scoring assets for project edits",
-    "soundEffectModel": "Generate seamless ambience and sound effect loops for project edits"
+    "musicModel": "Generate background music and scoring assets for project edits"
   },
   "defaultModelSection": {
     "coreFoundation": "Assistant, Text Analysis & Video",
@@ -64,7 +63,6 @@
     "pipelineLocation": "Scene Gen",
     "pipelineEdit": "Image Edit",
     "extMusic": "Music / Score",
-    "extSoundEffect": "Sound Effect / Ambience",
     "corePlaceholder": "Required",
     "extPlaceholder": "Not enabled"
   },
@@ -78,9 +76,7 @@
     "videoTitle": "No video models available",
     "videoDescription": "Go to the provider pool below, configure a video model, and enable it first.",
     "musicTitle": "No music models available",
-    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first.",
-    "soundEffectTitle": "No sound effect models available",
-    "soundEffectDescription": "Go to the provider pool below, configure a sound effect model, and enable it first."
+    "musicDescription": "Go to the provider pool below, configure a music model, and enable it first."
   },
   "providerPool": "Provider Pool",
   "dragToSort": "Drag to sort",
@@ -105,7 +101,6 @@
   "typeImage": "Image",
   "typeVideo": "Video",
   "typeMusic": "Music / Score",
-  "typeSoundEffect": "Sound Effect",
   "audioSubMusic": "Music",
   "apiKeyLabel": "API Key",
   "apiType": "API Type",

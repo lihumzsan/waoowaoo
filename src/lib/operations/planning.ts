@@ -67,10 +67,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video' | 'music' | 'sound_effect'
+  apiType: 'image' | 'video' | 'music'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'music' | 'sound_effect' | 'second' | 'call'
+  unit: 'image' | 'video' | 'music' | 'second' | 'call'
   maxFrozenCost?: number
 }
 

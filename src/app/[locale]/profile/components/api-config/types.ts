@@ -77,7 +77,6 @@ export interface ApiConfig {
         editModel?: string
         videoModel?: string
         musicModel?: string
-        soundEffectModel?: string
     }
     capabilityDefaults?: CapabilitySelections
     workflowConcurrency?: {

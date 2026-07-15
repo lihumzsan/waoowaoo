@@ -50,7 +50,7 @@ export function useRenderFinalVideo(projectId: string | null, episodeId: string 
     })
 }
 
-export function usePlanAudioDesign(projectId: string | null, episodeId: string | null) {
+export function usePlanBgmDesign(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
 
     return useMutation({
@@ -58,7 +58,7 @@ export function usePlanAudioDesign(projectId: string | null, episodeId: string |
             if (!projectId) throw new Error('Project ID is required')
             if (!episodeId) throw new Error('Episode ID is required')
 
-            const res = await apiFetch(`/api/projects/${projectId}/plan-audio-design`, {
+            const res = await apiFetch(`/api/projects/${projectId}/plan-bgm-design`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ episodeId }),
@@ -75,7 +75,7 @@ export function usePlanAudioDesign(projectId: string | null, episodeId: string |
                 runningTaskId: receipt.taskId,
                 runningTaskType: receipt.taskType,
                 intent: 'generate',
-                stage: 'audio_design_prepare',
+                stage: 'bgm_design_prepare',
             })
             await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
         },

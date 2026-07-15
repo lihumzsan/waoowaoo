@@ -151,7 +151,6 @@ export function useProjectWorkspaceController({
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handlePlanBgmScore: videoActions.handlePlanBgmScore,
-    handlePlanAmbientSound: videoActions.handlePlanAmbientSound,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
     handleUpdateEditAssetRequirementDescription,

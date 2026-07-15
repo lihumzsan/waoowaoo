@@ -8,7 +8,6 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
   calcImage,
   calcMusic,
-  calcSoundEffect,
   calcText,
   calcTextWithCache,
   calcVideo,
@@ -140,8 +139,6 @@ function resolveCost(input: CostInput) {
     }
     case 'music':
       return asMoney(calcMusic(input.model, input.quantity, input.metadata))
-    case 'sound_effect':
-      return asMoney(calcSoundEffect(input.model, input.quantity, input.metadata))
     default:
       throw new BillingOperationError('BILLING_INVALID_API_TYPE', `Unsupported billing apiType: ${String(input.apiType)}`, {
         apiType: input.apiType,

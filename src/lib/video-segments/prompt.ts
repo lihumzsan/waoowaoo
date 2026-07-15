@@ -52,6 +52,6 @@ export function buildVideoSegmentPrompt(input: {
     `REFERENCE MANIFEST\n${referenceLines.join('\n')}`,
     `CONTINUITY ACROSS THIS SEGMENT\n${input.segment.continuity}`,
     shotBlocks.join('\n\n'),
-    'AUDIO CONTRACT\nGenerate native synchronized audio. Include the written dialogue with the specified intrinsic voices and the listed short synchronized sounds. Do not replace dialogue with narration. Do not invent a long continuous ambience bed; episode-wide ambience is mixed separately.',
+    'AUDIO CONTRACT\nGenerate native synchronized audio. Include the written dialogue with the specified intrinsic voices and the listed short synchronized sounds. Do not replace dialogue with narration. Do not plan or depend on a separately generated continuous audio bed.',
   ].join('\n\n')
 }

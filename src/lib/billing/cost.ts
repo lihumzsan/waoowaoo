@@ -8,7 +8,6 @@ import { resolveImageSizeFromGenerationOptions } from '@/lib/image-generation/ru
 import { BillingOperationError } from './errors'
 
 export type ApiType = 'text' | 'image' | 'video' | 'music'
-  | 'sound_effect'
 export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
 
 type BillingMetadata = { [field: string]: unknown }
@@ -264,20 +263,6 @@ export function calcMusic(
   const units = Math.max(1, normalizePositiveInteger(quantity))
   const pricing = resolveCatalogPricing({
     apiType: 'music',
-    model,
-    selections: toCapabilitySelections(metadata),
-  })
-  return roundCredits(units * pricing.amount)
-}
-
-export function calcSoundEffect(
-  model: string,
-  quantity = 1,
-  metadata?: BillingMetadata,
-): number {
-  const units = Math.max(1, normalizePositiveInteger(quantity))
-  const pricing = resolveCatalogPricing({
-    apiType: 'sound_effect',
     model,
     selections: toCapabilitySelections(metadata),
   })

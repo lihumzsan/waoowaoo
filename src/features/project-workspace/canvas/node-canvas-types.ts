@@ -15,7 +15,6 @@ export type WorkspaceCanvasNodeKind =
   | 'editShotExecutionPlan'
   | 'videoPlan'
   | 'bgmScore'
-  | 'ambientSound'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
@@ -24,7 +23,6 @@ export type WorkspaceCanvasMediaNodeKind = Extract<WorkspaceCanvasNodeKind,
   | 'editStyleBible'
   | 'videoPlan'
   | 'bgmScore'
-  | 'ambientSound'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 >
@@ -56,8 +54,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'render_final_video' }
   | { readonly type: 'plan_bgm_score' }
   | { readonly type: 'generate_bgm_score' }
-  | { readonly type: 'plan_ambient_sound' }
-  | { readonly type: 'generate_ambient_sound' }
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
@@ -108,34 +104,6 @@ export interface WorkspaceCanvasBgmScoreDetails {
     readonly content: string
   }[]
   readonly finalPrompt?: string | null
-}
-
-export interface WorkspaceCanvasAmbientSoundDetails {
-  readonly status?: string | null
-  readonly decision?: 'ambient_sound' | 'none_needed' | null
-  readonly soundEffectModel?: string | null
-  readonly sourceCount: number
-  readonly sectionCount: number
-  readonly sources: readonly {
-    readonly key: string
-    readonly sourceIndex: number
-    readonly prompt: string
-    readonly loopDurationSeconds: number
-    readonly promptInfluence: number
-  }[]
-  readonly sections: readonly {
-    readonly key: string
-    readonly sourceIndex: number
-    readonly rangeKind: 'clip' | 'shot'
-    readonly rangeStart: number
-    readonly rangeEnd: number
-    readonly perspective: string
-    readonly intensity: string
-    readonly transitionIn: string
-    readonly transitionOut: string
-  }[]
-  readonly mixUrl?: string | null
-  readonly errorMessage?: string | null
 }
 
 export interface WorkspaceCanvasBgmScoreTimedTextSection {
@@ -333,7 +301,6 @@ export interface WorkspaceCanvasNodeData {
   readonly mediaLoadingContext: MediaLoadingContext | null
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
-  readonly ambientSoundDetails?: WorkspaceCanvasAmbientSoundDetails
   readonly sourceScriptDetails?: WorkspaceCanvasSourceScriptDetails
   readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails

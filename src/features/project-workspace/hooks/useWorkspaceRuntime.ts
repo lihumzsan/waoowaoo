@@ -31,7 +31,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null) => void
   handlePlanBgmScore: () => Promise<void>
-  handlePlanAmbientSound: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
@@ -53,7 +52,6 @@ export function useWorkspaceRuntime({
   handleGenerateEditScript,
   openAssetLibrary,
   handlePlanBgmScore,
-  handlePlanAmbientSound,
   handleRenderFinalVideo,
   handleGenerateEditShotExecutionPlan,
   handleUpdateEditAssetRequirementDescription,
@@ -79,7 +77,6 @@ export function useWorkspaceRuntime({
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onPlanBgmScore: handlePlanBgmScore,
-    onPlanAmbientSound: handlePlanAmbientSound,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
@@ -87,7 +84,6 @@ export function useWorkspaceRuntime({
   }), [
     assetsLoading,
     handlePlanBgmScore,
-    handlePlanAmbientSound,
     handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
     handleUpdateConfig,

@@ -195,7 +195,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
     }),
     render_final_video: defineOperation({
       id: 'render_final_video',
-      summary: 'Render the final linear edited video with FFmpeg and completed episode music and ambientSound layers.',
+      summary: 'Render the final linear edited video with FFmpeg, preserved native clip audio, and the completed episode BGM.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {

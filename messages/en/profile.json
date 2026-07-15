@@ -154,7 +154,7 @@
     "image": "Image Generation",
     "video": "Video Generation",
     "text": "Text Analysis",
-    "sound_effect": "Sound Effect Generation"
+    "music": "Music Generation"
   },
   "actionTypes": {
     "edit_style_preview_options_generate": "Generate Visual Style Directions",
@@ -162,10 +162,8 @@
     "image_character": "Character Image",
     "image_location": "Location Image",
     "music_generate": "Music Generation",
-    "music_score_plan": "Music Score Plan",
+    "bgm_design_plan": "BGM Design Plan",
     "music_score_generate": "Music Score Generation",
-    "ambient_sound_plan": "Ambient Sound Plan",
-    "ambient_sound_generate": "Ambient Sound Generation",
     "final_video_render": "Final Video Render",
     "chapter_render": "Chapter Render",
     "video_segment": "Video Segment Generation",

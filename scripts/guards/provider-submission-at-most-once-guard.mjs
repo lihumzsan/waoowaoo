@@ -10,7 +10,7 @@ import process from 'node:process'
 import ts from 'typescript'
 import { pathToFileURL } from 'node:url'
 
-const MEDIA_CALLS = new Set(['generateImage', 'generateVideo', 'generateMusic', 'generateSoundEffect'])
+const MEDIA_CALLS = new Set(['generateImage', 'generateVideo', 'generateMusic'])
 
 function property(object, name) {
   return object.properties.find((entry) => (

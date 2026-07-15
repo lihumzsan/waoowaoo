@@ -44,11 +44,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'plan_ambient_sound') {
-      await runtime.onPlanAmbientSound()
-      return
-    }
-
     if (action.type === 'plan_bgm_score') {
       await runtime.onPlanBgmScore()
       return

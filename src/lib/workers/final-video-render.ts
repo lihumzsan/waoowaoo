@@ -7,11 +7,8 @@ import { prisma } from '@/lib/prisma'
 import {
   readCompletedMusicScoreMix,
 } from '@/lib/music-score/project-data'
-import {
-  readCompletedAmbientSoundMix,
-} from '@/lib/ambient-sound/project-data'
-import { buildGainAutomationVolumeFilter } from '@/lib/audio-design/automation'
-import { buildAudioDesignTimelineSignature, parseAudioDesignStrict } from '@/lib/audio-design/contract'
+import { buildGainAutomationVolumeFilter } from '@/lib/bgm-design/automation'
+import { buildBgmDesignTimelineSignature, parseBgmDesignStrict } from '@/lib/bgm-design/contract'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey, getMediaObjectById, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
@@ -34,8 +31,6 @@ import {
   concatFinalRenderAudioClips,
   applyFinalRenderMasterAutomation,
   muxFinalRenderAudio,
-  muxFinalRenderAmbientAudio,
-  muxFinalRenderSourceAudio,
   renderFinalRenderAutomatedAudio,
   renderFinalRenderClipAudio,
 } from '@/lib/video-compose/final-render-audio'
@@ -51,7 +46,6 @@ type FinalVideoRenderPayload = {
 
 const DEFAULT_FINAL_RENDER_BGM_VOLUME = 1
 const FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS = 0.25
-const FINAL_RENDER_AMBIENT_SOUND_DURATION_TOLERANCE_SECONDS = 0.25
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -284,7 +278,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
     ])
     if (!project) throw new Error('FINAL_VIDEO_RENDER_PROJECT_NOT_FOUND')
     if (!episode) throw new Error('FINAL_VIDEO_RENDER_EPISODE_NOT_FOUND')
-    const [clips, musicScore, ambientSound, audioDesignRow] = await Promise.all([
+    const [clips, musicScore, bgmDesignRow] = await Promise.all([
       loadEpisodeChapterOutputClips({
         episodeId,
         projectId: job.data.projectId,
@@ -293,36 +287,21 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { episodeId },
         select: { status: true, mixJson: true, timelineSignature: true, designSignature: true },
       }),
-      prisma.projectEditAmbientSound.findUnique({
-        where: { episodeId },
-        select: { status: true, mixJson: true, timelineSignature: true, designSignature: true },
-      }),
-      prisma.projectEditAudioDesign.findUnique({
+      prisma.projectEditBgmDesign.findUnique({
         where: { episodeId },
         select: { status: true, designJson: true, timelineSignature: true, designSignature: true },
       }),
     ])
-    if (audioDesignRow?.status !== 'planned') throw new Error('FINAL_VIDEO_RENDER_AUDIO_DESIGN_REQUIRED')
-    if (!audioDesignRow.designSignature) throw new Error('FINAL_VIDEO_RENDER_AUDIO_DESIGN_SIGNATURE_REQUIRED')
-    const audioDesign = parseAudioDesignStrict(audioDesignRow.designJson)
+    if (bgmDesignRow?.status !== 'planned') throw new Error('FINAL_VIDEO_RENDER_BGM_DESIGN_REQUIRED')
+    if (!bgmDesignRow.designSignature) throw new Error('FINAL_VIDEO_RENDER_BGM_DESIGN_SIGNATURE_REQUIRED')
+    const bgmDesign = parseBgmDesignStrict(bgmDesignRow.designJson)
     const bgmMix = readCompletedMusicScoreMix(musicScore)
-    const ambientSoundMix = readCompletedAmbientSoundMix(ambientSound)
-    const scoreRequired = audioDesign.scoreCues.length === 1
-    const ambienceRequired = audioDesign.ambienceSources.length > 0
-    if (scoreRequired && (musicScore?.status !== 'completed' || !bgmMix)) {
+    if (musicScore?.status !== 'completed' || !bgmMix) {
       throw new Error(`FINAL_VIDEO_RENDER_BGM_NOT_READY:${musicScore?.status ?? 'missing'}`)
     }
-    if (scoreRequired && musicScore?.designSignature !== audioDesignRow.designSignature) {
+    if (musicScore.designSignature !== bgmDesignRow.designSignature) {
       throw new Error('FINAL_VIDEO_RENDER_BGM_DESIGN_STALE')
     }
-    if (!scoreRequired && bgmMix) throw new Error('FINAL_VIDEO_RENDER_BGM_UNPLANNED')
-    if (ambienceRequired && (ambientSound?.status !== 'completed' || !ambientSoundMix)) {
-      throw new Error(`FINAL_VIDEO_RENDER_AMBIENT_SOUND_NOT_READY:${ambientSound?.status ?? 'missing'}`)
-    }
-    if (ambienceRequired && ambientSound?.designSignature !== audioDesignRow.designSignature) {
-      throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_DESIGN_STALE')
-    }
-    if (!ambienceRequired && ambientSoundMix) throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_UNPLANNED')
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
     assertFinalRenderClipsHaveSources({
       clips,
@@ -331,21 +310,17 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
 
     const dimensions = resolveFinalRenderDimensions(project.videoRatio)
     const plannedDurationSeconds = clips.reduce((sum, clip) => sum + clip.durationSeconds, 0)
-    const designDurationSeconds = audioDesign.clock.totalFrames / audioDesign.clock.fps
-    if (Math.abs(plannedDurationSeconds - designDurationSeconds) > 1 / audioDesign.clock.fps) {
-      throw new Error(`FINAL_VIDEO_RENDER_AUDIO_DESIGN_DURATION_STALE:${designDurationSeconds.toFixed(6)}:${plannedDurationSeconds.toFixed(6)}`)
+    const designDurationSeconds = bgmDesign.clock.totalFrames / bgmDesign.clock.fps
+    if (Math.abs(plannedDurationSeconds - designDurationSeconds) > 1 / bgmDesign.clock.fps) {
+      throw new Error(`FINAL_VIDEO_RENDER_BGM_DESIGN_DURATION_STALE:${designDurationSeconds.toFixed(6)}:${plannedDurationSeconds.toFixed(6)}`)
     }
-    const currentTimelineSignature = buildAudioDesignTimelineSignature(clips)
-    if (audioDesignRow.timelineSignature !== currentTimelineSignature) {
-      throw new Error(`FINAL_VIDEO_RENDER_AUDIO_DESIGN_TIMELINE_STALE:${audioDesignRow.timelineSignature ?? 'missing'}:${currentTimelineSignature}`)
+    const currentTimelineSignature = buildBgmDesignTimelineSignature(clips)
+    if (bgmDesignRow.timelineSignature !== currentTimelineSignature) {
+      throw new Error(`FINAL_VIDEO_RENDER_BGM_DESIGN_TIMELINE_STALE:${bgmDesignRow.timelineSignature ?? 'missing'}:${currentTimelineSignature}`)
     }
     if (bgmMix) {
       if (musicScore?.timelineSignature !== currentTimelineSignature) throw new Error('FINAL_VIDEO_RENDER_BGM_TIMELINE_STALE')
       if (bgmMix.durationMs / 1000 + FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS < plannedDurationSeconds) throw new Error('FINAL_VIDEO_RENDER_BGM_DURATION_SHORT')
-    }
-    if (ambientSoundMix) {
-      if (ambientSound?.timelineSignature !== currentTimelineSignature) throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_TIMELINE_STALE')
-      if (ambientSoundMix.durationMs / 1000 + FINAL_RENDER_AMBIENT_SOUND_DURATION_TOLERANCE_SECONDS < plannedDurationSeconds) throw new Error('FINAL_VIDEO_RENDER_AMBIENT_SOUND_DURATION_SHORT')
     }
     const normalizedPaths: string[] = []
     const clipAudioPaths: string[] = []
@@ -397,68 +372,35 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
 
     await reportTaskProgress(job, 78, { stage: 'final_render_compose' })
     const finalPath = path.join(workspaceDir, 'final.mp4')
-    let musicPath: string | null = null
-    let ambientSoundPath: string | null = null
-    if (bgmMix) {
-      await reportTaskProgress(job, 55, { stage: 'final_render_music' })
-      const rawMusicPath = path.join(workspaceDir, `bgm-raw.${extensionFromMimeType(bgmMix.mimeType)}`)
-      musicPath = path.join(workspaceDir, 'bgm-automated.wav')
-      await writeFile(rawMusicPath, await getObjectBuffer(bgmMix.storageKey))
-      await renderFinalRenderAutomatedAudio({
-        runCommand: createFfmpegCommandRunner({ stage: 'final_render_score_automation', expectedDurationSeconds: stitchedDurationSeconds }),
-        inputPath: rawMusicPath,
-        outputPath: musicPath,
-        durationSeconds: stitchedDurationSeconds,
-        volumeFilter: buildGainAutomationVolumeFilter({
-          baseVolume: 1,
-          lanes: audioDesign.automationLanes.filter((lane) => lane.targetBus === 'score'),
-          clock: audioDesign.clock,
-        }),
-      })
-    }
-    if (ambientSoundMix) {
-      ambientSoundPath = path.join(workspaceDir, `ambientSound.${extensionFromMimeType(ambientSoundMix.mimeType)}`)
-      await writeFile(ambientSoundPath, await getObjectBuffer(ambientSoundMix.storageKey))
-    }
-    if (musicPath) {
-      await muxFinalRenderAudio({
-        runCommand: createFfmpegCommandRunner({
-          stage: 'final_render_mux_audio',
-          expectedDurationSeconds: stitchedDurationSeconds,
-        }),
-        stitchedPath,
-        mainAudioPath,
-        hasSourceAudio,
-        musicPath,
-        ambientSoundPath,
-        outputPath: finalPath,
-        durationSeconds: stitchedDurationSeconds,
-        volume: readBgmVolume(payload.bgmVolume),
-      })
-    } else if (ambientSoundPath) {
-      await muxFinalRenderAmbientAudio({
-        runCommand: createFfmpegCommandRunner({ stage: 'final_render_mux_ambience', expectedDurationSeconds: stitchedDurationSeconds }),
-        stitchedPath,
-        mainAudioPath,
-        hasSourceAudio,
-        ambientSoundPath,
-        outputPath: finalPath,
-        durationSeconds: stitchedDurationSeconds,
-      })
-    } else {
-      await muxFinalRenderSourceAudio({
-        runCommand: createFfmpegCommandRunner({
-          stage: 'final_render_mux_source_audio',
-          expectedDurationSeconds: stitchedDurationSeconds,
-        }),
-        stitchedPath,
-        mainAudioPath,
-        hasSourceAudio,
-        outputPath: finalPath,
-        durationSeconds: stitchedDurationSeconds,
-      })
-    }
-    const masterLanes = audioDesign.automationLanes.filter((lane) => lane.targetBus === 'master')
+    await reportTaskProgress(job, 55, { stage: 'final_render_music' })
+    const rawMusicPath = path.join(workspaceDir, `bgm-raw.${extensionFromMimeType(bgmMix.mimeType)}`)
+    const musicPath = path.join(workspaceDir, 'bgm-automated.wav')
+    await writeFile(rawMusicPath, await getObjectBuffer(bgmMix.storageKey))
+    await renderFinalRenderAutomatedAudio({
+      runCommand: createFfmpegCommandRunner({ stage: 'final_render_score_automation', expectedDurationSeconds: stitchedDurationSeconds }),
+      inputPath: rawMusicPath,
+      outputPath: musicPath,
+      durationSeconds: stitchedDurationSeconds,
+      volumeFilter: buildGainAutomationVolumeFilter({
+        baseVolume: 1,
+        lanes: bgmDesign.automationLanes.filter((lane) => lane.targetBus === 'score'),
+        clock: bgmDesign.clock,
+      }),
+    })
+    await muxFinalRenderAudio({
+      runCommand: createFfmpegCommandRunner({
+        stage: 'final_render_mux_audio',
+        expectedDurationSeconds: stitchedDurationSeconds,
+      }),
+      stitchedPath,
+      mainAudioPath,
+      hasSourceAudio,
+      musicPath,
+      outputPath: finalPath,
+      durationSeconds: stitchedDurationSeconds,
+      volume: readBgmVolume(payload.bgmVolume),
+    })
+    const masterLanes = bgmDesign.automationLanes.filter((lane) => lane.targetBus === 'master')
     const outputPath = masterLanes.length > 0 ? path.join(workspaceDir, 'final-mastered.mp4') : finalPath
     if (masterLanes.length > 0) {
       await applyFinalRenderMasterAutomation({
@@ -466,7 +408,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         inputPath: finalPath,
         outputPath,
         durationSeconds: stitchedDurationSeconds,
-        volumeFilter: buildGainAutomationVolumeFilter({ baseVolume: 1, lanes: masterLanes, clock: audioDesign.clock }),
+        volumeFilter: buildGainAutomationVolumeFilter({ baseVolume: 1, lanes: masterLanes, clock: bgmDesign.clock }),
       })
     }
     const outputBuffer = await readFile(outputPath)

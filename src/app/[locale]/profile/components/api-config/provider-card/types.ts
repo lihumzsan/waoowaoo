@@ -9,7 +9,6 @@ export interface ProviderCardDefaultModels {
   editModel?: string
   videoModel?: string
   musicModel?: string
-  soundEffectModel?: string
 }
 
 export interface ProviderCardProps {
@@ -36,7 +35,7 @@ export interface ModelFormState {
   modelId: string
 }
 
-export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music' | 'soundEffect'
+export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'music'
 
 export type ProviderCardGroupedModels = Partial<Record<ProviderCardModelType, CustomModel[]>>
 
@@ -50,5 +49,5 @@ export type ProviderCardTranslator = (
  * UI 层（是否显示"测试连接"按钮）和 逻辑层（保存时是否自动测试）共享此列表
  */
 export const VERIFIABLE_PROVIDER_KEYS = new Set([
-  'ark', 'google', 'openrouter', 'fal', 'elevenlabs',
+  'ark', 'google', 'openrouter', 'fal',
 ])

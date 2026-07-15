@@ -22,7 +22,6 @@ export interface DefaultModels {
   editModel?: string
   videoModel?: string
   musicModel?: string
-  soundEffectModel?: string
 }
 
 export interface CapabilityFieldDefaults {
@@ -38,7 +37,6 @@ export const DEFAULT_MODEL_FIELDS = [
   'editModel',
   'videoModel',
   'musicModel',
-  'soundEffectModel',
 ] as const satisfies ReadonlyArray<keyof DefaultModels>
 
 export function createInitialProviders(presetProviders: Provider[]): Provider[] {

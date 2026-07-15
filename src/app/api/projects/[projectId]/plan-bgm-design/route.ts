@@ -19,10 +19,9 @@ export const POST = apiHandler(async (
   const input: Record<string, unknown> = {}
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
   if (typeof body.musicModel === 'string') input.musicModel = body.musicModel
-  if (typeof body.soundEffectModel === 'string') input.soundEffectModel = body.soundEffectModel
   const result = await executeProjectAgentOperationFromApi({
     request,
-    operationId: 'plan_episode_audio_design',
+    operationId: 'plan_episode_bgm_design',
     projectId,
     userId: authResult.session.user.id,
     context: { episodeId: typeof body.episodeId === 'string' ? body.episodeId : null },

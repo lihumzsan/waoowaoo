@@ -67,7 +67,7 @@ function walk(dir, output = []) {
 function runCli() {
   const root = process.cwd()
   const violations = []
-  for (const relativeRoot of ['src/lib/workers', 'src/lib/bgm-score', 'src/lib/ambient-sound']) {
+  for (const relativeRoot of ['src/lib/workers', 'src/lib/bgm-score']) {
     for (const file of walk(path.join(root, relativeRoot))) {
       const relative = path.relative(root, file).split(path.sep).join('/')
       violations.push(...inspectTaskArtifactSource({ file: relative, content: fs.readFileSync(file, 'utf8') }))

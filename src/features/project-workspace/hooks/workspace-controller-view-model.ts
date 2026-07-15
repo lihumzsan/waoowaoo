@@ -18,7 +18,6 @@ interface ProjectSnapshotInput {
   editModel: string | undefined
   videoModel: string | undefined
   musicModel: string | undefined
-  soundEffectModel: string | undefined
   videoRatio: string | undefined
   capabilityOverrides: CapabilitySelections
 }

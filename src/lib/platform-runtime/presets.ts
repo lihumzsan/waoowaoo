@@ -78,8 +78,6 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
       return defaults.videoModel
     case 'music':
       return defaults.musicModel
-    case 'sound-effect':
-      return defaults.soundEffectModel
   }
 }
 
@@ -93,8 +91,6 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
       return getPlatformVideoGenerationOptions()
     case 'music':
       return getPlatformMusicGenerationOptions()
-    case 'sound-effect':
-      return {}
     case 'analysis':
       return {}
   }

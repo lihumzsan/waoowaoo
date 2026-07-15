@@ -18,7 +18,7 @@ const languageDirectiveAllowList = new Set([
   'scripts/guards/prompt-i18n-guard.mjs',
 ])
 const languageDirectivePattern = /请用中文|中文输出|use Chinese|output in Chinese/i
-const zhCanvasPromptEnglishPattern = /必须英文|英文词|Sound effects only|Generate one complete continuous instrumental cinematic BGM track|POV shot of a smartphone screen|Warm realistic indoor drama|Quiet roadside bus-stop/
+const zhCanvasPromptEnglishPattern = /必须英文|英文词|Generate one complete continuous instrumental cinematic BGM track|POV shot of a smartphone screen|Warm realistic indoor drama|Quiet roadside bus-stop/
 
 function fail(title, details = []) {
   console.error(`\n[prompt-i18n-guard] ${title}`)

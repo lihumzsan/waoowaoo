@@ -19,14 +19,7 @@ import {
   chapterPlanRawShotSchema,
   type ChapterPlanRawShot,
 } from '@/lib/edit-chapter/schemas'
-import {
-  ambienceSourceSchema,
-  scoreCueSchema,
-  soundWorldSchema,
-  type AmbienceSource,
-  type ScoreCue,
-  type SoundWorld,
-} from '@/lib/audio-design/types'
+import { scoreCueSchema, type ScoreCue } from '@/lib/bgm-design/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
 
@@ -43,9 +36,7 @@ export type StructuredStreamAdapterKey =
   | 'productionPlanning.emotionalCues'
   | 'editScript.shots'
   | 'shotExecutionPlan.shots'
-  | 'audioDesign.scoreCues'
-  | 'audioDesign.ambienceSources'
-  | 'audioDesign.soundWorlds'
+  | 'bgmDesign.scoreCue'
 
 export type TextStreamAdapterKey =
   | 'disabled.text'
@@ -79,9 +70,7 @@ export type StructuredStreamParsedItem =
     readonly kind: 'shotExecutionPlanShot'
     readonly shot: RawEditShotExecutionPlanShot
   }
-  | { readonly kind: 'audioDesignScoreCue'; readonly cue: ScoreCue }
-  | { readonly kind: 'audioDesignAmbienceSource'; readonly source: AmbienceSource }
-  | { readonly kind: 'audioDesignSoundWorld'; readonly world: SoundWorld }
+  | { readonly kind: 'bgmDesignScoreCue'; readonly cue: ScoreCue }
 
 export interface StructuredStreamItem {
   readonly adapterKey: StructuredStreamAdapterKey
@@ -210,45 +199,17 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
       : String(fallbackIndex + 1),
   },
   {
-    key: 'audioDesign.scoreCues',
-    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
-    stepIds: ['audio_design_plan'],
-    mode: 'array',
-    path: ['scoreCues'],
+    key: 'bgmDesign.scoreCue',
+    taskTypes: [TASK_TYPE.BGM_DESIGN_PLAN],
+    stepIds: ['bgm_design_plan'],
+    mode: 'object',
+    path: ['scoreCue'],
     parseItem: (value) => ({
-      kind: 'audioDesignScoreCue',
+      kind: 'bgmDesignScoreCue',
       cue: scoreCueSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignScoreCue'
+    itemKey: (item, fallbackIndex) => item.kind === 'bgmDesignScoreCue'
       ? item.cue.cueId
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'audioDesign.ambienceSources',
-    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
-    stepIds: ['audio_design_plan'],
-    mode: 'array',
-    path: ['ambienceSources'],
-    parseItem: (value) => ({
-      kind: 'audioDesignAmbienceSource',
-      source: ambienceSourceSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignAmbienceSource'
-      ? item.source.sourceId
-      : String(fallbackIndex + 1),
-  },
-  {
-    key: 'audioDesign.soundWorlds',
-    taskTypes: [TASK_TYPE.AUDIO_DESIGN_PLAN],
-    stepIds: ['audio_design_plan'],
-    mode: 'array',
-    path: ['soundWorlds'],
-    parseItem: (value) => ({
-      kind: 'audioDesignSoundWorld',
-      world: soundWorldSchema.parse(value),
-    }),
-    itemKey: (item, fallbackIndex) => item.kind === 'audioDesignSoundWorld'
-      ? item.world.worldId
       : String(fallbackIndex + 1),
   },
 ]

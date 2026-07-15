@@ -9,8 +9,7 @@ export type TaskTargetTerminalProjector =
   | 'chapter_render'
   | 'final_video_render'
   | 'music_score'
-  | 'ambient_sound'
-  | 'audio_design'
+  | 'bgm_design'
   | 'edit_script'
   | 'edit_shot_execution_plan'
 
@@ -24,9 +23,9 @@ export type ImageTaskHandlerKey =
   | 'asset_hub_modify'
 
 export type VideoTaskHandlerKey = 'video_segment' | 'final_video_render' | 'chapter_render'
-export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate' | 'ambient_sound_generate'
+export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate'
 export type TextTaskHandlerKey =
-  | 'audio_design_plan'
+  | 'bgm_design_plan'
   | 'edit_bible_generate'
   | 'edit_style_preview_options_generate'
   | 'edit_script_generate'
@@ -43,7 +42,7 @@ type TaskHandlerByQueue = {
   text: TextTaskHandlerKey
 }
 
-export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'sound_effect'
+export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
 export type TaskSubmissionTargetOwnership = 'none' | 'chapter_render' | 'final_video_render'
@@ -91,9 +90,8 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.IMAGE_CHARACTER]: definition('image', 'image_character', 'image', 3, 'project_assets', 'none', 'none', 'none'),
   [TASK_TYPE.IMAGE_LOCATION]: definition('image', 'image_location', 'image', 3, 'project_assets', 'none', 'none', 'none'),
   [TASK_TYPE.MUSIC_GENERATE]: definition('music', 'music_generate', 'music', 3, 'none', 'none', 'none', 'none'),
-  [TASK_TYPE.AUDIO_DESIGN_PLAN]: definition('text', 'audio_design_plan', 'text', 3, 'episode', 'audio_design', 'audio_design', 'none'),
+  [TASK_TYPE.BGM_DESIGN_PLAN]: definition('text', 'bgm_design_plan', 'text', 3, 'episode', 'bgm_design', 'bgm_design', 'none'),
   [TASK_TYPE.MUSIC_SCORE_GENERATE]: definition('music', 'music_score_generate', 'music', 3, 'episode', 'music_score', 'music_score', 'none'),
-  [TASK_TYPE.AMBIENT_SOUND_GENERATE]: definition('music', 'ambient_sound_generate', 'sound_effect', 3, 'episode', 'ambient_sound', 'ambient_sound', 'none'),
   [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 1, 'video_segments', 'final_video_render', 'final_video_render', 'final_video_render'),
   [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 1, 'video_segments', 'chapter_render', 'chapter_render', 'chapter_render'),
   [TASK_TYPE.VIDEO_SEGMENT]: definition('video', 'video_segment', 'video', 3, 'video_segments', 'video_segment', 'video_segment', 'none'),

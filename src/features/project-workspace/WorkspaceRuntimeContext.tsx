@@ -33,7 +33,6 @@ export interface WorkspaceRuntimeValue {
   onGenerateEditScript: () => Promise<void>
   onOpenAssetLibrary: () => void
   onPlanBgmScore: () => Promise<void>
-  onPlanAmbientSound: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
   onUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>

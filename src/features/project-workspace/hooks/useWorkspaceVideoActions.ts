@@ -1,7 +1,7 @@
 'use client'
 
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
-import { usePlanAudioDesign, useRenderFinalVideo } from '@/lib/query/hooks/useFinalMedia'
+import { usePlanBgmDesign, useRenderFinalVideo } from '@/lib/query/hooks/useFinalMedia'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
@@ -24,7 +24,7 @@ export function useWorkspaceVideoActions({
   episodeId,
   t,
 }: UseWorkspaceVideoActionsParams) {
-  const planAudioDesignMutation = usePlanAudioDesign(projectId, episodeId || null)
+  const planBgmDesignMutation = usePlanBgmDesign(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
 
   const handleRenderFinalVideo = async () => {
@@ -50,7 +50,7 @@ export function useWorkspaceVideoActions({
       return
     }
     try {
-      await planAudioDesignMutation.mutateAsync()
+      await planBgmDesignMutation.mutateAsync()
     } catch (err: unknown) {
       if (isAbortError(err)) {
         _ulogInfo(t('execution.requestAborted'))
@@ -61,26 +61,8 @@ export function useWorkspaceVideoActions({
     }
   }
 
-  const handlePlanAmbientSound = async () => {
-    if (!episodeId) {
-      alert(t('execution.selectEpisode'))
-      return
-    }
-    try {
-      await planAudioDesignMutation.mutateAsync()
-    } catch (err: unknown) {
-      if (isAbortError(err)) {
-        _ulogInfo(t('execution.requestAborted'))
-        return
-      }
-      alert(`${t('execution.ambientSoundFailed')}: ${getErrorMessage(err)}`)
-      throw err
-    }
-  }
-
   return {
     handlePlanBgmScore,
-    handlePlanAmbientSound,
     handleRenderFinalVideo,
   }
 }

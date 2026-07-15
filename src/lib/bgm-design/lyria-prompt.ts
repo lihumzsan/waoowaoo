@@ -1,4 +1,4 @@
-import { framesToSeconds, type AudioDesignClock, type MusicTheorySpec, type ScoreCue } from './types'
+import { framesToSeconds, type BgmDesignClock, type MusicTheorySpec, type ScoreCue } from './types'
 
 const PROHIBITION_LABELS: Record<MusicTheorySpec['prohibitions'][number], string> = {
   vocals: 'pitched vocal timbres',
@@ -39,7 +39,7 @@ export function assertLyriaPromptSafe(prompt: string): void {
 
 export function buildLyriaPrompts(input: {
   readonly cue: ScoreCue
-  readonly clock: AudioDesignClock
+  readonly clock: BgmDesignClock
 }): { readonly prompt: string; readonly negativePrompt: string } {
   const spec = input.cue.musicTheorySpec
   const cueFrames = input.cue.range.endFrameExclusive - input.cue.range.startFrame

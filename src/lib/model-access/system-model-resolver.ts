@@ -10,7 +10,6 @@ export type SystemModelPurpose =
   | 'edit-image'
   | 'video'
   | 'music'
-  | 'sound-effect'
 
 function requireModel(modelKey: string | null | undefined, purpose: SystemModelPurpose): string {
   if (typeof modelKey === 'string' && modelKey.trim()) return modelKey.trim()
@@ -51,7 +50,5 @@ export async function resolveSystemModelKey(input: {
       return requireModel(config.videoModel, input.purpose)
     case 'music':
       return requireModel(config.musicModel, input.purpose)
-    case 'sound-effect':
-      return requireModel(config.soundEffectModel, input.purpose)
   }
 }

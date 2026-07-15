@@ -32,5 +32,5 @@ export interface BgmScoreCue {
 export interface ScoreCandidateAsset extends BgmScoreMix {
   readonly candidateIndex: 0 | 1
   readonly selected: boolean
-  readonly quality: import('@/lib/audio-design/score-quality').ScoreCandidateQuality
+  readonly quality: import('@/lib/bgm-design/score-quality').ScoreCandidateQuality
 }

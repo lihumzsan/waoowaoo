@@ -67,9 +67,8 @@ export const TASK_TYPE = {
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
   MUSIC_GENERATE: 'music_generate',
-  AUDIO_DESIGN_PLAN: 'audio_design_plan',
+  BGM_DESIGN_PLAN: 'bgm_design_plan',
   MUSIC_SCORE_GENERATE: 'music_score_generate',
-  AMBIENT_SOUND_GENERATE: 'ambient_sound_generate',
   FINAL_VIDEO_RENDER: 'final_video_render',
   CHAPTER_RENDER: 'chapter_render',
   VIDEO_SEGMENT: 'video_segment',
@@ -119,7 +118,7 @@ export type TaskBillingInfo =
     billable: true
     source: 'task'
     taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music' | 'sound_effect'
+    apiType: 'text' | 'image' | 'video' | 'music'
     model: string
     quantity: number
     unit: 'token' | 'image' | 'video' | 'second' | 'call'

@@ -27,9 +27,3 @@ ALTER TABLE `project_edit_music_scores`
   DROP INDEX `project_edit_music_scores_planTaskId_idx`,
   DROP COLUMN `planTaskId`,
   ADD COLUMN `designSignature` VARCHAR(191) NULL;
-
-ALTER TABLE `project_edit_ambient_sounds`
-  DROP INDEX `project_edit_ambient_sounds_planTaskId_idx`,
-  DROP COLUMN `planTaskId`,
-  DROP COLUMN `planJson`,
-  ADD COLUMN `designSignature` VARCHAR(191) NULL;

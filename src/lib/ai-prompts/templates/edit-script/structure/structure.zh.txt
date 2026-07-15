@@ -17,7 +17,7 @@
 - characters：只列这个镜头需要视频模型表演的人物；每个人只包含 characterName 与 performance。
 - performance：写可见的表情、身体动作、停顿、反应和运动，不写人物站位、屏幕位置、朝向、视线坐标或摄影调度。
 - dialogue：逐字保留剧本中的对白；speakerName 必须出现在本镜头 characters 中。没有对白时输出空数组。
-- synchronousSound：只写与当前画面同步的短声音，例如脚步、开门、碰撞、衣物摩擦；不写连续风雨、room tone、城市或机械底噪，也不写 BGM。连续环境声由 Ambient Sound 层统一生成。
+- synchronousSound：只写与当前画面同步的短声音，例如脚步、开门、碰撞、衣物摩擦；不要规划单独生成的连续声音底，也不要写 BGM。
 
 # 分段
 

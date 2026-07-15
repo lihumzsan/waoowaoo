@@ -3,10 +3,7 @@ import {
   readCompletedMusicScoreMix,
   readMusicScoreStatus,
 } from '@/lib/music-score/project-data'
-import {
-  readCompletedAmbientSoundMix,
-} from '@/lib/ambient-sound/project-data'
-import { readPersistedAudioDesign } from '@/lib/audio-design/project-data'
+import { readPersistedBgmDesign } from '@/lib/bgm-design/project-data'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getEditFirstChoiceDefinition } from '@/lib/project-agent/edit-first-choice-tools'
@@ -86,16 +83,14 @@ export async function resolveEditFirstWorkflowView(params: {
     chapters,
     finalOutput,
     musicScore,
-    ambientSound,
-    audioDesignRow,
+    bgmDesignRow,
     activeSourceScriptTaskCount,
     activeBibleTaskCount,
     activeEditScriptTaskCount,
     activeShotExecutionPlanTaskCount,
     activeVideoTaskCount,
-    activeAudioDesignPlanTaskCount,
+    activeBgmDesignPlanTaskCount,
     activeBgmScoreGenerationTaskCount,
-    activeAmbientSoundGenerationTaskCount,
     activeChapterRenderTaskCount,
     activeFinalRenderTaskCount,
   ] = await Promise.all([
@@ -146,11 +141,7 @@ export async function resolveEditFirstWorkflowView(params: {
       where: { episodeId: params.episodeId },
       select: { status: true, cuesJson: true, mixJson: true },
     }),
-    prisma.projectEditAmbientSound.findUnique({
-      where: { episodeId: params.episodeId },
-      select: { status: true, mixJson: true },
-    }),
-    prisma.projectEditAudioDesign.findUnique({
+    prisma.projectEditBgmDesign.findUnique({
       where: { episodeId: params.episodeId },
       select: {
         status: true,
@@ -159,7 +150,6 @@ export async function resolveEditFirstWorkflowView(params: {
         designSignature: true,
         analysisModel: true,
         musicModel: true,
-        soundEffectModel: true,
       },
     }),
     prisma.task.count({
@@ -208,7 +198,7 @@ export async function resolveEditFirstWorkflowView(params: {
         episodeId: params.episodeId,
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
-        type: TASK_TYPE.AUDIO_DESIGN_PLAN,
+        type: TASK_TYPE.BGM_DESIGN_PLAN,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -219,16 +209,6 @@ export async function resolveEditFirstWorkflowView(params: {
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
         type: TASK_TYPE.MUSIC_SCORE_GENERATE,
-        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
-      },
-    }),
-    prisma.task.count({
-      where: {
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-        targetType: 'ProjectEpisode',
-        targetId: params.episodeId,
-        type: TASK_TYPE.AMBIENT_SOUND_GENERATE,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -290,8 +270,7 @@ export async function resolveEditFirstWorkflowView(params: {
       hasCompletedVideoSegment(segmentByIdentity.get(`${segment.editScriptId}:${segment.segmentId}`) ?? null))
   }).length
   const bgmScoreStatus = readMusicScoreStatus(musicScore)
-  const ambientSoundStatus = typeof ambientSound?.status === 'string' ? ambientSound.status : null
-  const audioDesign = readPersistedAudioDesign(audioDesignRow)
+  const bgmDesign = readPersistedBgmDesign(bgmDesignRow)
   const activeStylePreviewTaskCount = editBible
     ? await prisma.task.count({
       where: {
@@ -346,17 +325,12 @@ export async function resolveEditFirstWorkflowView(params: {
       chapter.renderStatus === 'completed' && hasOutputReference(chapter.outputMediaId)).length,
     failedChapterRenderCount: chapters.filter((chapter) => chapter.renderStatus === 'failed').length,
     activeChapterRenderTaskCount,
-    audioDesignStatus: audioDesignRow?.status ?? null,
-    audioDesignHasPlan: Boolean(audioDesign),
-    audioDesignHasScore: (audioDesign?.design.scoreCues.length ?? 0) > 0,
-    audioDesignHasAmbience: (audioDesign?.design.ambienceSources.length ?? 0) > 0,
-    activeAudioDesignPlanTaskCount,
+    bgmDesignStatus: bgmDesignRow?.status ?? null,
+    bgmDesignHasPlan: Boolean(bgmDesign),
+    activeBgmDesignPlanTaskCount,
     bgmScoreStatus,
     bgmScoreHasMix: Boolean(readCompletedMusicScoreMix(musicScore)),
     activeBgmScoreGenerationTaskCount,
-    ambientSoundStatus,
-    ambientSoundHasMix: Boolean(readCompletedAmbientSoundMix(ambientSound)),
-    activeAmbientSoundGenerationTaskCount,
     finalRenderStatus: finalOutput?.renderStatus ?? null,
     finalRenderHasOutput: Boolean(
       hasOutputReference(finalOutput?.outputUrl) || hasOutputReference(finalOutput?.outputMediaId),

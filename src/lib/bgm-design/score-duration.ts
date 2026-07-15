@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { buildFfmpegExecFileOptions, resolveFfmpegBinary } from '@/lib/video-compose/ffmpeg-binaries'
-import { AUDIO_DESIGN_SAMPLE_RATE } from './types'
+import { BGM_DESIGN_SAMPLE_RATE } from './types'
 
 const execFileAsync = promisify(execFile)
 
@@ -42,7 +42,7 @@ export function resolveScoreDurationConformance(input: {
   if (!Number.isFinite(input.sourceDurationSeconds) || input.sourceDurationSeconds <= 0) throw new Error('AUDIO_SCORE_SOURCE_DURATION_INVALID')
   if (!Number.isFinite(input.targetDurationSeconds) || input.targetDurationSeconds <= 0) throw new Error('AUDIO_SCORE_TARGET_DURATION_INVALID')
   const difference = input.sourceDurationSeconds - input.targetDurationSeconds
-  if (Math.abs(difference) <= 1 / AUDIO_DESIGN_SAMPLE_RATE) {
+  if (Math.abs(difference) <= 1 / BGM_DESIGN_SAMPLE_RATE) {
     return { ...input, tempoRatio: 1, method: 'none' }
   }
   if (difference > 0) {
@@ -74,7 +74,7 @@ export async function conformScoreDuration(input: {
   if (conformance.method === 'none') return { audio: input.audio, conformance }
   const sourcePath = path.join(input.workspaceDir, `${input.fileName}-duration-source.${audioExtension(input.audio.mimeType)}`)
   const outputPath = path.join(input.workspaceDir, `${input.fileName}-duration-conformed.wav`)
-  const targetSamples = Math.round(input.targetDurationSeconds * AUDIO_DESIGN_SAMPLE_RATE)
+  const targetSamples = Math.round(input.targetDurationSeconds * BGM_DESIGN_SAMPLE_RATE)
   const filter = conformance.method === 'trim'
     ? `atrim=end_sample=${targetSamples}`
     : `atempo=${conformance.tempoRatio.toFixed(9)},apad,atrim=end_sample=${targetSamples}`
@@ -82,7 +82,7 @@ export async function conformScoreDuration(input: {
   const execution = resolveFfmpegBinary('ffmpeg')
   await execFileAsync(execution.command, [
     '-y', '-v', 'error', '-i', sourcePath, '-vn', '-af', filter,
-    '-ar', String(AUDIO_DESIGN_SAMPLE_RATE), '-c:a', 'pcm_s24le', outputPath,
+    '-ar', String(BGM_DESIGN_SAMPLE_RATE), '-c:a', 'pcm_s24le', outputPath,
   ], buildFfmpegExecFileOptions(execution))
   return {
     audio: { buffer: await readFile(outputPath), mimeType: 'audio/wav' },

@@ -129,8 +129,7 @@ model ProjectEpisode {
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   musicScore              ProjectEditMusicScore?
-  ambientSound            ProjectEditAmbientSound?
-  audioDesign             ProjectEditAudioDesign?
+  bgmDesign              ProjectEditBgmDesign?
   finalOutput             ProjectEpisodeFinalOutput?
   editBible          ProjectEditBible?
   editStylePreviews       ProjectEditStylePreview[]
@@ -301,28 +300,7 @@ model ProjectEditMusicScore {
   @@map("project_edit_music_scores")
 }
 
-model ProjectEditAmbientSound {
-  id                String         @id @default(uuid())
-  episodeId         String         @unique
-  sourcesJson       Json?
-  mixJson           Json?
-  diagnosticsJson   Json?
-  version           Int            @default(1)
-  status            String         @default("pending")
-  taskId            String?
-  timelineSignature String?
-  designSignature   String?
-  soundEffectModel  String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @default(now()) @updatedAt
-  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([episodeId])
-  @@index([taskId])
-  @@map("project_edit_ambient_sounds")
-}
-
-model ProjectEditAudioDesign {
+model ProjectEditBgmDesign {
   id                String         @id @default(uuid())
   episodeId         String         @unique
   designJson        Json?
@@ -333,14 +311,13 @@ model ProjectEditAudioDesign {
   designSignature   String?
   analysisModel     String?
   musicModel        String?
-  soundEffectModel  String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @default(now()) @updatedAt
   episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   @@index([episodeId])
   @@index([taskId])
-  @@map("project_edit_audio_designs")
+  @@map("project_edit_bgm_designs")
 }
 
 model ProjectVideoSegment {
@@ -381,7 +358,6 @@ model Project {
   imageModel         String?
   videoModel         String?
   musicModel         String?
-  soundEffectModel   String?
   videoRatio         String                 @default("9:16")
   globalAssetText    String?
   characterModel     String?
@@ -480,7 +456,6 @@ model UserPreference {
   editModel       String? // 用户配置的修图模型
   videoModel      String? // 用户配置的视频模型
   musicModel      String? // 用户配置的音乐/配乐模型
-  soundEffectModel String? // 用户配置的音效模型
   analysisConcurrency Int? // 分析流程并发上限
   imageConcurrency Int? // 图像流程并发上限
   videoConcurrency Int? // 视频流程并发上限

@@ -21,7 +21,6 @@ export interface WorkspaceCanvasBillableActionRequest {
 const BILLABLE_CANVAS_ACTION_TYPES = new Set<WorkspaceCanvasNodeAction['type']>([
   'generate_video_segments',
   'generate_bgm_score',
-  'generate_ambient_sound',
   'generate_edit_assets',
   'generate_edit_asset',
   'regenerate_edit_asset_image',
@@ -69,11 +68,6 @@ export function resolveWorkspaceCanvasBillableActionRequest(params: {
     case 'generate_bgm_score':
       if (!params.episodeId) return null
       operationId = 'generate_episode_bgm_score'
-      input = { episodeId: params.episodeId }
-      break
-    case 'generate_ambient_sound':
-      if (!params.episodeId) return null
-      operationId = 'generate_episode_ambient_sound'
       input = { episodeId: params.episodeId }
       break
     case 'generate_edit_assets':

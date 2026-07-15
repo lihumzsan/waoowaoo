@@ -41,9 +41,6 @@ Arrangement and structure:
 Use the timestamped structure below. For each time range, describe the musical event, intensity level, transition behavior, and how the segment connects to the previous and next segment. Keep a coherent theme across the whole piece while allowing meaningful rises, releases, drops, rests, and texture changes.
 Explicitly reflect generationSegments continuity: inside a segment, allow subtle musical events but preserve one section theme and motion inertia; between segments, if time, space, or mood jumps, design a clear musical cut, rest, transition, or motif change.
 
-Ambient sound:
-Infer any appropriate ambience, space, reverb, texture, or environmental color from the visual action and story context. Use these as musical texture, not literal sound effects, unless the core edit plan's sound direction clearly asks for that.
-
 Shot-by-shot emotional and rhythm map:
 {timeline_map}
 
@@ -51,7 +48,7 @@ Production quality:
 High-quality finished mix, clean intro, edit-friendly transitions, controlled dynamics, and enough frequency space for dialogue or narration.
 
 Constraints:
-Instrumental only: no vocals, no lyrics, no artist imitation, no copyrighted song references. Avoid sudden unrelated style changes. Avoid overpowering drums or excessive cymbal crashes unless a timestamped segment clearly requires them.
+Instrumental BGM only: no vocals, no lyrics, no artist imitation, no copyrighted song references, no field recordings, no room tone, no foley, and no literal synchronized effects. Avoid sudden unrelated style changes. Avoid overpowering drums or excessive cymbal crashes unless a timestamped segment clearly requires them.
 
 Excellent final prompt examples for specificity and structure only. Do not copy their musical content unless the core edit plan independently supports it:
 
@@ -59,7 +56,7 @@ Example 1:
 Nocturnal chase underscore with tense forward motion, 96-112 BPM, built from a low pulsing rhythm, tight dry percussion, metallic accents, and dark harmonic swells. Start with a restrained pulse and narrow stereo field, then increase rhythmic density at each cut. Use short rises before action beats and quick releases after each impact. Keep the mix modern, clean, and spacious enough for dialogue, with no vocals or lyrics.
 
 Example 2:
-Intimate memory sequence score with fragile emotional warmth, slow rubato pacing, sparse melodic fragments, soft high-register textures, and gentle room ambience. Begin almost weightless, let the harmony open gradually through the middle, then resolve with a small bittersweet lift. Avoid heavy drums; keep dynamics controlled and transitions smooth so the music supports narration without drawing attention away from the image.
+Intimate memory sequence score with fragile emotional warmth, slow rubato pacing, sparse melodic fragments, and soft high-register textures. Begin almost weightless, let the harmony open gradually through the middle, then resolve with a small bittersweet lift. Avoid heavy drums; keep dynamics controlled and transitions smooth so the music supports narration without drawing attention away from the image.
 
 Example 3:
 Bright comedic montage cue with playful rhythmic bounce, light syncopation, crisp short-note motifs, and quick texture changes aligned to the cuts. Keep the arrangement agile and uncluttered, with small musical punctuation at each visual gag. Use a clean, upbeat mix, short transitions, and a loop-friendly ending; no vocals or lyrics.

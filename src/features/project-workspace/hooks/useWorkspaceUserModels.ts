@@ -20,7 +20,6 @@ export interface UserModelsPayload {
   image: UserModelOption[]
   video: UserModelOption[]
   music: UserModelOption[]
-  soundEffect: UserModelOption[]
 }
 
 export function useWorkspaceUserModels() {

@@ -1,6 +1,6 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { EditAssetContent, EditAssetGroupContent, StyleBibleContent } from './renderers/assets-style'
-import { BgmScoreContent, FinalContent, AmbientSoundContent } from './renderers/audio-final'
+import { BgmScoreContent, FinalContent } from './renderers/audio-final'
 import { EditBibleContent, SourceScriptContent } from './renderers/bible'
 import { EditScriptContent, EditShotExecutionPlanContent } from './renderers/edit-plans'
 import { MediaPreview } from './renderers/media'
@@ -21,7 +21,6 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
   editShotExecutionPlan: EditShotExecutionPlanContent,
   videoPlan: VideoPlanContent,
   bgmScore: BgmScoreContent,
-  ambientSound: AmbientSoundContent,
   editRequiredAsset: EditAssetContent,
   editAssetGroup: EditAssetGroupContent,
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>

@@ -6,7 +6,6 @@ export type WorkspaceCanvasStreamKind =
   | 'editScript'
   | 'editShotExecutionPlan'
   | 'bgmScore'
-  | 'ambientSound'
 
 export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   WorkspaceCanvasNodeData,
@@ -17,7 +16,6 @@ export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   | 'editScriptDetails'
   | 'editPipelineStepDetails'
   | 'bgmScoreDetails'
-  | 'ambientSoundDetails'
 >>
 
 export interface WorkspaceCanvasStreamPatch {
