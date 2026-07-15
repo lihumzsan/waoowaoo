@@ -46,8 +46,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         assistantAgent,
         legal,
         pricing,
-        contact,
-        animationAuditLab
+        contact
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
         import(`../messages/${locale}/assetLibrary.json`),
@@ -78,8 +77,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/assistantAgent.json`),
         import(`../messages/${locale}/legal.json`),
         import(`../messages/${locale}/pricing.json`),
-        import(`../messages/${locale}/contact.json`),
-        import(`../messages/${locale}/animationAuditLab.json`)
+        import(`../messages/${locale}/contact.json`)
     ]);
 
     return {
@@ -114,8 +112,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
             assistantAgent: assistantAgent.default,
             legal: legal.default,
             pricing: pricing.default,
-            contact: contact.default,
-            animationAuditLab: animationAuditLab.default
+            contact: contact.default
         }
     };
 });
