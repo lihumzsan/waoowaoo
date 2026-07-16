@@ -1022,6 +1022,34 @@ export async function runComfyUiVideoWorkflow(params: {
   return { videoBase64: dataBase64, mimeType }
 }
 
+export const COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID = 'basevideo/tools/video-seam-concat-nvenc'
+
+export async function runComfyUiVideoSeamConcatWorkflow(params: {
+  baseUrl: string
+  workflowKey?: string
+  videoUrls: [string, string]
+}): Promise<{ videoBase64: string; mimeType: string }> {
+  const base = normalizeComfyBaseUrl(params.baseUrl)
+  const workflowKey = params.workflowKey?.trim() || COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID
+  const videoUrls = params.videoUrls
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+
+  if (videoUrls.length !== 2) {
+    throw new Error('COMFYUI_VIDEO_SEAM_CONCAT_REQUIRES_TWO_INPUTS')
+  }
+
+  const videoFilenames = await uploadComfyUiImages(base, videoUrls)
+  const workflow = resolveComfyUiWorkflow(workflowKey, { videoFilenames })
+  const { dataBase64, mimeType } = await runComfyUiWorkflow({
+    baseUrl: base,
+    workflow,
+    expect: 'video',
+  })
+
+  return { videoBase64: dataBase64, mimeType }
+}
+
 export async function runComfyUiAudioWorkflow(params: {
   baseUrl: string
   workflowKey: string
