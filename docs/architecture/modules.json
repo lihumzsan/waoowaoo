@@ -81,6 +81,7 @@
         "src/features/project-workspace/hooks/workspace-controller-view-model.ts",
         "src/features/project-workspace/hooks/useWorkspaceVideoActions.ts",
         "src/features/project-workspace/canvas",
+        "src/lib/project-canvas/layout/canvas-layout-contract.ts",
         "src/features/project-workspace/components/WorkspaceHeaderShell.tsx",
         "src/features/project-workspace/episode-planning-overview.ts",
         "src/features/project-workspace/components/ProjectAssetLibrary.tsx",
@@ -136,6 +137,35 @@
         "scripts/guards/canvas-node-lifecycle-contract-guard.mjs",
         "scripts/guards/canvas-motion-presence-contract-guard.mjs",
         "scripts/guards/terminal-resource-refetch-guard.mjs"
+      ]
+    },
+    {
+      "id": "creative-resource",
+      "document": "docs/architecture/modules/creative-resource.md",
+      "title": "创作 Resource、Revision 与 Lineage",
+      "sourcePaths": [
+        "src/lib/creative-resource",
+        "src/lib/operations/domains/creative-resource",
+        "src/app/api/projects/[projectId]/resources",
+        "src/lib/query/hooks/useCreativeResources.ts",
+        "src/lib/query/keys.ts",
+        "src/lib/video-generation/reference-images.ts",
+        "src/features/project-workspace/canvas/nodes/renderers/resource-card.tsx",
+        "src/features/project-workspace/canvas/projection/workspace-node-resource-projection.ts",
+        "prisma/schema.prisma",
+        "prisma/migrations/20260717120000_add_creative_resource_spine/migration.sql"
+      ],
+      "testPaths": [
+        "tests/contracts/project-agent-toolset-conformance.test.ts",
+        "tests/contracts/task-definition-conformance.test.ts",
+        "tests/contracts/canvas-node-conformance.test.ts",
+        "tests/golden-journey/journeys/freeform-resources.spec.ts",
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/single-operation-invocation-guard.mjs",
+        "scripts/guards/provider-submission-at-most-once-guard.mjs",
+        "scripts/guards/task-artifact-idempotency-guard.mjs"
       ]
     },
     {
@@ -324,6 +354,7 @@
         "src/lib/project-workflow/edit-first-operation-ids.ts",
         "src/lib/project-workflow/edit-first-tool-input-schema.ts",
         "src/lib/edit-script/style-preview-operation-plan.ts",
+        "scripts/guards/single-operation-invocation-guard.mjs",
         "scripts/guards/assistant-choice-offer-authority-guard.mjs",
         "scripts/guards/no-client-agent-control.mjs",
         "scripts/guards/no-history-state-inference.mjs",

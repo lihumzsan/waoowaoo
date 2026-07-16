@@ -33,7 +33,7 @@ const WRITE_TOOL_PRIORITY = [
   'render_final_video',
 ] as const
 
-const WORKFLOW_POSITION_CHOICE_TOOL: Readonly<Record<string, string>> = {
+const MAINLINE_POSITION_CHOICE_TOOL: Readonly<Record<string, string>> = {
   'script_intake:ready': 'request_script_intake_choice',
   'source_script:needs_user_choice': 'request_edit_script_review_choice',
   'episode_plan:needs_user_choice': 'request_edit_bible_review_choice',
@@ -70,6 +70,13 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
 }
 
 export const GOLDEN_REMAINING_VIDEO_REQUEST = '生成剩余视频'
+export const GOLDEN_FREEFORM_TEXT_REQUEST = '自由生成三个文字候选'
+export const GOLDEN_FREEFORM_IMAGE_REQUEST = '自由生成三张图片候选'
+export const GOLDEN_FREEFORM_RETRY_REQUEST = '只重试失败的图片候选'
+export const GOLDEN_FREEFORM_VIDEO_REQUEST = '复用成功图片生成两个视频候选'
+export const GOLDEN_FREEFORM_AUDIO_REQUEST = '根据成功视频生成一段配乐'
+export const GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST = '从空项目直接生成一个视频'
+export const GOLDEN_FREEFORM_ADOPT_REQUEST = '选择第二张图片作为主视觉'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -116,6 +123,73 @@ function readJsonObjectAfterMarker(prompt: string, markers: readonly string[]): 
 }
 
 function buildToolArguments(request: GoldenChatCompletionRequest, toolName: string): unknown {
+  const instruction = latestFreeformInstruction(request)?.text ?? ''
+  if (toolName === 'create_text' && instruction.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) {
+    return {
+      prompt: 'Create three distinct short story concepts.',
+      candidates: [
+        { name: 'Concept 1', text: 'A lighthouse remembers every ship it failed to save.' },
+        { name: 'Concept 2', text: 'A paper city wakes whenever its maker falls asleep.' },
+        { name: 'Concept 3', text: 'A train crosses one impossible station each midnight.' },
+      ],
+    }
+  }
+  if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
+    return {
+      prompt: 'A cinematic midnight shrine in mist, wide composition.',
+      retryResourceIds: failedResourceIds(request),
+    }
+  }
+  if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) {
+    return { prompt: 'A cinematic midnight shrine in mist, wide composition.', count: 3 }
+  }
+  if (toolName === 'list_resources') {
+    if (instruction.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
+      return { mediaType: 'image', status: 'failed', limit: 6 }
+    }
+    if (instruction.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) {
+      return { mediaType: 'image', status: 'ready', limit: 6 }
+    }
+    if (instruction.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) {
+      return { mediaType: 'video', status: 'ready', limit: 6 }
+    }
+    if (instruction.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) {
+      return { mediaType: 'image', status: 'ready', limit: 6 }
+    }
+  }
+  if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) {
+    return { prompt: 'A slow cinematic push through a moonlit empty gallery.', count: 1 }
+  }
+  if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) {
+    return {
+      prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
+      count: 2,
+      references: resourceReferences(request, 'image').slice(0, 1),
+    }
+  }
+  if (toolName === 'create_audio' && instruction.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) {
+    return {
+      prompt: 'Compose restrained atmospheric music matching the referenced videos.',
+      durationSeconds: 120,
+      count: 1,
+      references: resourceReferences(request, 'video').slice(0, 3),
+    }
+  }
+  if (toolName === 'adopt_resource' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) {
+    const selected = listedResourceRecords(request)
+      .filter((resource) => resource.mediaType === 'image' && resource.status === 'ready')
+      .sort((left, right) => Number(left.candidateIndex ?? 0) - Number(right.candidateIndex ?? 0))[1]
+    const revision = asRecord(selected?.headRevision)
+    if (typeof selected?.resourceId !== 'string' || typeof revision?.revisionId !== 'string') {
+      throw new Error('GOLDEN_FREEFORM_ADOPT_RESOURCE_MISSING')
+    }
+    return {
+      resourceId: selected.resourceId,
+      revisionId: revision.revisionId,
+      role: 'primary_image',
+      slotKey: 'main',
+    }
+  }
   const tool = request.tools?.find((candidate) => candidate.function.name === toolName)
   const parameters = asRecord(tool?.function.parameters)
   const generated = asRecord(generateGoldenStructuredValue(parameters)) ?? {}
@@ -131,22 +205,126 @@ function availableToolNames(request: GoldenChatCompletionRequest): Set<string> {
   return new Set(request.tools?.map((tool) => tool.function.name) ?? [])
 }
 
-function hasCompletedToolCall(request: GoldenChatCompletionRequest, toolName: string): boolean {
-  const toolNameByCallId = new Map<string, string>()
-  for (const message of request.messages) {
-    if (!Array.isArray(message.tool_calls)) continue
-    for (const toolCall of message.tool_calls) {
-      const record = asRecord(toolCall)
-      const fn = asRecord(record?.function)
-      if (typeof record?.id !== 'string' || typeof fn?.name !== 'string') continue
-      toolNameByCallId.set(record.id, fn.name)
-    }
+const FREEFORM_REQUEST_MARKERS = [
+  GOLDEN_FREEFORM_TEXT_REQUEST,
+  GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_FREEFORM_RETRY_REQUEST,
+  GOLDEN_FREEFORM_VIDEO_REQUEST,
+  GOLDEN_FREEFORM_AUDIO_REQUEST,
+  GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_REQUEST,
+] as const
+
+function messageContentText(message: GoldenChatCompletionRequest['messages'][number]): string {
+  if (typeof message.content === 'string') return message.content
+  return message.content === undefined ? '' : JSON.stringify(message.content)
+}
+
+function latestFreeformInstruction(request: GoldenChatCompletionRequest): { readonly index: number; readonly text: string } | null {
+  for (let index = request.messages.length - 1; index >= 0; index -= 1) {
+    const message = request.messages[index]
+    if (message?.role !== 'user') continue
+    const text = messageContentText(message)
+    if (FREEFORM_REQUEST_MARKERS.some((marker) => text.includes(marker))) return { index, text }
   }
-  return request.messages.some((message) => (
-    message.role === 'tool'
-    && typeof message.tool_call_id === 'string'
-    && toolNameByCallId.get(message.tool_call_id) === toolName
+  return null
+}
+
+function calledToolsAfter(request: GoldenChatCompletionRequest, messageIndex: number): ReadonlySet<string> {
+  const called = new Set<string>()
+  request.messages.slice(messageIndex + 1).forEach((message) => {
+    if (!Array.isArray(message.tool_calls)) return
+    message.tool_calls.forEach((toolCall) => {
+      const fn = asRecord(asRecord(toolCall)?.function)
+      if (typeof fn?.name === 'string') called.add(fn.name)
+    })
+  })
+  return called
+}
+
+function parseMessageJson(message: GoldenChatCompletionRequest['messages'][number]): unknown {
+  if (typeof message.content !== 'string') return message.content
+  try {
+    return JSON.parse(message.content) as unknown
+  } catch {
+    return null
+  }
+}
+
+function collectResourceRecords(value: unknown, output: Record<string, unknown>[]): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectResourceRecords(item, output))
+    return
+  }
+  const record = asRecord(value)
+  if (!record) return
+  const resource = asRecord(record.resource)
+  if (resource && typeof resource.resourceId === 'string') output.push(resource)
+  Object.values(record).forEach((item) => collectResourceRecords(item, output))
+}
+
+function listedResourceRecords(request: GoldenChatCompletionRequest): readonly Record<string, unknown>[] {
+  const records: Record<string, unknown>[] = []
+  request.messages
+    .filter((message) => message.role === 'tool')
+    .forEach((message) => collectResourceRecords(parseMessageJson(message), records))
+  return [...new Map(records.map((record) => [String(record.resourceId), record])).values()]
+}
+
+function resourceReferences(request: GoldenChatCompletionRequest, mediaType: 'image' | 'video'): readonly Record<string, unknown>[] {
+  return listedResourceRecords(request).flatMap((resource) => {
+    if (resource.mediaType !== mediaType || resource.status !== 'ready') return []
+    const revision = asRecord(resource.headRevision)
+    if (
+      typeof resource.resourceId !== 'string'
+      || typeof revision?.revisionId !== 'string'
+      || typeof revision.fingerprint !== 'string'
+    ) return []
+    return [{
+      resourceId: resource.resourceId,
+      revisionId: revision.revisionId,
+      fingerprint: revision.fingerprint,
+      role: 'reference',
+    }]
+  })
+}
+
+function failedResourceIds(request: GoldenChatCompletionRequest): readonly string[] {
+  return listedResourceRecords(request).flatMap((resource) => (
+    resource.status === 'failed' && typeof resource.resourceId === 'string' ? [resource.resourceId] : []
   ))
+}
+
+function selectFreeformTool(request: GoldenChatCompletionRequest): string | null | undefined {
+  const instruction = latestFreeformInstruction(request)
+  if (!instruction) return undefined
+  const hasTaskUpdateAfterInstruction = request.messages
+    .slice(instruction.index + 1)
+    .some((message) => messageContentText(message).includes('[task_update]'))
+  if (hasTaskUpdateAfterInstruction) return null
+  const available = availableToolNames(request)
+  const called = calledToolsAfter(request, instruction.index)
+  const choose = (toolName: string): string | null => available.has(toolName) && !called.has(toolName) ? toolName : null
+  if (instruction.text.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) return choose('create_text')
+  if (instruction.text.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) return choose('create_image')
+  if (instruction.text.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) return choose('create_video')
+  if (instruction.text.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
+    if (!called.has('list_resources')) return choose('list_resources')
+    return choose('create_image')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) {
+    if (!called.has('list_resources')) return choose('list_resources')
+    return choose('create_video')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) {
+    if (!called.has('list_resources')) return choose('list_resources')
+    return choose('create_audio')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) {
+    if (!called.has('list_resources')) return choose('list_resources')
+    return choose('adopt_resource')
+  }
+  return null
 }
 
 function messageText(request: GoldenChatCompletionRequest): string {
@@ -521,6 +699,8 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
 }
 
 function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
+  const freeformTool = selectFreeformTool(request)
+  if (freeformTool !== undefined) return freeformTool
   const available = availableToolNames(request)
   const alreadyCalled = new Set<string>()
   for (const message of request.messages) {
@@ -531,18 +711,19 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
       if (typeof fn?.name === 'string') alreadyCalled.add(fn.name)
     }
   }
-  const workflowPosition = readWorkflowPosition(request)
-  if (workflowPosition === 'video_segments:ready') {
+  const mainlinePosition = readMainlinePosition(request)
+  if (mainlinePosition === 'final_render:completed') return null
+  if (mainlinePosition === 'video_segments:ready') {
     if (!messageText(request).includes(GOLDEN_REMAINING_VIDEO_REQUEST)) return null
     if (available.has('generate_video_segments') && !alreadyCalled.has('generate_video_segments')) {
       return 'generate_video_segments'
     }
   }
-  const choiceTool = workflowPosition ? WORKFLOW_POSITION_CHOICE_TOOL[workflowPosition] : undefined
+  const choiceTool = mainlinePosition ? MAINLINE_POSITION_CHOICE_TOOL[mainlinePosition] : undefined
   if (choiceTool && available.has(choiceTool) && !alreadyCalled.has(choiceTool)) {
     return choiceTool
   }
-  const recommendedOperation = readWorkflowRecommendedOperation(request)
+  const recommendedOperation = readMainlineRecommendedOperation(request)
   if (recommendedOperation && available.has(recommendedOperation) && !alreadyCalled.has(recommendedOperation)) {
     return recommendedOperation
   }
@@ -551,22 +732,16 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
   )) ?? null
 }
 
-function readWorkflowPosition(request: GoldenChatCompletionRequest): string | null {
+function readMainlinePosition(request: GoldenChatCompletionRequest): string | null {
   const text = messageText(request)
-  const step = text.match(/(?:^|\n)workflowStep=([^\n]+)/)?.[1]?.trim() ?? null
-  const status = text.match(/(?:^|\n)workflowStatus=([^\n]+)/)?.[1]?.trim() ?? null
+  const step = text.match(/(?:^|\n)mainlineStep=([^\n]+)/)?.[1]?.trim() ?? null
+  const status = text.match(/(?:^|\n)mainlineStatus=([^\n]+)/)?.[1]?.trim() ?? null
   return step && status ? `${step}:${status}` : null
 }
 
-function readWorkflowRecommendedOperation(request: GoldenChatCompletionRequest): string | null {
-  const operation = messageText(request).match(/(?:^|\n)workflowRecommendedOperation=([^\n]+)/)?.[1]?.trim() ?? null
+function readMainlineRecommendedOperation(request: GoldenChatCompletionRequest): string | null {
+  const operation = messageText(request).match(/(?:^|\n)mainlineRecommendedOperation=([^\n]+)/)?.[1]?.trim() ?? null
   return operation && operation !== 'none' ? operation : null
-}
-
-function readWorkflowOperationGroupIds(request: GoldenChatCompletionRequest): readonly string[] {
-  const raw = messageText(request).match(/(?:^|\n)workflowOperationGroupIds=([^\n]+)/)?.[1]?.trim() ?? ''
-  if (!raw || raw === 'none') return []
-  return Array.from(new Set(raw.split(',').map((value) => value.trim()).filter(Boolean)))
 }
 
 export function decideGoldenModelResponse(input: {
@@ -580,20 +755,6 @@ export function decideGoldenModelResponse(input: {
     return {
       kind: 'text',
       text: structuredText,
-    }
-  }
-
-  const groupedToolNames = readWorkflowOperationGroupIds(input.request)
-    .filter((toolName) => availableToolNames(input.request).has(toolName))
-    .filter((toolName) => !hasCompletedToolCall(input.request, toolName))
-  if (groupedToolNames.length > 1) {
-    return {
-      kind: 'tool_calls',
-      calls: groupedToolNames.map((toolName, index) => ({
-        toolCallId: `golden_call_${input.requestOrdinal}_${String(index + 1)}`,
-        toolName,
-        argumentsJson: JSON.stringify(buildToolArguments(input.request, toolName)),
-      })),
     }
   }
 

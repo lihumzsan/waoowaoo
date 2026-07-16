@@ -45,6 +45,7 @@
 - 音乐模型时长曾以少量固定 options 声明，调用方又自行选择时长，连续值会在模型能力校验前被拒绝。当前 range 只在 registry 声明为 120–180 秒，调用方读取 registry；provider contract 同时反证范围漂移、整数限制和 wire 丢失。
 - 最终三路音频曾因 AAC priming、不同 EOF 和 `-shortest` 在真实组合中挂起或截短。当前只有原生音轨与 BGM 两类输入，全部服从 stitched duration、显式 `-t` 和 bounded FFmpeg；真实 FFmpeg Critical 场景承担短原声与较长 M4A BGM 的历史反例。
 - 旧声音提案曾加入“观看和听取最终视频”作为语义质量裁决，会制造第二套状态解释和不可重复 oracle。当前规划只消费锁定文本事实与时长/identity 元数据，候选 QC 只消费新生成 PCM 的技术指标；任何最终媒体语义分析都不是声音阶段能力。
+- Episode media View 曾要求 FinalOutput 记录先存在，导致已持久化的 BgmDesign/MusicScore 只能依赖 Workflow 占位或短暂 stream 显示；解除顺序控制后，BGM 在规划终态与最终渲染之间消失。当前聚合 View 由 BgmDesign、MusicScore、FinalOutput 任一真实资源建立，三者仍各自保留 canonical identity，缺少 FinalOutput 时绝不伪造最终成片记录或专用卡片。
 
 ## 修改检查表
 

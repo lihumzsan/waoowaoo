@@ -33,6 +33,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-12 — EditBible 成功事务持锁。** `persistGeneratedEditBibleBundle` 必须从事务第一步 `FOR UPDATE` 锁定 Bible，并校验 id、episode、sourceDocument、generationTaskId 与 generating。source read、bundle validation、chapter/style/Bible 全部写入在同一持锁事务，最终以完整 owner fence CAS；旧 Task 成功、失败或取消不得覆盖新 owner。
 - **TL-13 — 单 attempt 外部执行至多一次。** Task 中每一个媒体、LLM 与 vision 生成单元必须在发出请求前以 `taskId + executionFingerprint + invocationKey + requestHash` 持久化唯一 invocation fence，并以 DB `Task.attempt` 作为提交资格版本。一个逻辑 invocation 在同一 attempt 只能提交一次；明确成功结果持久化为 `submitted` 并可重放，成功的同批 cue/候选/章节不会因兄弟单元失败而重复生成。只有三类明确事实可把该 invocation 原子切为 `retryable_rejected`：provider 以 typed HTTP 状态证明未受理、结构化模型结果已返回但未通过输出校验、已持久化 external id 的 provider job 以共享协议明确进入 `retryable` 失败终态。仅更高 DB attempt 可重新取得该 invocation 的一次新提交权，同 attempt 与旧 attempt 禁止重提；不传旧输出或 issues，也不创建 repair prompt。明确永久 HTTP/业务拒绝与 async `permanent` 终态关闭 Task；POST 断连、超时、无类型 `success:false` 或响应无法证明是否受理时进入 `outcome_unknown`，任何 attempt 都禁止再提交。已受理且仍 pending 的 external id 只能继续 poll；poll 传输失败保留 external id，明确 retryable 终态失败先重开对应 invocation 再清除 external id。本地下载、对象存储或 DB 持久化失败不得重开 invocation，下一 attempt 重放已有 provider 结果并复用 `taskId + artifact identity` 稳定产物 key。Task 最终成功只由 Terminal Service 向用户结算一次；最终失败退回用户额度，平台承担已发生的外部成本。
 - **TL-14 — Durable command、checkpoint 与 resource row 只存有裁决力的事实。** Outbox command 由 `id + kind + payload identity` 裁决幂等与分派，provider checkpoint 由 `taskId + stepKey + invocation identity/hash/status` 裁决提交与重放；整集 BGM 规划由 `ProjectEditBgmDesign.taskId + designSignature + timelineSignature` 裁决，MusicScore 只以当前生成 `taskId + designSignature + timelineSignature` 裁决候选与 mix；ProjectVideoSegment 由 `(editScriptId, segmentId) + inputSignature + generationTaskId` 裁决。规划与媒体生成是独立 Task 时不得用同一可覆盖字段冒充两个 owner。不得在 DB 行和 JSON payload 中重复持久化永远固定、没有 writer/reader 分支的 `version/contractVersion`。真实并发 fence 必须保留；不兼容形状变更禁止双轨解析。
+- **TL-15 — 创作 Resource 与领域成功同终态交接。** 需要向 Agent/Canvas 暴露创作产物的 TaskDefinition 必须声明唯一 terminal output materializer。`commitTaskTerminal` 在同一事务中先完成 owner-fenced 领域 success projector，再为通用预留候选或专业 `sourceType + sourceId` 追加不可变 CreativeResourceRevision、Lineage 与 provenance；真实 Resource refs 必须合并进 Task result/Event 后才能唤醒 Wait。任一步失败时 Task 不得进入 completed。终态重放只能返回同一 Revision，专业 Task 失败/取消不得破坏旧成功 head；Terminal Event 必须同时发布原领域 impact 与 `creativeResources` impact，客户端不得用 TaskType 猜第二次刷新。
 
 ## 状态所有权
 
@@ -58,6 +59,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 | Outbox 投递次数与 dead-letter                     | `OutboxCommand.deliveryCount` / Outbox worker                                      | dispatcher、告警与人工处理                                  |
 | Assistant continuation 投递耗尽结算              | `settleProjectAgentWaitContinuationDeliveryExhausted`                              | Outbox worker 只在结算成功后写 dead                          |
 | Canvas 正式 Query 内容                            | Query service / React Query fetch                                                   | Canvas projection；Task Event 只触发 invalidate/refetch     |
+| 异步创作 Revision、Lineage 与 Agent output refs   | `commitTaskTerminal` 内的 Creative Resource materializer                           | Resource Query、Canvas、Task continuation                   |
 | Worker/Redis/Reconciler/Outbox 运行参数           | `workers/runtime-config.ts` 与 `redis-config.ts`                                   | worker constructors、provider async wait、dispatcher、reconciler、Redis clients  |
 
 ## 权威入口
@@ -74,6 +76,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - Task 查询 route：`src/app/api/tasks/**` 与 `src/app/api/task-target-states/**` 只投影 Task service/operation 的权威状态，不得从 payload、历史消息或轮询次数重建生命周期。
 - 批准计划到整批 Task 的唯一入口：`src/lib/task/approved-plan-submitter.ts`；初次 Outbox 投递与 queued/absent 恢复都复用 `src/lib/task/enqueue.ts` 的 execution-completed 门禁。
 - Task/Operation 资源影响声明与唯一 resolver：`src/lib/workspace-resource/resource-impact.ts`；同步 Operation 持久事件：`src/lib/workspace-resource/resource-change-events.ts`；终态通知与 Query 重新读取：`src/lib/query/workspace-sse-event-sync.ts`、`src/lib/query/resource-change-sync.ts`。
+- Task 终态创作产物物化：`src/lib/creative-resource/task-materializer.ts`；它只能由 Terminal Service 在终态事务内调用，Resource persistence/view 约束见 `creative-resource.md`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
 - Provider invocation fence：`src/lib/task/provider-invocation.ts`；媒体/LLM/vision 调用统一门禁：`src/lib/ai-exec/engine.ts`；稳定 Task 产物 key：`src/lib/task/artifact-storage.ts`。
 - Final/Chapter render 的 FFmpeg 子进程门禁：`src/lib/video-compose/ffmpeg-command.ts`；临时 PCM 与 canonical duration 混流：`src/lib/video-compose/final-render-audio.ts`。
@@ -90,6 +93,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/integration/task/final-render-ffmpeg.integration.test.ts` 使用真实 FFmpeg 反证短原声与两条 M4A 音频的编码尾差会截断或挂起最终混流，并验证临时原声为 PCM、最终容器服从 stitched canonical duration 且同时包含音视频流。
 - `tests/unit/task/{job-envelope,retry-policy,target-ownership,normalize-error,operation-result-normalizer}.test.ts` 与 `tests/unit/sse/{protocol,server-session}.test.ts` 只验证纯协议和 resolver 边界。
 - `tests/contracts/task-definition-conformance.test.ts` 从生产 Task registry 穷尽验证 queue、handler、billing、retry、execution 和 terminal projector 声明。
+- `tests/golden-journey/journeys/{mainline-complete,freeform-resources}.spec.ts` 通过真实 Task terminal、Outbox、SSE 和刷新验证专业/通用输出 Revision、Resource refs、精确失败重试与 Canvas 交接。
 - Task 相关静态 guards 只阻止已知第二 writer/入口重新出现，不作为 route → worker → DB 行为证明。
 ## 本批 migration 发布门禁（必须人工执行，当前未应用）
 
@@ -102,6 +106,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 5. `20260711030000` 会删除 `operationConfirmed`；因此 migration 与新应用必须作为同一维护窗口切换，禁止旧应用实例继续写入。
 6. `20260712233000` 会删除 Outbox、provider checkpoint、审批链和持久 JSON 中没有分流语义的固定标记；旧代码仍会写这些字段，新代码会 strict-reject 旧 JSON，因此必须在同一维护窗口先排空、迁移，再一次性切换全部应用与 worker。
 7. `20260715160000_unify_audio_design` 新增统一 `ProjectEditAudioDesign`，并把 BGM 生成资源切换到 `designSignature`；它不再尝试改造即将删除、且历史物理表名不一致的环境音表。`20260715190000_remove_ambient_sound` 删除两种历史环境音表名和 sound-effect 配置列，把唯一规划表切换为 `project_edit_bgm_designs`，并将不兼容的旧设计失效为 `pending`，强制经唯一 BGM planner 重新规划。应用本次迁移前必须排空旧 BGM/环境音规划、两类生成 Task 与 final render；本仓只创建 migration，未授权也未执行任何共享数据迁移。
+8. `20260717120000_add_creative_resource_spine` 只新增 Resource/Revision/Lineage/Binding 表与引用，不删除或改写既有专业领域表；本仓只创建并验证 migration 文件，没有授权执行任何共享或生产数据 migration。
 
 ## 历史回归
 

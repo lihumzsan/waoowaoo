@@ -36,7 +36,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function assertOperationGroupWait(
+function assertOperationWait(
   oracle: GoldenOracleSnapshot,
   operationIds: readonly string[],
 ): readonly Record<string, unknown>[] {
@@ -358,11 +358,10 @@ async function assertAudioNodeVisibility(
   await expect(page.locator('article[data-node-id^="ambientSound:"]')).toHaveCount(0, { timeout: 30_000 })
 }
 
-async function assertFinalTimelineVisibility(
+async function assertNoDedicatedFinalCard(
   page: import('@playwright/test').Page,
-  expectedCount: 0 | 1,
 ): Promise<void> {
-  await expect(page.locator('article[data-node-id^="final:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+  await expect(page.locator('article[data-node-id^="final:"]')).toHaveCount(0, { timeout: 30_000 })
 }
 
 async function assertAllScopeVideoProjection(
@@ -581,7 +580,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   let reloadedCompletedPosition = false
   let observedAudioHiddenBeforeVideos = false
   let observedAudioVisibleAtAudioStage = false
-  let observedFinalTimelineHiddenBeforeAudioCompletion = false
+  let observedNoDedicatedFinalCardDuringAudio = false
   let singleCanvasVideoSegmentId: string | null = null
   let requestedRemainingVideoBatch = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
@@ -615,9 +614,9 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       }
       if (workflow.step === 'audio_plan' || workflow.step === 'audio_generation') {
         await assertAudioNodeVisibility(page, 1)
-        await assertFinalTimelineVisibility(page, 0)
+        await assertNoDedicatedFinalCard(page)
         observedAudioVisibleAtAudioStage = true
-        observedFinalTimelineHiddenBeforeAudioCompletion = true
+        observedNoDedicatedFinalCardDuringAudio = true
       }
       if (workflow.status === 'processing' && !reloadedProcessingPositions.has(workflowPosition)) {
         reloadedProcessingPositions.add(workflowPosition)
@@ -691,10 +690,10 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       )
       expect(new Set(videoTasks.map((task) => task.targetId)).size).toBe(oracle.domain.videoSegments.length)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
-      const bgmPlanTasks = assertOperationGroupWait(oracle, ['plan_episode_bgm_design'])
+      const bgmPlanTasks = assertOperationWait(oracle, ['plan_episode_bgm_design'])
       expect(bgmPlanTasks.map((task) => task.type)).toEqual([TASK_TYPE.BGM_DESIGN_PLAN])
       expect(bgmPlanTasks.every((task) => task.approvalGrantId === null)).toBe(true)
-      const bgmGenerationTasks = assertOperationGroupWait(oracle, ['generate_episode_bgm_score'])
+      const bgmGenerationTasks = assertOperationWait(oracle, ['generate_episode_bgm_score'])
       expect(bgmGenerationTasks.map((task) => task.type)).toEqual([TASK_TYPE.MUSIC_SCORE_GENERATE])
       expect(bgmGenerationTasks.every((task) => typeof task.approvalGrantId === 'string')).toBe(true)
       expect(bgmPlanTasks.every((task) => task.status === 'completed')).toBe(true)
@@ -734,12 +733,18 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(musicCandidates.filter((candidate) => asRecord(candidate)?.selected === true)).toHaveLength(1)
       expect(asRecord(musicScore?.mixJson)).not.toBeNull()
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
-      await assertFinalTimelineVisibility(page, 1)
+      const renderedResources = oracle.resources.filter((resource) => resource.schemaId === 'project.rendered_video')
+      expect(renderedResources).toHaveLength(1)
+      expect(renderedResources[0]).toMatchObject({ mediaType: 'video', status: 'ready' })
+      const renderedResourceId = renderedResources[0]?.id
+      if (typeof renderedResourceId !== 'string') throw new Error('GOLDEN_RENDERED_RESOURCE_ID_MISSING')
+      await assertNoDedicatedFinalCard(page)
+      await expect(page.locator(`article[data-node-id="${workspaceNodeId.resourceCard(renderedResourceId)}"] video[src]`)).toHaveCount(1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)
       expect(observedAudioVisibleAtAudioStage, 'main Journey must observe audio nodes at the audio stage').toBe(true)
       expect(
-        observedFinalTimelineHiddenBeforeAudioCompletion,
-        'main Journey must not expose final rendering before BGM is complete',
+        observedNoDedicatedFinalCardDuringAudio,
+        'main Journey must never expose a dedicated final-output card',
       ).toBe(true)
       const streamContinuity = await readCanvasStreamContinuity(page)
       expect(streamContinuity.seenIds.length, 'main Journey must observe at least one structured-stream Canvas node').toBeGreaterThan(0)

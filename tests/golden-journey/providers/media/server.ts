@@ -70,6 +70,7 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
   const falRequests = new Map<string, GoldenFalRequest>()
   let requestOrdinal = 0
   let statusDelayMs = 0
+  let failNextFalRequests = 0
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', requestOrigin(request))
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -87,6 +88,22 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
         }
         statusDelayMs = delayMs as number
         writeJson(response, 200, { ok: true, delayMs: statusDelayMs })
+      }).catch((error: unknown) => {
+        writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+      })
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/__golden/fail-next-fal') {
+      void readJsonBody(request).then((body) => {
+        const record = body && typeof body === 'object' && !Array.isArray(body)
+          ? body as Record<string, unknown>
+          : null
+        const count = record?.count
+        if (!Number.isInteger(count) || (count as number) < 0 || (count as number) > 20) {
+          throw new Error(`GOLDEN_MEDIA_FAILURE_COUNT_INVALID:${String(count)}`)
+        }
+        failNextFalRequests = count as number
+        writeJson(response, 200, { ok: true, count: failNextFalRequests })
       }).catch((error: unknown) => {
         writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
       })
@@ -162,6 +179,14 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
       return
     }
     if (request.method === 'POST') {
+      if (failNextFalRequests > 0) {
+        failNextFalRequests -= 1
+        writeJson(response, 422, {
+          detail: [{ type: 'golden_controlled_permanent_rejection' }],
+          error: 'GOLDEN_CONTROLLED_PROVIDER_FAILURE',
+        })
+        return
+      }
       requestOrdinal += 1
       const id = `golden_fal_${requestOrdinal}`
       const kind = falRequestKind(url.pathname)

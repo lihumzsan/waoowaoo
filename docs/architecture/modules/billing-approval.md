@@ -6,11 +6,11 @@
 
 确认不是“调用了 AI 就询问用户”的通用开关。只有执行前可以确定具体媒体输入与价格的收费媒体，才需要媒体报价确认。LLM 文本规划默认无需媒体确认；删除或不可逆覆盖属于破坏性确认，不伪装成媒体报价。
 
-收费媒体的正确顺序是：先生成最终计划，再准确报价，再由用户批准，最后只提交同一计划中的任务。用户批准的是具体工作，不是一个未来可能发生的最大额度。
+收费媒体的正确顺序是：先生成最终计划，再准确报价，再由用户批准，最后只提交同一计划中的任务。用户批准的是具体工作，不是一个未来可能发生的最大额度。本系统当前不提供 Run 预算授权、自动批准或“跳过所有计费确认”模式。
 
 ## 不变量
 
-- **BA-00A — 组审批只展示计费项。** 同一模型 step 的声明式 Operation group 中，只要存在需要审批的计费成员，整组 Tool call 必须共同冻结在一个持久 Approval interruption 中；`approvalItems` 保存全部 SDK call identity，`operationPlan`/quote 只来自真正计费的成员。批准恢复原 serialized RunState 并一次放行全部成员，禁止第二次模型推理、非计费成员提前执行或创建业务专用组合 Operation。
+- **BA-00A — 一次收费 Operation 对应一次精确 Approval。** Runtime 每个模型 step 最多执行一个 Operation。收费 Tool call 的持久 Approval 只保存该次 SDK call identity、不可变 plan、quote 和 serialized RunState；批准后恢复同一调用，拒绝则零 Task。多个候选属于同一个 Operation plan/Task batch，可以在一张报价卡中准确计价，但不得把不同动作合并成 Workflow group 或未来预算。
 
 - **BA-01 — 审批分类唯一。** `none`、`billable_media`、`destructive` 是 operation confirmation 的唯一分类；LLM 文本任务必须显式属于 `none`，不是漏配后的默认值。
 - **BA-02 — 精确计划先于媒体审批。** `billable_media` 的审批前必须确定真实 Task、目标、模型、输入、数量和准确报价。需要 LLM 先生成媒体 Prompt 的用户可见长流程必须先作为独立文本 Task 完成；媒体 plan 只读其持久结果，不得在 approval preflight 调用 LLM、写领域记录或形成第二生命周期。不得先批准、再让 LLM 或媒体 worker 决定实际收费内容。
@@ -31,9 +31,10 @@
 - **BA-17 — 直接 UI 批准只能消费当前展示计划。** Canvas 等直接操作入口可以把用户点击已展示价格的按钮视为批准，但按钮必须持有完整 `OperationPlanView`，Grant 与 execute 必须消费该 View 的同一 `planSnapshotId`；Canvas 按钮正文只展示紧凑的“动作 + 格式化价格”，完整任务数与预计消耗通过同一 quote 的 title/可访问标签提供。禁止预览 plan A、点击后重新 plan B，或用不展示报价的普通按钮提交收费媒体。所有 Canvas 收费 action 只能经过 `CanvasActionButton`，免费规划与非计费合成不得伪装成收费按钮。
 - **BA-18 — Episode scope 由计划产物裁决，目标 scope 由动作显式携带。** planner 必须从经过 project ownership 校验的真实 target 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝同一计划包含多个 episode，并以计划 Task scope 为 canonical episode。单个 chapter-owned 资源的 Canvas action 与 plan input 必须携带所属 `chapterId`；单个 Segment 还必须携带 `editScriptId + segmentId`。registry 在 planner 前拒绝缺失或不完整 scope，禁止通过默认章节、数组位置或最近记录推断。execute 只校验 session、project、operation 与可选的显式 scope 限制，commit context 必须从已批准 snapshot 注入 episode；禁止要求客户端在批准后重复提交同一 episode 事实或从 route body 重建 scope。
 - **BA-19 — 计划只因内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验由 `invokeApprovedOperationPlan` 重新调用当前 registry definition 的纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才进入 Grant 锁事务消费，任一变化必须在该事务撤销 Grant，且不得创建 Execution、Task、冻结或 Outbox。已完成 Execution 的幂等重放直接返回同一持久 output，不得因后续计划变化重新执行。planner 必须对相同事实确定性输出；随机预留 identity、时间戳或调用顺序不得进入计划 Hash。
-- **BA-20 — 组批准不合并执行身份。** 一个 Approval 卡可以合计展示多个收费 Operation 的 quote，但每个 member 仍必须持有自己的 `OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链；合计 View 不得携带或冒充任一 snapshot identity。用户批准后，全部 member Grant 必须在一个事务中签发，任一 snapshot 缺失、越权或不可用则整组零签发；Task/Wait 继续由各 member 的独立 plan commit 与通用 Operation Group barrier 原子汇合。
+- **BA-20 — Approval 不跨 Operation 合并执行身份。** 一个 Approval 卡只对应当前收费 Operation 的 `OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链。计划中的多个 PlannedTask 仍由一次 commit 原子提交并绑定同一个 Wait；不得把不同 Operation 的 quote 合计成一个授权，也不得从一张卡签发多个不相干 Grant。
 - **BA-21 — 计划必须在批准前证明 Task 资源作用域结构完整。** quote 与不可变 snapshot 写入都必须从 `TaskDefinition.terminalResourceImpact` 穷尽解析每个 PlannedTask 的必需 project/episode scope；最终 Task 提交还必须在写入前验证 episode 真实属于该 project。禁止让缺失必需 scope 的计划先获得报价或 Grant，也禁止让越权 scope 写入任何 Task。Operation planner、snapshot writer 和 Task submitter 必须复用同一个 resolver，不得各自维护 TaskType 或资源名单。
 - **BA-22 — 已运行 Task 是不可变计划依赖，不是待提交 Task。** planner 发现同 canonical target、同输入签名的 active Task 时，必须把其完整 identity、TaskType、target 与 episode 冻结为 `OperationPlan.taskDependencies`，并从报价与新 Task 列表中排除。snapshot writer 在批准前校验该 Task 仍 active 且属于同一 user/project/episode/type/target；变化则使计划失效并重新报价。批准 commit 不得重新提交或重复收费 dependency；Assistant 只能把它与本次新 Task 原子加入同一个 Wait。同签名 completed target 直接跳过，active target 输入签名冲突必须显式失败，禁止覆盖运行中的生成。
+- **BA-23 — 失败重试重新报价，不继承授权。** Agent 可以根据 Task terminal 的失败 refs 显式调用同一或其他收费 Operation，但每次调用都必须重新构造当前 exact plan/quote 并等待新的 Approval。失败 Task、旧 Grant、同一 Run 或用户先前的批准均不构成预算授权；系统不得自动批准或在后台静默重提收费工作。
 
 ## 权威入口
 
@@ -80,7 +81,7 @@
 
 ## 历史回归
 
-- BGM 与环境音首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 `issueApprovalGrant`。这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。通用 `approvalItems`/`issueApprovalGrantGroup` 原子组能力仍保留并由跨媒体集成场景验证；声音阶段现在只有一个 BGM 收费 Operation，主 Golden 只允许一个对应 Grant/Execution。
+- BGM 与环境音首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 Grant issuer；这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。当前 runtime 每个模型 step 只有一个 Operation，声音阶段也只剩一个 BGM 收费 Operation；一张 Approval 只授权一条 exact plan/Grant/Execution 链，主 Golden 拒绝跨 Operation 合并或额外收费任务。
 
 - 旧 Soundscape 曾使用“最多 12 个音源”的上限授权，BGM 与环境音又各自维护文本 plan；统一 AudioDesign 后仍保留两种收费能力。当前免费的 `plan_episode_bgm_design / BGM_DESIGN_PLAN` 唯一持久化严格 BgmDesign；唯一收费 `generate_episode_bgm_score` 只消费该冻结设计和签名，并按恰好两个候选报价。计费 `apiType` 已删除音效类别。
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。

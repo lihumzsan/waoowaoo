@@ -5,7 +5,7 @@ import type {
 
 export interface GoldenScenarioContract {
   readonly id: string
-  readonly kind: 'mainline' | 'security'
+  readonly kind: 'mainline' | 'freeform' | 'security'
   readonly title: string
   readonly startStep: EditFirstWorkflowStep | 'outside_workflow'
   readonly expectedTerminal: Readonly<{

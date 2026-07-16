@@ -86,4 +86,21 @@ describe('Golden local media provider', () => {
     })
   })
 
+  it('injects an exact number of permanent FAL submission rejections', async () => {
+    runningServer = await startGoldenMediaServer()
+    const control = await fetch(`${runningServer.baseUrl}/__golden/fail-next-fal`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ count: 2 }),
+    })
+    await expect(control.json()).resolves.toEqual({ ok: true, count: 2 })
+
+    const baseUrl = runningServer.baseUrl
+    const responses = await Promise.all([0, 1, 2].map(async () => await fetch(
+      `${baseUrl}/openai/gpt-image-2`,
+      { method: 'POST' },
+    )))
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 422, 422])
+  })
+
 })

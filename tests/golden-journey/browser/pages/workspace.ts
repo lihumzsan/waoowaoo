@@ -54,14 +54,14 @@ export async function readGoldenWorkflowProjection(
   if (!isGoldenWorkflowStatus(status)) {
     throw new Error('GOLDEN_CONTEXT_WORKFLOW_STATUS_INVALID')
   }
-  const operationPolicy = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
-    ? (workflow as Record<string, unknown>).operationPolicy
+  const recommendation = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).recommendation
     : null
-  const recommendedAction = operationPolicy && typeof operationPolicy === 'object' && !Array.isArray(operationPolicy)
-    ? (operationPolicy as Record<string, unknown>).recommendedAction
+  const recommendedAction = recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation)
+    ? (recommendation as Record<string, unknown>).recommendedAction
     : null
   const recommendedActionId = recommendedAction && typeof recommendedAction === 'object' && !Array.isArray(recommendedAction)
-    ? (recommendedAction as Record<string, unknown>).id
+    ? (recommendedAction as Record<string, unknown>).operationId
     : null
   return {
     step,
@@ -205,6 +205,7 @@ export async function readGoldenMainlineBoundary(page: Page): Promise<GoldenMain
   if (await visible(page, '审核角色与场景资产')) return 'asset_review'
   if (await visible(page, '需要确认')) return 'approval'
   if (await page.getByLabel('成片时间线', { exact: true }).count() > 0) return 'final_output'
+  if (await visible(page, /project\.rendered_video:/, false)) return 'final_output'
   if (await visible(page, /最终成片|最终视频已完成|制作完成/, false)) return 'final_output'
   return 'waiting'
 }

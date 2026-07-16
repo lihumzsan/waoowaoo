@@ -34,3 +34,13 @@ export async function setGoldenMediaStatusDelay(delayMs: number): Promise<void> 
   })
   if (!response.ok) throw new Error(`GOLDEN_MEDIA_DELAY_HTTP_${String(response.status)}`)
 }
+
+export async function failNextGoldenFalRequests(count: number): Promise<void> {
+  const descriptor = await readGoldenEnvironmentDescriptor()
+  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/fail-next-fal`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ count }),
+  })
+  if (!response.ok) throw new Error(`GOLDEN_MEDIA_FAILURE_CONTROL_HTTP_${String(response.status)}`)
+}

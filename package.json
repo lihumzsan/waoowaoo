@@ -104,7 +104,7 @@
     "check:prompt-i18n-regression": "node scripts/guards/prompt-semantic-regression.mjs",
     "billing:cleanup-pending-freezes": "tsx scripts/billing-cleanup-pending-freezes.ts",
     "billing:reconcile-ledger": "tsx scripts/billing-reconcile-ledger.ts",
-    "test:journey": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/golden-journey/self-tests && tsx tests/golden-journey/runtime/verify-mounts.ts && tsx tests/golden-journey/runtime/verify-service-isolation.ts && cross-env GOLDEN_MODEL_SCENARIO=normal-mainline playwright test --config tests/golden-journey/playwright.config.ts mainline-complete.spec.ts auth-project-permission.spec.ts asset-hub-ownership.spec.ts",
+    "test:journey": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/golden-journey/self-tests && tsx tests/golden-journey/runtime/verify-mounts.ts && tsx tests/golden-journey/runtime/verify-service-isolation.ts && cross-env GOLDEN_MODEL_SCENARIO=normal-mainline playwright test --config tests/golden-journey/playwright.config.ts mainline-complete.spec.ts freeform-resources.spec.ts auth-project-permission.spec.ts asset-hub-ownership.spec.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime-scripts.json",
     "lint:all": "npm run lint -- .",
     "security:secrets:staged": "node scripts/security/secret-scan.mjs --staged",

@@ -13,7 +13,7 @@
 - **TG-01 — 独立 oracle。** 期望结果来自用户目标、模块不变量、生产 registry 或已确认历史事实，不得从当前实现、mock 返回值、源码字符串、文件名或调用次数反推。
 - **TG-02 — 测试准入。** 修改生产代码不自动要求新增测试。新证据只能是主 Journey、必要安全 Journey、Critical Infrastructure、非平凡 Logic、Registry Conformance 或 Harness fail-closed 自测。
 - **TG-03 — 真实主链。** Journey 不得 mock 被测系统自己的 UI、route、service、状态机、数据库、队列、worker、Outbox、SSE 或 projector。只替代付费或不可控外部模型与媒体系统。
-- **TG-04 — 一个产品主线。** 创作产品只有 `GJ-MAIN-STORY-TO-FINAL-DELIVERABLE` 一条主 Journey。它从空项目开始，至少生成两个章节和多个资产，经过最终成片，并在核心 processing 阶段刷新。
+- **TG-04 — 一条专业主线，一个自由组合反证。** `GJ-MAIN-STORY-TO-FINAL-DELIVERABLE` 是唯一完整制作主 Journey，从空项目生成至少两个章节、多个专业资产和最终视频。`GJ-FREEFORM-RESOURCE-COMPOSITION` 只反证主线无法覆盖的架构语义：空项目直接生成、跨媒体显式引用、多候选部分失败精确重试、Binding 与 Lineage；它不得克隆 14 个专业阶段或形成第二套 Workflow runner。
 - **TG-05 — 权威事实断言。** 主 Journey 同时断言浏览器无异常和只读持久事实：章节、逐章脚本、逐章镜头执行计划、多个资产需求、最终输出与持久 identity 无重复。只看到按钮、文案或最终页面不算完成。
 - **TG-06 — 最小安全边界。** 未登录、跨用户项目、跨项目资产三个所有权边界保留为独立 Journey，因为创作主线无法自然反证它们；普通 CRUD、i18n、部署展示等不得各建一条浏览器产品线。
 - **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、晚到、重复、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam，不再通过阶段克隆驱动浏览器变体。
@@ -30,8 +30,9 @@
 
 - Fast：`npm run test:fast`，聚合 `test:logic` 与 `test:conformance`。
 - Critical：`npm run test:critical`，聚合 provider、Task、billing 与 billing concurrency 的真实基础设施场景。
-- Journey：`npm run test:journey`，先运行 Harness 自测与隔离检查，再运行一条多章节主线和三个安全边界。
+- Journey：`npm run test:journey`，先运行 Harness 自测与隔离检查，再运行一条多章节专业主线、一条自由组合反证和三个安全边界。
 - 主 Journey：`tests/golden-journey/journeys/mainline-complete.spec.ts`。
+- 自由组合 Journey：`tests/golden-journey/journeys/freeform-resources.spec.ts`。
 - 安全边界：`auth-project-permission.spec.ts` 与 `asset-hub-ownership.spec.ts`。
 - Scenario identity：`tests/golden-journey/contracts/scenarios.ts`。
 - 只读持久 Oracle：`tests/golden-journey/oracle/**`。
@@ -54,6 +55,8 @@
 主 Journey setup 后只走生产写入路径。它使用稳定产品 selector，不使用 Browser Use、视觉模型或 AI 元素选择作为可重复证据。固定 sleep 只能形成可观察窗口，不能证明成功；成功必须收口到浏览器结果和只读持久事实。
 
 外部模型替身生成最小但不平凡的数据：至少两个可独立锚定的故事块，派生两个章节与多个资产。核心 processing 阶段刷新后必须恢复或前进；Style Bible、先完成全部章节计划再生成资产的持久时序、逐章镜头计划和媒体生成必须观察其 canonical Canvas identity。最终只允许一个 durable final output。
+
+自由组合 Journey 不按 Workflow 位置驱动工具；它只给模型自然语言目标，并由协议替身按可见 Resource/Task 事实选择生产 Tool。场景必须覆盖一次多候选部分失败、仅失败资源重试、成功资源零重复提交、图片 Revision 作为视频精确输入、视频 Revision 作为音频输入、候选 Binding 与刷新恢复，以及空项目直接文字转视频。Oracle 读取真实 Operation/Task/CreativeResource/Revision/Lineage/Binding；不得由测试 route 直接写这些事实。
 
 声音阶段的 Fast 证据以生产 strict BgmDesign schema、生产 registry 和确定性 DSP/QC 函数为 oracle，反证旧环境音字段回流、固定时长枚举、候选不足和 BGM 时间线缺口；Critical 证据用真实数据库 owner fence 反证晚到规划覆盖；主 Journey 从真实 route/Task/worker/DB 链路断言每集只有一个 BgmDesign、恰有两个 BGM 候选、选择结果绑定设计签名，旧环境音 Task/Operation/Canvas 节点为零，且最终只产生一个 durable output。外部模型和媒体仍只在协议边界由 Harness 替代。
 

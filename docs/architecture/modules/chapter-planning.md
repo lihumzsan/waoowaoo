@@ -8,7 +8,7 @@
 
 ## 不变量
 
-- **CP-00A — 章节需求先于资产生成完成。** `plan_chapters` 必须先完成本集全部章节的 EditScript 与资产 requirement 持久化，Workflow 才能开放 `generate_edit_script_assets`。二者禁止并行或共享 Operation Group；否则图片完成投影可能早于迟到 requirement，留下永久 pending。Canvas 可以提前投影已知资产，但只有 Workflow 的 `allowedOperationIds` 明确开放该 Operation 后才能展示动作或预取收费计划。资产审核面向本集唯一共享资产集。
+- **CP-00A — 资产生成只依赖本次显式作用域。** `plan_chapters` 与 `generate_edit_script_assets` 都是独立 Operation，不由 Workflow 先后关系开放或关闭。显式 chapter/EditScript/requirement scope 只要目标 requirement 已持久化即可生成；无显式目标的 episode-wide pending batch 必须先确认本集全部章节 requirement 已就绪，避免迟到 requirement 永久停在 pending。二者不得合并为跨 Operation Group；Canvas 只有在能构造完整显式 scope 时才展示或预取该动作。资产审核仍面向本集唯一共享资产集。
 - **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。provenance 只能由服务端投影，模型不得输出第二份事实台账。
 - **CP-02 — 核心镜头契约最小且严格。** structure 输出只包含场景、动作、人物表演、对白、同步声音、时长、连续性与 `generationSegments`。`visibility`、`role`、`keyObjects`、lighting、空间站位、blocking、机位与生成 Prompt 都不属于该契约；strict schema 必须拒绝未知字段。
 - **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、token overlap、embedding 或数组位置将模型文本解释为 canonical fact。
@@ -42,7 +42,7 @@
 - `994b738981` 曾把第二次 LLM 分镜 Prompt 改成纯函数，但保留了独立 Operation、route、TaskType、worker、Workflow 阶段与 Panel 实体；只替换实现没有删除旧解释权。后续“全能参考”又作为旁路追加，使图片 Panel 与资产参考同时能生成视频。本次防线是一次性删除 Storyboard/Panel/图片阶段、空间档案和旧双模式，只保留唯一 `ProjectVideoSegment` 入口。
 - 多章节旧链曾通过 `updatedAt desc`、数组位置与 panel fallback 推断归属，导致异步顺序改变时停在无法推进的阶段。当前计划、Segment、Task 与媒体全程显式传递 `editScriptId + segmentId`。
 - 核心计划曾让模型回传 UUID，Canvas、对白、最终时间线与环境音又以 ID 作为缺名 fallback；当前 raw 模型协议只使用名称/短引用，服务端是唯一 identity resolver，UI 不回显 ID。
-- 章节规划与共享资产生成曾被放进同一并行 Operation Group；图片 Task 完成时，另一个章节的 requirement 可能尚未提交，完成投影只能更新当时已存在的行，迟到行永久停在 pending。首次改为串行后，Canvas 仍根据“已出现一个资产/脚本”提前挂载生成按钮并预取收费 plan，服务端只能以 episode gate 的 500 拒绝。旧 Golden 只证明 Task 时序，没有保持浏览器错误清洁。当前防线删除并行组，并让 Canvas 动作只消费 Workflow `allowedOperationIds`；完整 Journey 同时断言资产 Task 创建时间与零浏览器 5xx。
+- 章节规划与共享资产生成曾被放进同一并行 Operation Group；图片 Task 完成时，另一个章节的 requirement 可能尚未提交，完成投影只能更新当时已存在的行，迟到行永久停在 pending。首次改为串行后，Canvas 仍根据“已出现一个资产/脚本”提前挂载生成按钮并预取收费 plan，服务端只能以 episode gate 的 500 拒绝。旧 Golden 只证明 Task 时序，没有保持浏览器错误清洁。当前防线删除跨 Operation Group：显式 scoped 调用只校验该目标 requirement，无 scope 的 episode batch 原地要求全部 requirement ready；Canvas 只在自身领域事实足以构造完整输入时展示动作，完整 Journey 同时断言资产 Task 创建时间与零浏览器 5xx。
 - `d4fde69865` 将旧视频模式收敛为 `ProjectVideoSegment` 时，把 Canvas 单卡 action 退化为无目标的 episode 输入，planner 随后枚举全部 Segment；因此每张卡展示相同总价，点击一张也真实创建多个 Task，并非纯 UI 状态误显。旧 Logic 还把“episode-scoped canonical operation”写成 oracle，主 Golden 只走 Assistant 批量路径，防线反而固化了错误。当前仍保留唯一 Operation，但用共享穷尽 scope 区分 Canvas 精确单段与 Assistant pending 批量，服务端在报价前按持久状态跳过同签名 active/completed Segment；直接请求 Logic、planner policy 与主 Journey 的单卡后批量组合共同反证复发。
 - 本次是不兼容的 D 类协议切换。用户已决定废弃旧项目与旧数据，因此不提供 migration、backfill、fallback 或双轨 parser；新系统对旧形状显式失败。
 

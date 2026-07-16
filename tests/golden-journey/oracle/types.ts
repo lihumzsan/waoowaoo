@@ -25,6 +25,10 @@ export interface GoldenOracleSnapshot {
   readonly operationExecutions: readonly Record<string, unknown>[]
   readonly outboxCommands: readonly Record<string, unknown>[]
   readonly threads: readonly Record<string, unknown>[]
+  readonly resources: readonly Record<string, unknown>[]
+  readonly resourceRevisions: readonly Record<string, unknown>[]
+  readonly resourceLineage: readonly Record<string, unknown>[]
+  readonly resourceBindings: readonly Record<string, unknown>[]
   readonly domain: {
     readonly sourceDocuments: readonly Record<string, unknown>[]
     readonly bibles: readonly Record<string, unknown>[]

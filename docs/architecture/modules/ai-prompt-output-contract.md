@@ -18,6 +18,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - **AP-05 — 未知输出显式失败。** 结构化 raw schema 应在协议边界拒绝未知或缺失字段；不得静默删除、补默认、降级成自由文本或让下游消费者各自容错。协议失败与 Task retry/terminal 继续服从异步生命周期模块。
 - **AP-06 — Fixture 只是外部协议替身。** Golden provider fixture 必须通过同一生产 raw schema，但只能证明受控外部边界与内部真实主链兼容，不能证明真实模型必然服从 Prompt。Prompt 或 schema 变化时必须审计 fixture；不得让 fixture 自己定义期望协议。
 - **AP-07 — 流式展示无业务裁决权。** structured stream 只消费已声明 raw item、stable key 与 merge rule，提供可丢弃预览。stream parse rejection 不得写 Task/resource 失败，最终业务状态仍由 durable owner 决定。
+- **AP-08 — Freeform Playbook 不获得执行门禁。** 项目助手 Prompt 可以说明推荐完整制作配方、Choice 时机、失败重试和 Resource 引用规则，但不得把 recommendation 写成工具 allowlist 或固定 next step。所有注入 Tool 可调用；内在输入、owner/scope、provider capability、收费 Approval、破坏性确认和 Run fence 必须由代码 fail closed。Prompt 遗漏 Choice 或停止调用时不得伪造领域事实或死锁用户；UI 与下一次用户消息仍可调用同一开放 Operation。
 
 ## 权威入口
 
@@ -45,7 +46,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - 已删除的 location spatial profile、旧 Soundscape plan 与 source script 曾要求模型重复输出固定版本标记，但系统没有第二协议或 reader 分支；这些字段只会扩大 Prompt/schema/fixture 漂移面。当前声音阶段只有一个 strict `BgmDesign` raw schema，最终 identity 与 timeline signature 由服务端构造。
 - 核心剪辑、镜头执行计划与旧 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback。当前核心计划与 BgmDesign 统一使用 raw 名称/短引用/clip order，服务端解析成 final identity。
 - 2026-07 的分镜协议曾同时保留 Panel 图片链与全能参考旁路，Prompt owner 仍绑在旧链。当前核心镜头输出已缩减为动作/表演/对白/同步声音/连续性，执行计划只输出景别、运镜方式和运镜稳定性，视频 Prompt 只由 `src/lib/video-segments/prompt.ts` 构建。
-- 项目助手系统 Prompt 曾在视频链路重构中从每种语言 174 行整体重写为 56 行；推荐操作、Choice/Approval、并行组、Task continuation、失败边界、阶段审核和权限模式随旧媒体说明一起被删除。真实模型在视觉风格图片完成后只输出“请选择”，而 deterministic Golden provider 硬编码了正确 Choice 工具，既有 guard 又没有覆盖非结构化系统 Prompt 的关键行为语义。当前模板以重写前完整版本为基线，仅把已删除的 Spatial Profile、Storyboard/Panel/分镜图、旧视频入口、旧 Soundscape 和已不存在的结构化修复轮替换为 `ProjectVideoSegment`、`generate_video_segments` 与 BGM-only 声音动作；`prompt-semantic-regression` 对中英文同时要求完整段落与关键闭环 token，并拒绝旧链 token。该 guard 只能反证契约被删除或旧链复入，不能证明真实外部模型服从 Prompt。
+- 项目助手系统 Prompt 曾在视频链路重构中从每种语言 174 行整体重写为 56 行；Choice/Approval、Task continuation、失败边界和权限模式随旧媒体说明一起被删除。真实模型在视觉风格图片完成后只输出“请选择”，而 deterministic Golden provider 硬编码了正确 Choice 工具，既有 guard 又没有覆盖非结构化系统 Prompt 的关键行为语义。后续完整 Prompt 又把 `allowedOperationIds`、并行 Operation group、固定下一步和“唯一视频入口”写成硬控制，导致 OpenAI Agents loop 被应用层限制成线性工具链。当前中英文模板保留沟通、真实回执、Choice/Approval、Task continuation、失败重试、视觉安全与权限边界，同时改为“完整 toolset + advisory mainline + Resource 精确引用”；`prompt-semantic-regression` 要求这些闭环 token并拒绝旧 allowlist/group/旧媒体链回流。该 guard 只能反证 Prompt 契约被删除或旧门禁复入，不能证明真实外部模型始终服从 Prompt。
 - BGM 与环境音曾各自拥有结构化规划 Prompt、parser、Task 和资源侧计划字段，同一声音时间线由两条状态机分别解释；后续 AudioDesign 虽统一文本规划，仍输出两类生成事实。当前 `BGM_DESIGN_PLAN` 是唯一声音规划协议，输入仅含锁定剧本与渲染 clip 的 identity/duration 元数据；Prompt 明确禁止观看视频帧、分析原生音轨、最终视频或最终混音，并只输出 scorePresence、唯一整片 scoreCue 与 score/master automation。
 - 一分钟创作简报曾生成 1757 字源剧本并被全局规划估成 275 秒；首次纠正只强化源剧本 Prompt，又用“每个 Beat 通常 15-45 秒”的通用区间估时。真实复发中，源剧本已压缩为单场、4 个 Beat、509 字，但全局规划仍按固定区间估成 115 秒，证明旧防线没有覆盖“紧凑剧本 + 多 Beat”的真实组合。当前防线让源剧本按用户时长控制全部正文规模，同时要求 Beat 时长只从对白、动作、反应、停顿和转场的实际表演时间派生；Beat 数量不得成为扩大片长的第二解释源。尚未用真实模型重复生成该案例，模型服从性仍是未验证盲区。
 

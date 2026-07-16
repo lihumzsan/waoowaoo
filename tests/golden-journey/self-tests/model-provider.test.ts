@@ -3,6 +3,9 @@ import type { GoldenModelServer } from '../providers/model/server'
 import { startGoldenModelServer } from '../providers/model/server'
 import {
   decideGoldenModelResponse,
+  GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_FREEFORM_RETRY_REQUEST,
+  GOLDEN_FREEFORM_VIDEO_REQUEST,
   GOLDEN_REMAINING_VIDEO_REQUEST,
 } from '../providers/model/policy'
 import type { GoldenProviderGateway } from '../providers/gateway'
@@ -402,7 +405,7 @@ describe('Golden local model provider', () => {
     })
   })
 
-  it('uses the live workflow stage to raise the user Choice after asynchronous style tasks finish', () => {
+  it('uses the advisory mainline position to raise the user Choice after asynchronous style tasks finish', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 16,
@@ -410,7 +413,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'system',
-          content: '[project_state_snapshot]\nworkflowStep=visual_style\nworkflowStatus=needs_user_choice\nworkflowStatusReason=choose and confirm one completed style preview\nworkflowRecommendedOperation=none\n[/project_state_snapshot]',
+          content: '[project_state_snapshot]\nmainlineStep=visual_style\nmainlineStatus=needs_user_choice\nmainlineStatusReason=choose and confirm one completed style preview\nmainlineRecommendedOperation=none\n[/project_state_snapshot]',
         }],
         tools: [
           {
@@ -472,7 +475,7 @@ describe('Golden local model provider', () => {
       messages: [
         {
           role: 'system' as const,
-          content: '[project_state_snapshot]\nworkflowStep=video_segments\nworkflowStatus=ready\nworkflowRecommendedOperation=render_chapters\n[/project_state_snapshot]',
+          content: '[project_state_snapshot]\nmainlineStep=video_segments\nmainlineStatus=ready\nmainlineRecommendedOperation=render_chapters\n[/project_state_snapshot]',
         },
         { role: 'user' as const, content: userText },
       ],
@@ -520,7 +523,7 @@ describe('Golden local model provider', () => {
     })
   })
 
-  it('emits every declared workflow operation-group member in one model response', () => {
+  it('emits one recommended Operation per model response even when several tools are available', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 19,
@@ -528,7 +531,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'system',
-          content: '[project_state_snapshot]\nworkflowStep=chapter_plan\nworkflowStatus=ready\nworkflowRecommendedOperation=generate_edit_script_assets\nworkflowOperationGroupIds=generate_edit_script_assets,plan_chapters\n[/project_state_snapshot]',
+          content: '[project_state_snapshot]\nmainlineStep=chapter_plan\nmainlineStatus=ready\nmainlineRecommendedOperation=generate_edit_script_assets\n[/project_state_snapshot]',
         }],
         tools: [
           { type: 'function', function: { name: 'generate_edit_script_assets', parameters: { type: 'object' } } },
@@ -538,11 +541,128 @@ describe('Golden local model provider', () => {
     })
 
     expect(decision).toMatchObject({
-      kind: 'tool_calls',
-      calls: [
-        { toolName: 'generate_edit_script_assets' },
-        { toolName: 'plan_chapters' },
-      ],
+      kind: 'tool_call',
+      toolName: 'generate_edit_script_assets',
+    })
+  })
+
+  it('stops after the durable final render instead of reopening script intake', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 20,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'system',
+          content: '[project_state_snapshot]\nmainlineStep=final_render\nmainlineStatus=completed\nmainlineRecommendedOperation=none\n[/project_state_snapshot]',
+        }],
+        tools: [{
+          type: 'function',
+          function: { name: 'request_script_intake_choice', parameters: { type: 'object' } },
+        }],
+      },
+    })
+
+    expect(decision).toMatchObject({ kind: 'text' })
+  })
+
+  it('routes a freeform image request directly to create_image without consulting the mainline', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 21,
+      request: {
+        model: 'golden-model',
+        messages: [{ role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST }],
+        tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
+      },
+    })
+    expect(decision).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'create_image',
+      argumentsJson: JSON.stringify({ prompt: 'A cinematic midnight shrine in mist, wide composition.', count: 3 }),
+    })
+  })
+
+  it('reports a freeform Task continuation without repeating the original tool', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 22,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST },
+          { role: 'user', content: '[task_update]\noperation=create_image\nstatus=partial\ntotal=3 succeeded=1 failed=2' },
+        ],
+        tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
+      },
+    })
+    expect(decision).toMatchObject({ kind: 'text' })
+  })
+
+  it('retries only Resource identities returned as failed by list_resources', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 23,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: GOLDEN_FREEFORM_RETRY_REQUEST },
+          { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
+          {
+            role: 'tool',
+            content: JSON.stringify({ success: true, resources: [{ resource: {
+              resourceId: 'failed-resource-1', mediaType: 'image', status: 'failed', headRevision: null,
+            } }] }),
+          },
+        ],
+        tools: [
+          { type: 'function', function: { name: 'list_resources', parameters: { type: 'object' } } },
+          { type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } },
+        ],
+      },
+    })
+    expect(decision).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'create_image',
+      argumentsJson: JSON.stringify({
+        prompt: 'A cinematic midnight shrine in mist, wide composition.',
+        retryResourceIds: ['failed-resource-1'],
+      }),
+    })
+  })
+
+  it('passes exact listed image revisions into freeform video generation', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 24,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: GOLDEN_FREEFORM_VIDEO_REQUEST },
+          { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
+          {
+            role: 'tool',
+            content: JSON.stringify({ success: true, resources: [{ resource: {
+              resourceId: 'image-resource-1', mediaType: 'image', status: 'ready',
+              headRevision: { revisionId: 'image-revision-1', fingerprint: 'f'.repeat(64) },
+            } }] }),
+          },
+        ],
+        tools: [
+          { type: 'function', function: { name: 'list_resources', parameters: { type: 'object' } } },
+          { type: 'function', function: { name: 'create_video', parameters: { type: 'object' } } },
+        ],
+      },
+    })
+    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_video' })
+    if (decision.kind !== 'tool_call') return
+    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+      count: 2,
+      references: [{
+        resourceId: 'image-resource-1',
+        revisionId: 'image-revision-1',
+        fingerprint: 'f'.repeat(64),
+      }],
     })
   })
 
