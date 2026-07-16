@@ -1,0 +1,104 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "shot-1-video.mp4"
+    },
+    "_meta": {
+      "title": "上传 shot-1"
+    }
+  },
+  "2": {
+    "class_type": "LoadVideo",
+    "inputs": {
+      "file": "shot-2-video.mp4"
+    },
+    "_meta": {
+      "title": "上传 shot-2"
+    }
+  },
+  "3": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": ["1", 0]
+    },
+    "_meta": {
+      "title": "解析 shot-1"
+    }
+  },
+  "4": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "1 / a",
+      "values.a": ["3", 2]
+    },
+    "_meta": {
+      "title": "计算一帧时长 1/fps"
+    }
+  },
+  "5": {
+    "class_type": "Video Slice",
+    "inputs": {
+      "video": ["2", 0],
+      "start_time": ["4", 0],
+      "duration": 0,
+      "strict_duration": false
+    },
+    "_meta": {
+      "title": "删除 shot-2 第一帧及对应音频"
+    }
+  },
+  "6": {
+    "class_type": "GetVideoComponents",
+    "inputs": {
+      "video": ["5", 0]
+    },
+    "_meta": {
+      "title": "解析裁剪后的 shot-2"
+    }
+  },
+  "7": {
+    "class_type": "VHS_MergeImages",
+    "inputs": {
+      "images_A": ["3", 0],
+      "images_B": ["6", 0],
+      "merge_strategy": "match A",
+      "scale_method": "nearest-exact",
+      "crop": "disabled"
+    },
+    "_meta": {
+      "title": "拼接全部画面"
+    }
+  },
+  "8": {
+    "class_type": "AudioConcat",
+    "inputs": {
+      "audio1": ["3", 1],
+      "audio2": ["6", 1],
+      "direction": "after"
+    },
+    "_meta": {
+      "title": "拼接同步音频"
+    }
+  },
+  "9": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": ["7", 0],
+      "frame_rate": ["3", 2],
+      "loop_count": 0,
+      "filename_prefix": "shot-3-video",
+      "format": "video/nvenc_h264-mp4",
+      "pix_fmt": "yuv420p",
+      "bitrate": 10,
+      "megabit": true,
+      "save_metadata": false,
+      "pingpong": false,
+      "save_output": true,
+      "audio": ["8", 0]
+    },
+    "_meta": {
+      "title": "NVENC 输出 shot-3-video"
+    }
+  }
+}

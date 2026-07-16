@@ -79,6 +79,7 @@ export type ComfyUiWorkflowInject = {
   height?: number
   imageFilenames?: string[]
   audioFilenames?: string[]
+  videoFilenames?: string[]
   llmApi?: ComfyUiWorkflowLlmApiInject
   fps?: number
   durationSeconds?: number
@@ -1651,6 +1652,29 @@ function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: strin
   })
 }
 
+function applyVideoInjection(graph: ComfyUiWorkflowGraph, videoFilenames?: string[]): void {
+  const loadNodes = Object.entries(graph)
+    .filter(([, node]) => node.class_type.toLowerCase().includes('loadvideo'))
+    .sort(([a], [b]) => compareNodeIds(a, b))
+
+  if (loadNodes.length === 0) return
+
+  const filenames = Array.isArray(videoFilenames)
+    ? videoFilenames.filter((filename): filename is string => typeof filename === 'string' && filename.trim().length > 0)
+    : []
+  const fallbackFilename = filenames[filenames.length - 1] || null
+
+  loadNodes.forEach(([, node], index) => {
+    const filename = filenames[index] || fallbackFilename
+    if (filename) {
+      node.inputs.file = filename
+    } else {
+      delete node.inputs.file
+    }
+    delete node.inputs.upload
+  })
+}
+
 function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -3082,6 +3106,7 @@ export function resolveComfyUiWorkflow(
   const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
+  applyVideoInjection(graph, inject.videoFilenames)
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
@@ -3123,6 +3148,15 @@ export function getComfyUiWorkflowAudioInputCount(workflowKey: string): number {
 
   return Object.values(readWorkflowGraphFromFile(filePath))
     .filter((node) => node.class_type.toLowerCase().includes('loadaudio'))
+    .length
+}
+
+export function getComfyUiWorkflowVideoInputCount(workflowKey: string): number {
+  const filePath = resolveWorkflowFilePath(workflowKey)
+  if (!filePath) return 0
+
+  return Object.values(readWorkflowGraphFromFile(filePath))
+    .filter((node) => node.class_type.toLowerCase().includes('loadvideo'))
     .length
 }
 

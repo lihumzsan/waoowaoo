@@ -10,6 +10,7 @@ import {
   comfyUiWorkflowRequiresLlmApi,
   getComfyUiWorkflowParameterContract,
   getComfyUiWorkflowImageInputCount,
+  getComfyUiWorkflowVideoInputCount,
   listComfyUiWorkflowKeys,
   resolveComfyUiWorkflow,
   validateResolvedWorkflowPreflight,
@@ -31,6 +32,37 @@ describe('comfyui workflow registry', () => {
   let workflowRoot: string | null = null
   const BERNINI_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v'
   const BERNINI_AUDIO_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
+  const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
+
+  it('injects both video files into the fixed seam-concat workflow', () => {
+    expect(getComfyUiWorkflowVideoInputCount(VIDEO_SEAM_CONCAT_WORKFLOW_KEY)).toBe(2)
+
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'second.mp4'],
+    })
+
+    expect(workflow['1']).toMatchObject({
+      class_type: 'LoadVideo',
+      inputs: { file: 'first.mp4' },
+    })
+    expect(workflow['2']).toMatchObject({
+      class_type: 'LoadVideo',
+      inputs: { file: 'second.mp4' },
+    })
+    expect(workflow['1']?.inputs).not.toHaveProperty('upload')
+    expect(workflow['2']?.inputs).not.toHaveProperty('upload')
+    expect(workflow['5']?.inputs.start_time).toEqual(['4', 0])
+    expect(workflow['9']).toMatchObject({
+      class_type: 'VHS_VideoCombine',
+      inputs: {
+        frame_rate: ['3', 2],
+        format: 'video/nvenc_h264-mp4',
+        pix_fmt: 'yuv420p',
+        bitrate: 10,
+        megabit: true,
+      },
+    })
+  })
 
   afterEach(() => {
     delete process.env.COMFYUI_WORKFLOW_ROOT
