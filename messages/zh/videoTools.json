@@ -1,0 +1,47 @@
+{
+  "eyebrow": "独立视频工具",
+  "title": "视频无缝拼接",
+  "subtitle": "依次上传两个视频。系统会删除 Video 2 的第一帧及对应音频，再按 Video 1 的帧率无缝拼接画面和声音。",
+  "workflowNote": "输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s，无需调整工作流参数。",
+  "input1": {
+    "title": "Video 1",
+    "description": "拼接结果的前半段，并决定最终输出帧率。"
+  },
+  "input2": {
+    "title": "Video 2",
+    "description": "拼接结果的后半段；首帧及对应音频会自动移除。"
+  },
+  "actions": {
+    "select": "点击或拖入视频",
+    "replace": "替换",
+    "remove": "移除",
+    "start": "开始拼接",
+    "download": "下载视频",
+    "refresh": "刷新"
+  },
+  "status": {
+    "idle": "等待上传",
+    "uploading": "正在上传",
+    "queued": "排队中",
+    "preparing": "准备视频",
+    "processing": "正在拼接",
+    "persisting": "保存结果",
+    "completed": "已完成",
+    "failed": "拼接失败"
+  },
+  "result": {
+    "title": "拼接结果",
+    "description": "任务完成后可在这里预览和下载。",
+    "emptyHint": "上传两个视频并开始拼接，结果将在这里显示。",
+    "processingHint": "ComfyUI 正在处理视频，离开页面后任务仍会继续。"
+  },
+  "history": {
+    "title": "最近拼接",
+    "empty": "还没有拼接记录"
+  },
+  "errors": {
+    "uploadFailed": "视频上传失败",
+    "submitFailed": "拼接任务提交失败",
+    "loadTasks": "无法读取最近任务"
+  }
+}

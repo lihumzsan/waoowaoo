@@ -47,6 +47,7 @@
     "imageCharacter": "Character image",
     "imageLocation": "Location image",
     "videoPanel": "Video generation",
+    "videoSeamConcat": "Video seam concat",
     "lipSync": "Lip sync",
     "voiceLine": "Voice generation",
     "freeVoice": "Free voice",

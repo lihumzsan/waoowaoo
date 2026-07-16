@@ -47,6 +47,7 @@
     "imageCharacter": "角色图片",
     "imageLocation": "场景图片",
     "videoPanel": "视频生成",
+    "videoSeamConcat": "视频无缝拼接",
     "lipSync": "口型同步",
     "voiceLine": "配音生成",
     "freeVoice": "自由配音",

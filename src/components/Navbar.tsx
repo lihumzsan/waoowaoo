@@ -111,6 +111,13 @@ export default function Navbar() {
                     {t('workspace')}
                   </Link>
                   <Link
+                    href={{ pathname: '/workspace/video-tools' }}
+                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                  >
+                    <AppIcon name="film" className="w-4 h-4" />
+                    {t('videoTools')}
+                  </Link>
+                  <Link
                     href={{ pathname: '/workspace/asset-hub' }}
                     className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
                   >

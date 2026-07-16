@@ -1,0 +1,47 @@
+{
+  "eyebrow": "Standalone Video Tool",
+  "title": "Seamless Video Concatenation",
+  "subtitle": "Upload two videos in order. The first frame of Video 2 and its matching audio are removed before both streams are joined at the frame rate of Video 1.",
+  "workflowNote": "Output is fixed to NVENC H.264 MP4, yuv420p, and 10 Mbit/s. No workflow tuning is required.",
+  "input1": {
+    "title": "Video 1",
+    "description": "The first part of the result and the source of the output frame rate."
+  },
+  "input2": {
+    "title": "Video 2",
+    "description": "The second part of the result; its first frame and matching audio are removed."
+  },
+  "actions": {
+    "select": "Click or drop a video",
+    "replace": "Replace",
+    "remove": "Remove",
+    "start": "Start Concatenation",
+    "download": "Download Video",
+    "refresh": "Refresh"
+  },
+  "status": {
+    "idle": "Waiting for uploads",
+    "uploading": "Uploading",
+    "queued": "Queued",
+    "preparing": "Preparing videos",
+    "processing": "Concatenating",
+    "persisting": "Saving result",
+    "completed": "Completed",
+    "failed": "Concatenation failed"
+  },
+  "result": {
+    "title": "Concatenated Result",
+    "description": "Preview and download the output when the task completes.",
+    "emptyHint": "Upload two videos and start concatenation. The result will appear here.",
+    "processingHint": "ComfyUI is processing the videos. The task continues if you leave this page."
+  },
+  "history": {
+    "title": "Recent Concatenations",
+    "empty": "No concatenation history yet"
+  },
+  "errors": {
+    "uploadFailed": "Video upload failed",
+    "submitFailed": "Could not submit the concatenation task",
+    "loadTasks": "Could not load recent tasks"
+  }
+}
