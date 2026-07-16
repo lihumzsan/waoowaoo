@@ -422,7 +422,8 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     }
   }
 
-  const imageBase64 = await normalizeToBase64ForGeneration(input.imageUrl)
+  const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
+  const imageBase64 = inputImageUrl ? await normalizeToBase64ForGeneration(inputImageUrl) : ''
   const referenceImageUrls = Array.isArray(input.options?.referenceImages)
     ? input.options.referenceImages.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
@@ -433,6 +434,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   }
 
   if (lastFrameImageUrl) {
+    if (!imageBase64) throw new Error('ARK_VIDEO_LAST_FRAME_REQUIRES_FIRST_FRAME')
     const lastImageBase64 = await normalizeToBase64ForGeneration(lastFrameImageUrl)
     for (const image of normalizeVideoReferenceImages([
       { url: imageBase64, role: 'first_frame', order: 1 },
@@ -452,7 +454,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
       normalizedReferenceImages.push(normalizedReferenceImage)
     }
     appendArkReferenceImageContents(content, normalizeVideoReferenceImages([
-      { url: imageBase64, role: 'reference', order: 1 },
+      ...(imageBase64 ? [{ url: imageBase64, role: 'reference' as const, order: 1 }] : []),
       ...normalizedReferenceImages.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
     ]).map((image) => image.url))
   }

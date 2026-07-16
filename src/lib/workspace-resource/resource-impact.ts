@@ -12,6 +12,7 @@ export const WORKSPACE_RESOURCE_KIND = {
   EPISODE_DATA: 'episodeData',
   PROJECT_DATA: 'projectData',
   PROJECT_CONTEXT: 'projectContext',
+  CREATIVE_RESOURCES: 'creativeResources',
 } as const satisfies Record<string, WorkspaceResourceName>
 
 export const GLOBAL_ASSET_PROJECT_ID = 'global-asset-hub'
@@ -28,6 +29,7 @@ export const WORKSPACE_RESOURCE_IMPACT = {
   EPISODE: 'episode',
   PROJECT_DATA: 'project_data',
   PROJECT_WORKSPACE: 'project_workspace',
+  CREATIVE_RESOURCES: 'creative_resources',
 } as const
 
 export type WorkspaceResourceImpact = (typeof WORKSPACE_RESOURCE_IMPACT)[keyof typeof WORKSPACE_RESOURCE_IMPACT]
@@ -191,5 +193,7 @@ export function resolveWorkspaceResourceRefs(params: {
             ...videoSegmentRefs(projectId, episodeId),
           ])
         : projectAssetRefs(projectId, null)
+    case WORKSPACE_RESOURCE_IMPACT.CREATIVE_RESOURCES:
+      return [resourceRef(WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES, projectId, episodeId)]
   }
 }

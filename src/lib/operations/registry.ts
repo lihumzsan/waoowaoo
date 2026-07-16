@@ -50,6 +50,28 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if (!effects || typeof effects !== 'object' || Array.isArray(effects)) {
       throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_MISSING:${operationId}`)
     }
+    const resourceContract = op.resourceContract as Record<string, unknown> | undefined
+    if (!resourceContract || typeof resourceContract !== 'object' || Array.isArray(resourceContract)) {
+      throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_MISSING:${operationId}`)
+    }
+    if (resourceContract.kind === 'none') {
+      mustTrimmedString(resourceContract.reason, 'RESOURCE_CONTRACT_REASON')
+    } else if (resourceContract.kind === 'resource') {
+      if (resourceContract.acceptsReferences !== true && resourceContract.acceptsReferences !== false) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_REFERENCES_INVALID:${operationId}`)
+      }
+      if (resourceContract.supportsCandidates !== true && resourceContract.supportsCandidates !== false) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_CANDIDATES_INVALID:${operationId}`)
+      }
+      if (!Array.isArray(resourceContract.outputMediaTypes) || resourceContract.outputMediaTypes.length === 0) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_MEDIA_MISSING:${operationId}`)
+      }
+      if (!Array.isArray(resourceContract.outputSchemaIds) || resourceContract.outputSchemaIds.length === 0) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_SCHEMA_MISSING:${operationId}`)
+      }
+    } else {
+      throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_KIND_INVALID:${operationId}`)
+    }
     const keys = ['writes', 'billable', 'destructive', 'overwrite', 'bulk', 'externalSideEffects', 'longRunning'] as const
     for (const key of keys) {
       if (effects[key] !== true && effects[key] !== false) {

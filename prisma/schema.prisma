@@ -54,20 +54,20 @@ model CharacterAppearance {
 }
 
 model LocationImage {
-  id                       String            @id @default(uuid())
-  locationId               String
-  imageIndex               Int
-  description              String?           @db.Text
-  imageUrl                 String?           @db.Text
-  isSelected               Boolean           @default(false)
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @default(now()) @updatedAt
-  previousImageUrl         String?           @db.Text
-  previousDescription      String?           @db.Text // 上一次的描述词（用于撤回）
-  imageMediaId             String?
-  imageMedia               MediaObject?      @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  location                 ProjectLocation   @relation("LocationImages", fields: [locationId], references: [id], onDelete: Cascade)
-  selectedByLocations      ProjectLocation[] @relation("SelectedLocationImage")
+  id                  String            @id @default(uuid())
+  locationId          String
+  imageIndex          Int
+  description         String?           @db.Text
+  imageUrl            String?           @db.Text
+  isSelected          Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @default(now()) @updatedAt
+  previousImageUrl    String?           @db.Text
+  previousDescription String?           @db.Text // 上一次的描述词（用于撤回）
+  imageMediaId        String?
+  imageMedia          MediaObject?      @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  location            ProjectLocation   @relation("LocationImages", fields: [locationId], references: [id], onDelete: Cascade)
+  selectedByLocations ProjectLocation[] @relation("SelectedLocationImage")
 
   @@unique([locationId, imageIndex])
   @@index([locationId])
@@ -139,6 +139,8 @@ model ProjectEpisode {
   editShotExecutionPlans ProjectEditShotExecutionPlan[]
   editAssetRequirements  ProjectEditAssetRequirement[]
   videoSegments          ProjectVideoSegment[]
+  creativeResources      CreativeResource[]
+  creativeBindings       CreativeResourceBinding[]
 
   @@unique([projectId, episodeNumber])
   @@index([projectId])
@@ -751,6 +753,8 @@ model Project {
   locations               ProjectLocation[]
   canvasLayouts           ProjectCanvasLayout[]
   videoSegments           ProjectVideoSegment[]
+  creativeResources       CreativeResource[]
+  creativeBindings        CreativeResourceBinding[]
 
   @@index([userId])
   @@map("projects")
@@ -863,6 +867,8 @@ model User {
   projectAssistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches                MutationBatch[]
   inviteRedemptions              InviteRedemption[]
+  creativeResources              CreativeResource[]
+  creativeBindings               CreativeResourceBinding[]
 
   @@map("user")
 }
@@ -1047,13 +1053,14 @@ model Task {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentTask           Task?                     @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
-  childTasks           Task[]                    @relation("TaskChildren")
+  user                 User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentTask           Task?                      @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks           Task[]                     @relation("TaskChildren")
   events               TaskEvent[]
   executionCheckpoints TaskExecutionCheckpoint[]
-  approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
-  operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  approvalGrant        ApprovalGrant?             @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  operationExecution   OperationExecution?        @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  creativeRevisions    CreativeResourceRevision[]
 
   @@unique([operationExecutionId, operationPlanTaskId])
   @@index([status])
@@ -1126,24 +1133,25 @@ model ApprovalGrant {
 }
 
 model OperationExecution {
-  id              String                @id @default(uuid())
-  userId          String
-  scopeKind       String                @db.VarChar(32)
-  scopeId         String                @db.VarChar(191)
-  projectId       String?
-  episodeId       String?
-  operationId     String                @db.VarChar(128)
-  planSnapshotId  String
-  approvalGrantId String
-  requestId       String                @db.VarChar(128)
-  status          String                @db.VarChar(32)
-  output          Json?
-  completedAt     DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  planSnapshot    OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant   ApprovalGrant         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
-  tasks           Task[]
+  id                String                     @id @default(uuid())
+  userId            String
+  scopeKind         String                     @db.VarChar(32)
+  scopeId           String                     @db.VarChar(191)
+  projectId         String?
+  episodeId         String?
+  operationId       String                     @db.VarChar(128)
+  planSnapshotId    String
+  approvalGrantId   String
+  requestId         String                     @db.VarChar(128)
+  status            String                     @db.VarChar(32)
+  output            Json?
+  completedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  planSnapshot      OperationPlanSnapshot      @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  approvalGrant     ApprovalGrant              @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  tasks             Task[]
+  creativeRevisions CreativeResourceRevision[]
 
   @@unique([approvalGrantId])
   @@unique([planSnapshotId, requestId])
@@ -1304,20 +1312,20 @@ model GlobalLocation {
 
 // 全局场景图片（结构与 LocationImage 一致）
 model GlobalLocationImage {
-  id                       String       @id @default(uuid())
-  locationId               String
-  imageIndex               Int
-  description              String?      @db.Text
-  imageUrl                 String?      @db.Text
-  imageMediaId             String?
-  imageMedia               MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  isSelected               Boolean      @default(false)
-  previousImageUrl         String?      @db.Text
-  previousImageMediaId     String?
-  previousImageMedia       MediaObject? @relation("GlobalLocationImagePreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
-  previousDescription      String?      @db.Text // 上一次的描述词（用于撤回）
-  createdAt                DateTime     @default(now())
-  updatedAt                DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  locationId           String
+  imageIndex           Int
+  description          String?      @db.Text
+  imageUrl             String?      @db.Text
+  imageMediaId         String?
+  imageMedia           MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  isSelected           Boolean      @default(false)
+  previousImageUrl     String?      @db.Text
+  previousImageMediaId String?
+  previousImageMedia   MediaObject? @relation("GlobalLocationImagePreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
+  previousDescription  String?      @db.Text // 上一次的描述词（用于撤回）
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   location GlobalLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
@@ -1352,9 +1360,131 @@ model MediaObject {
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[]    @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]          @relation("GlobalLocationImageMedia")
   globalLocationImagePreviousImages     GlobalLocationImage[]          @relation("GlobalLocationImagePreviousImageMedia")
+  creativeResourceRevisions             CreativeResourceRevision[]
 
   @@index([createdAt])
   @@map("media_objects")
+}
+
+model CreativeResource {
+  id             String                     @id @default(uuid())
+  userId         String
+  projectId      String?
+  episodeId      String?
+  scopeKind      String                     @db.VarChar(32)
+  scopeId        String                     @db.VarChar(191)
+  mediaType      String                     @db.VarChar(16)
+  schemaId       String                     @db.VarChar(96)
+  name           String                     @db.VarChar(191)
+  status         String                     @default("pending") @db.VarChar(32)
+  originKey      String                     @unique(map: "creative_resources_origin_key") @db.VarChar(191)
+  sourceType     String?                    @db.VarChar(96)
+  sourceId       String?                    @db.VarChar(191)
+  candidateSetId String?                    @db.VarChar(191)
+  candidateIndex Int?
+  headRevisionId String?                    @unique(map: "creative_resources_head_revision_key")
+  errorCode      String?                    @db.VarChar(128)
+  errorMessage   String?                    @db.Text
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project        Project?                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode        ProjectEpisode?            @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  revisions      CreativeResourceRevision[] @relation("CreativeResourceRevisions")
+  headRevision   CreativeResourceRevision?  @relation("CreativeResourceHeadRevision", fields: [headRevisionId], references: [id], onDelete: SetNull)
+  bindings       CreativeResourceBinding[]
+
+  @@unique([sourceType, sourceId], map: "creative_resources_source_key")
+  @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
+  @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
+  @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
+  @@index([candidateSetId, candidateIndex], map: "creative_resources_candidate_idx")
+  @@map("creative_resources")
+}
+
+model CreativeResourceRevision {
+  id                   String                    @id @default(uuid())
+  resourceId           String
+  revision             Int
+  fingerprint          String                    @db.VarChar(64)
+  contentText          String?                   @db.LongText
+  contentJson          Json?
+  mediaId              String?
+  sourceType           String?                   @db.VarChar(96)
+  sourceId             String?                   @db.VarChar(191)
+  sourceRevision       String?                   @db.VarChar(96)
+  prompt               String?                   @db.LongText
+  modelKey             String?                   @db.VarChar(191)
+  generationOptions    Json?
+  operationId          String?                   @db.VarChar(128)
+  inputHash            String?                   @db.VarChar(64)
+  taskId               String?
+  operationExecutionId String?
+  executionSegmentId   String?                   @db.VarChar(191)
+  toolCallId           String?                   @db.VarChar(191)
+  createdAt            DateTime                  @default(now())
+  resource             CreativeResource          @relation("CreativeResourceRevisions", fields: [resourceId], references: [id], onDelete: Cascade)
+  headedResource       CreativeResource?         @relation("CreativeResourceHeadRevision")
+  media                MediaObject?              @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  task                 Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  inputLineage         CreativeResourceLineage[] @relation("CreativeResourceLineageInput")
+  outputLineage        CreativeResourceLineage[] @relation("CreativeResourceLineageOutput")
+  bindings             CreativeResourceBinding[]
+
+  @@unique([resourceId, revision], map: "creative_revisions_resource_revision_key")
+  @@unique([taskId, resourceId], map: "creative_revisions_task_resource_key")
+  @@unique([sourceType, sourceId, sourceRevision], map: "creative_revisions_source_key")
+  @@index([fingerprint], map: "creative_revisions_fingerprint_idx")
+  @@index([mediaId], map: "creative_revisions_media_idx")
+  @@index([taskId], map: "creative_revisions_task_idx")
+  @@index([operationExecutionId], map: "creative_revisions_execution_idx")
+  @@index([operationId, inputHash], map: "creative_revisions_operation_input_idx")
+  @@map("creative_resource_revisions")
+}
+
+model CreativeResourceLineage {
+  id               String                   @id @default(uuid())
+  outputRevisionId String
+  inputRevisionId  String
+  role             String                   @db.VarChar(64)
+  position         Int
+  createdAt        DateTime                 @default(now())
+  outputRevision   CreativeResourceRevision @relation("CreativeResourceLineageOutput", fields: [outputRevisionId], references: [id], onDelete: Cascade)
+  inputRevision    CreativeResourceRevision @relation("CreativeResourceLineageInput", fields: [inputRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([outputRevisionId, role, position], map: "creative_lineage_output_role_position_key")
+  @@index([inputRevisionId], map: "creative_lineage_input_idx")
+  @@map("creative_resource_lineage")
+}
+
+model CreativeResourceBinding {
+  id         String                   @id @default(uuid())
+  userId     String
+  projectId  String?
+  episodeId  String?
+  scopeKind  String                   @db.VarChar(32)
+  scopeId    String                   @db.VarChar(191)
+  role       String                   @db.VarChar(64)
+  slotKey    String                   @db.VarChar(128)
+  resourceId String
+  revisionId String
+  source     String                   @db.VarChar(64)
+  version    Int                      @default(0)
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode    ProjectEpisode?          @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  resource   CreativeResource         @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  revision   CreativeResourceRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  @@unique([scopeKind, scopeId, role, slotKey], map: "creative_bindings_scope_role_slot_key")
+  @@index([userId, scopeKind, scopeId], map: "creative_bindings_user_scope_idx")
+  @@index([projectId, episodeId], map: "creative_bindings_project_episode_idx")
+  @@index([resourceId], map: "creative_bindings_resource_idx")
+  @@index([revisionId], map: "creative_bindings_revision_idx")
+  @@map("creative_resource_bindings")
 }
 
 model LegacyMediaRefBackup {

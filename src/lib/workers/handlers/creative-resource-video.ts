@@ -1,0 +1,132 @@
+import type { Job } from 'bullmq'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
+import {
+  parseCreativeResourceGenerationTaskPayload,
+  type CreativeResourceGenerationTaskPayload,
+} from '@/lib/creative-resource/generation-contract'
+import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { prisma } from '@/lib/prisma'
+import type { TaskJobData } from '@/lib/task/types'
+import { reportTaskProgress } from '@/lib/workers/shared'
+import { resolveVideoDownloadHeaders } from '@/lib/workers/video-download'
+import {
+  resolveVideoSourceFromGeneration,
+  uploadVideoSourceToCos,
+} from '@/lib/workers/utils'
+
+async function loadVideoImageReferences(
+  job: Job<TaskJobData>,
+  input: CreativeResourceGenerationTaskPayload,
+) {
+  if (input.resource.inputs.length === 0) return []
+  const revisions = await prisma.creativeResourceRevision.findMany({
+    where: { id: { in: input.resource.inputs.map((reference) => reference.revisionId) } },
+    select: {
+      id: true,
+      resourceId: true,
+      fingerprint: true,
+      media: { select: { storageKey: true } },
+      resource: { select: { userId: true, mediaType: true, status: true } },
+    },
+  })
+  const byId = new Map(revisions.map((revision) => [revision.id, revision]))
+  return await Promise.all(input.resource.inputs.map(async (reference, index) => {
+    const revision = byId.get(reference.revisionId)
+    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
+    if (
+      revision.resourceId !== reference.resourceId
+      || revision.fingerprint !== reference.fingerprint
+      || revision.resource.userId !== job.data.userId
+      || revision.resource.status !== 'ready'
+    ) {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+    }
+    if (revision.resource.mediaType !== 'image' || !revision.media?.storageKey) {
+      throw new Error(`CREATIVE_RESOURCE_VIDEO_IMAGE_REFERENCE_REQUIRED:${reference.revisionId}`)
+    }
+    const role: 'first_frame' | 'last_frame' | 'reference' = reference.role === 'first_frame' || reference.role === 'last_frame'
+      ? reference.role
+      : 'reference'
+    return {
+      url: await normalizeToBase64ForGeneration(revision.media.storageKey),
+      role,
+      order: index + 1,
+      source: 'generated' as const,
+    }
+  }))
+}
+
+export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
+  if (job.data.targetType !== 'CreativeResource') {
+    throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${job.data.targetType}`)
+  }
+  const payload = parseCreativeResourceGenerationTaskPayload(job.data.payload ?? {})
+  if (
+    payload.resource.resourceId !== job.data.targetId
+    || payload.resource.mediaType !== 'video'
+    || payload.videoModel !== payload.resource.modelKey
+  ) {
+    throw new Error(`CREATIVE_RESOURCE_VIDEO_TASK_CONTRACT_INVALID:${job.data.taskId}`)
+  }
+  await reportTaskProgress(job, 20, { stage: 'creative_resource_prepare' })
+  const referenceImages = await loadVideoImageReferences(job, payload)
+  if (referenceImages.length === 0 && !supportsTextToVideoModel(payload.resource.modelKey)) {
+    throw new Error(`VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED:${payload.resource.modelKey}`)
+  }
+  const maxReferences = resolveBuiltinCapabilitiesByModelKey('video', payload.resource.modelKey)
+    ?.video?.maxReferenceImages ?? 1
+  if (referenceImages.length > maxReferences) {
+    throw new Error(
+      `VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(referenceImages.length)}:${String(maxReferences)}`,
+    )
+  }
+  const options = payload.generationOptions
+  await reportTaskProgress(job, 45, { stage: 'creative_resource_generate' })
+  const generated = await resolveVideoSourceFromGeneration(job, {
+    userId: job.data.userId,
+    modelId: payload.resource.modelKey,
+    referenceImages,
+    allowTextOnly: referenceImages.length === 0,
+    options: {
+      prompt: payload.resource.prompt,
+      ...(typeof options.duration === 'number' ? { duration: options.duration } : {}),
+      ...(typeof options.fps === 'number' ? { fps: options.fps } : {}),
+      ...(typeof options.resolution === 'string' ? { resolution: options.resolution } : {}),
+      ...(typeof options.aspectRatio === 'string' ? { aspectRatio: options.aspectRatio } : {}),
+      ...(typeof options.generateAudio === 'boolean' ? { generateAudio: options.generateAudio } : {}),
+      generationMode: 'normal',
+    },
+  })
+  const downloadHeaders = await resolveVideoDownloadHeaders(
+    job.data.userId,
+    payload.resource.modelKey,
+    generated.url,
+    generated.downloadHeaders,
+  )
+  await reportTaskProgress(job, 90, { stage: 'creative_resource_persist' })
+  const storageKey = await uploadVideoSourceToCos(
+    generated.url,
+    'creative-resource',
+    payload.resource.resourceId,
+    downloadHeaders,
+    { taskId: job.data.taskId, artifact: `creative-resource:${payload.resource.resourceId}` },
+  )
+  const durationSeconds = typeof options.duration === 'number' ? options.duration : null
+  const media = await ensureMediaObjectFromStorageKey(storageKey, {
+    mimeType: 'video/mp4',
+    ...(durationSeconds ? { durationMs: durationSeconds * 1000 } : {}),
+  })
+  return {
+    mediaId: media.id,
+    videoUrl: media.url,
+    storageKey: media.storageKey,
+    modelKey: payload.resource.modelKey,
+    provider: payload.resource.modelKey.split('::')[0] || null,
+    ...(durationSeconds ? { durationMs: durationSeconds * 1000 } : {}),
+    ...(typeof generated.actualVideoTokens === 'number'
+      ? { actualVideoTokens: generated.actualVideoTokens }
+      : {}),
+  }
+}

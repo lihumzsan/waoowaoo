@@ -5,6 +5,11 @@ export function supportsAssetReferenceMultiReferenceVideoModel(modelKey: string)
   return capabilities?.video?.assetReferenceMultiReference === true
 }
 
+export function supportsTextToVideoModel(modelKey: string): boolean {
+  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
+  return capabilities?.video?.supportsTextToVideo === true
+}
+
 export function requireVideoModelMaxReferenceImages(modelKey: string): number {
   const capabilities = resolveBuiltinCapabilitiesByModelKey('video', modelKey)
   const limit = capabilities?.video?.maxReferenceImages

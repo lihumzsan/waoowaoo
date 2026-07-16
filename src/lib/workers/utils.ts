@@ -522,6 +522,7 @@ export async function resolveVideoSourceFromGeneration(
     modelId: string
     imageUrl?: string
     referenceImages?: readonly VideoReferenceImageInput[]
+    allowTextOnly?: boolean
     options?: {
       prompt?: string
       duration?: number
@@ -602,6 +603,7 @@ export async function resolveVideoSourceFromGeneration(
     imageUrl: params.imageUrl,
     legacyReferenceImages: params.options?.referenceImages,
     legacyLastFrameImageUrl: params.options?.lastFrameImageUrl,
+    allowTextOnly: params.allowTextOnly,
   })
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {

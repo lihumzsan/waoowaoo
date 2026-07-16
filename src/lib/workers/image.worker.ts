@@ -15,6 +15,7 @@ import {
   handleLocationImageTask,
   handleModifyAssetImageTask,
 } from './handlers/image-task-handlers'
+import { handleCreativeResourceImageTask } from './handlers/creative-resource-image'
 
 type AnyObj = Record<string, unknown>
 type ImageTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
@@ -27,6 +28,7 @@ async function handleRegenerateGroupTask(job: Job<TaskJobData>) {
 }
 
 const IMAGE_TASK_HANDLERS = {
+  creative_resource_image: handleCreativeResourceImageTask,
   image_character: handleCharacterImageTask,
   edit_style_preview: handleEditStylePreviewImageTask,
   image_location: handleLocationImageTask,

@@ -247,6 +247,7 @@ export interface ImageCapabilities {
 }
 
 export interface VideoCapabilities {
+  supportsTextToVideo?: boolean
   generationModeOptions?: string[]
   generateAudioOptions?: boolean[]
   durationOptions?: number[]
@@ -297,6 +298,7 @@ const IMAGE_ALLOWED_FIELDS = new Set<keyof ImageCapabilities>([
 ])
 
 const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
+  'supportsTextToVideo',
   'generationModeOptions',
   'generateAudioOptions',
   'durationOptions',
@@ -518,6 +520,14 @@ function validateImageCapabilities(issues: CapabilityValidationIssue[], raw: unk
 
 function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
+
+  if (raw.supportsTextToVideo !== undefined && typeof raw.supportsTextToVideo !== 'boolean') {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.supportsTextToVideo',
+      message: 'supportsTextToVideo must be boolean',
+    })
+  }
 
   const generationModeOptions = raw.generationModeOptions
   if (generationModeOptions !== undefined && !isStringArray(generationModeOptions)) {

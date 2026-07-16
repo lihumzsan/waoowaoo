@@ -32,6 +32,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-260128',
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -49,6 +50,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'doubao-seedance-2-0-fast-260128',
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],

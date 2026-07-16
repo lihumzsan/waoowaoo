@@ -1,6 +1,9 @@
 import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 
 const TASK_TYPE_LABELS: Record<string, string> = {
+  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: 'progress.taskType.creativeResourceImage',
+  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: 'progress.taskType.creativeResourceAudio',
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: 'progress.taskType.creativeResourceVideo',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE]: 'progress.taskType.editStylePreviewOptionsGenerate',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'progress.taskType.editStylePreviewImage',
   [TASK_TYPE.IMAGE_CHARACTER]: 'progress.taskType.imageCharacter',
@@ -36,6 +39,9 @@ const TASK_TYPE_LABELS: Record<string, string> = {
 
 const STAGE_LABELS: Record<string, string> = {
   received: 'progress.stage.received',
+  creative_resource_prepare: 'progress.stage.creativeResourcePrepare',
+  creative_resource_generate: 'progress.stage.creativeResourceGenerate',
+  creative_resource_persist: 'progress.stage.creativeResourcePersist',
   generate_character_image: 'progress.stage.generateCharacterImage',
   generate_location_image: 'progress.stage.generateLocationImage',
   edit_style_preview_image_prepare: 'progress.stage.editStylePreviewImagePrepare',

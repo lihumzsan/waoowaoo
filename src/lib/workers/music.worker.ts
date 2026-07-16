@@ -156,6 +156,7 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
 type MusicTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const MUSIC_TASK_HANDLERS = {
+  creative_resource_audio: handleMusicGenerateTask,
   music_generate: handleMusicGenerateTask,
   music_score_generate: handleBgmScoreGenerateTask,
 } satisfies Record<MusicTaskHandlerKey, MusicTaskHandler>

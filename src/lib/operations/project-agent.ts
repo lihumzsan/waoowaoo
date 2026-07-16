@@ -29,6 +29,8 @@ import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createAuthOperations } from './domains/auth/auth-ops'
 import { createAssetImageOperations } from './domains/asset/generation'
+import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
+import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -217,6 +219,18 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createMediaOperations(), {
       groupPath: ['media'],
+      channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createCreativeResourceGenerationOperations(), {
+      groupPath: ['resource'],
+      channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createCreativeResourceOperations(), {
+      groupPath: ['resource'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

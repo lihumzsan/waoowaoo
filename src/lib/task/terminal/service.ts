@@ -13,8 +13,13 @@ import {
 import { buildTaskLifecycleEventPayload } from '@/lib/task/publisher'
 import { getTaskDefinition } from '@/lib/task/definition'
 import { isTaskType, TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
-import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+import {
+  dedupeWorkspaceResourceRefs,
+  resolveWorkspaceResourceRefs,
+  WORKSPACE_RESOURCE_KIND,
+} from '@/lib/workspace-resource/resource-impact'
 import type { TaskTerminalCommitIntent, TaskTerminalCommitResult } from './types'
+import { materializeCreativeResourceTaskTerminalInTransaction } from '@/lib/creative-resource/task-materializer'
 
 const ACTIVE_STATUSES = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] as const
 type TerminalTaskRow = {
@@ -29,6 +34,8 @@ type TerminalTaskRow = {
   attempt: number
   payload: unknown
   billingInfo: unknown
+  operationId: string | null
+  operationExecutionId: string | null
   updatedAt: Date
 }
 
@@ -79,7 +86,7 @@ function terminalEventKey(taskId: string): string {
 async function loadLockedTask(tx: Prisma.TransactionClient, taskId: string): Promise<TerminalTaskRow | null> {
   const rows = await tx.$queryRaw<TerminalTaskRow[]>(Prisma.sql`
     SELECT id, userId, projectId, episodeId, type, targetType, targetId,
-           status, attempt, payload, billingInfo, updatedAt
+           status, attempt, payload, billingInfo, operationId, operationExecutionId, updatedAt
     FROM tasks
     WHERE id = ${taskId}
     FOR UPDATE
@@ -143,6 +150,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       let errorCode: string | null = null
       let errorMessage: string | null = null
       let completedOutput: TaskHandlerCheckpointOutput | null = null
+      let materializedOutput: Record<string, unknown> | null = null
 
       if (intent.kind === 'completed') {
         const checkpoint = await tx.taskExecutionCheckpoint.findUnique({
@@ -171,6 +179,33 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
             textUsage: completedOutput.textUsage,
           },
         )) as TaskBillingInfo | null
+        materializedOutput = await materializeCreativeResourceTaskTerminalInTransaction(tx, {
+          kind: 'completed',
+          task: {
+            id: task.id,
+            userId: task.userId,
+            projectId: task.projectId,
+            episodeId: task.episodeId,
+            type: taskType,
+            targetType: task.targetType,
+            targetId: task.targetId,
+            payload: task.payload,
+            operationId: task.operationId,
+            operationExecutionId: task.operationExecutionId,
+          },
+          result: completedOutput.result,
+          errorCode: null,
+          errorMessage: null,
+        })
+        if (materializedOutput) {
+          completedOutput = {
+            ...completedOutput,
+            result: {
+              ...(completedOutput.result ?? {}),
+              ...materializedOutput,
+            },
+          }
+        }
         await projectTaskTargetTerminalInTransaction(tx, {
           kind: intent.kind,
           taskId: task.id,
@@ -181,6 +216,24 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       } else {
         errorCode = intent.kind === 'failed' ? intent.errorCode : 'TASK_CANCELLED'
         errorMessage = intent.kind === 'failed' ? intent.errorMessage : intent.reason
+        materializedOutput = await materializeCreativeResourceTaskTerminalInTransaction(tx, {
+          kind: intent.kind,
+          task: {
+            id: task.id,
+            userId: task.userId,
+            projectId: task.projectId,
+            episodeId: task.episodeId,
+            type: taskType,
+            targetType: task.targetType,
+            targetId: task.targetId,
+            payload: task.payload,
+            operationId: task.operationId,
+            operationExecutionId: task.operationExecutionId,
+          },
+          result: null,
+          errorCode,
+          errorMessage,
+        })
         const targetProjection = await projectTaskTargetTerminalInTransaction(tx, {
           kind: intent.kind,
           taskId: task.id,
@@ -231,11 +284,22 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       if (updated.count !== 1) throw new Error(`TASK_TERMINAL_CAS_FAILED:${task.id}`)
 
       const eventType = lifecycleType(intent)
-      const affectedResources = resolveWorkspaceResourceRefs({
-        impact: getTaskDefinition(taskType).terminalResourceImpact,
-        projectId: task.projectId,
-        episodeId: task.episodeId,
-      })
+      const affectedResources = dedupeWorkspaceResourceRefs([
+        ...resolveWorkspaceResourceRefs({
+          impact: getTaskDefinition(taskType).terminalResourceImpact,
+          projectId: task.projectId,
+          episodeId: task.episodeId,
+        }),
+        ...(materializedOutput
+          ? [
+              {
+                kind: WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES,
+                projectId: task.projectId,
+                episodeId: task.episodeId,
+              } as const,
+            ]
+          : []),
+      ])
       const eventPayload = buildTaskLifecycleEventPayload({
         taskId: task.id,
         projectId: task.projectId,
@@ -249,6 +313,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
         payload: {
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),
+          ...(materializedOutput ?? {}),
           ...(errorCode ? { errorCode } : {}),
           ...(errorMessage ? { message: errorMessage } : {}),
           terminalSource: intent.kind === 'completed' ? 'worker' : intent.source,

@@ -1,5 +1,4 @@
 import { Worker, type Job } from 'bullmq'
-import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { requireVideoModelMaxReferenceImages } from '@/lib/ai-registry/video-model-helpers'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
@@ -8,7 +7,6 @@ import { queueRedis } from '@/lib/redis'
 import { getTaskDefinitionForQueue, type VideoTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
 import type { TaskJobData } from '@/lib/task/types'
-import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { videoSegmentTaskPayloadSchema } from '@/lib/video-segments/types'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { handleChapterRenderTask } from './chapter-render'
@@ -21,22 +19,9 @@ import {
   resolveVideoSourceFromGeneration,
   uploadVideoSourceToCos,
 } from './utils'
+import { resolveVideoDownloadHeaders } from './video-download'
+import { handleCreativeResourceVideoTask } from './handlers/creative-resource-video'
 
-async function resolveDownloadHeaders(
-  userId: string,
-  modelId: string,
-  source: string,
-  generatedHeaders?: Record<string, string>,
-): Promise<Record<string, string> | undefined> {
-  if (generatedHeaders) return generatedHeaders
-  const parsedModel = parseModelKeyStrict(modelId)
-  const isGoogleDownloadUrl = source.includes('generativelanguage.googleapis.com/')
-    && source.includes('/files/')
-    && source.includes(':download')
-  if (parsedModel?.provider !== 'google' || !isGoogleDownloadUrl) return undefined
-  const { apiKey } = await getProviderConfig(userId, 'google')
-  return { 'x-goog-api-key': apiKey }
-}
 async function handleVideoSegmentTask(job: Job<TaskJobData>) {
   if (job.data.targetType !== 'ProjectVideoSegment') {
     throw new Error(`VIDEO_SEGMENT_TARGET_INVALID:${job.data.targetType}`)
@@ -133,7 +118,7 @@ async function handleVideoSegmentTask(job: Job<TaskJobData>) {
       generateAudio: true,
     },
   })
-  const downloadHeaders = await resolveDownloadHeaders(
+  const downloadHeaders = await resolveVideoDownloadHeaders(
     job.data.userId,
     payload.videoModel,
     generated.url,
@@ -183,6 +168,7 @@ async function handleVideoSegmentTask(job: Job<TaskJobData>) {
 type VideoTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const VIDEO_TASK_HANDLERS = {
+  creative_resource_video: handleCreativeResourceVideoTask,
   video_segment: handleVideoSegmentTask,
   final_video_render: handleFinalVideoRenderTask,
   chapter_render: handleChapterRenderTask,

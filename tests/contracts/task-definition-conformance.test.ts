@@ -18,8 +18,9 @@ describe('TaskDefinition conformance', () => {
       expect(isBillableTaskType(taskType)).toBe(definition.billingPolicy !== 'none')
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
+      expect(['none', 'creative_resource', 'domain_creative_resource']).toContain(definition.terminalOutputMaterializer)
       expect(['none', 'chapter_render', 'final_video_render']).toContain(definition.submissionTargetOwnership)
-      expect(['none', 'edit_pipeline', 'edit_style_preview', 'project_assets', 'global_assets', 'video_segments', 'episode']).toContain(definition.terminalResourceImpact)
+      expect(['none', 'edit_pipeline', 'edit_style_preview', 'project_assets', 'global_assets', 'video_segments', 'episode', 'creative_resources']).toContain(definition.terminalResourceImpact)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_segment', 'chapter_render', 'final_video_render', 'music_score', 'bgm_design', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalFailureProjector)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_segment', 'chapter_render', 'final_video_render', 'music_score', 'bgm_design', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalCancelProjector)
     }

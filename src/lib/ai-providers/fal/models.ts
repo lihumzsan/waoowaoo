@@ -95,6 +95,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -112,6 +113,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true],
         durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],

@@ -15,6 +15,8 @@ describe('billing/task-policy', () => {
     analysisModel: 'anthropic/claude-sonnet-4',
     imageModel: 'fal::gpt-image-2',
     videoModel: 'openrouter::bytedance/seedance-2.0-fast',
+    musicModel: 'google::lyria-3-pro-preview',
+    durationSeconds: 30,
     duration: 4,
     resolution: '720p',
   } as const

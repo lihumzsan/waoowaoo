@@ -9,6 +9,7 @@ import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/op
 import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
+import type { CreativeResourceOperationContract } from '@/lib/creative-resource/contracts'
 
 export type ProjectAgentOperationId = string
 
@@ -216,6 +217,7 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
   channels?: OperationChannels
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
+  resourceContract?: CreativeResourceOperationContract
   agentFlow?: OperationAgentFlow
   /**
    * Model-facing OpenAI Agents SDK tool input schema.
@@ -291,6 +293,7 @@ type NormalizedOperationFields = {
   channels: OperationChannels
   prerequisites: OperationPrerequisites
   toolInputSchema: ProjectAgentToolInputSchema
+  resourceContract: CreativeResourceOperationContract
 }
 
 type NormalizedDirectOperationBehavior<Input, Output> = DirectOperationBehavior<Input, Output> & {

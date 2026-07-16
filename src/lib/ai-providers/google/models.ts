@@ -40,6 +40,7 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'veo-3.1-generate-preview',
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [4, 6, 8],
         resolutionOptions: ['720p', '1080p', '4k'],
@@ -54,6 +55,7 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: 'veo-3.1-fast-generate-preview',
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         durationOptions: [4, 6, 8],
         resolutionOptions: ['720p', '1080p', '4k'],
@@ -66,15 +68,15 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'video',
     provider: 'google',
     modelId: 'veo-3.0-generate-001',
-    capabilities: { video: { durationOptions: [4, 6, 8], resolutionOptions: ['720p', '1080p', '4k'], supportGenerateAudio: false } },
+    capabilities: { video: { supportsTextToVideo: true, durationOptions: [4, 6, 8], resolutionOptions: ['720p', '1080p', '4k'], supportGenerateAudio: false } },
   },
   {
     modelType: 'video',
     provider: 'google',
     modelId: 'veo-3.0-fast-generate-001',
-    capabilities: { video: { durationOptions: [4, 6, 8], resolutionOptions: ['720p', '1080p', '4k'], supportGenerateAudio: false } },
+    capabilities: { video: { supportsTextToVideo: true, durationOptions: [4, 6, 8], resolutionOptions: ['720p', '1080p', '4k'], supportGenerateAudio: false } },
   },
-  { modelType: 'video', provider: 'google', modelId: 'veo-2.0-generate-001', capabilities: { video: { durationOptions: [5, 6, 8], supportGenerateAudio: false } } },
+  { modelType: 'video', provider: 'google', modelId: 'veo-2.0-generate-001', capabilities: { video: { supportsTextToVideo: true, durationOptions: [5, 6, 8], supportGenerateAudio: false } } },
 ] as const
 
 export const GOOGLE_API_CONFIG_CATALOG_MODELS = [

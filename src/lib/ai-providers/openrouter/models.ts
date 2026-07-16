@@ -162,6 +162,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [...OPENROUTER_SEEDANCE_2_DURATION_OPTIONS],
@@ -177,6 +178,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
     capabilities: {
       video: {
+        supportsTextToVideo: true,
         generationModeOptions: ['normal', 'firstlastframe'],
         generateAudioOptions: [true, false],
         durationOptions: [...OPENROUTER_SEEDANCE_2_DURATION_OPTIONS],
