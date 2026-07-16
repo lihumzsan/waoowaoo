@@ -5,6 +5,7 @@ import { QUEUE_NAME } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
+import { handleVideoSeamConcatTask } from './handlers/video-seam-concat'
 import { withUserConcurrencyGate } from './user-concurrency-gate'
 import {
   assertTaskActive,
@@ -969,6 +970,8 @@ async function processVideoTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.VIDEO_PANEL:
       return await handleVideoPanelTask(job)
+    case TASK_TYPE.VIDEO_SEAM_CONCAT:
+      return await handleVideoSeamConcatTask(job)
     case TASK_TYPE.LIP_SYNC:
       return await handleLipSyncTask(job)
     default:

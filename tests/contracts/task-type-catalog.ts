@@ -13,6 +13,7 @@ const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.IMAGE_CHARACTER]: 'tests/unit/worker/character-image-task-handler.test.ts',
   [TASK_TYPE.IMAGE_LOCATION]: 'tests/unit/worker/location-image-task-handler.test.ts',
   [TASK_TYPE.VIDEO_PANEL]: 'tests/unit/worker/video-worker.test.ts',
+  [TASK_TYPE.VIDEO_SEAM_CONCAT]: 'tests/unit/worker/video-seam-concat.test.ts',
   [TASK_TYPE.LIP_SYNC]: 'tests/unit/worker/video-worker.test.ts',
   [TASK_TYPE.VOICE_LINE]: 'tests/unit/worker/voice-worker.test.ts',
   [TASK_TYPE.FREE_VOICE]: 'tests/unit/worker/voice-worker.test.ts',

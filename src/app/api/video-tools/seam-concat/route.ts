@@ -4,7 +4,7 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { submitTask } from '@/lib/task/submitter'
-import type { TaskType } from '@/lib/task/types'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   VIDEO_TOOLS_PROJECT_ID,
   parseVideoSeamConcatSubmission,
@@ -31,7 +31,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     locale,
     requestId: getRequestId(request),
     projectId: VIDEO_TOOLS_PROJECT_ID,
-    type: 'video_seam_concat' as TaskType,
+    type: TASK_TYPE.VIDEO_SEAM_CONCAT,
     targetType: 'VideoSeamConcat',
     targetId,
     payload,

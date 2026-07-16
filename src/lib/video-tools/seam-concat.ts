@@ -55,7 +55,7 @@ export function validateVideoToolUpload(metadata: UploadMetadata): { extension: 
   return { extension, mimeType }
 }
 
-export function buildVideoToolInputKey(userId: string, extension: string, id = randomUUID()): string {
+export function buildVideoToolInputKey(userId: string, extension: string, id: string = randomUUID()): string {
   const safeUserId = safePathSegment(userId)
   const safeExtension = extension.replace(/[^a-z0-9]+/gi, '').toLowerCase()
   const safeId = safePathSegment(id)
@@ -65,7 +65,7 @@ export function buildVideoToolInputKey(userId: string, extension: string, id = r
   return `video-tools/${safeUserId}/inputs/${safeId}.${safeExtension}`
 }
 
-export function buildVideoToolOutputKey(userId: string, id = randomUUID()): string {
+export function buildVideoToolOutputKey(userId: string, id: string = randomUUID()): string {
   const safeUserId = safePathSegment(userId)
   const safeId = safePathSegment(id)
   if (!safeUserId || !safeId) {
