@@ -64,6 +64,10 @@ function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
     return [queryKeys.projectData(ref.projectId)]
   }
 
+  if (ref.kind === WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES) {
+    return [queryKeys.project.creativeResources(ref.projectId, ref.episodeId)]
+  }
+
   return []
 }
 
@@ -79,6 +83,7 @@ export async function syncWorkspaceResourceChanges(params: {
   const invalidationKeys = new Map<string, QueryKey>()
 
   for (const change of changes) {
+    addQueryKeyOnce(invalidationKeys, queryKeys.operationPlans.all(change.projectId))
     for (const queryKey of queryKeysForResource(change)) addQueryKeyOnce(invalidationKeys, queryKey)
   }
 

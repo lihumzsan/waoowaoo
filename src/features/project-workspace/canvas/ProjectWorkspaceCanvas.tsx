@@ -27,9 +27,8 @@ import {
   isTaskRuntimeRunningPhase,
   TASK_RUNTIME_TARGETS,
 } from '@/lib/task/runtime-targets'
-import { EDIT_FIRST_WORKFLOW_EMPTY_VIEW } from '@/lib/project-workflow/edit-first-view'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectAssets, useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
+import { useCreativeResources, useProjectAssets, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -233,12 +232,11 @@ function ProjectWorkspaceCanvasContent({
     finalVideo,
     videoSegments,
   } = useWorkspaceEpisodeCanvasData()
-  const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: projectAssets } = useProjectAssets(projectId)
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
+  const { data: creativeResourcesResponse } = useCreativeResources(projectId, episodeId ?? null)
   const editBible = editBibleResponse?.editBible ?? null
   const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
-  const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_WORKFLOW_EMPTY_VIEW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
   const scopedVideoSegments = useMemo(() => (
     workspaceScope.kind === 'chapter'
@@ -454,7 +452,6 @@ function ProjectWorkspaceCanvasContent({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
-    editFirstWorkflow,
     editBible,
     editScript: projectedEditScript,
     editScripts: projectedEditScripts,
@@ -467,6 +464,7 @@ function ProjectWorkspaceCanvasContent({
     finalVideo,
     videoSegments: scopedVideoSegments,
     defaultVideoModel: runtime.videoModel ?? null,
+    creativeResources: creativeResourcesResponse?.resources ?? [],
     savedLayouts: savedNodeLayouts,
     translate: t,
     onAction: onNodeAction,

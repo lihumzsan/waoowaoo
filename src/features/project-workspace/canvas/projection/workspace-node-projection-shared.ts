@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { isEditFirstWorkflowPosition, type EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
+import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
 import { buildEditStylePreviewSetView } from '@/lib/edit-script/style-preview-set-view'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type {
@@ -47,7 +47,6 @@ import {
   WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-  WORKSPACE_CANVAS_FINAL_NODE_SIZE,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
@@ -76,7 +75,6 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
   readonly episodeId: string
   readonly episodeName?: string
-  readonly editFirstWorkflow: EditFirstWorkflowView
   readonly editBible?: ProjectEditBible | null
   readonly editScript?: ProjectEditScript | null
   readonly editScripts?: readonly ProjectEditScript[]
@@ -89,6 +87,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly finalVideo?: ProjectFinalVideo | null
   readonly videoSegments?: readonly ProjectVideoSegment[]
   readonly defaultVideoModel?: string | null
+  readonly creativeResources?: readonly CreativeResourceCardView[]
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
   readonly onAction?: WorkspaceCanvasNodeActionHandler
@@ -106,7 +105,6 @@ const SHOT_GRID_GAP_Y = 820
 const STAGE_START_Y = 120
 const SHOT_GRID_START_Y = 460
 const VIDEO_PLAN_GRID_GAP_Y = 96
-const FINAL_TIMELINE_GAP_Y = 120
 const ASSET_GROUP_Y_OFFSET = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
 const SHOT_GRID_START_X = STORY_COLUMN_X + COLUMN_GAP_X * 3
 
@@ -269,7 +267,6 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     projectId,
     episodeId,
     episodeName,
-    editFirstWorkflow,
     editBible = null,
     editScript = null,
     editScripts = [],
@@ -282,6 +279,7 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     finalVideo = null,
     videoSegments = [],
     defaultVideoModel = null,
+    creativeResources = [],
     savedLayouts,
     translate,
     onAction,
@@ -291,7 +289,6 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
   const edges: WorkspaceCanvasFlowEdge[] = []
   const projectedEditScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
   const chapterIndexById = new Map((editBible?.chapters ?? []).map((chapter) => [chapter.id, chapter.chapterIndex] as const))
-  const editFirstCanvasVisibility = editFirstWorkflow.capabilities
   const stylePreviewSetView = buildEditStylePreviewSetView({
     previews: editBible?.stylePreviews ?? [],
   })
@@ -302,7 +299,6 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     projectId,
     episodeId,
     episodeName,
-    editFirstWorkflow,
     editBible,
     editScript,
     editScripts,
@@ -315,6 +311,7 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     finalVideo,
     videoSegments,
     defaultVideoModel,
+    creativeResources,
     savedLayouts,
     translate,
     onAction,
@@ -322,7 +319,6 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
     edges,
     projectedEditScripts,
     chapterIndexById,
-    editFirstCanvasVisibility,
     stylePreviewSetView,
     stylePreviewImageUrl,
     stylePreviewAspectRatio,
@@ -334,7 +330,6 @@ export type WorkspaceNodeProjectionContext = ReturnType<typeof createWorkspaceNo
 export {
   ASSET_GROUP_Y_OFFSET,
   COLUMN_GAP_X,
-  FINAL_TIMELINE_GAP_Y,
   ROW_GAP_Y,
   SHOT_GRID_COLUMNS,
   SHOT_GRID_GAP_X,
@@ -351,7 +346,6 @@ export {
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-  WORKSPACE_CANVAS_FINAL_NODE_SIZE,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
   TASK_RUNTIME_TARGETS,
   assetPreviewUrl,
@@ -360,7 +354,6 @@ export {
   createNode,
   findStreamTarget,
   hasStreamTarget,
-  isEditFirstWorkflowPosition,
   layoutPosition,
   maxNodeBottomY,
   parseJsonRecord,

@@ -3,9 +3,9 @@ import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-la
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { VideoSegmentGenerationScope } from '@/lib/video-segments/scope'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
+import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
 
 export type WorkspaceCanvasNodeKind =
-  | 'finalTimeline'
   | 'editSourceScript'
   | 'editBible'
   | 'editStyleBible'
@@ -17,9 +17,9 @@ export type WorkspaceCanvasNodeKind =
   | 'bgmScore'
   | 'editRequiredAsset'
   | 'editAssetGroup'
+  | 'resourceCard'
 
 export type WorkspaceCanvasMediaNodeKind = Extract<WorkspaceCanvasNodeKind,
-  | 'finalTimeline'
   | 'editStyleBible'
   | 'videoPlan'
   | 'bgmScore'
@@ -31,7 +31,7 @@ export interface MediaLoadingContext {
   readonly styleImageUrl: string | null
 }
 
-export type WorkspaceCanvasTargetType = 'episode' | 'videoSegment' | 'editSourceScript' | 'editBible' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'videoSegment' | 'editSourceScript' | 'editBible' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation' | 'creativeResource'
 
 export type WorkspaceCanvasNodeAction =
   | {
@@ -51,7 +51,6 @@ export type WorkspaceCanvasNodeAction =
       readonly type: 'generate_video_segments'
       readonly scope: Extract<VideoSegmentGenerationScope, { readonly kind: 'segment' }>
     }
-  | { readonly type: 'render_final_video' }
   | { readonly type: 'plan_bgm_score' }
   | { readonly type: 'generate_bgm_score' }
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
@@ -72,16 +71,6 @@ export interface WorkspaceCanvasTextLine {
   readonly kind: 'action' | 'dialogue' | 'voiceover' | 'text'
   readonly speaker?: string | null
   readonly text: string
-}
-
-export interface WorkspaceCanvasFinalDetails {
-  readonly totalShots: number
-  readonly totalImages: number
-  readonly totalVideos: number
-  readonly totalDuration?: number | null
-  readonly orderedVideoLabels: readonly string[]
-  readonly outputUrl?: string | null
-  readonly renderStatus?: string | null
 }
 
 export interface WorkspaceCanvasBgmScoreDetails {
@@ -299,7 +288,6 @@ export interface WorkspaceCanvasNodeData {
   readonly previewAspectRatio?: number | null
   readonly previewDisplayHeight?: number | null
   readonly mediaLoadingContext: MediaLoadingContext | null
-  readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
   readonly sourceScriptDetails?: WorkspaceCanvasSourceScriptDetails
   readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
@@ -310,6 +298,7 @@ export interface WorkspaceCanvasNodeData {
   readonly videoPlanDetails?: WorkspaceCanvasVideoPlanDetails
   readonly editAssetDetails?: WorkspaceCanvasEditAssetDetails
   readonly editAssetGroupDetails?: WorkspaceCanvasEditAssetGroupDetails
+  readonly resourceDetails?: CreativeResourceCardView
 }
 
 export type WorkspaceCanvasMediaNodeData = WorkspaceCanvasNodeData & {

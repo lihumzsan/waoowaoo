@@ -86,9 +86,7 @@ export function appendWorkspaceAssetExecutionProjection(
     edges,
     projectedEditScripts,
     chapterIndexById,
-    editFirstCanvasVisibility,
     stylePreviewImageUrl,
-    editFirstWorkflow,
   } = context
   const { bibleNodeId, editScriptNodeIdsByScriptId } = planning
 
@@ -171,8 +169,7 @@ export function appendWorkspaceAssetExecutionProjection(
     })
   }
   const displayedAssets = plannedAssets.length > 0 ? plannedAssets : [...fallbackAssetsByIdentity.values()]
-  const assetGenerationAvailable = editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_edit_script_assets')
-  if (editFirstCanvasVisibility.editAssetGroup && displayedAssets.length > 0) {
+  if (displayedAssets.length > 0) {
     const nodeId = workspaceNodeId.editAssetGroup(episodeId)
     assetGroupNodeId = nodeId
     const primaryScript = editScript ?? assetGroupScripts[0] ?? null
@@ -211,8 +208,8 @@ export function appendWorkspaceAssetExecutionProjection(
             locations: locationRequirements,
           }),
           ...(assetGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          actionLabel: assetGenerationAvailable && !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
-          action: assetGenerationAvailable && !assetsReady && primaryScript
+          actionLabel: !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
+          action: !assetsReady && primaryScript
             ? { type: 'generate_edit_assets', editScriptId: primaryScript.id }
             : undefined,
           editAssetGroupDetails: {
@@ -242,12 +239,12 @@ export function appendWorkspaceAssetExecutionProjection(
                 runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType, asset.taskTargetId),
                 action: asset.previewImageUrl
                   ? { type: 'regenerate_edit_asset_image', assetId: asset.id, kind: asset.kind }
-                  : assetGenerationAvailable && requirement && script
+                  : requirement && script
                     ? { type: 'generate_edit_asset', editScriptId: script.id, requirementId: requirement.id }
                     : undefined,
                 actionLabel: asset.previewImageUrl
                   ? translate('actions.regenerateImage')
-                  : assetGenerationAvailable && requirement && script
+                  : requirement && script
                     ? translate('actions.generateEditAsset')
                     : undefined,
               }
@@ -273,7 +270,6 @@ export function appendWorkspaceAssetExecutionProjection(
     const matchingExecutionPlan = executionPlanByEditScriptId.get(script.id) ?? null
     const executionPlanProjection = resolveWorkspaceCanvasNodeMaterialization('editShotExecutionPlan', activeTaskTargets, {
       identityAvailable: true,
-      workflowVisible: editFirstCanvasVisibility.editShotExecutionPlan,
       resourceAvailable: matchingExecutionPlan !== null,
       streamAvailable: streamedExecutionPlanTargetIds.has(script.id),
       submissionAvailable: false,

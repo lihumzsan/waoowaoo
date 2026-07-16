@@ -54,20 +54,27 @@ export function normalizeBgmDesignSummary(value: unknown) {
   }
 }
 
-export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, bgmDesign?: unknown) {
+export function normalizeFinalVideoSummary(
+  value: unknown,
+  musicScore?: unknown,
+  bgmDesign?: unknown,
+  explicitEpisodeId?: string,
+) {
   const record = toObject(value)
   const id = normalizeString(record.id)
-  const episodeId = normalizeString(record.episodeId)
-  if (!id || !episodeId) return null
+  const episodeId = normalizeString(record.episodeId) || normalizeString(explicitEpisodeId)
+  const normalizedMusicScore = normalizeMusicScoreSummary(musicScore)
+  const normalizedBgmDesign = normalizeBgmDesignSummary(bgmDesign)
+  if (!episodeId || (!id && !normalizedMusicScore && !normalizedBgmDesign)) return null
 
   return {
-    id,
+    id: id || null,
     episodeId,
     renderStatus: normalizeNullableString(record.renderStatus),
     renderTaskId: normalizeNullableString(record.renderTaskId),
     outputUrl: normalizeNullableString(record.outputUrl),
-    musicScore: normalizeMusicScoreSummary(musicScore),
-    bgmDesign: normalizeBgmDesignSummary(bgmDesign),
+    musicScore: normalizedMusicScore,
+    bgmDesign: normalizedBgmDesign,
     updatedAt: record.updatedAt instanceof Date
       ? record.updatedAt.toISOString()
       : normalizeNullableString(record.updatedAt),

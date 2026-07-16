@@ -47,13 +47,6 @@ export const WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE: WorkspaceCanvasNodeSize = {
   height: 320,
 }
 
-export const WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X = 88
-
-export const WORKSPACE_CANVAS_FINAL_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 340,
-  height: 280,
-}
-
 export const WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE: WorkspaceCanvasNodeSize = {
   width: 420,
   height: 380,
@@ -91,12 +84,6 @@ export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
 }
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
-  finalTimeline: {
-    collapsed: WORKSPACE_CANVAS_FINAL_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
-  },
   editSourceScript: {
     collapsed: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
     expanded: {
@@ -184,6 +171,13 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
   },
   editRequiredAsset: {
     collapsed: WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
+  },
+  resourceCard: {
+    collapsed: { width: 400, height: 500 },
+    expanded: { width: 620, height: 720 },
     expandedLayout: 'stack',
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,

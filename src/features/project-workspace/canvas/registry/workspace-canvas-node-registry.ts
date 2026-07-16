@@ -12,7 +12,7 @@ interface WorkspaceCanvasTaskMaterialization {
 }
 
 export type WorkspaceCanvasRuntimeAggregation = 'failureDominant' | 'resourceAggregate'
-export type WorkspaceCanvasProjectionOwner = 'planning' | 'assetExecution' | 'videoSegment' | 'audioFinal'
+export type WorkspaceCanvasProjectionOwner = 'planning' | 'assetExecution' | 'videoSegment' | 'audioFinal' | 'resource'
 
 interface WorkspaceCanvasTaskRuntime {
   readonly source: 'taskTarget'
@@ -21,7 +21,6 @@ interface WorkspaceCanvasTaskRuntime {
 
 interface WorkspaceCanvasMaterializationFacts {
   readonly identityAvailable: boolean
-  readonly workflowVisible: boolean
   readonly resourceAvailable: boolean
   readonly streamAvailable: boolean
   readonly submissionAvailable: boolean
@@ -67,30 +66,6 @@ const materializeFromTask = (targetType: string, ...taskTypes: readonly TaskType
 const resourceRequired = (reason: string): Capability<WorkspaceCanvasTaskMaterialization> => notApplicable(reason)
 
 export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
-  finalTimeline: {
-    kind: 'finalTimeline',
-    identityScope: 'episode',
-    resource: supported('episodeData'),
-    runtime: taskRuntime(),
-    materializeFromTask: resourceRequired('The workflow materializes the final timeline before its render Task.'),
-    stream: notApplicable('Final rendering has no structured text stream.'),
-    terminalHandoff: supported('episodeData'),
-    rendererKey: 'finalTimeline',
-    presentation: {
-      iconName: 'film',
-      showsMetaFooter: true,
-      hasSourceHandle: false,
-      usesInlineTaskProgress: true,
-      actionPlacement: 'footer',
-      showsLargeTitle: true,
-      usesGridAutoHeightShell: false,
-      showsMetaText: true,
-      runningRenderer: 'default',
-    },
-    projection: supported('audioFinal'),
-    focus: supported('operation'),
-    conformanceFixture: 'finalTimeline',
-  },
   editSourceScript: {
     kind: 'editSourceScript',
     identityScope: 'episode',
@@ -355,6 +330,35 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     focus: supported('operation'),
     conformanceFixture: 'editAssetGroup',
   },
+  resourceCard: {
+    kind: 'resourceCard',
+    identityScope: 'resource',
+    resource: supported('creativeResources'),
+    runtime: taskRuntime(),
+    materializeFromTask: materializeFromTask(
+      'CreativeResource',
+      TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+      TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+    ),
+    stream: notApplicable('Creative Resource Tasks expose terminal media or text facts, not structured streams.'),
+    terminalHandoff: supported('creativeResources'),
+    rendererKey: 'resourceCard',
+    presentation: {
+      iconName: 'package',
+      showsMetaFooter: true,
+      hasSourceHandle: true,
+      usesInlineTaskProgress: true,
+      actionPlacement: 'footer',
+      showsLargeTitle: true,
+      usesGridAutoHeightShell: false,
+      showsMetaText: true,
+      runningRenderer: 'default',
+    },
+    projection: supported('resource'),
+    focus: supported('operation'),
+    conformanceFixture: 'resourceCard',
+  },
 } as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodeDefinition>
 
 export function getWorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind>(kind: K): (typeof WORKSPACE_CANVAS_NODE_DEFINITIONS)[K] {
@@ -380,6 +384,6 @@ export function resolveWorkspaceCanvasNodeMaterialization<T extends TaskRuntimeT
     activeTaskTargets,
     materialized:
       facts.identityAvailable &&
-      (facts.workflowVisible || facts.resourceAvailable || facts.streamAvailable || facts.submissionAvailable || activeTaskTargets.length > 0),
+      (facts.resourceAvailable || facts.streamAvailable || facts.submissionAvailable || activeTaskTargets.length > 0),
   }
 }

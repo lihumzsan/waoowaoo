@@ -183,6 +183,10 @@
         "openDetails": "详情",
         "expandDetails": "展开",
         "collapseDetails": "收起",
+        "generationPrompt": "生成提示词",
+        "generationModel": "生成模型",
+        "generationReferences": "输入资源",
+        "candidateIndex": "候选 {index}",
         "editPrompt": "编辑",
         "savePrompt": "保存",
         "cancelEdit": "取消",
@@ -392,13 +396,6 @@
           "readyMissingPromptDesign": "配乐已完成 · 缺少提示词设计",
           "failed": "配乐生成失败"
         },
-        "finalTimeline": {
-          "title": "成片时间线",
-          "eyebrow": "最终输出",
-          "body": "等待将视频片段合成为最终成片。",
-          "meta": "顺序来自业务数据",
-          "outputReady": "成片已生成，可在详情中预览"
-        },
         "editBible": {
           "title": "制作规划",
           "eyebrow": "制作规划",
@@ -463,6 +460,10 @@
           "eyebrow": "角色与场景资产",
           "body": "本片需要预生成的角色与场景资产。点击卡片查看详情并单独重新生成，点击图片上的放大按钮查看大图。",
           "meta": "{characters} 个人物 · {locations} 个场景"
+        },
+        "resourceCard": {
+          "eyebrow": "创作资源 · {type}",
+          "body": "持久化创作产物"
         }
       }
     }

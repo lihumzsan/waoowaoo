@@ -4,7 +4,6 @@ import type { CanvasNodeLayout, CanvasViewportLayout } from '@/lib/project-canva
 export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 
 export const projectCanvasNodeTypeSchema = z.enum([
-  'finalTimeline',
   'editSourceScript',
   'editBible',
   'editStyleBible',
@@ -16,6 +15,7 @@ export const projectCanvasNodeTypeSchema = z.enum([
   'bgmScore',
   'editRequiredAsset',
   'editAssetGroup',
+  'resourceCard',
 ])
 
 export type CanvasLayoutNodeType = z.infer<typeof projectCanvasNodeTypeSchema>
@@ -33,6 +33,7 @@ export const projectCanvasTargetTypeSchema = z.enum([
   'editAssetRequirement',
   'projectCharacter',
   'projectLocation',
+  'creativeResource',
 ])
 
 const finiteNumberSchema = z.number().finite()

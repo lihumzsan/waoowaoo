@@ -129,7 +129,7 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
       expect(definition.runtime.reason.length).toBeGreaterThan(0)
     }
     if (definition.projection.kind === 'supported') {
-      expect(['planning', 'assetExecution', 'videoSegment', 'audioFinal']).toContain(definition.projection.value)
+      expect(['planning', 'assetExecution', 'videoSegment', 'audioFinal', 'resource']).toContain(definition.projection.value)
     } else {
       expect(definition.projection.reason.length).toBeGreaterThan(0)
     }

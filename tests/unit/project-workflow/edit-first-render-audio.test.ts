@@ -5,24 +5,12 @@ import {
   resolveEditFirstWorkflowViewFromSnapshot,
   snapshot,
 } from './edit-first-workflow.fixture'
-import {
-  createEditFirstWorkflowOperationPolicy,
-  createEditFirstWorkflowView,
-  type EditFirstWorkflowStep,
-} from '@/lib/project-workflow/edit-first-view'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import type { WorkspaceCanvasStreamPatch } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
 import { createValidBgmDesign } from '../bgm-design/bgm-design-fixture'
 import { TASK_RUNTIME_TARGETS, taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
-
-function capabilitiesAt(step: EditFirstWorkflowStep) {
-  return createEditFirstWorkflowView({
-    step,
-    status: { kind: 'ready', reason: null },
-  }).capabilities
-}
 
 describe('edit-first workflow state', () => {
   /**
@@ -33,23 +21,21 @@ describe('edit-first workflow state', () => {
    * Oracle: audio nodes are hidden through chapter rendering and visible when audio planning starts.
    * Command: npx vitest run tests/unit/project-workflow/edit-first-render-audio.test.ts
    */
-  it('reveals audio nodes only when the workflow reaches audio planning', () => {
-    expect(capabilitiesAt('video_segments')).toMatchObject({ bgmScore: false })
-    expect(capabilitiesAt('chapter_render')).toMatchObject({ bgmScore: false })
-    expect(capabilitiesAt('audio_plan')).toMatchObject({ bgmScore: true })
-    expect(capabilitiesAt('chapter_render').finalTimeline).toBe(false)
-    expect(capabilitiesAt('audio_plan').finalTimeline).toBe(false)
-    expect(capabilitiesAt('final_render').finalTimeline).toBe(true)
+  it('does not materialize audio or render placeholders without resource or Task facts', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+    expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(false)
+    expect(projection.nodes.some((node) => node.data.kind === 'resourceCard')).toBe(false)
   })
 
   it('materializes active audio Tasks while the workflow context catches up', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'chapter_render',
-        status: { kind: 'processing', reason: 'chapter renders are still running' },
-      }),
       activeTaskTargets: [
         {
           taskId: 'bgm-design-task-1',
@@ -84,8 +70,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('chapter_render')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_chapters')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['render_chapters'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('render_chapters')
   })
 
   it('keeps a stale final-render failure behind missing chapter and audio prerequisites', () => {
@@ -106,7 +91,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(beforeChapterRender.step).toBe('chapter_render')
-    expect(beforeChapterRender.operationPolicy.allowedOperationIds).toEqual(['render_chapters'])
+    expect(beforeChapterRender.recommendation.recommendedAction?.operationId).toBe('render_chapters')
 
     const beforeAudioPlanning = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
@@ -125,12 +110,10 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(beforeAudioPlanning.step).toBe('audio_plan')
-    expect(beforeAudioPlanning.operationPolicy.allowedOperationIds).toEqual([
-      'plan_episode_bgm_design',
-    ])
+    expect(beforeAudioPlanning.recommendation.recommendedAction?.operationId).toBe('plan_episode_bgm_design')
   })
 
-  it('keeps a stale failed final resource visible without an executable final action', () => {
+  it('does not turn a failed final-render domain row into a dedicated Canvas card', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -142,24 +125,11 @@ describe('edit-first workflow state', () => {
         outputUrl: null,
         updatedAt: '2026-07-13T00:00:00.000Z',
       },
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'chapter_render',
-        status: { kind: 'ready', reason: null },
-        operationPolicy: createEditFirstWorkflowOperationPolicy({
-          recommendedAction: {
-          id: 'render_chapters',
-          operationId: 'render_chapters',
-          title: 'Render chapter videos',
-          },
-        }),
-      }),
       savedLayouts: [],
       translate: (key) => key,
     })
 
-    const finalNode = projection.nodes.find((node) => node.data.kind === 'finalTimeline')
-    expect(finalNode?.id).toBe(workspaceNodeId.finalTimeline('episode-1'))
-    expect(finalNode?.data.action).toBeUndefined()
+    expect(projection.nodes).toHaveLength(0)
   })
 
   it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {
@@ -180,11 +150,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('video_segments')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_chapters')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([
-      'render_chapters',
-      'generate_video_segments',
-    ])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('render_chapters')
   })
 
   it('offers one BGM design plan after all chapter renders are ready', () => {
@@ -204,9 +170,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('audio_plan')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_episode_bgm_design')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['plan_episode_bgm_design'])
-    expect(state.operationPolicy.group).toBeNull()
+    expect(state.recommendation.recommendedAction?.operationId).toBe('plan_episode_bgm_design')
   })
 
   it('blocks final render while required BGM is generating', () => {
@@ -230,9 +194,8 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('audio_generation')
-    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.recommendation.recommendedAction).toBeNull()
     expect(state.status.kind).toBe('processing')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('keeps the BGM terminal presentation until the generation Task takes over', () => {
@@ -267,10 +230,6 @@ describe('edit-first workflow state', () => {
           musicModel: 'music-model',
         },
       },
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'audio_generation',
-        status: { kind: 'processing', reason: 'BGM generation is running' },
-      }),
       savedLayouts: [],
       translate: (key) => key,
     })
@@ -350,8 +309,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('audio_generation')
     expect(state.status.kind).toBe('failed')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('generate_episode_bgm_score')
   })
 
   it('offers only the paid BGM generator selected by the frozen BGM design', () => {
@@ -374,8 +332,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('audio_generation')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
-    expect(state.operationPolicy.group).toBeNull()
+    expect(state.recommendation.recommendedAction?.operationId).toBe('generate_episode_bgm_score')
   })
 
   it('allows final render after videos, chapters, and required BGM are ready', () => {
@@ -399,8 +356,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('final_render')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_final_video')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['render_final_video'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('render_final_video')
   })
 
   it('tracks final render processing before completion', () => {
@@ -445,6 +401,5 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('final_render')
     expect(state.status.kind).toBe('completed')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 })

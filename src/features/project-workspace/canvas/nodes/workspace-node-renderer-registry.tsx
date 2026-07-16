@@ -1,6 +1,6 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { EditAssetContent, EditAssetGroupContent, StyleBibleContent } from './renderers/assets-style'
-import { BgmScoreContent, FinalContent } from './renderers/audio-final'
+import { BgmScoreContent } from './renderers/audio-final'
 import { EditBibleContent, SourceScriptContent } from './renderers/bible'
 import { EditScriptContent, EditShotExecutionPlanContent } from './renderers/edit-plans'
 import { MediaPreview } from './renderers/media'
@@ -8,10 +8,10 @@ import { EditPipelineStepContent, ProcessGroupContent } from './renderers/pipeli
 import { nodeIsRunning } from './renderers/renderer-shared'
 import type { WorkspaceCanvasNodeRenderer, WorkspaceCanvasNodeRendererProps } from './renderers/types'
 import { VideoPlanContent } from './renderers/video-plan'
+import { ResourceCardContent, ResourceProvenanceContent } from './renderers/resource-card'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 
 export const WORKSPACE_CANVAS_NODE_RENDERERS = {
-  finalTimeline: FinalContent,
   editSourceScript: SourceScriptContent,
   editBible: EditBibleContent,
   editStyleBible: StyleBibleContent,
@@ -23,6 +23,7 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
   bgmScore: BgmScoreContent,
   editRequiredAsset: EditAssetContent,
   editAssetGroup: EditAssetGroupContent,
+  resourceCard: ResourceCardContent,
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>
 
 export function NodeContent({ data, labels, expanded }: WorkspaceCanvasNodeRendererProps) {
@@ -33,5 +34,12 @@ export function NodeContent({ data, labels, expanded }: WorkspaceCanvasNodeRende
     return <MediaPreview data={data} />
   }
   const Renderer = WORKSPACE_CANVAS_NODE_RENDERERS[data.kind]
-  return <Renderer data={data} labels={labels} expanded={expanded} />
+  return (
+    <div className="space-y-3">
+      <Renderer data={data} labels={labels} expanded={expanded} />
+      {data.kind !== 'resourceCard' && data.resourceDetails
+        ? <ResourceProvenanceContent data={data} labels={labels} expanded={expanded} />
+        : null}
+    </div>
+  )
 }

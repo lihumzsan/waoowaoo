@@ -8,7 +8,6 @@ const WORKSPACE_NODE_ACTION_ICON_BY_TYPE = {
   open_asset_library: 'arrowRight',
   update_edit_asset_requirement_description: 'arrowRight',
   generate_video_segments: 'video',
-  render_final_video: 'film',
   plan_bgm_score: 'audioWave',
   generate_bgm_score: 'audioWave',
   generate_edit_assets: 'package',

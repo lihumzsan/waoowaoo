@@ -2,57 +2,9 @@
 
 import { useTranslations } from 'next-intl'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
-import { shotDetailIconGrid } from '../shot-grid'
 import { WorkspaceCanvasMotionPresence } from '../workspace-node-motion'
 import type { WorkspaceCanvasFlowNode } from '../../node-canvas-types'
 import { SELECTABLE_TEXT_CLASS, nodeIsRunning, renderSection, renderSummaryText, renderTextSection, renderValue } from './renderer-shared'
-import { renderChips } from './media'
-
-export function FinalContent({
-  data,
-  labels,
-  expanded,
-}: {
-  readonly data: WorkspaceCanvasFlowNode['data']
-  readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
-}) {
-  const details = data.finalDetails
-  if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const running = nodeIsRunning(data)
-  const displayOutputUrl = details.renderStatus === 'completed' ? (toDisplayImageUrl(details.outputUrl) ?? details.outputUrl) : null
-  return (
-    <div className={`space-y-2 rounded-[18px] ${running ? 'workspace-node-loading-surface' : ''}`}>
-      {displayOutputUrl ? (
-        <div className="nodrag nowheel overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100">
-          <video src={displayOutputUrl} aria-label={data.title} controls preload="metadata" className="h-[156px] w-full bg-black object-contain" />
-        </div>
-      ) : null}
-      {renderSection(
-        labels('finalStats'),
-        shotDetailIconGrid([
-          {
-            label: labels('totalShots'),
-            value: details.totalShots != null ? String(details.totalShots) : '',
-          },
-          {
-            label: labels('totalImages'),
-            value: details.totalImages != null ? String(details.totalImages) : '',
-          },
-          {
-            label: labels('totalVideos'),
-            value: details.totalVideos != null ? String(details.totalVideos) : '',
-          },
-          {
-            label: labels('totalDuration'),
-            value: details.totalDuration != null ? String(details.totalDuration) : '',
-          },
-        ]),
-      )}
-      <WorkspaceCanvasMotionPresence visible={expanded}>{renderChips(labels('videoOrder'), details.orderedVideoLabels)}</WorkspaceCanvasMotionPresence>
-    </div>
-  )
-}
 export function BgmScoreContent({
   data,
   labels,

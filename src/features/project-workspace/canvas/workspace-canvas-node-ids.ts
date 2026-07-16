@@ -8,7 +8,7 @@ export const workspaceNodeId = {
   editShotExecutionPlan: (editScriptId: string): string => `edit-shot-execution-plan:edit-script:${editScriptId}`,
   videoPlan: (editScriptId: string, blockNumber: number): string => `video-plan:${editScriptId}:${blockNumber}`,
   bgmScore: (episodeId: string): string => `bgm-score:${episodeId}`,
-  finalTimeline: (episodeId: string): string => `final:${episodeId}`,
+  resourceCard: (resourceOrCandidateSetId: string): string => `resource:${resourceOrCandidateSetId}`,
 } as const
 
 export function workspaceEditShotExecutionPlanNodeId(editScriptId: string): string {

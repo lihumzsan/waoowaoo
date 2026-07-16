@@ -15,7 +15,6 @@ import {
   createNode,
   findStreamTarget,
   hasStreamTarget,
-  isEditFirstWorkflowPosition,
   layoutPosition,
   readJsonRecord,
   resolveWorkspaceCanvasNodeMaterialization,
@@ -97,7 +96,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
     projectId,
     episodeId,
     episodeName,
-    editFirstWorkflow,
     editBible,
     editScript,
     editScripts,
@@ -111,7 +109,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
     edges,
     projectedEditScripts,
     chapterIndexById,
-    editFirstCanvasVisibility,
     stylePreviewSetView,
     stylePreviewImageUrl,
   } = context
@@ -128,7 +125,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
     Boolean(editSourceScriptStreamTarget) || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
   const sourceScriptProjection = resolveWorkspaceCanvasNodeMaterialization('editSourceScript', activeTaskTargets, {
     identityAvailable: true,
-    workflowVisible: editFirstCanvasVisibility.editSourceScript,
     resourceAvailable: Boolean(editBible && (editBible.sourceKind === 'prompt_generated_outline' || editBible.sourceKind === 'prompt_generated_script')),
     streamAvailable: sourceScriptStreamAvailable,
     submissionAvailable: false,
@@ -151,8 +147,7 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
   const bibleStreamAvailable = Boolean(editBibleStreamTarget) || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const bibleProjection = resolveWorkspaceCanvasNodeMaterialization('editBible', activeTaskTargets, {
     identityAvailable: true,
-    workflowVisible: editFirstCanvasVisibility.editBible,
-    resourceAvailable: hasProductionPlanningArtifact,
+    resourceAvailable: hasProductionPlanningArtifact || Boolean(editBible?.sourceKind === 'prompt_generated_script'),
     streamAvailable: bibleStreamAvailable,
     submissionAvailable: editScriptPending,
     targetId: editBible?.id ?? null,
@@ -260,14 +255,12 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
   let styleBibleNodeId: string | null = null
   const styleBibleProjection = resolveWorkspaceCanvasNodeMaterialization('editStyleBible', activeTaskTargets, {
     identityAvailable: Boolean(editBible),
-    workflowVisible: isEditFirstWorkflowPosition(editFirstWorkflow, 'visual_style', 'processing'),
     resourceAvailable: Boolean(styleBibleDetails || stylePreviewSetView),
     streamAvailable: false,
     submissionAvailable: false,
     targetId: editBible?.id ?? null,
   })
-  const stylePreviewOptionsRunning =
-    styleBibleProjection.activeTaskTargets.length > 0 || (isEditFirstWorkflowPosition(editFirstWorkflow, 'visual_style', 'processing') && !stylePreviewSetView)
+  const stylePreviewOptionsRunning = styleBibleProjection.activeTaskTargets.length > 0
   if (editBible && styleBibleProjection.materialized) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     const stylePreviewRuntimeTargets =
@@ -334,7 +327,7 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
 
   let editScriptNodeId: string | null = null
   const editScriptNodeIdsByScriptId = new Map<string, string>()
-  if (editFirstCanvasVisibility.editScript || editScript || editScripts.length > 0 || editScriptPending) {
+  if (editScript || editScripts.length > 0 || editScriptPending) {
     const scriptNodes = projectedEditScripts
     const editScriptTitle = (chapterId: string | null): string => {
       if (!chapterId) return translate('nodes.editScript.title')

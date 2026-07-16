@@ -15,8 +15,8 @@ export const WORKSPACE_CANVAS_OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<str
   plan_episode_bgm_design: ['bgmScore'],
   generate_episode_bgm_score: ['bgmScore'],
   generate_project_music: ['bgmScore'],
-  render_chapters: ['finalTimeline', 'videoPlan'],
-  render_final_video: ['finalTimeline'],
+  render_chapters: ['resourceCard', 'videoPlan'],
+  render_final_video: ['resourceCard'],
 }
 
 export const WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY = [
@@ -28,7 +28,7 @@ export const WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY = [
   'editPipelineStep',
   'videoPlan',
   'bgmScore',
-  'finalTimeline',
+  'resourceCard',
 ] as const satisfies readonly WorkspaceCanvasNodeKind[]
 
 export function getWorkspaceCanvasOperationFocusKindPriority(operationId: string | null | undefined): readonly WorkspaceCanvasNodeKind[] | null {

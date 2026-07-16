@@ -302,7 +302,8 @@ export interface ProjectMusicScore {
 }
 
 export interface ProjectFinalVideo {
-  id: string
+  /** Null until a real final render record exists; BGM resources remain independently projectable. */
+  id: string | null
   episodeId: string
   renderStatus: string | null
   renderTaskId: string | null

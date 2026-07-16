@@ -54,24 +54,22 @@ export function appendWorkspaceVideoSegmentProjection(
     nodes,
     edges,
     projectedEditScripts,
-    editFirstWorkflow,
-    editFirstCanvasVisibility,
+    editShotExecutionPlans,
     stylePreviewImageUrl,
   } = context
-  const { editScriptNodeId } = planning
+  const { editScriptNodeId, editScriptNodeIdsByScriptId } = planning
   const { executionNodeId, executionNodeIdsByEditScriptId } = assetExecution
   const segmentByIdentity = new Map(videoSegments.map((segment) => [
     `${segment.editScriptId}:${segment.segmentId}`,
     segment,
   ]))
-  const projectedVideoPlans = editFirstCanvasVisibility.videoPlan
-    ? projectedEditScripts.flatMap((script) => script.generationSegments.map((segment, segmentIndex) => ({
+  const executionPlanByScriptId = new Map(editShotExecutionPlans.map((plan) => [plan.editScriptId, plan] as const))
+  const projectedVideoPlans = projectedEditScripts.flatMap((script) => script.generationSegments.map((segment, segmentIndex) => ({
         script,
         segment,
         segmentIndex,
         videoSegment: segmentByIdentity.get(`${script.id}:${segment.segmentId}`) ?? null,
       })))
-    : []
   const startY = Math.max(
     maxNodeBottomY(nodes, 'editShotExecutionPlan') ?? STAGE_START_Y,
     maxNodeBottomY(nodes, 'editAssetGroup') ?? STAGE_START_Y,
@@ -89,7 +87,11 @@ export function appendWorkspaceVideoSegmentProjection(
       return shot
     })
     const nodeId = workspaceNodeId.videoPlan(script.id, segmentIndex + 1)
-    const actionAvailable = editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_video_segments')
+    const segmentActive = videoSegment !== null && ['queued', 'processing', 'generating'].includes(videoSegment.status)
+    const segmentComplete = Boolean(videoSegment?.videoMedia)
+    const intrinsicInputsReady = script.assetReviewStatus === 'approved'
+      && executionPlanByScriptId.get(script.id)?.status === 'ready'
+    const generationActionAvailable = intrinsicInputsReady && !segmentActive && !segmentComplete
     nodes.push(createMediaNode({
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
@@ -120,20 +122,18 @@ export function appendWorkspaceVideoSegmentProjection(
           ? resourcePresentationFromStatus(videoSegment.status) ?? workspaceCanvasPendingResourcePresentation()
           : workspaceCanvasPendingResourcePresentation()),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoSegment(segment.videoSegmentId)),
-        ...(actionAvailable
+        actionLabel: generationActionAvailable ? translate('actions.generateVideo') : undefined,
+        action: generationActionAvailable
           ? {
-              actionLabel: translate(videoSegment?.videoMedia ? 'actions.regenerateVideo' : 'actions.generateVideo'),
-              action: {
-                type: 'generate_video_segments' as const,
-                scope: {
-                  kind: 'segment' as const,
-                  chapterId,
-                  editScriptId: script.id,
-                  segmentId: segment.segmentId,
-                },
+              type: 'generate_video_segments' as const,
+              scope: {
+                kind: 'segment' as const,
+                chapterId,
+                editScriptId: script.id,
+                segmentId: segment.segmentId,
               },
             }
-          : {}),
+          : undefined,
         previewImageUrl: null,
         previewAspectRatio: outputAspectRatio(videoSegment),
         videoPlanDetails: {
@@ -153,7 +153,10 @@ export function appendWorkspaceVideoSegmentProjection(
         onAction,
       },
     }))
-    const sourceNodeId = executionNodeIdsByEditScriptId.get(script.id) ?? executionNodeId ?? editScriptNodeId
+    const sourceNodeId = executionNodeIdsByEditScriptId.get(script.id)
+      ?? editScriptNodeIdsByScriptId.get(script.id)
+      ?? executionNodeId
+      ?? editScriptNodeId
     if (sourceNodeId) edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
   })
 

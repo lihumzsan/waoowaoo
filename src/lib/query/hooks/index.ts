@@ -146,6 +146,10 @@ export {
 } from './useProjectContext'
 
 export {
+    useCreativeResources,
+} from './useCreativeResources'
+
+export {
     projectEditBibleQueryOptions,
     useProjectEditBible,
     useProjectEditBibleResponse,

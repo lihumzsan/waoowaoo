@@ -7,7 +7,6 @@ import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/can
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import type { ProjectEditBible } from '@/types/project'
-import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
 /**
  * Logic Specification
@@ -74,10 +73,6 @@ describe('Canvas terminal handoff', () => {
     const sourceProjection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'source_script',
-        status: { kind: 'processing', reason: 'source generation is running' },
-      }),
       editBible: editBible('generating', 'prompt_generated_outline'),
       savedLayouts: [],
       translate: (key) => key,
@@ -87,10 +82,6 @@ describe('Canvas terminal handoff', () => {
     const bibleProjection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'episode_plan',
-        status: { kind: 'processing', reason: 'planning is running' },
-      }),
       editBible: editBible('generating', 'prompt_generated_script'),
       savedLayouts: [],
       translate: (key) => key,

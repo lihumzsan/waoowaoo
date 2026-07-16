@@ -67,6 +67,11 @@ export async function readProjectEpisodeDetail(input: {
     editScript: editScripts.length === 1 ? editScripts[0] : null,
     editScripts,
     editShotExecutionPlans,
-    finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.bgmDesign),
+    finalVideo: normalizeFinalVideoSummary(
+      episode.finalOutput,
+      episode.musicScore,
+      episode.bgmDesign,
+      episode.id,
+    ),
   }
 }

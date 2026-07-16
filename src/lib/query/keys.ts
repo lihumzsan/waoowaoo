@@ -56,6 +56,8 @@ export const queryKeys = {
     },
 
     operationPlans: {
+        all: (projectId: string) =>
+            ['operation-plan-preview', projectId] as const,
         preview: (projectId: string, operationId: string, inputKey: string) =>
             ['operation-plan-preview', projectId, operationId, inputKey] as const,
     },
@@ -88,6 +90,8 @@ export const queryKeys = {
             ['project', projectId, 'canvas-layout', episodeId] as const,
         context: (projectId: string, episodeId?: string | null, contextScope?: string | null) =>
             ['project', projectId, 'context', episodeId ?? '', contextScope ?? ''] as const,
+        creativeResources: (projectId: string, episodeId?: string | null) =>
+            ['project', projectId, 'creative-resources', episodeId ?? ''] as const,
         assistantThread: (projectId: string, episodeId?: string | null) =>
             ['project', projectId, 'assistant-thread', episodeId ?? ''] as const,
         editBible: (projectId: string, episodeId: string) =>

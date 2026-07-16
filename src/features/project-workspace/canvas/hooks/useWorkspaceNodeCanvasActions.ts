@@ -39,11 +39,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'render_final_video') {
-      await runtime.onRenderFinalVideo()
-      return
-    }
-
     if (action.type === 'plan_bgm_score') {
       await runtime.onPlanBgmScore()
       return

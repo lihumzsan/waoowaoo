@@ -16,23 +16,23 @@ export function useWorkspaceNodeCanvasProjection(
   input: BuildWorkspaceNodeCanvasProjectionInput,
 ): WorkspaceCanvasProjection {
   const {
-    projectId, episodeId, episodeName, editFirstWorkflow,
+    projectId, episodeId, episodeName,
     editBible, editScript, editScripts, editShotExecutionPlans, projectCharacters, projectLocations,
     activeTaskTargets, editScriptPending, streamTargets,
-    finalVideo, videoSegments, defaultVideoModel,
+    finalVideo, videoSegments, defaultVideoModel, creativeResources,
     savedLayouts, translate, onAction,
   } = input
   return useMemo(() => buildWorkspaceNodeCanvasProjection({
-    projectId, episodeId, episodeName, editFirstWorkflow,
+    projectId, episodeId, episodeName,
     editBible, editScript, editScripts, editShotExecutionPlans, projectCharacters, projectLocations,
     activeTaskTargets, editScriptPending, streamTargets,
-    finalVideo, videoSegments, defaultVideoModel,
+    finalVideo, videoSegments, defaultVideoModel, creativeResources,
     savedLayouts, translate, onAction,
   }), [
-    projectId, episodeId, episodeName, editFirstWorkflow,
+    projectId, episodeId, episodeName,
     editBible, editScript, editScripts, editShotExecutionPlans, projectCharacters, projectLocations,
     activeTaskTargets, editScriptPending, streamTargets,
-    finalVideo, videoSegments, defaultVideoModel,
+    finalVideo, videoSegments, defaultVideoModel, creativeResources,
     savedLayouts, translate, onAction,
   ])
 }

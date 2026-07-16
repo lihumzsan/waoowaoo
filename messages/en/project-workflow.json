@@ -183,6 +183,10 @@
         "openDetails": "Details",
         "expandDetails": "Expand",
         "collapseDetails": "Collapse",
+        "generationPrompt": "Generation Prompt",
+        "generationModel": "Generation Model",
+        "generationReferences": "Input Resources",
+        "candidateIndex": "Candidate {index}",
         "editPrompt": "Edit",
         "savePrompt": "Save",
         "cancelEdit": "Cancel",
@@ -392,13 +396,6 @@
           "readyMissingPromptDesign": "Music ready · prompt design missing",
           "failed": "Music generation failed"
         },
-        "finalTimeline": {
-          "title": "Final Timeline",
-          "eyebrow": "Final Output",
-          "body": "Waiting to assemble the final video.",
-          "meta": "Order comes from domain data",
-          "outputReady": "Final video generated. Preview it in details."
-        },
         "editBible": {
           "title": "Production Plan",
           "eyebrow": "Production Plan",
@@ -463,6 +460,10 @@
           "eyebrow": "Character and Scene Assets",
           "body": "Characters and scenes to pre-generate for this video. Click a card to view details and regenerate it individually, or use the image zoom button to preview it large.",
           "meta": "{characters} character(s) · {locations} scene(s)"
+        },
+        "resourceCard": {
+          "eyebrow": "Creative Resource · {type}",
+          "body": "Persistent creative output"
         }
       }
     }

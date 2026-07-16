@@ -8,7 +8,7 @@ export type WorkspaceCanvasLayoutLane =
   | 'execution'
   | 'videoPlan'
   | 'bgm'
-  | 'final'
+  | 'resource'
 
 export type WorkspaceCanvasAnchorMode = 'none' | 'fixed' | 'manual'
 
@@ -93,8 +93,8 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
       return 'videoPlan'
     case 'bgmScore':
       return 'bgm'
-    case 'finalTimeline':
-      return 'final'
+    case 'resourceCard':
+      return 'resource'
   }
 }
 
@@ -105,7 +105,7 @@ function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: Work
     case 'editScript':
     case 'execution':
     case 'bgm':
-    case 'final':
+    case 'resource':
       return lane
     case 'assets':
       return node.data.editAssetDetails?.editScriptId

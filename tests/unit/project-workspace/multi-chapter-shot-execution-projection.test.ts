@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import type { ProjectEditScript, ProjectVideoSegment } from '@/types/project'
-import {
-  createEditFirstWorkflowOperationPolicy,
-  createEditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
+import type { ProjectEditScript, ProjectEditShotExecutionPlan, ProjectVideoSegment } from '@/types/project'
 
 /**
  * Logic Specification
@@ -96,6 +92,27 @@ function completedVideoSegment(
   }
 }
 
+function readyExecutionPlan(script: ProjectEditScript): ProjectEditShotExecutionPlan {
+  return {
+    id: `execution-${script.id}`,
+    projectId: script.projectId,
+    episodeId: script.episodeId,
+    chapterId: script.chapterId,
+    editScriptId: script.id,
+    status: 'ready',
+    generationTaskId: `task-execution-${script.id}`,
+    generationSegments: script.generationSegments.map((segment) => ({
+      segmentId: segment.segmentId,
+      shots: segment.shotIds.map((shotId, index) => ({
+        shotId,
+        shotNumber: index + 1,
+        shotScale: 'medium',
+        cameraMovement: { movement: 'locked', stability: 'locked' },
+      })),
+    })),
+  }
+}
+
 describe('multi-chapter shot execution Canvas projection', () => {
   it('materializes every active chapter target before workflow and stream catch up', () => {
     const scripts = [
@@ -105,10 +122,6 @@ describe('multi-chapter shot execution Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'planned_assets',
-        status: { kind: 'needs_user_choice', reason: 'cached workflow has not observed the submitted Tasks' },
-      }),
       editScripts: scripts,
       editShotExecutionPlans: [],
       activeTaskTargets: scripts.map((script) => ({
@@ -150,15 +163,8 @@ describe('multi-chapter shot execution Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'video_segments',
-        status: { kind: 'ready', reason: null },
-        operationPolicy: createEditFirstWorkflowOperationPolicy({
-          allowedOperationIds: ['generate_video_segments'],
-        }),
-      }),
       editScripts: scripts,
-      editShotExecutionPlans: [],
+      editShotExecutionPlans: scripts.map(readyExecutionPlan),
       videoSegments: [],
       savedLayouts: [],
       translate: (key) => key,
@@ -195,7 +201,7 @@ describe('multi-chapter shot execution Canvas projection', () => {
     ])
   })
 
-  it('projects every completed chapter video in the all-chapters scope', () => {
+  it('projects completed chapter videos without inventing missing shot-plan or final-output nodes', () => {
     const scripts = [
       editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1', 'video-segment-1'),
       editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2', 'video-segment-2'),
@@ -207,13 +213,6 @@ describe('multi-chapter shot execution Canvas projection', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      editFirstWorkflow: createEditFirstWorkflowView({
-        step: 'final_render',
-        status: { kind: 'ready', reason: null },
-        operationPolicy: createEditFirstWorkflowOperationPolicy({
-          allowedOperationIds: ['render_final_video'],
-        }),
-      }),
       editScript: null,
       editScripts: scripts,
       editShotExecutionPlans: [],
@@ -242,21 +241,14 @@ describe('multi-chapter shot execution Canvas projection', () => {
     expect(nodes[0]?.position).not.toEqual(nodes[1]?.position)
     expect(projection.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        source: workspaceNodeId.editShotExecutionPlan('edit-script-1'),
+        source: workspaceNodeId.editScript('episode-1', 'chapter-1'),
         target: workspaceNodeId.videoPlan('edit-script-1', 1),
       }),
       expect.objectContaining({
-        source: workspaceNodeId.editShotExecutionPlan('edit-script-2'),
+        source: workspaceNodeId.editScript('episode-1', 'chapter-2'),
         target: workspaceNodeId.videoPlan('edit-script-2', 1),
       }),
-      expect.objectContaining({
-        source: workspaceNodeId.videoPlan('edit-script-1', 1),
-        target: workspaceNodeId.finalTimeline('episode-1'),
-      }),
-      expect.objectContaining({
-        source: workspaceNodeId.videoPlan('edit-script-2', 1),
-        target: workspaceNodeId.finalTimeline('episode-1'),
-      }),
     ]))
+    expect(projection.nodes.some((node) => node.data.kind === 'editShotExecutionPlan')).toBe(false)
   })
 })
