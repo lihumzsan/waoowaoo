@@ -7,7 +7,6 @@ import {
   prismaState,
   readEditFirstAspectRatio,
   vi,
-  workflow,
 } from './choice-card.fixture'
 
 describe('edit-first assistant choice cards', () => {
@@ -47,7 +46,6 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('episode_plan', 'needs_user_choice'),
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
     })
@@ -82,16 +80,15 @@ describe('edit-first assistant choice cards', () => {
     expect(card).not.toHaveProperty('operationPlan')
   })
 
-  it('rejects bible review cards outside the bible review stage', async () => {
+  it('rejects bible review when no reviewable plan exists', async () => {
     await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('script_intake', 'ready'),
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:step=script_intake:status=ready')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_BIBLE_NOT_FOUND')
   })
 
   it('builds a script review card after prompt script expansion', async () => {
@@ -115,7 +112,6 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('source_script', 'needs_user_choice'),
       choiceType: 'script_review',
       toolCallId: 'tool-call-script',
     })
@@ -138,16 +134,15 @@ describe('edit-first assistant choice cards', () => {
     })
   })
 
-  it('rejects script review cards outside the script review stage', async () => {
+  it('rejects script review when no reviewable generated script exists', async () => {
     await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('episode_plan', 'ready'),
       choiceType: 'script_review',
       toolCallId: 'tool-call-script',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:step=episode_plan:status=ready')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_SCRIPT_NOT_FOUND')
   })
 
   it('builds a style card from the available completed style previews', async () => {
@@ -195,7 +190,6 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('visual_style', 'needs_user_choice'),
       choiceType: 'style',
       toolCallId: 'tool-call-1',
     })
@@ -266,7 +260,6 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('visual_style', 'needs_user_choice'),
       choiceType: 'style',
       toolCallId: 'tool-call-1',
     })
@@ -312,7 +305,6 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('planned_assets', 'needs_user_choice'),
       choiceType: 'asset_review',
       toolCallId: 'tool-call-assets',
     })

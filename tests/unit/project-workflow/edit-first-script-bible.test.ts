@@ -11,8 +11,7 @@ describe('edit-first workflow state', () => {
     const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot())
 
     expect(state.step).toBe('script_intake')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('ingest_script')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['ingest_script'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('ingest_script')
   })
 
   it('separates prompt script expansion from episode plan generation', () => {
@@ -24,7 +23,6 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('source_script')
     expect(state.status.kind).toBe('processing')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('does not expose script ingestion after a confirmed script bible generation fails', () => {
@@ -36,8 +34,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('episode_plan')
     expect(state.status.kind).toBe('failed')
-    expect(state.operationPolicy.recommendedAction).toBeNull()
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
+    expect(state.recommendation.recommendedAction).toBeNull()
   })
 
   it('routes style text and image generation through consecutive Task-backed operations', () => {
@@ -46,7 +43,7 @@ describe('edit-first workflow state', () => {
       bibleStatus: 'confirmed',
     }))
     expect(directionsReady.step).toBe('visual_style')
-    expect(directionsReady.operationPolicy.recommendedAction?.operationId).toBe('generate_edit_style_previews')
+    expect(directionsReady.recommendation.recommendedAction?.operationId).toBe('generate_edit_style_previews')
 
     const directionsRunning = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
@@ -63,7 +60,7 @@ describe('edit-first workflow state', () => {
       activeStylePreviewTaskCount: 0,
     }))
     expect(plannedOnly.step).toBe('visual_style')
-    expect(plannedOnly.operationPolicy.recommendedAction?.operationId).toBe('generate_edit_style_preview_images')
+    expect(plannedOnly.recommendation.recommendedAction?.operationId).toBe('generate_edit_style_preview_images')
     expect(plannedOnly.status.kind).not.toBe('processing')
 
     const submitted = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
@@ -85,7 +82,6 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('source_script')
     expect(state.status.kind).toBe('needs_user_choice')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('generates the episode plan only after the generated script is approved', () => {
@@ -96,8 +92,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('episode_plan')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_bible_from_script')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_bible_from_script'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('generate_bible_from_script')
   })
 
   it('goes from confirmed style bible to chapter planning', () => {
@@ -109,9 +104,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.step).toBe('chapter_plan')
-    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_chapters')
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['plan_chapters'])
-    expect(state.operationPolicy.allowedOperationIds).toEqual(['plan_chapters'])
+    expect(state.recommendation.recommendedAction?.operationId).toBe('plan_chapters')
   })
 
   it('treats submitted chapter planning tasks as an active edit-script generation edge', () => {
@@ -125,6 +118,5 @@ describe('edit-first workflow state', () => {
 
     expect(state.step).toBe('chapter_plan')
     expect(state.status.kind).toBe('processing')
-    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 })

@@ -24,6 +24,24 @@ const FIRST_CLAIM = 'continuation-claim-1'
 async function seedClaimedContinuation() {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
+  await createQueuedTask({
+    id: 'task-1',
+    userId: user.id,
+    projectId: project.id,
+    type: TASK_TYPE.VIDEO_SEGMENT,
+    targetType: 'ProjectVideoSegment',
+    targetId: 'continuation-video-segment-1',
+    payload: {},
+  })
+  await prisma.task.update({
+    where: { id: 'task-1' },
+    data: {
+      status: TASK_STATUS.COMPLETED,
+      progress: 100,
+      result: { resources: [] },
+      finishedAt: new Date(),
+    },
+  })
   await prisma.projectAgentRun.create({
     data: {
       id: RUN_ID,

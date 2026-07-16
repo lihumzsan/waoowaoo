@@ -319,12 +319,15 @@ export async function planProjectEditScriptAssetsOperation(
       },
     }
   }
-  const readyChapterIds = new Set(
-    episodeScriptRows.filter((script) => script.status === 'ready' || script.status === 'completed').map((script) => script.chapterId),
-  )
-  const notReadyChapterIds = episodeChapters.map((chapter) => chapter.id).filter((chapterId) => !readyChapterIds.has(chapterId))
-  if (episodeChapters.length === 0 || notReadyChapterIds.length > 0) {
-    throw new Error(`EDIT_SCRIPT_ASSET_EPISODE_GATE_NOT_READY:${notReadyChapterIds.join(',') || 'no-chapters'}`)
+  const hasExplicitScope = Boolean(input.editScriptId || input.chapterId || input.requirementId)
+  if (!hasExplicitScope) {
+    const readyChapterIds = new Set(
+      episodeScriptRows.filter((script) => script.status === 'ready' || script.status === 'completed').map((script) => script.chapterId),
+    )
+    const notReadyChapterIds = episodeChapters.map((chapter) => chapter.id).filter((chapterId) => !readyChapterIds.has(chapterId))
+    if (episodeChapters.length === 0 || notReadyChapterIds.length > 0) {
+      throw new Error(`EDIT_SCRIPT_ASSET_EPISODE_GATE_NOT_READY:${notReadyChapterIds.join(',') || 'no-chapters'}`)
+    }
   }
 
   const scopedScripts = selectScripts({

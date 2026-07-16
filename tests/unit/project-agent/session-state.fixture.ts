@@ -1,17 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-import {
-  createEditFirstWorkflowOperationPolicy,
-  createEditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
+import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
 const workflow = createEditFirstWorkflowView({
   step: 'planned_assets',
   status: { kind: 'ready', reason: null },
-  operationPolicy: createEditFirstWorkflowOperationPolicy({
-    allowedOperationIds: ['generate_edit_script_assets'],
-  }),
 })
 
 type MockInterruption = {

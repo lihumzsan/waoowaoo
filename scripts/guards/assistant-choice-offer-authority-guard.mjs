@@ -85,10 +85,13 @@ export function inspectChoiceRegistryAuthority(input) {
   for (const marker of [
     'EDIT_FIRST_CHOICE_REGISTRY',
     'satisfies Record<EditFirstChoiceType, EditFirstChoiceDefinition>',
-    'workflowStep:',
-    'workflowStatus:',
+    'toolId:',
+    'reviewedResourceKind:',
     'offerBuilder:',
     'parseDecision:',
+    'serializeDecision:',
+    'resolveAtomicConfirmationCommand:',
+    'resolveReviewedResource:',
   ]) {
     if (!input.choiceRegistry.includes(marker)) {
       violations.push(`Choice registry is missing exhaustive capability ${JSON.stringify(marker)}`)
@@ -170,7 +173,6 @@ const choiceResult = read('src/lib/project-agent/edit-first-choice-result.ts')
 const assistantPanel = read('src/features/project-workspace/components/WorkspaceAssistantPanel.tsx')
 const assistantRenderers = read('src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx')
 const editScriptHooks = read('src/lib/query/hooks/useProjectEditScript.ts')
-const editFirstWorkflow = read('src/lib/project-workflow/edit-first.ts')
 const toolset = read('src/lib/project-agent/toolset.ts')
 const editScriptOperations = read('src/lib/operations/domains/media/edit-script-ops.ts')
 const operationInvocation = read('src/lib/operations/invocation.ts')
@@ -277,9 +279,10 @@ for (const marker of ["activeGroup?.key === 'aspectRatio'", "activeGroup?.key ==
 }
 for (const marker of [
   'reviewedResourceKind:',
-  'toWorkflowDecision:',
-  'isEnabled:',
-  'resolveWorkflowAction:',
+  'offerBuilder:',
+  'parseDecision:',
+  'serializeDecision:',
+  'resolveAtomicConfirmationCommand:',
   'resolveReviewedResource:',
 ]) {
   if (!choiceRegistry.includes(marker)) {
@@ -295,7 +298,6 @@ for (const [label, source, forbidden] of [
   ['choice card dispatcher', choiceCard, ['params.choiceType ===', 'switch (params.choiceType)']],
   ['choice resource dispatcher', choiceOffer, ["if (kind === '", 'switch (kind)']],
   ['choice result dispatcher', choiceResult, ['params.choiceType ===', 'switch (params.choiceType)']],
-  ['choice workflow dispatcher', editFirstWorkflow, ['choice.choiceType ===', 'switch (choice.choiceType)']],
   ['choice tool availability dispatcher', toolset, ['EDIT_FIRST_CHOICE_TOOL_IDS.', 'isEditFirstChoiceOperationEnabled']],
 ]) {
   for (const marker of forbidden) {
@@ -304,8 +306,13 @@ for (const [label, source, forbidden] of [
     }
   }
 }
-if (!choiceRegistry.includes("workflowAction('confirm_edit_style_preview', 'Confirm selected visual style')")) {
-  violations.push('Workflow does not map the consumed style decision to confirm_edit_style_preview')
+for (const marker of ['workflowStep:', 'workflowStatus:', 'isEnabled:', 'resolveWorkflowAction:', 'toWorkflowDecision:']) {
+  if (choiceRegistry.includes(marker)) {
+    violations.push(`Choice registry restores Workflow eligibility authority via ${JSON.stringify(marker)}`)
+  }
+}
+if (!choiceRegistry.includes("{ operationId: 'confirm_edit_style_preview', input: {} }")) {
+  violations.push('Choice registry does not map the consumed style decision to confirm_edit_style_preview')
 }
 for (const marker of [
   "confirm_edit_style_preview: defineOperation({",

@@ -8,11 +8,11 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
-    zh: '读取项目或剧集的具体内容：完整 Bible 正文、历史生成结果、失败原因、正在运行的任务详情，以及资产和视频片段字段。当你需要这些具体内容来回答用户、或用来填好某个工具的创作参数，而 project_state_snapshot 和当前对话里都没有时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。',
-    en: 'Read concrete project or episode content: the full Bible text, past generation results, failure reasons, running task details, assets, and video segments. Call it when you need that content to answer the user or fill another tool\'s creative input, and project_state_snapshot and the conversation do not already contain it. The current stage, progress, next step, projectId, episodeId, and approval state are already in project_state_snapshot — do not call it just to read those.',
+    zh: '读取项目或剧集的具体内容，包括 Bible、专业产物、任务详情、资产和视频片段。需要真实内容来回答用户或规划新的自由创作时调用；不要从聊天记录或画布外观猜测。',
+    en: 'Read concrete project or episode content, including the Bible, professional outputs, task details, assets, and video segments. Use it when real content is needed to answer or plan freeform creation; never infer those facts from chat history or Canvas appearance.',
   },
   get_project_snapshot: {
-    zh: '读取整个项目的结构化投影，用来了解项目全貌。当 project_state_snapshot 和当前对话不足以回答用户的具体请求、或不足以填好某个工具的创作参数时才调用。当前阶段、进度、下一步、projectId、episodeId、审批状态都已经写在 project_state_snapshot 里，不要为了看这些而调用。只有确实需要视频片段状态或输出媒体 identity 时，才传 detail=full。',
+    zh: '读取整个项目的结构化投影，用来了解已有专业产物和项目全貌。只有确实需要视频片段状态或输出媒体 identity 时，才传 detail=full。',
     en: 'Read a structured projection of the whole project to understand its overall state. Call it when project_state_snapshot and the conversation are not enough to answer the user\'s concrete request or fill another tool\'s creative input. Pass detail=full only when video-segment state or output media identity is actually needed.',
   },
   get_episode_overview: {

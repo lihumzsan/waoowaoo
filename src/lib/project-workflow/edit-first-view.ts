@@ -49,27 +49,8 @@ export interface EditFirstWorkflowAction {
   title: string
 }
 
-export interface EditFirstWorkflowOperationGroup {
-  readonly id: string
-  readonly operationIds: readonly EditFirstWorkflowOperationId[]
-  readonly approvalOperationIds: readonly EditFirstWorkflowOperationId[]
-}
-
-export interface EditFirstWorkflowOperationPolicy {
+export interface EditFirstWorkflowRecommendation {
   readonly recommendedAction: EditFirstWorkflowAction | null
-  readonly allowedOperationIds: readonly EditFirstWorkflowOperationId[]
-  readonly group: EditFirstWorkflowOperationGroup | null
-}
-
-export interface EditFirstWorkflowCapabilities {
-  readonly editSourceScript: boolean
-  readonly editBible: boolean
-  readonly editScript: boolean
-  readonly editAssetGroup: boolean
-  readonly editShotExecutionPlan: boolean
-  readonly videoPlan: boolean
-  readonly bgmScore: boolean
-  readonly finalTimeline: boolean
 }
 
 export type EditFirstWorkflowChoiceDecision =
@@ -82,8 +63,8 @@ export type EditFirstWorkflowChoiceDecision =
 export interface EditFirstWorkflowView {
   readonly step: EditFirstWorkflowStep
   readonly status: EditFirstWorkflowStatus
-  readonly operationPolicy: EditFirstWorkflowOperationPolicy
-  readonly capabilities: EditFirstWorkflowCapabilities
+  /** Advisory mainline projection only. It never controls tool availability or Canvas materialization. */
+  readonly recommendation: EditFirstWorkflowRecommendation
 }
 
 export interface EditFirstWorkflowSnapshot {
@@ -128,46 +109,14 @@ export interface EditFirstWorkflowSnapshot {
   activeFinalRenderTaskCount: number
 }
 
-const EDIT_FIRST_WORKFLOW_STEP_ORDER = new Map(
-  EDIT_FIRST_WORKFLOW_STEPS.map((step, index) => [step, index] as const),
-)
-
-const EDIT_FIRST_WORKFLOW_CAPABILITY_UNLOCK_STEP = {
-  editSourceScript: 'source_script',
-  editBible: 'episode_plan',
-  editScript: 'chapter_plan',
-  editAssetGroup: 'visual_style',
-  editShotExecutionPlan: 'shot_execution',
-  videoPlan: 'video_segments',
-  bgmScore: 'audio_plan',
-  finalTimeline: 'final_render',
-} as const satisfies Record<keyof EditFirstWorkflowCapabilities, EditFirstWorkflowStep>
-
-function resolveEditFirstWorkflowCapabilities(
-  step: EditFirstWorkflowStep,
-): EditFirstWorkflowCapabilities {
-  const current = EDIT_FIRST_WORKFLOW_STEP_ORDER.get(step)
-  if (current === undefined) throw new Error(`EDIT_FIRST_WORKFLOW_STEP_UNKNOWN:${step}`)
-  return Object.fromEntries(Object.entries(EDIT_FIRST_WORKFLOW_CAPABILITY_UNLOCK_STEP).map(
-    ([capability, unlockStep]) => {
-      const unlock = EDIT_FIRST_WORKFLOW_STEP_ORDER.get(unlockStep)
-      if (unlock === undefined) throw new Error(`EDIT_FIRST_WORKFLOW_UNLOCK_STEP_UNKNOWN:${unlockStep}`)
-      return [capability, current >= unlock]
-    },
-  )) as unknown as EditFirstWorkflowCapabilities
-}
-
-const EMPTY_OPERATION_POLICY: EditFirstWorkflowOperationPolicy = {
+const EMPTY_RECOMMENDATION: EditFirstWorkflowRecommendation = {
   recommendedAction: null,
-  allowedOperationIds: [],
-  group: null,
 }
 
 export const EDIT_FIRST_WORKFLOW_EMPTY_VIEW: EditFirstWorkflowView = {
   step: 'unavailable',
   status: { kind: 'inactive', reason: null },
-  operationPolicy: EMPTY_OPERATION_POLICY,
-  capabilities: resolveEditFirstWorkflowCapabilities('unavailable'),
+  recommendation: EMPTY_RECOMMENDATION,
 }
 
 function workflowAction(
@@ -181,72 +130,34 @@ function workflowAction(
   }
 }
 
-export function createEditFirstWorkflowOperationPolicy(params: {
+export function createEditFirstWorkflowRecommendation(params: {
   recommendedAction?: EditFirstWorkflowAction | null
-  allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
-  group?: EditFirstWorkflowOperationGroup | null
-} = {}): EditFirstWorkflowOperationPolicy {
-  const recommendedAction = params.recommendedAction ?? null
-  const allowedOperationIds = params.allowedOperationIds
-    ? [...params.allowedOperationIds]
-    : recommendedAction
-      ? [recommendedAction.operationId]
-      : []
-  if (new Set(allowedOperationIds).size !== allowedOperationIds.length) {
-    throw new Error('EDIT_FIRST_WORKFLOW_ALLOWED_OPERATION_DUPLICATE')
-  }
-  if (recommendedAction && !allowedOperationIds.includes(recommendedAction.operationId)) {
-    throw new Error(`EDIT_FIRST_WORKFLOW_RECOMMENDED_OPERATION_NOT_ALLOWED:${recommendedAction.operationId}`)
-  }
-  const group = params.group ?? null
-  if (group) {
-    if (group.operationIds.length !== allowedOperationIds.length
-      || group.operationIds.some((operationId, index) => operationId !== allowedOperationIds[index])) {
-      throw new Error(`EDIT_FIRST_WORKFLOW_GROUP_OPERATION_MISMATCH:${group.id}`)
-    }
-    if (group.approvalOperationIds.some((operationId) => !allowedOperationIds.includes(operationId))) {
-      throw new Error(`EDIT_FIRST_WORKFLOW_GROUP_APPROVAL_NOT_ALLOWED:${group.id}`)
-    }
-  }
+} = {}): EditFirstWorkflowRecommendation {
   return {
-    recommendedAction,
-    allowedOperationIds,
-    group,
+    recommendedAction: params.recommendedAction ?? null,
   }
 }
 
 export function createEditFirstWorkflowView(params: {
   readonly step: EditFirstWorkflowStep
   readonly status: EditFirstWorkflowStatus
-  readonly operationPolicy?: EditFirstWorkflowOperationPolicy
+  readonly recommendation?: EditFirstWorkflowRecommendation
 }): EditFirstWorkflowView {
-  const policy = params.operationPolicy ?? EMPTY_OPERATION_POLICY
-  if (
-    (params.status.kind === 'inactive'
-      || params.status.kind === 'processing'
-      || params.status.kind === 'completed')
-    && policy.allowedOperationIds.length > 0
-  ) {
-    throw new Error(`EDIT_FIRST_WORKFLOW_STATUS_FORBIDS_OPERATIONS:${params.step}:${params.status.kind}`)
-  }
   return {
     step: params.step,
     status: params.status,
-    operationPolicy: policy,
-    capabilities: resolveEditFirstWorkflowCapabilities(params.step),
+    recommendation: params.recommendation ?? EMPTY_RECOMMENDATION,
   }
 }
 
 function readyWorkflowView(params: {
   readonly step: EditFirstWorkflowStep
   readonly recommendedAction: EditFirstWorkflowAction
-  readonly allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
-  readonly group?: EditFirstWorkflowOperationGroup | null
 }): EditFirstWorkflowView {
   return createEditFirstWorkflowView({
     step: params.step,
     status: { kind: 'ready', reason: null },
-    operationPolicy: createEditFirstWorkflowOperationPolicy(params),
+    recommendation: createEditFirstWorkflowRecommendation(params),
   })
 }
 
@@ -257,12 +168,10 @@ function processingWorkflowView(step: EditFirstWorkflowStep, reason: string): Ed
 function reviewWorkflowView(params: {
   readonly step: EditFirstWorkflowStep
   readonly reason: string
-  readonly allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
 }): EditFirstWorkflowView {
   return createEditFirstWorkflowView({
     step: params.step,
     status: { kind: 'needs_user_choice', reason: params.reason },
-    operationPolicy: createEditFirstWorkflowOperationPolicy({ allowedOperationIds: params.allowedOperationIds }),
   })
 }
 
@@ -270,12 +179,11 @@ function failedWorkflowView(params: {
   readonly step: EditFirstWorkflowStep
   readonly reason: string
   readonly recommendedAction?: EditFirstWorkflowAction | null
-  readonly allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
 }): EditFirstWorkflowView {
   return createEditFirstWorkflowView({
     step: params.step,
     status: { kind: 'failed', reason: params.reason },
-    operationPolicy: createEditFirstWorkflowOperationPolicy(params),
+    recommendation: createEditFirstWorkflowRecommendation(params),
   })
 }
 
@@ -397,7 +305,6 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     return reviewWorkflowView({
       step: 'visual_style',
       reason: 'choose and confirm one completed style preview',
-      allowedOperationIds: ['generate_edit_style_previews'],
     })
   }
 
@@ -417,7 +324,6 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
       step: 'chapter_plan',
       reason: 'edit core table generation failed',
       recommendedAction,
-      allowedOperationIds: [recommendedAction.operationId, 'plan_chapters'],
     })
   }
 
@@ -523,16 +429,12 @@ export function resolveEditFirstWorkflowViewFromSnapshot(
     const chapterAction = workflowAction('render_chapters', 'Render chapter videos')
     const hasRenderableUnrenderedChapter = snapshot.renderableChapterCount > snapshot.completedChapterRenderCount
     const recommendedAction = hasRenderableUnrenderedChapter ? chapterAction : videoAction
-    const allowedOperationIds: EditFirstWorkflowOperationId[] = hasRenderableUnrenderedChapter
-      ? [chapterAction.operationId, videoAction.operationId]
-      : [videoAction.operationId]
     if (snapshot.activeVideoTaskCount > 0) {
       return processingWorkflowView('video_segments', 'video segments are still generating')
     }
     return readyWorkflowView({
       step: 'video_segments',
       recommendedAction,
-      allowedOperationIds,
     })
   }
 

@@ -30,7 +30,6 @@ import { buildScriptIntakeChoiceOfferCandidate, planScriptIntakeQuestions } from
 import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 import { EDIT_FIRST_CHOICE_TYPES, EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { prepareProjectAgentChoiceExecutionHandoff } from '@/lib/project-agent/execution-handoff'
-import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
@@ -227,8 +226,6 @@ const requestEditFirstChoiceOutputSchema = z
     emitted: z.literal(true),
     choiceType: z.enum(EDIT_FIRST_CHOICE_TYPES),
     cardId: z.string().min(1),
-    workflowStep: z.string().min(1),
-    workflowStatus: z.string().min(1),
   })
   .passthrough()
 
@@ -596,11 +593,6 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
         throw new Error('REQUEST_EDIT_CHOICE_TOOL_CALL_ID_REQUIRED')
       }
       const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-      const workflow = await resolveEditFirstWorkflowView({
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        episodeId,
-      })
       const locale = resolveLocale(ctx.context.locale)
       const runId = ctx.context.runId?.trim()
       if (!runId) {
@@ -614,9 +606,8 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
         throw new Error(`REQUEST_EDIT_CHOICE_RUN_FENCE_MISMATCH:${runId}`)
       }
       const candidate = isScriptIntake
-        ? buildScriptIntakeChoiceOfferCandidate({
+          ? buildScriptIntakeChoiceOfferCandidate({
             locale,
-            workflow,
             toolCallId,
             seedText: (input as RequestScriptIntakeChoiceInput).seedText,
             plan: await planScriptIntakeQuestions({
@@ -631,7 +622,6 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
             userId: ctx.userId,
             episodeId,
             locale,
-            workflow,
             choiceType,
             toolCallId,
           })
@@ -655,8 +645,6 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
         emitted: true,
         choiceType,
         cardId: handoff.card.cardId,
-        workflowStep: workflow.step,
-        workflowStatus: workflow.status.kind,
       })
     },
   })

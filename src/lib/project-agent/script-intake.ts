@@ -4,10 +4,6 @@ import type { Locale } from '@/i18n/routing'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 import { getProjectModelConfig } from '@/lib/config-service'
-import {
-  isEditFirstWorkflowPosition,
-  type EditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
 import type { ProjectAgentChoiceCardDefinition, ProjectAgentChoiceCardGroup } from './types'
 import type { ProjectAgentLocale } from './locale'
 import {
@@ -180,16 +176,10 @@ function buildScriptIntakeGroups(plan: ScriptIntakePlannerOutput): ProjectAgentC
 
 export function buildScriptIntakeChoiceCard(params: {
   readonly locale: ProjectAgentLocale
-  readonly workflow: EditFirstWorkflowView
   readonly toolCallId: string
   readonly seedText: string
   readonly plan: ScriptIntakePlannerOutput
 }): ProjectAgentChoiceCardDefinition {
-  if (!isEditFirstWorkflowPosition(params.workflow, 'script_intake', 'ready')) {
-    throw new Error(
-      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_intake:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
-    )
-  }
   const seedText = params.seedText.trim()
   if (!seedText) throw new Error('SCRIPT_INTAKE_SEED_TEXT_REQUIRED')
   const plan = validateScriptIntakePlannerOutput(ensureRuntimeQuestion({
@@ -226,7 +216,6 @@ export function buildScriptIntakeChoiceCard(params: {
 
 export function buildScriptIntakeChoiceOfferCandidate(params: {
   readonly locale: ProjectAgentLocale
-  readonly workflow: EditFirstWorkflowView
   readonly toolCallId: string
   readonly seedText: string
   readonly plan: ScriptIntakePlannerOutput

@@ -6,34 +6,11 @@ import {
 import { readPersistedBgmDesign } from '@/lib/bgm-design/project-data'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
-import { getEditFirstChoiceDefinition } from '@/lib/project-agent/edit-first-choice-tools'
 import {
   EDIT_FIRST_WORKFLOW_EMPTY_VIEW,
-  createEditFirstWorkflowOperationPolicy,
-  createEditFirstWorkflowView,
   resolveEditFirstWorkflowViewFromSnapshot,
-  type EditFirstWorkflowChoiceDecision,
   type EditFirstWorkflowView,
 } from './edit-first-view'
-
-export function resolveEditFirstWorkflowChoice(
-  workflow: EditFirstWorkflowView,
-  choice: EditFirstWorkflowChoiceDecision,
-): EditFirstWorkflowView {
-  const definition = getEditFirstChoiceDefinition(choice.choiceType)
-  if (!definition.isEnabled(workflow)) {
-    throw new Error(
-      `EDIT_FIRST_REVIEW_CHOICE_POSITION_MISMATCH:${choice.choiceType}:${workflow.step}:${workflow.status.kind}`,
-    )
-  }
-  const transition = definition.resolveWorkflowAction(choice)
-  if (!transition) throw new Error(`EDIT_FIRST_REVIEW_CHOICE_ACTION_MISSING:${choice.choiceType}`)
-  return createEditFirstWorkflowView({
-    step: workflow.step,
-    status: { kind: 'ready', reason: null },
-    operationPolicy: createEditFirstWorkflowOperationPolicy({ recommendedAction: transition }),
-  })
-}
 
 const ACTIVE_WORKFLOW_TASK_STATUSES = ['queued', 'processing'] as const
 

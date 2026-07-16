@@ -1,15 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
-import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
 import type { ProjectAssistantId } from './types'
 import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
-import {
-  appendProjectAssistantThreadMessagesInTransaction,
-  buildProjectAssistantScopeRef,
-} from './persistence'
-import { appendProjectAgentEvents, appendProjectAgentEventsInTransaction } from './event'
+import { buildProjectAssistantScopeRef } from './persistence'
+import { appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import {
@@ -23,7 +19,7 @@ import {
   projectAgentExecutionStartedIdempotencyKey,
 } from './execution-segment'
 
-export type ProjectAgentWaitStatus = 'collecting' | 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
+export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
 export type ProjectAgentTaskFollowUpSettlementOutcome =
   | 'completed'
@@ -68,15 +64,6 @@ export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput 
   sourceOperationActivityId?: string | null
 }
 
-export interface ProjectAgentCollectingTaskWait {
-  readonly waitId: string
-  readonly activityId: string
-  readonly runId: string
-  readonly operationId: string
-  readonly operationIds: readonly string[]
-  readonly followUpMode: ProjectAgentWaitFollowUpMode
-}
-
 interface ProjectAgentWaitRow {
   id: string
   runId: string | null
@@ -116,6 +103,14 @@ interface ProjectAgentWaitFailedTaskRow {
   errorMessage: string | null
 }
 
+interface ProjectAgentWaitCompletedTaskRow {
+  id: string
+  type: string | null
+  targetType: string | null
+  targetId: string | null
+  result: unknown
+}
+
 export interface ProjectAgentWaitTaskSnapshot {
   id: string
   status: string
@@ -131,6 +126,14 @@ export interface ProjectAgentWaitFailedTask {
   errorMessage: string | null
 }
 
+export interface ProjectAgentWaitCompletedTask {
+  taskId: string
+  taskType: string | null
+  targetType: string | null
+  targetId: string | null
+  result: Record<string, unknown> | null
+}
+
 export interface ProjectAgentWaitFollowUp {
   runId: string | null
   activityId: string | null
@@ -142,6 +145,7 @@ export interface ProjectAgentWaitFollowUp {
   failedTaskIds: string[]
   canceledTaskIds: string[]
   failedTasks: ProjectAgentWaitFailedTask[]
+  completedTasks: ProjectAgentWaitCompletedTask[]
   terminalStatus: ProjectAgentWaitTerminalStatus
   total: number
   successCount: number
@@ -262,6 +266,48 @@ async function readFailedTaskDetails(input: {
   })
 }
 
+function readResultRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+async function readCompletedTaskDetails(input: {
+  projectId: string
+  userId: string
+  completedTaskIds: string[]
+}): Promise<ProjectAgentWaitCompletedTask[]> {
+  const completedTaskIds = normalizeTaskIds(input.completedTaskIds)
+  if (completedTaskIds.length === 0) return []
+  const rows = await prisma.$queryRaw<ProjectAgentWaitCompletedTaskRow[]>(Prisma.sql`
+    SELECT id, type, targetType, targetId, result
+    FROM tasks
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND status = ${TASK_STATUS.COMPLETED}
+      AND id IN (${Prisma.join(completedTaskIds)})
+  `)
+  const rowById = new Map(rows.map((row) => [row.id, row]))
+  return completedTaskIds.map((taskId) => {
+    const row = rowById.get(taskId)
+    if (!row) throw new Error(`PROJECT_AGENT_WAIT_COMPLETED_TASK_MISSING:${taskId}`)
+    return {
+      taskId,
+      taskType: row.type,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      result: readResultRecord(row.result),
+    }
+  })
+}
+
 async function buildWaitFollowUpFromRow(
   row: ProjectAgentWaitRow,
   params: {
@@ -273,10 +319,17 @@ async function buildWaitFollowUpFromRow(
   const taskIds = parseStringArray(row.taskIds)
   const failedTaskIds = parseStringArray(row.failedTaskIds)
   const canceledTaskIds = parseStringArray(row.canceledTaskIds)
+  const excludedTaskIds = new Set([...failedTaskIds, ...canceledTaskIds])
+  const completedTaskIds = taskIds.filter((taskId) => !excludedTaskIds.has(taskId))
   const failedTasks = await readFailedTaskDetails({
     projectId: row.projectId,
     userId: row.userId,
     failedTaskIds,
+  })
+  const completedTasks = await readCompletedTaskDetails({
+    projectId: row.projectId,
+    userId: row.userId,
+    completedTaskIds,
   })
   return {
     runId: row.runId,
@@ -289,6 +342,7 @@ async function buildWaitFollowUpFromRow(
     failedTaskIds,
     canceledTaskIds,
     failedTasks,
+    completedTasks,
     terminalStatus: row.terminalStatus,
     total: taskIds.length,
     successCount: Math.max(taskIds.length - failedTaskIds.length - canceledTaskIds.length, 0),
@@ -327,8 +381,7 @@ function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode 
 
 function normalizeWaitStatus(value: string): ProjectAgentWaitStatus {
   if (
-    value === 'collecting'
-    || value === 'pending'
+    value === 'pending'
     || value === 'resolved'
     || value === 'claimed'
     || value === 'followed'
@@ -355,211 +408,6 @@ async function lockCurrentRunFenceInTransaction(
 export async function refreshProjectAgentRunFence(runFence: ProjectAgentRunFence): Promise<void> {
   const current = await prisma.$transaction(async (tx) => lockCurrentRunFenceInTransaction(tx, runFence.runId))
   assignProjectAgentRunFence(runFence, current)
-}
-
-export async function prepareProjectAgentCollectingTaskWait(input: CreateProjectAgentWaitInput & {
-  operationIds: readonly string[]
-}): Promise<ProjectAgentCollectingTaskWait> {
-  const operationIds = Array.from(new Set(input.operationIds.map((id) => id.trim()).filter(Boolean))).sort()
-  if (operationIds.length < 2) throw new Error('PROJECT_AGENT_WAIT_GROUP_REQUIRES_MULTIPLE_OPERATIONS')
-  const operationId = operationIds[0]
-  if (!operationId) throw new Error('PROJECT_AGENT_WAIT_GROUP_OPERATION_REQUIRED')
-  const waitId = randomUUID()
-  const activityId = randomUUID()
-  const { assistantId } = buildWaitScope(input)
-  await appendProjectAgentEvents({
-    scope: {
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      assistantId,
-    },
-    events: [
-      {
-        runFence: input.runFence,
-        idempotencyKey: `task-collection-started:${waitId}`,
-        event: {
-          kind: 'task.collection_started',
-          runId: input.runId,
-          activityId,
-          waitId,
-          operationId,
-          followUpMode: input.followUpMode,
-        },
-      },
-    ],
-  })
-  return { waitId, activityId, runId: input.runId, operationId, operationIds, followUpMode: input.followUpMode }
-}
-
-export async function bindProjectAgentCollectingWaitMemberInTransaction(
-  tx: Prisma.TransactionClient,
-  input: CreateProjectAgentWaitInput & {
-    group: ProjectAgentCollectingTaskWait
-  },
-): Promise<ProjectAgentTaskSuspensionReceipt> {
-  const taskIds = normalizeTaskIds(input.taskIds)
-  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_BATCH_EMPTY:${input.operationId}`)
-  if (!input.group.operationIds.includes(input.operationId)) {
-    throw new Error(`PROJECT_AGENT_WAIT_GROUP_OPERATION_MISMATCH:${input.operationId}`)
-  }
-  const waits = await tx.$queryRaw<Array<{ id: string; taskIds: unknown; status: string }>>(Prisma.sql`
-    SELECT id, taskIds, status
-    FROM project_agent_waits
-    WHERE id = ${input.group.waitId}
-      AND runId = ${input.runId}
-      AND projectId = ${input.projectId}
-      AND userId = ${input.userId}
-    FOR UPDATE
-  `)
-  const wait = waits[0]
-  if (!wait || wait.status !== 'collecting') {
-    throw new Error(`PROJECT_AGENT_WAIT_GROUP_NOT_COLLECTING:${input.group.waitId}`)
-  }
-  const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
-    SELECT id, status
-    FROM tasks
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND id IN (${Prisma.join(taskIds)})
-    FOR UPDATE
-  `)
-  const taskIdSet = new Set(tasks.map((task) => task.id))
-  const missingTaskIds = taskIds.filter((taskId) => !taskIdSet.has(taskId))
-  if (missingTaskIds.length > 0) throw new Error(`PROJECT_AGENT_WAIT_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
-  const groupTaskIds = normalizeTaskIds([...parseStringArray(wait.taskIds), ...taskIds])
-  const runFence = await lockCurrentRunFenceInTransaction(tx, input.runId)
-  const { assistantId, scopeRef } = buildWaitScope(input)
-  await appendProjectAgentEventsInTransaction(tx, {
-    scope: {
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      assistantId,
-      scopeRef,
-    },
-    events: [
-      ...(input.sourceOperationActivityId
-        ? [{
-            runFence,
-            idempotencyKey: `activity-completed:${input.sourceOperationActivityId}:before:${input.group.activityId}`,
-            event: {
-              kind: 'activity.completed' as const,
-              runId: input.runId,
-              activityId: input.sourceOperationActivityId,
-            },
-          }]
-        : []),
-      {
-        runFence,
-        idempotencyKey: `task-bound:${input.group.waitId}:${input.operationId}`,
-        event: {
-          kind: 'task.collection_member_bound',
-          runId: input.runId,
-          activityId: input.group.activityId,
-          waitId: input.group.waitId,
-          operationId: input.group.operationId,
-          taskIds: groupTaskIds,
-        },
-      },
-    ],
-  })
-  return {
-    kind: 'task',
-    runId: input.runId,
-    operationId: input.operationId,
-    activityId: input.group.activityId,
-    waitId: input.group.waitId,
-    taskIds,
-    followUpMode: input.group.followUpMode,
-  }
-}
-
-export async function sealProjectAgentCollectingTaskWait(input: CreateProjectAgentWaitInput & {
-  group: ProjectAgentCollectingTaskWait
-}): Promise<ProjectAgentTaskSuspensionReceipt> {
-  const taskIds = normalizeTaskIds(input.taskIds)
-  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_WAIT_GROUP_EMPTY:${input.group.waitId}`)
-  await prisma.$transaction(async (tx) => {
-    const runFence = await lockCurrentRunFenceInTransaction(tx, input.runId)
-    const { assistantId, scopeRef } = buildWaitScope(input)
-    await appendProjectAgentEventsInTransaction(tx, {
-      scope: {
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: input.episodeId ?? null,
-        assistantId,
-        scopeRef,
-      },
-      events: [
-        {
-          runFence,
-          idempotencyKey: `activity-started:${input.group.activityId}`,
-          event: {
-            kind: 'activity.started',
-            runId: input.runId,
-            activityId: input.group.activityId,
-            type: 'waiting_task',
-            operationId: input.group.operationId,
-          },
-        },
-        {
-          runFence,
-          idempotencyKey: `task-collection-sealed:${input.group.waitId}`,
-          event: {
-            kind: 'task.collection_sealed',
-            runId: input.runId,
-            activityId: input.group.activityId,
-            waitId: input.group.waitId,
-            operationId: input.group.operationId,
-            taskIds,
-            followUpMode: input.group.followUpMode,
-          },
-        },
-      ],
-    })
-    await prepareProjectAgentTaskExecutionHandoffInTransaction(tx, {
-      executionSegmentId: input.executionSegmentId ?? '',
-      runId: input.runId,
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      locale: input.locale ?? null,
-      assistantId,
-      operationId: input.group.operationId,
-      waitId: input.group.waitId,
-      taskIds,
-      followUpMode: input.group.followUpMode,
-    })
-    const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
-      SELECT id, status
-      FROM tasks
-      WHERE projectId = ${input.projectId}
-        AND userId = ${input.userId}
-        AND id IN (${Prisma.join(taskIds)})
-      FOR UPDATE
-    `)
-    for (const task of tasks) {
-      const terminalType = readTerminalLifecycleTypeFromTaskStatus(task.status)
-      if (!terminalType) continue
-      await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
-        taskId: task.id,
-        projectId: input.projectId,
-        userId: input.userId,
-        lifecycleType: terminalType,
-      })
-    }
-  })
-  await refreshProjectAgentRunFence(input.runFence)
-  return {
-    kind: 'task',
-    runId: input.runId,
-    operationId: input.group.operationId,
-    activityId: input.group.activityId,
-    waitId: input.group.waitId,
-    taskIds,
-    followUpMode: input.group.followUpMode,
-  }
 }
 
 function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerminalStatus | null {
@@ -1114,13 +962,6 @@ export async function startProjectAgentWaitFollowUp(input: {
   }
   if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
   if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
-  const rowRunId = row.runId
-  const rowActivityId = row.activityId
-  const runFence = createProjectAgentRunFence({
-    id: row.runId,
-    runVersion: row.runVersion,
-    eventSeq: row.eventSeq,
-  })
   const executionSegment = createProjectAgentExecutionSegment({
     kind: 'task_follow_up',
     commandId: input.commandId,

@@ -144,14 +144,24 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     violations.push(`${runtimePath} must verify transactionally bound Task identity and must not create a post-commit Wait`)
   }
   for (const required of [
+    'parallelToolCalls: false',
+    'PROJECT_AGENT_PARALLEL_OPERATION_STEP_FORBIDDEN',
+    'PROJECT_AGENT_TASK_BATCH_WAIT_IDENTITY_MISMATCH',
+    'PROJECT_AGENT_PARALLEL_APPROVAL_STEP_FORBIDDEN',
+    'members.length !== 1',
+  ]) {
+    if (!runtime.includes(required)) {
+      violations.push(`${runtimePath} is missing single-Operation step authority ${required}`)
+    }
+  }
+  for (const forbidden of [
     'prepareProjectAgentCollectingTaskWait',
     'sealProjectAgentCollectingTaskWait',
     'PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH',
     'PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH',
-    'approvalItems:',
   ]) {
-    if (!runtime.includes(required)) {
-      violations.push(`${runtimePath} is missing declared Operation-group authority ${required}`)
+    if (runtime.includes(forbidden)) {
+      violations.push(`${runtimePath} restores retired cross-Operation group authority ${forbidden}`)
     }
   }
   const stopPolicyPath = 'src/lib/project-agent/stop-conditions.ts'
@@ -165,22 +175,38 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
   const waitsPath = 'src/lib/project-agent/waits.ts'
   const waits = fs.readFileSync(path.join(scanRoot, waitsPath), 'utf8')
   for (const required of [
-    "'collecting'",
-    'task.collection_started',
-    'task.collection_member_bound',
-    'task.collection_sealed',
+    'bindProjectAgentWaitToTasksInTransaction',
     'prepareProjectAgentTaskExecutionHandoffInTransaction',
     "AND status = 'pending'",
   ]) {
     if (!waits.includes(required)) {
-      violations.push(`${waitsPath} is missing shared Wait-group lifecycle ${required}`)
+      violations.push(`${waitsPath} is missing atomic Operation Task-batch Wait lifecycle ${required}`)
+    }
+  }
+  for (const forbidden of [
+    "'collecting'",
+    'task.collection_started',
+    'task.collection_member_bound',
+    'task.collection_sealed',
+  ]) {
+    if (waits.includes(forbidden)) {
+      violations.push(`${waitsPath} restores retired collecting Wait lifecycle ${forbidden}`)
     }
   }
   const toolAdapterPath = 'src/lib/project-agent/agents-tool-adapter.ts'
   const toolAdapter = fs.readFileSync(path.join(scanRoot, toolAdapterPath), 'utf8')
-  for (const required of ['approvalBarrierOperationIds', 'bindProjectAgentCollectingWaitMemberInTransaction']) {
+  for (const required of [
+    'bindProjectAgentWaitToTasksInTransaction',
+    'taskBatchBinding',
+    'concurrentExecutionSegmentId: null',
+  ]) {
     if (!toolAdapter.includes(required)) {
-      violations.push(`${toolAdapterPath} is missing Operation-group barrier ${required}`)
+      violations.push(`${toolAdapterPath} is missing single-Operation Task-batch barrier ${required}`)
+    }
+  }
+  for (const forbidden of ['approvalBarrierOperationIds', 'bindProjectAgentCollectingWaitMemberInTransaction']) {
+    if (toolAdapter.includes(forbidden)) {
+      violations.push(`${toolAdapterPath} restores retired Operation-group barrier ${forbidden}`)
     }
   }
   return violations
@@ -205,8 +231,8 @@ export function main() {
   ]
   if (violations.length > 0) {
     process.stderr.write([
-      '[single-operation-invocation] Operation invocation or shared Wait-group contract violation.',
-      'AR-03C/AR-04/BA-09: adapters translate source/result only; invocation.ts owns execution and one sealed Wait owns grouped Task continuation.',
+      '[single-operation-invocation] Operation invocation or single-Operation Task-batch contract violation.',
+      'AR-03C/AR-04/BA-09: adapters translate source/result only; invocation.ts owns execution and one transactionally bound Wait owns one Operation Task batch.',
       'See docs/architecture/modules/assistant-run-lifecycle.md and billing-approval.md.',
       ...violations.map((violation) => `  - ${violation}`),
       '',

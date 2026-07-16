@@ -49,9 +49,6 @@ import {
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
-  prepareProjectAgentCollectingTaskWait,
-  sealProjectAgentCollectingTaskWait,
-  type ProjectAgentCollectingTaskWait,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
@@ -91,16 +88,8 @@ import {
 } from './suspension'
 import { appendProjectAgentEvents } from './event'
 import {
-  isProjectAgentOperationAlwaysEnabled,
-  isProjectAgentOperationEnabled,
   resolveProjectAgentToolset,
 } from './toolset'
-import { resolveProjectAgentTaskFollowUpTurnPolicy } from './task-follow-up-turn-policy'
-import {
-  resolveEditFirstWorkflowChoice,
-  resolveEditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first'
-import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
   PROJECT_AGENT_MAX_TURNS,
@@ -118,7 +107,6 @@ import {
 import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import {
-  mergeOperationPlanViewsForApproval,
   type OperationPlanView,
 } from '@/lib/operations/planning'
 import { issueApprovalGrantGroup } from '@/lib/operations/planned-operation-invocation'
@@ -407,6 +395,7 @@ export function buildTaskFollowUpInputItem(
     `status=${followUp.terminalStatus}`,
     `total=${String(followUp.total)} succeeded=${String(followUp.successCount)} failed=${String(followUp.failedCount)}`,
     ...(followUp.failedTaskIds.length > 0 ? [`failedTaskIds=${followUp.failedTaskIds.join(',')}`] : []),
+    ...(followUp.completedTasks.length > 0 ? [`completedTasks=${JSON.stringify(followUp.completedTasks)}`] : []),
     ...(followUp.failedTasks.length > 0 ? [`failedTasks=${JSON.stringify(followUp.failedTasks)}`] : []),
   ]
   return {
@@ -420,26 +409,19 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
   return normalized || 'none'
 }
 
-function formatRuntimeStateList(values: readonly string[]): string {
-  return values.length > 0 ? values.map(formatRuntimeStateValue).join(',') : 'none'
-}
-
 function buildProjectStateVersion(params: {
   phase: ProjectPhaseSnapshot
-  enabledOperationIds: readonly string[]
 }): string {
   const workflow = params.phase.editFirstWorkflow
   return [
     params.phase.phase,
     workflow.step,
     workflow.status.kind,
-    workflow.operationPolicy.recommendedAction?.operationId ?? 'none',
-    workflow.operationPolicy.group?.id ?? 'none',
+    workflow.recommendation.recommendedAction?.operationId ?? 'none',
     params.phase.planning.editBibleStatus ?? 'none',
     String(params.phase.planning.chapterCount),
     String(params.phase.progress.plannedVideoSegmentCount),
     String(params.phase.progress.completedVideoSegmentCount),
-    params.enabledOperationIds.join('|') || 'none',
   ].map(formatRuntimeStateValue).join(':')
 }
 
@@ -447,29 +429,20 @@ function buildProjectStateInputItem(params: {
   projectId: string
   episodeId: string | null
   phase: ProjectPhaseSnapshot
-  enabledOperationIds: readonly string[]
 }): AgentInputItem {
   const workflow = params.phase.editFirstWorkflow
-  const operationGroup = workflow.operationPolicy.group
   const lines = [
     '[project_state_snapshot]',
     `version=${buildProjectStateVersion({
       phase: params.phase,
-      enabledOperationIds: params.enabledOperationIds,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `phase=${formatRuntimeStateValue(params.phase.phase)}`,
-    `workflowAvailable=${String(workflow.status.kind !== 'inactive')}`,
-    `workflowStep=${formatRuntimeStateValue(workflow.step)}`,
-    `workflowStatus=${workflow.status.kind}`,
-    `workflowStatusReason=${formatRuntimeStateValue(workflow.status.reason)}`,
-    `workflowRecommendedOperation=${formatRuntimeStateValue(workflow.operationPolicy.recommendedAction?.operationId)}`,
-    `workflowOperationGroup=${formatRuntimeStateValue(operationGroup?.id)}`,
-    `workflowOperationGroupIds=${formatRuntimeStateList(operationGroup?.operationIds ?? [])}`,
-    `workflowApprovalOperationIds=${formatRuntimeStateList(operationGroup?.approvalOperationIds ?? [])}`,
-    `allowedOperationIds=${formatRuntimeStateList(workflow.operationPolicy.allowedOperationIds)}`,
-    `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
+    `mainlineStep=${formatRuntimeStateValue(workflow.step)}`,
+    `mainlineStatus=${workflow.status.kind}`,
+    `mainlineStatusReason=${formatRuntimeStateValue(workflow.status.reason)}`,
+    `mainlineRecommendedOperation=${formatRuntimeStateValue(workflow.recommendation.recommendedAction?.operationId)}`,
     `planning.editBibleStatus=${formatRuntimeStateValue(params.phase.planning.editBibleStatus)}`,
     `planning.chapterCount=${String(params.phase.planning.chapterCount)}`,
     `progress.plannedVideoSegmentCount=${String(params.phase.progress.plannedVideoSegmentCount)}`,
@@ -649,58 +622,12 @@ async function createProjectAgentWaitBindings(params: {
   registry: ProjectAgentOperationRegistry
   transactionallyBoundTaskBatches: ReadonlyMap<string, readonly string[]>
   committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
-  collectingTaskWait?: ProjectAgentCollectingTaskWait | null
-  runFence: ReturnType<typeof createProjectAgentRunFence>
-  executionSegmentId: string
-  projectId: string
-  userId: string
-  episodeId: string | null
-  locale: string
 }): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
   }
-  if (params.collectingTaskWait) {
-    const expectedOperationIds = [...params.collectingTaskWait.operationIds].sort()
-    const actualOperationIds = params.stopPart.taskWaits.map((wait) => wait.operationId).sort()
-    if (JSON.stringify(actualOperationIds) !== JSON.stringify(expectedOperationIds)) {
-      throw new Error(`PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH:${expectedOperationIds.join(',')}:${actualOperationIds.join(',')}`)
-    }
-    const taskIds = Array.from(new Set(params.stopPart.taskWaits.flatMap((wait) => wait.taskIds))).sort()
-    for (const taskWait of params.stopPart.taskWaits) {
-      const boundTaskIds = params.transactionallyBoundTaskBatches.get(taskWait.operationId)
-      const suspension = params.committedSuspensions.get(taskWait.operationId)
-      if (!boundTaskIds || !suspension || suspension.kind !== 'task') {
-        throw new Error(`PROJECT_AGENT_WAIT_GROUP_MEMBER_NOT_BOUND:${taskWait.operationId}`)
-      }
-      if (suspension.waitId !== params.collectingTaskWait.waitId) {
-        throw new Error(`PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH:${taskWait.operationId}`)
-      }
-    }
-    const sealed = await sealProjectAgentCollectingTaskWait({
-      runFence: params.runFence,
-      runId: params.runFence.runId,
-      executionSegmentId: params.executionSegmentId,
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      locale: params.locale,
-      assistantId: 'workspace-command',
-      operationId: params.collectingTaskWait.operationId,
-      taskIds,
-      followUpMode: params.collectingTaskWait.followUpMode,
-      group: params.collectingTaskWait,
-    })
-    params.committedSuspensions.forEach((suspension) => {
-      if (suspension.kind !== 'task') return
-      if (suspension.waitId !== sealed.waitId) {
-        throw new Error(`PROJECT_AGENT_WAIT_GROUP_SEALED_RECEIPT_MISMATCH:${suspension.operationId}`)
-      }
-    })
-    return sealed.followUpMode
-  }
   if (params.stopPart.taskWaits.length !== 1) {
-    throw new Error(`PROJECT_AGENT_WAIT_GROUP_REQUIRED:${params.stopPart.operationIds.join(',')}`)
+    throw new Error(`PROJECT_AGENT_PARALLEL_OPERATION_STEP_FORBIDDEN:${params.stopPart.operationIds.join(',')}`)
   }
   const taskWait = params.stopPart.taskWaits[0]
   if (!taskWait) throw new Error('PROJECT_AGENT_TASK_WAIT_DESCRIPTOR_MISSING')
@@ -742,53 +669,6 @@ function requireProjectAgentChoiceSuspensionReceipt(params: {
     throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_MISSING:${operationId}`)
   }
   return handoff
-}
-
-interface ProjectAgentLiveWorkflowState {
-  get(): Promise<EditFirstWorkflowView>
-  invalidate(): void
-}
-
-/**
- * Live view of the edit-first workflow state for one run. Tool isEnabled
- * predicates read it before every model turn; every operation execution
- * invalidates it, so a step advanced by a completed operation is visible to
- * the very next turn's tool surface. Lookups are deduplicated; refresh
- * failures must fail the run because stale workflow state would expose the
- * wrong tool surface.
- */
-function createProjectAgentLiveWorkflowState(params: {
-  requestId: string
-  projectId: string
-  userId: string
-  episodeId: string | null
-  initial: EditFirstWorkflowView
-}): ProjectAgentLiveWorkflowState {
-  let current = params.initial
-  let stale = false
-  let pending: Promise<EditFirstWorkflowView> | null = null
-  return {
-    async get() {
-      if (!stale) return current
-      pending ??= resolveEditFirstWorkflowView({
-        projectId: params.projectId,
-        userId: params.userId,
-        episodeId: params.episodeId,
-      })
-        .then((workflow) => {
-          current = workflow
-          stale = false
-          return workflow
-        })
-        .finally(() => {
-          pending = null
-        })
-      return pending
-    },
-    invalidate() {
-      stale = true
-    },
-  }
 }
 
 function buildRunContext(params: {
@@ -893,15 +773,7 @@ export async function createProjectAgentChatResponse(input: {
     userId: input.userId,
     episodeId: context.episodeId || null,
   })
-  const phase = control.kind === 'choice' && !control.appliedOperationId
-    ? {
-        ...resolvedPhase,
-        editFirstWorkflow: resolveEditFirstWorkflowChoice(
-          resolvedPhase.editFirstWorkflow,
-          control.choiceResult.choiceDecision,
-        ),
-      }
-    : resolvedPhase
+  const phase = resolvedPhase
   const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
     userId: input.userId,
@@ -990,70 +862,12 @@ export async function createProjectAgentChatResponse(input: {
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
-  const workflowOperationGroup = phase.editFirstWorkflow.operationPolicy.group
-  const workflowGroupOperationIds = workflowOperationGroup?.operationIds ?? []
-  const workflowApprovalOperationIds = workflowOperationGroup?.approvalOperationIds ?? []
-  const approvalGroupOperationIds = approvalInterruption
-    ? persistedApprovalItems.map((item) => item.operationId).sort()
-    : workflowApprovalOperationIds.length > 0
-      ? workflowGroupOperationIds
-      : []
-  const collectingOperationIds = control.kind === 'approval'
-    ? control.approved ? approvalGroupOperationIds : []
-    : workflowApprovalOperationIds.length === 0 ? workflowGroupOperationIds : []
-  const collectingTaskWait = collectingOperationIds.length > 1
-    ? await prepareProjectAgentCollectingTaskWait({
-        runFence,
-        runId: input.run.id,
-        executionSegmentId: executionSegment.id,
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: context.episodeId ?? null,
-        locale,
-        assistantId: 'workspace-command',
-        operationId: collectingOperationIds[0] ?? 'operation_group',
-        operationIds: collectingOperationIds,
-        taskIds: [],
-        followUpMode: resolveWaitFollowUpModeForOperations(operations, [...collectingOperationIds]),
-      })
-    : null
-  const liveWorkflow = createProjectAgentLiveWorkflowState({
-    requestId,
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: context.episodeId || null,
-    initial: phase.editFirstWorkflow,
-  })
   const approvalPreflightStore = createProjectAgentApprovalPreflightStore()
-  const taskFollowUpTurnPolicy = control.kind === 'task_follow_up'
-    ? resolveProjectAgentTaskFollowUpTurnPolicy(control.followUp.terminalStatus)
-    : null
   const toolset = resolveProjectAgentToolset({
     registry: operations,
-    context,
-    resumeOperationId: approvalInterruption?.operationId ?? null,
     disabledOperationIds: control.kind === 'choice' ? [EDIT_FIRST_CHOICE_TOOL_IDS[control.choiceType]] : [],
   })
   const operationIds = toolset.operationIds
-  const initialEnabledOperationIds = operationIds.filter((operationId) => {
-    const operation = operations[operationId]
-    if (!operation) return false
-    return (taskFollowUpTurnPolicy?.allowOperationIntent(operation.intent) ?? true)
-      && isProjectAgentOperationEnabled({
-        toolset,
-        workflow: phase.editFirstWorkflow,
-        operationId,
-      })
-  })
-  const initialChoiceContinuationOperationId = control.kind === 'choice'
-    ? phase.editFirstWorkflow.operationPolicy.recommendedAction?.operationId ?? null
-    : null
-  if (
-    initialChoiceContinuationOperationId
-    && !initialEnabledOperationIds.includes(initialChoiceContinuationOperationId)
-  ) {
-    throw new Error(`PROJECT_AGENT_CHOICE_CONTINUATION_NOT_ENABLED:${initialChoiceContinuationOperationId}`)
-  }
   const selectedTools = operationIds.map((operationId) => {
     const operation = operations[operationId]
     if (!operation) {
@@ -1069,7 +883,6 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     episodeId: context.episodeId || null,
     phase,
-    enabledOperationIds: initialEnabledOperationIds,
   })
 
   const agentInput: AgentInputItem[] = control.kind === 'approval'
@@ -1110,11 +923,8 @@ export async function createProjectAgentChatResponse(input: {
       contextTokenEstimate: estimateContextTokens(agentInput),
       toolset: {
         source: toolset.source,
-        coreOperationIds: toolset.coreOperationIds,
-        workflowOperationIds: toolset.workflowOperationIds,
-        initialEnabledOperationIds,
-        resumeOperationId: toolset.resumeOperationId,
-        includeChoiceOperation: toolset.includeChoiceOperation,
+        operationIds: [...toolset.operationIds],
+        disabledOperationIds: [...toolset.disabledOperationIds],
       },
       editFirstWorkflow: phase.editFirstWorkflow,
       selectedTools: selectedTools.map((item) => ({
@@ -1159,19 +969,14 @@ export async function createProjectAgentChatResponse(input: {
       'runtime=openai-agents-sdk',
       `control=${control.kind}`,
       `toolsetSource=${toolset.source}`,
-      `coreTools=${String(toolset.coreOperationIds.length)}`,
-      `workflowTools=${String(toolset.workflowOperationIds.length)}`,
       `tools=${String(operationIds.length)}`,
-      `enabledTools=${String(initialEnabledOperationIds.length)}`,
       `editFirstStep=${phase.editFirstWorkflow.step}`,
       `editFirstStatus=${phase.editFirstWorkflow.status.kind}`,
     ].join('\n')))
     initialChunks.push(createDataChunk('data-agent-debug', {
       requestId,
       toolsetSource: toolset.source,
-      coreOperationIds: toolset.coreOperationIds,
-      workflowOperationIds: toolset.workflowOperationIds,
-      operationIds,
+      operationIds: [...operationIds],
     } satisfies AgentDebugPartData))
   }
 
@@ -1246,16 +1051,6 @@ export async function createProjectAgentChatResponse(input: {
         },
         onError: (error) => (error instanceof Error ? error.message : String(error)),
       },
-      ...(isProjectAgentOperationAlwaysEnabled(toolset, item.operation.id) ? {} : {
-        isEnabled: async () => (
-          (taskFollowUpTurnPolicy?.allowOperationIntent(item.operation.intent) ?? true)
-          && isProjectAgentOperationEnabled({
-            toolset,
-            workflow: await liveWorkflow.get(),
-            operationId: item.operation.id,
-          })
-        ),
-      }),
       onExecutionSettled: ({ toolCallId, outcome }) => {
         if (!toolCallId) {
           throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_CALL_ID_MISSING:${item.operation.id}`)
@@ -1278,7 +1073,6 @@ export async function createProjectAgentChatResponse(input: {
           }
           preparedChoiceHandoffs.set(choiceHandoff.operationId, choiceHandoff)
         }
-        liveWorkflow.invalidate()
       },
       onToolCallIdentified: registerToolCallIdentity,
       onTaskBatchBound: (batch) => {
@@ -1293,8 +1087,6 @@ export async function createProjectAgentChatResponse(input: {
         committedSuspensions.set(batch.operationId, batch.suspension)
       },
       approvalPreflightStore,
-      approvalBarrierOperationIds: approvalGroupOperationIds,
-      collectingTaskWait,
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
 
@@ -1310,6 +1102,7 @@ export async function createProjectAgentChatResponse(input: {
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
       temperature: 0.2,
+      parallelToolCalls: false,
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
@@ -1359,9 +1152,8 @@ export async function createProjectAgentChatResponse(input: {
         // The serialized SDK state is the immutable continuation of the exact
         // tool call the model requested. Rewriting its original input here can
         // turn an approval resume into a fresh model turn and strand the
-        // already-approved invocation. Tools read current durable workflow
-        // state through their execution context, so the frozen model turn must
-        // remain byte-for-byte intact until its approved call has settled.
+        // already-approved invocation. The frozen model turn must remain
+        // byte-for-byte intact until its approved call has settled.
         return state
       })()
     : agentInput
@@ -1371,6 +1163,7 @@ export async function createProjectAgentChatResponse(input: {
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
       toolNotFoundBehavior: 'raise_error',
+      toolExecution: { maxFunctionToolConcurrency: 1 },
       signal: runAbortController.signal,
     })
     let runStatusFinalized = false
@@ -1514,25 +1307,17 @@ export async function createProjectAgentChatResponse(input: {
                 operationPlan,
               }
             }))
-            const expectedGroupIds = phase.editFirstWorkflow.operationPolicy.group?.operationIds ?? []
-            if (expectedGroupIds.length > 0) {
-              const expected = Array.from(new Set(expectedGroupIds)).sort()
-              const actual = Array.from(new Set(members.map((member) => member.operationId))).sort()
-              if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-                throw new Error(`PROJECT_AGENT_OPERATION_GROUP_INCOMPLETE:${expected.join(',')}:${actual.join(',')}`)
-              }
+            if (members.length !== 1) {
+              throw new Error(`PROJECT_AGENT_PARALLEL_APPROVAL_STEP_FORBIDDEN:${String(members.length)}`)
             }
-            const primary = members.find((member) => member.operationPlan) ?? members[0]
+            const primary = members[0]
             if (!primary) throw new Error('PROJECT_AGENT_APPROVAL_GROUP_EMPTY')
             return {
               approvalId: primary.approvalId,
               operationId: primary.operationId,
               toolCallId: primary.toolCallId,
               inputHash: primary.inputHash,
-              operationPlan: mergeOperationPlanViewsForApproval(
-                primary.operationId,
-                members.flatMap((member) => member.operationPlan ? [member.operationPlan] : []),
-              ),
+              operationPlan: primary.operationPlan,
               members,
               runState: result.state.toString(),
             }
@@ -1545,13 +1330,6 @@ export async function createProjectAgentChatResponse(input: {
             registry: operations,
             transactionallyBoundTaskBatches,
             committedSuspensions,
-            collectingTaskWait,
-            runFence,
-            executionSegmentId: executionSegment.id,
-            projectId: input.projectId,
-            userId: input.userId,
-            episodeId: context.episodeId ?? null,
-            locale,
           })
         } catch (error) {
           if (input.settleTaskFollowUp) throw error
@@ -1672,14 +1450,9 @@ export async function createProjectAgentChatResponse(input: {
         } else if (!shouldPersistApprovalInterruption) {
           if (latestStopPart?.reason === 'awaiting_external_task') {
             chunks.push(createRuntimeStatusChunk('awaiting_task', 'awaiting_task'))
-            const taskWait = collectingTaskWait
-              ? {
-                  operationId: collectingTaskWait.operationId,
-                  taskIds: Array.from(new Set(latestStopPart.taskWaits.flatMap((wait) => wait.taskIds))).sort(),
-                }
-              : latestStopPart.taskWaits.length === 1 && latestStopPart.taskWaits[0]
-                ? latestStopPart.taskWaits[0]
-                : null
+            const taskWait = latestStopPart.taskWaits.length === 1 && latestStopPart.taskWaits[0]
+              ? latestStopPart.taskWaits[0]
+              : null
             if (!taskWait) throw new Error('PROJECT_AGENT_TASK_HANDOFF_WAIT_DESCRIPTOR_MISSING')
             await settleProjectAgentPreparedTaskHandoff({
               executionFence: {

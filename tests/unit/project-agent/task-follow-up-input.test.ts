@@ -14,6 +14,17 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     failedTaskIds: [],
     canceledTaskIds: [],
     failedTasks: [],
+    completedTasks: [{
+      taskId: 'task-1',
+      taskType: 'creative_resource_image',
+      targetType: 'CreativeResource',
+      targetId: 'resource-1',
+      result: {
+        resourceId: 'resource-1',
+        revisionId: 'revision-1',
+        fingerprint: 'fingerprint-1',
+      },
+    }],
     terminalStatus: 'completed',
     total: 1,
     successCount: 1,
@@ -40,6 +51,8 @@ describe('project agent task follow-up input', () => {
     expect(content).toContain('operation=generate_edit_shot_execution_plan')
     expect(content).toContain('status=completed')
     expect(content).toContain('total=1 succeeded=1 failed=0')
+    expect(content).toContain('completedTasks=')
+    expect(content).toContain('revision-1')
     expect(content).not.toContain('本轮在任何工具调用之前')
     expect(content).not.toContain('Do not start this turn with a tool call')
     expect(content).not.toContain('不要重新运行刚刚到达终态')

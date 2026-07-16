@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { resetBillingState } from '../../helpers/db-reset'
-import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
+import { createQueuedTask, createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { prisma } from '../../helpers/prisma'
+import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import {
   beginProjectAgentWaitContinuationExecution,
   claimProjectAgentWaitContinuation,
@@ -29,6 +30,24 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
   const user = await createTestUser()
   const project = await createTestProject(user.id)
   const scopeRef = `project:${project.id}`
+  await createQueuedTask({
+    id: 'task-1',
+    userId: user.id,
+    projectId: project.id,
+    type: TASK_TYPE.VIDEO_SEGMENT,
+    targetType: 'ProjectVideoSegment',
+    targetId: 'dead-delivery-video-segment-1',
+    payload: {},
+  })
+  await prisma.task.update({
+    where: { id: 'task-1' },
+    data: {
+      status: TASK_STATUS.COMPLETED,
+      progress: 100,
+      result: { resources: [] },
+      finishedAt: new Date(),
+    },
+  })
   await prisma.projectAgentRun.create({
     data: {
       id: RUN_ID,

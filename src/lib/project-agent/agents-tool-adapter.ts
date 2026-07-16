@@ -37,9 +37,7 @@ import {
 } from './operation-execution-fence'
 import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
 import {
-  bindProjectAgentCollectingWaitMemberInTransaction,
   bindProjectAgentWaitToTasksInTransaction,
-  type ProjectAgentCollectingTaskWait,
 } from './waits'
 
 type UnknownObject = { [key: string]: unknown }
@@ -90,11 +88,6 @@ export interface CreateProjectAgentOperationToolParams {
   continuationClaim?: ProjectAgentOperationExecutionFence['continuationClaim']
   assistantPermissionMode: AssistantPermissionMode
   writer: UIMessageStreamWriter<UIMessage>
-  /**
-   * Live availability predicate, re-evaluated by the Agents SDK before every
-   * model turn. Omit for tools that are always available.
-   */
-  isEnabled?: () => Promise<boolean>
   /** Called exactly once after an execution attempt with its typed outcome. */
   onExecutionSettled?: (settlement: {
     toolCallId: string | null
@@ -110,19 +103,15 @@ export interface CreateProjectAgentOperationToolParams {
     suspension: ProjectAgentTaskSuspensionReceipt
   }) => void
   approvalPreflightStore?: ProjectAgentApprovalPreflightStore
-  /** Every member of a declared operation group is held by one approval barrier. */
-  approvalBarrierOperationIds?: readonly string[]
-  collectingTaskWait?: ProjectAgentCollectingTaskWait | null
 }
 
 export function createProjectAgentOperationTool(
   params: CreateProjectAgentOperationToolParams,
 ): Tool {
-  const requiresApproval = params.approvalBarrierOperationIds?.includes(params.operation.id) === true
-    || shouldRequireAssistantToolApproval({
+  const requiresApproval = shouldRequireAssistantToolApproval({
     mode: params.assistantPermissionMode,
     operation: params.operation,
-    })
+  })
   const identifyToolCall = (toolCallId: string | null | undefined): string | null => {
     const normalizedToolCallId = toolCallId?.trim() || null
     if (normalizedToolCallId) {
@@ -159,7 +148,6 @@ export function createProjectAgentOperationTool(
     parameters: params.operation.toolInputSchema as never,
     strict: true,
     ...(requiresApproval ? { needsApproval } : {}),
-    ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       let executionSettlementReported = false
       const reportExecutionSettled = (outcome: ProjectAgentOperationOutcome): void => {
@@ -239,12 +227,7 @@ export function createProjectAgentOperationTool(
               followUpMode: params.operation.agentFlow?.onTaskComplete === 'complete' ? 'complete' : 'resume_agent',
               sourceOperationActivityId,
             } as const
-            const suspension = params.collectingTaskWait
-              ? await bindProjectAgentCollectingWaitMemberInTransaction(transaction, {
-                  ...waitInput,
-                  group: params.collectingTaskWait,
-                })
-              : await bindProjectAgentWaitToTasksInTransaction(transaction, waitInput)
+            const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, waitInput)
             if (!suspension) throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED:${params.operation.id}`)
             bound = true
             boundBatch = { operationId: params.operation.id, taskIds, suspension }
@@ -274,7 +257,7 @@ export function createProjectAgentOperationTool(
           signal: params.operationSignal,
           continuationClaim: params.continuationClaim ?? null,
           taskBatchBinding,
-          concurrentExecutionSegmentId: params.collectingTaskWait ? params.context.executionSegmentId ?? null : null,
+          concurrentExecutionSegmentId: null,
         }
         try {
           const execution = await executeProjectAgentOperationFromTool({
@@ -305,14 +288,14 @@ export function createProjectAgentOperationTool(
           throw error
         }
       }
-      const operationActivityId = params.collectingTaskWait ? null : randomUUID()
+      const operationActivityId = randomUUID()
       const taskBatchBinding = createTaskBatchBinding(operationActivityId)
       const executionFence: ProjectAgentOperationExecutionFence = {
         runFence: params.runFence,
         signal: params.operationSignal,
         continuationClaim: params.continuationClaim ?? null,
         taskBatchBinding,
-        concurrentExecutionSegmentId: params.collectingTaskWait ? params.context.executionSegmentId ?? null : null,
+        concurrentExecutionSegmentId: null,
       }
       const startedActivity = operationActivityId ? await appendProjectAgentEvents({
         scope: {

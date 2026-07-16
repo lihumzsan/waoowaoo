@@ -139,8 +139,6 @@ export interface ProjectAgentChoiceResolvedPartData {
 export interface AgentDebugPartData {
   requestId: string
   toolsetSource: string
-  coreOperationIds: string[]
-  workflowOperationIds: string[]
   operationIds: string[]
 }
 
@@ -160,11 +158,8 @@ export interface AgentRuntimeContextPartData {
   contextTokenEstimate: number | null
   toolset: {
     source: string
-    coreOperationIds: string[]
-    workflowOperationIds: string[]
-    initialEnabledOperationIds: string[]
-    resumeOperationId: string | null
-    includeChoiceOperation: boolean
+    operationIds: string[]
+    disabledOperationIds: string[]
   }
   editFirstWorkflow: EditFirstWorkflowView
   selectedTools: Array<{

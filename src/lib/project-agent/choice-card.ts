@@ -6,10 +6,6 @@ import type {
   ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCardOption,
 } from './types'
-import {
-  isEditFirstWorkflowPosition,
-  type EditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 export {
   EDIT_FIRST_CHOICE_REGISTRY,
@@ -57,17 +53,8 @@ export async function buildStyleAndRatioChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (isEditFirstWorkflowPosition(params.workflow, 'visual_style', 'processing')) {
-    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:step=visual_style:status=processing')
-  }
-  if (!isEditFirstWorkflowPosition(params.workflow, 'visual_style', 'needs_user_choice')) {
-    throw new Error(
-      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
-    )
-  }
   const [project, editBible] = await Promise.all([
     prisma.project.findFirst({
       where: {
@@ -179,14 +166,8 @@ export async function buildScriptReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (!isEditFirstWorkflowPosition(params.workflow, 'source_script', 'needs_user_choice')) {
-    throw new Error(
-      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
-    )
-  }
   const editBible = await prisma.projectEditBible.findFirst({
     where: {
       episodeId: params.episodeId,
@@ -276,14 +257,8 @@ export async function buildBibleReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (!isEditFirstWorkflowPosition(params.workflow, 'episode_plan', 'needs_user_choice')) {
-    throw new Error(
-      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
-    )
-  }
   const editBible = await prisma.projectEditBible.findFirst({
     where: {
       episodeId: params.episodeId,
@@ -382,14 +357,8 @@ export async function buildAssetReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (!isEditFirstWorkflowPosition(params.workflow, 'planned_assets', 'needs_user_choice')) {
-    throw new Error(
-      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
-    )
-  }
   const editScripts = await prisma.projectEditScript.findMany({
     where: {
       projectId: params.projectId,
@@ -469,7 +438,6 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceCardDefinition> {
@@ -481,7 +449,6 @@ export async function buildEditFirstAssistantChoiceOfferCandidate(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
@@ -494,7 +461,6 @@ export async function buildEditFirstAssistantChoiceOfferCandidate(params: {
     userId: params.userId,
     episodeId: params.episodeId,
     locale: params.locale,
-    workflow: params.workflow,
     toolCallId: params.toolCallId,
   })
 }

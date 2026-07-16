@@ -39,9 +39,6 @@ describe('assistant choice offer conformance', () => {
         resourceKind: definition.reviewedResourceKind,
         offerBuilder: definition.offerBuilder.kind,
         parseDecision: typeof definition.parseDecision,
-        workflowDecision: typeof definition.toWorkflowDecision,
-        isEnabled: typeof definition.isEnabled,
-        workflowAction: typeof definition.resolveWorkflowAction,
         atomicConfirmation: typeof definition.resolveAtomicConfirmationCommand,
         resolveResource: typeof definition.resolveReviewedResource,
       }
@@ -54,9 +51,6 @@ describe('assistant choice offer conformance', () => {
     ])
     for (const definition of Object.values(EDIT_FIRST_CHOICE_REGISTRY)) {
       expect(definition.parseDecision).toBeTypeOf('function')
-      expect(definition.toWorkflowDecision).toBeTypeOf('function')
-      expect(definition.isEnabled).toBeTypeOf('function')
-      expect(definition.resolveWorkflowAction).toBeTypeOf('function')
       expect(definition.resolveAtomicConfirmationCommand).toBeTypeOf('function')
       expect(definition.resolveReviewedResource).toBeTypeOf('function')
     }

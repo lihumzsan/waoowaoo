@@ -1,181 +1,30 @@
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
-import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
-import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-view'
-import {
-  EDIT_FIRST_CHOICE_OPERATION_IDS,
-  isEditFirstChoiceToolEnabled,
-  isEditFirstChoiceToolId,
-} from './edit-first-choice-tools'
-import type { ProjectAgentContext } from './types'
 
-const CORE_OPERATION_IDS = [
-  'get_project_context',
-  'get_project_snapshot',
-  'get_episode_overview',
-  'get_chapter_detail',
-  'get_task',
-  'get_task_batch',
-  'list_tasks',
-] as const
-
-/**
- * Tool surface for a project agent run.
- *
- * Registration is static per run: every edit-first workflow operation is
- * registered up front so the agent definition (and any serialized RunState)
- * stays stable across the whole run. Availability is live per model turn:
- * each workflow tool carries an isEnabled predicate evaluated against the
- * current workflow state, so when an operation completes mid-run and the
- * workflow advances, the next stage's tool becomes callable on the very next
- * turn — no new run or toolset rebuild required.
- */
 export interface ProjectAgentToolset {
-  source: 'live-workflow'
-  operationIds: string[]
-  coreOperationIds: string[]
-  workflowOperationIds: string[]
-  resumeOperationId: string | null
-  includeChoiceOperation: boolean
-  disabledOperationIds: string[]
+  readonly source: 'operation-registry'
+  readonly operationIds: readonly string[]
+  readonly disabledOperationIds: readonly string[]
 }
 
-function pushOptionalTool(params: {
-  registry: ProjectAgentOperationRegistry
-  operationIds: string[]
-  operationId: string
-}) {
-  const operation = params.registry[params.operationId]
-  if (!operation?.channels.tool) return
-  if (!params.operationIds.includes(params.operationId)) {
-    params.operationIds.push(params.operationId)
-  }
-}
-
-function pushRequiredTool(params: {
-  registry: ProjectAgentOperationRegistry
-  operationIds: string[]
-  operationId: string
-}) {
-  const operation = params.registry[params.operationId]
-  if (!operation) {
-    throw new Error(`PROJECT_AGENT_REQUIRED_OPERATION_MISSING:${params.operationId}`)
-  }
-  if (!operation.channels.tool) {
-    throw new Error(`PROJECT_AGENT_REQUIRED_OPERATION_NOT_TOOL:${params.operationId}`)
-  }
-  if (!params.operationIds.includes(params.operationId)) {
-    params.operationIds.push(params.operationId)
-  }
-}
-
+/**
+ * The production Operation registry is the only tool-surface authority.
+ * Workflow guidance can recommend an operation, but it cannot hide a
+ * registered user-authorized capability from the Agent.
+ */
 export function resolveProjectAgentToolset(params: {
-  registry: ProjectAgentOperationRegistry
-  context: ProjectAgentContext
-  resumeOperationId?: string | null
-  disabledOperationIds?: readonly string[]
+  readonly registry: ProjectAgentOperationRegistry
+  readonly disabledOperationIds?: readonly string[]
 }): ProjectAgentToolset {
-  const operationIds: string[] = []
-  const coreOperationIds: string[] = []
-  const workflowOperationIds: string[] = []
-  const includeChoiceOperation = Boolean(params.context.episodeId)
-
-  for (const operationId of CORE_OPERATION_IDS) {
-    const beforeLength = operationIds.length
-    pushOptionalTool({
-      registry: params.registry,
-      operationIds,
-      operationId,
-    })
-    if (operationIds.length > beforeLength) {
-      coreOperationIds.push(operationId)
-    }
-  }
-
-  if (includeChoiceOperation) {
-    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
-      const beforeLength = operationIds.length
-      pushRequiredTool({
-        registry: params.registry,
-        operationIds,
-        operationId,
-      })
-      if (operationIds.length > beforeLength) {
-        workflowOperationIds.push(operationId)
-      }
-    }
-  }
-
-  for (const operationId of EDIT_FIRST_WORKFLOW_OPERATION_IDS) {
-    const beforeLength = operationIds.length
-    pushRequiredTool({
-      registry: params.registry,
-      operationIds,
-      operationId,
-    })
-    if (operationIds.length > beforeLength) {
-      workflowOperationIds.push(operationId)
-    }
-  }
-
-  const resumeOperationId = params.resumeOperationId ?? null
-  if (resumeOperationId) {
-    const beforeLength = operationIds.length
-    pushRequiredTool({
-      registry: params.registry,
-      operationIds,
-      operationId: resumeOperationId,
-    })
-    if (operationIds.length > beforeLength) {
-      workflowOperationIds.push(resumeOperationId)
-    }
-  }
-
+  const disabledOperationIds = Array.from(new Set(
+    (params.disabledOperationIds ?? []).map((operationId) => operationId.trim()).filter(Boolean),
+  )).sort()
+  const operationIds = Object.values(params.registry)
+    .filter((operation) => operation.channels.tool && !disabledOperationIds.includes(operation.id))
+    .map((operation) => operation.id)
+    .sort()
   return {
-    source: 'live-workflow',
+    source: 'operation-registry',
     operationIds,
-    coreOperationIds,
-    workflowOperationIds,
-    resumeOperationId,
-    includeChoiceOperation,
-    disabledOperationIds: Array.from(new Set(params.disabledOperationIds ?? [])),
+    disabledOperationIds,
   }
-}
-
-/**
- * Operations whose availability does not depend on the live workflow state:
- * read/UI core tools, edit-first choice cards (their execution validates the
- * fixed choice type against the live workflow stage), and the run's resumed approval operation.
- * A restored approval must stay callable even if the workflow has moved past
- * the stage that originally offered it.
- */
-export function isProjectAgentOperationAlwaysEnabled(
-  toolset: ProjectAgentToolset,
-  operationId: string,
-): boolean {
-  return toolset.coreOperationIds.includes(operationId)
-    || operationId === toolset.resumeOperationId
-}
-
-/**
- * Live availability of one registered operation against the current workflow
- * state. Evaluated once per model turn (via each tool's isEnabled), so the
- * tool surface the model sees always reflects the project as it is now, not
- * as it was when the run started.
- */
-export function isProjectAgentOperationEnabled(params: {
-  toolset: ProjectAgentToolset
-  workflow: EditFirstWorkflowView
-  operationId: string
-}): boolean {
-  if (params.toolset.disabledOperationIds.includes(params.operationId)) return false
-  if (isProjectAgentOperationAlwaysEnabled(params.toolset, params.operationId)) return true
-  if (isEditFirstChoiceToolId(params.operationId)) {
-    return isEditFirstChoiceToolEnabled({
-      workflow: params.workflow,
-      operationId: params.operationId,
-    })
-  }
-  return params.workflow.operationPolicy.allowedOperationIds.some(
-    (operationId) => operationId === params.operationId,
-  )
 }

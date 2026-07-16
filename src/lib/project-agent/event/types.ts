@@ -107,33 +107,7 @@ export type ProjectAgentEventPayload =
     reason: string
   }
   | {
-    kind: 'task.collection_started'
-    runId: string
-    activityId: string
-    waitId: string
-    operationId: string
-    followUpMode: ProjectAgentWaitFollowUpMode
-  }
-  | {
     kind: 'task.bound'
-    runId: string
-    activityId: string
-    waitId: string
-    operationId: string
-    taskIds: string[]
-    followUpMode: ProjectAgentWaitFollowUpMode
-    collecting?: boolean
-  }
-  | {
-    kind: 'task.collection_member_bound'
-    runId: string
-    activityId: string
-    waitId: string
-    operationId: string
-    taskIds: string[]
-  }
-  | {
-    kind: 'task.collection_sealed'
     runId: string
     activityId: string
     waitId: string

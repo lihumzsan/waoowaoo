@@ -1,6 +1,5 @@
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { EditFirstWorkflowChoiceDecision } from '@/lib/project-workflow/edit-first-view'
 import {
   getEditFirstChoiceDefinition,
   type EditFirstChoiceType,
@@ -21,7 +20,6 @@ export interface EditFirstChoiceResult {
    */
   inputItems: AgentInputItem[]
   decision: EditFirstChoiceDecision
-  choiceDecision: EditFirstWorkflowChoiceDecision
 }
 
 export type EditFirstChoiceDecision =
@@ -184,11 +182,9 @@ export function buildEditFirstChoiceResultFromDecision(params: {
 }): EditFirstChoiceResult {
   const decision = params.decision
   const definition = getEditFirstChoiceDefinition(decision.choiceType)
-  const choiceDecision: EditFirstWorkflowChoiceDecision = definition.toWorkflowDecision(decision)
   const result = definition.serializeDecision(decision)
   return {
     decision,
-    choiceDecision,
     inputItems: buildChoiceInputItems({
       toolCallId: params.toolCallId,
       choiceType: decision.choiceType,

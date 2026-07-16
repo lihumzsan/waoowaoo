@@ -1,12 +1,4 @@
 import {
-  isEditFirstWorkflowPosition,
-  type EditFirstWorkflowStatusKind,
-  type EditFirstWorkflowStep,
-  EditFirstWorkflowAction,
-  EditFirstWorkflowChoiceDecision,
-  EditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
-import {
   buildAssetReviewChoiceCard,
   buildBibleReviewChoiceCard,
   buildScriptReviewChoiceCard,
@@ -50,7 +42,6 @@ interface EditFirstChoiceOfferBuilderParams {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowView
   toolCallId: string
 }
 
@@ -64,8 +55,6 @@ interface EditFirstChoiceResourceResolverParams {
 
 interface EditFirstChoiceDefinition {
   readonly choiceType: EditFirstChoiceType
-  readonly workflowStep: EditFirstWorkflowStep
-  readonly workflowStatus: EditFirstWorkflowStatusKind
   readonly toolId: string
   readonly reviewedResourceKind: ProjectAgentChoiceReviewedResourceKind
   readonly offerBuilder:
@@ -75,12 +64,7 @@ interface EditFirstChoiceDefinition {
         readonly build: (params: EditFirstChoiceOfferBuilderParams) => Promise<ProjectAgentChoiceOfferCandidate>
       }
   readonly parseDecision: (input: EditFirstChoiceDecisionInput) => EditFirstChoiceDecision | null
-  readonly toWorkflowDecision: (decision: EditFirstChoiceDecision) => EditFirstWorkflowChoiceDecision
   readonly serializeDecision: (decision: EditFirstChoiceDecision) => Record<string, unknown>
-  readonly isEnabled: (workflow: EditFirstWorkflowView) => boolean
-  readonly resolveWorkflowAction: (
-    decision: EditFirstWorkflowChoiceDecision,
-  ) => EditFirstWorkflowAction | null
   /**
    * A structured user confirmation whose complete Operation input is already
    * present in the persisted Choice decision. These commands are committed by
@@ -99,16 +83,9 @@ interface EditFirstChoiceDefinition {
 }
 
 function defineEditFirstChoice(
-  definition: Omit<EditFirstChoiceDefinition, 'isEnabled'>,
+  definition: EditFirstChoiceDefinition,
 ): EditFirstChoiceDefinition {
-  return {
-    ...definition,
-    isEnabled: (workflow) => isEditFirstWorkflowPosition(
-      workflow,
-      definition.workflowStep,
-      definition.workflowStatus,
-    ),
-  }
+  return definition
 }
 
 export type EditFirstChoiceAtomicConfirmationCommand =
@@ -116,13 +93,6 @@ export type EditFirstChoiceAtomicConfirmationCommand =
   | { readonly operationId: 'confirm_bible'; readonly input: { readonly aspectRatio: '9:16' | '16:9' | '21:9' } }
   | { readonly operationId: 'confirm_edit_style_preview'; readonly input: Record<string, never> }
   | { readonly operationId: 'approve_edit_script_assets'; readonly input: Record<string, never> }
-
-function workflowAction(
-  operationId: EditFirstWorkflowAction['operationId'],
-  title: string,
-): EditFirstWorkflowAction {
-  return { id: operationId, operationId, title }
-}
 
 function assertDecisionType(
   decision: { readonly choiceType: EditFirstChoiceType },
@@ -136,49 +106,25 @@ function assertDecisionType(
 export const EDIT_FIRST_CHOICE_REGISTRY = {
   script_intake: defineEditFirstChoice({
     choiceType: 'script_intake',
-    workflowStep: 'script_intake',
-    workflowStatus: 'ready',
     toolId: 'request_script_intake_choice',
     reviewedResourceKind: 'script_intake_prompt',
     offerBuilder: { kind: 'persisted_payload' },
     parseDecision: (input) => parseScriptIntakeChoiceDecision(input),
-    toWorkflowDecision: (decision) => {
-      if (decision.choiceType !== 'script_intake') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_intake:${decision.choiceType}`)
-      }
-      return {
-        choiceType: 'script_intake',
-        decision: decision.decision,
-        normalizedBrief: decision.normalizedBrief,
-      }
-    },
     serializeDecision: (decision) => {
       if (decision.choiceType !== 'script_intake') {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_intake:${decision.choiceType}`)
       }
       return { decision: decision.decision, normalizedBrief: decision.normalizedBrief }
     },
-    resolveWorkflowAction: (decision) => {
-      assertDecisionType(decision, 'script_intake')
-      return workflowAction('ingest_script', 'Generate source script')
-    },
     resolveAtomicConfirmationCommand: () => null,
     resolveReviewedResource: async (params) => await resolveScriptIntakeChoiceResource(params),
   }),
   script_review: defineEditFirstChoice({
     choiceType: 'script_review',
-    workflowStep: 'source_script',
-    workflowStatus: 'needs_user_choice',
     toolId: 'request_edit_script_review_choice',
     reviewedResourceKind: 'script_review_document',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildScriptReviewChoiceCard(params) },
     parseDecision: (input) => parseScriptReviewChoiceDecision(input),
-    toWorkflowDecision: (decision) => {
-      if (decision.choiceType !== 'script_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_review:${decision.choiceType}`)
-      }
-      return { choiceType: 'script_review', decision: decision.decision }
-    },
     serializeDecision: (decision) => {
       if (decision.choiceType !== 'script_review') {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_review:${decision.choiceType}`)
@@ -186,14 +132,6 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
       return decision.decision === 'approve'
         ? { decision: 'approve' }
         : { decision: 'revise', revisionNotes: decision.revisionNotes }
-    },
-    resolveWorkflowAction: (decision) => {
-      if (decision.choiceType !== 'script_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_review:${decision.choiceType}`)
-      }
-      return decision.decision === 'approve'
-        ? workflowAction('approve_script', 'Approve generated script')
-        : workflowAction('revise_script', 'Revise generated script')
     },
     resolveAtomicConfirmationCommand: (decision) => {
       if (decision.choiceType !== 'script_review') {
@@ -207,18 +145,10 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   }),
   bible_review: defineEditFirstChoice({
     choiceType: 'bible_review',
-    workflowStep: 'episode_plan',
-    workflowStatus: 'needs_user_choice',
     toolId: 'request_edit_bible_review_choice',
     reviewedResourceKind: 'bible_review_plan',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildBibleReviewChoiceCard(params) },
     parseDecision: (input) => parseBibleReviewChoiceDecision(input),
-    toWorkflowDecision: (decision) => {
-      if (decision.choiceType !== 'bible_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
-      }
-      return { choiceType: 'bible_review', decision: decision.decision }
-    },
     serializeDecision: (decision) => {
       if (decision.choiceType !== 'bible_review') {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
@@ -226,14 +156,6 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
       return decision.decision === 'approve'
         ? { decision: 'approve', aspectRatio: decision.aspectRatio }
         : { decision: 'revise', revisionNotes: decision.revisionNotes }
-    },
-    resolveWorkflowAction: (decision) => {
-      if (decision.choiceType !== 'bible_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
-      }
-      return decision.decision === 'approve'
-        ? workflowAction('confirm_bible', 'Confirm episode plan')
-        : workflowAction('revise_bible', 'Revise episode plan')
     },
     resolveAtomicConfirmationCommand: (decision) => {
       if (decision.choiceType !== 'bible_review') {
@@ -247,22 +169,10 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   }),
   style: defineEditFirstChoice({
     choiceType: 'style',
-    workflowStep: 'visual_style',
-    workflowStatus: 'needs_user_choice',
     toolId: 'request_edit_style_choice',
     reviewedResourceKind: 'style_preview_set',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildStyleAndRatioChoiceCard(params) },
     parseDecision: (input) => parseStyleChoiceDecision(input),
-    toWorkflowDecision: (decision) => {
-      if (decision.choiceType !== 'style') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:style:${decision.choiceType}`)
-      }
-      return {
-        choiceType: 'style',
-        decision: decision.decision,
-        stylePreviewId: decision.stylePreviewId,
-      }
-    },
     serializeDecision: (decision) => {
       if (decision.choiceType !== 'style') {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:style:${decision.choiceType}`)
@@ -273,10 +183,6 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         saved: true,
       }
     },
-    resolveWorkflowAction: (decision) => {
-      assertDecisionType(decision, 'style')
-      return workflowAction('confirm_edit_style_preview', 'Confirm selected visual style')
-    },
     resolveAtomicConfirmationCommand: (decision) => {
       assertDecisionType(decision, 'style')
       return { operationId: 'confirm_edit_style_preview', input: {} }
@@ -285,18 +191,10 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   }),
   asset_review: defineEditFirstChoice({
     choiceType: 'asset_review',
-    workflowStep: 'planned_assets',
-    workflowStatus: 'needs_user_choice',
     toolId: 'request_edit_asset_review_choice',
     reviewedResourceKind: 'asset_review_set',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildAssetReviewChoiceCard(params) },
     parseDecision: (input) => parseAssetReviewChoiceDecision(input),
-    toWorkflowDecision: (decision) => {
-      if (decision.choiceType !== 'asset_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:asset_review:${decision.choiceType}`)
-      }
-      return { choiceType: 'asset_review', decision: decision.decision }
-    },
     serializeDecision: (decision) => {
       if (decision.choiceType !== 'asset_review') {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:asset_review:${decision.choiceType}`)
@@ -304,14 +202,6 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
       return decision.decision === 'approve'
         ? { decision: 'approve' }
         : { decision: 'revise', revisionNotes: decision.revisionNotes }
-    },
-    resolveWorkflowAction: (decision) => {
-      if (decision.choiceType !== 'asset_review') {
-        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:asset_review:${decision.choiceType}`)
-      }
-      return decision.decision === 'approve'
-        ? workflowAction('approve_edit_script_assets', 'Approve required assets')
-        : workflowAction('revise_edit_script_assets', 'Revise required assets')
     },
     resolveAtomicConfirmationCommand: (decision) => {
       if (decision.choiceType !== 'asset_review') {
@@ -358,15 +248,4 @@ export function isEditFirstChoiceType(value: unknown): value is EditFirstChoiceT
 
 export function isEditFirstChoiceToolId(operationId: string): operationId is EditFirstChoiceToolId {
   return EDIT_FIRST_CHOICE_OPERATION_IDS.some((candidate) => candidate === operationId)
-}
-
-export function isEditFirstChoiceToolEnabled(params: {
-  workflow: EditFirstWorkflowView
-  operationId: EditFirstChoiceToolId
-}): boolean {
-  const definition = EDIT_FIRST_CHOICE_TYPES
-    .map((choiceType) => EDIT_FIRST_CHOICE_REGISTRY[choiceType])
-    .find((candidate) => candidate.toolId === params.operationId)
-  if (!definition) throw new Error(`EDIT_FIRST_CHOICE_TOOL_DEFINITION_MISSING:${params.operationId}`)
-  return definition.isEnabled(params.workflow)
 }

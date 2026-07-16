@@ -159,7 +159,7 @@ async function abandonOpenWaitsForRun(
   await tx.projectAgentWait.updateMany({
     where: {
       runId,
-      status: { in: ['collecting', 'pending', 'resolved', 'claimed'] },
+      status: { in: ['pending', 'resolved', 'claimed'] },
     },
     data: {
       status: 'abandoned',
@@ -390,7 +390,7 @@ async function applyTaskBound(
       operationId: event.operationId,
       taskIds: event.taskIds,
       followUpMode: event.followUpMode,
-      status: event.collecting ? 'collecting' : 'pending',
+      status: 'pending',
       runVersion: nextFence.runVersion,
       eventSeq: BigInt(nextFence.eventSeq),
     },
@@ -399,7 +399,7 @@ async function applyTaskBound(
       operationId: event.operationId,
       taskIds: event.taskIds,
       followUpMode: event.followUpMode,
-      status: event.collecting ? 'collecting' : 'pending',
+      status: 'pending',
       runVersion: nextFence.runVersion,
       eventSeq: BigInt(nextFence.eventSeq),
       terminalStatus: null,
@@ -415,80 +415,6 @@ async function applyTaskBound(
     },
   })
   return getActivitySnapshot(tx, event.activityId)
-}
-
-async function applyTaskCollectionStarted(
-  tx: ProjectAgentProjectionTx,
-  scope: ProjectAgentEventScopeRef,
-  event: Extract<ProjectAgentEventPayload, { kind: 'task.collection_started' }>,
-  nextFence: ProjectAgentRunFence,
-): Promise<ProjectAgentActivitySnapshot | null> {
-  await tx.projectAgentWait.create({
-    data: {
-      id: event.waitId,
-      runId: event.runId,
-      activityId: null,
-      projectId: scope.projectId,
-      userId: scope.userId,
-      assistantId: scope.assistantId,
-      scopeRef: scope.scopeRef,
-      episodeId: scope.episodeId,
-      operationId: event.operationId,
-      taskIds: [],
-      followUpMode: event.followUpMode,
-      status: 'collecting',
-      runVersion: nextFence.runVersion,
-      eventSeq: BigInt(nextFence.eventSeq),
-    },
-  })
-  return getActivitySnapshot(tx, event.activityId)
-}
-
-async function applyTaskCollectionSealed(
-  tx: ProjectAgentProjectionTx,
-  event: Extract<ProjectAgentEventPayload, { kind: 'task.collection_sealed' }>,
-  nextFence: ProjectAgentRunFence,
-): Promise<ProjectAgentActivitySnapshot | null> {
-  const updated = await tx.projectAgentWait.updateMany({
-    where: {
-      id: event.waitId,
-      runId: event.runId,
-      operationId: event.operationId,
-      status: 'collecting',
-    },
-    data: {
-      activityId: event.activityId,
-      taskIds: event.taskIds,
-      followUpMode: event.followUpMode,
-      status: 'pending',
-      runVersion: nextFence.runVersion,
-      eventSeq: BigInt(nextFence.eventSeq),
-    },
-  })
-  if (updated.count !== 1) throw new Error(`PROJECT_AGENT_WAIT_GROUP_SEAL_CONFLICT:${event.waitId}`)
-  return getActivitySnapshot(tx, event.activityId)
-}
-
-async function applyTaskCollectionMemberBound(
-  tx: ProjectAgentProjectionTx,
-  event: Extract<ProjectAgentEventPayload, { kind: 'task.collection_member_bound' }>,
-  nextFence: ProjectAgentRunFence,
-): Promise<ProjectAgentActivitySnapshot | null> {
-  const updated = await tx.projectAgentWait.updateMany({
-    where: {
-      id: event.waitId,
-      runId: event.runId,
-      operationId: event.operationId,
-      status: 'collecting',
-    },
-    data: {
-      taskIds: event.taskIds,
-      runVersion: nextFence.runVersion,
-      eventSeq: BigInt(nextFence.eventSeq),
-    },
-  })
-  if (updated.count !== 1) throw new Error(`PROJECT_AGENT_WAIT_GROUP_MEMBER_CONFLICT:${event.waitId}`)
-  return null
 }
 
 async function applyTaskProgressed(
@@ -878,15 +804,6 @@ export async function reduceProjectAgentEvent(params: {
       break
     case 'task.bound':
       activity = await applyTaskBound(tx, scope, event, nextFence)
-      break
-    case 'task.collection_started':
-      activity = await applyTaskCollectionStarted(tx, scope, event, nextFence)
-      break
-    case 'task.collection_member_bound':
-      activity = await applyTaskCollectionMemberBound(tx, event, nextFence)
-      break
-    case 'task.collection_sealed':
-      activity = await applyTaskCollectionSealed(tx, event, nextFence)
       break
     case 'task.progressed':
       activity = await applyTaskProgressed(tx, event, nextFence)

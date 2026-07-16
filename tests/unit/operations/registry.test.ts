@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-ids'
+import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
 
 describe('project agent operation registry', () => {
   it('keeps operation ids aligned and core fields defined', () => {
@@ -17,24 +18,16 @@ describe('project agent operation registry', () => {
       expect(typeof operation.confirmation.required).toBe('boolean')
       expect(typeof operation.effects.writes).toBe('boolean')
       if (operation.effects.writes) {
-        expect([
-          'none',
-          'edit_pipeline',
-          'edit_pipeline_assets',
-          'edit_style_preview',
-          'project_assets',
-          'scoped_assets',
-          'global_assets',
-          'video_segments',
-          'episode',
-          'project_data',
-          'project_workspace',
-        ], operation.id).toContain(operation.effects.workspaceResourceImpact)
+        expect(Object.values(WORKSPACE_RESOURCE_IMPACT), operation.id).toContain(operation.effects.workspaceResourceImpact)
         if (operation.effects.workspaceResourceImpact !== 'none') {
-          expect(operation.executeInTransaction, operation.id).toBeTypeOf('function')
-          expect(operation.execute, operation.id).toBeUndefined()
-          expect(operation.confirmation.kind, operation.id).not.toBe('billable_media')
-          if (operation.effects.externalSideEffects) {
+          if (operation.confirmation.kind === 'billable_media') {
+            expect(operation.plan, operation.id).toBeTypeOf('function')
+            expect(operation.commit, operation.id).toBeTypeOf('function')
+          } else {
+            expect(operation.executeInTransaction, operation.id).toBeTypeOf('function')
+            expect(operation.execute, operation.id).toBeUndefined()
+          }
+          if (operation.effects.externalSideEffects && operation.confirmation.kind !== 'billable_media') {
             expect(operation.prepareTransaction, operation.id).toBeTypeOf('function')
             expect(operation.compensateTransactionFailure, operation.id).toBeTypeOf('function')
             expect(operation.channels.tool, operation.id).toBe(false)
@@ -49,6 +42,7 @@ describe('project agent operation registry', () => {
       expect(typeof operation.effects.bulk).toBe('boolean')
       expect(typeof operation.effects.externalSideEffects).toBe('boolean')
       expect(typeof operation.effects.longRunning).toBe('boolean')
+      expect(['none', 'resource']).toContain(operation.resourceContract.kind)
       expect(operation.inputSchema).toBeDefined()
       expect(operation.outputSchema).toBeDefined()
       expect(typeof operation.inputSchema.safeParse).toBe('function')
@@ -171,7 +165,7 @@ describe('project agent operation registry', () => {
       expect(operation.plan, operation.id).toBeTypeOf('function')
       expect(operation.commit, operation.id).toBeTypeOf('function')
       expect(operation.execute, operation.id).toBeUndefined()
-      expect(operation.effects.workspaceResourceImpact, operation.id).toBe('none')
+      expect(operation.effects.workspaceResourceImpact, operation.id).toBeDefined()
     }
   })
 
