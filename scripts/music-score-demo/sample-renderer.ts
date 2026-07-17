@@ -49,7 +49,7 @@ async function download(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer())
 }
 
-async function ensureSoundfont(assetsDir: string): Promise<string> {
+export async function ensureSoundfont(assetsDir: string): Promise<string> {
   await mkdir(assetsDir, { recursive: true })
   const soundfontPath = path.join(assetsDir, 'MuseScore_General.sf3')
   let current: Buffer | null = null
@@ -81,7 +81,7 @@ function run(command: string, args: readonly string[], errorCode: string): void 
   if (result.status !== 0) throw new Error(`${errorCode}:${result.stderr.trim() || result.stdout.trim()}`)
 }
 
-function resolveFluidSynth(): string {
+export function resolveFluidSynth(): string {
   const command = process.env.FLUIDSYNTH_PATH?.trim() || 'fluidsynth'
   const probe = spawnSync(command, ['--version'], { encoding: 'utf8' })
   if (probe.error || probe.status !== 0) {
