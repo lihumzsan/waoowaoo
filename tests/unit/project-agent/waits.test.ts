@@ -86,17 +86,10 @@ describe('project agent waits', () => {
     })
   })
 
-  it('[complete completed] -> closes the wait without waking the agent', () => {
+  it('[resume_agent canceled] -> becomes claimable so the agent can explain cancellation', () => {
     expect(resolveWaitTerminalNextStatus({
-      followUpMode: 'complete',
-      terminalStatus: 'completed',
-    })).toBe('followed')
-  })
-
-  it('[complete failed] -> still resumes the agent so it can report the failure', () => {
-    expect(resolveWaitTerminalNextStatus({
-      followUpMode: 'complete',
-      terminalStatus: 'failed',
+      followUpMode: 'resume_agent',
+      terminalStatus: 'canceled',
     })).toBe('resolved')
   })
 

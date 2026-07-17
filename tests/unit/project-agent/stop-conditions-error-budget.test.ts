@@ -100,7 +100,7 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('[error after recovery] -> SubmittedTasks still wins over earlier failures', () => {
+  it('[error after recovery] -> SubmittedTasks remains non-blocking', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
       toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
@@ -108,9 +108,6 @@ describe('project agent business stop signals', () => {
     const stopPart = controller.evaluateStep([
       submittedTasksOutput('generate_edit_shot_execution_plan', ['task-9']),
     ])
-    expect(stopPart).toEqual(expect.objectContaining({
-      reason: 'awaiting_external_task',
-      taskIds: ['task-9'],
-    }))
+    expect(stopPart).toBeNull()
   })
 })

@@ -72,6 +72,7 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
 export const GOLDEN_REMAINING_VIDEO_REQUEST = '生成剩余视频'
 export const GOLDEN_FREEFORM_TEXT_REQUEST = '自由生成三个文字候选'
 export const GOLDEN_FREEFORM_IMAGE_REQUEST = '自由生成三张图片候选'
+export const GOLDEN_PARALLEL_IMAGE_REQUEST = '并行生成三个独立图片资产'
 export const GOLDEN_FREEFORM_RETRY_REQUEST = '只重试失败的图片候选'
 export const GOLDEN_FREEFORM_VIDEO_REQUEST = '复用成功图片生成两个视频候选'
 export const GOLDEN_FREEFORM_AUDIO_REQUEST = '根据成功视频生成一段配乐'
@@ -221,6 +222,7 @@ function availableToolNames(request: GoldenChatCompletionRequest): Set<string> {
 const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_TEXT_REQUEST,
   GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
   GOLDEN_FREEFORM_AUDIO_REQUEST,
@@ -262,6 +264,23 @@ function parseMessageJson(message: GoldenChatCompletionRequest['messages'][numbe
   } catch {
     return null
   }
+}
+
+function containsSubmittedTaskReceipt(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsSubmittedTaskReceipt)
+  const record = asRecord(value)
+  if (!record) return false
+  const hasTaskIdentity = (
+    typeof record.taskId === 'string'
+    || (Array.isArray(record.taskIds) && record.taskIds.some((taskId) => typeof taskId === 'string'))
+  )
+  if (record.async === true && hasTaskIdentity) return true
+  return Object.values(record).some(containsSubmittedTaskReceipt)
+}
+
+function latestToolResultSubmittedTasks(request: GoldenChatCompletionRequest): boolean {
+  const latest = request.messages.at(-1)
+  return latest?.role === 'tool' && containsSubmittedTaskReceipt(parseMessageJson(latest))
 }
 
 function collectResourceRecords(value: unknown, output: Record<string, unknown>[]): void {
@@ -768,6 +787,42 @@ export function decideGoldenModelResponse(input: {
     return {
       kind: 'text',
       text: structuredText,
+    }
+  }
+
+  const freeformInstruction = latestFreeformInstruction(input.request)
+  if (freeformInstruction?.text.includes(GOLDEN_PARALLEL_IMAGE_REQUEST)) {
+    const alreadyCalled = calledToolsAfter(input.request, freeformInstruction.index).has('create_image')
+    const isTaskContinuation = messageText(input.request).includes('[task_update]')
+    if (isTaskContinuation || alreadyCalled || !availableToolNames(input.request).has('create_image')) {
+      return {
+        kind: 'text',
+        text: 'The three image submissions are accepted. I will continue when their background results arrive.',
+      }
+    }
+    const prompts = [
+      'A single stylized folk-horror guardian character on a plain dark background.',
+      'An empty stylized mountain shrine at night with red lanterns and dense mist.',
+      'A single ancient bronze ritual bell isolated on a plain dark background.',
+    ]
+    return {
+      kind: 'tool_calls',
+      calls: prompts.map((prompt, index) => ({
+        toolCallId: `golden_call_${input.requestOrdinal}_create_image_${String(index + 1)}`,
+        toolName: 'create_image',
+        argumentsJson: JSON.stringify({
+          prompt,
+          schemaId: null,
+          request: { kind: 'new', count: 1 },
+        }),
+      })),
+    }
+  }
+
+  if (latestToolResultSubmittedTasks(input.request)) {
+    return {
+      kind: 'text',
+      text: 'The background Task was submitted. I will continue from its terminal update.',
     }
   }
 

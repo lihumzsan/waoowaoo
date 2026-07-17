@@ -24,6 +24,15 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     zeroPaidProviderCalls: true,
   },
   {
+    id: 'GJ-PARALLEL-OPERATION-BATCH',
+    kind: 'freeform',
+    title: 'one model step requests three independent images, receives one exact quote, and runs one non-blocking background batch',
+    startStep: 'unavailable',
+    expectedTerminal: 'parallel_resources_ready',
+    requiresWorkers: true,
+    zeroPaidProviderCalls: true,
+  },
+  {
     id: 'GJ-FREEFORM-ZERO-VIDEO',
     kind: 'freeform',
     title: 'an empty project submits text-to-video without creating workflow artifacts',

@@ -13,10 +13,11 @@ import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
 import { appendProjectAgentEvents } from '@/lib/project-agent/event'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
-  bindProjectAgentWaitToTasksInTransaction,
+  bindProjectAgentOperationBatchWaitMemberInTransaction,
+  sealProjectAgentOperationBatchWait,
 } from '@/lib/project-agent/waits'
-import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
-import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
+import type { ProjectAgentOperationTaskBatchBinding, ProjectAgentTaskSubmissionReceipt } from '@/lib/operations/types'
+import { createProjectAgentOperationBatchCoordinator } from '@/lib/project-agent/operation-batch'
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
@@ -240,7 +241,7 @@ describe('approved operation plan Task batch integration', () => {
    * Authority: immutable OperationPlan task dependencies and the single Assistant Wait binding.
    * Rejects: resubmitting an already-active Task or waiting only for newly billed Tasks, which can
    * strand the workflow when the pre-existing Task finishes last.
-   * Production entry: persistOperationPlanSnapshot -> invokeApprovedOperationPlan -> bindProjectAgentWaitToTasksInTransaction.
+   * Production entry: persistOperationPlanSnapshot -> invokeApprovedOperationPlan -> OperationBatch Wait binding.
    * Oracle: two new billed Tasks are created while one existing active dependency joins the same durable Wait.
    * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts
    */
@@ -294,51 +295,44 @@ describe('approved operation plan Task batch integration', () => {
         parts: [{ type: 'text', text: 'generate previews' }],
       },
     })
-    const operationActivityId = 'approved-assistant-operation-activity-1'
     const runFence = createProjectAgentRunFence(initialRun)
-    await appendProjectAgentEvents({
-      scope: {
-        projectId: seeded.project.id,
-        userId: seeded.user.id,
-        assistantId: 'workspace-command',
-      },
-      events: [{
-        runFence,
-        idempotencyKey: `activity-started:${operationActivityId}`,
-        event: {
-          kind: 'activity.started',
-          runId: initialRun.id,
-          activityId: operationActivityId,
-          type: 'operation',
-          operationId: plan.operationId,
-        },
-      }],
-    })
+    const coordinator = createProjectAgentOperationBatchCoordinator({ originRunId: initialRun.id })
+    const toolCallId = 'approved-assistant-tool-call-1'
     let bound = false
     let committed = false
-    let committedSuspension: ProjectAgentTaskSuspensionReceipt | null = null
+    let committedReceipt: ProjectAgentTaskSubmissionReceipt | null = null
+    let committedBackgroundRunFence = coordinator.readRunFence()
     const taskBatchBinding: ProjectAgentOperationTaskBatchBinding = {
       async bindInTransaction(transaction, batch) {
-        const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, {
-          runFence,
-          runId: initialRun.id,
+        const result = await bindProjectAgentOperationBatchWaitMemberInTransaction(transaction, {
+          batch: coordinator.claim(batch.operationId),
+          backgroundRunFence: coordinator.readRunFence(),
           projectId: seeded.project.id,
           userId: seeded.user.id,
           assistantId: 'workspace-command',
           operationId: batch.operationId,
+          toolCallId,
           taskIds: [...batch.taskIds],
-          followUpMode: 'resume_agent',
-          sourceOperationActivityId: operationActivityId,
         })
-        if (!suspension) throw new Error('EXPECTED_ASSISTANT_WAIT')
         bound = true
-        committedSuspension = suspension
-        return suspension
+        committedReceipt = result.receipt
+        committedBackgroundRunFence = result.backgroundRunFence
+        return result.receipt
       },
       isBound: () => bound,
-      markCommitted: () => { committed = bound },
+      markCommitted: () => {
+        if (!bound || !committedReceipt) return
+        committed = true
+        coordinator.commitMember({
+          toolCallId,
+          operationId: committedReceipt.operationId,
+          taskIds: committedReceipt.taskIds,
+          receipt: committedReceipt,
+          runFence: committedBackgroundRunFence,
+        })
+      },
       isCommitted: () => committed,
-      getCommittedSuspension: () => committed ? committedSuspension : null,
+      getCommittedReceipt: () => committed ? committedReceipt : null,
     }
     const output = await invokeApprovedOperationPlan({
       operation: createApprovedBatchOperation(plan),
@@ -361,15 +355,28 @@ describe('approved operation plan Task batch integration', () => {
         requestId: issued.operationRequestId,
       },
     })
-    const [storedRun, waits, submittedTasks, allTaskCount, freezeCount] = await Promise.all([
+    const members = coordinator.readMembers()
+    const firstMember = members[0]
+    if (!firstMember) throw new Error('EXPECTED_OPERATION_BATCH_MEMBER')
+    await sealProjectAgentOperationBatchWait({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      batch: coordinator.claim(firstMember.operationId),
+      taskIds: members.flatMap((member) => [...member.taskIds]),
+    })
+    const [storedRun, backgroundRun, waits, submittedTasks, allTaskCount, freezeCount] = await Promise.all([
       prisma.projectAgentRun.findUniqueOrThrow({ where: { id: initialRun.id } }),
-      prisma.projectAgentWait.findMany({ where: { runId: initialRun.id } }),
+      prisma.projectAgentRun.findUniqueOrThrow({ where: { id: firstMember.receipt.backgroundRunId } }),
+      prisma.projectAgentWait.findMany({ where: { runId: firstMember.receipt.backgroundRunId } }),
       prisma.task.findMany({ where: { id: { in: output.taskIds } } }),
       prisma.task.count({ where: { projectId: seeded.project.id } }),
       prisma.balanceFreeze.count(),
     ])
     expect(taskBatchBinding.isCommitted()).toBe(true)
-    expect(storedRun.status).toBe('awaiting_task')
+    expect(storedRun.status).toBe('running')
+    expect(backgroundRun.status).toBe('awaiting_task')
     expect(waits).toHaveLength(1)
     expect((waits[0]?.taskIds as string[]).sort()).toEqual([...output.taskIds, dependency.id].sort())
     expect(submittedTasks).toHaveLength(2)

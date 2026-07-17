@@ -349,7 +349,20 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT e.* FROM task_events e JOIN tasks t ON t.id = e.taskId WHERE t.projectId = ? AND t.episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM approval_grants WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM operation_executions WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
-      queryRows(connection, "SELECT * FROM outbox_commands WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.projectId')) = ?", [scope.projectId]),
+      queryRows(connection, `
+        SELECT DISTINCT command.*
+        FROM outbox_commands command
+        LEFT JOIN tasks task
+          ON command.aggregateType = 'task' AND command.aggregateId = task.id
+        LEFT JOIN project_agent_waits agent_wait
+          ON command.aggregateType = 'project_agent_wait' AND command.aggregateId = agent_wait.id
+        LEFT JOIN project_agent_events agent_event
+          ON command.aggregateType = 'project_agent_event' AND command.aggregateId = agent_event.id
+        WHERE JSON_UNQUOTE(JSON_EXTRACT(command.payload, '$.projectId')) = ?
+          OR task.projectId = ?
+          OR agent_wait.projectId = ?
+          OR agent_event.projectId = ?
+      `, [scope.projectId, scope.projectId, scope.projectId, scope.projectId]),
       queryRows(connection, 'SELECT * FROM project_assistant_threads WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM creative_resources WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT r.* FROM creative_resource_revisions r JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
@@ -379,7 +392,13 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       runs: sortOracleRows(runs, 'createdAt', 'id'),
       activities: sortOracleRows(activities, 'createdAt', 'id'),
       interruptions: sortOracleRows(interruptions, 'createdAt', 'id').map((item) => ({ ...item, payload: parseJson(item.payload), response: parseJson(item.response) })),
-      waits: sortOracleRows(waits, 'createdAt', 'id'),
+      waits: sortOracleRows(waits, 'createdAt', 'id').map((item) => ({
+        ...item,
+        taskIds: parseJson(item.taskIds),
+        terminalTaskIds: parseJson(item.terminalTaskIds),
+        failedTaskIds: parseJson(item.failedTaskIds),
+        canceledTaskIds: parseJson(item.canceledTaskIds),
+      })),
       handoffs: sortOracleRows(handoffs, 'createdAt', 'id').map((item) => ({ ...item, payload: parseJson(item.payload) })),
       checkpoints: sortOracleRows(checkpoints, 'startedAt', 'id'),
       events: sortOracleRows(events, 'id').map((item) => ({ ...item, payload: parseJson(item.payload) })),

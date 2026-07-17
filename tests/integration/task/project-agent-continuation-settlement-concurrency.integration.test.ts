@@ -216,7 +216,13 @@ describe('Project Agent continuation settlement DB integration', () => {
     expect(run?.status).toBe('running')
     expect(thread).toBeNull()
   })
-  it('abandons a superseded awaiting-task Wait so later Task terminal commit cannot target the cancelled Run', async () => {
+  /**
+   * Authority: a user turn owns only the foreground Run slot; background Task
+   * Runs remain independent and still schedule their terminal continuation.
+   * Rejects: treating an awaiting-task Run as the current conversation and
+   * canceling its Wait when the user sends another message.
+   */
+  it('keeps an awaiting-task Wait alive when a new foreground user turn starts', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const runId = 'superseded-awaiting-task-run'
@@ -234,7 +240,7 @@ describe('Project Agent continuation settlement DB integration', () => {
         status: 'awaiting_task',
         runVersion: 1,
         eventSeq: BigInt(0),
-        controlKind: 'user_turn',
+        controlKind: 'task_follow_up',
       },
     })
     await prisma.projectAgentActivity.create({
@@ -300,7 +306,7 @@ describe('Project Agent continuation settlement DB integration', () => {
         userId: user.id,
         lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       })
-    ))).resolves.toEqual([])
+    ))).resolves.toEqual([expect.any(String)])
     const [run, activity, wait, continuationCommands, replacementThread] = await Promise.all([
       prisma.projectAgentRun.findUnique({ where: { id: runId } }),
       prisma.projectAgentActivity.findUnique({ where: { id: activityId } }),
@@ -317,10 +323,15 @@ describe('Project Agent continuation settlement DB integration', () => {
         assistantId: 'workspace-command',
       }),
     ])
-    expect(run?.status).toBe('cancelled')
-    expect(activity?.status).toBe('cancelled')
-    expect(wait).toMatchObject({ status: 'abandoned', resolvedAt: null, followedAt: null })
-    expect(continuationCommands).toBe(0)
+    expect(run?.status).toBe('awaiting_task')
+    expect(activity?.status).toBe('completed')
+    expect(wait).toMatchObject({
+      status: 'resolved',
+      terminalStatus: 'completed',
+      terminalTaskIds: [taskId],
+      followedAt: null,
+    })
+    expect(continuationCommands).toBe(1)
     expect(replacementThread?.messages.map((message) => message.id)).toContain('replacement-user-message')
   })
 })

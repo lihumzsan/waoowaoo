@@ -6,6 +6,7 @@ import {
   GOLDEN_FREEFORM_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
+  GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_REMAINING_VIDEO_REQUEST,
 } from '../providers/model/policy'
 import type { GoldenProviderGateway } from '../providers/gateway'
@@ -476,6 +477,32 @@ describe('Golden local model provider', () => {
     })
   })
 
+  it('ends the deterministic foreground turn after a durable Task receipt', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 17,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'assistant', tool_calls: [{ function: { name: 'ingest_script' } }] },
+          {
+            role: 'tool',
+            content: JSON.stringify({
+              ok: true,
+              data: { async: true, taskId: 'task-source-script-1' },
+            }),
+          },
+        ],
+        tools: [{
+          type: 'function',
+          function: { name: 'request_edit_script_review_choice', parameters: { type: 'object' } },
+        }],
+      },
+    })
+
+    expect(decision).toMatchObject({ kind: 'text' })
+  })
+
   it('passes null when production asks AI to let the system resolve chapter scope', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
@@ -626,6 +653,37 @@ describe('Golden local model provider', () => {
         request: { kind: 'new', count: 3 },
       }),
     })
+  })
+
+  it('emits three distinct calls to the same Operation for the parallel batch scenario', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'parallel-operation-batch',
+      requestOrdinal: 25,
+      request: {
+        model: 'golden-model',
+        messages: [{ role: 'user', content: GOLDEN_PARALLEL_IMAGE_REQUEST }],
+        tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
+      },
+    })
+    expect(decision.kind).toBe('tool_calls')
+    if (decision.kind !== 'tool_calls') return
+    expect(decision.calls).toHaveLength(3)
+    expect(new Set(decision.calls.map((call) => call.toolCallId)).size).toBe(3)
+    expect(decision.calls.every((call) => call.toolName === 'create_image')).toBe(true)
+
+    const continuationDecision = decideGoldenModelResponse({
+      scenarioId: 'parallel-operation-batch',
+      requestOrdinal: 26,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: GOLDEN_PARALLEL_IMAGE_REQUEST },
+          { role: 'user', content: '[task_update]\noperation=create_image\nstatus=completed\ntotal=3 succeeded=3 failed=0' },
+        ],
+        tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
+      },
+    })
+    expect(continuationDecision.kind).toBe('text')
   })
 
   it('reports a freeform Task continuation without repeating the original tool', () => {

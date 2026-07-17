@@ -11,6 +11,7 @@ import {
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_AUDIO_REQUEST,
   GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_TEXT_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
@@ -23,6 +24,12 @@ async function sendNaturalLanguage(page: import('@playwright/test').Page, text: 
   const composer = page.getByPlaceholder('和 AI 一起创造').filter({ visible: true })
   await composer.fill(text)
   await page.getByRole('button', { name: '发送', exact: true }).filter({ visible: true }).click()
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
 }
 
 async function approveOperation(
@@ -193,5 +200,70 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   expect(snapshot.domain.editScripts).toHaveLength(0)
   expect(snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toHaveLength(1)
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE)).toBe(false)
+  browserObservations.assertClean()
+})
+
+test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote and one background continuation', async ({
+  page,
+  browserObservations,
+}) => {
+  test.setTimeout(8 * 60_000)
+  await registerGoldenUser(page, {
+    username: `golden-parallel-batch-${String(Date.now())}`,
+    password: 'golden-parallel-batch-password',
+  })
+  const scope = await launchGoldenStoryFromHome(page, GOLDEN_PARALLEL_IMAGE_REQUEST)
+
+  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+    timeout: 60_000,
+    message: 'three parallel create_image calls must produce one approval interaction',
+  }).toBe('create_image')
+  const beforeApproval = await readGoldenOracleSnapshot(scope)
+  const pendingApprovals = beforeApproval.interruptions.filter((item) => (
+    item.type === 'approval' && item.status === 'pending'
+  ))
+  expect(pendingApprovals).toHaveLength(1)
+  const approvalPayload = asRecord(pendingApprovals[0]?.payload)
+  expect(Array.isArray(approvalPayload?.approvalItems) ? approvalPayload.approvalItems : []).toHaveLength(3)
+  expect(asRecord(approvalPayload?.operationPlan)?.taskCount).toBe(3)
+  expect(beforeApproval.tasks).toHaveLength(0)
+  expect(beforeApproval.approvalGrants).toHaveLength(0)
+
+  await submitGoldenBoundary(page, 'approval')
+  const resources = await waitForResources(scope, 'image', 3)
+  await expect.poll(async () => {
+    const current = await readGoldenOracleSnapshot(scope)
+    return current.runs
+      .filter((run) => typeof run.requestId === 'string' && run.requestId.startsWith('operation-batch:'))
+      .map((run) => run.status)
+  }, {
+    timeout: 60_000,
+    message: 'the single background OperationBatch Run must finish its one continuation',
+  }).toEqual(['completed'])
+  const snapshot = await readGoldenOracleSnapshot(scope)
+  const imageTasks = snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE)
+  const operationBatchRuns = snapshot.runs.filter((run) => (
+    typeof run.requestId === 'string' && run.requestId.startsWith('operation-batch:')
+  ))
+  const operationBatchHandoffs = snapshot.handoffs.filter((handoff) => handoff.kind === 'task_batch')
+  expect(imageTasks).toHaveLength(3)
+  expect(snapshot.approvalGrants).toHaveLength(3)
+  expect(snapshot.operationExecutions).toHaveLength(3)
+  expect(snapshot.waits).toHaveLength(1)
+  expect(Array.isArray(snapshot.waits[0]?.taskIds) ? snapshot.waits[0]?.taskIds : []).toHaveLength(3)
+  expect(snapshot.waits[0]?.status).toBe('followed')
+  expect(snapshot.checkpoints).toHaveLength(1)
+  expect(snapshot.outboxCommands.filter((command) => command.kind === 'project_agent.continue_wait')).toHaveLength(1)
+  expect(operationBatchRuns).toHaveLength(1)
+  expect(operationBatchRuns[0]?.status).toBe('completed')
+  expect(operationBatchHandoffs).toHaveLength(1)
+  expect(operationBatchHandoffs[0]?.status).toBe('settled')
+  expect(snapshot.identities.duplicateToolCallIds).toHaveLength(0)
+  expect(snapshot.identities.toolCallIds.filter((id) => id.includes('create_image'))).toHaveLength(3)
+  for (const resource of resources) {
+    if (typeof resource.id !== 'string') throw new Error('GOLDEN_RESOURCE_ID_MISSING')
+    await expect(page.locator(`article[data-node-id="${workspaceNodeId.resourceCard(String(resource.candidateSetId ?? resource.id))}"]`))
+      .toHaveCount(1)
+  }
   browserObservations.assertClean()
 })

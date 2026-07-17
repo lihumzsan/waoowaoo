@@ -50,15 +50,15 @@ describe('Project Agent suspension receipts', () => {
     })).toThrow('PROJECT_AGENT_SUSPENSION_RECEIPT_OPERATION_MISMATCH')
   })
 
-  it('does not equate a Task handoff with a Choice handoff', () => {
+  it('does not equate an Approval handoff with a Choice handoff', () => {
     expect(isSameProjectAgentSuspensionReceipt(choiceReceipt(), {
-      kind: 'task',
+      kind: 'approval',
       runId: 'run-1',
       operationId: 'request_future_choice',
       activityId: 'activity-1',
-      waitId: 'wait-1',
-      taskIds: ['task-1'],
-      followUpMode: 'resume_agent',
+      interruptionId: 'interruption-1',
+      approvalId: 'approval-1',
+      toolCallId: 'tool-1',
     })).toBe(false)
   })
 })

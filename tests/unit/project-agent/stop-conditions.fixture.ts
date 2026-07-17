@@ -33,14 +33,13 @@ function submittedTasksOutput(operationId: string, taskIds: readonly string[]) {
     outcome: {
       kind: 'submitted_tasks' as const,
       data: {},
-      suspension: {
-        kind: 'task' as const,
-        runId: 'run-1',
+      receipt: {
+        kind: 'task_submission' as const,
+        batchId: 'batch-1',
+        backgroundRunId: 'background-run-1',
         operationId,
-        activityId: `activity:${operationId}`,
         waitId: `wait:${operationId}`,
         taskIds,
-        followUpMode: 'resume_agent' as const,
       },
     },
   }

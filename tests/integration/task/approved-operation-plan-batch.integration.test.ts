@@ -19,8 +19,6 @@ import { removeTaskJob } from '@/lib/task/queues'
 import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
 import { appendProjectAgentEvents } from '@/lib/project-agent/event'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
-import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
-import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,

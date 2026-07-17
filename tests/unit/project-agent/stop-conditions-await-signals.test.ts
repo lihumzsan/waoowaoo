@@ -14,54 +14,30 @@ describe('project agent business stop signals', () => {
     expect(PROJECT_AGENT_MAX_TURNS).toBe(12)
   })
 
-  it('[SubmittedTasks] -> emits external task wait stop data', () => {
+  it('[SubmittedTasks] -> keeps the foreground model loop running', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
       submittedTasksOutput('generate_edit_script', ['task-1']),
     ])
 
-    expect(stopPart).toEqual({
-      reason: 'awaiting_external_task',
-      stepCount: 1,
-      operationIds: ['generate_edit_script'],
-      taskIds: ['task-1'],
-      phases: [],
-      taskWaits: [{ operationId: 'generate_edit_script', taskIds: ['task-1'], phases: [] }],
-    })
+    expect(stopPart).toBeNull()
   })
 
-  it('[SubmittedTasks batch] -> carries the durable task identities', () => {
+  it('[SubmittedTasks batch] -> does not turn Task identity into a stop signal', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
       submittedTasksOutput('generate_video_segments', ['task-video-1']),
     ])
 
-    expect(stopPart).toEqual({
-      reason: 'awaiting_external_task',
-      stepCount: 1,
-      operationIds: ['generate_video_segments'],
-      taskIds: ['task-video-1'],
-      phases: [],
-      taskWaits: [{ operationId: 'generate_video_segments', taskIds: ['task-video-1'], phases: [] }],
-    })
+    expect(stopPart).toBeNull()
   })
 
-  it('collects multiple long-running Operations from one model step for one shared Wait', () => {
+  it('keeps multiple submitted Operations non-blocking in one model step', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
       submittedTasksOutput('generate_edit_script', ['task-script-1']),
       submittedTasksOutput('generate_video_segments', ['task-video-1', 'task-video-2']),
-    ])).toEqual({
-      reason: 'awaiting_external_task',
-      stepCount: 2,
-      operationIds: ['generate_edit_script', 'generate_video_segments'],
-      taskIds: ['task-script-1', 'task-video-1', 'task-video-2'],
-      phases: [],
-      taskWaits: [
-        { operationId: 'generate_edit_script', taskIds: ['task-script-1'], phases: [] },
-        { operationId: 'generate_video_segments', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
-      ],
-    })
+    ])).toBeNull()
   })
 
   it('[Completed status query] -> remains an observation without creating a wait', () => {

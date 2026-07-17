@@ -281,6 +281,53 @@ describe('workspace structured stream runtime', () => {
     expect(entries[0]?.patch).not.toHaveProperty('error')
   })
 
+  it('keeps parallel shot-execution streams isolated by task and target', () => {
+    const snapshots: readonly StructuredStreamSnapshot[] = [
+      { taskId: 'task-a', targetId: 'edit-script-a', shotRef: 'shot-a' },
+      { taskId: 'task-b', targetId: 'edit-script-b', shotRef: 'shot-b' },
+    ].map(({ taskId, targetId, shotRef }) => ({
+      taskId,
+      taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId,
+      episodeId: 'episode-1',
+      adapterKey: 'shotExecutionPlan.shots' as const,
+      items: [{
+        adapterKey: 'shotExecutionPlan.shots' as const,
+        itemKey: shotRef,
+        index: 0,
+        value: {
+          kind: 'shotExecutionPlanShot' as const,
+          shot: {
+            shotRef,
+            shotScale: 'medium',
+            cameraMovement: { movement: 'static', stability: 'locked' as const },
+          },
+        },
+      }],
+      errorMessage: null,
+    }))
+
+    const entries = buildStreamRuntimeEntries(snapshots, 'episode-1', (key) => key)
+
+    expect(entries.map((entry) => ({
+      nodeId: entry.patch.nodeId,
+      taskId: entry.patch.taskId,
+      itemKeys: entry.patch.presentation.displayedItemKeys,
+    }))).toEqual([
+      {
+        nodeId: 'edit-shot-execution-plan:edit-script:edit-script-a',
+        taskId: 'task-a',
+        itemKeys: ['shot-a'],
+      },
+      {
+        nodeId: 'edit-shot-execution-plan:edit-script:edit-script-b',
+        taskId: 'task-b',
+        itemKeys: ['shot-b'],
+      },
+    ])
+  })
+
   it('skips an invalid preview item without hiding later valid content or creating a failure patch', () => {
     const anchor = {
       startBlockId: 'p0001', startQuote: 'start', endBlockId: 'p0001', endQuote: 'end',
