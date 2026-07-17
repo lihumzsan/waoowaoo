@@ -16,6 +16,7 @@
         "src/app/api/projects/[projectId]/operations",
         "src/app/api/operation-approval-grants",
         "src/app/api/payments",
+        "src/app/api/user/transactions/route.ts",
         "src/lib/operations/planning.ts",
         "src/lib/operations/operation-plan-snapshot.ts",
         "src/lib/operations/operation-plan-revalidation.ts",
@@ -450,7 +451,8 @@
         "scripts/check-pricing-catalog.mjs",
         "src/lib/task/provider-invocation.ts",
         "src/lib/task/artifact-storage.ts",
-        "src/lib/user-api/runtime-config.ts"
+        "src/lib/user-api",
+        "src/app/[locale]/profile/components/api-config"
       ],
       "testPaths": [
         "tests/integration/provider/fal-provider.contract.test.ts",

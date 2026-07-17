@@ -11,6 +11,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 ## 不变量
 
 - **PG-01 — 显式选择。** provider 与 model 必须由统一 registry/selection 解析；禁止按模型名、媒体类型或可用性猜测 provider。
+- **PG-01A — 公共生成参数服从所选模型能力。** Agent/业务 Operation 只接收稳定产品字段和精确 `provider::modelId`；允许字段、枚举、范围与默认值只从该模型的生产 capability registry 解析。动态默认/覆盖通过显式 `modelKey + field + value` command 进入同一 validator。`durationSeconds` 等公共字段到 provider `duration`/wire option 的转换只发生在统一内部 mapper/adapter，报价、Task payload 与 provenance 冻结映射后的执行快照；不得把 provider 原始 object 暴露给模型、猜 provider、静默丢字段或用另一模型的允许值通过校验。
 - **PG-02 — 单一网关。** route、worker 和业务 operation 不得直连 provider SDK、旧入口或 generator factory；调用必须经由 `ai-exec` 与 provider adapter。
 - **PG-03 — Provider 隔离。** provider 专属模型常量、option 和条件分支只能留在自身 `ai-providers/<provider>/` 实现内；跨 provider 分支属于 registry/engine 的职责。
 - **PG-04 — 异步协议完整。** external id、轮询状态、成功结果、失败原因和 `retryable | permanent` 终态分类必须由共享 discriminated union 与唯一 normalizer 明确归一化；`failed` 缺少 disposition、非失败状态携带 disposition、未知 provider 状态或失败状态被映射为完成都必须原地失败。网络/查询异常直接抛出并恢复同一 external id，不得伪装成 provider 终态。
@@ -29,7 +30,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - 模型目录、价格、能力和运行时选择：`src/lib/ai-registry/`。
 - LLM 推理强度的唯一运行时解析：`src/lib/ai-exec/reasoning-effort.ts`；平台 assistant/analysis 模型 identity 与角色环境配置入口：`src/lib/platform-models/` 和 `.env*.example`。
 - 结构化 LLM/vision 输出的唯一 envelope 解析、shape 校验与 schema 执行入口：`src/lib/ai-exec/structured-json.ts`、`src/lib/ai-exec/structured-step.ts`。
-- 用户 provider 配置的严格解析：`src/lib/user-api/runtime-config.ts`。
+- 用户 provider 配置的严格解析与写入：`src/lib/user-api/**`；运行时选择入口为 `src/lib/user-api/runtime-config.ts`。
 - `standards/capabilities/**` 与 `standards/pricing/**` 当前分别由 catalog 检查脚本读取，不是生产 runtime registry 的 writer；运行时仍从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力或价格已切换。
 
 ## 验证

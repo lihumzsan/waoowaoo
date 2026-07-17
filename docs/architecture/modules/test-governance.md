@@ -64,6 +64,8 @@
 
 ## 历史回归
 
+- 主 Journey 曾用固定 `chunkSize=1/delayMs=10` 让镜头计划 Task 暂停在 processing，以观察活动 Task 对应的 Canvas 节点和刷新恢复；响应较短或机器较快时，Task 会在浏览器断言前成功，测试把“完成太快”误报成节点缺失。当前外部模型替身提供只拦截 text response 的显式可观察 gate：Agent 的 Tool 调用可继续提交真实 Task，Journey 从只读 Oracle 看到至少两个 active target 并验证同 identity 刷新恢复后才释放响应；Harness 自测同时证明 gate 已实际拦截请求，禁止再用延迟长短承担这个 Oracle。
+
 - Golden 已使用独立 `.next-golden/<runtime>` 与 `artifacts/golden-journey/runs/<runtime>` 防止运行间竞争，但 ESLint 只排除了 `.next` 与 `.next-verify`；完整 Journey 通过后再运行 `verify:push` 会把数十万行 Turbopack 编译产物和 Playwright trace 当源码，先耗尽默认 heap，扩大 heap 后再报告生成代码错误。当前全局 lint ignore 与 Git ignore 共同排除这两类 Golden 运行产物，不放宽任何源码规则；防线是 canonical 顺序下 `test:journey` 后实际运行 `verify:push`。
 
 - 旧体系拥有大量 mock、分阶段和变体测试，却经常在更早阶段失败或从未运行到目标阶段；文件存在与场景名称被误当成覆盖，真实多章节组合仍漏测。
