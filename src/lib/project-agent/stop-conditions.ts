@@ -28,12 +28,6 @@ export interface ProjectAgentToolOutcomeInput {
 
 type RuntimeSignalDescriptor =
   | {
-    reason: 'awaiting_external_task'
-    operationId: string
-    taskIds: string[]
-    phases: string[]
-  }
-  | {
     reason: 'awaiting_user_confirmation'
     operationId: string
   }
@@ -48,12 +42,7 @@ function outcomeToDescriptor(input: ProjectAgentToolOutcomeInput): RuntimeSignal
   const { outcome } = input
   switch (outcome.kind) {
     case 'submitted_tasks':
-      return {
-        reason: 'awaiting_external_task',
-        operationId: outcome.suspension.operationId,
-        taskIds: [...outcome.suspension.taskIds],
-        phases: [],
-      }
+      return null
     case 'wait_choice':
       return {
         reason: 'awaiting_user_confirmation',
@@ -78,28 +67,10 @@ function outcomeToDescriptor(input: ProjectAgentToolOutcomeInput): RuntimeSignal
 
 function mergeAwaitDescriptors(
   stepCount: number,
-  firstReason: 'awaiting_external_task' | 'awaiting_user_confirmation',
+  firstReason: 'awaiting_user_confirmation',
   descriptors: RuntimeSignalDescriptor[],
 ): ProjectAgentStopPartData {
   const matching = descriptors.filter((descriptor) => descriptor.reason === firstReason)
-
-  if (firstReason === 'awaiting_external_task') {
-    const externalTaskDescriptors = matching.filter((descriptor): descriptor is Extract<RuntimeSignalDescriptor, { reason: 'awaiting_external_task' }> => (
-      descriptor.reason === 'awaiting_external_task'
-    ))
-    return {
-      reason: firstReason,
-      stepCount,
-      operationIds: Array.from(new Set(externalTaskDescriptors.map((descriptor) => descriptor.operationId))).sort(),
-      taskIds: Array.from(new Set(externalTaskDescriptors.flatMap((descriptor) => descriptor.taskIds))).sort(),
-      phases: Array.from(new Set(externalTaskDescriptors.flatMap((descriptor) => descriptor.phases))).sort(),
-      taskWaits: externalTaskDescriptors.map((descriptor) => ({
-        operationId: descriptor.operationId,
-        taskIds: Array.from(new Set(descriptor.taskIds)).sort(),
-        phases: Array.from(new Set(descriptor.phases)).sort(),
-      })),
-    }
-  }
 
   return {
     reason: firstReason,
@@ -126,9 +97,9 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
       })
 
       const awaitReason = descriptors.find((descriptor) => (
-        descriptor.reason === 'awaiting_external_task' || descriptor.reason === 'awaiting_user_confirmation'
+        descriptor.reason === 'awaiting_user_confirmation'
       ))?.reason
-      if (awaitReason === 'awaiting_external_task' || awaitReason === 'awaiting_user_confirmation') {
+      if (awaitReason === 'awaiting_user_confirmation') {
         return mergeAwaitDescriptors(totalStepOutputCount, awaitReason, descriptors)
       }
 

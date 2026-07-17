@@ -107,7 +107,26 @@ export type ProjectAgentEventPayload =
     reason: string
   }
   | {
-    kind: 'task.bound'
+    kind: 'task.collection_started'
+    runId: string
+    activityId: string
+    waitId: string
+    operationId: string
+    followUpMode: ProjectAgentWaitFollowUpMode
+  }
+  | {
+    kind: 'task.collection_member_bound'
+    runId: string
+    activityId: string
+    waitId: string
+    operationId: string
+    memberOperationId: string
+    toolCallId: string
+    taskIds: string[]
+    followUpMode: ProjectAgentWaitFollowUpMode
+  }
+  | {
+    kind: 'task.collection_sealed'
     runId: string
     activityId: string
     waitId: string

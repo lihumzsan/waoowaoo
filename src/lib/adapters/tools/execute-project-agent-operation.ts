@@ -41,7 +41,10 @@ export async function executeProjectAgentOperationFromTool(params: {
 }): Promise<ProjectAgentToolExecutionResult> {
   const registry = createProjectAgentOperationRegistry()
   const operation = registry[params.operationId]
-  const approvedInvocation = params.context.approvedInvocationByOperationId?.[params.operationId] ?? null
+  const toolCallId = params.toolCallId?.trim() || null
+  const approvedInvocation = toolCallId
+    ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
+    : null
   const operationContext = {
     request: params.request,
     userId: params.userId,

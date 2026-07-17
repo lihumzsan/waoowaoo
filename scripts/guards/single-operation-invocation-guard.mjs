@@ -140,73 +140,87 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
   }
   const runtimePath = 'src/lib/project-agent/runtime.ts'
   const runtime = fs.readFileSync(path.join(scanRoot, runtimePath), 'utf8')
-  if (runtime.includes('createProjectAgentWait(') || !runtime.includes('PROJECT_AGENT_TASK_BATCH_WAIT_NOT_BOUND')) {
-    violations.push(`${runtimePath} must verify transactionally bound Task identity and must not create a post-commit Wait`)
+  if (runtime.includes('createProjectAgentWait(')) {
+    violations.push(`${runtimePath} must not create a post-commit Wait`)
   }
   for (const required of [
-    'parallelToolCalls: false',
-    'PROJECT_AGENT_PARALLEL_OPERATION_STEP_FORBIDDEN',
-    'PROJECT_AGENT_TASK_BATCH_WAIT_IDENTITY_MISMATCH',
-    'PROJECT_AGENT_PARALLEL_APPROVAL_STEP_FORBIDDEN',
-    'members.length !== 1',
+    'parallelToolCalls: true',
+    'createProjectAgentOperationBatchCoordinator',
+    'sealProjectAgentOperationBatchWait',
+    'PROJECT_AGENT_OPERATION_BATCH_OUTCOME_MISSING',
+    'submittedTaskReceiptsByToolCall',
   ]) {
     if (!runtime.includes(required)) {
-      violations.push(`${runtimePath} is missing single-Operation step authority ${required}`)
+      violations.push(`${runtimePath} is missing non-blocking OperationBatch authority ${required}`)
     }
   }
   for (const forbidden of [
-    'prepareProjectAgentCollectingTaskWait',
-    'sealProjectAgentCollectingTaskWait',
+    'parallelToolCalls: false',
+    'PROJECT_AGENT_PARALLEL_OPERATION_STEP_FORBIDDEN',
+    'PROJECT_AGENT_PARALLEL_APPROVAL_STEP_FORBIDDEN',
+    'members.length !== 1',
     'PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH',
     'PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH',
   ]) {
     if (runtime.includes(forbidden)) {
-      violations.push(`${runtimePath} restores retired cross-Operation group authority ${forbidden}`)
+      violations.push(`${runtimePath} restores retired single-Operation step authority ${forbidden}`)
     }
   }
   const stopPolicyPath = 'src/lib/project-agent/stop-conditions.ts'
   const stopPolicy = fs.readFileSync(path.join(scanRoot, stopPolicyPath), 'utf8')
-  if (!stopPolicy.includes('taskWaits: externalTaskDescriptors.map')) {
-    violations.push(`${stopPolicyPath} must preserve every long-running Operation descriptor for the shared Wait`)
+  for (const required of ["case 'submitted_tasks':", 'return null']) {
+    if (!stopPolicy.includes(required)) {
+      violations.push(`${stopPolicyPath} must keep submitted Tasks non-blocking via ${required}`)
+    }
   }
-  if (stopPolicy.includes('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED')) {
-    violations.push(`${stopPolicyPath} restores the retired single-async-Operation rejection`)
+  for (const forbidden of ['awaiting_external_task', 'PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED']) {
+    if (stopPolicy.includes(forbidden)) {
+      violations.push(`${stopPolicyPath} restores retired Task suspension authority ${forbidden}`)
+    }
   }
   const waitsPath = 'src/lib/project-agent/waits.ts'
   const waits = fs.readFileSync(path.join(scanRoot, waitsPath), 'utf8')
   for (const required of [
-    'bindProjectAgentWaitToTasksInTransaction',
-    'prepareProjectAgentTaskExecutionHandoffInTransaction',
-    "AND status = 'pending'",
-  ]) {
-    if (!waits.includes(required)) {
-      violations.push(`${waitsPath} is missing atomic Operation Task-batch Wait lifecycle ${required}`)
-    }
-  }
-  for (const forbidden of [
+    'bindProjectAgentOperationBatchWaitMemberInTransaction',
+    'prepareProjectAgentOperationBatchHandoffInTransaction',
+    'sealProjectAgentOperationBatchWait',
     "'collecting'",
     'task.collection_started',
     'task.collection_member_bound',
     'task.collection_sealed',
+    "AND status = 'pending'",
+  ]) {
+    if (!waits.includes(required)) {
+      violations.push(`${waitsPath} is missing atomic OperationBatch Wait lifecycle ${required}`)
+    }
+  }
+  for (const forbidden of [
+    'bindProjectAgentWaitToTasksInTransaction',
+    'prepareProjectAgentTaskExecutionHandoffInTransaction',
   ]) {
     if (waits.includes(forbidden)) {
-      violations.push(`${waitsPath} restores retired collecting Wait lifecycle ${forbidden}`)
+      violations.push(`${waitsPath} restores retired foreground Task suspension lifecycle ${forbidden}`)
     }
   }
   const toolAdapterPath = 'src/lib/project-agent/agents-tool-adapter.ts'
   const toolAdapter = fs.readFileSync(path.join(scanRoot, toolAdapterPath), 'utf8')
   for (const required of [
-    'bindProjectAgentWaitToTasksInTransaction',
+    'bindProjectAgentOperationBatchWaitMemberInTransaction',
     'taskBatchBinding',
-    'concurrentExecutionSegmentId: null',
+    'operationBatch',
+    'concurrentExecutionSegmentId: params.context.executionSegmentId ?? null',
   ]) {
     if (!toolAdapter.includes(required)) {
-      violations.push(`${toolAdapterPath} is missing single-Operation Task-batch barrier ${required}`)
+      violations.push(`${toolAdapterPath} is missing non-blocking OperationBatch binding ${required}`)
     }
   }
-  for (const forbidden of ['approvalBarrierOperationIds', 'bindProjectAgentCollectingWaitMemberInTransaction']) {
+  for (const forbidden of [
+    'approvalBarrierOperationIds',
+    'bindProjectAgentCollectingWaitMemberInTransaction',
+    'bindProjectAgentWaitToTasksInTransaction',
+  ]) {
     if (toolAdapter.includes(forbidden)) {
-      violations.push(`${toolAdapterPath} restores retired Operation-group barrier ${forbidden}`)
+      violations.push(`${toolAdapterPath} restores retired foreground or legacy Operation-group barrier ${forbidden}`)
     }
   }
   return violations
@@ -231,8 +245,8 @@ export function main() {
   ]
   if (violations.length > 0) {
     process.stderr.write([
-      '[single-operation-invocation] Operation invocation or single-Operation Task-batch contract violation.',
-      'AR-03C/AR-04/BA-09: adapters translate source/result only; invocation.ts owns execution and one transactionally bound Wait owns one Operation Task batch.',
+      '[single-operation-invocation] Operation invocation or non-blocking OperationBatch contract violation.',
+      'AR-03C/AR-04/BA-09: invocation.ts remains the single execution authority; one model step may submit repeated or mixed Operations into one transactionally bound background Wait.',
       'See docs/architecture/modules/assistant-run-lifecycle.md and billing-approval.md.',
       ...violations.map((violation) => `  - ${violation}`),
       '',

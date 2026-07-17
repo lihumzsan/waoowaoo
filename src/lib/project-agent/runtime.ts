@@ -50,7 +50,7 @@ import {
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
   type ProjectAgentWaitFollowUp,
-  type ProjectAgentWaitFollowUpMode,
+  sealProjectAgentOperationBatchWait,
 } from './waits'
 import {
   safelyReleaseProjectAgentRunLock,
@@ -71,7 +71,6 @@ import {
   prepareProjectAgentApprovalExecutionHandoff,
   settleProjectAgentPreparedApprovalHandoff,
   settleProjectAgentPreparedChoiceHandoff,
-  settleProjectAgentPreparedTaskHandoff,
   type ProjectAgentChoiceHandoffReceipt,
 } from './execution-handoff'
 import {
@@ -82,10 +81,6 @@ import {
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentOperationExecutionFence } from './operation-execution-fence'
-import {
-  isSameProjectAgentSuspensionReceipt,
-  type ProjectAgentSuspensionReceipt,
-} from './suspension'
 import { appendProjectAgentEvents } from './event'
 import {
   resolveProjectAgentToolset,
@@ -107,6 +102,7 @@ import {
 import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import {
+  mergeOperationPlanViewsForApproval,
   type OperationPlanView,
 } from '@/lib/operations/planning'
 import { issueApprovalGrantGroup } from '@/lib/operations/planned-operation-invocation'
@@ -118,6 +114,10 @@ import {
   createProjectAgentExecutionSegment,
   projectAgentExecutionStartedIdempotencyKey,
 } from './execution-segment'
+import {
+  createProjectAgentOperationBatchCoordinator,
+  type ProjectAgentOperationBatchCoordinator,
+} from './operation-batch'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -128,13 +128,25 @@ interface ProjectAgentAgentsRunContext {
   locale: string
 }
 
+class ProjectAgentClientDisconnectedError extends Error {
+  constructor() {
+    super('PROJECT_AGENT_CLIENT_DISCONNECTED')
+    this.name = 'ProjectAgentClientDisconnectedError'
+  }
+}
+
 function readProjectAgentRunOwnershipLoss(signal: AbortSignal): Error | null {
   const reason = signal.reason
   return isProjectAgentRunOwnershipLostError(reason) ? reason : null
 }
 
+function readProjectAgentClientDisconnect(signal: AbortSignal): ProjectAgentClientDisconnectedError | null {
+  return signal.reason instanceof ProjectAgentClientDisconnectedError ? signal.reason : null
+}
+
 function resolveProjectAgentRunFailureTerminal(params: {
   ownershipLoss: Error | null
+  clientDisconnect: ProjectAgentClientDisconnectedError | null
   stopReason: string
   errorCode: string
   errorMessage: string
@@ -148,6 +160,12 @@ function resolveProjectAgentRunFailureTerminal(params: {
     return {
       status: 'cancelled',
       stopReason: 'run_lock_lost',
+    }
+  }
+  if (params.clientDisconnect) {
+    return {
+      status: 'cancelled',
+      stopReason: 'stream_cancelled',
     }
   }
   return {
@@ -469,7 +487,7 @@ function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
 function collectFunctionToolOutputs(
   toolResults: FunctionToolResult[],
   outcomesByToolCall: Map<string, ProjectAgentOperationOutcome>,
-): Array<{ toolName: string; outcome: ProjectAgentOperationOutcome }> {
+): Array<{ toolCallId: string; toolName: string; outcome: ProjectAgentOperationOutcome }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
     const toolCallId = readApprovalString(result.runItem.rawItem, 'callId')
@@ -483,6 +501,7 @@ function collectFunctionToolOutputs(
     }
     outcomesByToolCall.delete(toolCallId)
     return [{
+      toolCallId,
       toolName: result.tool.name,
       outcome,
     }]
@@ -564,8 +583,17 @@ function readApprovalGroupItems(value: unknown): readonly PersistedApprovalGroup
       operationPlan: readPersistedApprovalOperationPlan(item.operationPlan, operationId),
     }
   })
-  if (new Set(items.map((item) => item.operationId)).size !== items.length) {
-    throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_OPERATION_DUPLICATE')
+  if (new Set(items.map((item) => item.approvalId)).size !== items.length) {
+    throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_APPROVAL_ID_DUPLICATE')
+  }
+  if (items.some((item) => !item.toolCallId) || new Set(items.map((item) => item.toolCallId)).size !== items.length) {
+    throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_TOOL_CALL_ID_INVALID')
+  }
+  const planSnapshotIds = items.flatMap((item) => item.operationPlan?.planSnapshotId
+    ? [item.operationPlan.planSnapshotId]
+    : [])
+  if (new Set(planSnapshotIds).size !== planSnapshotIds.length) {
+    throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_PLAN_SNAPSHOT_DUPLICATE')
   }
   return items
 }
@@ -603,55 +631,6 @@ function findApprovalItem(
     throw new Error(`PROJECT_AGENT_APPROVAL_ITEM_NOT_FOUND approvalId=${approvalId}`)
   }
   return approvalItem
-}
-
-function resolveWaitFollowUpModeForOperations(
-  registry: ProjectAgentOperationRegistry,
-  operationIds: string[],
-): ProjectAgentWaitFollowUpMode {
-  if (operationIds.length === 0) return 'resume_agent'
-  const allComplete = operationIds.every((operationId) => (
-    registry[operationId]?.agentFlow?.onTaskComplete === 'complete'
-  ))
-  if (allComplete) return 'complete'
-  return 'resume_agent'
-}
-
-async function createProjectAgentWaitBindings(params: {
-  stopPart: ProjectAgentStopPartData | null
-  registry: ProjectAgentOperationRegistry
-  transactionallyBoundTaskBatches: ReadonlyMap<string, readonly string[]>
-  committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
-}): Promise<ProjectAgentWaitFollowUpMode | null> {
-  if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
-    return null
-  }
-  if (params.stopPart.taskWaits.length !== 1) {
-    throw new Error(`PROJECT_AGENT_PARALLEL_OPERATION_STEP_FORBIDDEN:${params.stopPart.operationIds.join(',')}`)
-  }
-  const taskWait = params.stopPart.taskWaits[0]
-  if (!taskWait) throw new Error('PROJECT_AGENT_TASK_WAIT_DESCRIPTOR_MISSING')
-  const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, [taskWait.operationId])
-  const boundTaskIds = params.transactionallyBoundTaskBatches.get(taskWait.operationId)
-  if (!boundTaskIds) throw new Error(`PROJECT_AGENT_TASK_BATCH_WAIT_NOT_BOUND:${taskWait.operationId}`)
-  const expected = Array.from(new Set(taskWait.taskIds)).sort()
-  const actual = Array.from(new Set(boundTaskIds)).sort()
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(`PROJECT_AGENT_TASK_BATCH_WAIT_IDENTITY_MISMATCH:${taskWait.operationId}`)
-  }
-  const suspension = params.committedSuspensions.get(taskWait.operationId)
-  if (!suspension || suspension.kind !== 'task') {
-    throw new Error(`PROJECT_AGENT_TASK_SUSPENSION_RECEIPT_MISSING:${taskWait.operationId}`)
-  }
-  const suspendedTaskIds = Array.from(new Set(suspension.taskIds)).sort()
-  if (
-    suspension.operationId !== taskWait.operationId
-    || JSON.stringify(suspendedTaskIds) !== JSON.stringify(expected)
-    || suspension.followUpMode !== followUpMode
-  ) {
-    throw new Error(`PROJECT_AGENT_TASK_SUSPENSION_RECEIPT_MISMATCH:${taskWait.operationId}`)
-  }
-  return suspension.followUpMode
 }
 
 function requireProjectAgentChoiceSuspensionReceipt(params: {
@@ -748,13 +727,19 @@ export async function createProjectAgentChatResponse(input: {
           : []),
       })
     : []
-  const approvedInvocationByOperationId = Object.fromEntries(issuedApprovalGrants.map((grant) => [
-    grant.operationId,
-    {
+  const issuedGrantByPlanSnapshotId = new Map(issuedApprovalGrants.map((grant) => [grant.planSnapshotId, grant]))
+  const approvedInvocationByToolCallId = Object.fromEntries(persistedApprovalItems.flatMap((item) => {
+    const planSnapshotId = item.operationPlan?.planSnapshotId ?? null
+    if (!item.toolCallId || !planSnapshotId) return []
+    const grant = issuedGrantByPlanSnapshotId.get(planSnapshotId)
+    if (!grant || grant.operationId !== item.operationId) {
+      throw new Error(`PROJECT_AGENT_APPROVAL_GRANT_MEMBER_MISMATCH:${item.toolCallId}`)
+    }
+    return [[item.toolCallId, {
       approvalGrantId: grant.approvalGrantId,
       requestId: grant.requestId,
-    },
-  ]))
+    }] as const]
+  }))
   const context: ProjectAgentContext = {
     ...contextBase,
     locale,
@@ -764,7 +749,7 @@ export async function createProjectAgentChatResponse(input: {
     choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
     ...(issuedApprovalGrants.length > 0
       ? {
-          approvedInvocationByOperationId,
+          approvedInvocationByToolCallId,
         }
       : {}),
   }
@@ -806,13 +791,24 @@ export async function createProjectAgentChatResponse(input: {
       runAbortController.abort(input.ownershipSignal?.reason)
     }
   }
+  const abortFromRequestSignal = (): void => {
+    if (!runAbortController.signal.aborted) {
+      runAbortController.abort(new ProjectAgentClientDisconnectedError())
+    }
+  }
   if (input.ownershipSignal?.aborted) {
     abortFromOwnershipSignal()
   } else {
     input.ownershipSignal?.addEventListener('abort', abortFromOwnershipSignal, { once: true })
   }
-  const detachOwnershipSignal = (): void => {
+  if (input.request.signal.aborted) {
+    abortFromRequestSignal()
+  } else {
+    input.request.signal.addEventListener('abort', abortFromRequestSignal, { once: true })
+  }
+  const detachAbortSignals = (): void => {
     input.ownershipSignal?.removeEventListener('abort', abortFromOwnershipSignal)
+    input.request.signal.removeEventListener('abort', abortFromRequestSignal)
   }
   let heartbeatController: ReturnType<typeof startProjectAgentRunHeartbeat> | null = null
   const stopHeartbeatOnce = async () => {
@@ -995,11 +991,57 @@ export async function createProjectAgentChatResponse(input: {
   })
 
   let latestStopPart: ProjectAgentStopPartData | null = null
-  const transactionallyBoundTaskBatches = new Map<string, readonly string[]>()
-  const committedSuspensions = new Map<string, ProjectAgentSuspensionReceipt>()
   const preparedChoiceHandoffs = new Map<string, ProjectAgentChoiceHandoffReceipt>()
   const outcomesByToolCall = new Map<string, ProjectAgentOperationOutcome>()
+  const submittedTaskReceiptsByToolCall = new Map<string, ProjectAgentOperationOutcome & { kind: 'submitted_tasks' }>()
   const operationIdByToolCallId = new Map<string, string>()
+  let activeOperationBatch = createProjectAgentOperationBatchCoordinator({ originRunId: input.run.id })
+  const operationBatch: ProjectAgentOperationBatchCoordinator = {
+    claim: (operationId) => activeOperationBatch.claim(operationId),
+    readRunFence: () => activeOperationBatch.readRunFence(),
+    commitMember: (member) => activeOperationBatch.commitMember(member),
+    readMembers: () => activeOperationBatch.readMembers(),
+  }
+  const sealActiveOperationBatch = async (): Promise<void> => {
+    const batchToSeal = activeOperationBatch
+    const members = batchToSeal.readMembers()
+    if (members.length === 0) {
+      if (submittedTaskReceiptsByToolCall.size > 0) {
+        throw new Error(
+          `PROJECT_AGENT_OPERATION_BATCH_MEMBER_MISSING:${Array.from(submittedTaskReceiptsByToolCall.keys()).sort().join(',')}`,
+        )
+      }
+      activeOperationBatch = createProjectAgentOperationBatchCoordinator({ originRunId: input.run.id })
+      return
+    }
+    for (const member of members) {
+      const outcome = submittedTaskReceiptsByToolCall.get(member.toolCallId)
+      if (!outcome || outcome.receipt.batchId !== member.receipt.batchId) {
+        throw new Error(`PROJECT_AGENT_OPERATION_BATCH_OUTCOME_MISSING:${member.toolCallId}`)
+      }
+    }
+    const memberToolCallIds = new Set(members.map((member) => member.toolCallId))
+    const unboundToolCallIds = Array.from(submittedTaskReceiptsByToolCall.keys())
+      .filter((toolCallId) => !memberToolCallIds.has(toolCallId))
+      .sort()
+    if (unboundToolCallIds.length > 0) {
+      throw new Error(`PROJECT_AGENT_OPERATION_BATCH_MEMBER_MISSING:${unboundToolCallIds.join(',')}`)
+    }
+    const firstMember = members[0]
+    if (!firstMember) throw new Error('PROJECT_AGENT_OPERATION_BATCH_EMPTY')
+    await sealProjectAgentOperationBatchWait({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: context.episodeId ?? null,
+      assistantId: 'workspace-command',
+      batch: batchToSeal.claim(firstMember.operationId),
+      taskIds: Array.from(new Set(members.flatMap((member) => [...member.taskIds]))).sort(),
+    })
+    for (const member of members) {
+      submittedTaskReceiptsByToolCall.delete(member.toolCallId)
+    }
+    activeOperationBatch = createProjectAgentOperationBatchCoordinator({ originRunId: input.run.id })
+  }
   const registerToolCallIdentity = (identity: { toolCallId: string; operationId: string }): void => {
     const toolCallId = identity.toolCallId.trim()
     const operationId = identity.operationId.trim()
@@ -1042,6 +1084,7 @@ export async function createProjectAgentChatResponse(input: {
       operationSignal: runAbortController.signal,
       continuationClaim: input.continuationClaim ?? null,
       assistantPermissionMode: input.assistantPermissionMode,
+      operationBatch,
       writer: {
         write: (chunk) => {
           sideChannelChunks.push(chunk as unknown as ProjectAgentUiChunk)
@@ -1059,6 +1102,9 @@ export async function createProjectAgentChatResponse(input: {
           throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_DUPLICATE:${item.operation.id}:${toolCallId}`)
         }
         outcomesByToolCall.set(toolCallId, outcome)
+        if (outcome.kind === 'submitted_tasks') {
+          submittedTaskReceiptsByToolCall.set(toolCallId, outcome)
+        }
         if (outcome.kind === 'wait_choice') {
           const choiceHandoff = outcome.choiceHandoff
           const existing = preparedChoiceHandoffs.get(choiceHandoff.operationId)
@@ -1075,17 +1121,6 @@ export async function createProjectAgentChatResponse(input: {
         }
       },
       onToolCallIdentified: registerToolCallIdentity,
-      onTaskBatchBound: (batch) => {
-        if (transactionallyBoundTaskBatches.has(batch.operationId)) {
-          throw new Error(`PROJECT_AGENT_TASK_BATCH_DUPLICATE_BINDING:${batch.operationId}`)
-        }
-        transactionallyBoundTaskBatches.set(batch.operationId, [...batch.taskIds])
-        const existing = committedSuspensions.get(batch.operationId)
-        if (existing && !isSameProjectAgentSuspensionReceipt(existing, batch.suspension)) {
-          throw new Error(`PROJECT_AGENT_SUSPENSION_RECEIPT_DUPLICATE:${batch.operationId}`)
-        }
-        committedSuspensions.set(batch.operationId, batch.suspension)
-      },
       approvalPreflightStore,
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
@@ -1102,11 +1137,12 @@ export async function createProjectAgentChatResponse(input: {
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
       temperature: 0.2,
-      parallelToolCalls: false,
+      parallelToolCalls: true,
     },
     tools,
-    toolUseBehavior: (_runContext, toolResults) => {
+    toolUseBehavior: async (_runContext, toolResults) => {
       const outcomes = collectFunctionToolOutputs(toolResults, outcomesByToolCall)
+      await sealActiveOperationBatch()
       const stopPart = stopController.evaluateStep(outcomes)
       if (!stopPart) {
         return {
@@ -1286,7 +1322,7 @@ export async function createProjectAgentChatResponse(input: {
         const approvalItems = result.interruptions.length > 0
           ? result.interruptions
           : result.state.getInterruptions()
-        const shouldPersistApprovalInterruption = approvalItems.length > 0 && latestStopPart?.reason !== 'awaiting_external_task'
+        const shouldPersistApprovalInterruption = approvalItems.length > 0
         const pendingApprovalHandoff = shouldPersistApprovalInterruption
           ? await (async () => {
             const members = await Promise.all(approvalItems.map(async (approvalItem) => {
@@ -1307,43 +1343,24 @@ export async function createProjectAgentChatResponse(input: {
                 operationPlan,
               }
             }))
-            if (members.length !== 1) {
-              throw new Error(`PROJECT_AGENT_PARALLEL_APPROVAL_STEP_FORBIDDEN:${String(members.length)}`)
-            }
             const primary = members[0]
             if (!primary) throw new Error('PROJECT_AGENT_APPROVAL_GROUP_EMPTY')
+            const operationPlan = mergeOperationPlanViewsForApproval(
+              primary.operationId,
+              members.flatMap((member) => member.operationPlan ? [member.operationPlan] : []),
+            )
             return {
               approvalId: primary.approvalId,
               operationId: primary.operationId,
               toolCallId: primary.toolCallId,
               inputHash: primary.inputHash,
-              operationPlan: primary.operationPlan,
+              operationPlan,
               members,
               runState: result.state.toString(),
             }
           })()
           : null
 
-        try {
-          await createProjectAgentWaitBindings({
-            stopPart: latestStopPart,
-            registry: operations,
-            transactionallyBoundTaskBatches,
-            committedSuspensions,
-          })
-        } catch (error) {
-          if (input.settleTaskFollowUp) throw error
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          pendingRunSettlement = {
-            status: 'failed',
-            stopReason: 'wait_binding_failed',
-            errorCode: 'PROJECT_AGENT_WAIT_BINDING_FAILED',
-            errorMessage,
-          }
-          chunks.push(createRuntimeStatusChunk('failed', 'wait_binding_failed'))
-          runStatusFinalized = true
-          return chunks
-        }
         const preparedChoiceHandoff = requireProjectAgentChoiceSuspensionReceipt({
           stopPart: latestStopPart,
           preparedChoiceHandoffs,
@@ -1448,46 +1465,7 @@ export async function createProjectAgentChatResponse(input: {
           if (control.kind === 'task_follow_up') taskFollowUpSettlementCommittedInline = true
           runStatusFinalized = true
         } else if (!shouldPersistApprovalInterruption) {
-          if (latestStopPart?.reason === 'awaiting_external_task') {
-            chunks.push(createRuntimeStatusChunk('awaiting_task', 'awaiting_task'))
-            const taskWait = latestStopPart.taskWaits.length === 1 && latestStopPart.taskWaits[0]
-              ? latestStopPart.taskWaits[0]
-              : null
-            if (!taskWait) throw new Error('PROJECT_AGENT_TASK_HANDOFF_WAIT_DESCRIPTOR_MISSING')
-            await settleProjectAgentPreparedTaskHandoff({
-              executionFence: {
-                runFence,
-                signal: runAbortController.signal,
-                continuationClaim: input.continuationClaim ?? null,
-              },
-              executionSegmentId: executionSegment.id,
-              projectId: input.projectId,
-              userId: input.userId,
-              episodeId: context.episodeId || null,
-              assistantId: 'workspace-command',
-              operationId: taskWait.operationId,
-              taskIds: taskWait.taskIds,
-              message: await buildAssistantMessageOnce(),
-              continuation: control.kind === 'task_follow_up'
-                ? (() => {
-                    const claimOwner = input.continuationClaim?.claimOwner
-                    const waitActivityId = control.followUp.activityId
-                    if (!claimOwner || !waitActivityId) {
-                      throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
-                    }
-                    return {
-                      waitId: control.followUp.waitId,
-                      commandId: control.followUp.commandId,
-                      claimOwner,
-                      waitActivityId,
-                    }
-                  })()
-                : null,
-            })
-            if (control.kind === 'task_follow_up') taskFollowUpSettlementCommittedInline = true
-            assistantMessagePersisted = true
-            runStatusFinalized = true
-          } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
+          if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             chunks.push(createRuntimeStatusChunk('awaiting_choice', 'awaiting_user_choice'))
             if (!preparedChoiceHandoff) {
               throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_REQUIRED_FOR_CHOICE_STOP')
@@ -1552,7 +1530,8 @@ export async function createProjectAgentChatResponse(input: {
       },
       onError: async (error) => {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
-        const effectiveError = ownershipLoss ?? error
+        const clientDisconnect = readProjectAgentClientDisconnect(runAbortController.signal)
+        const effectiveError = ownershipLoss ?? clientDisconnect ?? error
         const errorMessage = effectiveError instanceof Error ? effectiveError.message : String(effectiveError)
         projectAgentLogger.error({
           action: 'assistant.agents.stream.failed',
@@ -1581,6 +1560,7 @@ export async function createProjectAgentChatResponse(input: {
         }
         const failureTerminal = resolveProjectAgentRunFailureTerminal({
           ownershipLoss,
+          clientDisconnect,
           stopReason: 'stream_error',
           errorCode: 'PROJECT_AGENT_STREAM_FAILED',
           errorMessage,
@@ -1639,7 +1619,7 @@ export async function createProjectAgentChatResponse(input: {
           })
           throw error
         } finally {
-          detachOwnershipSignal()
+          detachAbortSignals()
           await stopHeartbeatOnce()
           await releaseRunLockOnce()
         }
@@ -1649,13 +1629,15 @@ export async function createProjectAgentChatResponse(input: {
     response.headers.set('x-request-id', stableRequestId)
     return response
   } catch (error) {
-    detachOwnershipSignal()
+    detachAbortSignals()
     await stopHeartbeatOnce()
     try {
       if (!input.settleTaskFollowUp) {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
+        const clientDisconnect = readProjectAgentClientDisconnect(runAbortController.signal)
         const terminal = resolveProjectAgentRunFailureTerminal({
           ownershipLoss,
+          clientDisconnect,
           stopReason: 'run_failed',
           errorCode: 'PROJECT_AGENT_RUN_FAILED',
           errorMessage: error instanceof Error ? error.message : String(error),

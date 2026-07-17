@@ -33,17 +33,16 @@ import { appendProjectAgentEventsInTransaction } from './event'
 import { createProjectAgentRunFence, type ProjectAgentRunFence } from './run-fence'
 import type {
   ProjectAgentTaskFollowUpSettlementOutcome,
-  ProjectAgentWaitFollowUpMode,
 } from './waits'
 import { localizeProjectAgentOperationTitle } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
 
-export type ProjectAgentExecutionHandoffKind = 'choice' | 'approval' | 'task'
+export type ProjectAgentExecutionHandoffKind = 'choice' | 'approval' | 'task_batch'
 export type ProjectAgentExecutionHandoffStatus = 'prepared' | 'settled'
 
 export type ProjectAgentContinuationTerminalOutcome = Exclude<
   ProjectAgentTaskFollowUpSettlementOutcome,
-  'awaiting_task' | 'awaiting_choice' | 'awaiting_approval'
+  'awaiting_choice' | 'awaiting_approval'
 >
 
 export interface ProjectAgentContinuationCheckpoint {
@@ -78,17 +77,6 @@ export interface ProjectAgentApprovalHandoffReceipt {
   toolCallId: string | null
 }
 
-export interface ProjectAgentTaskHandoffReceipt {
-  kind: 'task'
-  handoffId: string
-  executionSegmentId: string
-  runId: string
-  operationId: string
-  waitId: string
-  taskIds: readonly string[]
-  followUpMode: ProjectAgentWaitFollowUpMode
-}
-
 interface ChoiceHandoffPayload {
   card: ProjectAgentChoiceCardDefinition
   reviewedResource: ProjectAgentChoiceReviewedResource
@@ -101,10 +89,11 @@ interface ApprovalHandoffPayload {
   payload: Prisma.JsonValue
 }
 
-interface TaskHandoffPayload {
+interface OperationBatchHandoffPayload {
+  backgroundRunId: string
   waitId: string
+  activityId: string
   taskIds: string[]
-  followUpMode: ProjectAgentWaitFollowUpMode
 }
 
 export interface ProjectAgentExecutionSegmentContinuation {
@@ -164,23 +153,25 @@ function parseApprovalPayload(value: Prisma.JsonValue): ApprovalHandoffPayload {
   }
 }
 
-function parseTaskPayload(value: Prisma.JsonValue): TaskHandoffPayload {
+function parseOperationBatchPayload(value: Prisma.JsonValue): OperationBatchHandoffPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('PROJECT_AGENT_TASK_HANDOFF_PAYLOAD_INVALID')
+    throw new Error('PROJECT_AGENT_OPERATION_BATCH_HANDOFF_PAYLOAD_INVALID')
   }
   const record = value as Record<string, unknown>
+  const backgroundRunId = typeof record.backgroundRunId === 'string' ? record.backgroundRunId.trim() : ''
   const waitId = typeof record.waitId === 'string' ? record.waitId.trim() : ''
+  const activityId = typeof record.activityId === 'string' ? record.activityId.trim() : ''
   const taskIds = Array.isArray(record.taskIds)
     ? record.taskIds.filter((taskId): taskId is string => typeof taskId === 'string' && taskId.trim().length > 0)
     : []
-  const followUpMode = record.followUpMode
-  if (!waitId || taskIds.length === 0 || (followUpMode !== 'resume_agent' && followUpMode !== 'complete')) {
-    throw new Error('PROJECT_AGENT_TASK_HANDOFF_PAYLOAD_INVALID')
+  if (!backgroundRunId || !waitId || !activityId || taskIds.length === 0) {
+    throw new Error('PROJECT_AGENT_OPERATION_BATCH_HANDOFF_PAYLOAD_INVALID')
   }
   return {
+    backgroundRunId,
     waitId,
+    activityId,
     taskIds: Array.from(new Set(taskIds)).sort(),
-    followUpMode,
   }
 }
 
@@ -427,15 +418,16 @@ export async function prepareProjectAgentApprovalExecutionHandoff(input: {
 }
 
 /**
- * Task persistence owns the Task/Wait transaction. It records the matching
- * execution handoff in that same transaction so the later assistant-message
- * settlement never has to infer a Wait from stream output or task timing.
+ * Records the recoverable boundary between a foreground tool step and the
+ * background Run/Wait that owns its submitted Tasks. Member transactions may
+ * only grow the exact Task set; sealing is a separate terminal transition.
  */
-export async function prepareProjectAgentTaskExecutionHandoffInTransaction(
+export async function prepareProjectAgentOperationBatchHandoffInTransaction(
   tx: Prisma.TransactionClient,
   input: {
-    executionSegmentId: string
-    runId: string
+    batchId: string
+    originRunId: string
+    backgroundRunId: string
     projectId: string
     userId: string
     episodeId?: string | null
@@ -443,50 +435,37 @@ export async function prepareProjectAgentTaskExecutionHandoffInTransaction(
     assistantId?: ProjectAssistantId
     operationId: string
     waitId: string
+    activityId: string
     taskIds: readonly string[]
-    followUpMode: ProjectAgentWaitFollowUpMode
   },
-): Promise<ProjectAgentTaskHandoffReceipt> {
-  const executionSegmentId = requireIdentity(
-    input.executionSegmentId,
-    'PROJECT_AGENT_TASK_HANDOFF_SEGMENT_ID_REQUIRED',
+): Promise<void> {
+  const executionSegmentId = requireIdentity(input.batchId, 'PROJECT_AGENT_OPERATION_BATCH_ID_REQUIRED')
+  const runId = requireIdentity(input.originRunId, 'PROJECT_AGENT_OPERATION_BATCH_ORIGIN_RUN_REQUIRED')
+  const operationId = requireIdentity(input.operationId, 'PROJECT_AGENT_OPERATION_BATCH_OPERATION_REQUIRED')
+  const backgroundRunId = requireIdentity(
+    input.backgroundRunId,
+    'PROJECT_AGENT_OPERATION_BATCH_BACKGROUND_RUN_REQUIRED',
   )
-  const runId = requireIdentity(input.runId, 'PROJECT_AGENT_TASK_HANDOFF_RUN_ID_REQUIRED')
-  const operationId = requireIdentity(input.operationId, 'PROJECT_AGENT_TASK_HANDOFF_OPERATION_ID_REQUIRED')
-  const waitId = requireIdentity(input.waitId, 'PROJECT_AGENT_TASK_HANDOFF_WAIT_ID_REQUIRED')
+  const waitId = requireIdentity(input.waitId, 'PROJECT_AGENT_OPERATION_BATCH_WAIT_REQUIRED')
+  const activityId = requireIdentity(input.activityId, 'PROJECT_AGENT_OPERATION_BATCH_ACTIVITY_REQUIRED')
   const taskIds = Array.from(new Set(input.taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
-  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_HANDOFF_TASKS_EMPTY:${operationId}`)
+  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TASKS_EMPTY:${executionSegmentId}`)
   const assistantId = input.assistantId ?? 'workspace-command'
   const scopeRef = buildProjectAssistantScopeRef({
     projectId: input.projectId,
     episodeId: input.episodeId ?? null,
   })
-  const payload: TaskHandoffPayload = { waitId, taskIds, followUpMode: input.followUpMode }
-  const existing = await tx.projectAgentExecutionHandoff.findUnique({
-    where: { executionSegmentId },
-  })
-  let handoffId: string
-  if (existing) {
-    const existingPayload = parseTaskPayload(existing.payload)
-    if (
-      existing.runId !== runId
-      || existing.projectId !== input.projectId
-      || existing.userId !== input.userId
-      || existing.assistantId !== assistantId
-      || existing.scopeRef !== scopeRef
-      || existing.kind !== 'task'
-      || existing.operationId !== operationId
-      || normalizeStatus(existing.status) !== 'prepared'
-      || !isDeepStrictEqual(existingPayload, payload)
-    ) {
-      throw new Error(`PROJECT_AGENT_TASK_HANDOFF_IDENTITY_CONFLICT:${executionSegmentId}`)
-    }
-    handoffId = existing.id
-  } else {
-    handoffId = randomUUID()
+  const payload: OperationBatchHandoffPayload = {
+    backgroundRunId,
+    waitId,
+    activityId,
+    taskIds,
+  }
+  const existing = await tx.projectAgentExecutionHandoff.findUnique({ where: { executionSegmentId } })
+  if (!existing) {
     await tx.projectAgentExecutionHandoff.create({
       data: {
-        id: handoffId,
+        id: randomUUID(),
         executionSegmentId,
         runId,
         projectId: input.projectId,
@@ -495,22 +474,75 @@ export async function prepareProjectAgentTaskExecutionHandoffInTransaction(
         scopeRef,
         episodeId: input.episodeId ?? null,
         locale: input.locale?.trim() || 'en',
-        kind: 'task',
+        kind: 'task_batch',
         status: 'prepared',
         operationId,
         payload: payload as unknown as Prisma.InputJsonValue,
       },
     })
+    return
   }
-  return {
-    kind: 'task',
-    handoffId,
-    executionSegmentId,
-    runId,
-    operationId,
-    waitId,
-    taskIds,
-    followUpMode: input.followUpMode,
+  const existingPayload = parseOperationBatchPayload(existing.payload)
+  const growsExistingTasks = existingPayload.taskIds.every((taskId) => taskIds.includes(taskId))
+  if (
+    existing.runId !== runId
+    || existing.projectId !== input.projectId
+    || existing.userId !== input.userId
+    || existing.assistantId !== assistantId
+    || existing.scopeRef !== scopeRef
+    || existing.kind !== 'task_batch'
+    || existing.operationId !== operationId
+    || normalizeStatus(existing.status) !== 'prepared'
+    || existingPayload.backgroundRunId !== backgroundRunId
+    || existingPayload.waitId !== waitId
+    || existingPayload.activityId !== activityId
+    || !growsExistingTasks
+  ) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_HANDOFF_IDENTITY_CONFLICT:${executionSegmentId}`)
+  }
+  if (isDeepStrictEqual(existingPayload, payload)) return
+  const updated = await tx.projectAgentExecutionHandoff.updateMany({
+    where: { id: existing.id, status: 'prepared' },
+    data: { payload: payload as unknown as Prisma.InputJsonValue },
+  })
+  if (updated.count !== 1) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_HANDOFF_GROW_RACED:${executionSegmentId}`)
+  }
+}
+
+export async function settleProjectAgentOperationBatchHandoffInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    batchId: string
+    originRunId: string
+    backgroundRunId: string
+    waitId: string
+    activityId: string
+    taskIds: readonly string[]
+  },
+): Promise<void> {
+  const batchId = requireIdentity(input.batchId, 'PROJECT_AGENT_OPERATION_BATCH_ID_REQUIRED')
+  const taskIds = Array.from(new Set(input.taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
+  const handoff = await tx.projectAgentExecutionHandoff.findUnique({ where: { executionSegmentId: batchId } })
+  if (!handoff) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_HANDOFF_NOT_FOUND:${batchId}`)
+  const payload = parseOperationBatchPayload(handoff.payload)
+  if (
+    handoff.runId !== input.originRunId
+    || handoff.kind !== 'task_batch'
+    || normalizeStatus(handoff.status) !== 'prepared'
+    || payload.backgroundRunId !== input.backgroundRunId
+    || payload.waitId !== input.waitId
+    || payload.activityId !== input.activityId
+    || JSON.stringify(payload.taskIds) !== JSON.stringify(taskIds)
+  ) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_HANDOFF_IDENTITY_CONFLICT:${batchId}`)
+  }
+  const settled = await tx.projectAgentExecutionHandoff.updateMany({
+    where: { id: handoff.id, status: 'prepared' },
+    data: { status: 'settled', settledAt: new Date() },
+  })
+  if (settled.count !== 1) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_HANDOFF_SETTLEMENT_RACED:${batchId}`)
   }
 }
 
@@ -525,7 +557,7 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     assistantId: ProjectAssistantId
     scopeRef: string
     message: UIMessage
-    outcome: 'awaiting_choice' | 'awaiting_approval' | 'awaiting_task'
+    outcome: 'awaiting_choice' | 'awaiting_approval'
     sourceOperationId: string
     continuation?: ProjectAgentExecutionSegmentContinuation | null
   },
@@ -599,7 +631,6 @@ function normalizeProjectAgentContinuationOutcome(
     case 'failed':
     case 'outcome_unknown':
     case 'delivery_exhausted':
-    case 'awaiting_task':
     case 'awaiting_choice':
     case 'awaiting_approval':
       return value
@@ -852,8 +883,7 @@ export async function finalizeProjectAgentContinuationHandoff(input: {
     }
     const outcome = normalizeProjectAgentContinuationOutcome(checkpoint.outcome)
     if (
-      outcome === 'awaiting_task'
-      || outcome === 'awaiting_choice'
+      outcome === 'awaiting_choice'
       || outcome === 'awaiting_approval'
     ) {
       return
@@ -1136,85 +1166,6 @@ export async function settleProjectAgentPreparedApprovalHandoff(input: {
   return receipt
 }
 
-export async function settleProjectAgentPreparedTaskHandoff(input: {
-  executionFence: ProjectAgentOperationExecutionFence
-  executionSegmentId: string
-  projectId: string
-  userId: string
-  episodeId?: string | null
-  assistantId?: ProjectAssistantId
-  operationId: string
-  taskIds: readonly string[]
-  message: UIMessage
-  continuation?: ProjectAgentExecutionSegmentContinuation | null
-}): Promise<ProjectAgentTaskHandoffReceipt> {
-  const executionSegmentId = requireIdentity(
-    input.executionSegmentId,
-    'PROJECT_AGENT_TASK_HANDOFF_SEGMENT_ID_REQUIRED',
-  )
-  const assistantId = input.assistantId ?? 'workspace-command'
-  const scopeRef = buildProjectAssistantScopeRef({
-    projectId: input.projectId,
-    episodeId: input.episodeId ?? null,
-  })
-  const expectedTaskIds = Array.from(new Set(input.taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
-  let receipt: ProjectAgentTaskHandoffReceipt | null = null
-  await prisma.$transaction(async (tx) => {
-    await assertProjectAgentOperationExecutionFenceInTransaction(tx, input.executionFence)
-    const handoff = await tx.projectAgentExecutionHandoff.findUnique({
-      where: { executionSegmentId },
-    })
-    if (!handoff) throw new Error(`PROJECT_AGENT_TASK_HANDOFF_NOT_FOUND:${executionSegmentId}`)
-    const payload = parseTaskPayload(handoff.payload)
-    if (
-      handoff.runId !== input.executionFence.runFence.runId
-      || handoff.projectId !== input.projectId
-      || handoff.userId !== input.userId
-      || handoff.assistantId !== assistantId
-      || handoff.scopeRef !== scopeRef
-      || handoff.kind !== 'task'
-      || handoff.operationId !== input.operationId
-      || normalizeStatus(handoff.status) !== 'prepared'
-      || JSON.stringify(payload.taskIds) !== JSON.stringify(expectedTaskIds)
-    ) {
-      throw new Error(`PROJECT_AGENT_TASK_HANDOFF_IDENTITY_CONFLICT:${executionSegmentId}`)
-    }
-    await appendProjectAgentExecutionSegmentMessageHandoffInTransaction(tx, {
-      runFence: input.executionFence.runFence,
-      runId: handoff.runId,
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      assistantId,
-      scopeRef,
-      message: input.message,
-      outcome: 'awaiting_task',
-      sourceOperationId: input.operationId,
-      continuation: input.continuation ?? null,
-    })
-    assertProjectAgentOperationExecutionFenceSignal(input.executionFence)
-    const settled = await tx.projectAgentExecutionHandoff.updateMany({
-      where: { id: handoff.id, status: 'prepared' },
-      data: { status: 'settled', settledAt: new Date() },
-    })
-    if (settled.count !== 1) {
-      throw new Error(`PROJECT_AGENT_TASK_HANDOFF_SETTLEMENT_RACED:${handoff.id}`)
-    }
-    receipt = {
-      kind: 'task',
-      handoffId: handoff.id,
-      executionSegmentId,
-      runId: handoff.runId,
-      operationId: handoff.operationId,
-      waitId: payload.waitId,
-      taskIds: payload.taskIds,
-      followUpMode: payload.followUpMode,
-    }
-  })
-  if (!receipt) throw new Error(`PROJECT_AGENT_TASK_HANDOFF_SETTLEMENT_MISSING:${executionSegmentId}`)
-  return receipt
-}
-
 export async function recoverProjectAgentPreparedExecutionHandoff(input: {
   executionFence: ProjectAgentOperationExecutionFence
   projectId: string
@@ -1223,14 +1174,15 @@ export async function recoverProjectAgentPreparedExecutionHandoff(input: {
   assistantId?: ProjectAssistantId
   executionSegmentId?: string | null
   continuation?: ProjectAgentExecutionSegmentContinuation | null
-}): Promise<'choice' | 'approval' | 'task' | null> {
+}): Promise<'choice' | 'approval' | 'task_batch' | null> {
   const executionSegmentId = input.executionSegmentId?.trim() || null
-  const handoff = executionSegmentId
+  const exactHandoff = executionSegmentId
     ? await prisma.projectAgentExecutionHandoff.findUnique({ where: { executionSegmentId } })
-    : await prisma.projectAgentExecutionHandoff.findFirst({
-        where: { runId: input.executionFence.runFence.runId, status: 'prepared' },
-        orderBy: { createdAt: 'asc' },
-      })
+    : null
+  const handoff = exactHandoff ?? await prisma.projectAgentExecutionHandoff.findFirst({
+    where: { runId: input.executionFence.runFence.runId, status: 'prepared' },
+    orderBy: { createdAt: 'asc' },
+  })
   if (!handoff || normalizeStatus(handoff.status) !== 'prepared') return null
   if (
     handoff.runId !== input.executionFence.runFence.runId
@@ -1296,31 +1248,25 @@ export async function recoverProjectAgentPreparedExecutionHandoff(input: {
     })
     return 'approval'
   }
-  if (handoff.kind === 'task') {
-    const payload = parseTaskPayload(handoff.payload)
-    await settleProjectAgentPreparedTaskHandoff({
-      executionFence: input.executionFence,
-      executionSegmentId: handoff.executionSegmentId,
+  if (handoff.kind === 'task_batch') {
+    const payload = parseOperationBatchPayload(handoff.payload)
+    const waits = await import('./waits')
+    await waits.sealProjectAgentOperationBatchWait({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       assistantId: input.assistantId,
-      operationId: handoff.operationId,
-      taskIds: payload.taskIds,
-      message: {
-        id: `workspace-agent-handoff-recovery:${handoff.id}`,
-        role: 'assistant',
-        parts: [{
-          type: 'text',
-          text: localizeProjectAgentOperationTitle(
-            handoff.operationId,
-            normalizeProjectAgentLocale(handoff.locale),
-          ),
-        }],
+      batch: {
+        batchId: handoff.executionSegmentId,
+        originRunId: handoff.runId,
+        backgroundRunId: payload.backgroundRunId,
+        waitId: payload.waitId,
+        activityId: payload.activityId,
+        primaryOperationId: handoff.operationId,
       },
-      continuation: input.continuation ?? null,
+      taskIds: payload.taskIds,
     })
-    return 'task'
+    return 'task_batch'
   }
   throw new Error(`PROJECT_AGENT_EXECUTION_HANDOFF_KIND_INVALID:${handoff.kind}`)
 }

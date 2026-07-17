@@ -256,7 +256,8 @@ for (const required of [
   'settleProjectAgentPreparedChoiceHandoff',
   'prepareProjectAgentApprovalExecutionHandoff',
   'settleProjectAgentPreparedApprovalHandoff',
-  'settleProjectAgentPreparedTaskHandoff',
+  'createProjectAgentOperationBatchCoordinator',
+  'sealProjectAgentOperationBatchWait',
 ]) {
   if (!runtimeSource.includes(required)) {
     violations.push(`src/lib/project-agent/runtime.ts: execution-segment settlement authority missing ${required}`)
@@ -267,6 +268,14 @@ if (adapterSource.includes('currentActivityId')) {
   violations.push('src/lib/project-agent/agents-tool-adapter.ts: generic adapter must not close a continuation Activity')
 }
 const waitsSource = fs.readFileSync(path.join(root, 'src/lib/project-agent/waits.ts'), 'utf8')
+for (const required of [
+  'prepareProjectAgentOperationBatchHandoffInTransaction',
+  'settleProjectAgentOperationBatchHandoffInTransaction',
+]) {
+  if (!waitsSource.includes(required)) {
+    violations.push(`src/lib/project-agent/waits.ts: OperationBatch handoff authority missing ${required}`)
+  }
+}
 violations.push(...inspectContinuationExecutionSegmentBoundary(waitsSource).map(
   (violation) => `src/lib/project-agent/waits.ts: ${violation}`,
 ))
@@ -415,14 +424,20 @@ for (const [functionName, requiredFragments] of [
     'appendProjectAgentExecutionSegmentMessageHandoffInTransaction',
     "status: 'settled'",
   ]],
-  ['settleProjectAgentPreparedTaskHandoff', [
-    'prisma.$transaction',
-    'appendProjectAgentExecutionSegmentMessageHandoffInTransaction',
-    "outcome: 'awaiting_task'",
+  ['prepareProjectAgentOperationBatchHandoffInTransaction', [
+    'projectAgentExecutionHandoff.create',
+    "kind: 'task_batch'",
+    "status: 'prepared'",
+    'projectAgentExecutionHandoff.updateMany',
+  ]],
+  ['settleProjectAgentOperationBatchHandoffInTransaction', [
+    'projectAgentExecutionHandoff.findUnique',
+    "handoff.kind !== 'task_batch'",
+    "data: { status: 'settled'",
   ]],
   ['recoverProjectAgentPreparedExecutionHandoff', [
     'settleProjectAgentPreparedChoiceHandoff',
-    'settleProjectAgentPreparedTaskHandoff',
+    'sealProjectAgentOperationBatchWait',
   ]],
 ]) {
   const body = functionBody(executionHandoffSource, functionName)

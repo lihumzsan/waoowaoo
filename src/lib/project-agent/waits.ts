@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
 import type { ProjectAssistantId } from './types'
-import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
+import type { ProjectAgentTaskSubmissionReceipt } from '@/lib/operations/types'
+import type { ProjectAgentOperationBatchIdentity } from './operation-batch'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
@@ -13,20 +14,22 @@ import {
   assignProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
-import { prepareProjectAgentTaskExecutionHandoffInTransaction } from './execution-handoff'
+import {
+  prepareProjectAgentOperationBatchHandoffInTransaction,
+  settleProjectAgentOperationBatchHandoffInTransaction,
+} from './execution-handoff'
 import {
   createProjectAgentExecutionSegment,
   projectAgentExecutionStartedIdempotencyKey,
 } from './execution-segment'
 
-export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
+export type ProjectAgentWaitStatus = 'collecting' | 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
 export type ProjectAgentTaskFollowUpSettlementOutcome =
   | 'completed'
   | 'failed'
   | 'outcome_unknown'
   | 'delivery_exhausted'
-  | 'awaiting_task'
   | 'awaiting_choice'
   | 'awaiting_approval'
 
@@ -35,33 +38,16 @@ export type ProjectAgentContinuationExecutionStart = 'started' | 'already_starte
 /**
  * What happens when every task behind the wait reaches a terminal state.
  * - resume_agent: the wait becomes claimable and the agent is woken with a follow-up turn.
- * The mode is declared on the operation definition (agentFlow.onTaskComplete) and
- * recorded here when the wait is created.
+ * OperationBatch always uses resume_agent; terminal success, failure and
+ * cancellation all become one claimable continuation.
  */
-export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'complete'
+export type ProjectAgentWaitFollowUpMode = 'resume_agent'
 
 interface ProjectAgentWaitScopeInput {
   projectId: string
   userId: string
   episodeId?: string | null
   assistantId?: ProjectAssistantId
-}
-
-export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput {
-  runFence: ProjectAgentRunFence
-  runId: string
-  executionSegmentId?: string | null
-  /** Locale recorded with the durable handoff for recovery copy. */
-  locale?: string | null
-  operationId: string
-  taskIds: string[]
-  followUpMode: ProjectAgentWaitFollowUpMode
-  /**
-   * The short-lived Activity created for this same Operation invocation.
-   * Task binding owns its terminal transition; it is never an execution
-   * segment or continuation Activity.
-   */
-  sourceOperationActivityId?: string | null
 }
 
 interface ProjectAgentWaitRow {
@@ -375,13 +361,14 @@ function buildWaitScope(input: ProjectAgentWaitScopeInput): {
 }
 
 function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode {
-  if (value === 'resume_agent' || value === 'complete') return value
+  if (value === 'resume_agent') return value
   throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_MODE_INVALID:${value}`)
 }
 
 function normalizeWaitStatus(value: string): ProjectAgentWaitStatus {
   if (
-    value === 'pending'
+    value === 'collecting'
+    || value === 'pending'
     || value === 'resolved'
     || value === 'claimed'
     || value === 'followed'
@@ -410,67 +397,31 @@ export async function refreshProjectAgentRunFence(runFence: ProjectAgentRunFence
   assignProjectAgentRunFence(runFence, current)
 }
 
-function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerminalStatus | null {
-  if (value === null) return null
-  if (value === 'completed' || value === 'failed' || value === 'canceled') return value
-  throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_STATUS_INVALID:${value}`)
+export interface BindProjectAgentOperationBatchMemberResult {
+  receipt: ProjectAgentTaskSubmissionReceipt
+  backgroundRunFence: ProjectAgentRunFence
 }
 
-export async function bindProjectAgentWaitToTasksInTransaction(
+export async function bindProjectAgentOperationBatchWaitMemberInTransaction(
   tx: Prisma.TransactionClient,
-  input: CreateProjectAgentWaitInput,
-): Promise<ProjectAgentTaskSuspensionReceipt | null> {
-  const taskIds = normalizeTaskIds(input.taskIds)
-  if (taskIds.length === 0) return null
-  const waitId = randomUUID()
-  const activityId = randomUUID()
-  const { assistantId, scopeRef } = buildWaitScope(input)
-  await appendProjectAgentEventsInTransaction(tx, {
-    scope: {
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      assistantId,
-      scopeRef,
-    },
-    events: [
-      ...(input.sourceOperationActivityId
-        ? [{
-            runFence: input.runFence,
-            idempotencyKey: `activity-completed:${input.sourceOperationActivityId}:before:${activityId}`,
-            event: {
-              kind: 'activity.completed' as const,
-              runId: input.runId,
-              activityId: input.sourceOperationActivityId,
-            },
-          }]
-        : []),
-      {
-        runFence: input.runFence,
-        idempotencyKey: `activity-started:${activityId}`,
-        event: {
-          kind: 'activity.started',
-          runId: input.runId,
-          activityId,
-          type: 'waiting_task',
-          operationId: input.operationId,
-        },
-      },
-      {
-        runFence: input.runFence,
-        idempotencyKey: `task-bound:${waitId}`,
-        event: {
-          kind: 'task.bound',
-          runId: input.runId,
-          activityId,
-          waitId,
-          operationId: input.operationId,
-          taskIds,
-          followUpMode: input.followUpMode,
-        },
-      },
-    ],
-  })
+  input: ProjectAgentWaitScopeInput & {
+    batch: ProjectAgentOperationBatchIdentity
+    backgroundRunFence: ProjectAgentRunFence
+    locale?: string | null
+    operationId: string
+    toolCallId: string
+    taskIds: readonly string[]
+  },
+): Promise<BindProjectAgentOperationBatchMemberResult> {
+  const operationId = input.operationId.trim()
+  const toolCallId = input.toolCallId.trim()
+  const taskIds = normalizeTaskIds([...input.taskIds])
+  if (!operationId) throw new Error('PROJECT_AGENT_OPERATION_BATCH_OPERATION_REQUIRED')
+  if (!toolCallId) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TOOL_CALL_REQUIRED:${operationId}`)
+  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TASKS_EMPTY:${toolCallId}`)
+  if (input.backgroundRunFence.runId !== input.batch.backgroundRunId) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_RUN_FENCE_MISMATCH:${input.batch.batchId}`)
+  }
   const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
     SELECT id, status
     FROM tasks
@@ -482,43 +433,220 @@ export async function bindProjectAgentWaitToTasksInTransaction(
   const taskIdSet = new Set(tasks.map((task) => task.id))
   const missingTaskIds = taskIds.filter((taskId) => !taskIdSet.has(taskId))
   if (missingTaskIds.length > 0) {
-    throw new Error(`PROJECT_AGENT_WAIT_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
   }
-  for (const task of tasks) {
-    const terminalType = readTerminalLifecycleTypeFromTaskStatus(task.status)
-    if (!terminalType) continue
-    await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
-      taskId: task.id,
-      projectId: input.projectId,
-      userId: input.userId,
-      lifecycleType: terminalType,
-    })
+  const waits = await tx.$queryRaw<Array<{
+    id: string
+    runId: string | null
+    activityId: string | null
+    operationId: string
+    taskIds: unknown
+    status: string
+  }>>(Prisma.sql`
+    SELECT id, runId, activityId, operationId, taskIds, status
+    FROM project_agent_waits
+    WHERE id = ${input.batch.waitId}
+    FOR UPDATE
+  `)
+  const existingWait = waits[0] ?? null
+  if (
+    existingWait
+    && (
+      existingWait.runId !== input.batch.backgroundRunId
+      || existingWait.activityId !== input.batch.activityId
+      || existingWait.operationId !== input.batch.primaryOperationId
+      || existingWait.status !== 'collecting'
+    )
+  ) {
+    throw new Error(`PROJECT_AGENT_OPERATION_BATCH_WAIT_IDENTITY_CONFLICT:${input.batch.batchId}`)
   }
-  const executionSegmentId = input.executionSegmentId?.trim() ?? ''
-  if (executionSegmentId) {
-    await prepareProjectAgentTaskExecutionHandoffInTransaction(tx, {
-      executionSegmentId,
-      runId: input.runId,
+  const aggregateTaskIds = normalizeTaskIds([
+    ...(existingWait ? parseStringArray(existingWait.taskIds) : []),
+    ...taskIds,
+  ])
+  const { assistantId, scopeRef } = buildWaitScope(input)
+  const memberKey = createHash('sha256').update(toolCallId).digest('hex').slice(0, 32)
+  await appendProjectAgentEventsInTransaction(tx, {
+    scope: {
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
-      locale: input.locale ?? null,
       assistantId,
-      operationId: input.operationId,
-      waitId,
-      taskIds,
-      followUpMode: input.followUpMode,
-    })
-  }
+      scopeRef,
+    },
+    events: [
+      ...(!existingWait
+        ? [{
+            runFence: input.backgroundRunFence,
+            idempotencyKey: `run-started:${input.batch.backgroundRunId}`,
+            event: {
+              kind: 'run.started' as const,
+              runId: input.batch.backgroundRunId,
+              requestId: `operation-batch:${input.batch.batchId}`,
+              controlKind: 'task_follow_up' as const,
+            },
+          }, {
+            runFence: input.backgroundRunFence,
+            idempotencyKey: `activity-started:${input.batch.activityId}`,
+            event: {
+              kind: 'activity.started' as const,
+              runId: input.batch.backgroundRunId,
+              activityId: input.batch.activityId,
+              type: 'waiting_task' as const,
+              operationId: input.batch.primaryOperationId,
+            },
+          }, {
+            runFence: input.backgroundRunFence,
+            idempotencyKey: `task-collection-started:${input.batch.waitId}`,
+            event: {
+              kind: 'task.collection_started' as const,
+              runId: input.batch.backgroundRunId,
+              activityId: input.batch.activityId,
+              waitId: input.batch.waitId,
+              operationId: input.batch.primaryOperationId,
+              followUpMode: 'resume_agent' as const,
+            },
+          }]
+        : []),
+      {
+        runFence: input.backgroundRunFence,
+        idempotencyKey: `task-collection-member:${input.batch.waitId}:${memberKey}`,
+        event: {
+          kind: 'task.collection_member_bound' as const,
+          runId: input.batch.backgroundRunId,
+          activityId: input.batch.activityId,
+          waitId: input.batch.waitId,
+          operationId: input.batch.primaryOperationId,
+          memberOperationId: operationId,
+          toolCallId,
+          taskIds: aggregateTaskIds,
+          followUpMode: 'resume_agent' as const,
+        },
+      },
+    ],
+  })
+  await prepareProjectAgentOperationBatchHandoffInTransaction(tx, {
+    batchId: input.batch.batchId,
+    originRunId: input.batch.originRunId,
+    backgroundRunId: input.batch.backgroundRunId,
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    locale: input.locale ?? null,
+    assistantId,
+    operationId: input.batch.primaryOperationId,
+    waitId: input.batch.waitId,
+    activityId: input.batch.activityId,
+    taskIds: aggregateTaskIds,
+  })
   return {
-    kind: 'task',
-    runId: input.runId,
-    operationId: input.operationId,
-    activityId,
-    waitId,
-    taskIds,
-    followUpMode: input.followUpMode,
+    receipt: {
+      kind: 'task_submission',
+      batchId: input.batch.batchId,
+      backgroundRunId: input.batch.backgroundRunId,
+      waitId: input.batch.waitId,
+      operationId,
+      taskIds,
+    },
+    backgroundRunFence: input.backgroundRunFence,
   }
+}
+
+export async function sealProjectAgentOperationBatchWait(input: ProjectAgentWaitScopeInput & {
+  batch: ProjectAgentOperationBatchIdentity
+  taskIds: readonly string[]
+}): Promise<void> {
+  const taskIds = normalizeTaskIds([...input.taskIds])
+  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TASKS_EMPTY:${input.batch.batchId}`)
+  await prisma.$transaction(async (tx) => {
+    const waits = await tx.$queryRaw<Array<{
+      id: string
+      runId: string | null
+      activityId: string | null
+      operationId: string
+      taskIds: unknown
+      status: string
+    }>>(Prisma.sql`
+      SELECT id, runId, activityId, operationId, taskIds, status
+      FROM project_agent_waits
+      WHERE id = ${input.batch.waitId}
+      FOR UPDATE
+    `)
+    const wait = waits[0]
+    if (!wait) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_WAIT_NOT_FOUND:${input.batch.batchId}`)
+    const storedTaskIds = parseStringArray(wait.taskIds)
+    if (
+      wait.runId !== input.batch.backgroundRunId
+      || wait.activityId !== input.batch.activityId
+      || wait.operationId !== input.batch.primaryOperationId
+      || JSON.stringify(storedTaskIds) !== JSON.stringify(taskIds)
+    ) {
+      throw new Error(`PROJECT_AGENT_OPERATION_BATCH_WAIT_IDENTITY_CONFLICT:${input.batch.batchId}`)
+    }
+    if (wait.status === 'pending') return
+    if (wait.status !== 'collecting') {
+      throw new Error(`PROJECT_AGENT_OPERATION_BATCH_WAIT_NOT_COLLECTING:${input.batch.batchId}:${wait.status}`)
+    }
+    const runFence = await lockCurrentRunFenceInTransaction(tx, input.batch.backgroundRunId)
+    const { assistantId, scopeRef } = buildWaitScope(input)
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: input.episodeId ?? null,
+        assistantId,
+        scopeRef,
+      },
+      events: [{
+        runFence,
+        idempotencyKey: `task-collection-sealed:${input.batch.waitId}`,
+        event: {
+          kind: 'task.collection_sealed',
+          runId: input.batch.backgroundRunId,
+          activityId: input.batch.activityId,
+          waitId: input.batch.waitId,
+          operationId: input.batch.primaryOperationId,
+          taskIds,
+          followUpMode: 'resume_agent',
+        },
+      }],
+    })
+    await settleProjectAgentOperationBatchHandoffInTransaction(tx, {
+      batchId: input.batch.batchId,
+      originRunId: input.batch.originRunId,
+      backgroundRunId: input.batch.backgroundRunId,
+      waitId: input.batch.waitId,
+      activityId: input.batch.activityId,
+      taskIds,
+    })
+    const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
+      SELECT id, status
+      FROM tasks
+      WHERE projectId = ${input.projectId}
+        AND userId = ${input.userId}
+        AND id IN (${Prisma.join(taskIds)})
+      FOR UPDATE
+    `)
+    if (tasks.length !== taskIds.length) {
+      throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TASK_IDENTITY_CHANGED:${input.batch.batchId}`)
+    }
+    for (const task of tasks) {
+      const terminalType = readTerminalLifecycleTypeFromTaskStatus(task.status)
+      if (!terminalType) continue
+      await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
+        taskId: task.id,
+        projectId: input.projectId,
+        userId: input.userId,
+        lifecycleType: terminalType,
+      })
+    }
+  })
+}
+
+function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerminalStatus | null {
+  if (value === null) return null
+  if (value === 'completed' || value === 'failed' || value === 'canceled') return value
+  throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_STATUS_INVALID:${value}`)
 }
 
 export interface ApplyProjectAgentWaitTerminalEventInput {
@@ -573,20 +701,13 @@ export function applyProjectAgentWaitTerminalEvent(
   }
 }
 
-/**
- * Pure decision: a completed operation that explicitly owns the Run terminal
- * closes the wait; every other completed/failed wait becomes claimable so the
- * durable continuation can compute the next Workflow action.
- */
+/** Every aggregate terminal becomes claimable for exactly one continuation. */
 export function resolveWaitTerminalNextStatus(params: {
   followUpMode: string
   terminalStatus: ProjectAgentWaitTerminalStatus
 }): Extract<ProjectAgentWaitStatus, 'resolved' | 'followed'> {
-  if (params.terminalStatus === 'canceled') return 'followed'
-  if (
-    params.followUpMode === 'complete' && params.terminalStatus === 'completed'
-  ) {
-    return 'followed'
+  if (params.followUpMode !== 'resume_agent') {
+    throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_MODE_INVALID:${params.followUpMode}`)
   }
   return 'resolved'
 }
@@ -755,11 +876,10 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
   return outboxCommandIds
 }
 
-export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeInput & {
-  limit?: number
-}): Promise<ProjectAgentSessionWait[]> {
+export async function listProjectAgentSessionWaits(
+  input: ProjectAgentWaitScopeInput,
+): Promise<ProjectAgentSessionWait[]> {
   const { assistantId, scopeRef } = buildWaitScope(input)
-  const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50)
   const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>(Prisma.sql`
     SELECT
       id,
@@ -792,9 +912,8 @@ export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeI
       AND userId = ${input.userId}
       AND assistantId = ${assistantId}
       AND scopeRef = ${scopeRef}
-      AND status IN ('pending', 'resolved', 'claimed')
+      AND status IN ('collecting', 'pending', 'resolved', 'claimed')
     ORDER BY createdAt DESC
-    LIMIT ${limit}
   `)
 
   return rows.map((row) => {
@@ -957,7 +1076,15 @@ export async function startProjectAgentWaitFollowUp(input: {
       AND followedAt IS NULL
   `
   const row = rows[0]
-  if (!row || (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') || !row.followUpKey) {
+  if (
+    !row
+    || (
+      row.terminalStatus !== 'completed'
+      && row.terminalStatus !== 'failed'
+      && row.terminalStatus !== 'canceled'
+    )
+    || !row.followUpKey
+  ) {
     return null
   }
   if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)

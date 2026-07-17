@@ -103,7 +103,7 @@ export interface OperationPlanView {
 }
 
 /**
- * Builds the one quote shown for a declared approval group. Member plan
+ * Builds the one quote shown for one model-step approval batch. Member plan
  * identities deliberately stay out of this display-only view: every member
  * keeps its own immutable snapshot and approval grant.
  */

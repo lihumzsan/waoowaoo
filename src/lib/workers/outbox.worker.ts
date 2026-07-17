@@ -17,6 +17,7 @@ import {
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
 import { enqueuePersistedTask } from '@/lib/task/enqueue'
 import {
+  ProjectAgentContinuationDeferredError,
   runProjectAgentWaitContinuationCommand,
   settleProjectAgentWaitContinuationDeliveryExhausted,
 } from '@/lib/project-agent/server-follow-up'
@@ -89,6 +90,22 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
   } catch (error) {
     const currentAttempt = row.deliveryCount
     const attempts = outboxConfig.maxDeliveryAttempts
+    if (error instanceof ProjectAgentContinuationDeferredError) {
+      const retryDelayMs = Math.min(60_000, 1_000 * (2 ** Math.max(0, currentAttempt - 1)))
+      await releaseOutboxCommand({
+        id: outboxId,
+        leaseOwner,
+        error: error.message,
+        retryAt: new Date(Date.now() + retryDelayMs),
+        dead: false,
+      })
+      logger.info({
+        action: 'outbox.delivery.assistant_deferred',
+        message: error.message,
+        details: { outboxId, kind: row.kind, currentAttempt },
+      })
+      return
+    }
     const permanent = error instanceof OutboxPermanentError
     const dead = permanent || currentAttempt >= attempts
     const message = error instanceof Error ? error.message : String(error)

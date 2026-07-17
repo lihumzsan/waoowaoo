@@ -35,6 +35,8 @@
         "src/app/api/projects/[projectId]/reference-to-character",
         "src/lib/edit-script/style-preview-operation-plan.ts",
         "src/lib/project-agent/edit-first-choice-result.ts",
+        "src/lib/project-agent/runtime.ts",
+        "src/lib/project-agent/operation-batch.ts",
         "src/lib/task/submitter.ts",
         "src/lib/task/transactional-create.ts",
         "src/lib/task/approved-plan-submitter.ts",
@@ -53,6 +55,7 @@
         "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
         "tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts",
         "tests/integration/task/approval-plan-change-replay.integration.test.ts",
+        "tests/golden-journey/journeys/freeform-resources.spec.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
         "tests/integration/task/task-target-terminal-ownership.integration.test.ts",
         "tests/unit/operations/registry.test.ts",
@@ -291,6 +294,10 @@
         "scripts/guards/sse-durable-watermark-guard.mjs",
         "scripts/guards/terminal-resource-refetch-guard.mjs",
         "src/lib/project-agent/session-event.ts",
+        "src/lib/project-agent/operation-batch.ts",
+        "src/lib/project-agent/waits.ts",
+        "src/lib/project-agent/runs.ts",
+        "src/lib/project-agent/session-state.ts",
         "src/app/api/tasks",
         "src/app/api/task-target-states",
         "src/app/api/sse/route.ts",
@@ -318,7 +325,8 @@
         "tests/unit/task/target-ownership.test.ts",
         "tests/unit/sse/server-session.test.ts",
         "tests/unit/sse/protocol.test.ts",
-        "tests/contracts/task-definition-conformance.test.ts"
+        "tests/contracts/task-definition-conformance.test.ts",
+        "tests/golden-journey/journeys/freeform-resources.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/task-submit-compensation-guard.mjs",
@@ -420,7 +428,8 @@
         "tests/integration/task/project-agent-thread-clear-race.integration.test.ts",
         "tests/integration/task/plan-run-removal-migration.integration.test.ts",
         "tests/unit/project-agent/execution-segment.test.ts",
-        "tests/golden-journey/journeys/mainline-complete.spec.ts"
+        "tests/golden-journey/journeys/mainline-complete.spec.ts",
+        "tests/golden-journey/journeys/freeform-resources.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-client-agent-control.mjs",

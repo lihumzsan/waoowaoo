@@ -407,7 +407,7 @@ export async function createProjectAgentUserTurnRun(params: ProjectAgentRunScope
         AND userId = ${params.userId}
         AND assistantId = ${assistantId}
         AND scopeRef = ${scopeRef}
-        AND status IN ('awaiting_approval', 'awaiting_choice', 'awaiting_task')
+        AND status IN ('awaiting_approval', 'awaiting_choice')
       ORDER BY createdAt ASC
       FOR UPDATE
     `)
@@ -769,7 +769,7 @@ export async function touchProjectAgentRunHeartbeat(params: {
 }
 
 export async function findFreshRunningProjectAgentRunForScope(
-  scope: ProjectAgentRunScope,
+  scope: ProjectAgentRunScope & { excludeRunId?: string | null },
   now: Date = new Date(),
 ): Promise<ProjectAgentRunRecord | null> {
   const { assistantId, scopeRef } = buildRunScope(scope)
@@ -780,6 +780,7 @@ export async function findFreshRunningProjectAgentRunForScope(
       assistantId,
       scopeRef,
       status: 'running',
+      ...(scope.excludeRunId ? { id: { not: scope.excludeRunId } } : {}),
       heartbeatAt: {
         gte: staleHeartbeatCutoff(now),
       },
@@ -791,7 +792,7 @@ export async function findFreshRunningProjectAgentRunForScope(
 }
 
 export async function cancelStaleRunningProjectAgentRunsForScope(
-  scope: ProjectAgentRunScope,
+  scope: ProjectAgentRunScope & { excludeRunId?: string | null },
   now: Date = new Date(),
 ): Promise<string[]> {
   const { assistantId, scopeRef } = buildRunScope(scope)
@@ -802,6 +803,7 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
       assistantId,
       scopeRef,
       status: 'running',
+      ...(scope.excludeRunId ? { id: { not: scope.excludeRunId } } : {}),
       OR: [
         { heartbeatAt: null },
         {
@@ -824,7 +826,7 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
       episodeId: scope.episodeId ?? null,
       assistantId,
     })
-    if (!recovered) {
+    if (!recovered || recovered === 'task_batch') {
       await updateProjectAgentRunStatus({
         runFence: createProjectAgentRunFence(run),
         status: 'cancelled',
@@ -845,15 +847,35 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
         },
       })
     })
-    return recovered ? null : run.id
+    return recovered && recovered !== 'task_batch' ? null : run.id
   }))
   return settled.filter((runId): runId is string => runId !== null)
 }
 
-export async function ensureProjectAgentRunSlotAvailable(scope: ProjectAgentRunScope): Promise<void> {
+export async function ensureProjectAgentRunSlotAvailable(
+  scope: ProjectAgentRunScope & { excludeRunId?: string | null },
+): Promise<void> {
   await cancelStaleRunningProjectAgentRunsForScope(scope)
   const freshRun = await findFreshRunningProjectAgentRunForScope(scope)
   if (freshRun) {
     throw new Error('PROJECT_AGENT_RUN_ACTIVE')
   }
+}
+
+export async function hasPendingProjectAgentDecisionRunForScope(
+  scope: ProjectAgentRunScope & { excludeRunId?: string | null },
+): Promise<boolean> {
+  const { assistantId, scopeRef } = buildRunScope(scope)
+  const run = await prisma.projectAgentRun.findFirst({
+    where: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId,
+      scopeRef,
+      status: { in: ['awaiting_approval', 'awaiting_choice'] },
+      ...(scope.excludeRunId ? { id: { not: scope.excludeRunId } } : {}),
+    },
+    select: { id: true },
+  })
+  return Boolean(run)
 }

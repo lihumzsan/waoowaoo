@@ -14,7 +14,9 @@ import {
 import type { ProjectAgentContinueWaitCommand } from '@/lib/outbox/types'
 import { OutboxPermanentError } from '@/lib/outbox/types'
 import {
+  ensureProjectAgentRunSlotAvailable,
   getProjectAgentRun,
+  hasPendingProjectAgentDecisionRunForScope,
   type ProjectAgentRunRecord,
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
@@ -32,6 +34,13 @@ import {
 import { loadProjectAssistantThread } from './persistence'
 
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
+
+export class ProjectAgentContinuationDeferredError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProjectAgentContinuationDeferredError'
+  }
+}
 
 function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessage {
   return {
@@ -162,13 +171,42 @@ async function runClaimedFollowUp(params: {
   }
   const continuationRunId = run.id
 
+  if (await hasPendingProjectAgentDecisionRunForScope({
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+    excludeRunId: run.id,
+  })) {
+    throw new ProjectAgentContinuationDeferredError(`PROJECT_AGENT_CONTINUATION_DECISION_PENDING:${run.id}`)
+  }
+
+  // Redis serializes live writers, but a disconnected foreground stream may
+  // release its lease before its durable Run is settled. The database Run slot
+  // remains the authority: a continuation may exclude only its own background
+  // Run and must defer behind every other fresh foreground model loop.
+  try {
+    await ensureProjectAgentRunSlotAvailable({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      excludeRunId: run.id,
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROJECT_AGENT_RUN_ACTIVE') {
+      throw new ProjectAgentContinuationDeferredError(error.message)
+    }
+    throw error
+  }
+
   const runLock = await acquireProjectAgentRunLock({
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.episodeId,
     runId: run.id,
   })
-    if (!runLock) throw new Error(`PROJECT_AGENT_CONTINUATION_RUN_LOCK_BUSY:${run.id}`)
+  if (!runLock) {
+    throw new ProjectAgentContinuationDeferredError(`PROJECT_AGENT_CONTINUATION_RUN_LOCK_BUSY:${run.id}`)
+  }
 
   let lock: ProjectAgentRunLock | null = runLock
   try {

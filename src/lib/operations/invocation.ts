@@ -386,11 +386,11 @@ export async function invokeProjectAgentOperation(params: {
         operationId: operation.id,
       })
     : null
-  const taskSuspension = params.context.taskBatchBinding?.getCommittedSuspension() ?? null
+  const taskSubmission = params.context.taskBatchBinding?.getCommittedReceipt() ?? null
   const outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }> = choiceHandoff
     ? { kind: 'wait_choice', data: parsedOutputData, choiceHandoff }
-    : taskSuspension
-      ? { kind: 'submitted_tasks', data: parsedOutputData, suspension: taskSuspension }
+    : taskSubmission
+      ? { kind: 'submitted_tasks', data: parsedOutputData, receipt: taskSubmission }
       : params.channel === 'tool' && operationMayCompleteWithoutTasks(operation)
         ? { kind: 'noop', data: parsedOutputData }
         : { kind: 'completed', data: parsedOutputData }

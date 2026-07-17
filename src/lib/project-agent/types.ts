@@ -36,7 +36,8 @@ export interface ProjectAgentContext {
   choiceDecision?: EditFirstChoiceDecision | null
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
-  approvedInvocationByOperationId?: Record<string, PlannedOperationInvocation>
+  /** Exact approved invocation keyed by the SDK tool-call identity. */
+  approvedInvocationByToolCallId?: Record<string, PlannedOperationInvocation>
 }
 
 export interface ProjectAgentRunPartData {
@@ -74,18 +75,6 @@ export interface ProjectPhasePartData {
 }
 
 export type ProjectAgentStopPartData =
-  | {
-    reason: 'awaiting_external_task'
-    stepCount: number
-    operationIds: string[]
-    taskIds: string[]
-    phases: string[]
-    taskWaits: Array<{
-      operationId: string
-      taskIds: string[]
-      phases: string[]
-    }>
-  }
   | {
     reason: 'awaiting_user_confirmation'
     stepCount: number

@@ -134,7 +134,7 @@ async function readUniqueActiveProjectAgentRun(
       userId: input.userId,
       assistantId: input.assistantId,
       scopeRef,
-      status: { in: ['running', 'awaiting_approval', 'awaiting_choice', 'awaiting_task'] },
+      status: { in: ['running', 'awaiting_approval', 'awaiting_choice'] },
     },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -160,7 +160,7 @@ async function readUniqueActiveProjectAgentRun(
 }
 
 function isOpenSessionWait(wait: ProjectAgentSessionWait): boolean {
-  return wait.status === 'pending' || wait.status === 'claimed'
+  return wait.status === 'collecting' || wait.status === 'pending' || wait.status === 'claimed'
 }
 
 const SESSION_FACT_RUN_MISMATCH_CODES = {
@@ -183,13 +183,15 @@ async function readOpenProjectAgentSessionFacts(
     episodeId: input.episodeId ?? null,
   })
   return await prisma.$queryRaw<ProjectAgentSessionOpenFact[]>(Prisma.sql`
-    SELECT 'WAIT' AS kind, id, runId
-    FROM project_agent_waits
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${input.assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status IN ('pending', 'claimed')
+    SELECT 'WAIT' AS kind, agent_wait.id, agent_wait.runId
+    FROM project_agent_waits agent_wait
+    INNER JOIN project_agent_runs agent_run ON agent_run.id = agent_wait.runId
+    WHERE agent_wait.projectId = ${input.projectId}
+      AND agent_wait.userId = ${input.userId}
+      AND agent_wait.assistantId = ${input.assistantId}
+      AND agent_wait.scopeRef = ${scopeRef}
+      AND agent_wait.status IN ('collecting', 'pending', 'claimed')
+      AND agent_run.status <> 'awaiting_task'
     UNION ALL
     SELECT 'INTERRUPTION' AS kind, id, runId
     FROM project_agent_interruptions
@@ -199,13 +201,15 @@ async function readOpenProjectAgentSessionFacts(
       AND scopeRef = ${scopeRef}
       AND status = 'pending'
     UNION ALL
-    SELECT 'ACTIVITY' AS kind, id, runId
-    FROM project_agent_activities
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${input.assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status IN ('running', 'waiting')
+    SELECT 'ACTIVITY' AS kind, activity.id, activity.runId
+    FROM project_agent_activities activity
+    INNER JOIN project_agent_runs agent_run ON agent_run.id = activity.runId
+    WHERE activity.projectId = ${input.projectId}
+      AND activity.userId = ${input.userId}
+      AND activity.assistantId = ${input.assistantId}
+      AND activity.scopeRef = ${scopeRef}
+      AND activity.status IN ('running', 'waiting')
+      AND agent_run.status <> 'awaiting_task'
   `)
 }
 
@@ -351,7 +355,7 @@ async function listActiveTasksForWaits(params: {
   waits: readonly ProjectAgentSessionWait[]
 }): Promise<ProjectAgentSessionTask[]> {
   const taskIds = Array.from(new Set(params.waits
-    .filter((wait) => wait.status === 'pending')
+    .filter((wait) => wait.status === 'collecting' || wait.status === 'pending')
     .flatMap((wait) => wait.taskIds)))
   if (taskIds.length === 0) return []
   const tasks = await prisma.task.findMany({
@@ -407,14 +411,13 @@ async function buildProjectAgentSessionState(
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       assistantId,
-      limit: 1,
+      limit: 10,
     }),
     listProjectAgentSessionWaits({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       assistantId,
-      limit: 10,
     }),
     getPendingProjectAgentInterruptionForScope({
       projectId: input.projectId,
@@ -430,7 +433,10 @@ async function buildProjectAgentSessionState(
       locale: input.locale,
     }),
   ])
-  const run = resolveCurrentRun({ activeRuns: activeRun ? [activeRun] : [], recentRuns })
+  const run = resolveCurrentRun({
+    activeRuns: activeRun ? [activeRun] : [],
+    recentRuns: recentRuns.filter((candidate) => candidate.status !== 'awaiting_task'),
+  })
   const currentActivity = await getCurrentProjectAgentActivity({
     projectId: input.projectId,
     userId: input.userId,
@@ -438,9 +444,10 @@ async function buildProjectAgentSessionState(
     assistantId,
     ...(run ? { runId: run.id } : {}),
   })
+  const foregroundWaits = run ? waits.filter((wait) => wait.runId === run.id) : []
   const facts = resolveRunOwnedSessionFacts({
     run,
-    waits,
+    waits: foregroundWaits,
     interruption: pendingInterruption,
     activity: currentActivity,
     openFacts,
@@ -454,7 +461,7 @@ async function buildProjectAgentSessionState(
     listActiveTasksForWaits({
       projectId: input.projectId,
       userId: input.userId,
-      waits: facts.waits,
+      waits,
     }),
   ])
   const currentRun: ProjectAgentSessionRun | null = run
@@ -470,7 +477,7 @@ async function buildProjectAgentSessionState(
     currentRun,
     currentActivity: facts.activity,
     pendingInteraction,
-    activeWaits: facts.waits,
+    activeWaits: waits,
     activeTasks,
     editFirstWorkflow: workflow,
   }

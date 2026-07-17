@@ -91,20 +91,12 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     }
     const agentFlow = op.agentFlow as
       | {
-          onTaskComplete?: unknown
           suspendsFor?: unknown
         }
       | undefined
     if (agentFlow !== undefined) {
       if (!agentFlow || typeof agentFlow !== 'object' || Array.isArray(agentFlow)) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INVALID:${operationId}`)
-      }
-      if (
-        agentFlow.onTaskComplete !== undefined &&
-        agentFlow.onTaskComplete !== 'resume_agent' &&
-        agentFlow.onTaskComplete !== 'complete'
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
       }
       if (
         agentFlow.suspendsFor !== undefined &&
@@ -134,7 +126,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         || effects.writes !== false
         || confirmation.kind !== 'none'
         || confirmation.required !== false
-        || agentFlow.onTaskComplete !== undefined
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_LIFECYCLE_CONTRACT_INVALID:${operationId}`)
       }

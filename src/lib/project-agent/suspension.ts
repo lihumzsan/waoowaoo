@@ -1,13 +1,12 @@
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import type { ProjectAgentChoiceCardPartData } from './types'
-import type { ProjectAgentWaitFollowUpMode } from './waits'
 
 /**
  * A suspension is a durable handoff from one Assistant execution segment to
  * an external responder. It is intentionally a protocol kind, never an
  * operation id or a UI rendering hint.
  */
-export type ProjectAgentSuspensionKind = 'choice' | 'approval' | 'task'
+export type ProjectAgentSuspensionKind = 'choice' | 'approval'
 
 interface ProjectAgentSuspensionReceiptBase {
   kind: ProjectAgentSuspensionKind
@@ -32,17 +31,9 @@ export interface ProjectAgentApprovalSuspensionReceipt extends ProjectAgentSuspe
   toolCallId: string | null
 }
 
-export interface ProjectAgentTaskSuspensionReceipt extends ProjectAgentSuspensionReceiptBase {
-  kind: 'task'
-  waitId: string
-  taskIds: readonly string[]
-  followUpMode: ProjectAgentWaitFollowUpMode
-}
-
 export type ProjectAgentSuspensionReceipt =
   | ProjectAgentChoiceSuspensionReceipt
   | ProjectAgentApprovalSuspensionReceipt
-  | ProjectAgentTaskSuspensionReceipt
 
 export function assertProjectAgentSuspensionReceipt(params: {
   receipt: ProjectAgentSuspensionReceipt
@@ -83,12 +74,6 @@ export function isSameProjectAgentSuspensionReceipt(
     return left.interruptionId === right.interruptionId
       && left.approvalId === right.approvalId
       && left.toolCallId === right.toolCallId
-  }
-  if (left.kind === 'task' && right.kind === 'task') {
-    return left.waitId === right.waitId
-      && left.followUpMode === right.followUpMode
-      && left.taskIds.length === right.taskIds.length
-      && left.taskIds.every((taskId, index) => taskId === right.taskIds[index])
   }
   return false
 }

@@ -722,9 +722,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         kind: 'none',
         required: false,
       },
-      agentFlow: {
-        onTaskComplete: 'resume_agent',
-      },
       toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
       outputSchema: editStylePreviewOptionsTaskSubmitOutputSchema,
@@ -829,9 +826,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         kind: 'billable_media',
         required: true,
         summary: '将为已生成的视觉风格方案生成候选图片并产生媒体费用。批准后只执行当前报价中的图片任务。',
-      },
-      agentFlow: {
-        onTaskComplete: 'resume_agent',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewImagesInputSchema,

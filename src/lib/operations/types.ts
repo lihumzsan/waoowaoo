@@ -6,7 +6,6 @@ import type { OperationPlan } from './planning'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
 import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
-import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
 import type { CreativeResourceOperationContract } from '@/lib/creative-resource/contracts'
@@ -35,17 +34,30 @@ export interface ProjectAgentOperationTaskBatchBinding {
   bindInTransaction(
     transaction: Prisma.TransactionClient,
     batch: { operationId: string; taskIds: readonly string[] },
-  ): Promise<ProjectAgentTaskSuspensionReceipt | null>
+  ): Promise<ProjectAgentTaskSubmissionReceipt | null>
   isBound(): boolean
   markCommitted(): void
   isCommitted(): boolean
-  getCommittedSuspension(): ProjectAgentTaskSuspensionReceipt | null
+  getCommittedReceipt(): ProjectAgentTaskSubmissionReceipt | null
+}
+
+/**
+ * Durable Task submission identity returned to the Agent without suspending
+ * the foreground model loop. The background Run/Wait pair owns completion.
+ */
+export interface ProjectAgentTaskSubmissionReceipt {
+  kind: 'task_submission'
+  batchId: string
+  backgroundRunId: string
+  waitId: string
+  operationId: string
+  taskIds: readonly string[]
 }
 
 export type ProjectAgentOperationOutcome =
   | { kind: 'completed'; data: unknown }
   | { kind: 'noop'; data: unknown }
-  | { kind: 'submitted_tasks'; data: unknown; suspension: ProjectAgentTaskSuspensionReceipt }
+  | { kind: 'submitted_tasks'; data: unknown; receipt: ProjectAgentTaskSubmissionReceipt }
   | { kind: 'wait_choice'; data: unknown; choiceHandoff: ProjectAgentChoiceHandoffReceipt }
   | { kind: 'wait_approval' }
   | { kind: 'failed'; error: ProjectAgentToolError }
@@ -137,16 +149,8 @@ export interface OperationConfirmation {
   } | null
 }
 
-/**
- * Agent continuation semantics for this operation, declared next to the
- * operation itself so runtime never special-cases operation ids.
- * onTaskComplete controls what happens when all async tasks submitted by this
- * operation complete successfully:
- * - resume_agent (default): wake the agent with a follow-up turn.
- * Failed tasks always resume the agent so it can report and recover.
- */
+/** Operation-declared user-interaction semantics. */
 export interface OperationAgentFlow {
-  onTaskComplete?: 'resume_agent' | 'complete'
   /**
    * A tool-owned, durable suspension protocol. Approval is created by the
    * Agents SDK approval boundary, while Choice is declared by the operation
