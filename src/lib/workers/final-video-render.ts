@@ -83,6 +83,27 @@ export async function probeDurationSeconds(filePath: string): Promise<number> {
   return duration
 }
 
+export async function probeVideoDimensions(filePath: string): Promise<{ readonly width: number; readonly height: number }> {
+  const result = await runFfmpegCommand('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=width,height',
+    '-of',
+    'csv=p=0:s=x',
+    filePath,
+  ], { stage: 'video_probe_dimensions' })
+  const [rawWidth, rawHeight] = result.stdout.trim().split('x')
+  const width = Number.parseInt(rawWidth ?? '', 10)
+  const height = Number.parseInt(rawHeight ?? '', 10)
+  if (!Number.isSafeInteger(width) || width <= 0 || !Number.isSafeInteger(height) || height <= 0) {
+    throw new Error('VIDEO_PROBE_DIMENSIONS_FAILED')
+  }
+  return { width, height }
+}
+
 function escapeConcatPath(filePath: string): string {
   return filePath.replace(/'/g, "'\\''")
 }

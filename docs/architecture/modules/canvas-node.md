@@ -20,7 +20,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
 - **CN-06 — 视频节点只有 Segment。** Canvas 不存在 Storyboard、Panel Image、Shot Image、VideoGroup 或单镜头/连续/全能参考模式分支。每个 `videoPlan` 节点只投影一个 `ProjectVideoSegment`，展示时长、所属镜头、continuity 和成品视频；其收费 action 必须原样携带该节点的 `chapterId + editScriptId + segmentId`，报价与执行不得退化为 episode 批量 scope。
 - **CN-07 — 镜头执行节点只展示三项决策。** 只有景别、运镜方式与运镜稳定性。机位、焦段、构图、灯光、blocking、站位、物体与空间档案不得投影。
-- **CN-08 — 同步与异步写入都精确交接 Query。** Task Terminal 与同步 Operation 只通过注册的 `affectedResources` 发布可 replay 事实；客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
+- **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 Binding role 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputRevisionId → outputRevisionId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。
 
@@ -54,6 +54,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - Segment 收敛后，Canvas 每张视频卡曾复用无目标的 episode 级 action，导致全部卡片得到同一总价，单卡点击也真实提交全部 Segment；本地 `submittingNodeIds` 只标记点击卡片，无法纠正服务端批量事实。当前 projection 从同一卡片 View 构造精确 scope，计费 request 的 cache identity 包含该 scope，服务端 planner 决定唯一 Task 集合。
 - Workflow 曾同时裁决节点可见性与 Operation 可用性，Canvas 还维护独立 stage rank；新增 `render_chapters` 时漏接一个分支就隐藏真实产物。当前 projector 只读取领域/Resource/Task/stream 事实，主链 View 只提供 recommendation，不参与 materialization、action policy 或 edge。
 - Canvas 收费按钮曾在依赖资源尚未完成时缓存 plan preflight 的 `NOT_READY`；Task 终态虽然通过显式 `affectedResources` 刷新了正式领域 Query，却没有让由这些资源派生的 operation plan preview 失效，执行计划已 `ready` 后按钮仍保持旧错误。当前统一资源变更同步会按 project 同时 invalidate 全部 plan preview；服务端 plan/execute 的内容重验证仍是审批正确性的唯一裁判，客户端失效只负责展示最新报价 View。
+- Resource 提交曾只显示 Assistant 回执，Canvas 要等媒体终态才看见节点和 prompt；专业源剧本 origin 匹配错误又生成 raw JSON 重复卡，规划 projector 还会凭来源种类创建空制作规划和主链假连线。当前 pending Resource 提交事务立即触发正式 Query，renderer 从冻结 Task payload 展示 prompt；专业 origin 只匹配真实专业 identity，所有非 Lineage 连线已删除。
 - Workflow action gating 删除后，Video Segment 卡片曾在资产审核或镜头执行计划尚未完成时就预取付费 plan，并在同输入视频完成后继续展示实际不可执行的“重新生成”；前者制造预期中的 500，后者与 planner 的幂等 `skip_completed` 冲突。当前专业卡片只用自身显式领域事实判断这一条内在 action 是否具备输入：资产已批准、执行计划 `ready`、没有 active Task 且没有同输入成品；这不影响 Agent registry 中 Operation 全量开放，新的自由变体由显式新输入或通用 `create_video` 表达。
 
 ## 修改检查表

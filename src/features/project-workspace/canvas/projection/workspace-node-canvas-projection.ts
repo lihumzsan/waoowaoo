@@ -10,9 +10,9 @@ export type { BuildWorkspaceNodeCanvasProjectionInput } from './workspace-node-p
 
 export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
   const context = createWorkspaceNodeProjectionContext(input)
-  const planning = appendWorkspacePlanningProjection(context)
-  const assetExecution = appendWorkspaceAssetExecutionProjection(context, planning)
-  const videoSegments = appendWorkspaceVideoSegmentProjection(context, planning, assetExecution)
+  appendWorkspacePlanningProjection(context)
+  appendWorkspaceAssetExecutionProjection(context)
+  const videoSegments = appendWorkspaceVideoSegmentProjection(context)
   appendWorkspaceAudioFinalProjection(context, videoSegments)
   appendWorkspaceResourceProjection(context)
   return { nodes: context.nodes, edges: context.edges }

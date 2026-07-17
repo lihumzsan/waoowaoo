@@ -1,7 +1,5 @@
 import type { ProjectEditScript, ProjectVideoSegment } from '@/types/project'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
-import type { WorkspacePlanningProjection } from './workspace-node-planning-projection'
-import type { WorkspaceAssetExecutionProjection } from './workspace-node-asset-execution-projection'
 import {
   SHOT_GRID_GAP_X,
   SHOT_GRID_START_X,
@@ -10,7 +8,6 @@ import {
   VIDEO_PLAN_GRID_COLUMNS,
   VIDEO_PLAN_GRID_GAP_Y,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
-  createEdge,
   createMediaNode,
   layoutPosition,
   maxNodeBottomY,
@@ -41,8 +38,6 @@ function outputAspectRatio(segment: ProjectVideoSegment | null): number | null {
 
 export function appendWorkspaceVideoSegmentProjection(
   context: WorkspaceNodeProjectionContext,
-  planning: WorkspacePlanningProjection,
-  assetExecution: WorkspaceAssetExecutionProjection,
 ): WorkspaceVideoSegmentProjection {
   const {
     projectId,
@@ -52,13 +47,10 @@ export function appendWorkspaceVideoSegmentProjection(
     translate,
     onAction,
     nodes,
-    edges,
     projectedEditScripts,
     editShotExecutionPlans,
     stylePreviewImageUrl,
   } = context
-  const { editScriptNodeId, editScriptNodeIdsByScriptId } = planning
-  const { executionNodeId, executionNodeIdsByEditScriptId } = assetExecution
   const segmentByIdentity = new Map(videoSegments.map((segment) => [
     `${segment.editScriptId}:${segment.segmentId}`,
     segment,
@@ -153,11 +145,6 @@ export function appendWorkspaceVideoSegmentProjection(
         onAction,
       },
     }))
-    const sourceNodeId = executionNodeIdsByEditScriptId.get(script.id)
-      ?? editScriptNodeIdsByScriptId.get(script.id)
-      ?? executionNodeId
-      ?? editScriptNodeId
-    if (sourceNodeId) edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
   })
 
   const bottom = maxNodeBottomY(nodes, 'videoPlan') ?? startY

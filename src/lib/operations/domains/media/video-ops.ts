@@ -58,7 +58,7 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
       execute: async (ctx, input) => {
         const segments = await loadVideoSegments({
           projectId: ctx.projectId,
-          episodeId: normalizeString(input.episodeId) || null,
+          episodeId: normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId) || null,
         })
         if (segments.length === 0) throw new ApiError('NOT_FOUND')
 
@@ -122,7 +122,7 @@ export function createVideoOperations(): ProjectAgentOperationRegistryDraft {
       execute: async (ctx, input) => {
         const segments = await loadVideoSegments({
           projectId: ctx.projectId,
-          episodeId: normalizeString(input.episodeId) || null,
+          episodeId: normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId) || null,
         })
         if (segments.length === 0) throw new ApiError('NOT_FOUND')
 

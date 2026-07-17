@@ -23,7 +23,7 @@ export type ImageTaskHandlerKey =
   | 'asset_hub_image'
   | 'asset_hub_modify'
 
-export type VideoTaskHandlerKey = 'creative_resource_video' | 'video_segment' | 'final_video_render' | 'chapter_render'
+export type VideoTaskHandlerKey = 'creative_resource_video' | 'creative_resource_video_merge' | 'video_segment' | 'final_video_render' | 'chapter_render'
 export type MusicTaskHandlerKey = 'creative_resource_audio' | 'music_generate' | 'music_score_generate'
 export type TextTaskHandlerKey =
   | 'bgm_design_plan'
@@ -93,6 +93,7 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE]: definition('text', 'edit_style_preview_options_generate', 'text', 3, 'edit_style_preview', 'none', 'none', 'none'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: definition('image', 'edit_style_preview', 'image', 3, 'edit_style_preview', 'edit_style_preview', 'edit_style_preview', 'none', 'domain_creative_resource'),
   [TASK_TYPE.IMAGE_CHARACTER]: definition('image', 'image_character', 'image', 3, 'project_assets', 'none', 'none', 'none', 'domain_creative_resource'),

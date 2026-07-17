@@ -62,6 +62,7 @@ export type CreativeResourceGenerationTaskPayload = z.infer<
 const creativeResourceGenerationTaskEnvelopeSchema = creativeResourceGenerationTaskPayloadSchema.extend({
   ui: z.record(z.string(), z.unknown()).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
+  externalId: z.string().trim().min(1).optional(),
   flowId: z.string().optional(),
   flowStageIndex: z.number().optional(),
   flowStageTotal: z.number().optional(),

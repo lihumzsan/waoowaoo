@@ -51,6 +51,7 @@ import type {
 import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
+import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
 const commonReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
@@ -797,6 +798,17 @@ async function commitMediaGeneration(
     })
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: config.operationId })
+  await createWorkspaceResourceBroadcastsInTransaction({
+    tx: authorization.transaction,
+    invocationId: authorization.operationExecutionId,
+    affectedResources: [{
+      kind: 'creativeResources',
+      projectId: ctx.projectId,
+      episodeId: metadata.episodeId,
+    }],
+    userId: ctx.userId,
+    operationId: config.operationId,
+  })
   const results = plan.tasks.map((task) => {
     const result = submitted.get(task.id)
     if (!result) throw new Error(`CREATIVE_RESOURCE_TASK_RESULT_MISSING:${task.id}`)

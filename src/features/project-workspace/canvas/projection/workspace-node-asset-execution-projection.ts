@@ -1,7 +1,6 @@
 import type { ProjectEditScript, ProjectEditShotExecutionPlan } from '@/types/project'
 import type { WorkspaceCanvasEditPipelineStepItem } from '../node-canvas-types'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
-import type { WorkspacePlanningProjection } from './workspace-node-planning-projection'
 import {
   ASSET_GROUP_Y_OFFSET,
   COLUMN_GAP_X,
@@ -11,7 +10,6 @@ import {
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
   assetPreviewUrl,
-  createEdge,
   createMediaNode,
   createNode,
   layoutPosition,
@@ -27,11 +25,6 @@ import {
 } from './workspace-node-projection-shared'
 
 type Translate = WorkspaceNodeProjectionContext['translate']
-
-export interface WorkspaceAssetExecutionProjection {
-  readonly executionNodeId: string | null
-  readonly executionNodeIdsByEditScriptId: ReadonlyMap<string, string>
-}
 
 function planningEntityNameSet(value: unknown, key: 'characters' | 'locations'): ReadonlySet<string> {
   const record = readJsonRecord(value)
@@ -65,8 +58,7 @@ function executionItems(plan: ProjectEditShotExecutionPlan, editScript: ProjectE
 
 export function appendWorkspaceAssetExecutionProjection(
   context: WorkspaceNodeProjectionContext,
-  planning: WorkspacePlanningProjection,
-): WorkspaceAssetExecutionProjection {
+): void {
   const {
     projectId,
     episodeId,
@@ -83,14 +75,10 @@ export function appendWorkspaceAssetExecutionProjection(
     translate,
     onAction,
     nodes,
-    edges,
     projectedEditScripts,
     chapterIndexById,
     stylePreviewImageUrl,
   } = context
-  const { bibleNodeId, editScriptNodeIdsByScriptId } = planning
-
-  let assetGroupNodeId: string | null = null
   const assetGroupScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
   const allAssetRequirements = assetGroupScripts.flatMap((script) => script.requirements.map((requirement) => ({ script, requirement })))
   const requirementByAssetId = new Map<string, (typeof allAssetRequirements)[number]>()
@@ -171,7 +159,6 @@ export function appendWorkspaceAssetExecutionProjection(
   const displayedAssets = plannedAssets.length > 0 ? plannedAssets : [...fallbackAssetsByIdentity.values()]
   if (displayedAssets.length > 0) {
     const nodeId = workspaceNodeId.editAssetGroup(episodeId)
-    assetGroupNodeId = nodeId
     const primaryScript = editScript ?? assetGroupScripts[0] ?? null
     const characterRequirements = displayedAssets.filter((asset) => asset.kind === 'character').length
     const locationRequirements = displayedAssets.filter((asset) => asset.kind === 'location').length
@@ -254,14 +241,8 @@ export function appendWorkspaceAssetExecutionProjection(
         },
       }),
     )
-    const sourceNodeId = primaryScript ? workspaceNodeId.editScript(episodeId, primaryScript.chapterId ?? null) : bibleNodeId
-    if (sourceNodeId) {
-      edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
-    }
   }
 
-  let executionNodeId: string | null = null
-  const executionNodeIdsByEditScriptId = new Map<string, string>()
   const executionPlanByEditScriptId = new Map(editShotExecutionPlans.map((plan) => [plan.editScriptId, plan] as const))
   const streamedExecutionPlanTargetIds = new Set(
     streamTargets.filter((target) => target.streamKind === 'editShotExecutionPlan').map((target) => target.targetId),
@@ -280,8 +261,6 @@ export function appendWorkspaceAssetExecutionProjection(
       ? (resourcePresentationFromStatus(matchingExecutionPlan.status) ?? workspaceCanvasPendingResourcePresentation())
       : null
     const nodeId = workspaceNodeId.editShotExecutionPlan(script.id)
-    executionNodeIdsByEditScriptId.set(script.id, nodeId)
-    if (editScript?.id === script.id || executionNodeId === null) executionNodeId = nodeId
     const chapterIndex = script.chapterId ? chapterIndexById.get(script.chapterId) : undefined
     nodes.push(
       createNode({
@@ -325,11 +304,6 @@ export function appendWorkspaceAssetExecutionProjection(
         },
       }),
     )
-    const sourceNodeId = assetGroupNodeId ?? editScriptNodeIdsByScriptId.get(script.id) ?? null
-    if (sourceNodeId) {
-      edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
-    }
   })
 
-  return { executionNodeId, executionNodeIdsByEditScriptId }
 }

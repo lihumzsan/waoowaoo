@@ -6,6 +6,7 @@ import type {
   CreativeResourceInputRef,
   CreativeResourceJsonValue,
   CreativeResourceMediaType,
+  CreativeResourcePendingGeneration,
   CreativeResourceRevisionContent,
   CreativeResourceRevisionView,
   CreativeResourceScopeRef,
@@ -13,9 +14,12 @@ import type {
   CreativeResourceView,
 } from './contracts'
 import { isCreativeResourceMediaType, isCreativeResourceScopeKind, isCreativeResourceStatus } from './contracts'
+import { parseCreativeResourceGenerationTaskPayload, toCreativeResourceJsonValue } from './generation-contract'
+import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
 import { getCreativeResourceSchema } from './schema-registry'
 
-type CreativeResourceReadClient = Pick<Prisma.TransactionClient, 'creativeResource'> | typeof prisma
+type CreativeResourceReadClient = Pick<Prisma.TransactionClient, 'creativeResource' | 'task'> | typeof prisma
 
 const resourceInclude = {
   headRevision: {
@@ -143,7 +147,10 @@ function bindingView(row: ResourceRow['bindings'][number], scope: CreativeResour
   }
 }
 
-export function projectCreativeResourceView(row: ResourceRow): CreativeResourceView {
+export function projectCreativeResourceView(
+  row: ResourceRow,
+  pendingGeneration: CreativeResourcePendingGeneration | null = null,
+): CreativeResourceView {
   const scope = scopeFromRow(row)
   return {
     resourceId: row.id,
@@ -158,6 +165,7 @@ export function projectCreativeResourceView(row: ResourceRow): CreativeResourceV
     candidateSetId: row.candidateSetId,
     candidateIndex: row.candidateIndex,
     headRevision: row.headRevision ? revisionView(row.headRevision) : null,
+    pendingGeneration,
     bindings: row.bindings.map((binding) => bindingView(binding, scope)),
     error: row.errorCode || row.errorMessage
       ? { code: row.errorCode, message: row.errorMessage ?? row.errorCode ?? '' }
@@ -167,8 +175,11 @@ export function projectCreativeResourceView(row: ResourceRow): CreativeResourceV
   }
 }
 
-export function projectCreativeResourceCardView(row: ResourceRow): CreativeResourceCardView {
-  const resource = projectCreativeResourceView(row)
+export function projectCreativeResourceCardView(
+  row: ResourceRow,
+  pendingGeneration: CreativeResourcePendingGeneration | null = null,
+): CreativeResourceCardView {
+  const resource = projectCreativeResourceView(row, pendingGeneration)
   const schema = getCreativeResourceSchema(resource.schemaId)
   return {
     resource,
@@ -178,6 +189,46 @@ export function projectCreativeResourceCardView(row: ResourceRow): CreativeResou
       fallbackMediaType: resource.mediaType,
     },
   }
+}
+
+async function loadPendingGenerations(
+  client: CreativeResourceReadClient,
+  resourceIds: readonly string[],
+): Promise<ReadonlyMap<string, CreativeResourcePendingGeneration>> {
+  if (resourceIds.length === 0) return new Map()
+  const tasks = await client.task.findMany({
+    where: {
+      targetType: 'CreativeResource',
+      targetId: { in: [...resourceIds] },
+      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+      type: { in: [
+        TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+        TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+        TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
+      ] },
+    },
+    select: { id: true, type: true, targetId: true, operationId: true, payload: true },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  })
+  const pendingByResourceId = new Map<string, CreativeResourcePendingGeneration>()
+  for (const task of tasks) {
+    if (pendingByResourceId.has(task.targetId)) {
+      throw new Error(`CREATIVE_RESOURCE_ACTIVE_TASK_OWNER_AMBIGUOUS:${task.targetId}`)
+    }
+    const payload = task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
+      ? parseCreativeResourceVideoMergeTaskPayload(task.payload)
+      : parseCreativeResourceGenerationTaskPayload(task.payload)
+    pendingByResourceId.set(task.targetId, {
+      taskId: task.id,
+      operationId: task.operationId,
+      prompt: payload.resource.prompt,
+      modelKey: payload.resource.modelKey,
+      generationOptions: toCreativeResourceJsonValue(payload.resource.generationOptions),
+      inputs: payload.resource.inputs,
+    })
+  }
+  return pendingByResourceId
 }
 
 export async function listProjectCreativeResourceCards(input: {
@@ -191,7 +242,8 @@ export async function listProjectCreativeResourceCards(input: {
   readonly client?: CreativeResourceReadClient
 }): Promise<CreativeResourceCardView[]> {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 200))
-  const rows = await (input.client ?? prisma).creativeResource.findMany({
+  const client = input.client ?? prisma
+  const rows = await client.creativeResource.findMany({
     where: {
       projectId: input.projectId,
       userId: input.userId,
@@ -204,7 +256,8 @@ export async function listProjectCreativeResourceCards(input: {
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     take: limit,
   })
-  const views = rows.map(projectCreativeResourceCardView)
+  const pending = await loadPendingGenerations(client, rows.map((row) => row.id))
+  const views = rows.map((row) => projectCreativeResourceCardView(row, pending.get(row.id) ?? null))
   const byCandidateSet = new Map<string, CreativeResourceView[]>()
   for (const view of views) {
     const candidateSetId = view.resource.candidateSetId
@@ -229,9 +282,12 @@ export async function getProjectCreativeResourceCard(input: {
   readonly resourceId: string
   readonly client?: CreativeResourceReadClient
 }): Promise<CreativeResourceCardView | null> {
-  const row = await (input.client ?? prisma).creativeResource.findFirst({
+  const client = input.client ?? prisma
+  const row = await client.creativeResource.findFirst({
     where: { id: input.resourceId, projectId: input.projectId, userId: input.userId },
     include: resourceInclude,
   })
-  return row ? projectCreativeResourceCardView(row) : null
+  if (!row) return null
+  const pending = await loadPendingGenerations(client, [row.id])
+  return projectCreativeResourceCardView(row, pending.get(row.id) ?? null)
 }

@@ -49,8 +49,18 @@ function professionalTargetKeys(card: CreativeResourceCardView): readonly string
   if (!origin) return []
   const exact = targetKey(origin.sourceType, origin.sourceId)
   switch (origin.sourceType) {
-    case 'ProjectEpisodeSourceDocument':
-      return [exact, targetKey('ProjectEditSourceScript', origin.sourceId), targetKey('editSourceScript', origin.sourceId)]
+    case 'ProjectEpisodeSourceDocument': {
+      const editBibleId = readSnapshotString(card, 'editBibleId')
+      return [
+        exact,
+        ...(editBibleId
+          ? [
+              targetKey('ProjectEditSourceScript', editBibleId),
+              targetKey('editSourceScript', editBibleId),
+            ]
+          : []),
+      ]
+    }
     case 'ProjectEditBible':
       return [exact, targetKey('editBible', origin.sourceId)]
     case 'ProjectEditStylePreview':
@@ -140,7 +150,9 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
         targetId: card.resource.resourceId,
         title: card.resource.name,
         eyebrow: translate('nodes.resourceCard.eyebrow', { type: card.resource.mediaType }),
-        body: card.resource.headRevision?.provenance.prompt ?? translate('nodes.resourceCard.body'),
+        body: card.resource.headRevision?.provenance.prompt
+          ?? card.resource.pendingGeneration?.prompt
+          ?? translate('nodes.resourceCard.body'),
         meta: card.resource.schemaId,
         ...resourcePresentation(card.resource),
         runtimeTargets: groupResources.map((resource) => ({
@@ -150,6 +162,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
             TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
             TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
             TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+            TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
           ],
         })),
         resourceDetails: card,

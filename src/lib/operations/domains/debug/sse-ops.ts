@@ -202,7 +202,7 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const channel = getProjectChannel(ctx.projectId)
         const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
         const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
-        const episodeId = input.episodeId ? input.episodeId.trim() : null
+        const episodeId = input.episodeId?.trim() || ctx.context.episodeId?.trim() || null
         const assistantId = input.assistantId ?? 'workspace-command'
 
         if (

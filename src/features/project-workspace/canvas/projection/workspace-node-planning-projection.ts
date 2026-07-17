@@ -10,7 +10,6 @@ import {
   WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-  createEdge,
   createMediaNode,
   createNode,
   findStreamTarget,
@@ -106,7 +105,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
     translate,
     onAction,
     nodes,
-    edges,
     projectedEditScripts,
     chapterIndexById,
     stylePreviewSetView,
@@ -147,7 +145,7 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
   const bibleStreamAvailable = Boolean(editBibleStreamTarget) || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const bibleProjection = resolveWorkspaceCanvasNodeMaterialization('editBible', activeTaskTargets, {
     identityAvailable: true,
-    resourceAvailable: hasProductionPlanningArtifact || Boolean(editBible?.sourceKind === 'prompt_generated_script'),
+    resourceAvailable: hasProductionPlanningArtifact,
     streamAvailable: bibleStreamAvailable,
     submissionAvailable: editScriptPending,
     targetId: editBible?.id ?? null,
@@ -245,7 +243,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
         },
       }),
     )
-    if (sourceScriptNodeId) edges.push(createEdge(`edge:${sourceScriptNodeId}:${bibleNodeId}`, sourceScriptNodeId, bibleNodeId))
   }
 
   const stylePreviewStartY =
@@ -320,9 +317,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
         },
       }),
     )
-    if (bibleNodeId) {
-      edges.push(createEdge(`edge:${bibleNodeId}:${styleBibleNodeId}`, bibleNodeId, styleBibleNodeId))
-    }
   }
 
   let editScriptNodeId: string | null = null
@@ -397,11 +391,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
             },
           }),
         )
-        if (styleBibleNodeId) {
-          edges.push(createEdge(`edge:${styleBibleNodeId}:${nodeId}`, styleBibleNodeId, nodeId))
-        } else if (bibleNodeId) {
-          edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
-        }
       })
       pendingChapters.forEach((chapter, pendingIndex) => {
         const index = scriptNodes.length + pendingIndex
@@ -432,11 +421,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
             },
           }),
         )
-        if (styleBibleNodeId) {
-          edges.push(createEdge(`edge:${styleBibleNodeId}:${nodeId}`, styleBibleNodeId, nodeId))
-        } else if (bibleNodeId) {
-          edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
-        }
       })
     } else if (pendingChapters.length > 0) {
       pendingChapters.forEach((chapter, index) => {
@@ -468,11 +452,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
             },
           }),
         )
-        if (styleBibleNodeId) {
-          edges.push(createEdge(`edge:${styleBibleNodeId}:${nodeId}`, styleBibleNodeId, nodeId))
-        } else if (bibleNodeId) {
-          edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
-        }
       })
     } else {
       editScriptNodeId = workspaceNodeId.editScript(episodeId, null)
@@ -505,11 +484,6 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
           },
         }),
       )
-      if (styleBibleNodeId) {
-        edges.push(createEdge(`edge:${styleBibleNodeId}:${editScriptNodeId}`, styleBibleNodeId, editScriptNodeId))
-      } else if (bibleNodeId) {
-        edges.push(createEdge(`edge:${bibleNodeId}:${editScriptNodeId}`, bibleNodeId, editScriptNodeId))
-      }
     }
   }
 

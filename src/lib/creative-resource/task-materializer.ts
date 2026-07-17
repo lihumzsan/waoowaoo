@@ -12,6 +12,7 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   toCreativeResourceJsonValue,
 } from './generation-contract'
+import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
 import { buildCreativeResourceScopeRef, resolveProjectCreativeResourceScope } from './identity'
 import {
   appendCreativeResourceRevisionInTransaction,
@@ -363,7 +364,9 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
   if (input.task.targetType !== 'CreativeResource') {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${input.task.targetType}`)
   }
-  const payload = parseCreativeResourceGenerationTaskPayload(input.task.payload ?? {})
+  const payload = input.task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
+    ? parseCreativeResourceVideoMergeTaskPayload(input.task.payload ?? {})
+    : parseCreativeResourceGenerationTaskPayload(input.task.payload ?? {})
   if (payload.resource.resourceId !== input.task.targetId) {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_MISMATCH:${input.task.id}`)
   }

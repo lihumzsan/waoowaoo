@@ -50,26 +50,29 @@ function ResourceOutput({ resource }: { readonly resource: CreativeResourceView 
 }
 
 export function ResourceProvenanceContent({ data, labels }: WorkspaceCanvasNodeRendererProps) {
-  const revision = data.resourceDetails?.resource.headRevision
-  if (!revision) return null
+  const resource = data.resourceDetails?.resource
+  if (!resource) return null
+  const provenance = resource.headRevision?.provenance ?? resource.pendingGeneration
+  const inputs = resource.headRevision?.inputs ?? resource.pendingGeneration?.inputs ?? []
+  if (!provenance) return null
   return (
     <div className="space-y-2">
-      {revision.provenance.prompt
+      {provenance.prompt
         ? renderSection(labels('generationPrompt'), (
             <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words text-xs leading-5 text-slate-700`}>
-              {revision.provenance.prompt}
+              {provenance.prompt}
             </p>
           ))
         : null}
-      {revision.provenance.modelKey
+      {provenance.modelKey
         ? renderSection(labels('generationModel'), (
-            <p className={`${SELECTABLE_TEXT_CLASS} break-all text-xs text-slate-700`}>{revision.provenance.modelKey}</p>
+            <p className={`${SELECTABLE_TEXT_CLASS} break-all text-xs text-slate-700`}>{provenance.modelKey}</p>
           ))
         : null}
-      {revision.inputs.length > 0
+      {inputs.length > 0
         ? renderSection(labels('generationReferences'), (
             <div className="flex flex-wrap gap-1.5">
-              {revision.inputs.map((reference) => (
+              {inputs.map((reference) => (
                 <span key={`${reference.role}:${reference.position}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
                   {reference.role} · {reference.resourceId.slice(0, 8)}
                 </span>

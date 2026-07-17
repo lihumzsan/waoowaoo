@@ -46,16 +46,10 @@ export function resolveOperationScopeInput(params: {
   readonly context: ProjectAgentContext
   readonly prerequisites: OperationPrerequisites
 }): unknown {
-  const scopedInput = stripOperationEnvironmentInputFields(params.input)
-  const contextEpisodeId = readTrimmedString(params.context.episodeId)
-  if (!isRecord(scopedInput)) return scopedInput
-  if (params.prerequisites.episodeId === 'required' || params.prerequisites.episodeId === 'optional') {
-    return {
-      ...scopedInput,
-      ...(contextEpisodeId ? { episodeId: contextEpisodeId } : {}),
-    }
-  }
-  return scopedInput
+  // Environment scope belongs to ProjectAgentOperationContext. Never inject it
+  // into the model-authored business payload: strict tool schemas must validate
+  // exactly the fields advertised to the model.
+  return stripOperationEnvironmentInputFields(params.input)
 }
 
 export function resolveOperationEffectiveEpisodeId(params: {

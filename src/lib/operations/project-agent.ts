@@ -31,6 +31,7 @@ import { createAuthOperations } from './domains/auth/auth-ops'
 import { createAssetImageOperations } from './domains/asset/generation'
 import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
+import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -230,6 +231,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createCreativeResourceOperations(), {
+      groupPath: ['resource'],
+      channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createCreativeResourceVideoMergeOperations(), {
       groupPath: ['resource'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,

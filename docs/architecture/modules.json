@@ -150,6 +150,7 @@
       "sourcePaths": [
         "src/lib/creative-resource",
         "src/lib/operations/domains/creative-resource",
+        "src/lib/workers/handlers/creative-resource-video-merge.ts",
         "src/app/api/projects/[projectId]/resources",
         "src/lib/query/hooks/useCreativeResources.ts",
         "src/lib/query/keys.ts",

@@ -49,6 +49,15 @@ export interface CreativeResourceGenerationProvenance {
   readonly generationOptions: CreativeResourceJsonValue | null
 }
 
+export interface CreativeResourcePendingGeneration {
+  readonly taskId: string
+  readonly operationId: string | null
+  readonly prompt: string | null
+  readonly modelKey: string | null
+  readonly generationOptions: CreativeResourceJsonValue | null
+  readonly inputs: readonly CreativeResourceInputRef[]
+}
+
 export type CreativeResourceRevisionContent =
   | {
       readonly kind: 'text'
@@ -108,6 +117,7 @@ export interface CreativeResourceView {
   readonly candidateSetId: string | null
   readonly candidateIndex: number | null
   readonly headRevision: CreativeResourceRevisionView | null
+  readonly pendingGeneration: CreativeResourcePendingGeneration | null
   readonly bindings: readonly CreativeResourceBindingView[]
   readonly error: {
     readonly code: string | null

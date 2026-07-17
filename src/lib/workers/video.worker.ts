@@ -21,6 +21,7 @@ import {
 } from './utils'
 import { resolveVideoDownloadHeaders } from './video-download'
 import { handleCreativeResourceVideoTask } from './handlers/creative-resource-video'
+import { handleCreativeResourceVideoMergeTask } from './handlers/creative-resource-video-merge'
 
 async function handleVideoSegmentTask(job: Job<TaskJobData>) {
   if (job.data.targetType !== 'ProjectVideoSegment') {
@@ -169,6 +170,7 @@ type VideoTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknow
 
 const VIDEO_TASK_HANDLERS = {
   creative_resource_video: handleCreativeResourceVideoTask,
+  creative_resource_video_merge: handleCreativeResourceVideoMergeTask,
   video_segment: handleVideoSegmentTask,
   final_video_render: handleFinalVideoRenderTask,
   chapter_render: handleChapterRenderTask,

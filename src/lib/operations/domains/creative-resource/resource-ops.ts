@@ -56,6 +56,7 @@ const resourceCardSchema = z.object({
     candidateSetId: z.string().nullable(),
     candidateIndex: z.number().int().min(0).nullable(),
     headRevision: z.unknown().nullable(),
+    pendingGeneration: z.unknown().nullable(),
     bindings: z.array(z.unknown()),
     error: z.object({ code: z.string().nullable(), message: z.string() }).strict().nullable(),
     createdAt: z.string().min(1),

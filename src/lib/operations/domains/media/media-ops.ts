@@ -219,7 +219,7 @@ async function planRegenerateSingleImageOperation(
     })
   }
   const locale = resolveOperationLocale(ctx.context)
-  const episodeId = normalizeString(input.episodeId) || null
+  const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId) || null
   const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({ projectId: ctx.projectId, episodeId })
   const payload = withTaskUiPayload(billingPayload, {
     intent: 'regenerate',

@@ -65,6 +65,7 @@ export const TASK_TYPE = {
   CREATIVE_RESOURCE_IMAGE: 'creative_resource_image',
   CREATIVE_RESOURCE_AUDIO: 'creative_resource_audio',
   CREATIVE_RESOURCE_VIDEO: 'creative_resource_video',
+  CREATIVE_RESOURCE_VIDEO_MERGE: 'creative_resource_video_merge',
   EDIT_STYLE_PREVIEW_OPTIONS_GENERATE: 'edit_style_preview_options_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   IMAGE_CHARACTER: 'image_character',
