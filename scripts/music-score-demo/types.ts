@@ -15,6 +15,17 @@ export const instrumentIds = [
   'harp',
   'choir_aahs',
   'timpani',
+  'shakuhachi',
+  'koto',
+  'shamisen',
+  'taiko',
+  'woodblock',
+  'tubular_bells',
+  'contrabass',
+  'bassoon',
+  'choir_oohs',
+  'dulcimer',
+  'string_tremolo',
 ] as const
 
 export const instrumentIdSchema = z.enum(instrumentIds)
@@ -23,7 +34,14 @@ export type InstrumentId = z.infer<typeof instrumentIdSchema>
 const emotionCueSchema = z.object({
   startSecond: z.number().min(0),
   endSecond: z.number().positive(),
-  emotion: z.enum(['restrained_tender', 'hopeful', 'released']),
+  emotion: z.enum([
+    'restrained_tender',
+    'hopeful',
+    'released',
+    'folk_unease',
+    'ritual_dread',
+    'cosmic_revelation',
+  ]),
   intensity: z.number().min(0).max(1),
 }).strict()
 

@@ -17,6 +17,17 @@ const instrumentPrograms: Readonly<Record<InstrumentId, number>> = {
   harp: 46,
   choir_aahs: 52,
   timpani: 47,
+  shakuhachi: 77,
+  koto: 107,
+  shamisen: 106,
+  taiko: 116,
+  woodblock: 115,
+  tubular_bells: 14,
+  contrabass: 43,
+  bassoon: 70,
+  choir_oohs: 53,
+  dulcimer: 15,
+  string_tremolo: 44,
 }
 
 function midiValue(value: number): number {
@@ -77,8 +88,14 @@ export function scoreToMidi(score: CompiledScore): Buffer {
     const averagePan = instrumentEvents.reduce((sum, event) => sum + event.pan, 0) / Math.max(1, instrumentEvents.length)
     events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 7, midiValue(Math.sqrt(maximumGain) * 108)] })
     events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 10, midiValue(64 + averagePan * 48)] })
-    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 91, instrument === 'timpani' ? 44 : 74] })
-    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 93, instrument === 'string_ensemble' || instrument === 'choir_aahs' ? 38 : 18] })
+    const isPercussion = instrument === 'timpani' || instrument === 'taiko' || instrument === 'woodblock'
+    const isAtmospheric = instrument === 'string_ensemble'
+      || instrument === 'choir_aahs'
+      || instrument === 'choir_oohs'
+      || instrument === 'string_tremolo'
+      || instrument === 'shakuhachi'
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 91, isPercussion ? 44 : 74] })
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 93, isAtmospheric ? 38 : 18] })
   }
   for (const event of score.events) {
     const channel = channelByInstrument.get(event.instrument)

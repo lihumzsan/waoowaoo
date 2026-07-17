@@ -14,10 +14,11 @@ The command writes WAV, MP3, and standard MIDI files to `tmp/music-score-demo/`.
 
 ```bash
 brew install fluid-synth
-npx tsx scripts/music-score-demo/render-upper-bound.ts
+npx tsx scripts/music-score-demo/render-sampled.ts
+npx tsx scripts/music-score-demo/render-sampled.ts scripts/music-score-demo/scores/05-chinese-folk-cthulhu.json
 ```
 
-This command downloads the pinned MIT-licensed `MuseScore_General.sf3` from the official MuseScore mirror, verifies its SHA-256 hash, renders each instrument as a separate FluidSynth stem, and masters the stems into 48 kHz/24-bit WAV plus 256 kbps MP3. The SoundFont and its license stay under ignored `tmp/music-score-demo-assets/`.
+The first command renders score 04 by default; the second renders the Chinese-folk cosmic-horror score. The parameterized entry downloads the pinned MIT-licensed `MuseScore_General.sf3` from the official MuseScore mirror, verifies its SHA-256 hash, renders each instrument as a separate FluidSynth stem, and masters the stems into 48 kHz/24-bit WAV plus 256 kbps MP3. The SoundFont and its license stay under ignored `tmp/music-score-demo-assets/`.
 
 ## Schemes
 

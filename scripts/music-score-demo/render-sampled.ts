@@ -7,17 +7,24 @@ const repositoryRoot = process.cwd()
 const scriptDir = path.join(repositoryRoot, 'scripts/music-score-demo')
 
 async function main(): Promise<void> {
-  const raw: unknown = JSON.parse(await readFile(path.join(scriptDir, 'scores/04-upper-bound-continuous.json'), 'utf8'))
+  const scoreArgument = process.argv[2]?.trim()
+  const scorePath = scoreArgument
+    ? path.resolve(repositoryRoot, scoreArgument)
+    : path.join(scriptDir, 'scores/04-upper-bound-continuous.json')
+  const outputName = process.argv[3]?.trim() || path.basename(scorePath, path.extname(scorePath))
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(outputName)) throw new Error('SAMPLED_OUTPUT_NAME_INVALID')
+
+  const raw: unknown = JSON.parse(await readFile(scorePath, 'utf8'))
   const score = parseAndCompileScore(raw)
-  if (score.sourceKind !== 'cinematic-continuous/v1') throw new Error('UPPER_BOUND_SCORE_KIND_INVALID')
+  if (score.sourceKind !== 'cinematic-continuous/v1') throw new Error('SAMPLED_SCORE_KIND_INVALID')
   const result = await renderSampledScore({
     score,
     outputDir: path.join(repositoryRoot, 'tmp/music-score-demo'),
     assetsDir: path.join(repositoryRoot, 'tmp/music-score-demo-assets'),
-    outputName: '04-upper-bound-continuous',
+    outputName,
   })
   process.stdout.write(
-    `04-upper-bound-continuous: ${score.events.length} events, ${score.durationSeconds}s, sampled stems\n`
+    `${outputName}: ${score.events.length} events, ${score.durationSeconds}s, sampled stems\n`
       + `wav → ${result.wavPath}\nmp3 → ${result.mp3Path}\nmidi → ${result.midiPath}\n`,
   )
 }

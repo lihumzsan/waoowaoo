@@ -26,6 +26,17 @@ const stemFilters: Readonly<Record<InstrumentId, string>> = {
   harp: 'highpass=f=100,lowpass=f=16000,equalizer=f=3500:t=q:w=1:g=1.2,volume=0.58',
   choir_aahs: 'highpass=f=130,lowpass=f=12000,equalizer=f=2200:t=q:w=1.2:g=-1.8,volume=0.48',
   timpani: 'highpass=f=30,lowpass=f=5000,equalizer=f=100:t=q:w=1:g=1.5,volume=0.62',
+  shakuhachi: 'highpass=f=150,lowpass=f=12500,equalizer=f=1900:t=q:w=1.1:g=-1.2,volume=0.66',
+  koto: 'highpass=f=100,lowpass=f=15500,equalizer=f=3200:t=q:w=1:g=1.1,volume=0.57',
+  shamisen: 'highpass=f=105,lowpass=f=12500,equalizer=f=2100:t=q:w=1:g=1.4,volume=0.54',
+  taiko: 'highpass=f=28,lowpass=f=5600,equalizer=f=85:t=q:w=1:g=1.8,volume=0.7',
+  woodblock: 'highpass=f=350,lowpass=f=10500,equalizer=f=2300:t=q:w=1.2:g=1.1,volume=0.44',
+  tubular_bells: 'highpass=f=90,lowpass=f=15000,equalizer=f=2600:t=q:w=1:g=-1.2,volume=0.48',
+  contrabass: 'highpass=f=27,lowpass=f=6200,equalizer=f=92:t=q:w=1:g=1.5,volume=0.7',
+  bassoon: 'highpass=f=48,lowpass=f=9000,equalizer=f=520:t=q:w=1.1:g=1.1,volume=0.6',
+  choir_oohs: 'highpass=f=125,lowpass=f=11000,equalizer=f=1900:t=q:w=1.2:g=-1.6,volume=0.44',
+  dulcimer: 'highpass=f=115,lowpass=f=15000,equalizer=f=2800:t=q:w=1:g=1.2,volume=0.5',
+  string_tremolo: 'highpass=f=82,lowpass=f=12800,equalizer=f=2400:t=q:w=1.2:g=-1.4,volume=0.56',
 }
 
 function sha256(value: Buffer): string {
@@ -124,7 +135,7 @@ export async function renderSampledScore(input: {
     `${mixInputs}amix=inputs=${instruments.length}:duration=longest:normalize=0,`
       + 'acompressor=threshold=0.16:ratio=2.2:attack=18:release=190:makeup=1.35,'
       + `afade=t=in:st=0:d=0.8,afade=t=out:st=${Math.max(0, input.score.durationSeconds - 2.7)}:d=2.7,`
-      + 'loudnorm=I=-16:LRA=10:TP=-1.0,alimiter=limit=0.92[mix]',
+      + 'loudnorm=I=-16:LRA=10:TP=-1.0,alimiter=limit=0.92:level=false[mix]',
   ].join(';')
   run(ffmpegPath, [
     '-nostdin', '-y', '-hide_banner', '-loglevel', 'error',
