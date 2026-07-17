@@ -45,6 +45,23 @@ npx tsx scripts/music-score-demo/render-public-domain-benchmark.ts --include-mae
 
 Variant C renders a competition performance of Alexander Scriabin's Etude Op. 8 No. 13 through the same Salamander/sfizz path. MAESTRO includes note velocity and pedal positions captured by a Yamaha Disklavier, but it is CC BY-NC-SA 4.0. Variant C is therefore an internal ceiling benchmark only and must not be shipped as a commercial product asset.
 
+## Chinese folk cosmic-horror studio render
+
+The studio score keeps the symbolic `cinematic-continuous/v1` contract but replaces the General MIDI proxies with a small, explicit sampler orchestra:
+
+- [real guqin open strings by Rafael Caro](https://freesound.org/people/RafaelCaro/sounds/176266/), licensed CC BY 4.0;
+- flute, solo contrabass, cello tremolo, gong, and large drum samples from [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE), licensed CC0;
+- [Salamander Grand Piano](https://sfzlab.github.io/sfz-website/instruments/alexander-holm/salamander-grand-piano/), licensed CC BY 3.0.
+
+The arrangement is intentionally sparse: one recurring guqin motif, monophonic flute answers, a continuous low-string floor, a single late tremolo cluster, and ritual percussion only at structural boundaries. All remote assets are commit- or hash-pinned, verified before use, converted into local SFZ instruments, and rendered through the same pinned sfizz binary as the public-domain benchmark.
+
+```bash
+npx tsx scripts/music-score-demo/setup-sfizz-render.ts
+npx tsx scripts/music-score-demo/render-chinese-cthulhu-studio.ts
+```
+
+The renderer writes the editable MIDI plus a 48 kHz/24-bit WAV and 256 kbps MP3 to `tmp/music-score-demo/`. It uses stem-level voicing and two-pass linear loudness normalization without a dynamics compressor, so the silence-to-revelation contour remains intact.
+
 ## Schemes
 
 1. `note-events/v1`: every note is explicit. Maximum control, largest model output.

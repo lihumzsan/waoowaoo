@@ -37,6 +37,11 @@ const stemFilters: Readonly<Record<InstrumentId, string>> = {
   choir_oohs: 'highpass=f=125,lowpass=f=11000,equalizer=f=1900:t=q:w=1.2:g=-1.6,volume=0.44',
   dulcimer: 'highpass=f=115,lowpass=f=15000,equalizer=f=2800:t=q:w=1:g=1.2,volume=0.5',
   string_tremolo: 'highpass=f=82,lowpass=f=12800,equalizer=f=2400:t=q:w=1.2:g=-1.4,volume=0.56',
+  guqin: 'highpass=f=55,lowpass=f=14500,equalizer=f=2600:t=q:w=1:g=1.1,volume=0.58',
+  xiao: 'highpass=f=130,lowpass=f=12000,equalizer=f=2100:t=q:w=1.1:g=-1.2,volume=0.62',
+  ritual_gong: 'highpass=f=30,lowpass=f=15000,equalizer=f=420:t=q:w=1:g=-1.2,volume=0.52',
+  temple_drum: 'highpass=f=28,lowpass=f=6500,equalizer=f=90:t=q:w=1:g=1.6,volume=0.68',
+  low_string_drone: 'highpass=f=25,lowpass=f=7200,equalizer=f=84:t=q:w=1:g=1.2,volume=0.62',
 }
 
 function sha256(value: Buffer): string {

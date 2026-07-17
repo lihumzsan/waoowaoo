@@ -26,6 +26,11 @@ export const instrumentIds = [
   'choir_oohs',
   'dulcimer',
   'string_tremolo',
+  'guqin',
+  'xiao',
+  'ritual_gong',
+  'temple_drum',
+  'low_string_drone',
 ] as const
 
 export const instrumentIdSchema = z.enum(instrumentIds)
