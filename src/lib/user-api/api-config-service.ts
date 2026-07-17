@@ -40,12 +40,15 @@ import {
   validateDefaultModelPricing,
 } from './api-config-defaults'
 import {
-  normalizeCapabilitySelectionsInput,
   parseStoredCapabilitySelections,
   sanitizeCapabilitySelectionsAgainstModels,
   serializeCapabilitySelections,
   validateCapabilitySelectionsAgainstModels,
 } from './api-config-capability-defaults'
+import {
+  capabilitySelectionCommandSchema,
+  capabilitySelectionCommandToSelections,
+} from '@/lib/ai-registry/capability-selection-command'
 
 export async function getUserApiConfig(userId: string) {
   const pref = await prisma.userPreference.findUnique({
@@ -132,9 +135,19 @@ export async function putUserApiConfig(
   const normalizedModelsInput = payload.models === undefined ? undefined : normalizeModelList(payload.models)
   const normalizedProviders = payload.providers === undefined ? undefined : normalizeProvidersInput(payload.providers)
   const normalizedDefaults = payload.defaultModels === undefined ? undefined : normalizeDefaultModelsInput(payload.defaultModels)
-  const normalizedCapabilityDefaults = payload.capabilityDefaults === undefined
+  const parsedCapabilityDefaults = payload.capabilityDefaults === undefined
     ? undefined
-    : normalizeCapabilitySelectionsInput(payload.capabilityDefaults)
+    : capabilitySelectionCommandSchema.safeParse(payload.capabilityDefaults)
+  if (parsedCapabilityDefaults && !parsedCapabilityDefaults.success) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CAPABILITY_DEFAULTS_PARSE_FAILED',
+      field: 'capabilityDefaults',
+      issues: parsedCapabilityDefaults.error.issues,
+    })
+  }
+  const normalizedCapabilityDefaults = parsedCapabilityDefaults?.success
+    ? capabilitySelectionCommandToSelections(parsedCapabilityDefaults.data)
+    : undefined
   const normalizedWorkflowConcurrency = payload.workflowConcurrency === undefined
     ? undefined
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)

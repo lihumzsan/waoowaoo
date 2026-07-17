@@ -9,13 +9,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { session } = authResult
 
   const searchParams = request.nextUrl.searchParams
+  const limit = searchParams.get('limit')
+  const statuses = searchParams.getAll('status')
+  const types = searchParams.getAll('type')
   const input = {
     projectId: searchParams.get('projectId') || undefined,
     targetType: searchParams.get('targetType') || undefined,
     targetId: searchParams.get('targetId') || undefined,
-    status: searchParams.getAll('status'),
-    type: searchParams.getAll('type'),
-    limit: searchParams.get('limit'),
+    ...(statuses.length > 0 ? { status: statuses } : {}),
+    ...(types.length > 0 ? { type: types } : {}),
+    ...(limit !== null ? { limit: Number(limit) } : {}),
   }
 
   const result = await executeProjectAgentOperationFromApi({
@@ -29,4 +32,3 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   return NextResponse.json(result)
 })
-

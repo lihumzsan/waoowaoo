@@ -191,7 +191,17 @@ export function useGenerateAssetHubCharacterFromReference() {
       count: number
       customDescription?: string
     }) => {
-      const input = { ...payload, isBackgroundJob: true }
+      const input = {
+        referenceImageUrls: payload.referenceImageUrls,
+        target: {
+          kind: 'appearance' as const,
+          characterName: payload.characterName,
+          characterId: payload.characterId,
+          appearanceId: payload.appearanceId,
+        },
+        count: payload.count,
+        ...(payload.customDescription ? { customDescription: payload.customDescription } : {}),
+      }
       const plan = await fetchAssetHubOperationPlanView({
         operationId: 'asset_hub_reference_to_character',
         input,

@@ -12,18 +12,13 @@ import {
   type ProjectDraftInput,
 } from '@/lib/projects/validation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { defineOperation } from '@/lib/operations/define-operation'
 
-function readProjectDraftBody(body: unknown): ProjectDraftInput {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return { name: '' }
-  }
-
-  const payload = body as Record<string, unknown>
-  return {
-    name: typeof payload.name === 'string' ? payload.name : '',
-    description: typeof payload.description === 'string' ? payload.description : null,
-  }
-}
+const updateProjectInputSchema = z.object({
+  name: z.string().optional().describe('New project name. Omit to keep the current name.'),
+  description: z.string().nullable().optional()
+    .describe('New project description, null to clear it, or omit to keep it unchanged.'),
+}).strict()
 
 async function requireOwnedProject(
   params: { projectId: string; userId: string },
@@ -68,7 +63,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       },
     },
 
-    update_project: {
+    update_project: defineOperation({
       id: 'update_project',
       summary: 'Update project name/description for the project owner.',
       intent: 'act',
@@ -82,13 +77,23 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({
-        name: z.string().optional(),
-        description: z.string().optional().nullable(),
-      }).passthrough(),
+      inputSchema: updateProjectInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        const draft = readProjectDraftBody(input)
+        if (input.name === undefined && input.description === undefined) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'PROJECT_UPDATE_EMPTY',
+            field: 'body',
+          })
+        }
+        const existing = await requireOwnedProject(
+          { projectId: ctx.projectId, userId: ctx.userId },
+          transaction,
+        )
+        const draft: ProjectDraftInput = {
+          name: input.name ?? existing.name,
+          description: input.description === undefined ? existing.description : input.description,
+        }
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
           const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'
@@ -100,10 +105,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           })
         }
 
-        const existing = await requireOwnedProject(
-          { projectId: ctx.projectId, userId: ctx.userId },
-          transaction,
-        )
         const normalized = normalizeProjectDraft(draft)
 
         const updatedProject = await transaction.project.update({
@@ -125,7 +126,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
 
         return { project: updatedProject }
       },
-    },
+    }),
 
     delete_project: {
       id: 'delete_project',

@@ -25,6 +25,16 @@ export async function setGoldenStreamPacing(
   if (!response.ok) throw new Error(`GOLDEN_PROVIDER_CONTROL_HTTP_${String(response.status)}`)
 }
 
+export async function setGoldenTextResponseHold(holdTextResponses: boolean): Promise<void> {
+  const descriptor = await readGoldenEnvironmentDescriptor()
+  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/control`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ holdTextResponses }),
+  })
+  if (!response.ok) throw new Error(`GOLDEN_TEXT_RESPONSE_HOLD_HTTP_${String(response.status)}`)
+}
+
 export async function setGoldenMediaStatusDelay(delayMs: number): Promise<void> {
   const descriptor = await readGoldenEnvironmentDescriptor()
   const response = await fetch(`${descriptor.providerBaseUrl}/__golden/media-delay`, {

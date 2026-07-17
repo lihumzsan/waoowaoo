@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { ApiError } from '@/lib/api-errors'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { getUserCostSummary } from '@/lib/billing'
@@ -14,20 +13,16 @@ import {
 
 const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_-]*$/
 
-function readNumber(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number.parseInt(value, 10)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed ? trimmed : null
-}
+const listUserTransactionsInputSchema = z.object({
+  page: z.number().int().min(1).optional().describe('One-based page number. Defaults to 1.'),
+  pageSize: z.number().int().min(1).max(200).optional().describe('Rows per page. Defaults to 20.'),
+  type: z.string().trim().min(1).optional()
+    .describe('Exact transaction type. Omit or use "all" to include every type.'),
+  startDate: z.string().datetime({ offset: true }).optional()
+    .describe('Inclusive ISO 8601 start timestamp with timezone.'),
+  endDate: z.string().datetime({ offset: true }).optional()
+    .describe('Inclusive ISO 8601 end timestamp with timezone.'),
+}).strict()
 
 function extractActionFromDescription(description: string | null): string | null {
   if (!description) return null
@@ -35,19 +30,6 @@ function extractActionFromDescription(description: string | null): string | null
   const firstPart = cleaned.split(' - ')[0]?.trim() || ''
   if (ACTION_KEY_PATTERN.test(firstPart)) return firstPart
   return null
-}
-
-function parseDateField(value: unknown, field: string): Date | null {
-  const raw = readString(value)
-  if (!raw) return null
-  const date = new Date(raw)
-  if (Number.isNaN(date.getTime())) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'DATE_INVALID',
-      field,
-    })
-  }
-  return date
 }
 
 export function createUserBillingOperations(): ProjectAgentOperationRegistryDraft {
@@ -65,16 +47,15 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: listUserTransactionsInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const params = (input && typeof input === 'object' && !Array.isArray(input)) ? input as Record<string, unknown> : {}
-
-        const page = Math.max(1, readNumber(params.page, 1))
-        const pageSize = Math.min(200, Math.max(1, readNumber(params.pageSize, 20)))
-        const type = readString(params.type)
-        const startDate = parseDateField(params.startDate, 'startDate')
-        const endDate = parseDateField(params.endDate, 'endDate')
+        const params = listUserTransactionsInputSchema.parse(input)
+        const page = params.page ?? 1
+        const pageSize = params.pageSize ?? 20
+        const type = params.type ?? null
+        const startDate = params.startDate ? new Date(params.startDate) : null
+        const endDate = params.endDate ? new Date(params.endDate) : null
 
         const where: Prisma.BalanceTransactionWhereInput = { userId: ctx.userId }
         if (type && type !== 'all') {

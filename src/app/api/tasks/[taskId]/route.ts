@@ -11,11 +11,15 @@ export const GET = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
   const { session } = authResult
   const { taskId } = await context.params
+  const includeEvents = request.nextUrl.searchParams.get('includeEvents')
+  const eventsLimit = request.nextUrl.searchParams.get('eventsLimit')
 
   const input = {
     taskId,
-    includeEvents: request.nextUrl.searchParams.get('includeEvents'),
-    eventsLimit: request.nextUrl.searchParams.get('eventsLimit'),
+    ...(includeEvents !== null
+      ? { includeEvents: includeEvents === '1' || includeEvents === 'true' }
+      : {}),
+    ...(eventsLimit !== null ? { eventsLimit: Number(eventsLimit) } : {}),
   }
 
   const result = await executeProjectAgentOperationFromApi({
@@ -50,4 +54,3 @@ export const DELETE = apiHandler(async (
 
   return NextResponse.json(result)
 })
-

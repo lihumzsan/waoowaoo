@@ -12,6 +12,11 @@ import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { resolveBuiltinModelContext, getCapabilityOptionFields, validateCapabilitySelectionsPayload, type CapabilityModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { getDeploymentConfig, isCloudDeployment, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import {
+  capabilitySelectionCommandSchema,
+  capabilitySelectionCommandToSelections,
+} from '@/lib/ai-registry/capability-selection-command'
+import { defineOperation } from '@/lib/operations/define-operation'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -32,6 +37,21 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
   videoModel: 'video',
   musicModel: 'music',
 }
+
+const projectModelKeySchema = z.string().trim().min(1).nullable()
+  .describe('Exact provider::modelId returned by list_user_models, or null to clear the project override.')
+
+const updateProjectConfigInputSchema = z.object({
+  analysisModel: projectModelKeySchema.optional(),
+  characterModel: projectModelKeySchema.optional(),
+  locationModel: projectModelKeySchema.optional(),
+  editModel: projectModelKeySchema.optional(),
+  videoModel: projectModelKeySchema.optional(),
+  musicModel: projectModelKeySchema.optional(),
+  videoRatio: z.string().trim().min(1).optional()
+    .describe('Project output aspect ratio, for example 16:9 or 9:16.'),
+  capabilityOverrides: capabilitySelectionCommandSchema.optional(),
+}).strict()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -283,7 +303,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       },
     },
 
-    update_project_config: {
+    update_project_config: defineOperation({
       id: 'update_project_config',
       summary: 'Update project model keys and capability overrides.',
       intent: 'act',
@@ -298,21 +318,12 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       confirmation: { required: true },
-      inputSchema: z.object({
-        analysisModel: z.string().nullable().optional(),
-        characterModel: z.string().nullable().optional(),
-        locationModel: z.string().nullable().optional(),
-        editModel: z.string().nullable().optional(),
-        videoModel: z.string().nullable().optional(),
-        musicModel: z.string().nullable().optional(),
-        videoRatio: z.string().optional(),
-        capabilityOverrides: z.unknown().optional(),
-      }).passthrough(),
+      inputSchema: updateProjectConfigInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         const cloudDeployment = isCloudDeployment(deployment)
-        const body = input as unknown as Record<string, unknown>
+        const body: Record<string, unknown> = input
         assertNoLegacyStyleFields(body)
         if (cloudDeployment) {
           assertCloudProjectConfigFields(body)
@@ -350,7 +361,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           }
 
           if (field === 'capabilityOverrides') {
-            const overrides = normalizeCapabilitySelectionsInput(body.capabilityOverrides)
+            const overrides = capabilitySelectionCommandToSelections(input.capabilityOverrides ?? [])
             const modelContextMap = getNextProjectModelMap(currentProjectConfig, body)
             const cleanedOverrides = sanitizeCapabilityOverrides(overrides, modelContextMap)
             validateCapabilityOverrides(cleanedOverrides, modelContextMap)
@@ -380,6 +391,6 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
         return { project: fullProject }
       },
-    },
+    }),
   }
 }

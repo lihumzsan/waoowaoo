@@ -47,30 +47,41 @@ function requireImageBillingInfo(
   return billingInfo
 }
 
+const regenerateGroupInputSchema = z.object({
+  target: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('character'),
+      characterId: z.string().trim().min(1).describe('Exact project character ID.'),
+      appearanceId: z.string().trim().min(1).describe('Exact character appearance ID.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('location'),
+      locationId: z.string().trim().min(1).describe('Exact project location ID.'),
+    }).strict(),
+  ]),
+  count: z.number().int().positive().max(12).optional(),
+}).strict()
+
 async function planRegenerateGroupOperation(
   ctx: ProjectAgentOperationContext,
-  input: {
-    type: 'character' | 'location'
-    id: string
-    appearanceId?: string
-    count?: number
-  } & Record<string, unknown>,
+  input: z.infer<typeof regenerateGroupInputSchema>,
 ): Promise<OperationPlan> {
-  assertNoLegacyArtStyle(input)
+  const type = input.target.kind
+  const id = type === 'character' ? input.target.characterId : input.target.locationId
+  const appearanceId = type === 'character' ? input.target.appearanceId : ''
   const count =
-    input.type === 'character'
+    type === 'character'
       ? normalizeImageGenerationCount('character', input.count)
       : normalizeImageGenerationCount('location', input.count)
-  const appearanceId = normalizeString(input.appearanceId)
-  const targetType = input.type === 'character' ? 'CharacterAppearance' : 'LocationImage'
-  const targetId = input.type === 'character' ? appearanceId : input.id
+  const targetType = type === 'character' ? 'CharacterAppearance' : 'LocationImage'
+  const targetId = type === 'character' ? appearanceId : id
   if (!targetId) throw new ApiError('INVALID_PARAMS')
 
   let locationSummary: string | null = null
   let locationName: string | null = null
-  if (input.type === 'location') {
+  if (type === 'location') {
     const location = await prisma.projectLocation.findUnique({
-      where: { id: input.id },
+      where: { id },
       select: { name: true, summary: true },
     })
     if (!location) throw new ApiError('NOT_FOUND')
@@ -78,22 +89,28 @@ async function planRegenerateGroupOperation(
     locationSummary = location.summary
   }
   const hasOutputAtStart =
-    input.type === 'character'
+    type === 'character'
       ? await hasCharacterAppearanceOutput({
           appearanceId,
-          characterId: input.id,
+          characterId: id,
         })
-      : await hasLocationImageOutput({ locationId: input.id })
+      : await hasLocationImageOutput({ locationId: id })
   const projectModelConfig = await getProjectModelConfig(ctx.projectId, ctx.userId)
-  const imageModel = input.type === 'character' ? projectModelConfig.characterModel : projectModelConfig.locationModel
+  const imageModel = type === 'character' ? projectModelConfig.characterModel : projectModelConfig.locationModel
+  const operationPayload = {
+    type,
+    id,
+    ...(appearanceId ? { appearanceId } : {}),
+    count,
+  }
   let billingPayload: Record<string, unknown>
   try {
     billingPayload = await buildImageBillingPayload({
       projectId: ctx.projectId,
       userId: ctx.userId,
       imageModel,
-      basePayload: { ...input, count },
-      aspectRatio: input.type === 'character' ? CHARACTER_ASSET_IMAGE_RATIO : LOCATION_IMAGE_RATIO,
+      basePayload: operationPayload,
+      aspectRatio: type === 'character' ? CHARACTER_ASSET_IMAGE_RATIO : LOCATION_IMAGE_RATIO,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Image model capability not configured'
@@ -103,7 +120,7 @@ async function planRegenerateGroupOperation(
     })
   }
   const locale = resolveOperationLocale(ctx.context)
-  const episodeId = normalizeString(input.episodeId) || null
+  const episodeId = normalizeString(ctx.context.episodeId) || null
   const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
     projectId: ctx.projectId,
     episodeId,
@@ -131,8 +148,8 @@ async function planRegenerateGroupOperation(
       }),
     ],
     metadata: {
-      type: input.type,
-      locationId: input.id,
+      type,
+      locationId: id,
       count,
       locationDescription: locationSummary || locationName || '',
     },
@@ -260,18 +277,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
         required: true,
         summary: '将批量重生成图片并产生媒体费用；用户批准当前不可变计划后执行。',
       },
-      inputSchema: z
-        .object({
-          type: z.enum(['character', 'location']),
-          id: z.string().min(1),
-          appearanceId: z.string().min(1).optional(),
-          count: z.number().int().positive().max(12).optional(),
-        })
-        .passthrough()
-        .refine((value) => value.type !== 'character' || !!value.appearanceId, {
-          message: 'appearanceId is required when type=character',
-          path: ['appearanceId'],
-        }),
+      inputSchema: regenerateGroupInputSchema,
       outputSchema: taskSubmitOperationOutputSchema,
       plan: planRegenerateGroupOperation,
       commit: async (ctx, _input, plan) => await commitRegenerateGroupOperation(ctx, plan),

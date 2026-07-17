@@ -14,10 +14,7 @@ import type {
   CreativeResourceInputRef,
   CreativeResourceMediaType,
 } from '@/lib/creative-resource/contracts'
-import {
-  creativeResourceGenerationOptionsSchema,
-  creativeResourceInputRefSchema,
-} from '@/lib/creative-resource/generation-contract'
+import { creativeResourceInputRefSchema } from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeResourceCandidateSetId,
   buildCreativeResourceOriginKey,
@@ -30,6 +27,7 @@ import {
 } from '@/lib/creative-resource/persistence'
 import {
   CREATIVE_RESOURCE_SCHEMA,
+  CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
 import { isPlatformProviderCredentialMode } from '@/lib/deployment/config'
@@ -54,51 +52,114 @@ import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
-const commonReferenceSchema = z.array(creativeResourceInputRefSchema).max(8).optional()
+const commonReferenceSchema = z.array(creativeResourceInputRefSchema)
+  .max(8)
+  .optional()
+  .describe('Exact immutable Resource revisions to use as ordered creative inputs. Obtain resourceId, revisionId, and fingerprint from list_resources or get_resource; pass null when no reference is needed.')
+
+const commonMediaGenerationShape = {
+  episodeId: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1).max(200).optional()
+    .describe('Optional display name for the generated Resource or candidate set.'),
+  prompt: z.string().trim().min(1)
+    .describe('Complete generation instruction for the selected media model.'),
+  modelKey: z.string().trim().min(1).optional()
+    .describe('Optional exact provider::modelId returned by list_user_models. Pass null to use the project-configured model.'),
+  request: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('new'),
+      count: z.number().int().min(1).max(6).optional()
+        .describe('Number of new candidates to generate. Defaults to 1.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('retry'),
+      resourceIds: z.array(z.string().trim().min(1)).min(1).max(6)
+        .describe('Exact failed Resource IDs to retry without regenerating successful candidates.'),
+    }).strict(),
+  ]).describe('Choose new generation or an explicit retry of failed Resources.'),
+  references: commonReferenceSchema,
+} as const
 
 const createTextInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  schemaId: z.string().trim().min(1).optional(),
-  name: z.string().trim().min(1).max(200).optional(),
-  prompt: z.string().trim().min(1),
-  text: z.string().trim().min(1).optional(),
-  candidates: z.array(z.object({
-    name: z.string().trim().min(1).max(200).optional(),
-    text: z.string().trim().min(1),
-  }).strict()).min(1).max(6).optional(),
+  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).optional()
+    .describe('Professional meaning of the text Resource. Pass null to use generic.text.'),
+  name: z.string().trim().min(1).max(200).optional()
+    .describe('Optional display name for the text Resource or candidate set.'),
+  prompt: z.string().trim().min(1)
+    .describe('The user request or authoring instruction that produced this text.'),
+  content: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('single'),
+      text: z.string().trim().min(1).describe('One completed text result.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('candidates'),
+      candidates: z.array(z.object({
+        name: z.string().trim().min(1).max(200).optional()
+          .describe('Optional candidate display name.'),
+        text: z.string().trim().min(1)
+          .describe('Completed candidate text.'),
+      }).strict()).min(2).max(6)
+        .describe('Two to six independently selectable completed text candidates.'),
+    }).strict(),
+  ]).describe('Choose one completed result or a selectable candidate set.'),
   references: commonReferenceSchema,
-}).strict().refine((input) => Boolean(input.text) !== Boolean(input.candidates), {
-  message: 'Provide exactly one of text or candidates',
-  path: ['text'],
-})
+}).strict()
 
-const mediaGenerationInputSchema = z.object({
-  episodeId: z.string().trim().min(1).optional(),
-  schemaId: z.string().trim().min(1).optional(),
-  name: z.string().trim().min(1).max(200).optional(),
-  prompt: z.string().trim().min(1),
-  modelKey: z.string().trim().min(1).optional(),
-  count: z.number().int().min(1).max(6).optional(),
-  retryResourceIds: z.array(z.string().trim().min(1)).min(1).max(6).optional(),
-  references: commonReferenceSchema,
-  generationOptions: creativeResourceGenerationOptionsSchema.optional(),
-}).strict().refine((input) => !(input.count && input.retryResourceIds), {
-  message: 'count and retryResourceIds are mutually exclusive',
-  path: ['retryResourceIds'],
-})
+const createImageInputSchema = z.object({
+  ...commonMediaGenerationShape,
+  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image).optional()
+    .describe('Professional meaning of the image Resource. Pass null to use generic.image.'),
+  aspectRatio: z.string().trim().min(1).optional()
+    .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
+  resolution: z.string().trim().min(1).optional()
+    .describe('Optional resolution supported by the selected image model, such as 1K or 2K.'),
+  quality: z.string().trim().min(1).optional()
+    .describe('Optional quality tier supported by the selected image model.'),
+  size: z.string().trim().min(1).optional()
+    .describe('Optional provider-independent image size supported by the selected model.'),
+}).strict()
 
-const createAudioInputSchema = mediaGenerationInputSchema.extend({
-  durationSeconds: z.number().int().min(1).max(600),
-  vocalMode: z.enum(['instrumental', 'vocal']).optional(),
-  genre: z.string().trim().min(1).optional(),
-  mood: z.string().trim().min(1).optional(),
-  bpm: z.number().int().min(20).max(300).optional(),
-  outputFormat: z.enum(['mp3', 'wav']).optional(),
+const createAudioInputSchema = z.object({
+  ...commonMediaGenerationShape,
+  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio).optional()
+    .describe('Professional meaning of the audio Resource. Pass null to use generic.audio.'),
+  durationSeconds: z.number().int().min(1).max(600)
+    .describe('Requested audio duration in seconds.'),
+  vocalMode: z.enum(['instrumental', 'vocal']).optional()
+    .describe('Whether the music model should produce instrumental or vocal audio.'),
+  genre: z.string().trim().min(1).optional()
+    .describe('Optional musical genre.'),
+  mood: z.string().trim().min(1).optional()
+    .describe('Optional musical mood.'),
+  bpm: z.number().int().min(20).max(300).optional()
+    .describe('Optional tempo in beats per minute.'),
+  outputFormat: z.enum(['mp3', 'wav']).optional()
+    .describe('Requested audio file format.'),
+}).strict()
+
+const createVideoInputSchema = z.object({
+  ...commonMediaGenerationShape,
+  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video).optional()
+    .describe('Professional meaning of the video Resource. Pass null to use generic.video.'),
+  durationSeconds: z.number().int().min(1).max(600).optional()
+    .describe('Requested video duration in seconds. Pass null to use the selected model default.'),
+  aspectRatio: z.string().trim().min(1).optional()
+    .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
+  resolution: z.string().trim().min(1).optional()
+    .describe('Optional resolution supported by the selected video model, such as 720p or 1080p.'),
+  fps: z.number().int().min(1).max(240).optional()
+    .describe('Optional frame rate supported by the selected video model.'),
+  generateAudio: z.boolean().optional()
+    .describe('Whether the selected video model should generate synchronized native audio.'),
 }).strict()
 
 type CreateTextInput = z.infer<typeof createTextInputSchema>
-type MediaGenerationInput = z.infer<typeof mediaGenerationInputSchema>
+type CreateImageInput = z.infer<typeof createImageInputSchema>
 type CreateAudioInput = z.infer<typeof createAudioInputSchema>
+type CreateVideoInput = z.infer<typeof createVideoInputSchema>
+type MediaGenerationInput = CreateImageInput | CreateAudioInput | CreateVideoInput
 
 const resourceRefOutputSchema = z.object({
   resourceId: z.string().min(1),
@@ -166,18 +227,39 @@ async function assertInputReferences(
     const mediaTypeById = new Map(resources.map((resource) => [resource.id, resource.mediaType]))
     for (const reference of references) {
       if (mediaTypeById.get(reference.resourceId) !== requiredMediaType) {
-        throw new Error(
-          `CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID:${reference.resourceId}:${requiredMediaType}`,
-        )
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
+          field: 'references',
+          resourceId: reference.resourceId,
+          allowedValues: [requiredMediaType],
+          agentRetryableAfterCorrection: true,
+        })
       }
     }
   })
 }
 
 function requireSchemaForMedia(schemaId: string, mediaType: CreativeResourceMediaType): string {
-  const schema = requireCreativeResourceSchema(schemaId)
+  let schema: ReturnType<typeof requireCreativeResourceSchema>
+  try {
+    schema = requireCreativeResourceSchema(schemaId)
+  } catch {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_SCHEMA_UNKNOWN',
+      field: 'schemaId',
+      requestedValue: schemaId,
+      allowedValues: CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType],
+      agentRetryableAfterCorrection: true,
+    })
+  }
   if (schema.mediaType !== mediaType) {
-    throw new Error(`CREATIVE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${schema.schemaId}:${mediaType}`)
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_SCHEMA_MEDIA_MISMATCH',
+      field: 'schemaId',
+      requestedValue: schema.schemaId,
+      allowedValues: CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType],
+      agentRetryableAfterCorrection: true,
+    })
   }
   return schema.schemaId
 }
@@ -204,7 +286,15 @@ async function resolveGenerationModel(input: {
   }
   if (!requested) return configured
   const parsed = parseModelKeyStrict(requested)
-  if (!parsed) throw new Error(`CREATIVE_RESOURCE_MODEL_KEY_INVALID:${requested}`)
+  if (!parsed) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_MODEL_KEY_INVALID',
+      field: 'modelKey',
+      requestedValue: requested,
+      expectedFormat: 'provider::modelId',
+      agentRetryableAfterCorrection: true,
+    })
+  }
   return parsed.modelKey
 }
 
@@ -225,7 +315,9 @@ async function createTextResources(
     episodeId,
   })
   const references = normalizeInputReferences(input.references)
-  const candidates = input.candidates ?? [{ name: input.name, text: input.text ?? '' }]
+  const candidates = input.content.kind === 'candidates'
+    ? input.content.candidates
+    : [{ name: input.name, text: input.content.text }]
   const candidateSetId = candidates.length > 1 ? randomUUID() : null
   const requestId = ctx.toolCallId?.trim()
     ? `${ctx.context.runId ?? 'run'}:${ctx.toolCallId.trim()}`
@@ -280,31 +372,6 @@ interface MediaPlanConfig {
   readonly modelPayloadKey: 'imageModel' | 'musicModel' | 'videoModel'
 }
 
-const GENERATION_OPTION_KEYS = {
-  image: new Set(['aspectRatio', 'resolution', 'quality', 'size']),
-  audio: new Set<string>(),
-  video: new Set(['duration', 'fps', 'resolution', 'aspectRatio', 'generateAudio']),
-} as const
-
-function readCapabilitySelections(
-  options: z.infer<typeof creativeResourceGenerationOptionsSchema> | undefined,
-  allowedFields: ReadonlySet<string> | null,
-): Record<string, CapabilityValue> {
-  const selections: Record<string, CapabilityValue> = {}
-  for (const [field, value] of Object.entries(options ?? {})) {
-    if (!GENERATION_OPTION_KEYS.image.has(field)
-      && !GENERATION_OPTION_KEYS.video.has(field)
-      && !GENERATION_OPTION_KEYS.audio.has(field)) {
-      throw new Error(`CREATIVE_RESOURCE_GENERATION_OPTION_UNSUPPORTED:${field}`)
-    }
-    if (allowedFields && !allowedFields.has(field)) continue
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      selections[field] = value
-    }
-  }
-  return selections
-}
-
 function preferredCapabilityValue(
   values: readonly CapabilityValue[] | undefined,
   preferred: CapabilityValue,
@@ -316,34 +383,92 @@ function preferredCapabilityValue(
 function assertCapabilityResolution(
   modelKey: string,
   issues: ReturnType<typeof resolveGenerationOptionsForModel>['issues'],
+  requestedSelections: Readonly<Record<string, CapabilityValue>>,
 ): void {
   const issue = issues[0]
   if (!issue) return
-  throw new Error(`${issue.code}:${modelKey}:${issue.field}:${issue.message}`)
+  const field = issue.field.split('.').at(-1) ?? issue.field
+  throw new ApiError('INVALID_PARAMS', {
+    code: issue.code,
+    field,
+    modelKey,
+    requestedValue: requestedSelections[field] ?? null,
+    allowedValues: issue.allowedValues ?? [],
+    agentRetryableAfterCorrection: true,
+  })
+}
+
+function requireCapabilityField(params: {
+  readonly field: string
+  readonly value: CapabilityValue | undefined
+  readonly capabilitiesKnown: boolean
+  readonly optionFields: Readonly<Record<string, readonly CapabilityValue[]>>
+  readonly modelKey: string
+}): void {
+  if (params.value === undefined || !params.capabilitiesKnown || params.optionFields[params.field]) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'CAPABILITY_FIELD_INVALID',
+    field: params.field,
+    modelKey: params.modelKey,
+    requestedValue: params.value,
+    allowedValues: [],
+    agentRetryableAfterCorrection: true,
+  })
 }
 
 async function resolveFrozenGenerationOptions(input: {
   readonly ctx: ProjectAgentOperationContext
   readonly config: MediaPlanConfig
   readonly modelKey: string
-  readonly generationOptions: z.infer<typeof creativeResourceGenerationOptionsSchema> | undefined
-  readonly audioInput: CreateAudioInput | null
+  readonly publicInput: MediaGenerationInput
 }): Promise<Record<string, string | number | boolean>> {
   const modelType: UnifiedModelType = input.config.mediaType === 'audio' ? 'music' : input.config.mediaType
   const projectConfig = await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
   const capabilities = resolveBuiltinCapabilitiesByModelKey(modelType, input.modelKey)
   const optionFields = getCapabilityOptionFields(modelType, capabilities)
   const optionFieldNames = capabilities ? new Set(Object.keys(optionFields)) : null
-  const explicitSelections = readCapabilitySelections(input.generationOptions, optionFieldNames)
-  if (input.audioInput) {
+  const explicitSelections: Record<string, CapabilityValue> = {}
+
+  if (input.config.mediaType === 'image') {
+    const publicInput = input.publicInput as CreateImageInput
+    for (const field of ['resolution', 'quality', 'size'] as const) {
+      requireCapabilityField({
+        field,
+        value: publicInput[field],
+        capabilitiesKnown: capabilities !== undefined,
+        optionFields,
+        modelKey: input.modelKey,
+      })
+      if (publicInput[field] !== undefined) explicitSelections[field] = publicInput[field]
+    }
+  } else if (input.config.mediaType === 'video') {
+    const publicInput = input.publicInput as CreateVideoInput
+    const selections = {
+      duration: publicInput.durationSeconds,
+      resolution: publicInput.resolution,
+      fps: publicInput.fps,
+      generateAudio: publicInput.generateAudio,
+    } as const
+    for (const [field, value] of Object.entries(selections)) {
+      requireCapabilityField({
+        field,
+        value,
+        capabilitiesKnown: capabilities !== undefined,
+        optionFields,
+        modelKey: input.modelKey,
+      })
+      if (value !== undefined) explicitSelections[field] = value
+    }
+  } else {
+    const publicInput = input.publicInput as CreateAudioInput
     if (!optionFieldNames || optionFieldNames.has('durationSeconds')) {
-      explicitSelections.durationSeconds = input.audioInput.durationSeconds
+      explicitSelections.durationSeconds = publicInput.durationSeconds
     }
-    if (input.audioInput.vocalMode && (!optionFieldNames || optionFieldNames.has('vocalMode'))) {
-      explicitSelections.vocalMode = input.audioInput.vocalMode
+    if (publicInput.vocalMode && (!optionFieldNames || optionFieldNames.has('vocalMode'))) {
+      explicitSelections.vocalMode = publicInput.vocalMode
     }
-    if (input.audioInput.outputFormat && (!optionFieldNames || optionFieldNames.has('outputFormat'))) {
-      explicitSelections.outputFormat = input.audioInput.outputFormat
+    if (publicInput.outputFormat && (!optionFieldNames || optionFieldNames.has('outputFormat'))) {
+      explicitSelections.outputFormat = publicInput.outputFormat
     }
   }
 
@@ -356,7 +481,7 @@ async function resolveFrozenGenerationOptions(input: {
     runtimeSelections: explicitSelections,
     requireAllFields: false,
   })
-  assertCapabilityResolution(input.modelKey, partial.issues)
+  assertCapabilityResolution(input.modelKey, partial.issues, explicitSelections)
   const completedSelections: Record<string, CapabilityValue> = { ...partial.options }
 
   const fill = (field: string, preferred: CapabilityValue): void => {
@@ -383,21 +508,23 @@ async function resolveFrozenGenerationOptions(input: {
     runtimeSelections: completedSelections,
     requireAllFields: true,
   })
-  assertCapabilityResolution(input.modelKey, resolved.issues)
+  assertCapabilityResolution(input.modelKey, resolved.issues, completedSelections)
 
   const frozen: Record<string, string | number | boolean> = { ...resolved.options }
-  const raw = input.generationOptions ?? {}
   const projectAspectRatio = projectConfig.videoRatio?.trim() || '9:16'
   if (input.config.mediaType === 'image') {
-    frozen.aspectRatio = typeof raw.aspectRatio === 'string' ? raw.aspectRatio : projectAspectRatio
-    if (typeof raw.size === 'string') frozen.size = raw.size
+    const publicInput = input.publicInput as CreateImageInput
+    frozen.aspectRatio = publicInput.aspectRatio ?? projectAspectRatio
+    if (publicInput.size) frozen.size = publicInput.size
   } else if (input.config.mediaType === 'video') {
-    frozen.aspectRatio = typeof raw.aspectRatio === 'string' ? raw.aspectRatio : projectAspectRatio
-    if (typeof raw.fps === 'number') frozen.fps = raw.fps
-  } else if (input.audioInput) {
-    frozen.durationSeconds = input.audioInput.durationSeconds
-    frozen.vocalMode = input.audioInput.vocalMode ?? String(frozen.vocalMode ?? 'instrumental')
-    frozen.outputFormat = input.audioInput.outputFormat ?? String(frozen.outputFormat ?? 'mp3')
+    const publicInput = input.publicInput as CreateVideoInput
+    frozen.aspectRatio = publicInput.aspectRatio ?? projectAspectRatio
+    if (typeof publicInput.fps === 'number') frozen.fps = publicInput.fps
+  } else {
+    const publicInput = input.publicInput as CreateAudioInput
+    frozen.durationSeconds = publicInput.durationSeconds
+    frozen.vocalMode = publicInput.vocalMode ?? String(frozen.vocalMode ?? 'instrumental')
+    frozen.outputFormat = publicInput.outputFormat ?? String(frozen.outputFormat ?? 'mp3')
   }
   return frozen
 }
@@ -422,21 +549,31 @@ async function planMediaGeneration(
   })
   if (config.mediaType === 'video') {
     if (references.length === 0 && !supportsTextToVideoModel(modelKey)) {
-      throw new Error(`VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED:${modelKey}`)
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED',
+        field: 'references',
+        modelKey,
+        requiredCapability: 'textToVideo',
+        agentRetryableAfterCorrection: true,
+      })
     }
     const maxReferences = resolveBuiltinCapabilitiesByModelKey('video', modelKey)?.video?.maxReferenceImages ?? 1
     if (references.length > maxReferences) {
-      throw new Error(
-        `VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED:${modelKey}:${String(references.length)}:${String(maxReferences)}`,
-      )
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
+        field: 'references',
+        modelKey,
+        requestedValue: references.length,
+        allowedValues: [maxReferences],
+        agentRetryableAfterCorrection: true,
+      })
     }
   }
   const generationOptions = await resolveFrozenGenerationOptions({
     ctx,
     config,
     modelKey,
-    generationOptions: input.generationOptions,
-    audioInput: config.mediaType === 'audio' ? input as CreateAudioInput : null,
+    publicInput: input,
   })
   const inputHash = hashTaskInput({
     operationId: config.operationId,
@@ -454,7 +591,7 @@ async function planMediaGeneration(
       outputFormat: (input as CreateAudioInput).outputFormat,
     } : {}),
   })
-  const retryResourceIds = input.retryResourceIds ?? []
+  const retryResourceIds = input.request.kind === 'retry' ? input.request.resourceIds : []
   const requestId = [
     'generation',
     config.operationId,
@@ -485,20 +622,43 @@ async function planMediaGeneration(
       })
     : []
   if (retryResourceIds.length > 0 && retryRows.length !== retryResourceIds.length) {
-    throw new Error('CREATIVE_RESOURCE_RETRY_TARGET_NOT_FOUND')
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_RETRY_TARGET_NOT_FOUND',
+      field: 'request.resourceIds',
+      requestedValue: retryResourceIds,
+      agentRetryableAfterCorrection: true,
+    })
   }
   const retryById = new Map(retryRows.map((resource) => [resource.id, resource]))
   const resources = retryResourceIds.length > 0
-    ? retryResourceIds.map((resourceId, candidateIndex) => {
+      ? retryResourceIds.map((resourceId, candidateIndex) => {
         const resource = retryById.get(resourceId)
-        if (!resource) throw new Error(`CREATIVE_RESOURCE_RETRY_TARGET_NOT_FOUND:${resourceId}`)
+        if (!resource) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'CREATIVE_RESOURCE_RETRY_TARGET_NOT_FOUND',
+            field: 'request.resourceIds',
+            requestedValue: resourceId,
+            agentRetryableAfterCorrection: true,
+          })
+        }
         if (
           resource.status !== 'failed'
           || resource.mediaType !== config.mediaType
           || resource.schemaId !== schemaId
           || resource.episodeId !== episodeId
         ) {
-          throw new Error(`CREATIVE_RESOURCE_RETRY_TARGET_INVALID:${resourceId}`)
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'CREATIVE_RESOURCE_RETRY_TARGET_INVALID',
+            field: 'request.resourceIds',
+            requestedValue: resourceId,
+            expected: {
+              status: 'failed',
+              mediaType: config.mediaType,
+              schemaId,
+              episodeId,
+            },
+            agentRetryableAfterCorrection: true,
+          })
         }
         return {
           resourceId,
@@ -506,7 +666,9 @@ async function planMediaGeneration(
           candidateIndex: resource.candidateIndex ?? candidateIndex,
         }
       })
-    : Array.from({ length: input.count ?? 1 }, (_, candidateIndex) => ({
+    : Array.from({
+        length: input.request.kind === 'new' ? (input.request.count ?? 1) : 1,
+      }, (_, candidateIndex) => ({
         resourceId: buildCreativeResourceOriginKey({
           operationId: config.operationId,
           requestId,
@@ -734,7 +896,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       agentFlow: { onTaskComplete: 'resume_agent' },
       confirmation: { kind: 'billable_media', required: true },
-      inputSchema: mediaGenerationInputSchema,
+      inputSchema: createImageInputSchema,
       outputSchema: mediaTaskOutputSchema,
       plan: async (ctx, input) => await planMediaGeneration(ctx, input, IMAGE_CONFIG),
       commit: async (ctx, _input, plan) => await commitMediaGeneration(ctx, plan, IMAGE_CONFIG),
@@ -772,7 +934,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       agentFlow: { onTaskComplete: 'resume_agent' },
       confirmation: { kind: 'billable_media', required: true },
-      inputSchema: mediaGenerationInputSchema,
+      inputSchema: createVideoInputSchema,
       outputSchema: mediaTaskOutputSchema,
       plan: async (ctx, input) => await planMediaGeneration(ctx, input, VIDEO_CONFIG),
       commit: async (ctx, _input, plan) => await commitMediaGeneration(ctx, plan, VIDEO_CONFIG),

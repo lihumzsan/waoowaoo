@@ -5,6 +5,8 @@ import {
   invalidateQueryTemplates,
   requestJsonWithError,
 } from './mutation-shared'
+import { capabilitySelectionsToCommand } from '@/lib/ai-registry/capability-selection-command'
+import type { CapabilitySelections } from '@/lib/ai-registry/types'
 
 /**
  * 从资产中心复制到项目资产
@@ -52,6 +54,16 @@ function resolveProjectConfigPatch(input: ProjectConfigMutationInput): Record<st
     return { [input.key]: input.value }
 }
 
+function serializeProjectConfigPatch(patch: Record<string, unknown>): Record<string, unknown> {
+    if (!Object.prototype.hasOwnProperty.call(patch, 'capabilityOverrides')) return patch
+    return {
+        ...patch,
+        capabilityOverrides: capabilitySelectionsToCommand(
+            patch.capabilityOverrides as CapabilitySelections | null | undefined,
+        ),
+    }
+}
+
 export function useUpdateProjectConfig(projectId: string) {
     const queryClient = useQueryClient()
 
@@ -62,7 +74,7 @@ export function useUpdateProjectConfig(projectId: string) {
                 {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(resolveProjectConfigPatch(input)),
+                    body: JSON.stringify(serializeProjectConfigPatch(resolveProjectConfigPatch(input))),
                 },
                 'Failed to update config',
             ),

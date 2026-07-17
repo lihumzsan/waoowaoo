@@ -6,10 +6,6 @@ import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
   throw new ApiError('INVALID_PARAMS', {
@@ -40,6 +36,21 @@ const MODEL_FIELDS = new Set([
   'musicModel',
 ])
 
+const modelKeyPreferenceSchema = z.string().trim().min(1).nullable()
+  .describe('Exact provider::modelId key from list_user_models, or null to clear the preference.')
+
+const updateUserPreferenceInputSchema = z.object({
+  assistantModel: modelKeyPreferenceSchema.optional(),
+  analysisModel: modelKeyPreferenceSchema.optional(),
+  characterModel: modelKeyPreferenceSchema.optional(),
+  locationModel: modelKeyPreferenceSchema.optional(),
+  editModel: modelKeyPreferenceSchema.optional(),
+  videoModel: modelKeyPreferenceSchema.optional(),
+  musicModel: modelKeyPreferenceSchema.optional(),
+  videoRatio: z.string().trim().min(1).optional()
+    .describe('Default output aspect ratio, for example 16:9 or 9:16.'),
+}).strict()
+
 async function lockUserPreferenceOwner(
   transaction: Prisma.TransactionClient,
   userId: string,
@@ -68,7 +79,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: z.object({}).strict(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, _input, transaction) => {
         const deployment = getDeploymentConfig()
@@ -116,12 +127,12 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
         required: true,
         summary: '将覆盖更新用户偏好设置（例如模型等）。系统会在获得明确批准后执行同一份已审核请求。',
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: updateUserPreferenceInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         await lockUserPreferenceOwner(transaction, ctx.userId)
-        const body = isRecord(input) ? input : {}
+        const body: Record<string, unknown> = input
         if (isPlatformProviderCredentialMode(deployment)) {
           const attemptedModelField = Object.keys(body).find((field) => MODEL_FIELDS.has(field))
           if (attemptedModelField) {

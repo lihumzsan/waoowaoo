@@ -27,12 +27,42 @@ export interface GoldenModelServer {
 export async function startGoldenModelServer(port = 0): Promise<GoldenModelServer> {
   const requestCountByScenario = new Map<string, number>()
   let streamPacing: { readonly chunkSize: number; readonly delayMs: number } | null = null
+  let holdTextResponses = false
+  const heldTextResponseReleases = new Set<() => void>()
+  const releaseHeldTextResponses = (): void => {
+    for (const release of [...heldTextResponseReleases]) release()
+  }
+  const waitForTextResponseRelease = async (response: Parameters<typeof writeGoldenJsonResponse>[0]['response']): Promise<void> => {
+    if (!holdTextResponses) return
+    await new Promise<void>((resolve) => {
+      const release = (): void => {
+        heldTextResponseReleases.delete(release)
+        response.off('close', release)
+        resolve()
+      }
+      heldTextResponseReleases.add(release)
+      response.once('close', release)
+    })
+  }
+  const writeControlSnapshot = (response: Parameters<typeof writeGoldenJsonResponse>[0]['response']): void => {
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({
+      ok: true,
+      streamPacing,
+      holdTextResponses,
+      heldTextResponseCount: heldTextResponseReleases.size,
+    }))
+  }
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1')
       if (request.method === 'GET' && url.pathname === '/health') {
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({ ok: true }))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/__golden/control') {
+        writeControlSnapshot(response)
         return
       }
       if (request.method === 'POST' && url.pathname === '/__golden/control') {
@@ -50,8 +80,14 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
             ? { chunkSize: pacing.chunkSize, delayMs: pacing.delayMs }
             : null
         }
-        response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(JSON.stringify({ ok: true, streamPacing }))
+        if (Object.prototype.hasOwnProperty.call(record, 'holdTextResponses')) {
+          if (typeof record.holdTextResponses !== 'boolean') {
+            throw new Error('GOLDEN_TEXT_RESPONSE_HOLD_INVALID')
+          }
+          holdTextResponses = record.holdTextResponses
+          if (!holdTextResponses) releaseHeldTextResponses()
+        }
+        writeControlSnapshot(response)
         return
       }
       if (request.method !== 'POST' || url.pathname !== '/v1/chat/completions') {
@@ -68,6 +104,9 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
         request: completionRequest,
         requestOrdinal,
       })
+      if (decision.kind === 'text') {
+        await waitForTextResponseRelease(response)
+      }
       if (completionRequest.stream) {
         await writeGoldenStreamingResponse({
           response,
@@ -101,6 +140,8 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     server,
     close: async () => await new Promise<void>((resolve, reject) => {
+      holdTextResponses = false
+      releaseHeldTextResponses()
       server.close((error) => error ? reject(error) : resolve())
     }),
   }

@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { EDIT_FIRST_VIDEO_SEGMENTS_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
@@ -50,7 +49,6 @@ export function createVideoSegmentOperations(): ProjectAgentOperationRegistryDra
         required: true,
         summary: '将按已批准资产、核心分段和镜头执行计划生成收费视频；批准后执行不可变任务计划。',
       },
-      toolInputSchema: EDIT_FIRST_VIDEO_SEGMENTS_TOOL_INPUT_SCHEMA,
       inputSchema,
       outputSchema,
       plan: async (ctx, payload) => await planGenerateVideoSegments({

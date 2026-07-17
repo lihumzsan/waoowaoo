@@ -127,21 +127,30 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   if (toolName === 'create_text' && instruction.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) {
     return {
       prompt: 'Create three distinct short story concepts.',
-      candidates: [
-        { name: 'Concept 1', text: 'A lighthouse remembers every ship it failed to save.' },
-        { name: 'Concept 2', text: 'A paper city wakes whenever its maker falls asleep.' },
-        { name: 'Concept 3', text: 'A train crosses one impossible station each midnight.' },
-      ],
+      content: {
+        kind: 'candidates',
+        candidates: [
+          { name: 'Concept 1', text: 'A lighthouse remembers every ship it failed to save.' },
+          { name: 'Concept 2', text: 'A paper city wakes whenever its maker falls asleep.' },
+          { name: 'Concept 3', text: 'A train crosses one impossible station each midnight.' },
+        ],
+      },
     }
   }
   if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
     return {
       prompt: 'A cinematic midnight shrine in mist, wide composition.',
-      retryResourceIds: failedResourceIds(request),
+      request: {
+        kind: 'retry',
+        resourceIds: failedResourceIds(request),
+      },
     }
   }
   if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) {
-    return { prompt: 'A cinematic midnight shrine in mist, wide composition.', count: 3 }
+    return {
+      prompt: 'A cinematic midnight shrine in mist, wide composition.',
+      request: { kind: 'new', count: 3 },
+    }
   }
   if (toolName === 'list_resources') {
     if (instruction.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
@@ -158,12 +167,16 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) {
-    return { prompt: 'A slow cinematic push through a moonlit empty gallery.', count: 1 }
+    return {
+      prompt: 'A slow cinematic push through a moonlit empty gallery.',
+      durationSeconds: 15,
+      request: { kind: 'new', count: 1 },
+    }
   }
   if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) {
     return {
       prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
-      count: 2,
+      request: { kind: 'new', count: 2 },
       references: resourceReferences(request, 'image').slice(0, 1),
     }
   }
@@ -171,7 +184,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     return {
       prompt: 'Compose restrained atmospheric music matching the referenced videos.',
       durationSeconds: 120,
-      count: 1,
+      request: { kind: 'new', count: 1 },
       references: resourceReferences(request, 'video').slice(0, 3),
     }
   }

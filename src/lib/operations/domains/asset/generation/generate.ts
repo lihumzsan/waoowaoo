@@ -12,9 +12,9 @@ export async function planCharacterImageGenerationOperation(
   assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
   const locale = resolveLocaleFromContext(ctx.context.locale)
 
-  let characterId = normalizeString(input.characterId)
-  const characterName = normalizeString(input.characterName)
-  if (!characterId) {
+  let characterId = input.target.kind === 'id' ? input.target.characterId : ''
+  const characterName = input.target.kind === 'name' ? input.target.characterName : ''
+  if (input.target.kind === 'name') {
     const exact = await prisma.projectCharacter.findFirst({
       where: {
         projectId: ctx.projectId,
@@ -98,9 +98,9 @@ export async function planLocationImageGenerationOperation(
   assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
   const locale = resolveLocaleFromContext(ctx.context.locale)
 
-  let locationId = normalizeString(input.locationId)
-  const locationName = normalizeString(input.locationName)
-  if (!locationId) {
+  let locationId = input.target.kind === 'id' ? input.target.locationId : ''
+  const locationName = input.target.kind === 'name' ? input.target.locationName : ''
+  if (input.target.kind === 'name') {
     const exact = await prisma.projectLocation.findFirst({
       where: {
         projectId: ctx.projectId,
@@ -167,26 +167,38 @@ export async function planLocationImageGenerationOperation(
 
 export function buildGenerateCharacterImageInputSchema() {
   return z.object({
-    characterId: z.string().min(1).optional(),
-    characterName: z.string().min(1).optional(),
+    target: z.discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('id'),
+        characterId: z.string().trim().min(1).describe('Exact project character ID.'),
+      }).strict(),
+      z.object({
+        kind: z.literal('name'),
+        characterName: z.string().trim().min(1)
+          .describe('Exact or unambiguous project character name to resolve.'),
+      }).strict(),
+    ]).describe('Choose an exact character identity or resolve one by name.'),
     appearanceId: z.string().min(1).optional(),
     appearanceIndex: z.number().int().min(0).max(20).optional(),
     count: z.number().int().positive().max(6).optional(),
     imageIndex: z.number().int().min(0).max(20).optional(),
-  }).refine((value) => Boolean(value.characterId || value.characterName), {
-    message: 'characterId or characterName is required',
-    path: ['characterId'],
-  })
+  }).strict()
 }
 
 export function buildGenerateLocationImageInputSchema() {
   return z.object({
-    locationId: z.string().min(1).optional(),
-    locationName: z.string().min(1).optional(),
+    target: z.discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('id'),
+        locationId: z.string().trim().min(1).describe('Exact project location ID.'),
+      }).strict(),
+      z.object({
+        kind: z.literal('name'),
+        locationName: z.string().trim().min(1)
+          .describe('Exact or unambiguous project location name to resolve.'),
+      }).strict(),
+    ]).describe('Choose an exact location identity or resolve one by name.'),
     count: z.number().int().positive().max(6).optional(),
     imageIndex: z.number().int().min(0).max(50).optional(),
-  }).refine((value) => Boolean(value.locationId || value.locationName), {
-    message: 'locationId or locationName is required',
-    path: ['locationId'],
-  })
+  }).strict()
 }

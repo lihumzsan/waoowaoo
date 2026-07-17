@@ -13,7 +13,11 @@ import { GOLDEN_EDIT_FIRST_WORKFLOW_STEPS } from '../contracts/stages'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import type { GoldenOracleSnapshot } from '../oracle/types'
-import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
+import {
+  setGoldenMediaStatusDelay,
+  setGoldenStreamPacing,
+  setGoldenTextResponseHold,
+} from '../providers/control'
 import { GOLDEN_REMAINING_VIDEO_REQUEST } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { bgmDesignSchema } from '@/lib/bgm-design/types'
@@ -494,12 +498,12 @@ async function submitObservedBoundary(input: {
 
   if (input.boundary === 'asset_review') {
     await expect(input.page.getByText('已就绪资产', { exact: true })).toHaveCount(0)
-    await setGoldenStreamPacing({ chunkSize: 1, delayMs: 10 })
+    await setGoldenTextResponseHold(true)
     try {
       await submitGoldenBoundary(input.page, input.boundary)
       await assertShotExecutionPlansMaterializeAndSurviveReload(input)
     } finally {
-      await setGoldenStreamPacing(null)
+      await setGoldenTextResponseHold(false)
     }
     return
   }

@@ -177,7 +177,17 @@ export function useGenerateProjectCharacterFromReference(projectId: string) {
             count: number
             customDescription?: string
         }) => {
-            const input = { ...payload, isBackgroundJob: true }
+            const input = {
+                referenceImageUrls: payload.referenceImageUrls,
+                target: {
+                    kind: 'appearance' as const,
+                    characterName: payload.characterName,
+                    characterId: payload.characterId,
+                    appearanceId: payload.appearanceId,
+                },
+                count: payload.count,
+                ...(payload.customDescription ? { customDescription: payload.customDescription } : {}),
+            }
             const plan = await fetchOperationPlanView({
                 projectId,
                 operationId: 'reference_to_character',

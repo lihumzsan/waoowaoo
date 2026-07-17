@@ -35,19 +35,32 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_OVERWRITE,
       inputSchema: z.object({
-        type: z.enum(['character', 'location']),
-        assetId: z.string().min(1),
-        appearanceId: z.string().optional(),
-        imageIndex: z.number().int().nullable().optional(),
-      }),
+        selection: z.discriminatedUnion('kind', [
+          z.object({
+            kind: z.literal('character'),
+            assetId: z.string().trim().min(1).describe('Exact project character ID.'),
+            appearanceId: z.string().trim().min(1).describe('Exact character appearance ID.'),
+            imageIndex: z.number().int().min(0).nullable()
+              .describe('Candidate image index to select, or null to clear the selection.'),
+          }).strict(),
+          z.object({
+            kind: z.literal('location'),
+            assetId: z.string().trim().min(1).describe('Exact project location ID.'),
+            imageIndex: z.number().int().min(0).nullable()
+              .describe('Candidate image index to select, or null to clear the selection.'),
+          }).strict(),
+        ]),
+      }).strict(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) =>
         selectAssetRender({
-          kind: input.type,
-          assetId: input.assetId,
+          kind: input.selection.kind,
+          assetId: input.selection.assetId,
           body: {
-            ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
-            imageIndex: input.imageIndex ?? undefined,
+            ...(input.selection.kind === 'character'
+              ? { appearanceId: input.selection.appearanceId }
+              : {}),
+            imageIndex: input.selection.imageIndex ?? undefined,
           },
           access: {
             scope: 'project',

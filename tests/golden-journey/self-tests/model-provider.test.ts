@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GoldenModelServer } from '../providers/model/server'
 import { startGoldenModelServer } from '../providers/model/server'
 import {
@@ -348,6 +348,48 @@ describe('Golden local model provider', () => {
     expect(body).toContain('data: [DONE]')
   })
 
+  it('holds text responses behind an explicit observable gate until released', async () => {
+    runningServer = await startGoldenModelServer()
+    const controlUrl = new URL('/__golden/control', runningServer.baseUrl)
+    const enableResponse = await fetch(controlUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ holdTextResponses: true }),
+    })
+    expect(enableResponse.status).toBe(200)
+
+    const heldResponse = fetch(`${runningServer.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer golden-scenario:normal-mainline',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: '只输出包含 "questions" 和 targetRuntime 的 JSON。',
+        }],
+      }),
+    })
+
+    await vi.waitFor(async () => {
+      const response = await fetch(controlUrl)
+      const snapshot = await response.json() as { heldTextResponseCount?: unknown }
+      expect(snapshot.heldTextResponseCount).toBe(1)
+    })
+
+    const releaseResponse = await fetch(controlUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ holdTextResponses: false }),
+    })
+    expect(releaseResponse.status).toBe(200)
+    const response = await heldResponse
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('stable boundary')
+  })
+
   it('derives tool argument keys from the production-supplied schema', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
@@ -579,7 +621,10 @@ describe('Golden local model provider', () => {
     expect(decision).toMatchObject({
       kind: 'tool_call',
       toolName: 'create_image',
-      argumentsJson: JSON.stringify({ prompt: 'A cinematic midnight shrine in mist, wide composition.', count: 3 }),
+      argumentsJson: JSON.stringify({
+        prompt: 'A cinematic midnight shrine in mist, wide composition.',
+        request: { kind: 'new', count: 3 },
+      }),
     })
   })
 
@@ -626,7 +671,7 @@ describe('Golden local model provider', () => {
       toolName: 'create_image',
       argumentsJson: JSON.stringify({
         prompt: 'A cinematic midnight shrine in mist, wide composition.',
-        retryResourceIds: ['failed-resource-1'],
+        request: { kind: 'retry', resourceIds: ['failed-resource-1'] },
       }),
     })
   })
@@ -657,7 +702,7 @@ describe('Golden local model provider', () => {
     expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_video' })
     if (decision.kind !== 'tool_call') return
     expect(JSON.parse(decision.argumentsJson)).toMatchObject({
-      count: 2,
+      request: { kind: 'new', count: 2 },
       references: [{
         resourceId: 'image-resource-1',
         revisionId: 'image-revision-1',

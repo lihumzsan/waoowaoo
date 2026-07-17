@@ -7,6 +7,7 @@ import type { DefaultModels, WorkflowConcurrency } from './selectors'
 import type { MutableRefObject } from 'react'
 import { useCallback, useRef, useState } from 'react'
 import { logError as _ulogError } from '@/lib/logging/core'
+import { capabilitySelectionsToCommand } from '@/lib/ai-registry/capability-selection-command'
 
 export function useApiConfigSaver(input: {
   latestModelsRef: MutableRefObject<CustomModel[]>
@@ -52,11 +53,22 @@ export function useApiConfigSaver(input: {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          models: enabledModels,
-          providers: currentProviders,
+          models: enabledModels.map((model) => ({
+            modelId: model.modelId,
+            name: model.name,
+            type: model.type,
+            provider: model.provider,
+          })),
+          providers: currentProviders.map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+            ...(provider.apiKey !== undefined ? { apiKey: provider.apiKey } : {}),
+            ...(provider.hidden !== undefined ? { hidden: provider.hidden } : {}),
+          })),
           defaultModels: currentDefaultModels,
           workflowConcurrency: currentWorkflowConcurrency,
-          capabilityDefaults: currentCapabilityDefaults,
+          capabilityDefaults: capabilitySelectionsToCommand(currentCapabilityDefaults),
         }),
       })
       if (!res.ok) {

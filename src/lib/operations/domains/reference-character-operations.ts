@@ -27,12 +27,26 @@ const referenceImagesSchema = z.array(z.string().min(1)).min(1).max(5)
 
 export const referenceCharacterGenerationInputSchema = z.object({
   referenceImageUrls: referenceImagesSchema,
-  characterName: z.string().min(1).optional(),
-  characterId: z.string().min(1).optional(),
-  appearanceId: z.string().min(1).optional(),
+  target: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('unattached'),
+      characterName: z.string().trim().min(1).optional()
+        .describe('Optional display name for the generated character concept.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('character'),
+      characterId: z.string().trim().min(1).describe('Exact existing character ID.'),
+      characterName: z.string().trim().min(1).optional(),
+    }).strict(),
+    z.object({
+      kind: z.literal('appearance'),
+      characterId: z.string().trim().min(1).describe('Exact existing character ID.'),
+      appearanceId: z.string().trim().min(1).describe('Exact existing appearance ID.'),
+      characterName: z.string().trim().min(1).optional(),
+    }).strict(),
+  ]).describe('Generate an unattached concept or target an existing character/appearance.'),
   count: z.number().int().positive().max(6).optional(),
   customDescription: z.string().min(1).optional(),
-  isBackgroundJob: z.boolean().optional(),
 }).strict()
 
 export const referenceCharacterExtractionInputSchema = z.object({
@@ -71,11 +85,7 @@ async function assertProjectTargetOwnership(params: {
   projectId: string
   characterId: string
   appearanceId: string
-  isBackgroundJob: boolean
 }): Promise<void> {
-  if (params.isBackgroundJob && (!params.characterId || !params.appearanceId)) {
-    throw new ApiError('INVALID_PARAMS', { code: 'REFERENCE_CHARACTER_TARGET_REQUIRED' })
-  }
   if (!params.characterId && !params.appearanceId) return
   const appearance = params.appearanceId
     ? await prisma.characterAppearance.findFirst({
@@ -102,11 +112,7 @@ async function assertAssetHubTargetOwnership(params: {
   userId: string
   characterId: string
   appearanceId: string
-  isBackgroundJob: boolean
 }): Promise<void> {
-  if (params.isBackgroundJob && (!params.characterId || !params.appearanceId)) {
-    throw new ApiError('INVALID_PARAMS', { code: 'REFERENCE_CHARACTER_TARGET_REQUIRED' })
-  }
   if (!params.characterId && !params.appearanceId) return
   const appearance = params.appearanceId
     ? await prisma.globalCharacterAppearance.findFirst({
@@ -137,23 +143,25 @@ export async function planReferenceCharacterGeneration(params: {
 }): Promise<OperationPlan> {
   const referenceImageUrls = normalizeReferenceImages(params.input.referenceImageUrls)
   const count = normalizeImageGenerationCount('reference-to-character', params.input.count)
-  const characterId = params.input.characterId?.trim() ?? ''
-  const appearanceId = params.input.appearanceId?.trim() ?? ''
-  const isBackgroundJob = params.input.isBackgroundJob === true
+  const characterId = params.input.target.kind === 'unattached'
+    ? ''
+    : params.input.target.characterId
+  const appearanceId = params.input.target.kind === 'appearance'
+    ? params.input.target.appearanceId
+    : ''
+  const isBackgroundJob = params.input.target.kind === 'appearance'
 
   if (params.scope === 'project') {
     await assertProjectTargetOwnership({
       projectId: params.ctx.projectId,
       characterId,
       appearanceId,
-      isBackgroundJob,
     })
   } else {
     await assertAssetHubTargetOwnership({
       userId: params.ctx.userId,
       characterId,
       appearanceId,
-      isBackgroundJob,
     })
   }
 
@@ -164,7 +172,9 @@ export async function planReferenceCharacterGeneration(params: {
     isBackgroundJob,
     ...(characterId ? { characterId } : {}),
     ...(appearanceId ? { appearanceId } : {}),
-    ...(params.input.characterName ? { characterName: params.input.characterName.trim() } : {}),
+    ...(params.input.target.characterName
+      ? { characterName: params.input.target.characterName.trim() }
+      : {}),
     ...(params.input.customDescription ? { customDescription: params.input.customDescription.trim() } : {}),
     displayMode: 'detail',
   }

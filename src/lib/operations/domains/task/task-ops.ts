@@ -3,20 +3,40 @@ import { ApiError } from '@/lib/api-errors'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { cancelTask, dismissFailedTasks, getTaskById, queryTasks } from '@/lib/task/service'
-import type { TaskStatus } from '@/lib/task/types'
+import { TASK_STATUS, TASK_TYPE, type TaskStatus, type TaskType } from '@/lib/task/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
-function toObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
+const taskStatusSchema = z.enum(Object.values(TASK_STATUS) as [TaskStatus, ...TaskStatus[]])
+const taskTypeSchema = z.enum(Object.values(TASK_TYPE) as [TaskType, ...TaskType[]])
 
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
-}
+const listTasksInputSchema = z.object({
+  projectId: z.string().trim().min(1).optional()
+    .describe('Filter by the exact project ID. Omit to query tasks across the current user.'),
+  targetType: z.string().trim().min(1).optional()
+    .describe('Filter by the exact persisted task target type.'),
+  targetId: z.string().trim().min(1).optional()
+    .describe('Filter by the exact persisted task target ID.'),
+  status: z.array(taskStatusSchema).min(1).optional()
+    .describe('Filter by one or more exact task lifecycle statuses.'),
+  type: z.array(taskTypeSchema).min(1).optional()
+    .describe('Filter by one or more exact task types.'),
+  limit: z.number().int().min(1).max(200).optional()
+    .describe('Maximum tasks to return. Defaults to 50.'),
+}).strict()
+
+const dismissFailedTasksInputSchema = z.object({
+  taskIds: z.array(z.string().trim().min(1)).min(1).max(200)
+    .describe('Exact failed task IDs to dismiss.'),
+}).strict()
+
+const getTaskInputSchema = z.object({
+  taskId: z.string().trim().min(1).describe('Exact task ID.'),
+  includeEvents: z.boolean().optional()
+    .describe('Whether to include persisted lifecycle events. Defaults to false.'),
+  eventsLimit: z.number().int().min(1).max(5000).optional()
+    .describe('Maximum lifecycle events to return when includeEvents is true. Defaults to 500.'),
+}).strict()
 
 function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
   const error = normalizeTaskError(task.errorCode, task.errorMessage)
@@ -41,31 +61,16 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: listTasksInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const payload = toObject(input)
-        const projectId = readString(payload.projectId) || undefined
-        const targetType = readString(payload.targetType) || undefined
-        const targetId = readString(payload.targetId) || undefined
-
-        const statusList = Array.isArray(payload.status) ? payload.status : []
-        const typeList = Array.isArray(payload.type) ? payload.type : []
-        const status = statusList.filter((value): value is TaskStatus => typeof value === 'string') as TaskStatus[]
-        const type = typeList.filter((value): value is string => typeof value === 'string')
-
-        const limitRaw = typeof payload.limit === 'string' || typeof payload.limit === 'number'
-          ? Number.parseInt(String(payload.limit), 10)
-          : 50
-        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50
-
         const tasks = await queryTasks({
-          projectId,
-          targetType,
-          targetId,
-          status: status.length ? status : undefined,
-          type: type.length ? type : undefined,
-          limit,
+          projectId: input.projectId,
+          targetType: input.targetType,
+          targetId: input.targetId,
+          status: input.status,
+          type: input.type,
+          limit: input.limit ?? 50,
         })
 
         const filtered = tasks
@@ -93,23 +98,10 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         required: true,
         summary: '将批量 dismiss 失败任务（不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: dismissFailedTasksInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        const payload = toObject(input)
-        const taskIdsRaw = Array.isArray(payload.taskIds) ? payload.taskIds : null
-        const taskIds = taskIdsRaw
-          ? taskIdsRaw.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-          : []
-
-        if (taskIds.length === 0) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-        if (taskIds.length > 200) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-
-        const count = await dismissFailedTasks(taskIds, ctx.userId, transaction)
+        const count = await dismissFailedTasks(input.taskIds, ctx.userId, transaction)
         return { success: true, dismissed: count }
       },
     }),
@@ -127,26 +119,17 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: getTaskInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const payload = toObject(input)
-        const taskId = readString(payload.taskId)
-        if (!taskId) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-
-        const task = await getTaskById(taskId)
+        const task = await getTaskById(input.taskId)
         if (!task || task.userId !== ctx.userId) {
           throw new ApiError('NOT_FOUND')
         }
 
-        const includeEvents = payload.includeEvents === true || payload.includeEvents === '1'
-        const eventsLimitRaw = typeof payload.eventsLimit === 'string' || typeof payload.eventsLimit === 'number'
-          ? Number.parseInt(String(payload.eventsLimit), 10)
-          : 500
-        const eventsLimit = Number.isFinite(eventsLimitRaw) ? Math.min(Math.max(eventsLimitRaw, 1), 5000) : 500
-        const events = includeEvents ? await listTaskLifecycleEvents(taskId, eventsLimit) : null
+        const events = input.includeEvents
+          ? await listTaskLifecycleEvents(input.taskId, input.eventsLimit ?? 500)
+          : null
 
         return {
           task: {

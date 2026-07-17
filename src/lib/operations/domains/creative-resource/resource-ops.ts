@@ -8,12 +8,16 @@ import {
 } from '@/lib/creative-resource/view-service'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { CREATIVE_RESOURCE_SCHEMAS } from '@/lib/creative-resource/schema-registry'
+
+const creativeResourceSchemaIds = CREATIVE_RESOURCE_SCHEMAS.map((definition) => definition.schemaId)
 
 const listResourcesInputSchema = z.object({
   episodeId: z.string().trim().min(1).nullable().optional(),
   includeProjectScope: z.boolean().optional(),
   mediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES).optional(),
-  schemaId: z.string().trim().min(1).optional(),
+  schemaId: z.enum(creativeResourceSchemaIds).optional()
+    .describe('Optional exact professional Resource schema to filter by. Pass null to include every schema.'),
   status: z.enum(CREATIVE_RESOURCE_STATUSES).optional(),
   limit: z.number().int().min(1).max(200).optional(),
 }).strict()

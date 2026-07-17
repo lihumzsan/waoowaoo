@@ -2,10 +2,14 @@ import { z } from 'zod'
 import { CREATIVE_RESOURCE_MEDIA_TYPES, type CreativeResourceJsonValue } from './contracts'
 
 export const creativeResourceInputRefSchema = z.object({
-  resourceId: z.string().trim().min(1),
-  revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
-  role: z.string().trim().min(1).optional(),
+  resourceId: z.string().trim().min(1)
+    .describe('Exact Resource identity returned by list_resources or get_resource.'),
+  revisionId: z.string().trim().min(1)
+    .describe('Exact immutable revision identity returned for that Resource.'),
+  fingerprint: z.string().trim().min(1)
+    .describe('Exact revision fingerprint returned with revisionId; never invent or recompute it.'),
+  role: z.string().trim().min(1).optional()
+    .describe('Optional semantic role of this reference in the new output, such as character, location, or source_video.'),
 }).strict()
 
 export const creativeResourceGenerationOptionsSchema = z.record(

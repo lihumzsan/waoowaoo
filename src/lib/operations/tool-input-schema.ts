@@ -155,6 +155,28 @@ function addNullable(schema: JsonValue): JsonValue {
     }
   }
 
+  if (Array.isArray(schema.enum)) {
+    const type = schema.type
+    return {
+      ...schema,
+      ...(typeof type === 'string'
+        ? { type: [type, 'null'] }
+        : Array.isArray(type)
+          ? { type: Array.from(new Set([...type.filter((item): item is string => typeof item === 'string'), 'null'])) }
+          : {}),
+      enum: [...schema.enum, null].map(toJsonValue),
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(schema, 'const')) {
+    return {
+      anyOf: [
+        schema,
+        { type: 'null' },
+      ],
+    }
+  }
+
   if (typeof schema.type === 'string') {
     return {
       ...schema,
@@ -166,13 +188,6 @@ function addNullable(schema: JsonValue): JsonValue {
     return {
       ...schema,
       type: Array.from(new Set([...schema.type.filter((item): item is string => typeof item === 'string'), 'null'])),
-    }
-  }
-
-  if (Array.isArray(schema.enum)) {
-    return {
-      ...schema,
-      enum: [...schema.enum, null].map(toJsonValue),
     }
   }
 
