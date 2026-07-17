@@ -206,6 +206,86 @@ function compileProcedural(source: Extract<ScoreSource, { kind: 'emotion-procedu
   return events
 }
 
+function compileCinematic(source: Extract<ScoreSource, { kind: 'cinematic-continuous/v1' }>): NoteEvent[] {
+  const harmonyByBar = new Map(source.harmony.map((bar) => [bar.barIndex, bar] as const))
+  const totalBeats = source.durationSeconds / (60 / source.bpm)
+  const events: NoteEvent[] = source.phrases.flatMap((track) => track.notes.map((note) => ({
+    trackId: track.trackId,
+    instrument: track.instrument,
+    startBeat: note.startBeat,
+    durationBeats: note.durationBeats,
+    midi: note.midi,
+    velocity: note.velocity,
+    gain: track.gain,
+    pan: track.pan,
+  })))
+
+  for (const layer of source.layers) {
+    layer.barIndexes.forEach((barIndex, layerBarIndex) => {
+      const harmony = harmonyByBar.get(barIndex)
+      if (!harmony) throw new Error(`CINEMATIC_HARMONY_BAR_MISSING:${barIndex}`)
+      const progress = layer.barIndexes.length <= 1 ? 1 : layerBarIndex / (layer.barIndexes.length - 1)
+      const velocity = clampVelocity(layer.velocityStart + (layer.velocityEnd - layer.velocityStart) * progress)
+      const startBeat = barIndex * source.beatsPerBar
+
+      if (layer.part === 'sustain') {
+        for (const voice of harmony.voices) {
+          events.push({
+            trackId: layer.trackId,
+            instrument: layer.instrument,
+            startBeat,
+            durationBeats: layer.durationBeats,
+            midi: clampMidi(voice + layer.octaveShift * 12),
+            velocity,
+            gain: layer.gain,
+            pan: layer.pan,
+          })
+        }
+        return
+      }
+
+      if (layer.part === 'arpeggio') {
+        const stepCount = Math.round(source.beatsPerBar / layer.subdivisionBeats)
+        for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
+          const voiceIndex = layer.order[stepIndex % layer.order.length]
+          if (voiceIndex === undefined || voiceIndex >= harmony.voices.length) {
+            throw new Error(`CINEMATIC_ARPEGGIO_VOICE_INVALID:${layer.trackId}:${barIndex}:${String(voiceIndex)}`)
+          }
+          const voice = harmony.voices[voiceIndex]
+          if (voice === undefined) throw new Error(`CINEMATIC_ARPEGGIO_VOICE_MISSING:${layer.trackId}:${barIndex}`)
+          const contour = Math.sin(stepIndex / Math.max(1, stepCount - 1) * Math.PI)
+          const noteStartBeat = startBeat + stepIndex * layer.subdivisionBeats
+          events.push({
+            trackId: layer.trackId,
+            instrument: layer.instrument,
+            startBeat: noteStartBeat,
+            durationBeats: Math.min(layer.noteDurationBeats, totalBeats - noteStartBeat),
+            midi: clampMidi(voice + layer.octaveShift * 12),
+            velocity: clampVelocity(velocity + contour * 8),
+            gain: layer.gain,
+            pan: layer.pan + (stepIndex % 2 === 0 ? -0.035 : 0.035),
+          })
+        }
+        return
+      }
+
+      for (const beatOffset of layer.patternBeats) {
+        events.push({
+          trackId: layer.trackId,
+          instrument: layer.instrument,
+          startBeat: startBeat + beatOffset,
+          durationBeats: layer.noteDurationBeats,
+          midi: clampMidi(harmony.bassMidi + layer.octaveShift * 12),
+          velocity,
+          gain: layer.gain,
+          pan: layer.pan,
+        })
+      }
+    })
+  }
+  return events
+}
+
 function validateCompiled(source: ScoreSource, events: readonly NoteEvent[]): void {
   const totalBeats = source.durationSeconds / (60 / source.bpm)
   if (events.length === 0) throw new Error('COMPILED_SCORE_EMPTY')
@@ -223,7 +303,9 @@ export function parseAndCompileScore(value: unknown): CompiledScore {
     ? compileDirect(source)
     : source.kind === 'motif-arrangement/v1'
       ? compileMotif(source)
-      : compileProcedural(source)
+      : source.kind === 'emotion-procedural/v1'
+        ? compileProcedural(source)
+        : compileCinematic(source)
   validateCompiled(source, events)
   return {
     title: source.title,

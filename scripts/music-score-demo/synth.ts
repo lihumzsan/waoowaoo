@@ -1,6 +1,14 @@
 import type { CompiledScore, InstrumentId, NoteEvent } from './types'
 
 const SAMPLE_RATE = 48_000
+const codeSynthInstruments: ReadonlySet<InstrumentId> = new Set([
+  'felt_piano',
+  'warm_pad',
+  'soft_bass',
+  'cello',
+  'glass_mallet',
+  'soft_pulse',
+])
 
 function midiToHz(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12)
@@ -144,6 +152,11 @@ function wavHeader(dataLength: number): Buffer {
 }
 
 export function renderScoreToWav(score: CompiledScore): Buffer {
+  for (const event of score.events) {
+    if (!codeSynthInstruments.has(event.instrument)) {
+      throw new Error(`CODE_SYNTH_INSTRUMENT_UNSUPPORTED:${event.instrument}`)
+    }
+  }
   const sampleCount = Math.round(score.durationSeconds * SAMPLE_RATE)
   const left = new Float64Array(sampleCount)
   const right = new Float64Array(sampleCount)

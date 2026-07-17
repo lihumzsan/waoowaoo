@@ -9,6 +9,18 @@ const instrumentPrograms: Readonly<Record<InstrumentId, number>> = {
   cello: 42,
   glass_mallet: 10,
   soft_pulse: 118,
+  concert_grand: 0,
+  string_ensemble: 48,
+  solo_cello: 42,
+  clarinet: 71,
+  french_horn: 60,
+  harp: 46,
+  choir_aahs: 52,
+  timpani: 47,
+}
+
+function midiValue(value: number): number {
+  return Math.max(0, Math.min(127, Math.round(value)))
 }
 
 function variableLength(value: number): number[] {
@@ -45,6 +57,7 @@ export function scoreToMidi(score: CompiledScore): Buffer {
   let nextChannel = 0
   for (const instrument of instruments) {
     if (nextChannel === 9) nextChannel += 1
+    if (nextChannel > 15) throw new Error('MIDI_CHANNEL_CAPACITY_EXCEEDED')
     channelByInstrument.set(instrument, nextChannel)
     nextChannel += 1
   }
@@ -59,6 +72,13 @@ export function scoreToMidi(score: CompiledScore): Buffer {
     const channel = channelByInstrument.get(instrument)
     if (channel === undefined) throw new Error(`MIDI_CHANNEL_MISSING:${instrument}`)
     events.push({ tick: 0, priority: 1, bytes: [0xc0 | channel, instrumentPrograms[instrument]] })
+    const instrumentEvents = score.events.filter((event) => event.instrument === instrument)
+    const maximumGain = Math.max(...instrumentEvents.map((event) => event.gain), 0.1)
+    const averagePan = instrumentEvents.reduce((sum, event) => sum + event.pan, 0) / Math.max(1, instrumentEvents.length)
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 7, midiValue(Math.sqrt(maximumGain) * 108)] })
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 10, midiValue(64 + averagePan * 48)] })
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 91, instrument === 'timpani' ? 44 : 74] })
+    events.push({ tick: 0, priority: 1, bytes: [0xb0 | channel, 93, instrument === 'string_ensemble' || instrument === 'choir_aahs' ? 38 : 18] })
   }
   for (const event of score.events) {
     const channel = channelByInstrument.get(event.instrument)

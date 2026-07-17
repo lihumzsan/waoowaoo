@@ -7,6 +7,14 @@ export const instrumentIds = [
   'cello',
   'glass_mallet',
   'soft_pulse',
+  'concert_grand',
+  'string_ensemble',
+  'solo_cello',
+  'clarinet',
+  'french_horn',
+  'harp',
+  'choir_aahs',
+  'timpani',
 ] as const
 
 export const instrumentIdSchema = z.enum(instrumentIds)
@@ -102,10 +110,63 @@ export const proceduralScoreSchema = z.object({
   }).strict(),
 }).strict()
 
+const cinematicHarmonyBarSchema = z.object({
+  barIndex: z.number().int().min(0),
+  bassMidi: z.number().int().min(24).max(72),
+  voices: z.array(z.number().int().min(36).max(96)).min(3).max(6),
+}).strict()
+
+const cinematicLayerBaseShape = {
+  trackId: z.string().trim().min(1),
+  instrument: instrumentIdSchema,
+  barIndexes: z.array(z.number().int().min(0)).min(1),
+  octaveShift: z.number().int().min(-3).max(3),
+  velocityStart: z.number().int().min(1).max(127),
+  velocityEnd: z.number().int().min(1).max(127),
+  gain: z.number().positive().max(2),
+  pan: z.number().min(-1).max(1),
+}
+
+const cinematicSustainLayerSchema = z.object({
+  ...cinematicLayerBaseShape,
+  part: z.literal('sustain'),
+  durationBeats: z.number().positive().max(8),
+}).strict()
+
+const cinematicArpeggioLayerSchema = z.object({
+  ...cinematicLayerBaseShape,
+  part: z.literal('arpeggio'),
+  order: z.array(z.number().int().min(0).max(7)).min(1).max(16),
+  subdivisionBeats: z.number().positive().max(2),
+  noteDurationBeats: z.number().positive().max(4),
+}).strict()
+
+const cinematicBassLayerSchema = z.object({
+  ...cinematicLayerBaseShape,
+  part: z.literal('bass'),
+  patternBeats: z.array(z.number().min(0).lt(4)).min(1).max(8),
+  noteDurationBeats: z.number().positive().max(4),
+}).strict()
+
+const cinematicLayerSchema = z.discriminatedUnion('part', [
+  cinematicSustainLayerSchema,
+  cinematicArpeggioLayerSchema,
+  cinematicBassLayerSchema,
+])
+
+export const cinematicScoreSchema = z.object({
+  kind: z.literal('cinematic-continuous/v1'),
+  ...sourceBaseShape,
+  harmony: z.array(cinematicHarmonyBarSchema).min(1),
+  layers: z.array(cinematicLayerSchema).min(1),
+  phrases: z.array(directTrackSchema),
+}).strict()
+
 export const scoreSourceSchema = z.discriminatedUnion('kind', [
   directScoreSchema,
   motifScoreSchema,
   proceduralScoreSchema,
+  cinematicScoreSchema,
 ])
 
 export type ScoreSource = z.infer<typeof scoreSourceSchema>

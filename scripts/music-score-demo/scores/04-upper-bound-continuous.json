@@ -1,0 +1,168 @@
+{
+  "kind": "cinematic-continuous/v1",
+  "title": "连续电影配乐：克制、希望与释放",
+  "bpm": 80,
+  "beatsPerBar": 4,
+  "durationSeconds": 54,
+  "emotionCurve": [
+    { "startSecond": 0, "endSecond": 18, "emotion": "restrained_tender", "intensity": 0.24 },
+    { "startSecond": 18, "endSecond": 36, "emotion": "hopeful", "intensity": 0.56 },
+    { "startSecond": 36, "endSecond": 54, "emotion": "released", "intensity": 0.86 }
+  ],
+  "harmony": [
+    { "barIndex": 0, "bassMidi": 38, "voices": [50, 53, 57, 60, 64] },
+    { "barIndex": 1, "bassMidi": 38, "voices": [50, 53, 57, 58, 62] },
+    { "barIndex": 2, "bassMidi": 36, "voices": [48, 53, 57, 60, 67] },
+    { "barIndex": 3, "bassMidi": 40, "voices": [48, 52, 55, 60, 62] },
+    { "barIndex": 4, "bassMidi": 43, "voices": [50, 53, 58, 62, 69] },
+    { "barIndex": 5, "bassMidi": 45, "voices": [50, 55, 57, 62, 67] },
+    { "barIndex": 6, "bassMidi": 38, "voices": [50, 53, 57, 60, 64] },
+    { "barIndex": 7, "bassMidi": 46, "voices": [50, 53, 57, 58, 62] },
+    { "barIndex": 8, "bassMidi": 45, "voices": [48, 53, 57, 60, 67] },
+    { "barIndex": 9, "bassMidi": 43, "voices": [48, 52, 55, 60, 62] },
+    { "barIndex": 10, "bassMidi": 43, "voices": [50, 53, 58, 62, 69] },
+    { "barIndex": 11, "bassMidi": 45, "voices": [49, 55, 57, 64, 67] },
+    { "barIndex": 12, "bassMidi": 38, "voices": [50, 53, 57, 62, 64] },
+    { "barIndex": 13, "bassMidi": 46, "voices": [50, 53, 57, 58, 60] },
+    { "barIndex": 14, "bassMidi": 41, "voices": [48, 53, 57, 60, 67] },
+    { "barIndex": 15, "bassMidi": 40, "voices": [48, 52, 55, 60, 62] },
+    { "barIndex": 16, "bassMidi": 43, "voices": [50, 53, 58, 60, 62] },
+    { "barIndex": 17, "bassMidi": 38, "voices": [50, 53, 57, 60, 64] }
+  ],
+  "layers": [
+    {
+      "trackId": "continuous-strings",
+      "instrument": "string_ensemble",
+      "part": "sustain",
+      "barIndexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      "octaveShift": 0,
+      "velocityStart": 30,
+      "velocityEnd": 72,
+      "durationBeats": 4,
+      "gain": 0.82,
+      "pan": 0.08
+    },
+    {
+      "trackId": "flowing-piano",
+      "instrument": "concert_grand",
+      "part": "arpeggio",
+      "barIndexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      "octaveShift": 1,
+      "velocityStart": 34,
+      "velocityEnd": 68,
+      "order": [0, 2, 4, 1, 3, 4, 2, 1],
+      "subdivisionBeats": 0.5,
+      "noteDurationBeats": 0.72,
+      "gain": 0.9,
+      "pan": -0.16
+    },
+    {
+      "trackId": "cello-foundation",
+      "instrument": "solo_cello",
+      "part": "bass",
+      "barIndexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      "octaveShift": 0,
+      "velocityStart": 38,
+      "velocityEnd": 72,
+      "patternBeats": [0],
+      "noteDurationBeats": 4,
+      "gain": 0.78,
+      "pan": -0.04
+    },
+    {
+      "trackId": "harp-light",
+      "instrument": "harp",
+      "part": "arpeggio",
+      "barIndexes": [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      "octaveShift": 2,
+      "velocityStart": 28,
+      "velocityEnd": 58,
+      "order": [0, 2, 4, 3, 1, 2, 4, 3],
+      "subdivisionBeats": 0.5,
+      "noteDurationBeats": 0.84,
+      "gain": 0.56,
+      "pan": 0.3
+    },
+    {
+      "trackId": "choir-air",
+      "instrument": "choir_aahs",
+      "part": "sustain",
+      "barIndexes": [12, 13, 14, 15, 16, 17],
+      "octaveShift": 1,
+      "velocityStart": 24,
+      "velocityEnd": 52,
+      "durationBeats": 4,
+      "gain": 0.46,
+      "pan": 0.14
+    }
+  ],
+  "phrases": [
+    {
+      "trackId": "main-theme",
+      "instrument": "clarinet",
+      "gain": 0.74,
+      "pan": -0.1,
+      "notes": [
+        { "startBeat": 8, "durationBeats": 2.25, "midi": 69, "velocity": 42 },
+        { "startBeat": 10.25, "durationBeats": 1.25, "midi": 67, "velocity": 40 },
+        { "startBeat": 11.5, "durationBeats": 3.75, "midi": 65, "velocity": 44 },
+        { "startBeat": 15.25, "durationBeats": 0.75, "midi": 64, "velocity": 42 },
+        { "startBeat": 16, "durationBeats": 3.5, "midi": 62, "velocity": 46 },
+        { "startBeat": 19.5, "durationBeats": 1.25, "midi": 65, "velocity": 48 },
+        { "startBeat": 20.75, "durationBeats": 3.25, "midi": 69, "velocity": 51 },
+        { "startBeat": 24, "durationBeats": 1.5, "midi": 69, "velocity": 54 },
+        { "startBeat": 25.5, "durationBeats": 1, "midi": 72, "velocity": 56 },
+        { "startBeat": 26.5, "durationBeats": 3.5, "midi": 74, "velocity": 59 },
+        { "startBeat": 30, "durationBeats": 1, "midi": 72, "velocity": 55 },
+        { "startBeat": 31, "durationBeats": 3, "midi": 69, "velocity": 57 },
+        { "startBeat": 34, "durationBeats": 2, "midi": 67, "velocity": 54 },
+        { "startBeat": 36, "durationBeats": 3, "midi": 65, "velocity": 58 },
+        { "startBeat": 39, "durationBeats": 1, "midi": 67, "velocity": 60 },
+        { "startBeat": 40, "durationBeats": 4, "midi": 69, "velocity": 63 },
+        { "startBeat": 44, "durationBeats": 2, "midi": 72, "velocity": 65 },
+        { "startBeat": 46, "durationBeats": 2, "midi": 74, "velocity": 68 },
+        { "startBeat": 48, "durationBeats": 1.5, "midi": 74, "velocity": 69 },
+        { "startBeat": 49.5, "durationBeats": 1, "midi": 77, "velocity": 72 },
+        { "startBeat": 50.5, "durationBeats": 2.5, "midi": 81, "velocity": 75 },
+        { "startBeat": 53, "durationBeats": 1.5, "midi": 79, "velocity": 72 },
+        { "startBeat": 54.5, "durationBeats": 1.5, "midi": 77, "velocity": 70 },
+        { "startBeat": 56, "durationBeats": 2, "midi": 76, "velocity": 69 },
+        { "startBeat": 58, "durationBeats": 1, "midi": 77, "velocity": 72 },
+        { "startBeat": 59, "durationBeats": 5, "midi": 74, "velocity": 74 },
+        { "startBeat": 64, "durationBeats": 2, "midi": 72, "velocity": 68 },
+        { "startBeat": 66, "durationBeats": 2, "midi": 69, "velocity": 64 },
+        { "startBeat": 68, "durationBeats": 3.5, "midi": 74, "velocity": 70 }
+      ]
+    },
+    {
+      "trackId": "horn-lift",
+      "instrument": "french_horn",
+      "gain": 0.65,
+      "pan": 0.12,
+      "notes": [
+        { "startBeat": 32, "durationBeats": 6, "midi": 62, "velocity": 40 },
+        { "startBeat": 40, "durationBeats": 4, "midi": 65, "velocity": 46 },
+        { "startBeat": 44, "durationBeats": 4, "midi": 67, "velocity": 50 },
+        { "startBeat": 48, "durationBeats": 4, "midi": 69, "velocity": 56 },
+        { "startBeat": 52, "durationBeats": 4, "midi": 70, "velocity": 60 },
+        { "startBeat": 56, "durationBeats": 4, "midi": 72, "velocity": 66 },
+        { "startBeat": 60, "durationBeats": 4, "midi": 69, "velocity": 63 },
+        { "startBeat": 64, "durationBeats": 4, "midi": 67, "velocity": 60 },
+        { "startBeat": 68, "durationBeats": 3.5, "midi": 65, "velocity": 56 }
+      ]
+    },
+    {
+      "trackId": "timpani-arc",
+      "instrument": "timpani",
+      "gain": 0.66,
+      "pan": 0,
+      "notes": [
+        { "startBeat": 48, "durationBeats": 2, "midi": 38, "velocity": 58 },
+        { "startBeat": 56, "durationBeats": 2, "midi": 38, "velocity": 64 },
+        { "startBeat": 64, "durationBeats": 2, "midi": 38, "velocity": 70 },
+        { "startBeat": 68, "durationBeats": 2, "midi": 45, "velocity": 66 },
+        { "startBeat": 70, "durationBeats": 2, "midi": 38, "velocity": 72 }
+      ]
+    }
+  ]
+}
