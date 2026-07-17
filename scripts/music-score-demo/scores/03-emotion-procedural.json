@@ -1,0 +1,21 @@
+{
+  "kind": "emotion-procedural/v1",
+  "title": "情绪程序：克制到释放",
+  "bpm": 90,
+  "beatsPerBar": 4,
+  "durationSeconds": 24,
+  "emotionCurve": [
+    { "startSecond": 0, "endSecond": 8, "emotion": "restrained_tender", "intensity": 0.25 },
+    { "startSecond": 8, "endSecond": 16, "emotion": "hopeful", "intensity": 0.55 },
+    { "startSecond": 16, "endSecond": 24, "emotion": "released", "intensity": 0.82 }
+  ],
+  "seed": 20260717,
+  "rootMidi": 50,
+  "mode": "dorian",
+  "palette": {
+    "lead": "glass_mallet",
+    "pad": "warm_pad",
+    "bass": "soft_bass",
+    "pulse": "soft_pulse"
+  }
+}

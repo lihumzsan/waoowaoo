@@ -1,0 +1,100 @@
+{
+  "kind": "note-events/v1",
+  "title": "逐音符事件：克制到释放",
+  "bpm": 90,
+  "beatsPerBar": 4,
+  "durationSeconds": 24,
+  "emotionCurve": [
+    { "startSecond": 0, "endSecond": 8, "emotion": "restrained_tender", "intensity": 0.25 },
+    { "startSecond": 8, "endSecond": 16, "emotion": "hopeful", "intensity": 0.55 },
+    { "startSecond": 16, "endSecond": 24, "emotion": "released", "intensity": 0.82 }
+  ],
+  "tracks": [
+    {
+      "trackId": "piano",
+      "instrument": "felt_piano",
+      "gain": 0.78,
+      "pan": -0.18,
+      "notes": [
+        { "startBeat": 0, "durationBeats": 1.8, "midi": 62, "velocity": 48 },
+        { "startBeat": 2, "durationBeats": 1.8, "midi": 69, "velocity": 43 },
+        { "startBeat": 4, "durationBeats": 1.8, "midi": 58, "velocity": 46 },
+        { "startBeat": 6, "durationBeats": 1.8, "midi": 65, "velocity": 44 },
+        { "startBeat": 8, "durationBeats": 1.8, "midi": 65, "velocity": 48 },
+        { "startBeat": 10, "durationBeats": 1.8, "midi": 72, "velocity": 46 },
+        { "startBeat": 12, "durationBeats": 1.8, "midi": 60, "velocity": 50 },
+        { "startBeat": 14, "durationBeats": 1.8, "midi": 67, "velocity": 48 },
+        { "startBeat": 16, "durationBeats": 1.3, "midi": 62, "velocity": 54 },
+        { "startBeat": 17.5, "durationBeats": 1.3, "midi": 65, "velocity": 52 },
+        { "startBeat": 19, "durationBeats": 0.8, "midi": 69, "velocity": 55 },
+        { "startBeat": 20, "durationBeats": 1.3, "midi": 58, "velocity": 57 },
+        { "startBeat": 21.5, "durationBeats": 1.3, "midi": 62, "velocity": 54 },
+        { "startBeat": 23, "durationBeats": 0.8, "midi": 65, "velocity": 58 },
+        { "startBeat": 24, "durationBeats": 1, "midi": 65, "velocity": 62 },
+        { "startBeat": 25, "durationBeats": 1, "midi": 69, "velocity": 60 },
+        { "startBeat": 26, "durationBeats": 1, "midi": 72, "velocity": 64 },
+        { "startBeat": 27, "durationBeats": 0.8, "midi": 76, "velocity": 67 },
+        { "startBeat": 28, "durationBeats": 1, "midi": 60, "velocity": 63 },
+        { "startBeat": 29, "durationBeats": 1, "midi": 64, "velocity": 66 },
+        { "startBeat": 30, "durationBeats": 1, "midi": 67, "velocity": 68 },
+        { "startBeat": 31, "durationBeats": 0.8, "midi": 72, "velocity": 70 },
+        { "startBeat": 32, "durationBeats": 1, "midi": 62, "velocity": 66 },
+        { "startBeat": 33, "durationBeats": 1, "midi": 65, "velocity": 64 },
+        { "startBeat": 34, "durationBeats": 1, "midi": 69, "velocity": 62 },
+        { "startBeat": 35, "durationBeats": 0.8, "midi": 74, "velocity": 68 }
+      ]
+    },
+    {
+      "trackId": "pad",
+      "instrument": "warm_pad",
+      "gain": 0.5,
+      "pan": 0.16,
+      "notes": [
+        { "startBeat": 0, "durationBeats": 3.9, "midi": 50, "velocity": 38 },
+        { "startBeat": 0, "durationBeats": 3.9, "midi": 53, "velocity": 34 },
+        { "startBeat": 0, "durationBeats": 3.9, "midi": 57, "velocity": 36 },
+        { "startBeat": 4, "durationBeats": 3.9, "midi": 46, "velocity": 37 },
+        { "startBeat": 4, "durationBeats": 3.9, "midi": 50, "velocity": 34 },
+        { "startBeat": 4, "durationBeats": 3.9, "midi": 53, "velocity": 36 },
+        { "startBeat": 8, "durationBeats": 3.9, "midi": 53, "velocity": 39 },
+        { "startBeat": 8, "durationBeats": 3.9, "midi": 57, "velocity": 36 },
+        { "startBeat": 8, "durationBeats": 3.9, "midi": 60, "velocity": 38 },
+        { "startBeat": 12, "durationBeats": 3.9, "midi": 48, "velocity": 41 },
+        { "startBeat": 12, "durationBeats": 3.9, "midi": 52, "velocity": 38 },
+        { "startBeat": 12, "durationBeats": 3.9, "midi": 55, "velocity": 40 },
+        { "startBeat": 16, "durationBeats": 3.9, "midi": 50, "velocity": 44 },
+        { "startBeat": 16, "durationBeats": 3.9, "midi": 53, "velocity": 42 },
+        { "startBeat": 16, "durationBeats": 3.9, "midi": 57, "velocity": 43 },
+        { "startBeat": 20, "durationBeats": 3.9, "midi": 46, "velocity": 46 },
+        { "startBeat": 20, "durationBeats": 3.9, "midi": 50, "velocity": 43 },
+        { "startBeat": 20, "durationBeats": 3.9, "midi": 53, "velocity": 44 },
+        { "startBeat": 24, "durationBeats": 3.9, "midi": 53, "velocity": 49 },
+        { "startBeat": 24, "durationBeats": 3.9, "midi": 57, "velocity": 46 },
+        { "startBeat": 24, "durationBeats": 3.9, "midi": 60, "velocity": 47 },
+        { "startBeat": 28, "durationBeats": 3.9, "midi": 48, "velocity": 51 },
+        { "startBeat": 28, "durationBeats": 3.9, "midi": 52, "velocity": 48 },
+        { "startBeat": 28, "durationBeats": 3.9, "midi": 55, "velocity": 49 },
+        { "startBeat": 32, "durationBeats": 3.9, "midi": 50, "velocity": 52 },
+        { "startBeat": 32, "durationBeats": 3.9, "midi": 53, "velocity": 49 },
+        { "startBeat": 32, "durationBeats": 3.9, "midi": 57, "velocity": 51 }
+      ]
+    },
+    {
+      "trackId": "bass",
+      "instrument": "soft_bass",
+      "gain": 0.7,
+      "pan": 0,
+      "notes": [
+        { "startBeat": 0, "durationBeats": 3.7, "midi": 38, "velocity": 44 },
+        { "startBeat": 4, "durationBeats": 3.7, "midi": 34, "velocity": 43 },
+        { "startBeat": 8, "durationBeats": 3.7, "midi": 41, "velocity": 47 },
+        { "startBeat": 12, "durationBeats": 3.7, "midi": 36, "velocity": 49 },
+        { "startBeat": 16, "durationBeats": 3.7, "midi": 38, "velocity": 52 },
+        { "startBeat": 20, "durationBeats": 3.7, "midi": 34, "velocity": 54 },
+        { "startBeat": 24, "durationBeats": 3.7, "midi": 41, "velocity": 58 },
+        { "startBeat": 28, "durationBeats": 3.7, "midi": 36, "velocity": 60 },
+        { "startBeat": 32, "durationBeats": 3.7, "midi": 38, "velocity": 62 }
+      ]
+    }
+  ]
+}

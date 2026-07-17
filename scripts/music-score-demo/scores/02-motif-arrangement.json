@@ -1,0 +1,103 @@
+{
+  "kind": "motif-arrangement/v1",
+  "title": "动机编排：克制到释放",
+  "bpm": 90,
+  "beatsPerBar": 4,
+  "durationSeconds": 24,
+  "emotionCurve": [
+    { "startSecond": 0, "endSecond": 8, "emotion": "restrained_tender", "intensity": 0.25 },
+    { "startSecond": 8, "endSecond": 16, "emotion": "hopeful", "intensity": 0.55 },
+    { "startSecond": 16, "endSecond": 24, "emotion": "released", "intensity": 0.82 }
+  ],
+  "harmony": [
+    { "barIndex": 0, "rootMidi": 50, "chordIntervals": [0, 3, 7, 14] },
+    { "barIndex": 1, "rootMidi": 46, "chordIntervals": [0, 4, 7, 11] },
+    { "barIndex": 2, "rootMidi": 53, "chordIntervals": [0, 4, 7, 14] },
+    { "barIndex": 3, "rootMidi": 48, "chordIntervals": [0, 4, 7, 14] },
+    { "barIndex": 4, "rootMidi": 50, "chordIntervals": [0, 3, 7, 10] },
+    { "barIndex": 5, "rootMidi": 46, "chordIntervals": [0, 4, 7, 12] },
+    { "barIndex": 6, "rootMidi": 53, "chordIntervals": [0, 4, 7, 11] },
+    { "barIndex": 7, "rootMidi": 48, "chordIntervals": [0, 4, 7, 14] },
+    { "barIndex": 8, "rootMidi": 50, "chordIntervals": [0, 3, 7, 14] }
+  ],
+  "motifs": [
+    {
+      "motifId": "rising-question",
+      "steps": [
+        { "beatOffset": 0, "durationBeats": 0.8, "semitones": 0, "velocity": 48 },
+        { "beatOffset": 1, "durationBeats": 0.7, "semitones": 3, "velocity": 51 },
+        { "beatOffset": 2, "durationBeats": 0.7, "semitones": 7, "velocity": 54 },
+        { "beatOffset": 3, "durationBeats": 0.8, "semitones": 10, "velocity": 50 }
+      ]
+    },
+    {
+      "motifId": "release-answer",
+      "steps": [
+        { "beatOffset": 0, "durationBeats": 0.55, "semitones": 0, "velocity": 62 },
+        { "beatOffset": 0.75, "durationBeats": 0.55, "semitones": 4, "velocity": 64 },
+        { "beatOffset": 1.5, "durationBeats": 0.55, "semitones": 7, "velocity": 67 },
+        { "beatOffset": 2.25, "durationBeats": 0.55, "semitones": 11, "velocity": 70 },
+        { "beatOffset": 3, "durationBeats": 0.8, "semitones": 14, "velocity": 73 }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "trackId": "motif-a",
+      "instrument": "felt_piano",
+      "part": "motif",
+      "motifId": "rising-question",
+      "barIndexes": [0, 1, 2, 3, 4, 5],
+      "octaveShift": 1,
+      "velocityScale": 0.94,
+      "gain": 0.72,
+      "pan": -0.22
+    },
+    {
+      "trackId": "motif-b",
+      "instrument": "glass_mallet",
+      "part": "motif",
+      "motifId": "release-answer",
+      "barIndexes": [6, 7, 8],
+      "octaveShift": 1,
+      "velocityScale": 0.9,
+      "gain": 0.62,
+      "pan": 0.2
+    },
+    {
+      "trackId": "strings",
+      "instrument": "cello",
+      "part": "chords",
+      "barIndexes": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "octaveShift": 0,
+      "velocityScale": 0.72,
+      "noteDurationBeats": 3.9,
+      "gain": 0.5,
+      "pan": 0.12
+    },
+    {
+      "trackId": "bass",
+      "instrument": "soft_bass",
+      "part": "bass",
+      "barIndexes": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      "octaveShift": -1,
+      "velocityScale": 0.92,
+      "patternBeats": [0, 2],
+      "noteDurationBeats": 1.7,
+      "gain": 0.62,
+      "pan": 0
+    },
+    {
+      "trackId": "pulse",
+      "instrument": "soft_pulse",
+      "part": "pulse",
+      "barIndexes": [3, 4, 5, 6, 7, 8],
+      "octaveShift": 0,
+      "velocityScale": 0.85,
+      "patternBeats": [0, 1, 2, 3],
+      "noteDurationBeats": 0.18,
+      "gain": 0.46,
+      "pan": 0.28
+    }
+  ]
+}
