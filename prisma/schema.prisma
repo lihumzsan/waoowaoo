@@ -471,6 +471,7 @@ model ProjectAssistantThread {
   assistantId  String
   scopeRef     String
   messagesJson Json
+  planJson     Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

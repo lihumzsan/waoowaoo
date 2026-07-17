@@ -10,6 +10,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 - **AR-01 — 服务端权威。** thread/run 的 append、终态、锁和恢复由服务端管理；客户端和模型不得持有第二套 run 状态。
 - **AR-01A — WorkflowView 只提供主链建议。** `resolveEditFirstWorkflowView` 仍可从正式领域事实投影 `step/status/recommendedAction`，用于教程、完整制作建议与诊断，但它不是 Operation eligibility、Canvas visibility、持久化或 Task continuation 的裁判。Assistant 的工具集合必须来自完整 Operation registry；不得保存 `allowedOperationIds`、`isEnabled`、operation group、stage rank 或固定 next-action 控制表。任何能力是否可执行只由 Operation channel、显式 input/prerequisite、owner/scope、provider capability、Approval/Choice 与 Run fence 裁决。
+- **AR-01D — Agent Plan 只是线程便签。** `update_plan` 是当前 Assistant Thread 计划快照的唯一写入口，每次调用完整替换，最多一个步骤为 `in_progress`，空列表清除。快照只进入后续模型输入与 Session 最终 View；不得驱动 Operation eligibility、Task/Wait/Approval/Choice、Workflow、Resource/Artifact、Canvas 节点或 Run 终态，也不得恢复 `PlanRun`、任务依赖或第二套执行状态机。模型自主判断步骤完成，UI 只展示快照，不从历史消息或 Tool output 重建。
 - **AR-01C — Tool Schema 是模型调用的唯一参数契约。** 每个 tool-visible Operation 必须从同一个 strict runtime schema 生成完整 OpenAI strict Tool Schema，或声明与该 runtime command 等价的显式 schema；不得把必需参数藏在空 object、`unknown`、passthrough、根级 refinement 或 Prompt 文案中。可选字段为适配 strict 模式暴露为 nullable 时，enum/const 与运行时 null-to-absence normalizer 必须保持同一可接受集合。条件输入必须使用可穷尽 discriminated branch；动态模型能力使用 `modelKey + field + value` 的显式 command 并由生产 capability registry 校验。Agent 只提交产品级公共参数，provider 原始字段与冻结执行选项留在内部 mapper。输入错误必须返回 typed code、field、allowed values 与可修正语义，不能退化为通用失败文案。
 - **AR-01B — HTTP Command 单入口。** 用户消息、Approval response 与 Choice response 必须先由各自 route 完成一次鉴权和输入解析，再统一调用 `executeProjectAgentCommand`。只有该 service 可以为 HTTP command 编排 thread read/merge、Run slot/identity、Redis lock/heartbeat、Run create/retry、Interruption consume、runtime invocation 与 pre-stream failure settlement；route 不得导入 runtime/Run/lock/Interruption owner，不得构造私有 `NextRequest`、header 或 body 再调用另一 route。service 只组合现有 owner，不直接实现模型、Operation、Billing、Task Terminal 或 execution handoff。Task terminal continuation 仍只属于 AR-03B 的 Outbox 入口，不得为追求形式统一改走 HTTP service。
 - **AR-02 — 每回合有结算语义。** 一个前台 turn 必须明确是完成、等待用户、继续 Agent 还是失败；合法的空输出或未发起新 Tool 可以结算为 `completed` 且不产生领域事实，只有 completion、Tool、持久化、ownership 或协议本身失败才可结算为失败。Task 提交只产生 durable receipt 与独立后台 Run/Wait，不把当前前台 Run 改成等待 Task；模型文案不得伪造领域完成。
@@ -58,6 +59,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - 已消费 Decision 的恢复入口：`readRetryableConsumedProjectAgent*Interruption` 只重读同一持久决定；`createProjectAgentConsumedControlRetryRun` 是唯一新 attempt 创建者；`run.execution_started` 是禁止再次执行的持久水位。
 - Approval/Choice 原子替换 authority：`appendProjectAgentInterruptionReplacementInTransaction`；Activity 单调终态 authority：`transitionProjectAgentActivity`。
 - Operation registry 验证：`src/lib/operations/registry.ts`。
+- Agent Plan 唯一事实与解析：`ProjectAssistantThread.planJson`、`src/lib/project-agent/plan.ts`；唯一写命令是 registry 中的 `update_plan`，Session projector 只读该快照，原始 Tool 卡不承担展示或状态解释。
 - Operation API/Tool 唯一执行 authority：`src/lib/operations/invocation.ts` 的 `invokeProjectAgentOperation`；Choice 消费事务只能使用该入口的 `atomic_choice_confirmation` 模式与 caller-owned transaction，该模式拒绝非事务、收费、长任务、外部副作用与 suspension Operation。
 - Operation 资源影响唯一 resolver 与持久通知：`src/lib/workspace-resource/resource-impact.ts`、`src/lib/workspace-resource/resource-change-events.ts`；registry conformance 拒绝非事务资源写、Task-producing Operation 的重复 impact 与缺少补偿的外部上传。
 - Operation Run fence 唯一裁判：`src/lib/project-agent/operation-execution-fence.ts`；Task 提交、批准计划与 transactional executor 只能复用该 commit barrier。
@@ -90,6 +92,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 | Session 一致快照 | 前后 `ProjectAgentEvent.id` 水位一致；前台 active Run 唯一，后台 `awaiting_task` Runs/Waits 作为独立集合投影的 `getProjectAgentSessionSnapshot` | Session State route |
 | SSE 事件事实身份 | `type + id → canonical fingerprint` / server session 与每个浏览器标签页的有界 event sequence | bootstrap/live 精确去重；identity conflict 只允许 snapshot resync |
 | Session/Thread UI 收敛 | `assistant.session.changed` 触发的主动刷新 | Workspace Assistant runtime；不得轮询或从消息推断状态 |
+| 当前 Agent Plan | `ProjectAssistantThread.planJson` / `update_plan` transactional Operation | 后续模型输入、Session View、Assistant 计划清单；其他运行或领域模块不得消费 |
 
 写入者变化：新增的事件不是第二份 Session 状态，只是持久 ProjectAgentEvent 的 level-triggered 通知投影。后台 continuation、其他进程和其他标签页不再依赖当前请求结束或 timer 才看到 Session/Thread；旧 Session HTTP 响应也不能覆盖较新的事件水位。
 

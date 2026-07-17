@@ -735,9 +735,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
     Reasoning: WorkspaceAssistantReasoningPart,
-    tools: {
-      Fallback: WorkspaceAssistantToolCallCard,
-    },
+    tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
     data: {
       by_name: {
         'agent-run': HiddenRuntimeContextDataCard,

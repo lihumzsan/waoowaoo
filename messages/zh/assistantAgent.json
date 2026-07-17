@@ -41,6 +41,10 @@
     "pendingApprovalTitle": "待处理审批",
     "pendingApprovalCount": "{count} 个待处理动作"
   },
+  "plan": {
+    "title": "执行计划",
+    "progress": "{completed}/{total}"
+  },
   "attachments": {
     "openUpload": "上传文本文件",
     "dialogTitle": "上传文本文件",

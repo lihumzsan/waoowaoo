@@ -7,6 +7,10 @@ type ProjectAgentOperationTitleCopy = {
 }
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
+  update_plan: {
+    zh: '为复杂或多阶段工作维护一份简短计划。每次调用完整替换当前计划，最多一个步骤处于 in_progress，进展变化后及时更新；传空 plan 可清除。它只是可见便签，不执行工作、不创建 Task，也不控制工具或项目状态。',
+    en: 'Maintain a concise plan for complex or multi-step work. Each call replaces the whole current plan; keep at most one item in_progress, update it when progress changes, and pass an empty plan to clear it. This is a visible notebook only: it executes no work, creates no Tasks, and controls no tool or project state.',
+  },
   get_project_context: {
     zh: '读取项目或剧集的具体内容，包括 Bible、专业产物、任务详情、资产和视频片段。需要真实内容来回答用户或规划新的自由创作时调用；不要从聊天记录或画布外观猜测。',
     en: 'Read concrete project or episode content, including the Bible, professional outputs, task details, assets, and video segments. Use it when real content is needed to answer or plan freeform creation; never infer those facts from chat history or Canvas appearance.',
@@ -134,6 +138,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
 }
 
 const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
+  update_plan: {
+    zh: '更新计划',
+    en: 'Update plan',
+  },
   get_project_snapshot: {
     zh: '项目快照',
     en: 'Project snapshot',

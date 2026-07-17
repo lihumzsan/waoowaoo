@@ -33,6 +33,10 @@ import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { readProjectAgentSessionEventWatermark } from './session-event'
+import {
+  readProjectAgentPlan,
+  type ProjectAgentPlanSnapshot,
+} from './plan'
 
 interface ProjectAgentSessionScopeInput {
   projectId: string
@@ -88,6 +92,7 @@ export interface ProjectAgentSessionState {
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
+  plan: ProjectAgentPlanSnapshot | null
   editFirstWorkflow: EditFirstWorkflowView
 }
 
@@ -393,7 +398,7 @@ async function buildProjectAgentSessionState(
     ...input,
     assistantId,
   }
-  const [workflow, activeRun, recentRuns, waits, pendingInterruption, openFacts] = await Promise.all([
+  const [workflow, activeRun, recentRuns, waits, pendingInterruption, openFacts, plan] = await Promise.all([
     resolveEditFirstWorkflowView({
       projectId: input.projectId,
       userId: input.userId,
@@ -431,6 +436,12 @@ async function buildProjectAgentSessionState(
       episodeId: input.episodeId ?? null,
       assistantId,
       locale: input.locale,
+    }),
+    readProjectAgentPlan({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
     }),
   ])
   const run = resolveCurrentRun({
@@ -479,6 +490,7 @@ async function buildProjectAgentSessionState(
     pendingInteraction,
     activeWaits: waits,
     activeTasks,
+    plan,
     editFirstWorkflow: workflow,
   }
 }

@@ -41,6 +41,10 @@
     "pendingApprovalTitle": "Pending approval",
     "pendingApprovalCount": "{count} pending actions"
   },
+  "plan": {
+    "title": "Plan",
+    "progress": "{completed}/{total}"
+  },
   "attachments": {
     "openUpload": "Attach text file",
     "dialogTitle": "Attach a text file",

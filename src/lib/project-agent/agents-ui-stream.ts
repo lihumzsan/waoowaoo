@@ -48,12 +48,17 @@ const PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS = [
   '[project_state_snapshot]',
   '[/project_state_snapshot]',
 ] as const
+const AGENT_PLAN_PROTOCOL_MARKERS = [
+  '[agent_plan]',
+  '[/agent_plan]',
+] as const
 const RAW_TOOL_CALL_PROTOCOL_MARKERS = [
   '<call:',
 ] as const
 
 const TEXT_PROTOCOL_MARKERS = [
   ...PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS,
+  ...AGENT_PLAN_PROTOCOL_MARKERS,
   ...RAW_TOOL_CALL_PROTOCOL_MARKERS,
 ] as const
 
@@ -64,6 +69,9 @@ const TEXT_PROTOCOL_TAIL_LENGTH = Math.max(
 function resolveTextProtocolLeakCode(candidate: string): string | null {
   if (PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
     return 'PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK'
+  }
+  if (AGENT_PLAN_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
+    return 'PROJECT_AGENT_OUTPUT_PLAN_FRAME_LEAK'
   }
   if (RAW_TOOL_CALL_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
     return 'PROJECT_AGENT_OUTPUT_TOOL_CALL_PROTOCOL_LEAK'

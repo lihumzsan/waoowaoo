@@ -23,6 +23,7 @@ import {
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
+import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -232,6 +233,9 @@ export default function WorkspaceAssistantPanel({
                     <ThreadPrimitive.Messages>
                       {() => <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />}
                     </ThreadPrimitive.Messages>
+                    {assistantRuntime.sessionState?.plan ? (
+                      <WorkspaceAssistantPlanCard plan={assistantRuntime.sessionState.plan} />
+                    ) : null}
                     {showAssistantReplyLoading ? <WorkspaceAssistantPendingTurnPlaceholder /> : null}
                     {assistantRuntime.sessionStateError ? (
                       <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">

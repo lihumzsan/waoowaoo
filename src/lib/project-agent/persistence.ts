@@ -19,6 +19,10 @@ interface AppendProjectAssistantThreadMessagesInput extends ProjectAssistantThre
   messages: unknown
 }
 
+interface ReplaceProjectAssistantThreadPlanInput extends ProjectAssistantThreadIdentity {
+  planJson: Prisma.InputJsonValue | typeof Prisma.DbNull
+}
+
 type ProjectAssistantThreadTransactionClient = Prisma.TransactionClient
 
 function buildProjectAssistantScopeRef(input: ProjectAssistantThreadScopeInput): string {
@@ -198,6 +202,25 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
     },
   })
   return toThreadSnapshot(record, nextMessages)
+}
+
+export async function replaceProjectAssistantThreadPlanInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: ReplaceProjectAssistantThreadPlanInput,
+): Promise<void> {
+  const scopeRef = buildProjectAssistantScopeRef(input)
+  const updated = await tx.projectAssistantThread.updateMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      assistantId: input.assistantId,
+      scopeRef,
+    },
+    data: { planJson: input.planJson },
+  })
+  if (updated.count !== 1) {
+    throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)
+  }
 }
 
 export async function clearProjectAssistantThreadInTransaction(

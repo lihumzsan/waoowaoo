@@ -48,6 +48,7 @@ import {
   resolveProjectAgentLanguageModel,
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
+import { readProjectAgentPlan, type ProjectAgentPlanSnapshot } from './plan'
 import {
   type ProjectAgentWaitFollowUp,
   sealProjectAgentOperationBatchWait,
@@ -473,6 +474,17 @@ function buildProjectStateInputItem(params: {
   } as AgentInputItem
 }
 
+function buildProjectAgentPlanInputItem(plan: ProjectAgentPlanSnapshot): AgentInputItem {
+  return {
+    role: 'system',
+    content: [
+      '[agent_plan]',
+      JSON.stringify(plan),
+      '[/agent_plan]',
+    ].join('\n'),
+  } as AgentInputItem
+}
+
 function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
   return [
     { type: 'start' },
@@ -880,6 +892,14 @@ export async function createProjectAgentChatResponse(input: {
     episodeId: context.episodeId || null,
     phase,
   })
+  const currentPlan = control.kind === 'approval'
+    ? null
+    : await readProjectAgentPlan({
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId || null,
+        assistantId: 'workspace-command',
+      })
 
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
@@ -893,6 +913,7 @@ export async function createProjectAgentChatResponse(input: {
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
         projectStateInputItem,
+        ...(currentPlan ? [buildProjectAgentPlanInputItem(currentPlan)] : []),
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [

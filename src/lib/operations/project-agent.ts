@@ -32,6 +32,7 @@ import { createAssetImageOperations } from './domains/asset/generation'
 import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
+import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -42,6 +43,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
   const PREREQ_EPISODE_OPTIONAL = { episodeId: 'optional' } as const
 
   return {
+    ...withOperationPack(createAssistantPlanOperations(), {
+      groupPath: ['assistant', 'plan'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
     ...withOperationPack(createSystemProjectOperations(), {
       groupPath: ['project', 'system'],
       channels: CHANNELS_TOOL_API,
