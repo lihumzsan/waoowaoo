@@ -101,7 +101,7 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
 
 export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
   const t = useTranslations('assistantAgent')
-  if (data.reason === 'awaiting_user_confirmation' || data.reason === 'awaiting_external_task') return null
+  if (data.reason === 'awaiting_user_confirmation') return null
   return (
     <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
       <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />

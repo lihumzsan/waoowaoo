@@ -65,6 +65,8 @@ export function useWorkspaceAssistantCanvasFocus({
 }: UseWorkspaceAssistantCanvasFocusParams): string | null {
   const currentActivity = sessionState?.currentActivity ?? null
   const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
+    ?? sessionState?.activeTasks.find((task) => Boolean(task.operationId))?.operationId
+    ?? null
   const activeTaskTargets = useMemo(() => {
     const targets = (sessionState?.activeTasks ?? []).flatMap((task) => {
       const target = buildWorkspaceAssistantActiveTaskTarget({
@@ -81,13 +83,15 @@ export function useWorkspaceAssistantCanvasFocus({
   }, [sessionState?.activeTasks])
 
   const externalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
-    activeExternalTaskOperationId && currentActivity
+    activeExternalTaskOperationId
       ? {
           operationId: activeExternalTaskOperationId,
-          requestKey: `${currentActivity.runId}:${currentActivity.activityId}:${activeExternalTaskOperationId}`,
+          requestKey: currentActivity?.type === 'waiting_task'
+            ? `${currentActivity.runId}:${currentActivity.activityId}:${activeExternalTaskOperationId}`
+            : `background-tasks:${activeTaskTargets.map((target) => target.taskId).sort().join(',')}`,
         }
       : null
-  ), [activeExternalTaskOperationId, currentActivity])
+  ), [activeExternalTaskOperationId, activeTaskTargets, currentActivity])
 
   const focusRequest = useMemo(() => {
     const baseFocusRequest = runtimeFocusRequest ?? externalTaskFocusRequest

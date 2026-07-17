@@ -544,36 +544,41 @@ function buildEditScriptRuntimeEntries(
   })
 }
 
-function buildShotExecutionRuntimeEntry(
+function buildShotExecutionRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
-): WorkspaceCanvasStreamRuntimeEntry | null {
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots')
-  const shotItems = itemsOfKind(matchingSnapshots, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
-  if (shotItems.length === 0) return null
-  const rawItems = matchingSnapshots.flatMap((snapshot) => snapshot.items)
-  const firstSnapshot = matchingSnapshots[0] ?? null
-  if (!firstSnapshot) return null
-  const editScriptId = firstSnapshot.targetId
-  if (!editScriptId) return null
-  const nodeId = workspaceNodeId.editShotExecutionPlan(editScriptId)
-  return createStreamRuntimeEntry({
-    nodeId,
-    streamKind: 'editShotExecutionPlan',
-    taskId: firstSnapshot.taskId,
-    taskType: firstSnapshot.taskType,
-    targetType: firstSnapshot.targetType,
-    targetId: editScriptId,
-    episodeId: firstSnapshot.episodeId,
-    terminalHandoff: areAllTerminalHandoffs(matchingSnapshots),
-    presentation: streamPresentation(rawItems),
-    data: {
-      body: translate('nodes.editShotExecutionPlan.pendingBody'),
-      meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
-      editPipelineStepDetails: shotItems.length > 0 ? {
-        items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
-      } : undefined,
-    },
+  const grouped = new Map<string, StructuredStreamSnapshot[]>()
+  matchingSnapshots.forEach((snapshot) => {
+    if (!snapshot.targetId) return
+    const key = `${snapshot.taskId}:${snapshot.targetId}`
+    grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
+  })
+  return [...grouped.values()].flatMap((group) => {
+    const firstSnapshot = group[0] ?? null
+    if (!firstSnapshot?.targetId) return []
+    const shotItems = itemsOfKind(group, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
+    if (shotItems.length === 0) return []
+    const rawItems = group.flatMap((snapshot) => snapshot.items)
+    return [createStreamRuntimeEntry({
+      nodeId: workspaceNodeId.editShotExecutionPlan(firstSnapshot.targetId),
+      streamKind: 'editShotExecutionPlan',
+      taskId: firstSnapshot.taskId,
+      taskType: firstSnapshot.taskType,
+      targetType: firstSnapshot.targetType,
+      targetId: firstSnapshot.targetId,
+      episodeId: firstSnapshot.episodeId,
+      terminalHandoff: areAllTerminalHandoffs(group),
+      presentation: streamPresentation(rawItems),
+      data: {
+        body: translate('nodes.editShotExecutionPlan.pendingBody'),
+        meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
+        editPipelineStepDetails: {
+          items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
+        },
+      },
+    })]
   })
 }
 
@@ -646,7 +651,7 @@ export function buildStreamRuntimeEntries(
     ...buildSourceScriptRuntimeEntries(snapshots, translate),
     ...buildProductionPlanningRuntimeEntries(snapshots, translate),
     ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
-    buildShotExecutionRuntimeEntry(snapshots, translate),
+    ...buildShotExecutionRuntimeEntries(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
