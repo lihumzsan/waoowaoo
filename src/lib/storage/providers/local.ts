@@ -1,6 +1,16 @@
+import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { DeleteObjectsResult, SignedUrlParams, StorageProvider, UploadObjectParams, UploadObjectResult } from '@/lib/storage/types'
+import { Readable, Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import type {
+  DeleteObjectsResult,
+  SignedUrlParams,
+  StorageProvider,
+  UploadObjectParams,
+  UploadObjectResult,
+  UploadObjectStreamParams,
+} from '@/lib/storage/types'
 import { normalizeKey, toFetchableUrl } from '@/lib/storage/utils'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './data/uploads'
@@ -17,6 +27,35 @@ export class LocalStorageProvider implements StorageProvider {
     const filePath = resolveUploadPath(normalizedKey)
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, params.body)
+    return { key: normalizedKey }
+  }
+
+  async uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult> {
+    const normalizedKey = normalizeKey(params.key)
+    const filePath = resolveUploadPath(normalizedKey)
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+    let receivedLength = 0
+    const lengthValidator = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        receivedLength += chunk.byteLength
+        if (receivedLength > params.contentLength) {
+          callback(new Error('STORAGE_STREAM_LENGTH_MISMATCH'))
+          return
+        }
+        callback(null, chunk)
+      },
+      flush(callback) {
+        callback(receivedLength === params.contentLength
+          ? undefined
+          : new Error('STORAGE_STREAM_LENGTH_MISMATCH'))
+      },
+    })
+    await pipeline(
+      Readable.fromWeb(params.body as unknown as import('node:stream/web').ReadableStream),
+      lengthValidator,
+      createWriteStream(filePath),
+    )
     return { key: normalizedKey }
   }
 

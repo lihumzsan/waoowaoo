@@ -86,9 +86,13 @@ export default function VideoToolsPage() {
     setUploadErrors((previous) => ({ ...previous, [slot]: undefined }))
     setPageError(null)
     try {
-      const formData = new FormData()
-      formData.set('file', file)
-      const response = await apiFetch('/api/video-tools/uploads', { method: 'POST', body: formData })
+      const headers = new Headers({ 'x-file-name': encodeURIComponent(file.name) })
+      if (file.type) headers.set('Content-Type', file.type)
+      const response = await apiFetch('/api/video-tools/uploads', {
+        method: 'POST',
+        headers,
+        body: file,
+      })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.uploadFailed')))
       const uploaded = await response.json() as UploadedVideo & { success: boolean }
       const value: UploadedVideo = {

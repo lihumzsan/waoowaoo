@@ -5,7 +5,13 @@ import { POST as submitSeamConcat } from '@/app/api/video-tools/seam-concat/rout
 import { buildMockRequest } from '../../../helpers/request'
 
 const authState = vi.hoisted(() => ({ authenticated: true }))
-const uploadObjectMock = vi.hoisted(() => vi.fn(async (_body: Buffer, key: string) => key))
+const uploadObjectStreamMock = vi.hoisted(() => vi.fn(async (body: ReadableStream<Uint8Array>, key: string) => {
+  const reader = body.getReader()
+  while (!(await reader.read()).done) {
+    // Consume the request stream so length mismatches surface during the route call.
+  }
+  return key
+}))
 const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
   success: true,
   async: true,
@@ -29,7 +35,7 @@ vi.mock('@/lib/api-auth', () => ({
 }))
 
 vi.mock('@/lib/storage', () => ({
-  uploadObject: uploadObjectMock,
+  uploadObjectStream: uploadObjectStreamMock,
   getSignedUrl: vi.fn((key: string) => `/api/storage/sign?key=${encodeURIComponent(key)}`),
 }))
 
@@ -39,17 +45,21 @@ vi.mock('@/lib/task/resolve-locale', () => ({ resolveRequiredTaskLocale: vi.fn((
 describe('video tools routes', () => {
   beforeEach(() => {
     authState.authenticated = true
-    uploadObjectMock.mockClear()
+    uploadObjectStreamMock.mockClear()
     submitTaskMock.mockClear()
   })
 
-  it('uploads an authenticated MP4 to a user-scoped input key', async () => {
-    const formData = new FormData()
-    formData.set('file', new File([new Uint8Array([1, 2, 3])], 'shot-1-video.mp4', { type: 'video/mp4' }))
+  it('streams authenticated raw MP4 bytes to a user-scoped input key', async () => {
     const request = new NextRequest('http://localhost:3000/api/video-tools/uploads', {
       method: 'POST',
-      body: formData,
+      headers: {
+        'content-length': '3',
+        'content-type': 'video/mp4',
+        'x-file-name': encodeURIComponent('shot-1-video.mp4'),
+      },
+      body: new Uint8Array([1, 2, 3]),
     })
+    const formDataSpy = vi.spyOn(request, 'formData')
 
     const response = await uploadVideo(request, { params: Promise.resolve({}) })
     const body = await response.json() as { success: boolean; key: string; name: string; size: number }
@@ -57,20 +67,64 @@ describe('video tools routes', () => {
     expect(response.status).toBe(200)
     expect(body).toMatchObject({ success: true, name: 'shot-1-video.mp4', size: 3 })
     expect(body.key).toMatch(/^video-tools\/user-1\/inputs\/.+\.mp4$/)
-    expect(uploadObjectMock).toHaveBeenCalledWith(expect.any(Buffer), body.key, undefined, 'video/mp4')
+    expect(formDataSpy).not.toHaveBeenCalled()
+    expect(uploadObjectStreamMock).toHaveBeenCalledWith(
+      expect.any(ReadableStream),
+      body.key,
+      3,
+      'video/mp4',
+    )
   })
 
   it('rejects unsupported uploads', async () => {
-    const formData = new FormData()
-    formData.set('file', new File([new Uint8Array([1])], 'notes.txt', { type: 'text/plain' }))
     const request = new NextRequest('http://localhost:3000/api/video-tools/uploads', {
       method: 'POST',
-      body: formData,
+      headers: {
+        'content-length': '1',
+        'content-type': 'text/plain',
+        'x-file-name': encodeURIComponent('notes.txt'),
+      },
+      body: new Uint8Array([1]),
     })
 
     const response = await uploadVideo(request, { params: Promise.resolve({}) })
     expect(response.status).toBe(400)
-    expect(uploadObjectMock).not.toHaveBeenCalled()
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing content length before consuming the request body', async () => {
+    const request = new NextRequest('http://localhost:3000/api/video-tools/uploads', {
+      method: 'POST',
+      headers: {
+        'content-type': 'video/mp4',
+        'x-file-name': encodeURIComponent('shot-1-video.mp4'),
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+    const readerSpy = vi.spyOn(request.body as ReadableStream<Uint8Array>, 'getReader')
+
+    const response = await uploadVideo(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(400)
+    expect(readerSpy).not.toHaveBeenCalled()
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a request body shorter than its declared content length', async () => {
+    const request = new NextRequest('http://localhost:3000/api/video-tools/uploads', {
+      method: 'POST',
+      headers: {
+        'content-length': '4',
+        'content-type': 'video/mp4',
+        'x-file-name': encodeURIComponent('shot-1-video.mp4'),
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+
+    const response = await uploadVideo(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(400)
+    expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
   })
 
   it('submits two owned inputs to the video queue contract', async () => {

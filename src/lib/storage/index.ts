@@ -51,6 +51,25 @@ export async function uploadObject(
   return result.key
 }
 
+export async function uploadObjectStream(
+  body: ReadableStream<Uint8Array>,
+  key: string,
+  contentLength: number,
+  contentType?: string,
+): Promise<string> {
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    throw new Error('STORAGE_STREAM_CONTENT_LENGTH_INVALID')
+  }
+
+  const result = await getStorageProvider().uploadObjectStream({
+    key,
+    body,
+    contentLength,
+    contentType,
+  })
+  return result.key
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await getStorageProvider().deleteObject(key)
 }

@@ -1,4 +1,11 @@
-import type { DeleteObjectsResult, SignedUrlParams, StorageProvider, UploadObjectParams, UploadObjectResult } from '@/lib/storage/types'
+import type {
+  DeleteObjectsResult,
+  SignedUrlParams,
+  StorageProvider,
+  UploadObjectParams,
+  UploadObjectResult,
+  UploadObjectStreamParams,
+} from '@/lib/storage/types'
 import { requireEnv, streamToBuffer, toFetchableUrl } from '@/lib/storage/utils'
 
 const DEFAULT_MINIO_REGION = 'us-east-1'
@@ -72,6 +79,20 @@ export class MinioStorageProvider implements StorageProvider {
       Bucket: this.bucket,
       Key: params.key,
       Body: params.body,
+      ContentType: params.contentType,
+    }))
+
+    return { key: params.key }
+  }
+
+  async uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult> {
+    const sdk = await this.loadSdk()
+    const client = await this.getClient()
+    await client.send(new sdk.PutObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+      Body: params.body,
+      ContentLength: params.contentLength,
       ContentType: params.contentType,
     }))
 

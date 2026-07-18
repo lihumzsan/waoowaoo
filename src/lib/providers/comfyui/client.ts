@@ -435,7 +435,32 @@ function parseDataUrl(source: string): { buffer: Buffer; mimeType: string; filen
   }
 }
 
-async function loadBinarySource(source: string): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
+type LoadedBufferedSource = {
+  buffer: Buffer
+  mimeType: string
+  filename: string
+}
+
+type LoadedStreamingSource = {
+  body: ReadableStream<Uint8Array>
+  contentLength?: number
+  mimeType: string
+  filename: string
+}
+
+type LoadedBinarySource = LoadedBufferedSource | LoadedStreamingSource
+
+function readOptionalContentLength(headers: Headers): number | undefined {
+  const rawLength = headers.get('content-length')?.trim()
+  if (!rawLength || !/^\d+$/.test(rawLength)) return undefined
+  const contentLength = Number(rawLength)
+  return Number.isSafeInteger(contentLength) ? contentLength : undefined
+}
+
+function loadBinarySource(source: string): Promise<LoadedBufferedSource>
+function loadBinarySource(source: string, streamRemote: true): Promise<LoadedBinarySource>
+function loadBinarySource(source: string, streamRemote: boolean): Promise<LoadedBinarySource>
+async function loadBinarySource(source: string, streamRemote = false): Promise<LoadedBinarySource> {
   const dataUrl = parseDataUrl(source)
   if (dataUrl) return dataUrl
 
@@ -446,7 +471,6 @@ async function loadBinarySource(source: string): Promise<{ buffer: Buffer; mimeT
     throw new Error(`COMFYUI_SOURCE_FETCH_FAILED: ${response.status} ${detail.slice(0, 200)}`)
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer())
   const mimeType = response.headers.get('content-type')?.split(';')[0].trim() || 'application/octet-stream'
   let filename = 'upload.bin'
 
@@ -460,7 +484,23 @@ async function loadBinarySource(source: string): Promise<{ buffer: Buffer; mimeT
     }
   }
 
-  return { buffer, mimeType, filename }
+  if (streamRemote) {
+    if (!response.body) {
+      throw new Error('COMFYUI_SOURCE_FETCH_FAILED: missing response body')
+    }
+    return {
+      body: response.body,
+      contentLength: readOptionalContentLength(response.headers),
+      mimeType,
+      filename,
+    }
+  }
+
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    mimeType,
+    filename,
+  }
 }
 
 function toBlobPart(buffer: Buffer): ArrayBuffer {
@@ -481,21 +521,108 @@ function buildUploadFilename(originalFilename: string, mimeType: string, index: 
   return `waoowaoo-${Date.now()}-${index}-${sanitizedBase || 'upload'}${extension}`
 }
 
-async function uploadComfyUiImage(baseUrl: string, imageUrl: string, index: number): Promise<string> {
-  const { buffer, mimeType, filename } = await loadBinarySource(imageUrl)
-  const formData = new FormData()
-  formData.set(
-    'image',
-    new Blob([toBlobPart(buffer)], { type: mimeType }),
-    buildUploadFilename(filename, mimeType, index),
-  )
-  formData.set('type', 'input')
-
-  const response = await fetch(`${baseUrl}/upload/image`, {
-    method: 'POST',
-    body: formData,
-    signal: AbortSignal.timeout(120_000),
+function buildStreamingMultipartBody(source: {
+  body: ReadableStream<Uint8Array>
+  contentLength?: number
+  mimeType: string
+}, filename: string): {
+  body: ReadableStream<Uint8Array>
+  headers: Headers
+} {
+  const boundary = `----waoowaoo-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const encoder = new TextEncoder()
+  const prefix = encoder.encode([
+    `--${boundary}`,
+    `Content-Disposition: form-data; name="image"; filename="${filename}"`,
+    `Content-Type: ${source.mimeType}`,
+    '',
+    '',
+  ].join('\r\n'))
+  const suffix = encoder.encode([
+    '',
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="type"',
+    '',
+    'input',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n'))
+  const reader = source.body.getReader()
+  let stage: 'prefix' | 'content' | 'suffix' | 'done' = 'prefix'
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (stage === 'prefix') {
+        controller.enqueue(prefix)
+        stage = 'content'
+        return
+      }
+      if (stage === 'content') {
+        try {
+          const chunk = await reader.read()
+          if (!chunk.done) {
+            controller.enqueue(chunk.value)
+            return
+          }
+          stage = 'suffix'
+        } catch (error) {
+          controller.error(error)
+          return
+        }
+      }
+      if (stage === 'suffix') {
+        controller.enqueue(suffix)
+        stage = 'done'
+        return
+      }
+      controller.close()
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
   })
+  const headers = new Headers({
+    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+  })
+  if (source.contentLength !== undefined) {
+    headers.set('Content-Length', String(prefix.byteLength + source.contentLength + suffix.byteLength))
+  }
+  return { body, headers }
+}
+
+async function uploadComfyUiImage(
+  baseUrl: string,
+  imageUrl: string,
+  index: number,
+  streamRemote = false,
+): Promise<string> {
+  const source = await loadBinarySource(imageUrl, streamRemote)
+  const uploadFilename = buildUploadFilename(source.filename, source.mimeType, index)
+  let requestInit: RequestInit
+  if ('buffer' in source) {
+    const formData = new FormData()
+    formData.set(
+      'image',
+      new Blob([toBlobPart(source.buffer)], { type: source.mimeType }),
+      uploadFilename,
+    )
+    formData.set('type', 'input')
+    requestInit = {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(120_000),
+    }
+  } else {
+    const multipart = buildStreamingMultipartBody(source, uploadFilename)
+    requestInit = {
+      method: 'POST',
+      headers: multipart.headers,
+      body: multipart.body,
+      duplex: 'half',
+      signal: AbortSignal.timeout(120_000),
+    } as RequestInit & { duplex: 'half' }
+  }
+
+  const response = await fetch(`${baseUrl}/upload/image`, requestInit)
   const rawText = await response.text().catch(() => '')
   if (!response.ok) {
     throw new Error(`COMFYUI_UPLOAD_FAILED: ${response.status} ${rawText.slice(0, 300)}`)
@@ -518,12 +645,16 @@ async function uploadComfyUiImage(baseUrl: string, imageUrl: string, index: numb
   throw new Error('COMFYUI_UPLOAD_FAILED: missing uploaded filename')
 }
 
-async function uploadComfyUiImages(baseUrl: string, imageUrls: string[]): Promise<string[]> {
+async function uploadComfyUiImages(
+  baseUrl: string,
+  imageUrls: string[],
+  streamRemote = false,
+): Promise<string[]> {
   const filenames: string[] = []
   for (let index = 0; index < imageUrls.length; index += 1) {
     const imageUrl = imageUrls[index]
     if (!imageUrl) continue
-    filenames.push(await uploadComfyUiImage(baseUrl, imageUrl, index))
+    filenames.push(await uploadComfyUiImage(baseUrl, imageUrl, index, streamRemote))
   }
   return filenames
 }
@@ -752,11 +883,24 @@ async function normalizeWorkflowModelInputsForServer(
   return workflow
 }
 
-export async function runComfyUiWorkflow(params: {
+type ComfyUiWorkflowParams = {
   baseUrl: string
   workflow: ComfyUiWorkflowGraph
   expect: 'image' | 'video' | 'audio'
-}): Promise<{ dataBase64: string; mimeType: string }> {
+}
+
+type ComfyUiWorkflowBase64Result = { dataBase64: string; mimeType: string }
+type ComfyUiWorkflowViewResult = { viewUrl: string; mimeType: string; contentLength?: number }
+
+export function runComfyUiWorkflow(
+  params: ComfyUiWorkflowParams & { returnViewUrl: true },
+): Promise<ComfyUiWorkflowViewResult>
+export function runComfyUiWorkflow(
+  params: ComfyUiWorkflowParams & { returnViewUrl?: false },
+): Promise<ComfyUiWorkflowBase64Result>
+export async function runComfyUiWorkflow(
+  params: ComfyUiWorkflowParams & { returnViewUrl?: boolean },
+): Promise<ComfyUiWorkflowBase64Result | ComfyUiWorkflowViewResult> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const workflow = await normalizeWorkflowModelInputsForServer(base, params.workflow)
   const promptResponse = await fetch(`${base}/prompt`, {
@@ -883,7 +1027,8 @@ export async function runComfyUiWorkflow(params: {
     subfolder: mediaRef.subfolder,
     type: mediaRef.type,
   })
-  const viewResponse = await fetch(`${base}/view?${search.toString()}`, {
+  const viewUrl = `${base}/view?${search.toString()}`
+  const viewResponse = await fetch(viewUrl, {
     signal: AbortSignal.timeout(120_000),
   })
   if (!viewResponse.ok) {
@@ -891,11 +1036,22 @@ export async function runComfyUiWorkflow(params: {
     throw new Error(`COMFYUI_VIEW_FAILED: ${viewResponse.status} ${detail.slice(0, 200)}`)
   }
 
-  const buffer = Buffer.from(await viewResponse.arrayBuffer())
   const headerMime = viewResponse.headers.get('content-type')?.split(';')[0].trim()
   const mimeType = headerMime && headerMime !== 'application/octet-stream'
     ? headerMime
     : guessMimeFromFilename(mediaRef.filename)
+
+  if (params.returnViewUrl) {
+    const contentLength = readOptionalContentLength(viewResponse.headers)
+    await viewResponse.body?.cancel()
+    return {
+      viewUrl,
+      mimeType,
+      ...(contentLength === undefined ? {} : { contentLength }),
+    }
+  }
+
+  const buffer = Buffer.from(await viewResponse.arrayBuffer())
 
   return {
     dataBase64: buffer.toString('base64'),
@@ -1034,7 +1190,7 @@ export async function runComfyUiVideoSeamConcatWorkflow(params: {
   videoUrls: [string, string]
   trimEndFrames?: number
   trimStartFrames?: number
-}): Promise<{ videoBase64: string; mimeType: string }> {
+}): Promise<{ videoUrl: string; mimeType: string; contentLength?: number }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const workflowKey = params.workflowKey?.trim() || COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID
   const videoUrls = params.videoUrls
@@ -1058,18 +1214,23 @@ export async function runComfyUiVideoSeamConcatWorkflow(params: {
     )
   }
 
-  const videoFilenames = await uploadComfyUiImages(base, videoUrls)
+  const videoFilenames = await uploadComfyUiImages(base, videoUrls, true)
   const workflow = resolveComfyUiWorkflow(workflowKey, {
     videoFilenames,
     videoTrimFrames: [trimEndFrames, trimStartFrames],
   })
-  const { dataBase64, mimeType } = await runComfyUiWorkflow({
+  const output = await runComfyUiWorkflow({
     baseUrl: base,
     workflow,
     expect: 'video',
+    returnViewUrl: true,
   })
 
-  return { videoBase64: dataBase64, mimeType }
+  return {
+    videoUrl: output.viewUrl,
+    mimeType: output.mimeType,
+    ...(output.contentLength === undefined ? {} : { contentLength: output.contentLength }),
+  }
 }
 
 export async function runComfyUiAudioWorkflow(params: {

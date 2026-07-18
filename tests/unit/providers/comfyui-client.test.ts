@@ -969,6 +969,9 @@ describe('comfyui client media refs', () => {
       'default-second-upload.mp4',
     ]
     const submittedGraphs: Array<Record<string, { class_type: string; inputs: Record<string, unknown> }>> = []
+    const uploadBodies: unknown[] = []
+    const uploadHeaders: Headers[] = []
+    const uploadPayloads: Uint8Array[] = []
     let uploadIndex = 0
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -981,11 +984,16 @@ describe('comfyui client media refs', () => {
       if (url.startsWith('https://assets.test/')) {
         return new Response(new Uint8Array([1, 2, 3]), {
           status: 200,
-          headers: { 'Content-Type': 'video/mp4' },
+          headers: { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
         })
       }
 
       if (url.endsWith('/upload/image')) {
+        uploadBodies.push(init?.body)
+        uploadHeaders.push(new Headers(init?.headers))
+        if (init?.body instanceof ReadableStream) {
+          uploadPayloads.push(new Uint8Array(await new Response(init.body).arrayBuffer()))
+        }
         const name = uploadedNames[uploadIndex]
         uploadIndex += 1
         return new Response(JSON.stringify({ name }), {
@@ -1021,7 +1029,7 @@ describe('comfyui client media refs', () => {
       if (url.includes('/view?filename=shot-3-video.mp4')) {
         return new Response(new Uint8Array([9, 8, 7]), {
           status: 200,
-          headers: { 'Content-Type': 'video/mp4' },
+          headers: { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
         })
       }
 
@@ -1038,8 +1046,24 @@ describe('comfyui client media refs', () => {
     await vi.advanceTimersByTimeAsync(1_500)
     const result = await resultPromise
 
-    expect(result).toEqual({ videoBase64: 'CQgH', mimeType: 'video/mp4' })
+    expect(result).toEqual({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=shot-3-video.mp4&subfolder=&type=output',
+      mimeType: 'video/mp4',
+      contentLength: 3,
+    })
     expect(uploadIndex).toBe(2)
+    expect(uploadBodies).toHaveLength(2)
+    expect(uploadBodies.every((body) => body instanceof ReadableStream)).toBe(true)
+    expect(uploadHeaders.every((headers) => headers.get('content-type')?.startsWith('multipart/form-data; boundary='))).toBe(true)
+    expect(uploadHeaders.every((headers) => Number(headers.get('content-length')) > 3)).toBe(true)
+    expect(uploadPayloads.every((payload, index) => (
+      payload.byteLength === Number(uploadHeaders[index]?.get('content-length'))
+    ))).toBe(true)
+    const firstUpload = new TextDecoder().decode(uploadPayloads[0])
+    expect(firstUpload).toContain('Content-Disposition: form-data; name="image"; filename="')
+    expect(firstUpload).toContain('Content-Type: video/mp4')
+    expect(firstUpload).toContain('Content-Disposition: form-data; name="type"')
+    expect(firstUpload).toContain('input')
     expect(submittedGraphs).toHaveLength(1)
     expect(submittedGraphs[0]?.['1']?.inputs.file).toBe('first-upload.mp4')
     expect(submittedGraphs[0]?.['2']?.inputs.file).toBe('second-upload.mp4')

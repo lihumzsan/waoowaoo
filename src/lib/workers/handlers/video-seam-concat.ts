@@ -1,7 +1,7 @@
 import type { Job } from 'bullmq'
 import { getProviderConfig } from '@/lib/api-config'
 import { runComfyUiVideoSeamConcatWorkflow } from '@/lib/providers/comfyui/client'
-import { getSignedObjectUrl, getSignedUrl, uploadObject } from '@/lib/storage'
+import { getSignedObjectUrl, getSignedUrl, uploadObjectStream } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import {
   VIDEO_SEAM_CONCAT_WORKFLOW_KEY,
@@ -57,6 +57,24 @@ function readPayload(job: Job<TaskJobData>): SeamConcatPayload {
   }
 }
 
+function resolveOutputContentLength(response: Response, expectedLength: number | undefined): number {
+  const rawLength = response.headers.get('content-length')?.trim()
+  let contentLength = expectedLength
+  if (rawLength) {
+    if (!/^\d+$/.test(rawLength)) {
+      throw new Error('COMFYUI_VIEW_CONTENT_LENGTH_INVALID')
+    }
+    contentLength = Number(rawLength)
+  }
+  if (!Number.isSafeInteger(contentLength) || (contentLength as number) <= 0) {
+    throw new Error('COMFYUI_VIEW_CONTENT_LENGTH_MISSING')
+  }
+  if (expectedLength !== undefined && contentLength !== expectedLength) {
+    throw new Error('COMFYUI_VIEW_CONTENT_LENGTH_MISMATCH')
+  }
+  return contentLength as number
+}
+
 export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
   const payload = readPayload(job)
   const provider = await getProviderConfig(job.data.userId, 'comfyui')
@@ -90,18 +108,34 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
     stage: 'persist_output',
     stageLabel: 'videoTools.status.persisting',
   })
+  const response = await fetch(output.videoUrl, {
+    signal: AbortSignal.timeout(120_000),
+  })
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    throw new Error(`COMFYUI_VIEW_FAILED: ${response.status} ${detail.slice(0, 200)}`)
+  }
+  if (!response.body) {
+    throw new Error('COMFYUI_VIEW_BODY_MISSING')
+  }
+
+  const contentLength = resolveOutputContentLength(response, output.contentLength)
+  const responseMimeType = response.headers.get('content-type')?.split(';')[0]?.trim()
+  const mimeType = responseMimeType && responseMimeType !== 'application/octet-stream'
+    ? responseMimeType
+    : output.mimeType || 'video/mp4'
   const outputKey = buildVideoToolOutputKey(job.data.userId)
-  const videoKey = await uploadObject(
-    Buffer.from(output.videoBase64, 'base64'),
+  const videoKey = await uploadObjectStream(
+    response.body,
     outputKey,
-    undefined,
-    output.mimeType || 'video/mp4',
+    contentLength,
+    mimeType,
   )
 
   return {
     videoKey,
     videoUrl: getSignedUrl(videoKey),
-    mimeType: output.mimeType || 'video/mp4',
+    mimeType,
     input1Name: payload.input1Name,
     input1TrimEndFrames: payload.input1TrimEndFrames,
     input2Name: payload.input2Name,

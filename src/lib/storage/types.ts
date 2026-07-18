@@ -6,6 +6,13 @@ export interface UploadObjectParams {
   contentType?: string
 }
 
+export interface UploadObjectStreamParams {
+  key: string
+  body: ReadableStream<Uint8Array>
+  contentLength: number
+  contentType?: string
+}
+
 export interface UploadObjectResult {
   key: string
 }
@@ -23,6 +30,7 @@ export interface SignedUrlParams {
 export interface StorageProvider {
   readonly kind: StorageType
   uploadObject(params: UploadObjectParams): Promise<UploadObjectResult>
+  uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult>
   deleteObject(key: string): Promise<void>
   deleteObjects(keys: string[]): Promise<DeleteObjectsResult>
   getSignedObjectUrl(params: SignedUrlParams): Promise<string>

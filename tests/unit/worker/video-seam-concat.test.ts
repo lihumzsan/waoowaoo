@@ -4,7 +4,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { handleVideoSeamConcatTask } from '@/lib/workers/handlers/video-seam-concat'
 import { getProviderConfig } from '@/lib/api-config'
 import { runComfyUiVideoSeamConcatWorkflow } from '@/lib/providers/comfyui/client'
-import { getSignedObjectUrl, getSignedUrl, uploadObject } from '@/lib/storage'
+import { getSignedObjectUrl, getSignedUrl, uploadObjectStream } from '@/lib/storage'
 
 vi.mock('@/lib/api-config', () => ({ getProviderConfig: vi.fn() }))
 vi.mock('@/lib/providers/comfyui/client', () => ({
@@ -13,7 +13,7 @@ vi.mock('@/lib/providers/comfyui/client', () => ({
 vi.mock('@/lib/storage', () => ({
   getSignedObjectUrl: vi.fn(),
   getSignedUrl: vi.fn(),
-  uploadObject: vi.fn(),
+  uploadObjectStream: vi.fn(),
 }))
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 
@@ -21,7 +21,8 @@ const getProviderConfigMock = vi.mocked(getProviderConfig)
 const runWorkflowMock = vi.mocked(runComfyUiVideoSeamConcatWorkflow)
 const getSignedObjectUrlMock = vi.mocked(getSignedObjectUrl)
 const getSignedUrlMock = vi.mocked(getSignedUrl)
-const uploadObjectMock = vi.mocked(uploadObject)
+const uploadObjectStreamMock = vi.mocked(uploadObjectStream)
+const persistedBytes: number[][] = []
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
@@ -50,8 +51,20 @@ describe('video seam concat worker handler', () => {
     getSignedObjectUrlMock
       .mockResolvedValueOnce('https://storage.test/one.mp4')
       .mockResolvedValueOnce('https://storage.test/two.mp4')
-    runWorkflowMock.mockResolvedValue({ videoBase64: 'CQgH', mimeType: 'video/mp4' })
-    uploadObjectMock.mockResolvedValue('video-tools/user-1/outputs/result.mp4')
+    runWorkflowMock.mockResolvedValue({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
+      mimeType: 'video/mp4',
+      contentLength: 3,
+    })
+    persistedBytes.length = 0
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([9, 8, 7]), {
+      status: 200,
+      headers: { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
+    })))
+    uploadObjectStreamMock.mockImplementation(async (body) => {
+      persistedBytes.push(Array.from(new Uint8Array(await new Response(body).arrayBuffer())))
+      return 'video-tools/user-1/outputs/result.mp4'
+    })
     getSignedUrlMock.mockReturnValue('/api/storage/sign?key=result')
   })
 
@@ -72,12 +85,18 @@ describe('video seam concat worker handler', () => {
       trimEndFrames: 12,
       trimStartFrames: 3,
     })
-    expect(uploadObjectMock).toHaveBeenCalledWith(
-      Buffer.from([9, 8, 7]),
+    expect(fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(uploadObjectStreamMock).toHaveBeenCalledWith(
+      expect.any(ReadableStream),
       expect.stringMatching(/^video-tools\/user-1\/outputs\/.+\.mp4$/),
-      undefined,
+      3,
       'video/mp4',
     )
+    expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
+    expect(persistedBytes).toEqual([[9, 8, 7]])
     expect(result).toEqual(expect.objectContaining({
       videoKey: 'video-tools/user-1/outputs/result.mp4',
       videoUrl: '/api/storage/sign?key=result',
