@@ -34,11 +34,12 @@ describe('comfyui workflow registry', () => {
   const BERNINI_AUDIO_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
   const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
 
-  it('injects both video files into the fixed seam-concat workflow', () => {
+  it('injects both video files and exact frame trims into the fixed seam-concat workflow', () => {
     expect(getComfyUiWorkflowVideoInputCount(VIDEO_SEAM_CONCAT_WORKFLOW_KEY)).toBe(2)
 
     const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
       videoFilenames: ['first.mp4', 'second.mp4'],
+      videoTrimFrames: [3, 4],
     })
 
     expect(workflow['1']).toMatchObject({
@@ -51,11 +52,108 @@ describe('comfyui workflow registry', () => {
     })
     expect(workflow['1']?.inputs).not.toHaveProperty('upload')
     expect(workflow['2']?.inputs).not.toHaveProperty('upload')
-    expect(workflow['5']?.inputs.start_time).toEqual(['4', 0])
+    expect(workflow['3']).toMatchObject({
+      class_type: 'GetVideoComponents',
+      inputs: { video: ['1', 0] },
+    })
+    expect(workflow['4']).toMatchObject({
+      class_type: 'GetVideoComponents',
+      inputs: { video: ['2', 0] },
+    })
+    expect(workflow['5']).toMatchObject({
+      class_type: 'GetImageSize',
+      inputs: { image: ['3', 0] },
+    })
+    expect(workflow['6']).toMatchObject({
+      class_type: 'GetImageSize',
+      inputs: { image: ['4', 0] },
+    })
+    expect(workflow['7']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'max(a - b, 0)',
+        'values.a': ['5', 2],
+        'values.b': 3,
+      },
+    })
+    expect(workflow['8']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'max(a - b, 0)',
+        'values.a': ['6', 2],
+        'values.b': 4,
+      },
+    })
     expect(workflow['9']).toMatchObject({
+      class_type: 'ImageFromBatch',
+      inputs: {
+        image: ['3', 0],
+        batch_index: 0,
+        length: ['7', 0],
+      },
+    })
+    expect(workflow['10']).toMatchObject({
+      class_type: 'ImageFromBatch',
+      inputs: {
+        image: ['4', 0],
+        batch_index: 4,
+        length: ['8', 0],
+      },
+    })
+    expect(workflow['11']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': ['7', 0],
+        'values.b': ['3', 2],
+      },
+    })
+    expect(workflow['12']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': ['8', 0],
+        'values.b': ['4', 2],
+      },
+    })
+    expect(workflow['13']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': 4,
+        'values.b': ['4', 2],
+      },
+    })
+    expect(workflow['14']).toMatchObject({
+      class_type: 'TrimAudioDuration',
+      inputs: {
+        audio: ['3', 1],
+        start_index: 0,
+        duration: ['11', 0],
+      },
+    })
+    expect(workflow['15']).toMatchObject({
+      class_type: 'TrimAudioDuration',
+      inputs: {
+        audio: ['4', 1],
+        start_index: ['13', 0],
+        duration: ['12', 0],
+      },
+    })
+    expect(workflow['16']?.inputs).toMatchObject({
+      images_A: ['9', 0],
+      images_B: ['10', 0],
+    })
+    expect(workflow['17']?.inputs).toMatchObject({
+      audio1: ['14', 0],
+      audio2: ['15', 0],
+    })
+    expect(workflow['18']).toMatchObject({
       class_type: 'VHS_VideoCombine',
       inputs: {
         frame_rate: ['3', 2],
+        images: ['16', 0],
+        audio: ['17', 0],
         format: 'video/nvenc_h264-mp4',
         pix_fmt: 'yuv420p',
         bitrate: 10,

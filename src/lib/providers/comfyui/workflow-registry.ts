@@ -80,6 +80,7 @@ export type ComfyUiWorkflowInject = {
   imageFilenames?: string[]
   audioFilenames?: string[]
   videoFilenames?: string[]
+  videoTrimFrames?: [number, number]
   llmApi?: ComfyUiWorkflowLlmApiInject
   fps?: number
   durationSeconds?: number
@@ -1675,6 +1676,26 @@ function applyVideoInjection(graph: ComfyUiWorkflowGraph, videoFilenames?: strin
   })
 }
 
+function applyVideoSeamTrimInjection(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  videoTrimFrames?: [number, number],
+): void {
+  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-concat-nvenc') return
+  if (!videoTrimFrames) return
+
+  const [trimEndFrames, trimStartFrames] = videoTrimFrames
+  const video1RetainedFrames = graph['7']
+  const video2RetainedFrames = graph['8']
+  const video2Images = graph['10']
+  const video2AudioStart = graph['13']
+
+  if (video1RetainedFrames) video1RetainedFrames.inputs['values.b'] = trimEndFrames
+  if (video2RetainedFrames) video2RetainedFrames.inputs['values.b'] = trimStartFrames
+  if (video2Images) video2Images.inputs.batch_index = trimStartFrames
+  if (video2AudioStart) video2AudioStart.inputs['values.a'] = trimStartFrames
+}
+
 function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -3107,6 +3128,7 @@ export function resolveComfyUiWorkflow(
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
   applyVideoInjection(graph, inject.videoFilenames)
+  applyVideoSeamTrimInjection(graph, workflowKey, inject.videoTrimFrames)
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)

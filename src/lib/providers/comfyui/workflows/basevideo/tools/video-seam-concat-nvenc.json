@@ -1,90 +1,139 @@
 {
   "1": {
     "class_type": "LoadVideo",
-    "inputs": {
-      "file": "shot-1-video.mp4"
-    },
-    "_meta": {
-      "title": "上传 shot-1"
-    }
+    "inputs": { "file": "shot-1-video.mp4" },
+    "_meta": { "title": "Load Video 1" }
   },
   "2": {
     "class_type": "LoadVideo",
-    "inputs": {
-      "file": "shot-2-video.mp4"
-    },
-    "_meta": {
-      "title": "上传 shot-2"
-    }
+    "inputs": { "file": "shot-2-video.mp4" },
+    "_meta": { "title": "Load Video 2" }
   },
   "3": {
     "class_type": "GetVideoComponents",
-    "inputs": {
-      "video": ["1", 0]
-    },
-    "_meta": {
-      "title": "解析 shot-1"
-    }
+    "inputs": { "video": ["1", 0] },
+    "_meta": { "title": "Video 1 Components" }
   },
   "4": {
-    "class_type": "ComfyMathExpression",
-    "inputs": {
-      "expression": "1 / a",
-      "values.a": ["3", 2]
-    },
-    "_meta": {
-      "title": "计算一帧时长 1/fps"
-    }
+    "class_type": "GetVideoComponents",
+    "inputs": { "video": ["2", 0] },
+    "_meta": { "title": "Video 2 Components" }
   },
   "5": {
-    "class_type": "Video Slice",
-    "inputs": {
-      "video": ["2", 0],
-      "start_time": ["4", 0],
-      "duration": 0,
-      "strict_duration": false
-    },
-    "_meta": {
-      "title": "删除 shot-2 第一帧及对应音频"
-    }
+    "class_type": "GetImageSize",
+    "inputs": { "image": ["3", 0] },
+    "_meta": { "title": "Video 1 Frame Count" }
   },
   "6": {
-    "class_type": "GetVideoComponents",
-    "inputs": {
-      "video": ["5", 0]
-    },
-    "_meta": {
-      "title": "解析裁剪后的 shot-2"
-    }
+    "class_type": "GetImageSize",
+    "inputs": { "image": ["4", 0] },
+    "_meta": { "title": "Video 2 Frame Count" }
   },
   "7": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "max(a - b, 0)",
+      "values.a": ["5", 2],
+      "values.b": 0
+    },
+    "_meta": { "title": "Retained Video 1 Frames" }
+  },
+  "8": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "max(a - b, 0)",
+      "values.a": ["6", 2],
+      "values.b": 1
+    },
+    "_meta": { "title": "Retained Video 2 Frames" }
+  },
+  "9": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": ["3", 0],
+      "batch_index": 0,
+      "length": ["7", 0]
+    },
+    "_meta": { "title": "Retained Video 1 Images" }
+  },
+  "10": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": ["4", 0],
+      "batch_index": 1,
+      "length": ["8", 0]
+    },
+    "_meta": { "title": "Retained Video 2 Images" }
+  },
+  "11": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "a / b",
+      "values.a": ["7", 0],
+      "values.b": ["3", 2]
+    },
+    "_meta": { "title": "Video 1 Audio Duration" }
+  },
+  "12": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "a / b",
+      "values.a": ["8", 0],
+      "values.b": ["4", 2]
+    },
+    "_meta": { "title": "Video 2 Audio Duration" }
+  },
+  "13": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "a / b",
+      "values.a": 1,
+      "values.b": ["4", 2]
+    },
+    "_meta": { "title": "Video 2 Audio Start" }
+  },
+  "14": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": ["3", 1],
+      "start_index": 0,
+      "duration": ["11", 0]
+    },
+    "_meta": { "title": "Retained Video 1 Audio" }
+  },
+  "15": {
+    "class_type": "TrimAudioDuration",
+    "inputs": {
+      "audio": ["4", 1],
+      "start_index": ["13", 0],
+      "duration": ["12", 0]
+    },
+    "_meta": { "title": "Retained Video 2 Audio" }
+  },
+  "16": {
     "class_type": "VHS_MergeImages",
     "inputs": {
-      "images_A": ["3", 0],
-      "images_B": ["6", 0],
+      "images_A": ["9", 0],
+      "images_B": ["10", 0],
       "merge_strategy": "match A",
       "scale_method": "nearest-exact",
       "crop": "disabled"
     },
-    "_meta": {
-      "title": "拼接全部画面"
-    }
+    "_meta": { "title": "Concatenate Retained Images" }
   },
-  "8": {
+  "17": {
     "class_type": "AudioConcat",
     "inputs": {
-      "audio1": ["3", 1],
-      "audio2": ["6", 1],
+      "audio1": ["14", 0],
+      "audio2": ["15", 0],
       "direction": "after"
     },
-    "_meta": {
-      "title": "拼接同步音频"
-    }
+    "_meta": { "title": "Concatenate Retained Audio" }
   },
-  "9": {
+  "18": {
     "class_type": "VHS_VideoCombine",
     "inputs": {
-      "images": ["7", 0],
+      "images": ["16", 0],
       "frame_rate": ["3", 2],
       "loop_count": 0,
       "filename_prefix": "shot-3-video",
@@ -95,10 +144,8 @@
       "save_metadata": false,
       "pingpong": false,
       "save_output": true,
-      "audio": ["8", 0]
+      "audio": ["17", 0]
     },
-    "_meta": {
-      "title": "NVENC 输出 shot-3-video"
-    }
+    "_meta": { "title": "NVENC Output shot-3-video" }
   }
 }

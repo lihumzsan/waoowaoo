@@ -1028,6 +1028,8 @@ export async function runComfyUiVideoSeamConcatWorkflow(params: {
   baseUrl: string
   workflowKey?: string
   videoUrls: [string, string]
+  trimEndFrames?: number
+  trimStartFrames?: number
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const workflowKey = params.workflowKey?.trim() || COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID
@@ -1040,7 +1042,10 @@ export async function runComfyUiVideoSeamConcatWorkflow(params: {
   }
 
   const videoFilenames = await uploadComfyUiImages(base, videoUrls)
-  const workflow = resolveComfyUiWorkflow(workflowKey, { videoFilenames })
+  const workflow = resolveComfyUiWorkflow(workflowKey, {
+    videoFilenames,
+    videoTrimFrames: [params.trimEndFrames ?? 0, params.trimStartFrames ?? 1],
+  })
   const { dataBase64, mimeType } = await runComfyUiWorkflow({
     baseUrl: base,
     workflow,

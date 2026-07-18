@@ -962,7 +962,12 @@ describe('comfyui client media refs', () => {
 
   it('uploads two videos in order and submits the seam-concat graph', async () => {
     vi.useFakeTimers()
-    const uploadedNames = ['first-upload.mp4', 'second-upload.mp4']
+    const uploadedNames = [
+      'first-upload.mp4',
+      'second-upload.mp4',
+      'default-first-upload.mp4',
+      'default-second-upload.mp4',
+    ]
     const submittedGraphs: Array<Record<string, { class_type: string; inputs: Record<string, unknown> }>> = []
     let uploadIndex = 0
 
@@ -1002,7 +1007,7 @@ describe('comfyui client media refs', () => {
         return new Response(JSON.stringify({
           'prompt-seam-concat': {
             outputs: {
-              '9': {
+              '18': {
                 gifs: [{ filename: 'shot-3-video.mp4', subfolder: '', type: 'output' }],
               },
             },
@@ -1026,6 +1031,8 @@ describe('comfyui client media refs', () => {
     const resultPromise = runComfyUiVideoSeamConcatWorkflow({
       baseUrl: 'http://127.0.0.1:8188',
       videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+      trimEndFrames: 3,
+      trimStartFrames: 4,
     })
 
     await vi.advanceTimersByTimeAsync(1_500)
@@ -1036,6 +1043,25 @@ describe('comfyui client media refs', () => {
     expect(submittedGraphs).toHaveLength(1)
     expect(submittedGraphs[0]?.['1']?.inputs.file).toBe('first-upload.mp4')
     expect(submittedGraphs[0]?.['2']?.inputs.file).toBe('second-upload.mp4')
+    expect(submittedGraphs[0]?.['7']?.inputs['values.b']).toBe(3)
+    expect(submittedGraphs[0]?.['8']?.inputs['values.b']).toBe(4)
+    expect(submittedGraphs[0]?.['10']?.inputs.batch_index).toBe(4)
+    expect(submittedGraphs[0]?.['13']?.inputs['values.a']).toBe(4)
+
+    const defaultResultPromise = runComfyUiVideoSeamConcatWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    await defaultResultPromise
+
+    expect(uploadIndex).toBe(4)
+    expect(submittedGraphs).toHaveLength(2)
+    expect(submittedGraphs[1]?.['7']?.inputs['values.b']).toBe(0)
+    expect(submittedGraphs[1]?.['8']?.inputs['values.b']).toBe(1)
+    expect(submittedGraphs[1]?.['10']?.inputs.batch_index).toBe(1)
+    expect(submittedGraphs[1]?.['13']?.inputs['values.a']).toBe(1)
   })
 
   it('dumps resolved ComfyUI video prompts to stdout when prompt dump is enabled', async () => {
