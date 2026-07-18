@@ -1,5 +1,6 @@
 import { downloadAndUploadImage, downloadAndUploadVideo, generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
+import { decodeBase64WithLimit, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 export interface ProcessMediaOptions {
   source: string | Buffer
@@ -44,7 +45,8 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
       const base64Start = source.indexOf(';base64,')
       if (base64Start === -1) throw new Error('无法解析 data: URL')
       const base64Data = source.substring(base64Start + 8)
-      const buffer = Buffer.from(base64Data, 'base64') as Buffer
+      const maxBytes = type === 'image' ? MAX_IMAGE_BYTES : type === 'audio' ? MAX_AUDIO_BYTES : MAX_VIDEO_BYTES
+      const buffer = decodeBase64WithLimit(base64Data, maxBytes, `${type} result`)
       return await uploadObject(buffer, key, undefined, contentType)
     }
 
@@ -63,7 +65,7 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
     if (!response.ok) {
       throw new Error(`Failed to download ${type}: ${response.status} ${response.statusText}`)
     }
-    const buffer = Buffer.from(await response.arrayBuffer()) as Buffer
+    const buffer = await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'audio result')
     return await uploadObject(buffer, key, undefined, contentType)
   }
 

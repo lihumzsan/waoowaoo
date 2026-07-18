@@ -66,6 +66,7 @@
 - 旧系统把产物依赖编码为 Workflow 的 `allowedOperationIds`、step visibility 和固定 continuation：新能力必须同时接入 runtime、Choice、Canvas 和 Golden 的多份阶段表，漏接一次就会隐藏真实产物或强迫 Agent 停在计划点。当前 WorkflowView 只保留推荐主链投影；工具资格来自完整 Operation registry 与 Operation 自身显式契约，Canvas 从持久 Resource/领域 View 显示真实产物。
 - 仅删除 Workflow 而不先让 Operation 自足会把“轮到此步骤时上游必然存在”的隐含假设暴露为错误执行。当前所有开放 Operation 仍经 registry schema/prerequisite、owner/scope、provider capability 和 plan/commit fail closed；缺少必要输入不会静默跳过或伪造产物。
 - 把专业领域全部改成通用 JSON 会丢失关系查询、类型安全和既有卡片；保留两套独立资产系统又会产生双 writer。当前专业 table 与 Resource 脊柱拥有不同事实：前者保存当前领域结构，后者保存不可变跨领域交付、provenance、Lineage 与 Binding；Task terminal 是二者异步交接的同一事务边界。
+- Binding service 曾只验证 Resource 属于同一用户，允许把 project A/episode A 的 Resource 写入 project B Binding；CR-09 文档和同用户正常 Golden 没有覆盖跨项目同用户攻击。当前 Binding 先验证 target project/episode owner，再只允许用户级 Resource 显式采用、同 project 或同 episode Resource；跨项目和跨 episode 原地 NOT_FOUND。跨项目同用户负向组合仍需在真实 Resource Golden 中持续保留。
 
 ## 修改检查表
 

@@ -1,6 +1,7 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { toFetchableUrl } from '@/lib/storage'
 import { LRUCache } from 'lru-cache'
+import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 /**
  * 🔥 图片下载缓存系统
  * 
@@ -118,8 +119,8 @@ async function downloadImageAsBase64(imageUrl: string, logPrefix: string): Promi
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
 
-        const buffer = await response.arrayBuffer()
-        const base64 = Buffer.from(buffer).toString('base64')
+        const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'cached image')
+        const base64 = buffer.toString('base64')
         const contentType = response.headers.get('content-type') || 'image/png'
 
         const duration = Date.now() - startTime

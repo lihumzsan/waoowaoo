@@ -42,12 +42,10 @@ describe('outbound-image normalization', () => {
       return null
     })
 
-    fetchMock.mockResolvedValue({
-      ok: true,
+    fetchMock.mockResolvedValue(new Response(Uint8Array.from([1, 2, 3]), {
       status: 200,
-      headers: new Headers({ 'content-type': 'image/png' }),
-      arrayBuffer: async () => Uint8Array.from([1, 2, 3]).buffer,
-    } as unknown as Response)
+      headers: { 'content-type': 'image/png' },
+    }))
 
     dnsLookupMock.mockResolvedValue(
       { address: '93.184.216.34', family: 4 } as unknown as { address: string; family: number },
@@ -117,12 +115,10 @@ describe('outbound-image normalization', () => {
 
   it('rejects outbound redirect to private ip', async () => {
     fetchMock
-      .mockResolvedValueOnce({
-        ok: false,
+      .mockResolvedValueOnce(new Response(null, {
         status: 302,
-        headers: new Headers({ location: 'http://127.0.0.1/secret.png' }),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      } as unknown as Response)
+        headers: { location: 'http://127.0.0.1/secret.png' },
+      }))
 
     await expect(normalizeToBase64ForGeneration('https://example.com/a.png')).rejects.toMatchObject({
       code: 'OUTBOUND_IMAGE_UNSAFE_URL',
@@ -136,31 +132,27 @@ describe('outbound-image normalization', () => {
   })
 
   it('sniffs png mime when upstream returns application/octet-stream', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/octet-stream' }),
-      arrayBuffer: async () => Uint8Array.from([
+    fetchMock.mockResolvedValue(new Response(Uint8Array.from([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
         0x00, 0x00, 0x00, 0x0d,
-      ]).buffer,
-    } as Response)
+      ]), {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream' },
+    }))
 
     const dataUrl = await normalizeToBase64ForGeneration('images/direct.png')
     expect(dataUrl).toBe('data:image/png;base64,iVBORw0KGgoAAAAN')
   })
 
   it('sniffs jpeg mime when upstream returns application/octet-stream', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/octet-stream' }),
-      arrayBuffer: async () => Uint8Array.from([
+    fetchMock.mockResolvedValue(new Response(Uint8Array.from([
         0xff, 0xd8, 0xff, 0xe0,
         0x00, 0x10, 0x4a, 0x46,
         0x49, 0x46, 0x00, 0x01,
-      ]).buffer,
-    } as Response)
+      ]), {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream' },
+    }))
 
     const dataUrl = await normalizeToBase64ForGeneration('images/direct.jpg')
     expect(dataUrl).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgAB')
@@ -169,19 +161,14 @@ describe('outbound-image normalization', () => {
   it('normalizes references with dedupe and failure isolation', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).includes('/api/bad.png')) {
-        return {
-          ok: false,
+        return new Response(null, {
           status: 404,
-          headers: new Headers(),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        } as Response
+        })
       }
-      return {
-        ok: true,
+      return new Response(Uint8Array.from([7, 8, 9]), {
         status: 200,
-        headers: new Headers({ 'content-type': 'image/png' }),
-        arrayBuffer: async () => Uint8Array.from([7, 8, 9]).buffer,
-      } as Response
+        headers: { 'content-type': 'image/png' },
+      })
     })
 
     const normalized = await normalizeReferenceImagesForGeneration([
@@ -194,12 +181,9 @@ describe('outbound-image normalization', () => {
   })
 
   it('reports structured issue and fails explicitly when all references fail', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
+    fetchMock.mockResolvedValue(new Response(null, {
       status: 500,
-      headers: new Headers(),
-      arrayBuffer: async () => new ArrayBuffer(0),
-    } as Response)
+    }))
 
     const issues: Array<{
       code: string
@@ -227,12 +211,9 @@ describe('outbound-image normalization', () => {
   })
 
   it('fails open for optional references when all candidates fail', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
+    fetchMock.mockResolvedValue(new Response(null, {
       status: 500,
-      headers: new Headers(),
-      arrayBuffer: async () => new ArrayBuffer(0),
-    } as Response)
+    }))
 
     const issues: Array<{
       code: string

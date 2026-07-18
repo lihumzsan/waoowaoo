@@ -23,6 +23,7 @@ import {
 } from '@/lib/video-compose/final-render-plan'
 import { loadEditScriptCoreView } from '@/lib/edit-script/core-view'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
+import { MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 import {
   assertFinalRenderClipsHaveSources,
   normalizeFinalRenderErrorLocale,
@@ -123,7 +124,7 @@ export async function writeVideoSourceToFile(source: FinalRenderClipPlan['source
   if (!response.ok) {
     throw new Error(`FINAL_VIDEO_RENDER_VIDEO_DOWNLOAD_FAILED:${response.status}`)
   }
-  await writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
+  await writeFile(outputPath, await readResponseBufferWithLimit(response, MAX_VIDEO_BYTES, 'final render video source'))
 }
 
 export async function buildEditScript(episodeId: string, chapterId: string): Promise<FinalRenderEditScriptInput | null> {

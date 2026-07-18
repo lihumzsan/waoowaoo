@@ -16,6 +16,7 @@ import { assertTaskActive, waitExternalResult } from '@/lib/workers/utils'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
+import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 import {
   parseReferenceImages,
   readBoolean,
@@ -79,7 +80,7 @@ async function generateReferenceImage(params: {
     const imgRes = await fetchWithRetry(finalImageUrl, {
       scope: `reference-to-character:${imageIndex + 1}`,
     })
-    const buffer = Buffer.from(await imgRes.arrayBuffer())
+    const buffer = await readResponseBufferWithLimit(imgRes, MAX_IMAGE_BYTES, 'reference character image')
     const processed = await sharp(buffer)
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer()

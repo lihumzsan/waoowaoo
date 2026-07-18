@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
+import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import {
   EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
 } from '@/lib/edit-script/style-preview-image-constants'
@@ -85,6 +86,7 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
     keyPrefix: 'edit-style-preview',
     options: imageRuntimeOptions,
   })
+  await ensureMediaObjectFromStorageKey(imageKey)
 
   const completed = await prisma.projectEditStylePreview.updateMany({
     where: { id: preview.id, taskId: job.data.taskId, status: 'generating' },

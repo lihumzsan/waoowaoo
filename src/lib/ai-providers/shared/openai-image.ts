@@ -2,6 +2,7 @@ import OpenAI, { toFile } from 'openai'
 import { getInternalBaseUrl } from '@/lib/env'
 import { getImageBase64Cached } from '@/lib/image-cache'
 import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
+import { decodeBase64WithLimit, MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
 
 export const OPENAI_IMAGE_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536', '256x256', '512x512', '1792x1024', '1024x1792'] as const
 export const OPENAI_OFFICIAL_IMAGE_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536'] as const
@@ -81,7 +82,7 @@ export function readOpenAIStringOption(
 export async function toOpenAIUploadFile(imageSource: string, index: number): Promise<File> {
   const parsedDataUrl = parseOpenAIImageDataUrl(imageSource)
   if (parsedDataUrl) {
-    const bytes = Buffer.from(parsedDataUrl.base64, 'base64')
+    const bytes = decodeBase64WithLimit(parsedDataUrl.base64, MAX_IMAGE_BYTES, 'OpenAI reference image')
     return await toFile(bytes, `reference-${index}.png`, { type: parsedDataUrl.mimeType })
   }
 
@@ -91,11 +92,11 @@ export async function toOpenAIUploadFile(imageSource: string, index: number): Pr
     if (!parsedCached) {
       throw new Error(`OPENAI_REFERENCE_INVALID: failed to parse image source ${index}`)
     }
-    const bytes = Buffer.from(parsedCached.base64, 'base64')
+    const bytes = decodeBase64WithLimit(parsedCached.base64, MAX_IMAGE_BYTES, 'OpenAI cached reference image')
     return await toFile(bytes, `reference-${index}.png`, { type: parsedCached.mimeType })
   }
 
-  const bytes = Buffer.from(imageSource, 'base64')
+  const bytes = decodeBase64WithLimit(imageSource, MAX_IMAGE_BYTES, 'OpenAI reference image')
   return await toFile(bytes, `reference-${index}.png`, { type: 'image/png' })
 }
 

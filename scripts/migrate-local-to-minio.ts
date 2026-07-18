@@ -16,8 +16,9 @@ const LOCAL_DIR = process.env.LOCAL_UPLOAD_DIR || './data/uploads'
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'http://127.0.0.1:19000'
 const MINIO_BUCKET = process.env.MINIO_BUCKET || 'waoowaoo'
 const MINIO_REGION = process.env.MINIO_REGION || 'us-east-1'
-const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || 'minioadmin'
-const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY || 'minioadmin'
+const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY?.trim()
+const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY?.trim()
+if (!MINIO_ACCESS_KEY || !MINIO_SECRET_KEY) throw new Error('MINIO_CREDENTIALS_REQUIRED')
 const CONCURRENCY = parseInt(process.env.MIGRATE_CONCURRENCY || '10')
 const DRY_RUN = process.env.MIGRATE_DRY_RUN === 'true'
 

@@ -82,7 +82,7 @@ if [ $? -eq 0 ]; then
     echo
     echo "后续步骤:"
     echo "  1. 验证 MinIO 控制台: http://127.0.0.1:19001"
-    echo "     账号: minioadmin / minioadmin"
+    echo "     使用 .env 中配置的 MinIO 账号登录"
     echo "  2. 更新 .env: STORAGE_TYPE=minio"
     echo "  3. 重启应用: docker compose restart app"
     echo "  4. 测试图片/视频访问"

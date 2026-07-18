@@ -10,6 +10,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { handleBgmScoreGenerateTask } from '@/lib/bgm-score/generate'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
+import { decodeBase64WithLimit, MAX_AUDIO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 type MusicPayload = {
   musicModel?: unknown
@@ -61,7 +62,7 @@ function decodeAudioDataUrl(dataUrl: string): { buffer: Buffer; mimeType: string
   if (!match) return null
   return {
     mimeType: match[1],
-    buffer: Buffer.from(match[2], 'base64'),
+    buffer: decodeBase64WithLimit(match[2], MAX_AUDIO_BYTES, 'generated music'),
   }
 }
 
@@ -69,7 +70,7 @@ async function loadAudioBuffer(input: { audioBase64?: string; audioUrl?: string;
   const explicitMimeType = readString(input.mimeType) || 'audio/mpeg'
   if (input.audioBase64) {
     return {
-      buffer: Buffer.from(input.audioBase64, 'base64'),
+      buffer: decodeBase64WithLimit(input.audioBase64, MAX_AUDIO_BYTES, 'generated music'),
       mimeType: explicitMimeType,
     }
   }
@@ -87,7 +88,7 @@ async function loadAudioBuffer(input: { audioBase64?: string; audioUrl?: string;
   }
   const contentType = response.headers.get('content-type') || explicitMimeType
   return {
-    buffer: Buffer.from(await response.arrayBuffer()),
+    buffer: await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'generated music'),
     mimeType: contentType,
   }
 }

@@ -6,6 +6,7 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { toFetchableUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { buildFfmpegExecFileOptions, resolveFfmpegBinary } from '@/lib/video-compose/ffmpeg-binaries'
+import { decodeBase64WithLimit, MAX_AUDIO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 export type GeneratedAudioBuffer = { readonly buffer: Buffer; readonly mimeType: string }
 const execFileAsync = promisify(execFile)
@@ -20,7 +21,7 @@ export function extensionFromAudioMimeType(mimeType: string): string {
 function decodeAudioDataUrl(dataUrl: string): GeneratedAudioBuffer | null {
   const match = /^data:(audio\/[^;]+);base64,(.+)$/i.exec(dataUrl.trim())
   if (!match?.[1] || !match[2]) return null
-  return { mimeType: match[1], buffer: Buffer.from(match[2], 'base64') }
+  return { mimeType: match[1], buffer: decodeBase64WithLimit(match[2], MAX_AUDIO_BYTES, 'generated audio') }
 }
 
 export async function loadGeneratedAudioBuffer(input: {
@@ -29,14 +30,14 @@ export async function loadGeneratedAudioBuffer(input: {
   readonly mimeType?: string
 }): Promise<GeneratedAudioBuffer> {
   const mimeType = input.mimeType?.trim() || 'audio/mpeg'
-  if (input.audioBase64) return { buffer: Buffer.from(input.audioBase64, 'base64'), mimeType }
+  if (input.audioBase64) return { buffer: decodeBase64WithLimit(input.audioBase64, MAX_AUDIO_BYTES, 'generated audio'), mimeType }
   const audioUrl = input.audioUrl?.trim() || ''
   if (!audioUrl) throw new Error('AUDIO_GENERATION_EMPTY_RESULT')
   const decoded = decodeAudioDataUrl(audioUrl)
   if (decoded) return decoded
   const response = await fetch(toFetchableUrl(audioUrl))
   if (!response.ok) throw new Error(`AUDIO_GENERATION_DOWNLOAD_FAILED:${response.status}`)
-  return { buffer: Buffer.from(await response.arrayBuffer()), mimeType: response.headers.get('content-type') || mimeType }
+  return { buffer: await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'generated audio'), mimeType: response.headers.get('content-type') || mimeType }
 }
 
 export async function uploadTaskAudioArtifact(input: {

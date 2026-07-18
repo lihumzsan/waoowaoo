@@ -17,6 +17,7 @@ import {
   submitPlannedOperationTask,
   type OperationPlan,
 } from '@/lib/operations/planning'
+import { assertFileSizeWithinLimit, MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
 
 const ASSET_SCOPES = ['global', 'project'] as const
 const ASSET_KINDS = ['character', 'location', 'prop'] as const
@@ -307,6 +308,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       outputSchema: uploadRenderOutputSchema,
       prepareTransaction: async (ctx, input) => {
         const projectId = requireProjectId(input.scope, input.projectId)
+        assertFileSizeWithinLimit(input.file, MAX_IMAGE_BYTES, 'asset render image')
         const imageBuffer = Buffer.from(await input.file.arrayBuffer())
         return await prepareProjectAssetRenderUpload({
           userId: ctx.userId,

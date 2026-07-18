@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
 import { parseProjectAssistantTextAttachmentFile } from '@/lib/project-agent/text-attachments/parser'
+import { readFormDataWithLimit } from '@/lib/http/body-limits'
+import { PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_SIZE_BYTES } from '@/lib/project-agent/text-attachments/types'
 
 function mapTextAttachmentError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
@@ -42,16 +44,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const authResult = await requireUserAuth()
   if (isErrorResponse(authResult)) return authResult
 
-  let formData: FormData
-  try {
-    formData = await request.formData()
-  } catch {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'FORM_DATA_PARSE_FAILED',
-      field: 'body',
-      message: 'request body must be valid multipart/form-data',
-    })
-  }
+  const formData = await readFormDataWithLimit(
+    request,
+    PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_SIZE_BYTES + 1024 * 1024,
+    'text attachment upload',
+  )
 
   try {
     const file = readUploadedFile(formData.get('file'))

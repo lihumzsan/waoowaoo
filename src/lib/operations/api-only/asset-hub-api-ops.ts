@@ -13,10 +13,18 @@ import {
   requireOwnedAssetVariant,
 } from '@/lib/assets/services/asset-scope-ownership'
 import { prisma } from '@/lib/prisma'
+import {
+  assertFileSizeWithinLimit,
+  decodeBase64WithLimit,
+  MAX_IMAGE_BYTES,
+  MAX_MULTIPART_IMAGE_REQUEST_BYTES,
+  readFormDataWithLimit,
+} from '@/lib/http/body-limits'
 
 type UploadFileLike = {
   name: string
   type: string
+  size: number
   arrayBuffer: () => Promise<ArrayBuffer>
 }
 
@@ -38,6 +46,7 @@ function isFileLike(value: unknown): value is UploadFileLike {
   if (!value || typeof value !== 'object') return false
   const file = value as Partial<UploadFileLike>
   return typeof file.name === 'string' && typeof file.type === 'string' && typeof file.arrayBuffer === 'function'
+    && typeof file.size === 'number'
 }
 
 function parseAppearanceIndex(value: unknown): number | null {
@@ -113,15 +122,11 @@ async function prepareAssetHubImageUpload(
   userId: string,
   request: Request,
 ): Promise<PreparedAssetHubUpload> {
-  let formData: FormData
-  try {
-    formData = await request.formData()
-  } catch {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'FORMDATA_PARSE_FAILED',
-      message: 'request body must be valid multipart/form-data',
-    })
-  }
+  const formData = await readFormDataWithLimit(
+    request,
+    MAX_MULTIPART_IMAGE_REQUEST_BYTES,
+    'asset hub image upload',
+  )
 
   const file = formData.get('file')
   const type = normalizeString(formData.get('type'))
@@ -134,6 +139,7 @@ async function prepareAssetHubImageUpload(
     throw new ApiError('INVALID_PARAMS')
   }
   if (type !== 'character' && type !== 'location') throw new ApiError('INVALID_PARAMS')
+  assertFileSizeWithinLimit(file, MAX_IMAGE_BYTES, 'asset hub image')
 
   await requireOwnedAssetTarget({
     access: { scope: 'global', userId },
@@ -395,9 +401,9 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
           const matches = imageBase64.match(/^data:image\/(\w+);base64,(.+)$/)
           if (!matches) throw new ApiError('INVALID_PARAMS')
           ext = matches[1] === 'jpeg' ? 'jpg' : matches[1]
-          buffer = Buffer.from(matches[2], 'base64')
+          buffer = decodeBase64WithLimit(matches[2], MAX_IMAGE_BYTES, 'temporary image')
         } else if (base64 && extension) {
-          buffer = Buffer.from(base64, 'base64')
+          buffer = decodeBase64WithLimit(base64, MAX_IMAGE_BYTES, 'temporary image')
           ext = extension
         } else {
           throw new ApiError('INVALID_PARAMS')

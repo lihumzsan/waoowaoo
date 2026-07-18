@@ -17,7 +17,6 @@ import { reportTaskProgress } from '../shared'
 import {
   assertTaskActive,
   getProjectModels,
-  toSignedUrlIfCos,
 } from '../utils'
 import { normalizeOptionalReferenceImagesForGeneration } from '@/lib/media/outbound-image'
 import {
@@ -100,12 +99,11 @@ async function generateCharacterCandidatePrompts(input: {
 
 interface CharacterImageDb {
   characterAppearance: {
-    findUnique(args: Record<string, unknown>): Promise<CharacterAppearanceWithCharacter | null>
-    findFirst(args: Record<string, unknown>): Promise<PrimaryAppearanceRecord | null>
+    findFirst(args: Record<string, unknown>): Promise<CharacterAppearanceWithCharacter | PrimaryAppearanceRecord | null>
     update(args: Record<string, unknown>): Promise<unknown>
   }
   projectCharacter: {
-    findUnique(args: Record<string, unknown>): Promise<CharacterRecord | null>
+    findFirst(args: Record<string, unknown>): Promise<CharacterRecord | null>
   }
 }
 
@@ -125,10 +123,13 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
   let appearance: CharacterAppearanceRecord | null = null
 
   if (appearanceId) {
-    const appearanceWithCharacter = await db.characterAppearance.findUnique({
-      where: { id: appearanceId },
+    const appearanceWithCharacter = await db.characterAppearance.findFirst({
+      where: {
+        id: appearanceId,
+        character: { project: { id: projectId, userId } },
+      },
       include: { character: true },
-    })
+    }) as CharacterAppearanceWithCharacter | null
     if (appearanceWithCharacter) {
       appearance = appearanceWithCharacter
     }
@@ -136,8 +137,8 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
 
   const characterId = typeof payload.id === 'string' ? payload.id : null
   if (!appearance && characterId) {
-    const character = await db.projectCharacter.findUnique({
-      where: { id: characterId },
+    const character = await db.projectCharacter.findFirst({
+      where: { id: characterId, project: { id: projectId, userId } },
       include: { appearances: { orderBy: { appearanceIndex: 'asc' } } },
     })
     appearance = character?.appearances?.[0] || null
@@ -161,19 +162,19 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
         appearanceIndex: PRIMARY_APPEARANCE_INDEX,
       },
       select: { imageUrl: true, imageUrls: true, selectedIndex: true },
-    })
+    }) as PrimaryAppearanceRecord | null
     if (primaryAppearance) {
       const primaryImageUrls = parseImageUrls(primaryAppearance.imageUrls, 'primaryAppearance.imageUrls')
       const selectedIndex = primaryAppearance.selectedIndex
       const selectedKey = typeof selectedIndex === 'number' ? primaryImageUrls[selectedIndex] : null
       const fallbackKey = primaryImageUrls.find((value) => typeof value === 'string' && value) || primaryAppearance.imageUrl
       const primaryKey = (typeof selectedKey === 'string' && selectedKey) ? selectedKey : fallbackKey
-      const primaryMainUrl = primaryKey ? toSignedUrlIfCos(primaryKey, 3600) : null
-      if (primaryMainUrl) primaryReferenceInputs.push(primaryMainUrl)
+      if (primaryKey) primaryReferenceInputs.push(primaryKey)
     }
   }
   const primaryReferenceImages = await normalizeOptionalReferenceImagesForGeneration(primaryReferenceInputs, {
     context: { taskType: String(job.data.type), scope: 'character.primaryAppearance' },
+    ownerUserId: job.data.userId,
   })
 
   const singleIndex = payload.imageIndex ?? payload.descriptionIndex

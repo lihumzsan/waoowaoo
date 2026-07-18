@@ -5,10 +5,10 @@ import {
   assertTaskActive,
   getUserModels,
   resolveImageSourceFromGeneration,
-  toSignedUrlIfCos,
   uploadImageSourceToCos,
 } from '../utils'
 import {
+  normalizeOwnedMediaToBase64ForGeneration,
   normalizeOptionalReferenceImagesForGeneration,
 } from '@/lib/media/outbound-image'
 import {
@@ -103,8 +103,7 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     const imageUrls = parseImageUrls(appearance.imageUrls, 'globalCharacterAppearance.imageUrls')
     const targetImageIndex = Number(payload.imageIndex ?? appearance.selectedIndex ?? 0)
     const currentKey = imageUrls[targetImageIndex] || appearance.imageUrl
-    const currentUrl = toSignedUrlIfCos(currentKey, 3600)
-    if (!currentUrl) throw new Error('No global character image to modify')
+    if (!currentKey) throw new Error('No global character image to modify')
 
     const extraReferenceInputs: string[] = []
     if (Array.isArray(payload.extraImageUrls)) {
@@ -116,8 +115,10 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     }
     const normalizedExtras = await normalizeOptionalReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'asset-hub-modify.extra' },
+      ownerUserId: job.data.userId,
     })
-    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
+    const requiredReference = await normalizeOwnedMediaToBase64ForGeneration(currentKey, job.data.userId)
+    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
     const currentDescription = readIndexedDescription({
       descriptions: appearance.descriptions,
       fallbackDescription: appearance.description,
@@ -200,9 +201,6 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     const locationImage = location.images.find((imageItem) => imageItem.imageIndex === targetImageIndex)
     if (!locationImage?.imageUrl) throw new Error('Global location image not found')
 
-    const currentUrl = toSignedUrlIfCos(locationImage.imageUrl, 3600)
-    if (!currentUrl) throw new Error('No global location image to modify')
-
     const extraReferenceInputs: string[] = []
     if (Array.isArray(payload.extraImageUrls)) {
       for (const url of payload.extraImageUrls) {
@@ -213,8 +211,13 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
     }
     const normalizedExtras = await normalizeOptionalReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'asset-hub-modify.extra' },
+      ownerUserId: job.data.userId,
     })
-    const referenceImages = Array.from(new Set([currentUrl, ...normalizedExtras]))
+    const requiredReference = await normalizeOwnedMediaToBase64ForGeneration(
+      locationImage.imageUrl,
+      job.data.userId,
+    )
+    const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
 
     const isProp = payload.type === 'prop'
     const prompt = isProp

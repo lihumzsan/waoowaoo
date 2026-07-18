@@ -128,6 +128,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - 多章节主 Journey 并发持久化核心剪辑 requirement 时曾触发 Prisma `P2034` write conflict/deadlock；共享错误规范化遗漏该官方可重试事务错误，worker 因而把一次瞬时冲突写成业务最终失败。当前 `src/lib/prisma-error.ts` 将 `P2034` 归入统一 retryable 数据库错误，仍由 Task attempt owner 和既有 max-attempt/backoff 协议负责重试，业务 service 不增加局部循环或第二 retry owner。
 
 - `95254ae71` 尝试收敛 AI 与 Task 重试，但错误分类没有成为唯一来源时，重试仍会在多层复发。
+- 共享错误裁判与 durable provider fence 曾补齐 provider 的数值 `status/code`，但 AI SDK `APICallError` 使用 `statusCode`，切换 SDK 后同一根因会换形复发：明确 429/5xx 可能被 fence 写成永久 `outcome_unknown`，403 欠费也可能丢失业务分类。现在 `normalizeAnyError` 与 `provider-invocation.ts` 的显式 HTTP 裁决都按同一 `status/statusCode/code` 顺序读取；明确未受理才写 `retryable_rejected` 并继续由 Task retry policy 唯一决定更高 attempt，provider adapter 不新增局部 retry 或错误表。
 - `ba753a204` 去除隐式队列重试后，后续又需要显式任务生命周期与错误分类，说明“删重试”本身不能替代契约。
 - 真实 `GJ-WORKER-RETRY-RECOVERY` 曾证明 durable provider fence 把明确 HTTP 503 统一写成永久 `rejected`，使 Task registry 的 retry 永远不可达；防线必须同时执行“同 attempt 零重提、ambiguous 零重提、明确临时未受理仅由更高 attempt 重取”，不能只断言调用次数。
 - 核心剪辑表真实 Task 曾执行 3 个 DB attempts，却只有 attempt 1 的一个 `submitted` 模型 checkpoint；attempt 2/3 重放同一份 Schema-invalid 输出。旧测试分别证明“输出错误可排队重试”和“相同 invocation 只调用一次”，没有执行两者组合；现由结构化结果边界把失败的 invocation 显式重开，并由 provider checkpoint Critical scenario 证明更高 attempt 只重新提交该单元。

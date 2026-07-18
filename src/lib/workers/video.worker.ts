@@ -1,6 +1,6 @@
 import { Worker, type Job } from 'bullmq'
 import { requireVideoModelMaxReferenceImages } from '@/lib/ai-registry/video-model-helpers'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import { queueRedis } from '@/lib/redis'
@@ -37,6 +37,7 @@ async function handleVideoSegmentTask(job: Job<TaskJobData>) {
       chapterId: payload.chapterId,
       editScriptId: payload.editScriptId,
       segmentId: payload.segmentId,
+      project: { userId: job.data.userId },
       inputSignature: payload.inputSignature,
       generationTaskId: job.data.taskId,
     },
@@ -99,7 +100,7 @@ async function handleVideoSegmentTask(job: Job<TaskJobData>) {
 
   await reportTaskProgress(job, 18, { stage: 'video_segment_references', videoSegmentId: segmentId })
   const referenceImages = await Promise.all(payload.referenceImages.map(async (reference) => ({
-    url: await normalizeToBase64ForGeneration(reference.source),
+    url: await normalizeOwnedMediaToBase64ForGeneration(reference.source, job.data.userId),
     role: 'reference' as const,
     order: reference.order,
     source: 'asset' as const,

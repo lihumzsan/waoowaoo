@@ -4,6 +4,7 @@ import { lookup } from 'node:dns/promises'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getInternalBaseUrl } from '@/lib/env'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 type StorageHelpers = Pick<typeof import('@/lib/storage'), 'getSignedObjectUrl' | 'toFetchableUrl'>
 
@@ -653,9 +654,69 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
     })
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer())
+  const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'outbound image')
   const mimeType = guessContentType(normalizedUrl, response.headers.get('content-type'), buffer)
   return `data:${mimeType};base64,${buffer.toString('base64')}`
+}
+
+/**
+ * Worker-owned media is read directly from storage after the same relation-based
+ * ownership decision used by the authenticated media routes. This avoids using
+ * a browser session or a second internal-auth protocol for background work.
+ */
+export async function normalizeOwnedMediaToBase64ForGeneration(
+  input: string,
+  userId: string,
+): Promise<string> {
+  const normalizedInput = normalizeInput(input)
+  const storageKey = await resolveStorageKeyFromMediaValue(normalizedInput)
+  if (!storageKey) {
+    throw new OutboundImageNormalizeError({
+      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
+      stage: 'normalize_base64',
+      input: normalizedInput,
+      message: `owned media input does not resolve to a storage key: ${normalizedInput}`,
+    })
+  }
+
+  const { authorizeStorageObjectReadForUser } = await import('@/lib/media/storage-access-policy')
+  const media = await authorizeStorageObjectReadForUser(storageKey, userId)
+  const { getObjectStream } = await import('@/lib/storage')
+  const object = await getObjectStream({ key: media.storageKey })
+  if (object.statusCode < 200 || object.statusCode >= 300) {
+    throw new OutboundImageNormalizeError({
+      code: 'OUTBOUND_IMAGE_FETCH_FAILED',
+      stage: 'normalize_base64',
+      input: normalizedInput,
+      message: `owned media storage read failed (${object.statusCode}): ${media.storageKey}`,
+    })
+  }
+
+  const headers = new Headers()
+  const declaredContentType = media.mimeType || object.contentType
+  if (declaredContentType) headers.set('content-type', declaredContentType)
+  if (object.contentLength != null) headers.set('content-length', String(object.contentLength))
+  const response = new Response(object.body, { status: object.statusCode, headers })
+  const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'owned outbound image')
+  const mimeType = guessContentType(media.storageKey, declaredContentType, buffer)
+  return `data:${mimeType};base64,${buffer.toString('base64')}`
+}
+
+function isOwnedStorageInputCandidate(input: string): boolean {
+  const unwrapped = unwrapNextImageInternal(input)
+  if (isStorageKey(unwrapped)) return true
+  const parsed = toUrlMaybe(unwrapped)
+  if (!parsed) return false
+  return parsed.pathname.startsWith('/m/')
+    || parsed.pathname.startsWith('/api/files/')
+    || parsed.pathname === '/api/storage/sign'
+}
+
+async function normalizeReferenceForGeneration(input: string, ownerUserId?: string): Promise<string> {
+  if (ownerUserId && isOwnedStorageInputCandidate(input)) {
+    return await normalizeOwnedMediaToBase64ForGeneration(input, ownerUserId)
+  }
+  return await normalizeToBase64ForGeneration(input)
 }
 
 function toNormalizationIssue(
@@ -686,6 +747,7 @@ export async function normalizeReferenceImagesForGeneration(
   options: {
     onIssue?: (issue: OutboundImageNormalizationIssue) => void
     context?: Record<string, unknown>
+    ownerUserId?: string
   } = {},
 ): Promise<string[]> {
   const seen = new Set<string>()
@@ -701,7 +763,7 @@ export async function normalizeReferenceImagesForGeneration(
     candidateCount += 1
 
     try {
-      normalized.push(await normalizeToBase64ForGeneration(trimmed))
+      normalized.push(await normalizeReferenceForGeneration(trimmed, options.ownerUserId))
     } catch (error) {
       const issue = toNormalizationIssue(error, trimmed, index)
       options.onIssue?.(issue)
@@ -737,6 +799,7 @@ export async function normalizeOptionalReferenceImagesForGeneration(
   options: {
     onIssue?: (issue: OutboundImageNormalizationIssue) => void
     context?: Record<string, unknown>
+    ownerUserId?: string
   } = {},
 ): Promise<string[]> {
   try {

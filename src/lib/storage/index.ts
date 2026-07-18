@@ -3,6 +3,7 @@ import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { createStorageProvider } from '@/lib/storage/factory'
 import type { DeleteObjectsResult, GetObjectStreamParams, ObjectStreamResult, StorageProvider } from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
+import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 const storageLogger = createScopedLogger({
   module: 'storage.provider',
@@ -112,7 +113,7 @@ export async function downloadAndUploadImage(
         throw new Error(`Failed to download image: ${response.status} ${response.statusText}`)
       }
 
-      const buffer = Buffer.from(await response.arrayBuffer())
+      const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'storage image download')
       let processed = await sharp(buffer).jpeg({ quality: 95, mozjpeg: true }).toBuffer()
       let quality = 95
       const maxSizeBytes = 10 * 1024 * 1024
@@ -152,7 +153,7 @@ export async function downloadAndUploadVideo(
         throw new Error(`Failed to download video: ${response.status} ${response.statusText}`)
       }
 
-      const buffer = Buffer.from(await response.arrayBuffer())
+      const buffer = await readResponseBufferWithLimit(response, MAX_VIDEO_BYTES, 'storage video download')
       return await uploadObject(buffer, key, 1)
     },
   })

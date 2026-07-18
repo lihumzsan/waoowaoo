@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getObjectStream } from '@/lib/storage'
-import { getMediaObjectByPublicId } from '@/lib/media/service'
+import { authorizeMediaObjectRead } from '@/lib/media/storage-access-policy'
+import { apiHandler } from '@/lib/api-errors'
 
 export const runtime = 'nodejs'
 
-function buildEtag(media: { sha256?: string | null; id: string; updatedAt?: string | null }) {
+function buildEtag(media: { sha256?: string | null; id: string; updatedAt?: string | Date | null }) {
   if (media.sha256) return `"${media.sha256}"`
   return `W/"media-${media.id}-${media.updatedAt || '0'}"`
 }
@@ -34,16 +35,14 @@ function storageErrorResponse(error: unknown): Response {
   return NextResponse.json({ error: 'Failed to fetch media' }, { status: 502 })
 }
 
-export async function GET(
+export const GET = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ publicId: string }> },
-) {
+) => {
   const { publicId } = await context.params
-  const media = await getMediaObjectByPublicId(publicId)
-
-  if (!media) {
-    return NextResponse.json({ error: 'Media not found' }, { status: 404 })
-  }
+  const authorization = await authorizeMediaObjectRead(publicId)
+  if (authorization instanceof Response) return authorization
+  const { media } = authorization
   if (!media.storageKey) {
     return NextResponse.json({ error: 'Media storage key missing' }, { status: 500 })
   }
@@ -60,7 +59,7 @@ export async function GET(
       status: 304,
       headers: {
         ETag: etag,
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': 'private, no-store',
       },
     })
   }
@@ -80,7 +79,7 @@ export async function GET(
 
   const headers = new Headers()
   headers.set('Content-Type', contentType)
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+  headers.set('Cache-Control', 'private, no-store')
   headers.set('ETag', etag)
   if (object.contentLength != null) headers.set('Content-Length', String(object.contentLength))
   if (object.contentRange) headers.set('Content-Range', object.contentRange)
@@ -94,17 +93,16 @@ export async function GET(
     status: object.statusCode,
     headers,
   })
-}
+})
 
-export async function HEAD(
+export const HEAD = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ publicId: string }> },
-) {
+) => {
   const { publicId } = await context.params
-  const media = await getMediaObjectByPublicId(publicId)
-  if (!media) {
-    return NextResponse.json({ error: 'Media not found' }, { status: 404 })
-  }
+  const authorization = await authorizeMediaObjectRead(publicId)
+  if (authorization instanceof Response) return authorization
+  const { media } = authorization
 
   const etag = buildEtag({
     id: media.id,
@@ -113,9 +111,9 @@ export async function HEAD(
   })
 
   const headers = new Headers()
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+  headers.set('Cache-Control', 'private, no-store')
   headers.set('ETag', etag)
   if (media.mimeType) headers.set('Content-Type', media.mimeType)
   if (media.sizeBytes != null) headers.set('Content-Length', String(media.sizeBytes))
   return new Response(null, { status: 200, headers })
-}
+})

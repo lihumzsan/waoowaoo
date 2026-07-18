@@ -48,11 +48,55 @@ export async function bindCreativeResourceRevisionInTransaction(
   const resourceId = requireNonEmpty(input.resourceId, 'CREATIVE_RESOURCE_ID_REQUIRED')
   const revisionId = requireNonEmpty(input.revisionId, 'CREATIVE_RESOURCE_REVISION_ID_REQUIRED')
   const source = requireNonEmpty(input.source, 'CREATIVE_RESOURCE_BINDING_SOURCE_REQUIRED')
+  if (input.scope.kind === 'project') {
+    const project = await tx.project.findFirst({
+      where: { id: input.scope.id, userId: input.scope.userId },
+      select: { id: true },
+    })
+    if (!project) throw new Error('CREATIVE_RESOURCE_BINDING_SCOPE_NOT_OWNED')
+  }
+  if (input.scope.kind === 'episode') {
+    const episode = await tx.projectEpisode.findFirst({
+      where: {
+        id: input.scope.id,
+        projectId: input.scope.projectId ?? '',
+        project: { userId: input.scope.userId },
+      },
+      select: { id: true },
+    })
+    if (!episode) throw new Error('CREATIVE_RESOURCE_BINDING_SCOPE_NOT_OWNED')
+  }
+  const allowedResourceScopes: Prisma.CreativeResourceWhereInput[] = [{
+    scopeKind: 'user',
+    scopeId: input.scope.userId,
+    projectId: null,
+    episodeId: null,
+  }]
+  if (input.scope.projectId) {
+    allowedResourceScopes.push({
+      scopeKind: 'project',
+      scopeId: input.scope.projectId,
+      projectId: input.scope.projectId,
+      episodeId: null,
+    })
+  }
+  if (input.scope.episodeId) {
+    allowedResourceScopes.push({
+      scopeKind: 'episode',
+      scopeId: input.scope.episodeId,
+      projectId: input.scope.projectId,
+      episodeId: input.scope.episodeId,
+    })
+  }
   const revision = await tx.creativeResourceRevision.findFirst({
     where: {
       id: revisionId,
       resourceId,
-      resource: { userId: input.scope.userId, status: 'ready' },
+      resource: {
+        userId: input.scope.userId,
+        status: 'ready',
+        OR: allowedResourceScopes,
+      },
     },
     select: { id: true },
   })

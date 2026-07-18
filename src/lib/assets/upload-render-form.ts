@@ -4,6 +4,7 @@ import type { AssetKind } from '@/lib/assets/contracts'
 export type UploadRenderFileLike = {
   readonly name: string
   readonly type: string
+  readonly size: number
   arrayBuffer: () => Promise<ArrayBuffer>
 }
 
@@ -26,6 +27,7 @@ function isUploadRenderFileLike(value: unknown): value is UploadRenderFileLike {
   const candidate = value as Partial<UploadRenderFileLike>
   return typeof candidate.name === 'string'
     && typeof candidate.type === 'string'
+    && typeof candidate.size === 'number'
     && typeof candidate.arrayBuffer === 'function'
 }
 

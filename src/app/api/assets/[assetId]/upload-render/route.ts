@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiHandler, ApiError } from '@/lib/api-errors'
-import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
+import { apiHandler } from '@/lib/api-errors'
+import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import { parseProjectUploadRenderFormData } from '@/lib/assets/upload-render-form'
+import { MAX_MULTIPART_IMAGE_REQUEST_BYTES, readFormDataWithLimit } from '@/lib/http/body-limits'
 
 export const POST = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ assetId: string }> },
 ) => {
   const { assetId } = await context.params
-  let formData: FormData
-  try {
-    formData = await request.formData()
-  } catch {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'FORMDATA_PARSE_FAILED',
-      field: 'body',
-      message: 'request body must be valid multipart/form-data',
-    })
-  }
+  const userAuthResult = await requireUserAuth()
+  if (isErrorResponse(userAuthResult)) return userAuthResult
+  const formData = await readFormDataWithLimit(
+    request,
+    MAX_MULTIPART_IMAGE_REQUEST_BYTES,
+    'asset render upload',
+  )
 
   const input = parseProjectUploadRenderFormData(formData, assetId)
   const authResult = await requireProjectAuthLight(input.projectId)

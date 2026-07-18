@@ -1,4 +1,5 @@
 import type { Dispatcher, RequestInit as UndiciRequestInit } from 'undici'
+import { assertSafeProviderOutboundUrl, UnsafeOutboundUrlError } from './outbound-url-policy'
 
 type ProxyDispatcherCache = {
   proxyUrl: string
@@ -31,25 +32,6 @@ export function resolveOutboundProxyUrl(): string | null {
     ?? readTrimmedEnv('http_proxy')
     ?? readTrimmedEnv('ALL_PROXY')
     ?? readTrimmedEnv('all_proxy')
-}
-
-function isLocalHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
-  if (!normalized) return true
-  if (normalized === 'localhost' || normalized === '::1') return true
-  if (normalized.endsWith('.local')) return true
-  if (normalized === '0.0.0.0') return true
-  if (normalized.startsWith('127.')) return true
-  if (normalized.startsWith('10.')) return true
-  if (normalized.startsWith('192.168.')) return true
-  if (normalized.startsWith('fe80:')) return true
-  if (/^f[cd][0-9a-f]{2}:/.test(normalized)) return true
-  const match = /^172\.(\d+)\./.exec(normalized)
-  if (match) {
-    const secondOctet = Number(match[1])
-    return secondOctet >= 16 && secondOctet <= 31
-  }
-  return false
 }
 
 function readFetchInputUrl(input: RequestInfo | URL): string | null {
@@ -113,7 +95,6 @@ export function shouldProxyProviderUrl(input: RequestInfo | URL): boolean {
   try {
     const parsed = new URL(rawUrl)
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
-    if (isLocalHostname(parsed.hostname)) return false
     if (matchesNoProxy(parsed.hostname, parsed.port || defaultPort(parsed.protocol))) return false
     return true
   } catch {
@@ -136,22 +117,37 @@ export async function fetchWithProviderProxy(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  const rawUrl = readFetchInputUrl(input)
+  if (!rawUrl) throw new UnsafeOutboundUrlError('provider request URL is missing')
+  await assertSafeProviderOutboundUrl(rawUrl)
   const proxy = shouldProxyProviderUrl(input) ? await resolveProxyDispatcher() : null
-  if (!proxy) return await fetch(input, init)
+  const guardedInit: RequestInit = { ...(init ?? {}), redirect: 'manual' }
+  const response = !proxy
+    ? await fetch(input, guardedInit)
+    : await (async () => {
+        const { fetch: undiciFetch } = await import('undici')
+        type UndiciFetchInput = Parameters<typeof undiciFetch>[0]
+        const requestInit: RequestInitWithDispatcher = {
+          ...(guardedInit as unknown as UndiciRequestInit),
+          dispatcher: proxy.dispatcher,
+        }
+        return await undiciFetch(input as unknown as UndiciFetchInput, requestInit) as unknown as Response
+      })()
 
-  const { fetch: undiciFetch } = await import('undici')
-  type UndiciFetchInput = Parameters<typeof undiciFetch>[0]
-  const requestInit: RequestInitWithDispatcher = {
-    ...((init ?? {}) as unknown as UndiciRequestInit),
-    dispatcher: proxy.dispatcher,
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel()
+    throw new UnsafeOutboundUrlError('provider redirect responses are not allowed')
   }
-  return await undiciFetch(input as unknown as UndiciFetchInput, requestInit) as unknown as Response
+  return response
 }
 
 export async function withProviderProxyDispatcher<T>(
   targetUrl: RequestInfo | URL,
   operation: () => Promise<T>,
 ): Promise<T> {
+  const rawUrl = readFetchInputUrl(targetUrl)
+  if (!rawUrl) throw new UnsafeOutboundUrlError('provider dispatcher target URL is missing')
+  await assertSafeProviderOutboundUrl(rawUrl)
   if (!shouldProxyProviderUrl(targetUrl)) return await operation()
   const proxy = await resolveProxyDispatcher()
   if (!proxy) return await operation()

@@ -1,5 +1,6 @@
 import { extractStorageKey, getSignedUrl, toFetchableUrl } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { MAX_AUDIO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
 export function getWavDurationFromBuffer(buffer: Buffer): number {
   try {
@@ -39,7 +40,7 @@ export async function downloadAudioData(audioUrl: string): Promise<Buffer> {
   if (!response.ok) {
     throw new Error(`Audio download failed: ${response.status}`)
   }
-  return Buffer.from(await response.arrayBuffer())
+  return await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'reference audio')
 }
 
 export async function resolveReferenceAudioUrl(referenceAudioUrl: string): Promise<string> {

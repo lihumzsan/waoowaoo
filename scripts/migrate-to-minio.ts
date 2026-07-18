@@ -16,6 +16,12 @@ import * as path from 'path'
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) throw new Error(`${name}_REQUIRED`)
+  return value
+}
+
 // ==================== 配置 ====================
 const CONFIG = {
   // 源: 本地存储
@@ -27,8 +33,8 @@ const CONFIG = {
     endPoint: process.env.MINIO_ENDPOINT?.replace(/^https?:\/\//, '') || '127.0.0.1',
     port: parseInt(process.env.MINIO_PORT || '9000'),
     useSSL: process.env.MINIO_USE_SSL === 'true',
-    accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+    accessKey: requireEnv('MINIO_ACCESS_KEY'),
+    secretKey: requireEnv('MINIO_SECRET_KEY'),
     bucket: process.env.MINIO_BUCKET || 'waoowaoo',
     region: process.env.MINIO_REGION || 'us-east-1',
     forcePathStyle: process.env.MINIO_FORCE_PATH_STYLE !== 'false',

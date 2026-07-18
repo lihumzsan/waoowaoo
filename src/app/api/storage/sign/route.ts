@@ -19,8 +19,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
   if (isErrorResponse(authResult)) return authResult
 
   const expires = expiresRaw ? Number.parseInt(expiresRaw, 10) : DEFAULT_EXPIRES_SECONDS
-  const ttl = Number.isFinite(expires) && expires > 0 ? expires : DEFAULT_EXPIRES_SECONDS
+  const ttl = Number.isFinite(expires) && expires > 0
+    ? Math.min(expires, DEFAULT_EXPIRES_SECONDS)
+    : DEFAULT_EXPIRES_SECONDS
 
-  const signedUrl = await getSignedObjectUrl(key, ttl)
-  return NextResponse.redirect(new URL(signedUrl, request.url))
+  const signedUrl = await getSignedObjectUrl(authResult.media.storageKey, ttl)
+  const response = new NextResponse(null, {
+    status: 307,
+    headers: { Location: signedUrl },
+  })
+  response.headers.set('Cache-Control', 'private, no-store')
+  return response
 })

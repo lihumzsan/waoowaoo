@@ -5,7 +5,7 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import type { TaskJobData } from '@/lib/task/types'
@@ -50,7 +50,7 @@ async function loadVideoImageReferences(
       ? reference.role
       : 'reference'
     return {
-      url: await normalizeToBase64ForGeneration(revision.media.storageKey),
+      url: await normalizeOwnedMediaToBase64ForGeneration(revision.media.storageKey, job.data.userId),
       role,
       order: index + 1,
       source: 'generated' as const,

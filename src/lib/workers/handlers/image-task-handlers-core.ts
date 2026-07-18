@@ -7,12 +7,11 @@ import {
   getProjectModels,
   getUserModels,
   resolveImageSourceFromGeneration,
-  toSignedUrlIfCos,
   uploadImageSourceToCos,
 } from '../utils'
 import {
+  normalizeOwnedMediaToBase64ForGeneration,
   normalizeReferenceImagesForGeneration,
-  normalizeToBase64ForGeneration,
 } from '@/lib/media/outbound-image'
 import {
   AnyObj,
@@ -59,16 +58,18 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     const appearanceId = pickFirstString(payload.appearanceId, payload.targetId, job.data.targetId)
     if (!appearanceId) throw new Error('character appearance id missing')
 
-    const appearance = await prisma.characterAppearance.findUnique({
-      where: { id: appearanceId },
+    const appearance = await prisma.characterAppearance.findFirst({
+      where: {
+        id: appearanceId,
+        character: { project: { id: job.data.projectId, userId: job.data.userId } },
+      },
     })
     if (!appearance) throw new Error('Character appearance not found')
 
     const imageIndex = Number(payload.imageIndex ?? appearance.selectedIndex ?? 0)
     const imageUrls = parseImageUrls(appearance.imageUrls, 'characterAppearance.imageUrls')
     const currentKey = imageUrls[imageIndex] || appearance.imageUrl
-    const currentUrl = toSignedUrlIfCos(currentKey, 3600)
-    if (!currentUrl) throw new Error('No image to modify')
+    if (!currentKey) throw new Error('No image to modify')
 
     const extraReferenceInputs: string[] = []
     if (Array.isArray(payload.extraImageUrls)) {
@@ -78,9 +79,10 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const requiredReference = await normalizeToBase64ForGeneration(currentUrl)
+    const requiredReference = await normalizeOwnedMediaToBase64ForGeneration(currentKey, job.data.userId)
     const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'image-task-handlers-core.extra' },
+      ownerUserId: job.data.userId,
     })
     const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
     const currentDescription = readIndexedDescription({
@@ -162,8 +164,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
   if (type === 'location' || type === 'prop') {
     const locationImageId = pickFirstString(payload.locationImageId, payload.targetId, job.data.targetId)
     let locationImage: LocationImageRecord | null = locationImageId
-      ? await prisma.locationImage.findUnique({
-        where: { id: locationImageId },
+      ? await prisma.locationImage.findFirst({
+        where: {
+          id: locationImageId,
+          location: { project: { id: job.data.projectId, userId: job.data.userId } },
+        },
         include: { location: true },
       }) as unknown as LocationImageRecord | null
       : null
@@ -171,7 +176,11 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     const payloadLocationId = typeof payload.locationId === 'string' ? payload.locationId : null
     if (!locationImage && payloadLocationId) {
       locationImage = await prisma.locationImage.findFirst({
-        where: { locationId: payloadLocationId, imageIndex: Number(payload.imageIndex ?? 0) },
+        where: {
+          locationId: payloadLocationId,
+          imageIndex: Number(payload.imageIndex ?? 0),
+          location: { project: { id: job.data.projectId, userId: job.data.userId } },
+        },
         include: { location: true },
       }) as unknown as LocationImageRecord | null
     }
@@ -179,9 +188,6 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
     if (!locationImage || !locationImage.imageUrl) {
       throw new Error('Location image not found')
     }
-
-    const currentUrl = toSignedUrlIfCos(locationImage.imageUrl, 3600)
-    if (!currentUrl) throw new Error('No location image url')
 
     const extraReferenceInputs: string[] = []
     if (Array.isArray(payload.extraImageUrls)) {
@@ -191,9 +197,10 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
         }
       }
     }
-    const requiredReference = await normalizeToBase64ForGeneration(currentUrl)
+    const requiredReference = await normalizeOwnedMediaToBase64ForGeneration(locationImage.imageUrl, job.data.userId)
     const normalizedExtras = await normalizeReferenceImagesForGeneration(extraReferenceInputs, {
       context: { taskType: String(job.data.type), scope: 'image-task-handlers-core.extra' },
+      ownerUserId: job.data.userId,
     })
     const referenceImages = Array.from(new Set([requiredReference, ...normalizedExtras]))
 
