@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
+import { isValidVideoTrimFrames } from './trim-frames'
+
+export { isValidVideoTrimFrames, VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES } from './trim-frames'
 
 export const VIDEO_TOOLS_PROJECT_ID = 'video-tools'
 export const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
 export const VIDEO_TOOL_MAX_UPLOAD_BYTES = 256 * 1024 * 1024
-export const VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES = 100_000
 
 const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
   mp4: 'video/mp4',
@@ -34,13 +36,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-export function isValidVideoTrimFrames(value: unknown): value is number {
-  return Number.isFinite(value)
-    && Number.isInteger(value)
-    && value >= 0
-    && value <= VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES
 }
 
 function readVideoTrimFrames(value: unknown, defaultValue: number): number {

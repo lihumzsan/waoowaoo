@@ -1,4 +1,4 @@
-import { isValidVideoTrimFrames } from '@/lib/video-tools/seam-concat'
+import { isValidVideoTrimFrames } from '@/lib/video-tools/trim-frames'
 
 export type UploadedVideo = {
   key: string
