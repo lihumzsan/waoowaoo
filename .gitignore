@@ -40,6 +40,7 @@ yarn-error.log*
 .cursor/
 .gemini/
 .artifacts/
+.codex-artifacts/
 .agent/
 .shared/
 .codex-run/
@@ -60,7 +61,6 @@ next-env.d.ts
 .env.local
 .env.test
 .env.*.local
-docker-logs/
 
 # database
 *.db
