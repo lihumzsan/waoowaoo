@@ -26,18 +26,20 @@ vi.mock('@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-promp
 }))
 
 vi.mock('@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video', () => ({
-  VideoPanelCard: ({ panel, panelIndex, prevPanel, nextPanel, hasNext }: {
+  VideoPanelCard: ({ panel, panelIndex, prevPanel, nextPanel, hasNext, isLastFrame }: {
     panel: VideoPanel
     panelIndex: number
     prevPanel: VideoPanel | null
     nextPanel: VideoPanel | null
     hasNext: boolean
+    isLastFrame: boolean
   }) => React.createElement('article', {
     'data-panel-key': `${panel.storyboardId}-${panel.panelIndex}`,
     'data-global-index': panelIndex,
     'data-prev-index': prevPanel?.panelIndex,
     'data-next-index': nextPanel?.panelIndex,
     'data-has-next': String(hasNext),
+    'data-is-last-frame': String(isLastFrame),
   }),
 }))
 
@@ -68,6 +70,11 @@ describe('video panel pagination', () => {
   })
 
   it('mounts only the requested page while preserving global neighbor indexes', () => {
+    const linkedGlobalIndexes = new Set([23])
+    const getNextPanel = vi.fn((index: number) => (
+      (panels[index + 1] as VideoPanel | undefined) || null
+    ))
+    const isLinkedAsLastFrame = vi.fn((index: number) => linkedGlobalIndexes.has(index - 1))
     const props = {
       allPanels: panels as VideoPanel[],
       currentPage: 2,
@@ -106,8 +113,8 @@ describe('video panel pagination', () => {
       onGenerateFirstLastFrame: vi.fn(),
       onPreviewImage: vi.fn(),
       onToggleLipSyncVideo: vi.fn(),
-      getNextPanel: (index: number) => (panels[index + 1] as VideoPanel | undefined) || null,
-      isLinkedAsLastFrame: () => false,
+      getNextPanel,
+      isLinkedAsLastFrame,
       getFirstLastFrameDurationStatus: () => null,
       getLocalPrompt: () => '',
       updateLocalPrompt: vi.fn(),
@@ -120,9 +127,16 @@ describe('video panel pagination', () => {
     expect(mountedCards).toHaveLength(24)
     expect(markup).toContain('data-global-index="24"')
     expect(markup).toContain('data-prev-index="23"')
+    expect(markup).toMatch(/data-global-index="24"[^>]*data-is-last-frame="true"/)
     expect(markup).toContain('data-global-index="47"')
     expect(markup).toContain('data-next-index="48"')
     expect(markup).not.toContain('data-global-index="0"')
+    expect(getNextPanel).toHaveBeenCalledWith(24)
+    expect(getNextPanel).toHaveBeenCalledWith(47)
+    expect(getNextPanel).not.toHaveBeenCalledWith(0)
+    expect(isLinkedAsLastFrame).toHaveBeenCalledWith(24)
+    expect(isLinkedAsLastFrame).toHaveBeenCalledWith(47)
+    expect(isLinkedAsLastFrame).not.toHaveBeenCalledWith(0)
     expect(markup).toContain('content-visibility:auto')
     expect(markup).toContain('contain-intrinsic-size:0 720px')
   })

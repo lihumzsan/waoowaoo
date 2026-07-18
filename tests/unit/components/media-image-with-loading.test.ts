@@ -18,12 +18,14 @@ vi.mock('next/image', async () => {
       src: string
       alt: string
       unoptimized?: boolean
-    }>(function MockNextImage({ src, alt, unoptimized }, ref) {
+      sizes?: string
+    }>(function MockNextImage({ src, alt, unoptimized, sizes }, ref) {
       return ReactModule.createElement('img', {
         ref,
         src,
         alt,
         'data-unoptimized': String(Boolean(unoptimized)),
+        'data-sizes': sizes,
       })
     }),
   }
@@ -76,8 +78,10 @@ describe('MediaImageWithLoading', () => {
     const markup = renderToStaticMarkup(React.createElement(MediaImage, {
       src: '/m/project/frame.png',
       alt: 'frame',
+      sizes: '(max-width: 767px) 100vw, 33vw',
     }))
 
     expect(markup).toContain('data-unoptimized="false"')
+    expect(markup).toContain('data-sizes="(max-width: 767px) 100vw, 33vw"')
   })
 })
