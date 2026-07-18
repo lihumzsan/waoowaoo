@@ -14,7 +14,9 @@ describe('comfyui video capabilities catalog', () => {
     )
 
     expect(capabilities?.video?.generationModeOptions).toEqual(['firstlastframe'])
-    expect(capabilities?.video?.durationOptions).toEqual([10, 4, 5, 6, 8, 12])
+    expect(capabilities?.video?.durationOptions).toEqual([
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    ])
     expect(capabilities?.video?.fpsOptions).toEqual([24])
     expect(capabilities?.video?.resolutionOptions).toEqual(['720p'])
     expect(capabilities?.video?.firstlastframe).toBe(true)
@@ -24,7 +26,7 @@ describe('comfyui video capabilities catalog', () => {
       videoCapabilities: capabilities?.video,
     })
     const defaultSelection = normalizeVideoGenerationSelections({ definitions })
-    expect(defaultSelection.duration).toBe(10)
+    expect(defaultSelection.duration).toBe(4)
   })
 
   it('registers the current Smart VBVR LTX 2.3 workflow as a selectable video model', () => {
