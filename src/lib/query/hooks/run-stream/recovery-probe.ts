@@ -66,6 +66,7 @@ export function startRecoveryProbe(args: StartRecoveryProbeArgs): () => void {
 
       if (cancelled || args.hasRunState()) return
 
+      nextRetryDelayMs = PROBE_RETRY_INTERVAL_MS
       successfulProbeScopes.set(args.storageKey, Date.now())
 
       if (!activeRunId) {

@@ -5,6 +5,7 @@ interface PromptAutoEnsureQueueOptions {
 
 export interface PromptAutoEnsureQueue {
   enqueue: (panelKeys: readonly string[]) => void
+  replace: (panelKeys: readonly string[]) => void
   dispose: () => void
   whenIdle: () => Promise<void>
 }
@@ -53,6 +54,26 @@ export function createPromptAutoEnsureQueue(
     enqueue: (panelKeys) => {
       if (disposed) return
       for (const panelKey of panelKeys) {
+        if (scheduled.has(panelKey)) continue
+        scheduled.add(panelKey)
+        pending.push(panelKey)
+      }
+      schedule()
+    },
+    replace: (panelKeys) => {
+      if (disposed) return
+      const nextKeys = new Set(panelKeys)
+      const retainedPending: string[] = []
+      for (const panelKey of pending) {
+        if (nextKeys.has(panelKey)) {
+          retainedPending.push(panelKey)
+        } else {
+          scheduled.delete(panelKey)
+        }
+      }
+      pending.length = 0
+      pending.push(...retainedPending)
+      for (const panelKey of nextKeys) {
         if (scheduled.has(panelKey)) continue
         scheduled.add(panelKey)
         pending.push(panelKey)

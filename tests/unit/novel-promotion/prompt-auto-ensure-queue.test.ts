@@ -62,4 +62,29 @@ describe('runPromptAutoEnsureQueue', () => {
     expect(maxActive).toBe(2)
     expect(started).toEqual(['a', 'b', 'c', 'd'])
   })
+
+  it('drops pending keys that are no longer visible when candidates are replaced', async () => {
+    const started: string[] = []
+    const release = new Map<string, () => void>()
+    const queue = createPromptAutoEnsureQueue(async (panelKey) => {
+      started.push(panelKey)
+      await new Promise<void>((resolve) => release.set(panelKey, resolve))
+    })
+
+    queue.enqueue(['old-a', 'old-b', 'old-c', 'old-d'])
+    expect(started).toEqual(['old-a', 'old-b'])
+
+    queue.replace(['new-a', 'new-b'])
+    release.get('old-a')?.()
+    await vi.waitFor(() => expect(started).toEqual(['old-a', 'old-b', 'new-a']))
+    release.get('old-b')?.()
+    await vi.waitFor(() => expect(started).toEqual(['old-a', 'old-b', 'new-a', 'new-b']))
+
+    expect(started).not.toContain('old-c')
+    expect(started).not.toContain('old-d')
+
+    release.get('new-a')?.()
+    release.get('new-b')?.()
+    await queue.whenIdle()
+  })
 })

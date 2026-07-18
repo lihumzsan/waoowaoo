@@ -93,4 +93,36 @@ describe('recovery probe', () => {
 
     cleanup()
   })
+
+  it('resets failure backoff after a successful lookup', async () => {
+    vi.useFakeTimers()
+
+    const resolveActiveRunId = vi
+      .fn<({ projectId, storageScopeKey }: { projectId: string; storageScopeKey?: string }) => Promise<string | null>>()
+      .mockRejectedValueOnce(new Error('runs unavailable'))
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('runs unavailable again'))
+      .mockResolvedValueOnce(null)
+
+    const cleanup = startRecoveryProbe({
+      projectId: 'project-1',
+      storageKey: 'scope:story-to-script:episode-1',
+      storageScopeKey: 'episode-1',
+      hasRunState: () => false,
+      resolveActiveRunId,
+      onRecovered: vi.fn(),
+    })
+
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(recoveryProbeTestUtils.PROBE_RETRY_INTERVAL_MS)
+    expect(resolveActiveRunId).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(recoveryProbeTestUtils.PROBE_SUCCESS_COOLDOWN_MS)
+    expect(resolveActiveRunId).toHaveBeenCalledTimes(3)
+
+    await vi.advanceTimersByTimeAsync(recoveryProbeTestUtils.PROBE_RETRY_INTERVAL_MS)
+    expect(resolveActiveRunId).toHaveBeenCalledTimes(4)
+
+    cleanup()
+  })
 })

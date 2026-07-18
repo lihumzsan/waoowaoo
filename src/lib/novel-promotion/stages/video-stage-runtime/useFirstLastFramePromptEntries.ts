@@ -341,7 +341,7 @@ export function useFirstLastFramePromptEntries({
       ) continue
       candidates.push(panelKey)
     }
-    autoEnsureQueueRef.current?.enqueue(candidates)
+    autoEnsureQueueRef.current?.replace(candidates)
   }, [allPanels, linkedPanels, promptEntries, promptTaskStates, visiblePanelKeys])
 
   const resolvedPromptEntries = useMemo(() => {
