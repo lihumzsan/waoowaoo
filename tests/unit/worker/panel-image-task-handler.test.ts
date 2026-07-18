@@ -620,7 +620,7 @@ describe('worker panel-image-task-handler behavior', () => {
       .mockResolvedValueOnce('generated-qwen-style-source')
     mockImageUploads('cos/panel-qwen-style.png')
 
-    const result = await handlePanelImageTask(buildJob({
+    await handlePanelImageTask(buildJob({
       candidateCount: 1,
       imageModel: QWEN_STORYBOARD_MODEL,
     }))
@@ -690,7 +690,7 @@ describe('worker panel-image-task-handler behavior', () => {
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-scene-source')
     mockImageUploads('cos/panel-qwen.png')
 
-    const result = await handlePanelImageTask(buildJob({
+    await handlePanelImageTask(buildJob({
       candidateCount: 1,
       imageModel: QWEN_STORYBOARD_MODEL,
     }))

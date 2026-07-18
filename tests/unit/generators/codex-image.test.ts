@@ -8,25 +8,32 @@ const getProviderConfigMock = vi.hoisted(() => vi.fn(async () => ({
   baseUrl: 'C:\\codex.exe',
 })))
 const prepareCodexImageInputsMock = vi.hoisted(() => vi.fn(async (
-  _inputs: string[],
-  _normalizer: (input: string) => Promise<string>,
-) => ({
-  imagePaths: ['C:\\tmp\\ref-a.png', 'C:\\tmp\\ref-b.png'],
-  cleanup: cleanupMock,
-})))
-const runCodexImageGenerationMock = vi.hoisted(() => vi.fn(async (_params: {
+  inputs: string[],
+  normalizer: (input: string) => Promise<string>,
+) => {
+  void inputs
+  void normalizer
+  return {
+    imagePaths: ['C:\\tmp\\ref-a.png', 'C:\\tmp\\ref-b.png'],
+    cleanup: cleanupMock,
+  }
+}))
+const runCodexImageGenerationMock = vi.hoisted(() => vi.fn(async (params: {
   codexPath?: string
   model?: string
   prompt: string
   imagePaths?: string[]
-}) => ({
-  imageBase64: 'UE5H',
-  mimeType: 'image/png',
-  imagePath: 'C:\\tmp\\out.png',
-  text: '{"image_path":"C:\\\\tmp\\\\out.png"}',
-  stdout: '',
-  stderr: '',
-})))
+}) => {
+  void params
+  return {
+    imageBase64: 'UE5H',
+    mimeType: 'image/png',
+    imagePath: 'C:\\tmp\\out.png',
+    text: '{"image_path":"C:\\\\tmp\\\\out.png"}',
+    stdout: '',
+    stderr: '',
+  }
+}))
 const normalizeToBase64ForGenerationMock = vi.hoisted(() => vi.fn(async () => 'data:image/png;base64,QQ=='))
 
 vi.mock('@/lib/api-config', () => ({

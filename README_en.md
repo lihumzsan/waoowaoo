@@ -13,7 +13,7 @@
 </p>
 
 > [!IMPORTANT]
-> This repository supports development mode only. The development machine runs Next.js, workers, watchdog, Bull Board, and warmup through `npm run dev`. MySQL, Redis, MinIO, and ComfyUI use the existing services on `192.168.0.112`; the development machine does not run or manage Docker.
+> This repository supports development mode only. The development machine runs Next.js, workers, watchdog, and Bull Board through `npm run dev`; use `npm run dev:full` only when explicit route warmup is needed. MySQL, Redis, MinIO, and ComfyUI use the existing services on `192.168.0.112`; the development machine does not run or manage Docker.
 
 ## ✨ Features
 

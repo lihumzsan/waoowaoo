@@ -13,7 +13,7 @@
 </p>
 
 > [!IMPORTANT]
-> 本仓库只支持开发模式。本机通过 `npm run dev` 运行 Next.js、Worker、Watchdog、Bull Board 和 Warmup；MySQL、Redis、MinIO 与 ComfyUI 固定使用 `192.168.0.112` 上的现有服务。本机不运行或管理 Docker。
+> 本仓库只支持开发模式。本机通过 `npm run dev` 运行 Next.js、Worker、Watchdog 和 Bull Board；仅在明确需要预热时使用 `npm run dev:full`。MySQL、Redis、MinIO 与 ComfyUI 固定使用 `192.168.0.112` 上的现有服务。本机不运行或管理 Docker。
 
 ## ✨ 功能特性
 

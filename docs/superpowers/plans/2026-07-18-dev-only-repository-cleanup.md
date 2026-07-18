@@ -304,3 +304,49 @@ git log -8 --oneline --decorate
 ```
 
 Expected: the correction commits are present and the worktree is clean.
+
+## Delivery Record
+
+### Actual Implementation
+
+- Revalidated the remote-only development boundary after a clean restart: MySQL, Redis, and MinIO remain configured on `192.168.0.112`; `npm run dev` starts Next.js, worker, watchdog, and Bull Board successfully.
+- Removed six tracked public assets with zero repository references: the four default Next.js SVGs, the unused legacy `public/icon.png`, and the unused `grid-template-9x16.png`.
+- Removed the landing-page local-image query string, added above-the-fold priority, and added a regression test for both conditions.
+- Corrected both READMEs to describe route warmup as opt-in through `npm run dev:full`.
+- Eliminated all twelve existing ESLint unused-variable warnings without changing runtime contracts.
+- Removed completed local `.superpowers` review intermediates and the current Playwright CLI session artifacts; `.env`, IDE state, logs, dependencies, and active runtime configuration were preserved.
+
+### Plan Deviations
+
+- A later approved performance change made warmup opt-in instead of part of default `npm run dev`; the READMEs now reflect the current package scripts rather than this plan's original startup wording.
+- The restart audit included narrow repository hygiene and a Next.js image-warning fix beyond the original Docker-removal file list. These changes preserve the remote-infrastructure boundary and application behavior.
+
+### Impact
+
+- No database schema, queue, provider, storage, ComfyUI workflow, credential, or ignored `.env` value changed.
+- The deleted public files have no source, configuration, test, or documentation references. Existing metadata continues to use `/logo.ico` and `/logo.png`.
+- The landing page no longer emits local-image pattern or LCP priority warnings after a browser reload.
+
+### Verification
+
+- `npm run test:unit:all`: 301 files and 1,315 tests passed.
+- `npm run lint`: exit 0 with zero warnings.
+- `npm run typecheck`: exit 0.
+- `npm run build`: exit 0; 72 static pages generated.
+- Authenticated-independent browser reload of `/zh`: zero console errors and zero warnings after the fix.
+- Runtime smoke: `/zh` and Bull Board returned HTTP 200; Next.js, worker, watchdog, and Bull Board remained active during observation.
+- Independent read-only review found no Critical, Important, or Minor issues and approved all six resource deletions.
+- `git diff --check`: exit 0.
+
+### Remaining Risks
+
+- `npm audit --omit=dev` reports 22 dependency advisories (14 high, 8 moderate), including Next.js and Undici. The dry run would change 50 packages and remove 365 installed development packages under `--omit=dev`, so a broad automatic fix was intentionally not applied in this cleanup.
+- Repository search cannot prove that an external system has never bookmarked one of the deleted public URLs; no repository evidence indicates such a contract.
+
+### Follow-ups
+
+- Handle dependency security upgrades as an isolated, fully tested change instead of mixing them into repository cleanup.
+
+### ZenTao Closeout
+
+- Not requested and not performed.

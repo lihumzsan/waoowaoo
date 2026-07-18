@@ -28,7 +28,9 @@ describe('first/last-frame prompt cache invalidation', () => {
 
   it('invalidates project, episode, storyboard, and video-stage caches', async () => {
     const mutations = await import('@/lib/query/mutations/useVideoMutations')
-    const invalidateQueries = vi.fn(async (_options: unknown) => undefined)
+    const invalidateQueries = vi.fn(async (options: unknown) => {
+      void options
+    })
 
     await mutations.invalidateFirstLastFramePromptCaches(
       { invalidateQueries } as never,

@@ -301,15 +301,13 @@ function annotatePanelWithBeat(panel: StoryboardPanelLike, beat: DialogueBeat): 
 }
 
 function stripDialogueBeatFields(panel: StoryboardPanelLike): StoryboardPanelLike {
-  const {
-    dialogueBeatId: _dialogueBeatId,
-    dialogue_beat_id: _dialogueBeatIdSnake,
-    dialogueBeatIds: _dialogueBeatIds,
-    dialogue_beat_ids: _dialogueBeatIdsSnake,
-    dialogueSpeaker: _dialogueSpeaker,
-    estimatedDialogueSeconds: _estimatedDialogueSeconds,
-    ...rest
-  } = panel
+  const rest = { ...panel }
+  delete rest.dialogueBeatId
+  delete rest.dialogue_beat_id
+  delete rest.dialogueBeatIds
+  delete rest.dialogue_beat_ids
+  delete rest.dialogueSpeaker
+  delete rest.estimatedDialogueSeconds
   return rest
 }
 

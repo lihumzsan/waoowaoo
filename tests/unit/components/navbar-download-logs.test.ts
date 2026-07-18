@@ -14,7 +14,10 @@ vi.mock('next-auth/react', () => ({
 }))
 
 vi.mock('next/image', () => ({
-  default: ({ alt, ...props }: { alt: string } & Record<string, unknown>) => createElement('img', { alt, ...props }),
+  default: ({ alt, priority, ...props }: { alt: string; priority?: boolean } & Record<string, unknown>) => {
+    void priority
+    return createElement('img', { alt, ...props })
+  },
 }))
 
 vi.mock('@/components/LanguageSwitcher', () => ({
