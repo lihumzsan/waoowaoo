@@ -5,7 +5,7 @@
 <h1 align="center">waoowaoo AI Video Studio</h1>
 
 <p align="center">
-  An AI-powered tool for creating short drama / comic videos — automatically generates storyboards, characters, and scenes from novel text, then assembles them into complete videos.
+  An AI-powered tool that turns novel text into storyboards, characters, scenes, voiceovers, and complete short-form videos.
 </p>
 
 <p align="center">
@@ -13,115 +13,90 @@
 </p>
 
 > [!IMPORTANT]
-> **Beta Notice**: This project is currently in its early beta stage. As it is currently a solo-developed project, some bugs and imperfections are to be expected. We are iterating rapidly — please stay tuned for frequent updates! We are committed to rolling out a massive roadmap of new features and optimizations, with the ultimate goal of becoming the top-tier solution in the industry. Your feedback and feature requests are highly welcome!
-
----
+> This repository currently supports development mode only. Next.js, workers, watchdog, Bull Board, and warmup run on the host through `npm run dev`. Docker Compose provides local MySQL, Redis, and MinIO only; it does not build or deploy the application.
 
 ## ✨ Features
 
-- 🎬 **AI Script Analysis** — Parse novels, extract characters, scenes & plot automatically
-- 🎨 **Character & Scene Generation** — Consistent AI-generated character and scene images
-- 📽️ **Storyboard Video** — Auto-generate shots and compose into complete videos
+- 🎬 **AI Script Analysis** — Parse novels and extract characters, scenes, and plot
+- 🎨 **Character and Scene Generation** — Generate consistent visual assets
+- 📽️ **Storyboard Video** — Generate shots and compose complete videos
 - 🎙️ **AI Voiceover** — Multi-character voice synthesis
-- 🌐 **Bilingual UI** — Chinese / English, switch in the top-right corner
+- 🌐 **Bilingual UI** — Chinese and English interfaces
 
----
+## 🚀 Development Setup
 
-## 🚀 Quick Start
+### Prerequisites
 
-**Prerequisites**: Install [Docker Desktop](https://docs.docker.com/get-docker/)
+- Node.js >= 18.18.0
+- npm >= 9.0.0
+- Docker Desktop, only when running MySQL, Redis, and MinIO locally
 
-### Method 1: Pull Pre-built Image (Easiest)
-
-No need to clone the repository. Just download and run:
-
-```bash
-# Download docker-compose.yml
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-
-# Start all services
-docker compose up -d
-```
-
-> ⚠️ This is a beta version. Database is not compatible between versions. To upgrade, clear old data first:
-
-```bash
-docker compose down -v
-docker rmi ghcr.io/saturndec/waoowaoo:latest
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-docker compose up -d
-```
-
-> After starting, please **clear your browser cache** and log in again to avoid issues caused by stale cache.
-
-### Method 2: Clone & Docker Build (Full Control)
+### Initialize
 
 ```bash
 git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
-docker compose up -d
-```
-
-To update:
-```bash
-git pull
-docker compose down && docker compose up -d --build
-```
-
-### Method 3: Local Development (For Developers)
-
-```bash
-git clone https://github.com/lihumzsan/waoowaoo.git
-cd waoowaoo
-
-# Copy environment config (must be done before npm install)
 cp .env.example .env
-# ⚠️ Edit .env to fill in your AI API Keys (NEXTAUTH_URL defaults to http://localhost:3000, no change needed)
-
 npm install
-
-# Start infrastructure only
-docker compose up mysql redis minio -d
-
-# Run database migration
+npm run infra:up
 npx prisma db push
-
-# Start development server
 npm run dev
 ```
 
----
+Edit `.env` as needed for development and AI provider settings. After startup, open:
 
-Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!
+- App: [http://localhost:3000](http://localhost:3000)
+- Bull Board: [http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
+- MinIO Console: [http://localhost:19001](http://localhost:19001)
 
-> The database is initialized automatically on first launch — no extra configuration needed.
+> [!WARNING]
+> Run `npx prisma db push` before the first startup. Otherwise the database tables will not exist.
 
-> [!TIP]
-> **If you experience lag**: HTTP mode may limit browser connections. Install [Caddy](https://caddyserver.com/docs/install) for HTTPS:
-> ```bash
-> caddy run --config caddyfile
-> ```
-> Then visit [https://localhost:1443](https://localhost:1443)
+### Infrastructure Commands
 
----
+```bash
+# Start MySQL, Redis, and MinIO and wait for health checks
+npm run infra:up
+
+# Show service status
+npm run infra:status
+
+# Follow infrastructure logs
+npm run infra:logs
+
+# Stop services without deleting data volumes
+npm run infra:down
+```
+
+Do not run `docker compose down -v`; it deletes local development data volumes.
+
+If you already use local or remote MySQL, Redis, and MinIO services, skip `npm run infra:up` and configure their addresses in `.env`.
+
+## 🧪 Verification
+
+```bash
+npm run lint:all
+npm run typecheck
+npm run test:all
+npm run build
+```
+
+## 🎛️ ComfyUI Workflows
+
+Built-in workflows live under `src/lib/providers/comfyui/workflows`. They are used by default. Set an absolute `COMFYUI_WORKFLOW_ROOT` path in `.env` only when reusing an external workflow directory.
 
 ## 🔧 API Configuration
 
-After launching, go to **Settings** to configure your AI service API keys. A built-in guide is provided.
-
-> 💡 **Note**: Currently only official provider APIs are recommended. Third-party compatible formats (OpenAI Compatible) are not yet fully supported and will be improved in future releases.
-
----
+After startup, configure AI provider API keys in Settings. The UI includes provider-specific guidance. Official provider APIs are recommended.
 
 ## 📦 Tech Stack
 
 - **Framework**: Next.js 15 + React 19
 - **Database**: MySQL + Prisma ORM
 - **Queue**: Redis + BullMQ
+- **Object Storage**: MinIO / S3 Compatible
 - **Styling**: Tailwind CSS v4
 - **Auth**: NextAuth.js
-
----
 
 ## 📦 Preview
 
@@ -130,20 +105,8 @@ After launching, go to **Settings** to configure your AI service API keys. A bui
 ![466e13c8fd1fc799d8f588c367ebfa24e1e99bf7](https://github.com/user-attachments/assets/09bbff39-e535-4c67-80a9-69421c3b05ee)
 ![c067c197c20b0f1de456357c49cdf0b0973c9b31](https://github.com/user-attachments/assets/688e3147-6e95-43b0-b9e7-dd9af40db8a0)
 
----
-
 ## 🤝 Contributing
 
-This project is maintained by the core team. You're welcome to contribute by:
-
-- 🐛 Filing [Issues](https://github.com/saturndec/waoowaoo/issues) — report bugs
-- 💡 Filing [Issues](https://github.com/saturndec/waoowaoo/issues) — propose features
-- 🔧 Submitting Pull Requests as references — we review every PR carefully for ideas, but the team implements fixes internally rather than merging external PRs directly
-
----
+Use Issues to report bugs or suggest features. Pull requests are welcome for maintainer review.
 
 **Made with ❤️ by waoowaoo team**
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=saturndec/waoowaoo&type=date&legend=top-left)](https://www.star-history.com/#saturndec/waoowaoo&type=date&legend=top-left)

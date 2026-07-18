@@ -1,80 +1,3 @@
-> [!IMPORTANT]
-> 这个仓库已经补齐了跨机器启动当前项目所需的关键内容，适合直接在另一台机器拉取后继续使用：
-> - 当前代码与 Prisma schema / migrations
-> - 本地开发所需的 `docker-compose.yml`
-> - 初始化环境模板 `.env.example`
-> - 内置 ComfyUI 工作流目录 `src/lib/providers/comfyui/workflows`
->
-> 如果你要使用这个 GitHub 仓库里的“当前版本”，请优先按下面这段流程初始化，不要使用下方旧的“仅下载预构建镜像”思路，因为那种方式不会包含这个仓库里的最新本地改动。
-
-## 当前仓库跨机器初始化
-
-### 1. 克隆当前仓库
-
-```bash
-git clone https://github.com/lihumzsan/waoowaoo.git
-cd waoowaoo
-```
-
-### 2. 纯 Docker 方式启动当前仓库代码
-
-> `docker-compose.yml` 已改为基于当前仓库源码构建，不再依赖上游预构建镜像。
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-```
-
-启动完成后访问：
-
-- App: [http://localhost:13000](http://localhost:13000)
-- Bull Board: [http://localhost:13010/admin/queues](http://localhost:13010/admin/queues)
-
-### 3. 本地开发方式启动
-
-```bash
-cp .env.example .env
-npm install
-docker compose up mysql redis minio -d
-npx prisma generate
-npx prisma db push
-npm run dev
-```
-
-本地开发模式访问：
-
-- App: [http://localhost:3000](http://localhost:3000)
-- Bull Board: [http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
-
-### 4. ComfyUI 工作流说明
-
-- 仓库已经内置 `src/lib/providers/comfyui/workflows`，另一台机器即使不配置 `COMFYUI_WORKFLOW_ROOT`，也能直接使用仓库内置工作流。
-- 如果你想继续复用自己机器外部的工作流目录，可以在 `.env` 里额外设置 `COMFYUI_WORKFLOW_ROOT=/absolute/path/to/workflows`。
-
-### 5. 如果你还要迁移本地数据库数据
-
-代码、迁移脚本和工作流已经在仓库里，但运行时数据库内容不会自动进 Git。若你想把当前机器里的项目数据也迁到另一台机器，建议单独导出再导入：
-
-导出本机 Docker MySQL：
-
-```bash
-docker exec waoowaoo-mysql mysqldump -uroot -pwaoowaoo123 --databases waoowaoo > waoowaoo.sql
-```
-
-在新机器导入：
-
-```bash
-docker exec -i waoowaoo-mysql mysql -uroot -pwaoowaoo123 waoowaoo < waoowaoo.sql
-```
-
-如果你还需要迁移本地上传文件或 MinIO 对象，请一并备份对应数据目录或对象桶内容。
-
-<p align="center">
-  <a href="https://www.waoowaoo.com/">
-    <img src="images/cta-banner.png" alt="🚀 探索 AI 影视的下一代创作流 | 立即加入 waoowaoo 在线网页版内测候补" width="800">
-  </a>
-</p>
-
 <p align="center">
   <img src="public/banner.png" alt="waoowaoo" width="600">
 </p>
@@ -90,121 +13,90 @@ docker exec -i waoowaoo-mysql mysql -uroot -pwaoowaoo123 waoowaoo < waoowaoo.sql
 </p>
 
 > [!IMPORTANT]
-> ⚠️ **测试版声明**：本项目目前处于测试初期阶段，由于暂时只有我一个人开发，存在部分 bug 和不完善之处。我们正在快速迭代更新中，**欢迎进群反馈问题和需求，及时关注项目更新！目前更新会非常频繁，后续会增加大量新功能以及优化效果，我们的目标是成为行业最强AI工具！**
+> 本仓库当前只支持开发模式：Next.js、Worker、Watchdog、Bull Board 和 Warmup 均通过 `npm run dev` 在宿主机运行。Docker Compose 只用于提供本地 MySQL、Redis 和 MinIO，不包含应用镜像或部署流程。
 
-<img src="https://github.com/user-attachments/assets/d190bf41-488d-47df-a5df-06346ef0f2f5" width="30%">
-
----
 ## ✨ 功能特性
 
 - 🎬 **AI 剧本分析** — 自动解析小说，提取角色、场景、剧情
-- 🎨 **角色 & 场景生成** — AI 生成一致性人物和场景图片
+- 🎨 **角色与场景生成** — AI 生成一致性人物和场景图片
 - 📽️ **分镜视频制作** — 自动生成分镜头并合成视频
 - 🎙️ **AI 配音** — 多角色语音合成
-- 🌐 **多语言支持** — 中文 / 英文界面，右上角一键切换
+- 🌐 **多语言支持** — 中文 / 英文界面
 
----
+## 🚀 开发环境启动
 
-## 🚀 快速开始
+### 前提条件
 
-**前提条件**：安装 [Docker Desktop](https://docs.docker.com/get-docker/)
+- Node.js >= 18.18.0
+- npm >= 9.0.0
+- Docker Desktop（仅在本机运行 MySQL、Redis、MinIO 时需要）
 
-### 方式一：拉取预构建镜像（最简单）
-
-无需克隆仓库，下载即用：
-
-```bash
-# 下载 docker-compose.yml
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-
-# 启动所有服务
-docker compose up -d
-```
-
-> ⚠️ 当前为测试版，版本间数据库不兼容。升级请先清除旧数据：
-
-```bash
-docker compose down -v
-docker rmi ghcr.io/saturndec/waoowaoo:latest
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-docker compose up -d
-```
-
-> 启动后请**清空浏览器缓存**并重新登录，避免旧版本缓存导致异常。
-
-### 方式二：克隆仓库 + Docker 构建（完全控制）
+### 初始化
 
 ```bash
 git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
-docker compose up -d
-```
-
-更新版本：
-```bash
-git pull
-docker compose down && docker compose up -d --build
-```
-
-### 方式三：本地开发模式（开发者）
-
-```bash
-git clone https://github.com/lihumzsan/waoowaoo.git
-cd waoowaoo
-
-# 复制环境变量配置文件（必须在 npm install 之前完成）
 cp .env.example .env
-# ⚠️ 编辑 .env，填入你的 AI API Key（NEXTAUTH_URL 默认已是 http://localhost:3000，无需修改）
-
 npm install
-
-# 只启动基础设施
-# 注意：docker-compose.yml 将服务映射到非标准端口，.env.example 已按此预设
-mysql:13306  redis:16379  minio:19000
-docker compose up mysql redis minio -d
-
-# 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
+npm run infra:up
 npx prisma db push
-
-# 启动开发服务器
 npm run dev
 ```
 
+按需编辑 `.env` 中的开发配置和 AI 服务配置。启动后访问：
+
+- 应用：[http://localhost:3000](http://localhost:3000)
+- Bull Board：[http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
+- MinIO 控制台：[http://localhost:19001](http://localhost:19001)
+
 > [!WARNING]
-> 跳过 `npx prisma db push` 会导致所有数据库表不存在，启动后报错 `The table 'tasks' does not exist`。请务必先运行此命令再启动开发服务器。
+> 首次启动前必须执行 `npx prisma db push`。跳过后数据库表不会创建。
 
----
+### 基础设施命令
 
-访问 [http://localhost:13000](http://localhost:13000)（方式一、二）或 [http://localhost:3000](http://localhost:3000)（方式三）开始使用！
+```bash
+# 启动并等待 MySQL、Redis、MinIO 健康
+npm run infra:up
 
-> 首次启动会自动完成数据库初始化，无需任何额外配置。
+# 查看服务状态
+npm run infra:status
 
-> [!TIP]
-> **如果遇到网页卡顿**：HTTP 模式下浏览器可能限制并发连接。可安装 [Caddy](https://caddyserver.com/docs/install) 启用 HTTPS：
-> ```bash
-> caddy run --config caddyfile
-> ```
-> 然后访问 [https://localhost:1443](https://localhost:1443)
+# 跟随基础设施日志
+npm run infra:logs
 
----
+# 停止服务但保留数据卷
+npm run infra:down
+```
+
+不要使用 `docker compose down -v`，该命令会删除本地开发数据卷。
+
+如果已经有本机或远程 MySQL、Redis、MinIO，可以跳过 `npm run infra:up`，直接在 `.env` 中配置对应地址。
+
+## 🧪 验证命令
+
+```bash
+npm run lint:all
+npm run typecheck
+npm run test:all
+npm run build
+```
+
+## 🎛️ ComfyUI 工作流
+
+仓库内置 `src/lib/providers/comfyui/workflows`。不配置 `COMFYUI_WORKFLOW_ROOT` 时直接使用内置工作流；如需复用仓库外目录，可在 `.env` 中设置绝对路径。
 
 ## 🔧 API 配置
 
-启动后进入**设置中心**配置 AI 服务的 API Key，内置配置教程。
-
-> 💡 **注意**：目前仅推荐使用各服务商官方 API，第三方兼容格式（OpenAI Compatible）尚不完善，后续版本会持续优化。
-
----
+启动后进入设置中心配置 AI 服务 API Key，界面内包含配置说明。目前推荐使用各服务商官方 API。
 
 ## 📦 技术栈
 
-- **框架**: Next.js 15 + React 19
-- **数据库**: MySQL + Prisma ORM
-- **队列**: Redis + BullMQ
-- **样式**: Tailwind CSS v4
-- **认证**: NextAuth.js
-
----
+- **框架**：Next.js 15 + React 19
+- **数据库**：MySQL + Prisma ORM
+- **队列**：Redis + BullMQ
+- **对象存储**：MinIO / S3 Compatible
+- **样式**：Tailwind CSS v4
+- **认证**：NextAuth.js
 
 ## 📦 页面功能预览
 
@@ -213,20 +105,8 @@ npm run dev
 ![466e13c8fd1fc799d8f588c367ebfa24e1e99bf7](https://github.com/user-attachments/assets/09bbff39-e535-4c67-80a9-69421c3b05ee)
 ![c067c197c20b0f1de456357c49cdf0b0973c9b31](https://github.com/user-attachments/assets/688e3147-6e95-43b0-b9e7-dd9af40db8a0)
 
----
-
 ## 🤝 参与方式
 
-本项目由核心团队独立维护。欢迎你通过以下方式参与：
-
-- 🐛 提交 [Issue](https://github.com/saturndec/waoowaoo/issues) 反馈 Bug
-- 💡 提交 [Issue](https://github.com/saturndec/waoowaoo/issues) 提出功能建议
-- 🔧 提交 Pull Request 供参考 — 我们会认真审阅每一个 PR 的思路，但最终由团队自行实现修复，不会直接合并外部 PR
-
----
+欢迎通过 Issue 反馈 Bug 或提出功能建议，也可以提交 Pull Request 供维护者审阅。
 
 **Made with ❤️ by waoowaoo team**
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=saturndec/waoowaoo&type=date&legend=top-left)](https://www.star-history.com/#saturndec/waoowaoo&type=date&legend=top-left)
