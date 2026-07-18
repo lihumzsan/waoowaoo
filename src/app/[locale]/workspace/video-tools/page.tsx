@@ -11,6 +11,7 @@ import { useRouter } from '@/i18n/navigation'
 import VideoUploadCard from './VideoUploadCard'
 import {
   canSubmitVideoSeamConcat,
+  resolveVideoToolTaskTrimFrames,
   resolveVideoToolTaskView,
   selectCurrentVideoToolTask,
   type UploadedVideo,
@@ -307,6 +308,7 @@ export default function VideoToolsPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {tasks.map((task) => {
                 const view = resolveVideoToolTaskView(task)
+                const trimFrames = resolveVideoToolTaskTrimFrames(task)
                 return (
                   <button
                     key={task.id}
@@ -321,6 +323,16 @@ export default function VideoToolsPage() {
                       <span className="truncate text-xs font-semibold text-[var(--glass-text-primary)]">{t(`status.${view.phase}`)}</span>
                       <span className={`h-2 w-2 rounded-full ${statusDotClass(view.active, view.phase === 'failed')}`} />
                     </div>
+                    <dl className="mt-3 space-y-1 text-[11px] text-[var(--glass-text-secondary)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="truncate">{t('history.input1TrimLabel')}</dt>
+                        <dd className="font-medium tabular-nums">{trimFrames.input1TrimEndFrames}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <dt className="truncate">{t('history.input2TrimLabel')}</dt>
+                        <dd className="font-medium tabular-nums">{trimFrames.input2TrimStartFrames}</dd>
+                      </div>
+                    </dl>
                     <p className="mt-2 text-[11px] text-[var(--glass-text-tertiary)]">{new Date(task.createdAt).toLocaleString()}</p>
                   </button>
                 )

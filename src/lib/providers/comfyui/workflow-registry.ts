@@ -1680,6 +1680,36 @@ function applyVideoInjection(graph: ComfyUiWorkflowGraph, videoFilenames?: strin
   })
 }
 
+function validateVideoSeamWorkflowContract(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+): void {
+  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-concat-nvenc') return
+
+  const expectedNodes = [
+    { nodeId: '1', classType: 'LoadVideo', inputField: 'file' },
+    { nodeId: '2', classType: 'LoadVideo', inputField: 'file' },
+    { nodeId: '7', classType: 'ComfyMathExpression', inputField: 'values.b' },
+    { nodeId: '8', classType: 'ComfyMathExpression', inputField: 'values.b' },
+    { nodeId: '10', classType: 'ImageFromBatch', inputField: 'batch_index' },
+    { nodeId: '13', classType: 'ComfyMathExpression', inputField: 'values.a' },
+  ] as const
+
+  for (const { nodeId, classType, inputField } of expectedNodes) {
+    const node = graph[nodeId]
+    if (
+      !node
+      || node.class_type !== classType
+      || !isRecord(node.inputs)
+      || !Object.prototype.hasOwnProperty.call(node.inputs, inputField)
+    ) {
+      throw new Error(
+        `COMFYUI_VIDEO_SEAM_WORKFLOW_CONTRACT_INVALID: node ${nodeId} must be ${classType} with input ${inputField}`,
+      )
+    }
+  }
+}
+
 function applyVideoSeamTrimInjection(
   graph: ComfyUiWorkflowGraph,
   workflowKey: string,
@@ -1704,10 +1734,10 @@ function applyVideoSeamTrimInjection(
   const video2Images = graph['10']
   const video2AudioStart = graph['13']
 
-  if (video1RetainedFrames) video1RetainedFrames.inputs['values.b'] = trimEndFrames
-  if (video2RetainedFrames) video2RetainedFrames.inputs['values.b'] = trimStartFrames
-  if (video2Images) video2Images.inputs.batch_index = trimStartFrames
-  if (video2AudioStart) video2AudioStart.inputs['values.a'] = trimStartFrames
+  video1RetainedFrames.inputs['values.b'] = trimEndFrames
+  video2RetainedFrames.inputs['values.b'] = trimStartFrames
+  video2Images.inputs.batch_index = trimStartFrames
+  video2AudioStart.inputs['values.a'] = trimStartFrames
 }
 
 function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
@@ -3141,6 +3171,7 @@ export function resolveComfyUiWorkflow(
   const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
+  validateVideoSeamWorkflowContract(graph, workflowKey)
   applyVideoInjection(graph, inject.videoFilenames)
   applyVideoSeamTrimInjection(graph, workflowKey, inject.videoTrimFrames)
   applyRhLlmApiInjection(graph, inject.llmApi)

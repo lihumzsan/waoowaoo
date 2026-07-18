@@ -72,7 +72,7 @@ describe('comfyui workflow registry', () => {
     expect(workflow['7']).toMatchObject({
       class_type: 'ComfyMathExpression',
       inputs: {
-        expression: 'max(a - b, 0)',
+        expression: '(a - b) / (a > b)',
         'values.a': ['5', 2],
         'values.b': 3,
       },
@@ -80,7 +80,7 @@ describe('comfyui workflow registry', () => {
     expect(workflow['8']).toMatchObject({
       class_type: 'ComfyMathExpression',
       inputs: {
-        expression: 'max(a - b, 0)',
+        expression: '(a - b) / (a > b)',
         'values.a': ['6', 2],
         'values.b': 4,
       },
@@ -163,6 +163,42 @@ describe('comfyui workflow registry', () => {
     })
   })
 
+  it.each([
+    { label: 'Video 1 exact-full-length trim', nodeId: '7', frameCountNodeId: '5', totalFrames: 24, trimFrames: 24 },
+    { label: 'Video 1 over-length trim', nodeId: '7', frameCountNodeId: '5', totalFrames: 24, trimFrames: 25 },
+    { label: 'Video 2 exact-full-length trim', nodeId: '8', frameCountNodeId: '6', totalFrames: 48, trimFrames: 48 },
+    { label: 'Video 2 over-length trim', nodeId: '8', frameCountNodeId: '6', totalFrames: 48, trimFrames: 49 },
+  ])('uses a video-frame-only assertion for $label, including silent inputs', ({
+    nodeId,
+    frameCountNodeId,
+    totalFrames,
+    trimFrames,
+  }) => {
+    const trims: [number, number] = nodeId === '7' ? [trimFrames, 0] : [0, trimFrames]
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: trims,
+    })
+    const retainedFrameNode = workflow[nodeId]
+
+    expect(retainedFrameNode).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: '(a - b) / (a > b)',
+        'values.a': [frameCountNodeId, 2],
+        'values.b': trimFrames,
+      },
+    })
+
+    // ComfyMathExpression treats booleans numerically. False becomes zero, so
+    // exact-full and over-length trims both fail with division by zero. The
+    // assertion reads only GetImageSize's batch count and therefore also
+    // applies when the source video has no audio stream.
+    const retainedFrames = (totalFrames - trimFrames) / Number(totalFrames > trimFrames)
+    expect(Number.isFinite(retainedFrames)).toBe(false)
+    expect(retainedFrameNode?.inputs['values.a']).not.toEqual(['3', 1])
+    expect(retainedFrameNode?.inputs['values.a']).not.toEqual(['4', 1])
+  })
+
   it('accepts seam trim frame boundaries in direct workflow resolution', () => {
     const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
       videoTrimFrames: [0, VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES],
@@ -216,6 +252,40 @@ describe('comfyui workflow registry', () => {
     mkdirSync(dirname(filePath), { recursive: true })
     writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
   }
+
+  it.each([
+    {
+      label: 'missing retained-frame node',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        delete workflow['7']
+      },
+      expected: 'node 7 must be ComfyMathExpression with input values.b',
+    },
+    {
+      label: 'wrong head-trim node class',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        workflow['10'].class_type = 'PreviewImage'
+      },
+      expected: 'node 10 must be ImageFromBatch with input batch_index',
+    },
+    {
+      label: 'missing audio-start trim input',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        delete workflow['13'].inputs['values.a']
+      },
+      expected: 'node 13 must be ComfyMathExpression with input values.a',
+    },
+  ])('rejects a malformed fixed seam workflow contract: $label', ({ mutate, expected }) => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'second.mp4'],
+    })
+    mutate(workflow)
+    writeExternalWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, workflow)
+
+    expect(() => resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: [3, 4],
+    })).toThrow(`COMFYUI_VIDEO_SEAM_WORKFLOW_CONTRACT_INVALID: ${expected}`)
+  })
 
   it('detects and injects OpenRouter config into RH LLM API nodes', () => {
     writeExternalWorkflow('basevideo/test/rh-llm', {

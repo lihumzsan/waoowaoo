@@ -41,6 +41,8 @@
   },
   "history": {
     "title": "Recent Concatenations",
+    "input1TrimLabel": "Video 1 tail frames",
+    "input2TrimLabel": "Video 2 head frames",
     "empty": "No concatenation history yet"
   },
   "errors": {

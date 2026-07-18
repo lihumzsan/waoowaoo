@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canSubmitVideoSeamConcat,
+  resolveVideoToolTaskTrimFrames,
   resolveVideoToolTaskView,
   selectCurrentVideoToolTask,
   type UploadedVideo,
@@ -59,6 +60,23 @@ describe('video tools state', () => {
       active: false,
       videoUrl: '/api/storage/sign?key=output',
     })
+  })
+
+  it('resolves history trim counts from result, then payload, then legacy defaults', () => {
+    expect(resolveVideoToolTaskTrimFrames(task({
+      result: { input1TrimEndFrames: 12, input2TrimStartFrames: 3 },
+      payload: { input1TrimEndFrames: 8, input2TrimStartFrames: 9 },
+    }))).toEqual({ input1TrimEndFrames: 12, input2TrimStartFrames: 3 })
+
+    expect(resolveVideoToolTaskTrimFrames(task({
+      result: {},
+      payload: { input1TrimEndFrames: 5, input2TrimStartFrames: 6 },
+    }))).toEqual({ input1TrimEndFrames: 5, input2TrimStartFrames: 6 })
+
+    expect(resolveVideoToolTaskTrimFrames(task({
+      result: null,
+      payload: {},
+    }))).toEqual({ input1TrimEndFrames: 0, input2TrimStartFrames: 1 })
   })
 
   it('prefers the newest active task, otherwise the newest task', () => {

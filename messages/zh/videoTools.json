@@ -41,6 +41,8 @@
   },
   "history": {
     "title": "最近拼接",
+    "input1TrimLabel": "Video 1 尾部去帧",
+    "input2TrimLabel": "Video 2 头部去帧",
     "empty": "还没有拼接记录"
   },
   "errors": {
