@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
+  VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES,
+  isValidVideoTrimFrames,
+} from '@/lib/video-tools/trim-frames'
+import {
   COMFYUI_LTX23_GOON_FPS,
   COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
@@ -1685,6 +1689,16 @@ function applyVideoSeamTrimInjection(
   if (!videoTrimFrames) return
 
   const [trimEndFrames, trimStartFrames] = videoTrimFrames
+  if (!isValidVideoTrimFrames(trimEndFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
+  if (!isValidVideoTrimFrames(trimStartFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
   const video1RetainedFrames = graph['7']
   const video2RetainedFrames = graph['8']
   const video2Images = graph['10']

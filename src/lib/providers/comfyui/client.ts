@@ -1,6 +1,10 @@
 import { basename, extname } from 'path'
 import { toFetchableUrl } from '@/lib/storage/utils'
 import {
+  VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES,
+  isValidVideoTrimFrames,
+} from '@/lib/video-tools/trim-frames'
+import {
   COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID,
   COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID,
   comfyUiWorkflowRequiresLlmApi,
@@ -1041,10 +1045,23 @@ export async function runComfyUiVideoSeamConcatWorkflow(params: {
     throw new Error('COMFYUI_VIDEO_SEAM_CONCAT_REQUIRES_TWO_INPUTS')
   }
 
+  const trimEndFrames = params.trimEndFrames ?? 0
+  const trimStartFrames = params.trimStartFrames ?? 1
+  if (!isValidVideoTrimFrames(trimEndFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
+  if (!isValidVideoTrimFrames(trimStartFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
+
   const videoFilenames = await uploadComfyUiImages(base, videoUrls)
   const workflow = resolveComfyUiWorkflow(workflowKey, {
     videoFilenames,
-    videoTrimFrames: [params.trimEndFrames ?? 0, params.trimStartFrames ?? 1],
+    videoTrimFrames: [trimEndFrames, trimStartFrames],
   })
   const { dataBase64, mimeType } = await runComfyUiWorkflow({
     baseUrl: base,

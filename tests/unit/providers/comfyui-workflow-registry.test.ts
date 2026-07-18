@@ -15,6 +15,7 @@ import {
   resolveComfyUiWorkflow,
   validateResolvedWorkflowPreflight,
 } from '@/lib/providers/comfyui/workflow-registry'
+import { VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES } from '@/lib/video-tools/trim-frames'
 
 function getLoadImageNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
   return Object.values(workflow).filter((node) => node.class_type.toLowerCase().includes('loadimage'))
@@ -89,7 +90,7 @@ describe('comfyui workflow registry', () => {
       inputs: {
         image: ['3', 0],
         batch_index: 0,
-        length: ['7', 0],
+        length: ['7', 1],
       },
     })
     expect(workflow['10']).toMatchObject({
@@ -97,7 +98,7 @@ describe('comfyui workflow registry', () => {
       inputs: {
         image: ['4', 0],
         batch_index: 4,
-        length: ['8', 0],
+        length: ['8', 1],
       },
     })
     expect(workflow['11']).toMatchObject({
@@ -160,6 +161,44 @@ describe('comfyui workflow registry', () => {
         megabit: true,
       },
     })
+  })
+
+  it('accepts seam trim frame boundaries in direct workflow resolution', () => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: [0, VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES],
+    })
+
+    expect(workflow['7']?.inputs['values.b']).toBe(0)
+    expect(workflow['8']?.inputs['values.b']).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+    expect(workflow['10']?.inputs.batch_index).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+    expect(workflow['13']?.inputs['values.a']).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+  })
+
+  it.each([
+    {
+      name: 'negative end trim',
+      videoTrimFrames: [-1, 0] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'fractional start trim',
+      videoTrimFrames: [0, 1.5] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'over-limit end trim',
+      videoTrimFrames: [VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES + 1, 0] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'non-finite start trim',
+      videoTrimFrames: [0, Number.POSITIVE_INFINITY] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+  ])('rejects $name in direct seam workflow resolution', ({ videoTrimFrames, error }) => {
+    expect(() => resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames,
+    })).toThrow(error)
   })
 
   afterEach(() => {

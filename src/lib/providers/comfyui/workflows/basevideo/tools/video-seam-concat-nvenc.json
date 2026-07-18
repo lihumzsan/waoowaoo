@@ -52,7 +52,7 @@
     "inputs": {
       "image": ["3", 0],
       "batch_index": 0,
-      "length": ["7", 0]
+      "length": ["7", 1]
     },
     "_meta": { "title": "Retained Video 1 Images" }
   },
@@ -61,7 +61,7 @@
     "inputs": {
       "image": ["4", 0],
       "batch_index": 1,
-      "length": ["8", 0]
+      "length": ["8", 1]
     },
     "_meta": { "title": "Retained Video 2 Images" }
   },

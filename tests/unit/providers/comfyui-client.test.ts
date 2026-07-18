@@ -1064,6 +1064,37 @@ describe('comfyui client media refs', () => {
     expect(submittedGraphs[1]?.['13']?.inputs['values.a']).toBe(1)
   })
 
+  it.each([
+    {
+      name: 'negative end trim',
+      trimEndFrames: -1,
+      trimStartFrames: 0,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'fractional start trim',
+      trimEndFrames: 0,
+      trimStartFrames: 1.5,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'over-limit end trim',
+      trimEndFrames: 100_001,
+      trimStartFrames: 0,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+  ])('rejects $name before uploading seam inputs', async ({ trimEndFrames, trimStartFrames, error }) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+    await expect(runComfyUiVideoSeamConcatWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+      trimEndFrames,
+      trimStartFrames,
+    })).rejects.toThrow(error)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('dumps resolved ComfyUI video prompts to stdout when prompt dump is enabled', async () => {
     vi.useFakeTimers()
     process.env.COMFYUI_VIDEO_PROMPT_DUMP = '1'
