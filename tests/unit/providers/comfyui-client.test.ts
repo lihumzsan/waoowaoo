@@ -1038,7 +1038,10 @@ describe('comfyui client media refs', () => {
 
     const resultPromise = runComfyUiVideoSeamConcatWorkflow({
       baseUrl: 'http://127.0.0.1:8188',
-      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+      videoUrls: [
+        'https://assets.test/shot-1.mp4%22%0D%0AX-Evil%3Ayes',
+        'https://assets.test/shot-2.mp4',
+      ],
       trimEndFrames: 3,
       trimStartFrames: 4,
     })
@@ -1060,7 +1063,11 @@ describe('comfyui client media refs', () => {
       payload.byteLength === Number(uploadHeaders[index]?.get('content-length'))
     ))).toBe(true)
     const firstUpload = new TextDecoder().decode(uploadPayloads[0])
-    expect(firstUpload).toContain('Content-Disposition: form-data; name="image"; filename="')
+    const contentDisposition = firstUpload.split('\r\n')
+      .find((line) => line.startsWith('Content-Disposition: form-data; name="image"'))
+    expect(contentDisposition).toMatch(
+      /^Content-Disposition: form-data; name="image"; filename="[a-zA-Z0-9._-]+"$/,
+    )
     expect(firstUpload).toContain('Content-Type: video/mp4')
     expect(firstUpload).toContain('Content-Disposition: form-data; name="type"')
     expect(firstUpload).toContain('input')

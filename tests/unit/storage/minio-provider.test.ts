@@ -1,3 +1,6 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { MinioStorageProvider } from '@/lib/storage/providers/minio'
 
@@ -28,7 +31,7 @@ describe('minio storage provider', () => {
     ).toBe('images/voice/custom/project-1/chenji.wav')
   })
 
-  it('passes a web stream and declared length to the S3 put command once', async () => {
+  it('passes a non-flowing node stream and declared length to the S3 put command once', async () => {
     const provider = createProvider()
     const send = vi.fn(async () => undefined)
     const putInputs: Record<string, unknown>[] = []
@@ -60,10 +63,68 @@ describe('minio storage provider', () => {
     expect(putInputs).toEqual([{
       Bucket: 'waoowaoo',
       Key: 'video-tools/user-1/inputs/one.mp4',
-      Body: body,
+      Body: expect.any(Readable),
       ContentLength: 3,
       ContentType: 'video/mp4',
     }])
+    expect(putInputs[0]?.Body).not.toBe(body)
+    expect((putInputs[0]?.Body as Readable).readableFlowing).toBeNull()
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('reaches a local server through the real AWS SDK middleware without pre-consuming or retrying the stream', async () => {
+    let requestCount = 0
+    let receivedBytes = 0
+    const server = createServer((request, response) => {
+      requestCount += 1
+      request.on('data', (chunk: Buffer) => {
+        receivedBytes += chunk.byteLength
+      })
+      request.on('end', () => {
+        response.statusCode = 200
+        response.setHeader('ETag', '"test-etag"')
+        response.end()
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+
+    try {
+      const address = server.address() as AddressInfo
+      process.env.MINIO_ENDPOINT = `http://127.0.0.1:${address.port}`
+      process.env.MINIO_REGION = 'us-east-1'
+      process.env.MINIO_BUCKET = 'waoowaoo'
+      process.env.MINIO_ACCESS_KEY = 'minioadmin'
+      process.env.MINIO_SECRET_KEY = 'minioadmin'
+      process.env.MINIO_FORCE_PATH_STYLE = 'true'
+      const provider = new MinioStorageProvider()
+      let sourceChunkReads = 0
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sourceChunkReads === 0) {
+            sourceChunkReads += 1
+            controller.enqueue(new Uint8Array([1, 2, 3]))
+            return
+          }
+          controller.close()
+        },
+      })
+
+      await provider.uploadObjectStream({
+        body,
+        key: 'video-tools/user-1/inputs/real-sdk.mp4',
+        contentLength: 3,
+        contentType: 'video/mp4',
+      })
+
+      expect(requestCount).toBe(1)
+      expect(sourceChunkReads).toBe(1)
+      expect(receivedBytes).toBeGreaterThan(0)
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
   })
 })

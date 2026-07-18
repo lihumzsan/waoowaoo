@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -15,25 +16,44 @@ import { normalizeKey, toFetchableUrl } from '@/lib/storage/utils'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './data/uploads'
 
-function resolveUploadPath(key: string): string {
-  return path.join(process.cwd(), UPLOAD_DIR, normalizeKey(key))
+function resolveStorageKey(key: string): { normalizedKey: string; filePath: string } {
+  const normalizedKey = normalizeKey(key)
+  const validationKey = normalizedKey.replace(/\\/g, '/')
+  if (
+    !normalizedKey
+    || normalizedKey.includes('\0')
+    || normalizedKey.includes('\\')
+    || validationKey.split('/').includes('..')
+  ) {
+    throw new Error('STORAGE_KEY_INVALID')
+  }
+
+  const uploadRoot = path.resolve(process.cwd(), UPLOAD_DIR)
+  const filePath = path.resolve(uploadRoot, normalizedKey)
+  if (filePath === uploadRoot || !filePath.startsWith(`${uploadRoot}${path.sep}`)) {
+    throw new Error('STORAGE_KEY_INVALID')
+  }
+  return { normalizedKey, filePath }
 }
 
 export class LocalStorageProvider implements StorageProvider {
   readonly kind = 'local' as const
 
   async uploadObject(params: UploadObjectParams): Promise<UploadObjectResult> {
-    const normalizedKey = normalizeKey(params.key)
-    const filePath = resolveUploadPath(normalizedKey)
+    const { normalizedKey, filePath } = resolveStorageKey(params.key)
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, params.body)
     return { key: normalizedKey }
   }
 
   async uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult> {
-    const normalizedKey = normalizeKey(params.key)
-    const filePath = resolveUploadPath(normalizedKey)
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    const { normalizedKey, filePath } = resolveStorageKey(params.key)
+    const destinationDirectory = path.dirname(filePath)
+    await fs.mkdir(destinationDirectory, { recursive: true })
+    const tempPath = path.join(
+      destinationDirectory,
+      `.${path.basename(filePath)}.${randomUUID()}.tmp`,
+    )
 
     let receivedLength = 0
     const lengthValidator = new Transform({
@@ -51,17 +71,23 @@ export class LocalStorageProvider implements StorageProvider {
           : new Error('STORAGE_STREAM_LENGTH_MISMATCH'))
       },
     })
-    await pipeline(
-      Readable.fromWeb(params.body as unknown as import('node:stream/web').ReadableStream),
-      lengthValidator,
-      createWriteStream(filePath),
-    )
-    return { key: normalizedKey }
+    try {
+      await pipeline(
+        Readable.fromWeb(params.body as unknown as import('node:stream/web').ReadableStream),
+        lengthValidator,
+        createWriteStream(tempPath, { flags: 'wx' }),
+      )
+      await fs.rename(tempPath, filePath)
+      return { key: normalizedKey }
+    } catch (error) {
+      await fs.unlink(tempPath).catch(() => undefined)
+      throw error
+    }
   }
 
   async deleteObject(key: string): Promise<void> {
     try {
-      await fs.unlink(resolveUploadPath(key))
+      await fs.unlink(resolveStorageKey(key).filePath)
     } catch (error: unknown) {
       const code = (error as { code?: string })?.code
       if (code !== 'ENOENT') {
@@ -89,11 +115,11 @@ export class LocalStorageProvider implements StorageProvider {
 
   async getSignedObjectUrl(params: SignedUrlParams): Promise<string> {
     void params.expiresInSeconds
-    return `/api/files/${encodeURIComponent(normalizeKey(params.key))}`
+    return `/api/files/${encodeURIComponent(resolveStorageKey(params.key).normalizedKey)}`
   }
 
   async getObjectBuffer(key: string): Promise<Buffer> {
-    return await fs.readFile(resolveUploadPath(key))
+    return await fs.readFile(resolveStorageKey(key).filePath)
   }
 
   extractStorageKey(input: string | null | undefined): string | null {

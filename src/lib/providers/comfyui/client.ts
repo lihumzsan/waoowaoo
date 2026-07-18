@@ -510,11 +510,13 @@ function toBlobPart(buffer: Buffer): ArrayBuffer {
 }
 
 function buildUploadFilename(originalFilename: string, mimeType: string, index: number): string {
-  const sanitizedBase = basename(originalFilename, extname(originalFilename))
+  const originalExtension = extname(originalFilename)
+  const sanitizedBase = basename(originalFilename, originalExtension)
     .replace(/[^a-z0-9._-]+/gi, '-')
     .replace(/^-+|-+$/g, '')
-  const extension = extname(originalFilename)
-    || (() => {
+  const extension = /^\.[a-z0-9]{1,10}$/i.test(originalExtension)
+    ? originalExtension
+    : (() => {
       const guessed = mimeType.split('/')[1] || 'bin'
       return `.${guessed.replace(/[^a-z0-9]+/gi, '') || 'bin'}`
     })()

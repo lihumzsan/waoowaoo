@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import type {
   DeleteObjectsResult,
   SignedUrlParams,
@@ -88,10 +89,13 @@ export class MinioStorageProvider implements StorageProvider {
   async uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult> {
     const sdk = await this.loadSdk()
     const client = await this.getClient()
+    const body = Readable.fromWeb(
+      params.body as unknown as import('node:stream/web').ReadableStream,
+    )
     await client.send(new sdk.PutObjectCommand({
       Bucket: this.bucket,
       Key: params.key,
-      Body: params.body,
+      Body: body,
       ContentLength: params.contentLength,
       ContentType: params.contentType,
     }))

@@ -111,26 +111,34 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
   const response = await fetch(output.videoUrl, {
     signal: AbortSignal.timeout(120_000),
   })
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '')
-    throw new Error(`COMFYUI_VIEW_FAILED: ${response.status} ${detail.slice(0, 200)}`)
-  }
-  if (!response.body) {
-    throw new Error('COMFYUI_VIEW_BODY_MISSING')
-  }
+  const responseBody = response.body
+  let mimeType: string
+  let videoKey: string
+  try {
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`COMFYUI_VIEW_FAILED: ${response.status} ${detail.slice(0, 200)}`)
+    }
+    if (!responseBody) {
+      throw new Error('COMFYUI_VIEW_BODY_MISSING')
+    }
 
-  const contentLength = resolveOutputContentLength(response, output.contentLength)
-  const responseMimeType = response.headers.get('content-type')?.split(';')[0]?.trim()
-  const mimeType = responseMimeType && responseMimeType !== 'application/octet-stream'
-    ? responseMimeType
-    : output.mimeType || 'video/mp4'
-  const outputKey = buildVideoToolOutputKey(job.data.userId)
-  const videoKey = await uploadObjectStream(
-    response.body,
-    outputKey,
-    contentLength,
-    mimeType,
-  )
+    const contentLength = resolveOutputContentLength(response, output.contentLength)
+    const responseMimeType = response.headers.get('content-type')?.split(';')[0]?.trim()
+    mimeType = responseMimeType && responseMimeType !== 'application/octet-stream'
+      ? responseMimeType
+      : output.mimeType || 'video/mp4'
+    const outputKey = buildVideoToolOutputKey(job.data.userId)
+    videoKey = await uploadObjectStream(
+      responseBody,
+      outputKey,
+      contentLength,
+      mimeType,
+    )
+  } catch (error) {
+    await responseBody?.cancel().catch(() => undefined)
+    throw error
+  }
 
   return {
     videoKey,

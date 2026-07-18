@@ -23,6 +23,7 @@ const getSignedObjectUrlMock = vi.mocked(getSignedObjectUrl)
 const getSignedUrlMock = vi.mocked(getSignedUrl)
 const uploadObjectStreamMock = vi.mocked(uploadObjectStream)
 const persistedBytes: number[][] = []
+let responseBodyCancelCount = 0
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
@@ -39,7 +40,41 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   } as Job<TaskJobData>
 }
 
+const validPayload = {
+  input1Key: 'video-tools/user-1/inputs/one.mp4',
+  input1Name: 'one.mp4',
+  input2Key: 'video-tools/user-1/inputs/two.mp4',
+  input2Name: 'two.mp4',
+}
+
 describe('video seam concat worker handler', () => {
+  function stubOutputResponse(
+    headers: Record<string, string>,
+    closeBody = true,
+    status = 200,
+    cancelError?: Error,
+  ): void {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([9, 8, 7]))
+        if (closeBody) controller.close()
+      },
+    })
+    const originalCancel = body.cancel.bind(body)
+    Object.defineProperty(body, 'cancel', {
+      configurable: true,
+      value: (reason?: unknown) => {
+        responseBodyCancelCount += 1
+        if (cancelError) return Promise.reject(cancelError)
+        return originalCancel(reason)
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, {
+      status,
+      headers,
+    })))
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     getProviderConfigMock.mockResolvedValue({
@@ -57,10 +92,8 @@ describe('video seam concat worker handler', () => {
       contentLength: 3,
     })
     persistedBytes.length = 0
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([9, 8, 7]), {
-      status: 200,
-      headers: { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
-    })))
+    responseBodyCancelCount = 0
+    stubOutputResponse({ 'Content-Length': '3', 'Content-Type': 'video/mp4' })
     uploadObjectStreamMock.mockImplementation(async (body) => {
       persistedBytes.push(Array.from(new Uint8Array(await new Response(body).arrayBuffer())))
       return 'video-tools/user-1/outputs/result.mp4'
@@ -97,6 +130,7 @@ describe('video seam concat worker handler', () => {
     )
     expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
     expect(persistedBytes).toEqual([[9, 8, 7]])
+    expect(responseBodyCancelCount).toBe(0)
     expect(result).toEqual(expect.objectContaining({
       videoKey: 'video-tools/user-1/outputs/result.mp4',
       videoUrl: '/api/storage/sign?key=result',
@@ -106,6 +140,78 @@ describe('video seam concat worker handler', () => {
       input2Name: 'two.mp4',
       input2TrimStartFrames: 3,
     }))
+  })
+
+  it.each([
+    {
+      name: 'missing content length',
+      headerLength: undefined,
+      outputLength: undefined,
+      error: 'COMFYUI_VIEW_CONTENT_LENGTH_MISSING',
+    },
+    {
+      name: 'invalid content length',
+      headerLength: 'invalid',
+      outputLength: 3,
+      error: 'COMFYUI_VIEW_CONTENT_LENGTH_INVALID',
+    },
+    {
+      name: 'mismatched content length',
+      headerLength: '4',
+      outputLength: 3,
+      error: 'COMFYUI_VIEW_CONTENT_LENGTH_MISMATCH',
+    },
+  ])('cancels the output body on $name before upload', async ({ headerLength, outputLength, error }) => {
+    runWorkflowMock.mockResolvedValue({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
+      mimeType: 'video/mp4',
+      ...(outputLength === undefined ? {} : { contentLength: outputLength }),
+    })
+    stubOutputResponse({
+      ...(headerLength === undefined ? {} : { 'Content-Length': headerLength }),
+      'Content-Type': 'video/mp4',
+    }, false)
+
+    await expect(handleVideoSeamConcatTask(buildJob(validPayload))).rejects.toThrow(error)
+
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+    expect(responseBodyCancelCount).toBe(1)
+  })
+
+  it('cancels the output body when streaming storage rejects before consuming it', async () => {
+    stubOutputResponse({ 'Content-Length': '3', 'Content-Type': 'video/mp4' }, false)
+    uploadObjectStreamMock.mockRejectedValue(new Error('storage upload failed'))
+
+    await expect(handleVideoSeamConcatTask(buildJob(validPayload)))
+      .rejects.toThrow('storage upload failed')
+
+    expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
+    expect(responseBodyCancelCount).toBe(1)
+  })
+
+  it('cancels the output body when ComfyUI returns an error response', async () => {
+    stubOutputResponse({ 'Content-Type': 'text/plain' }, true, 502)
+
+    await expect(handleVideoSeamConcatTask(buildJob(validPayload)))
+      .rejects.toThrow('COMFYUI_VIEW_FAILED: 502')
+
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+    expect(responseBodyCancelCount).toBe(1)
+  })
+
+  it('preserves the upload error when output body cancellation also fails', async () => {
+    stubOutputResponse(
+      { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
+      false,
+      200,
+      new Error('cancel failed'),
+    )
+    uploadObjectStreamMock.mockRejectedValue(new Error('storage upload failed'))
+
+    await expect(handleVideoSeamConcatTask(buildJob(validPayload)))
+      .rejects.toThrow('storage upload failed')
+
+    expect(responseBodyCancelCount).toBe(1)
   })
 
   it('uses the legacy trim defaults when the payload omits both trim values', async () => {
