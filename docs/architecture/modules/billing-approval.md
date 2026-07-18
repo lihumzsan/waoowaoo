@@ -35,6 +35,7 @@
 - **BA-21 — 计划必须在批准前证明 Task 资源作用域结构完整。** quote 与不可变 snapshot 写入都必须从 `TaskDefinition.terminalResourceImpact` 穷尽解析每个 PlannedTask 的必需 project/episode scope；最终 Task 提交还必须在写入前验证 episode 真实属于该 project。禁止让缺失必需 scope 的计划先获得报价或 Grant，也禁止让越权 scope 写入任何 Task。Operation planner、snapshot writer 和 Task submitter 必须复用同一个 resolver，不得各自维护 TaskType 或资源名单。
 - **BA-22 — 已运行 Task 是不可变计划依赖，不是待提交 Task。** planner 发现同 canonical target、同输入签名的 active Task 时，必须把其完整 identity、TaskType、target 与 episode 冻结为 `OperationPlan.taskDependencies`，并从报价与新 Task 列表中排除。snapshot writer 在批准前校验该 Task 仍 active 且属于同一 user/project/episode/type/target；变化则使计划失效并重新报价。批准 commit 不得重新提交或重复收费 dependency；Assistant 只能把它与本 Tool member 的新 Task 原子加入当前 OperationBatch Wait。同签名 completed target 直接跳过，active target 输入签名冲突必须显式失败，禁止覆盖运行中的生成。
 - **BA-23 — 失败重试重新报价，不继承授权。** Agent 可以根据 Task terminal 的失败 refs 显式调用同一或其他收费 Operation，但每次调用都必须重新构造当前 exact plan/quote 并等待新的 Approval。失败 Task、旧 Grant、同一 Run 或用户先前的批准均不构成预算授权；系统不得自动批准或在后台静默重提收费工作。
+- **BA-24 — 外部支付终态必须进入同一账本。** Stripe Checkout 充值以 `payment_intent` 作为 canonical external identity，并把 credits、最小货币单位金额与币种冻结在充值流水；refund 以及 `charge.dispute.funds_withdrawn` 只能由已验签 webhook 通过 ledger 的唯一 adjustment writer 按精确比例扣回。退款失败或 `charge.dispute.funds_reinstated` 只恢复此前同一 Stripe object 的实际 debit；`dispute.created/closed` 不解释资金事实。事件乱序、重复、跨币种、超额或找不到原充值必须 fail closed，禁止按用户最近充值猜测。
 
 ## 权威入口
 
@@ -47,6 +48,7 @@
 - Project UI 的唯一收费执行 route：`src/app/api/projects/[projectId]/operations/[operationId]/execute/route.ts`；route 只鉴权并把 immutable Grant provenance 交给统一 invocation，不解释媒体类型或 episode。
 - Canvas 收费 action 解析与唯一按钮：`src/features/project-workspace/canvas/hooks/useWorkspaceCanvasBillableAction.ts`、`src/features/project-workspace/canvas/nodes/CanvasActionButton.tsx`；同一个 query result 同时提供可见 quote 与点击授权的 snapshot。
 - ApprovalGrant 与充值/支付 route：`src/app/api/operation-approval-grants/**`、`src/app/api/payments/**` 只负责鉴权、参数和调用既有 grant/payment service，不得建立第二审批或账本 writer。
+- Stripe 充值/退款/争议生命周期：`src/lib/payments/stripe-webhook.ts` 只解释已验签外部事实，余额变更全部调用 `src/lib/billing/ledger.ts` 的 recharge/adjustment transaction writer。
 - 批准计划的唯一 Task 创建入口：`src/lib/task/approved-plan-submitter.ts`；它只消费已经由当前 invocation 绑定的 execution context，不拥有 Grant 消费权。
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
 - 批准 Task 的 durable enqueue：`src/lib/outbox/types.ts` 的 `task.enqueue` → `src/lib/task/enqueue.ts`。
@@ -65,6 +67,7 @@
 - `tests/unit/operations/planning.test.ts` 与视频 Segment 生产 planner 共同反证缺失 scope、随机 identity 或未冻结参考图的收费计划；`ProjectVideoSegment` 只使用 `(editScriptId, segmentId)` 作为预留 identity。
 - `tests/unit/operations/planning.test.ts` 验证计划边界拒绝缺少 registry 所需资源 scope 的 Task；`tests/integration/task/create-task-dedupe.integration.test.ts` 使用真实数据库验证 Task 提交边界拒绝缺失或跨 project 的 episode。
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
+- `stripe-recharge.integration.test.ts` 额外验证部分退款、重复事件、退款失败恢复、争议创建/关闭不改余额、资金扣回/恢复事件和未知 payment intent 拒绝。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
 - `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
 - `npm run check:pricing-catalog` 只验证 standards pricing 的结构及其 capability tier 字段；它不证明运行时代码 catalog 与 standards 值相同。
@@ -93,6 +96,7 @@
 - Operation plan 与 Grant 曾统一写入 15 分钟 `expiresAt`。真实创作流程中用户在报价卡停留超过 15 分钟后，Assistant control 先消费 interruption，再由 `issueApprovalGrant` 抛出 `OPERATION_PLAN_EXPIRED`，导致一张仍可点击的卡片变成原始 Runtime Error；旧 Critical 场景只证明“过期 Grant 无副作用”和“已消费 Grant 可重放”，没有覆盖真实 Assistant 控制顺序，也把 timer 固化成正确性来源。当前协议删除两个 `expiresAt` 与所有时间判断；所有收费 Operation 由同一 registry planner 和三个 Hash 进行内容重验证，变化时撤销旧 Grant，未变化时无论停留多久都可执行。
 - Operation plan 曾只校验 payload、quote 与 episode 一致性，没有从 Task registry 验证每个 Task 的终态资源作用域；因此测试 fixture 和潜在 planner 可以生成引用不存在或跨 project episode 的不可执行计划，直到 Grant 消费后的 Task 提交才失败。旧审批原子性场景证明了“同一计划全有或全无”，却没有反证“计划本身能通过权威 Task 边界”。当前 quote、snapshot 与 Task submitter 复用 `TaskDefinition.terminalResourceImpact` 的同一作用域 resolver，缺失或越权在批准前 fail closed。
 - Segment 新链曾让 Canvas 单卡与 Assistant 批量共用无目标 episode 输入，导致单卡预取的是整集报价、同一次批准也提交整集 Task。旧测试只断言两者调用相同 Operation，没有断言同一 Operation 的 scope 与计划 Task 集合。当前共享 scope contract 让 Canvas 明确单段、Assistant 明确 pending 批量，quote、snapshot、Grant 与 commit 始终消费同一精确计划；批量 planner 在报价前排除同签名 active/completed Segment。
+- Stripe webhook 最初只处理 Checkout 成功，退款、退款失败和争议不会改变已发额度；签名校验与充值幂等测试只能证明“不会重复加”，无法反证“外部资金逆转后额度仍可消费”。当前充值流水冻结 payment intent 和换算事实，refund 与 Stripe 明确的 `funds_withdrawn/funds_reinstated` 争议资金事件只追加 signed adjustment；`dispute.created/closed`（包括 inquiry）不再被猜成资金移动，退款失败或资金恢复按原 debit 精确恢复。旧充值若没有 payment intent/billingMeta 不会按最近订单猜测而会显式失败并要求人工对账，这是上线前需确认的历史数据盲区。
 
 ## 修改检查表
 

@@ -580,6 +580,8 @@ type AddBalanceOptions = {
   operatorId?: string
   externalOrderId?: string
   idempotencyKey?: string
+  relatedId?: string
+  billingMeta?: Record<string, unknown>
   type?: 'recharge' | 'adjust'
 }
 
@@ -592,6 +594,8 @@ function resolveAddBalanceOptions(reasonOrOptions?: string | AddBalanceOptions):
     operatorId: reasonOrOptions?.operatorId,
     externalOrderId: reasonOrOptions?.externalOrderId,
     idempotencyKey: reasonOrOptions?.idempotencyKey,
+    relatedId: reasonOrOptions?.relatedId,
+    billingMeta: reasonOrOptions?.billingMeta,
     type: reasonOrOptions?.type || 'recharge',
   }
 }
@@ -607,7 +611,7 @@ export async function addBalanceWithTransaction(
   }
   const options = resolveAddBalanceOptions(reasonOrOptions)
   const transactionType = options.type || 'recharge'
-  const relatedId = options.externalOrderId || null
+  const relatedId = options.relatedId || options.externalOrderId || null
 
   if (options.idempotencyKey) {
     const existing = await tx.balanceTransaction.findFirst({
@@ -646,8 +650,78 @@ export async function addBalanceWithTransaction(
       operatorId: options.operatorId || null,
       externalOrderId: options.externalOrderId || null,
       idempotencyKey: options.idempotencyKey || null,
+      billingMeta: options.billingMeta ? JSON.stringify(options.billingMeta) : null,
     },
   })
+}
+
+export type ApplyBalanceAdjustmentOptions = {
+  reason: string
+  externalOrderId: string
+  idempotencyKey: string
+  relatedId: string
+  billingMeta?: Record<string, unknown>
+}
+
+export async function applyBalanceAdjustmentWithTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  signedAmount: number,
+  options: ApplyBalanceAdjustmentOptions,
+): Promise<'applied' | 'already_applied'> {
+  const normalizedAmount = normalizeMoney(signedAmount)
+  if (!Number.isFinite(normalizedAmount) || Math.abs(normalizedAmount) <= MONEY_EPSILON) {
+    throw new BillingOperationError('BILLING_INVALID_ADJUSTMENT_AMOUNT', 'adjustment amount must be a non-zero number', {
+      signedAmount,
+    })
+  }
+
+  const existing = await tx.balanceTransaction.findFirst({
+    where: {
+      userId,
+      type: 'adjust',
+      idempotencyKey: options.idempotencyKey,
+    },
+    select: { id: true, amount: true, relatedId: true },
+  })
+  if (existing) {
+    const existingAmount = normalizeMoney(toMoneyNumber(existing.amount))
+    if (
+      Math.abs(existingAmount - normalizedAmount) > MONEY_EPSILON
+      || existing.relatedId !== options.relatedId
+    ) {
+      throw new BillingOperationError('BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT', 'adjustment idempotency identity has conflicting facts', {
+        idempotencyKey: options.idempotencyKey,
+        existingAmount,
+        requestedAmount: normalizedAmount,
+        existingRelatedId: existing.relatedId,
+        requestedRelatedId: options.relatedId,
+      })
+    }
+    return 'already_applied'
+  }
+
+  const updatedBalance = await tx.userBalance.upsert({
+    where: { userId },
+    create: { userId, balance: normalizedAmount, frozenAmount: 0, totalSpent: 0 },
+    update: { balance: { increment: normalizedAmount } },
+  })
+
+  await tx.balanceTransaction.create({
+    data: {
+      userId,
+      type: 'adjust',
+      amount: normalizedAmount,
+      balanceAfter: toMoneyNumber(updatedBalance.balance),
+      description: options.reason,
+      relatedId: options.relatedId,
+      freezeId: null,
+      externalOrderId: options.externalOrderId,
+      idempotencyKey: options.idempotencyKey,
+      billingMeta: options.billingMeta ? JSON.stringify(options.billingMeta) : null,
+    },
+  })
+  return 'applied'
 }
 
 export async function addBalance(userId: string, amount: number, reasonOrOptions?: string | AddBalanceOptions): Promise<boolean> {
