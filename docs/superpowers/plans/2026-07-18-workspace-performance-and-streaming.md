@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the video stage responsive for large episodes and keep large video uploads/ComfyUI transfers out of the Node.js heap.
+**Goal:** Make the video stage responsive for large episodes and keep large video uploads/ComfyUI transfers, including ordinary generated panel videos, out of the Node.js heap.
 
 **Architecture:** Limit the mounted video-card working set with client-side pagination while retaining the complete panel array for linking and batch operations. Scope automatic first/last-frame prompt work to the visible page, cap its concurrency, stop mutation-wide cache invalidation, and make recovery probes distinguish an empty successful lookup from a transport failure. Replace the video-tools multipart/Buffer path with a raw request stream, add streaming storage writes, stream inputs to ComfyUI, and persist ComfyUI outputs from their response stream.
 
@@ -59,7 +59,7 @@ Out of scope:
 - Plan Status: complete
 - Evidence Profile: standard
 - Story ID: none (ZenTao was not requested)
-- Task IDs: none; Superpowers Tasks 1-5 are tracked in this file
+- Task IDs: none; Superpowers Tasks 1-6 are tracked in this file
 - ZenTao Sync Status: not-synced
 - ZenTao Readback Evidence / Time: none
 - Last Updated: 2026-07-18
@@ -316,6 +316,44 @@ Expected: pagination remains reachable and aligned, cards do not overflow, globa
 
 Record exact commands/results, screenshot paths, runtime measurements, deviations, risks, and process ownership below. Do not mark complete when any required evidence is missing.
 
+### Task 6: Stream Ordinary ComfyUI Panel Video Outputs
+
+**Files:**
+- Modify: `src/lib/providers/comfyui/client.ts`
+- Modify: `src/lib/generators/base.ts`
+- Modify: `src/lib/generators/comfyui-video.ts`
+- Modify: `src/lib/media-process.ts`
+- Modify: `src/lib/workers/utils.ts`
+- Modify: `src/lib/workers/video.worker.ts`
+- Test: `tests/unit/providers/comfyui-client.test.ts`
+- Test: `tests/unit/generators/comfyui-video.test.ts`
+- Test: `tests/unit/media-process-stream.test.ts`
+- Test: `tests/unit/worker/video-generation-resume.test.ts`
+- Test: `tests/unit/worker/video-worker.test.ts`
+
+**Interfaces:**
+- Produces: ordinary ComfyUI video workflows return a `/view` URL plus stream metadata instead of a base64 video.
+- Produces: `processRemoteMediaStream()` validates the response length and streams the response body into storage.
+- Preserves: non-ComfyUI providers, image/audio workflows, task result shape, panel persistence, retries, and the existing seam-concat streaming path.
+
+- [x] **Step 1: Add failing contracts for URL results and stream persistence**
+
+Assert that the ComfyUI client and generator return a video URL without `videoBase64`, the media persistence path passes a `ReadableStream` to `uploadObjectStream`, and the video worker forwards stream metadata only for the generated ComfyUI result.
+
+- [x] **Step 2: Run the focused tests and confirm the buffered implementation fails**
+
+Run: `npx vitest run tests/unit/providers/comfyui-client.test.ts tests/unit/generators/comfyui-video.test.ts tests/unit/media-process-stream.test.ts tests/unit/worker/video-worker.test.ts`
+
+Expected: the current base64 result and four-argument worker upload contract fail the new stream assertions.
+
+- [x] **Step 3: Implement the ordinary ComfyUI output stream contract**
+
+Return the existing ComfyUI `/view` reference from `runComfyUiVideoWorkflow()`, carry MIME/optional length metadata through `GenerateResult` and `resolveVideoSourceFromGeneration()`, then fetch and stream that URL directly to storage. Reject missing, invalid, or mismatched lengths and non-video MIME, apply a ten-minute transfer timeout, and cancel the response body on persistence failure.
+
+- [x] **Step 4: Run focused and repository verification**
+
+Run the four focused test files, `npm run typecheck`, `npm run lint:all`, and `npm run build`. Record exact results and any environment-only limitation in the Delivery Record.
+
 ## Delivery Record
 
 ### Delivered changes
@@ -325,6 +363,7 @@ Record exact commands/results, screenshot paths, runtime measurements, deviation
 - Automatic first/last-frame prompt creation is persistent across React rerenders, deduplicates queued/active keys, is scoped to the visible page, and never exceeds two active requests. A generation completion no longer invalidates the whole project/episode/video query set.
 - The 188-panel video stage mounts 24 cards per page while preserving global panel indexes, cross-page first/last linking, batch operations, and page-aware voice-line location. Stable media images use Next derivatives and offscreen placeholders do not animate.
 - Browser video-tools upload, local/MinIO storage, ComfyUI multipart input, and seam-concat output persistence use streaming paths with length validation, path containment, atomic local writes, and cleanup/cancellation on failure.
+- Ordinary ComfyUI panel generation now returns a `/view` URL plus stream metadata instead of a base64 data URL. The video worker streams that response directly into storage, rejects missing/invalid/mismatched lengths and non-video MIME, cancels failed streams, and enforces a ten-minute transfer timeout.
 - Browser QA exposed an additional narrow-viewport overflow. Commit `28efdf83` makes the global navbar, capsule stage navigation, language action, and video toolbar responsive without changing the desktop workflow.
 - The stale Goon duration test was aligned with the already-intentional 4-15 second production contract in commit `5eea866e`; production model behavior was not changed.
 - Final review found two lifecycle edges: stale queued prompts after a visible-page change and recovery backoff that remained elevated after success. Commit `586f7c6e` fixes both, adds regression coverage, and passed re-review without blocking findings.
@@ -333,8 +372,9 @@ Record exact commands/results, screenshot paths, runtime measurements, deviation
 
 | Command | Result |
 | --- | --- |
-| `npm run test:unit:all` | 300 files and 1,314 tests passed. |
-| `npm run lint` | Exit 0; 0 errors and 12 pre-existing unused-variable warnings. |
+| `npm run test:unit:all -- --reporter=dot` | 302 files and 1,326 tests passed on the final diff. |
+| `npx vitest run tests/unit/media-process-stream.test.ts tests/unit/providers/comfyui-client.test.ts tests/unit/generators/comfyui-video.test.ts tests/unit/worker/video-generation-resume.test.ts tests/unit/worker/video-worker.test.ts --reporter=dot` | 5 files and 79 ordinary-ComfyUI stream tests passed. |
+| `npm run lint:all` | Exit 0. |
 | `npm run typecheck` | Exit 0. |
 | `npm run build` | Exit 0; Next.js production build completed and generated 72 static pages. |
 | `BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/api/contract/video-tools-routes.test.ts --reporter=dot` | 1 file and 10 upload/length/stream contract tests passed against `waoowaoo_test` on `192.168.0.112:13306`. |
@@ -361,6 +401,7 @@ Large episode: project `蛊真人后传`, episode `第002章 炼道尊者的价�
 - Page 2 mounted exactly shots 25-48. Clicking the 31st `定位视频` action from page 1 switched to page 4 and revealed shots 73-96, proving the voice-line path reveals the target page before scrolling.
 - Desktop `1440x900` and mobile `390x844` both had zero document overflow. Mobile navbar/stage controls and the video action toolbar remained reachable without overlapping.
 - After a clean service restart and one route compilation, Next's physical footprint was 1.7 GiB (2.2 GiB peak). This remains the main unavoidable dev-mode compiler cost, but it no longer combines with a 188-card browser tree or eager startup warmup.
+- After the ordinary-ComfyUI streaming change, a fresh dev smoke reached the video-stage route in 353ms and mounted the 24-card page in 433ms. It rendered 2,171 elements, 25 images including the site logo, and 217 buttons with no horizontal overflow or browser console errors. Settled RSS was about 1.20 GiB for `next-server` and 86 MiB for the worker process.
 
 Screenshots:
 
@@ -372,16 +413,18 @@ Screenshots:
 ### Remaining risk and process ownership
 
 - The streaming code is covered by real HTTP/AWS middleware and route contracts, and the configured MinIO endpoint was reached, but this verification intentionally did not submit a new expensive live ComfyUI generation job. A future manual large-file smoke can validate the exact external ComfyUI workflow without changing the implementation contract.
+- The video system test cannot be used reliably against the shared `192.168.0.112` Redis while another application worker is active there: the remote worker consumed the test job from the un-namespaced production queue and marked the BullMQ job complete, while the local `waoowaoo_test` task remained queued. Focused worker, chain, storage, type, lint, build, and browser evidence passed; queue isolation is a separate test-infrastructure follow-up.
 - Final service ownership: this session started `npm run dev`; it is intentionally left running at `http://localhost:3000/zh` after verification. Default startup does not include warmup.
 
 ### Actual Implementation
 
-- Tasks 1-5 are complete on the local `main` branch. The final reviewer marked the delivery ready to merge after the prompt-queue and recovery-backoff follow-up; its two optional queue-lifecycle test edges were added in `fb968350`.
+- Tasks 1-6 are complete on the local `main` branch. The ordinary ComfyUI streaming follow-up passed focused review after adding transfer timeout and strict video MIME validation.
 
 ### Plan Deviations
 
 - Browser QA added a scoped responsive-navigation fix because the existing mobile toolbar and top navigation overflowed at `390x844`.
 - The single video-tools integration contract was run directly through Vitest because the npm integration wrapper does not reliably accept a single-file filter.
+- The ordinary video system test was observed rather than treated as product evidence because the shared remote Redis queue has no test namespace and an existing remote worker consumed the test job.
 
 ### Impact
 
@@ -393,7 +436,7 @@ Screenshots:
 
 ### Remaining Risks
 
-- Dev-mode Next compilation remains the largest local memory consumer. A fresh external ComfyUI generation was intentionally not submitted; the complete upload/download streaming chain is instead covered by route, storage, client, and worker contracts against the configured remote test infrastructure.
+- Dev-mode Next compilation remains the largest local memory consumer. A fresh external ComfyUI generation was intentionally not submitted; the complete upload/download streaming chain is instead covered by route, storage, client, and worker contracts against the configured remote test infrastructure. Mid-transfer user cancellation and a configurable maximum output size remain follow-up hardening opportunities, but the original full-file heap amplification is removed.
 
 ### Follow-ups
 

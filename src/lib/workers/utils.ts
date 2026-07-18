@@ -7,7 +7,11 @@ import { generateLipSync } from '@/lib/lipsync'
 import { pollAsyncTask } from '@/lib/async-poll'
 import { getSignedUrl, toFetchableUrl } from '@/lib/storage'
 import { initializeFonts, createLabelSVG } from '@/lib/fonts'
-import { processMediaResult, processMediaResultWithMetadata } from '@/lib/media-process'
+import {
+  processMediaResult,
+  processMediaResultWithMetadata,
+  processRemoteMediaStream,
+} from '@/lib/media-process'
 import { renderStaticCameraMotionVideo } from '@/lib/video/static-camera-motion'
 import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import {
@@ -463,7 +467,12 @@ export async function resolveVideoSourceFromGeneration(
     allowCustomDuration?: boolean
     pollProgress?: { start?: number; end?: number }
   },
-): Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }> {
+): Promise<{
+  url: string
+  actualVideoTokens?: number
+  downloadHeaders?: Record<string, string>
+  stream?: { mimeType: string; contentLength?: number }
+}> {
   const logger = scopedWorkerUtilLogger(job, 'worker.video.generate_source')
   const startedAt = Date.now()
   const allowTaskExternalIdResume = shouldResumeTaskExternalPolling(params.modelId)
@@ -580,7 +589,10 @@ export async function resolveVideoSourceFromGeneration(
       message: 'video source generation completed',
       durationMs: Date.now() - startedAt,
     })
-    return { url: result.videoUrl }
+    return {
+      url: result.videoUrl,
+      ...(result.videoStream ? { stream: result.videoStream } : {}),
+    }
   }
 
   const externalId = normalizeExternalId(result, 'VIDEO')
@@ -761,7 +773,19 @@ export async function uploadVideoSourceToCos(
   keyPrefix: string,
   targetId: string,
   downloadHeaders?: Record<string, string>,
+  stream?: { mimeType: string; contentLength?: number },
 ) {
+  if (typeof source === 'string' && stream) {
+    return await processRemoteMediaStream({
+      source,
+      type: 'video',
+      keyPrefix,
+      targetId,
+      downloadHeaders,
+      mimeType: stream.mimeType,
+      contentLength: stream.contentLength,
+    })
+  }
   return await processMediaResult({
     source,
     type: 'video',

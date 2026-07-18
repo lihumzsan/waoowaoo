@@ -173,6 +173,56 @@ describe('comfyui client media refs', () => {
     expect(fetchMock).toHaveBeenCalled()
   })
 
+  it('rejects an HTTP 200 ComfyUI view response whose MIME does not match the expected media', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-invalid-mime' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/history/prompt-invalid-mime')) {
+        return new Response(JSON.stringify({
+          'prompt-invalid-mime': {
+            outputs: {
+              '40': {
+                video_url: '/view?filename=invalid-mime.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/view?filename=invalid-mime.mp4')) {
+        return new Response('<html>proxy error</html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        })
+      }
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflow: { '1': { class_type: 'Dummy', inputs: {} } },
+      expect: 'video',
+      returnViewUrl: true,
+    })
+    const rejection = expect(resultPromise).rejects.toThrow('COMFYUI_VIEW_MIME_INVALID')
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    await rejection
+  })
+
   it('does not abandon a prompt that is still pending in the ComfyUI queue after queue timeout', async () => {
     vi.useFakeTimers()
     process.env.COMFYUI_VIDEO_QUEUE_TIMEOUT_MS = '2000'
@@ -586,7 +636,10 @@ describe('comfyui client media refs', () => {
       'https://assets.test/last.png',
     ])
     expect(uploadCount).toBe(3)
-    expect(result.mimeType).toBe('video/mp4')
+    expect(result).toEqual({
+      videoUrl: 'http://127.0.0.1:8878/view?filename=video-reference-order.mp4&subfolder=&type=output',
+      mimeType: 'video/mp4',
+    })
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['1']?.inputs.image).toBe('uploaded-first.png')
   })
 

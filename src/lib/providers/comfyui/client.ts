@@ -1038,7 +1038,17 @@ export async function runComfyUiWorkflow(
     throw new Error(`COMFYUI_VIEW_FAILED: ${viewResponse.status} ${detail.slice(0, 200)}`)
   }
 
-  const headerMime = viewResponse.headers.get('content-type')?.split(';')[0].trim()
+  const headerMime = viewResponse.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
+  const headerMimeMatchesExpectedMedia = headerMime?.startsWith(`${params.expect}/`)
+    || (params.expect === 'audio' && headerMime === 'application/ogg')
+  if (
+    headerMime
+    && headerMime !== 'application/octet-stream'
+    && !headerMimeMatchesExpectedMedia
+  ) {
+    await viewResponse.body?.cancel().catch(() => undefined)
+    throw new Error(`COMFYUI_VIEW_MIME_INVALID: expected ${params.expect}, received ${headerMime}`)
+  }
   const mimeType = headerMime && headerMime !== 'application/octet-stream'
     ? headerMime
     : guessMimeFromFilename(mediaRef.filename)
@@ -1121,7 +1131,7 @@ export async function runComfyUiVideoWorkflow(params: {
   fps?: number
   motionStrength?: number
   llmApi?: ComfyUiWorkflowLlmApiInject
-}): Promise<{ videoBase64: string; mimeType: string }> {
+}): Promise<{ videoUrl: string; mimeType: string; contentLength?: number }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const workflowKey = params.workflowKey?.trim() || COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID
   const imageFilenames = await uploadComfyUiImages(
@@ -1176,12 +1186,17 @@ export async function runComfyUiVideoWorkflow(params: {
     targetFrameCount,
   })
 
-  const { dataBase64, mimeType } = await runComfyUiWorkflow({
+  const output = await runComfyUiWorkflow({
     baseUrl: base,
     workflow,
     expect: 'video',
+    returnViewUrl: true,
   })
-  return { videoBase64: dataBase64, mimeType }
+  return {
+    videoUrl: output.viewUrl,
+    mimeType: output.mimeType,
+    ...(output.contentLength === undefined ? {} : { contentLength: output.contentLength }),
+  }
 }
 
 export const COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID = 'basevideo/tools/video-seam-concat-nvenc'

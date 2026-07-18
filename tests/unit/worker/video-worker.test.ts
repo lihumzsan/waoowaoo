@@ -54,16 +54,27 @@ const utilsMock = vi.hoisted(() => ({
   getProjectModels: vi.fn(async () => ({ videoRatio: '16:9' })),
   resolveLipSyncVideoSource: vi.fn(async () => 'https://provider.example/lipsync.mp4'),
   resolveVideoSourceFromGeneration:
-    vi.fn<(...args: unknown[]) => Promise<{ url: string; actualVideoTokens?: number; downloadHeaders?: Record<string, string> }>>(
+    vi.fn<(...args: unknown[]) => Promise<{
+      url: string
+      actualVideoTokens?: number
+      downloadHeaders?: Record<string, string>
+      stream?: { mimeType: string; contentLength?: number }
+    }>>(
       async () => ({ url: 'https://provider.example/video.mp4' }),
-  ),
+    ),
   renderStaticCameraMotionVideo:
     vi.fn<(...args: unknown[]) => Promise<Buffer>>(async () => Buffer.from('static-camera-video')),
   toSignedUrlIfCos: vi.fn((url: string | null) => (url ? `https://signed.example/${url}` : null)),
   uploadImageSourceToCos: vi.fn<(...args: [unknown, string, string]) => Promise<string>>(
     async (_source: unknown, _prefix: string, targetId: string) => `images/${targetId}.jpg`,
   ),
-  uploadVideoSourceToCos: vi.fn<(...args: [unknown, string, string, Record<string, string>?]) => Promise<string>>(
+  uploadVideoSourceToCos: vi.fn<(...args: [
+    unknown,
+    string,
+    string,
+    Record<string, string>?,
+    { mimeType: string; contentLength?: number }?,
+  ]) => Promise<string>>(
     async () => 'cos/lip-sync/video.mp4',
   ),
 }))
@@ -305,6 +316,39 @@ describe('worker video processor behavior', () => {
       'panel-1',
       {
         Authorization: 'Bearer oa-key',
+      },
+    )
+  })
+
+  it('VIDEO_PANEL: forwards ComfyUI stream metadata into COS upload', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    utilsMock.resolveVideoSourceFromGeneration.mockResolvedValueOnce({
+      url: 'https://comfy.example/view?filename=generated.mp4&type=output',
+      stream: {
+        mimeType: 'video/mp4',
+        contentLength: 321,
+      },
+    })
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.uploadVideoSourceToCos).toHaveBeenCalledWith(
+      'https://comfy.example/view?filename=generated.mp4&type=output',
+      'panel-video',
+      'panel-1',
+      undefined,
+      {
+        mimeType: 'video/mp4',
+        contentLength: 321,
       },
     )
   })

@@ -222,7 +222,7 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
             analysisModel: typeof options.analysisModel === 'string' ? options.analysisModel : null,
           })
         : undefined
-      const { videoBase64, mimeType } = await runComfyUiVideoWorkflow({
+      const { videoUrl, mimeType, contentLength } = await runComfyUiVideoWorkflow({
         baseUrl,
         workflowKey: selectedWorkflowKey,
         prompt: prompt || '',
@@ -240,7 +240,11 @@ export class ComfyUIVideoGenerator extends BaseVideoGenerator {
 
       return {
         success: true,
-        videoUrl: `data:${mimeType};base64,${videoBase64}`,
+        videoUrl,
+        videoStream: {
+          mimeType,
+          ...(contentLength === undefined ? {} : { contentLength }),
+        },
       }
     } catch (error) {
       return {

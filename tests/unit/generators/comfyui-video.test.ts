@@ -83,9 +83,33 @@ describe('ComfyUI video generator', () => {
     })
     isComfyUiWorkflowLlmApiRequiredMock.mockReturnValue(false)
     runComfyUiVideoWorkflowMock.mockResolvedValue({
-      videoBase64: 'video-base64',
+      videoUrl: 'https://comfy.example/view?filename=generated.mp4&type=output',
       mimeType: 'video/mp4',
+      contentLength: 123,
     })
+  })
+
+  it('returns the ComfyUI output as a streamable URL instead of a base64 data URL', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'animate the frame',
+      options: {
+        modelId: BERNINI_WORKFLOW_ID,
+      },
+    })
+
+    expect(result).toEqual({
+      success: true,
+      videoUrl: 'https://comfy.example/view?filename=generated.mp4&type=output',
+      videoStream: {
+        mimeType: 'video/mp4',
+        contentLength: 123,
+      },
+    })
+    expect(result.videoUrl).not.toContain('base64,')
   })
 
   it('canonicalizes the old smooth first-last-frame key to Goon', async () => {

@@ -1,4 +1,4 @@
-import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { generateUniqueKey, toFetchableUrl, uploadObject, uploadObjectStream } from '@/lib/storage'
 import sharp from 'sharp'
 
 export interface ProcessMediaOptions {
@@ -6,6 +6,16 @@ export interface ProcessMediaOptions {
   type: 'image' | 'video' | 'audio'
   keyPrefix: string
   targetId: string
+  downloadHeaders?: Record<string, string>
+}
+
+export interface ProcessRemoteMediaStreamOptions {
+  source: string
+  type: 'video'
+  keyPrefix: string
+  targetId: string
+  contentLength?: number
+  mimeType?: string
   downloadHeaders?: Record<string, string>
 }
 
@@ -129,6 +139,77 @@ export function resolveMediaExt(
   if (type === 'image') return detectImageExtFromBuffer(buffer) || normalizeImageExtFromMime(mimeHint) || 'jpg'
   if (type === 'video') return detectVideoExtFromBuffer(buffer) || normalizeVideoExtFromMime(mimeHint) || 'mp4'
   return detectAudioExtFromBuffer(buffer) || normalizeAudioExtFromMime(mimeHint) || 'mp3'
+}
+
+function readStreamContentLength(rawValue: string | null): number | undefined {
+  if (rawValue === null) return undefined
+  const value = rawValue.trim()
+  if (!/^\d+$/.test(value)) {
+    throw new Error('REMOTE_MEDIA_STREAM_CONTENT_LENGTH_INVALID')
+  }
+  const contentLength = Number(value)
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    throw new Error('REMOTE_MEDIA_STREAM_CONTENT_LENGTH_INVALID')
+  }
+  return contentLength
+}
+
+function resolveRemoteVideoMimeType(response: Response, mimeHint?: string): string {
+  const responseMime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+  if (responseMime && responseMime !== 'application/octet-stream') {
+    if (!normalizeVideoExtFromMime(responseMime)) {
+      throw new Error('REMOTE_MEDIA_STREAM_MIME_INVALID')
+    }
+    return responseMime
+  }
+
+  const normalizedHint = mimeHint?.split(';')[0]?.trim().toLowerCase()
+  if (normalizedHint) {
+    if (!normalizeVideoExtFromMime(normalizedHint)) {
+      throw new Error('REMOTE_MEDIA_STREAM_MIME_INVALID')
+    }
+    return normalizedHint
+  }
+  return 'video/mp4'
+}
+
+export async function processRemoteMediaStream(options: ProcessRemoteMediaStreamOptions): Promise<string> {
+  const expectedLength = options.contentLength
+  if (expectedLength !== undefined && (!Number.isSafeInteger(expectedLength) || expectedLength <= 0)) {
+    throw new Error('REMOTE_MEDIA_STREAM_CONTENT_LENGTH_INVALID')
+  }
+
+  const response = await fetch(toFetchableUrl(options.source), {
+    headers: options.downloadHeaders,
+    signal: AbortSignal.timeout(10 * 60 * 1000),
+  })
+  const responseBody = response.body
+  try {
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`REMOTE_MEDIA_STREAM_FETCH_FAILED: ${response.status} ${detail.slice(0, 200)}`)
+    }
+    if (!responseBody) {
+      throw new Error('REMOTE_MEDIA_STREAM_BODY_MISSING')
+    }
+
+    const responseLength = readStreamContentLength(response.headers.get('content-length'))
+    const contentLength = responseLength ?? expectedLength
+    if (contentLength === undefined) {
+      throw new Error('REMOTE_MEDIA_STREAM_CONTENT_LENGTH_MISSING')
+    }
+    if (responseLength !== undefined && expectedLength !== undefined && responseLength !== expectedLength) {
+      throw new Error('REMOTE_MEDIA_STREAM_CONTENT_LENGTH_MISMATCH')
+    }
+
+    const mimeType = resolveRemoteVideoMimeType(response, options.mimeType)
+    const ext = normalizeVideoExtFromMime(mimeType) || 'mp4'
+    const key = generateUniqueKey(`${options.keyPrefix}-${options.targetId}`, ext)
+    return await uploadObjectStream(responseBody, key, contentLength, mimeType)
+  } catch (error) {
+    await responseBody?.cancel().catch(() => undefined)
+    throw error
+  }
 }
 
 async function inspectMediaMetadata(

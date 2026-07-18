@@ -126,6 +126,34 @@ describe('worker utils video generation resume', () => {
     expect(generatorApiMock.generateVideo).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves ComfyUI stream metadata for worker-side persistence', async () => {
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/view?filename=generated.mp4&type=output',
+      videoStream: {
+        mimeType: 'video/mp4',
+        contentLength: 987,
+      },
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      imageUrl: 'data:image/png;base64,QQ==',
+      options: {
+        prompt: 'animate this frame',
+      },
+    })
+
+    expect(result).toEqual({
+      url: 'https://comfy.test/view?filename=generated.mp4&type=output',
+      stream: {
+        mimeType: 'video/mp4',
+        contentLength: 987,
+      },
+    })
+  })
+
   it('preserves ComfyUI first-last routing and the tail image for provider submission', async () => {
     configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValueOnce({
       duration: 10,
