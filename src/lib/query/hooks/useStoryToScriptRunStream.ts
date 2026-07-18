@@ -57,6 +57,9 @@ export function useStoryToScriptRunStream({
       }
       const runs = parseRecoverableRuns(await response.json())
       const decision = selectRecoverableRun(runs)
+      if (runs.length > 0 && !decision.runId) {
+        throw new Error('Invalid active story-to-script runs response')
+      }
       return decision.runId
     },
     validateParams: (params) => {

@@ -56,6 +56,9 @@ export function useScriptToStoryboardRunStream({
       }
       const runs = parseRecoverableRuns(await response.json())
       const decision = selectRecoverableRun(runs)
+      if (runs.length > 0 && !decision.runId) {
+        throw new Error('Invalid active script-to-storyboard runs response')
+      }
       return decision.runId
     },
     validateParams: (params) => {

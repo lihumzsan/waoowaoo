@@ -76,4 +76,39 @@ describe('run stream recovery resolvers', () => {
       })).rejects.toThrow()
     }
   })
+
+  it.each([
+    [{
+      runs: [{
+        id: 'run-terminal',
+        status: 'completed',
+        createdAt: '2026-07-18T00:00:00.000Z',
+        updatedAt: '2026-07-18T00:00:00.000Z',
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+      }],
+    }],
+    [{
+      runs: [{
+        id: 'run-expired',
+        status: 'running',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+        leaseExpiresAt: '2020-01-01T00:01:00.000Z',
+        heartbeatAt: '2020-01-01T00:00:30.000Z',
+      }],
+    }],
+  ])('rejects non-empty active-query responses without a recoverable run', async (payload) => {
+    apiFetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => payload,
+    })
+
+    for (const [, runStreamHook] of hookCases) {
+      await expect(getRecoveryResolver(runStreamHook)({
+        projectId: 'project-1',
+        storageScopeKey: 'episode-1',
+      })).rejects.toThrow()
+    }
+  })
 })
