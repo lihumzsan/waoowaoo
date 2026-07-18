@@ -7,22 +7,35 @@ import {
   VIDEO_SEAM_CONCAT_WORKFLOW_KEY,
   buildVideoToolOutputKey,
   isOwnedVideoToolInputKey,
+  isValidVideoTrimFrames,
 } from '@/lib/video-tools/seam-concat'
 import { reportTaskProgress } from '../shared'
 
 type SeamConcatPayload = {
   input1Key: string
   input1Name: string
+  input1TrimEndFrames: number
   input2Key: string
   input2Name: string
+  input2TrimStartFrames: number
+}
+
+function readTrimFrames(value: unknown, defaultValue: number): number {
+  const trimFrames = value === undefined ? defaultValue : value
+  if (!isValidVideoTrimFrames(trimFrames)) {
+    throw new Error('VIDEO_SEAM_CONCAT_PAYLOAD_INVALID')
+  }
+  return trimFrames
 }
 
 function readPayload(job: Job<TaskJobData>): SeamConcatPayload {
   const payload = job.data.payload
   const input1Key = typeof payload?.input1Key === 'string' ? payload.input1Key.trim() : ''
   const input1Name = typeof payload?.input1Name === 'string' ? payload.input1Name.trim() : ''
+  const input1TrimEndFrames = readTrimFrames(payload?.input1TrimEndFrames, 0)
   const input2Key = typeof payload?.input2Key === 'string' ? payload.input2Key.trim() : ''
   const input2Name = typeof payload?.input2Name === 'string' ? payload.input2Name.trim() : ''
+  const input2TrimStartFrames = readTrimFrames(payload?.input2TrimStartFrames, 1)
 
   if (!input1Key || !input1Name || !input2Key || !input2Name) {
     throw new Error('VIDEO_SEAM_CONCAT_PAYLOAD_INVALID')
@@ -34,7 +47,14 @@ function readPayload(job: Job<TaskJobData>): SeamConcatPayload {
     throw new Error('VIDEO_SEAM_CONCAT_INPUT_NOT_OWNED')
   }
 
-  return { input1Key, input1Name, input2Key, input2Name }
+  return {
+    input1Key,
+    input1Name,
+    input1TrimEndFrames,
+    input2Key,
+    input2Name,
+    input2TrimStartFrames,
+  }
 }
 
 export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
@@ -62,6 +82,8 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
     baseUrl,
     workflowKey: VIDEO_SEAM_CONCAT_WORKFLOW_KEY,
     videoUrls: [input1Url, input2Url],
+    trimEndFrames: payload.input1TrimEndFrames,
+    trimStartFrames: payload.input2TrimStartFrames,
   })
 
   await reportTaskProgress(job, 90, {
@@ -81,6 +103,8 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
     videoUrl: getSignedUrl(videoKey),
     mimeType: output.mimeType || 'video/mp4',
     input1Name: payload.input1Name,
+    input1TrimEndFrames: payload.input1TrimEndFrames,
     input2Name: payload.input2Name,
+    input2TrimStartFrames: payload.input2TrimStartFrames,
   }
 }

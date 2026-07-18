@@ -31,6 +31,8 @@ export default function VideoToolsPage() {
   const t = useTranslations('videoTools')
   const [input1, setInput1] = useState<UploadedVideo | null>(null)
   const [input2, setInput2] = useState<UploadedVideo | null>(null)
+  const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
+  const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})
   const [tasks, setTasks] = useState<VideoToolTask[]>([])
@@ -108,7 +110,18 @@ export default function VideoToolsPage() {
   }
 
   const submit = async () => {
-    if (!input1 || !input2 || !canSubmitVideoSeamConcat(input1, input2, currentTask) || submitting) return
+    if (
+      !input1
+      || !input2
+      || !canSubmitVideoSeamConcat(
+        input1,
+        input2,
+        currentTask,
+        input1TrimEndFrames,
+        input2TrimStartFrames,
+      )
+      || submitting
+    ) return
     setSubmitting(true)
     setPageError(null)
     try {
@@ -116,8 +129,16 @@ export default function VideoToolsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input1: { key: input1.key, name: input1.name },
-          input2: { key: input2.key, name: input2.name },
+          input1: {
+            key: input1.key,
+            name: input1.name,
+            trimEndFrames: input1TrimEndFrames,
+          },
+          input2: {
+            key: input2.key,
+            name: input2.name,
+            trimStartFrames: input2TrimStartFrames,
+          },
         }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
@@ -132,7 +153,9 @@ export default function VideoToolsPage() {
         updatedAt: now,
         payload: {
           input1Name: input1.name,
+          input1TrimEndFrames,
           input2Name: input2.name,
+          input2TrimStartFrames,
         },
         result: null,
         error: null,
@@ -153,7 +176,13 @@ export default function VideoToolsPage() {
     )
   }
 
-  const canSubmit = canSubmitVideoSeamConcat(input1, input2, currentTask) && !submitting && !uploadingSlot
+  const canSubmit = canSubmitVideoSeamConcat(
+    input1,
+    input2,
+    currentTask,
+    input1TrimEndFrames,
+    input2TrimStartFrames,
+  ) && !submitting && !uploadingSlot
   const phaseLabel = t(`status.${taskView.phase}`)
 
   return (
@@ -189,6 +218,10 @@ export default function VideoToolsPage() {
             replaceLabel={t('actions.replace')}
             removeLabel={t('actions.remove')}
             uploadingLabel={t('status.uploading')}
+            trimLabel={t('input1.trimLabel')}
+            trimHelp={t('input1.trimHelp')}
+            trimFrames={input1TrimEndFrames}
+            onTrimFramesChange={setInput1TrimEndFrames}
           />
           <VideoUploadCard
             label={t('input2.title')}
@@ -203,6 +236,10 @@ export default function VideoToolsPage() {
             replaceLabel={t('actions.replace')}
             removeLabel={t('actions.remove')}
             uploadingLabel={t('status.uploading')}
+            trimLabel={t('input2.trimLabel')}
+            trimHelp={t('input2.trimHelp')}
+            trimFrames={input2TrimStartFrames}
+            onTrimFramesChange={setInput2TrimStartFrames}
           />
         </div>
 

@@ -1,15 +1,19 @@
 {
   "eyebrow": "独立视频工具",
   "title": "视频无缝拼接",
-  "subtitle": "依次上传两个视频。系统会删除 Video 2 的第一帧及对应音频，再按 Video 1 的帧率无缝拼接画面和声音。",
+  "subtitle": "依次上传两个视频，设置 Video 1 尾部和 Video 2 头部需要去掉的帧数，再按 Video 1 的帧率无缝拼接画面和声音。",
   "workflowNote": "输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s，无需调整工作流参数。",
   "input1": {
     "title": "Video 1",
-    "description": "拼接结果的前半段，并决定最终输出帧率。"
+    "description": "拼接结果的前半段，并决定最终输出帧率。",
+    "trimLabel": "去掉尾部帧数",
+    "trimHelp": "拼接前从视频尾部移除这些帧。"
   },
   "input2": {
     "title": "Video 2",
-    "description": "拼接结果的后半段；首帧及对应音频会自动移除。"
+    "description": "拼接结果的后半段，可设置头部裁剪帧数。",
+    "trimLabel": "去掉头部帧数",
+    "trimHelp": "从视频头部移除这些帧及对应音频。"
   },
   "actions": {
     "select": "点击或拖入视频",

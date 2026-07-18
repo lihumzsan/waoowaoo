@@ -1,15 +1,19 @@
 {
   "eyebrow": "Standalone Video Tool",
   "title": "Seamless Video Concatenation",
-  "subtitle": "Upload two videos in order. The first frame of Video 2 and its matching audio are removed before both streams are joined at the frame rate of Video 1.",
+  "subtitle": "Upload two videos in order, choose the tail and head trim counts, and join both streams at the frame rate of Video 1.",
   "workflowNote": "Output is fixed to NVENC H.264 MP4, yuv420p, and 10 Mbit/s. No workflow tuning is required.",
   "input1": {
     "title": "Video 1",
-    "description": "The first part of the result and the source of the output frame rate."
+    "description": "The first part of the result and the source of the output frame rate.",
+    "trimLabel": "Trim tail frames",
+    "trimHelp": "Remove this many frames from the end before joining."
   },
   "input2": {
     "title": "Video 2",
-    "description": "The second part of the result; its first frame and matching audio are removed."
+    "description": "The second part of the result, with a configurable head trim.",
+    "trimLabel": "Trim head frames",
+    "trimHelp": "Remove this many frames and matching audio from the start."
   },
   "actions": {
     "select": "Click or drop a video",

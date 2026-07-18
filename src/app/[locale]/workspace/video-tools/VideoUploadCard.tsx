@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
+import { VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES } from '@/lib/video-tools/trim-frames'
 import type { UploadedVideo } from './video-tools-state'
 
 type VideoUploadCardProps = {
@@ -17,6 +18,10 @@ type VideoUploadCardProps = {
   replaceLabel: string
   removeLabel: string
   uploadingLabel: string
+  trimLabel: string
+  trimHelp: string
+  trimFrames: number | ''
+  onTrimFramesChange: (value: number | '') => void
 }
 
 const ACCEPTED_VIDEO_TYPES = '.mp4,.mov,.webm,.mkv,video/mp4,video/quicktime,video/webm,video/x-matroska'
@@ -124,6 +129,26 @@ export default function VideoUploadCard(props: VideoUploadCardProps) {
           <span className="mt-2 text-xs text-[var(--glass-text-tertiary)]">MP4 / MOV / WEBM / MKV · 256 MB</span>
         </button>
       )}
+
+      <div className="mx-4 mb-4 rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
+        <label className="block text-xs font-semibold text-[var(--glass-text-secondary)]">
+          {props.trimLabel}
+          <input
+            type="number"
+            min={0}
+            max={VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}
+            step={1}
+            value={props.trimFrames}
+            disabled={props.disabled || props.uploading}
+            onChange={(event) => {
+              const value = event.currentTarget.value
+              props.onTrimFramesChange(value === '' ? '' : Number(value))
+            }}
+            className="mt-2 w-full rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-3 py-2 text-sm text-[var(--glass-text-primary)] outline-none transition-colors focus:border-[var(--glass-tone-info-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </label>
+        <p className="mt-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">{props.trimHelp}</p>
+      </div>
 
       {props.error ? (
         <p className="mx-4 mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-600">
