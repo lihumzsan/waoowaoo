@@ -38,24 +38,25 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="glass-nav sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Link href={session ? buildAuthenticatedHomeTarget() : { pathname: '/' }} className="group">
+      <nav className="glass-nav sticky top-0 z-50 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-2 h-16">
+            <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+              <Link href={session ? buildAuthenticatedHomeTarget() : { pathname: '/' }} className="group shrink-0">
                 <Image
-                  src="/logo-small.png?v=1"
+                  src="/logo-small.png"
                   alt={tc('appName')}
                   width={80}
                   height={80}
-                  className="object-contain transition-transform group-hover:scale-110"
+                  priority
+                  className="h-auto w-10 object-contain transition-transform group-hover:scale-110 sm:w-20"
                 />
               </Link>
               <button
                 type="button"
                 onClick={openModal}
                 disabled={!update}
-                className={`relative inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.02em] transition-all ${update
+                className={`relative inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold tracking-[0.02em] transition-all sm:px-3 ${update
                   ? 'border-[var(--glass-tone-warning-fg)]/40 bg-[linear-gradient(135deg,var(--glass-tone-warning-bg),var(--glass-bg-surface-strong))] text-[var(--glass-tone-warning-fg)] shadow-[0_8px_24px_-16px_rgba(245,158,11,0.9)] hover:brightness-105'
                   : 'border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] text-[var(--glass-text-secondary)] hover:border-[var(--glass-stroke-focus)] hover:text-[var(--glass-text-primary)] disabled:cursor-default'
                   }`}
@@ -79,21 +80,21 @@ export default function Navbar() {
                 type="button"
                 onClick={() => void handleCheckUpdate()}
                 disabled={manualChecking}
-                className="rounded-full p-1.5 text-[var(--glass-text-tertiary)] hover:bg-[var(--glass-bg-muted)] hover:text-[var(--glass-text-secondary)] transition-colors disabled:opacity-40"
+                className="shrink-0 rounded-full p-1.5 text-[var(--glass-text-tertiary)] hover:bg-[var(--glass-bg-muted)] hover:text-[var(--glass-text-secondary)] transition-colors disabled:opacity-40"
                 title={tc('updateNotice.checkUpdate')}
               >
                 <AppIcon name="refresh" className={`h-3.5 w-3.5 ${manualChecking ? 'animate-spin' : ''}`} />
               </button>
               {checkMsg === 'upToDate' && !update && (
                 <span
-                  className="text-[11px] text-[var(--glass-tone-success-fg)] font-medium transition-opacity duration-1000"
+                  className="hidden text-[11px] text-[var(--glass-tone-success-fg)] font-medium transition-opacity duration-1000 sm:inline"
                   style={{ opacity: checkMsgFading ? 0 : 1 }}
                 >
                   ✓ {tc('updateNotice.upToDate')}
                 </span>
               )}
             </div>
-            <div className="flex items-center space-x-6">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-6">
               {status === 'loading' ? (
                 /* Session 加载中骨架屏 */
                 <div className="flex items-center space-x-4">
@@ -105,42 +106,45 @@ export default function Navbar() {
                 <>
                   <Link
                     href={{ pathname: '/workspace' }}
-                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                    className="shrink-0 p-1 text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1 sm:p-0"
+                    title={t('workspace')}
                   >
                     <AppIcon name="monitor" className="w-4 h-4" />
-                    {t('workspace')}
+                    <span className="hidden sm:inline">{t('workspace')}</span>
                   </Link>
                   <Link
                     href={{ pathname: '/workspace/video-tools' }}
-                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                    className="shrink-0 p-1 text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1 sm:p-0"
+                    title={t('videoTools')}
                   >
                     <AppIcon name="film" className="w-4 h-4" />
-                    {t('videoTools')}
+                    <span className="hidden sm:inline">{t('videoTools')}</span>
                   </Link>
                   <Link
                     href={{ pathname: '/workspace/asset-hub' }}
-                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                    className="shrink-0 p-1 text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1 sm:p-0"
+                    title={t('assetHub')}
                   >
                     <AppIcon name="folderHeart" className="w-4 h-4" />
-                    {t('assetHub')}
+                    <span className="hidden sm:inline">{t('assetHub')}</span>
                   </Link>
                   <Link
                     href={{ pathname: '/profile' }}
-                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                    className="shrink-0 p-1 text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1 sm:p-0"
                     title={t('profile')}
                   >
                     <AppIcon name="userRoundCog" className="w-5 h-5" />
-                    {t('profile')}
+                    <span className="hidden sm:inline">{t('profile')}</span>
                   </Link>
                   <LanguageSwitcher />
                   <a
                     href={downloadLogsHref}
                     download
-                    className="text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1"
+                    className="shrink-0 p-1 text-sm text-[var(--glass-text-secondary)] hover:text-[var(--glass-text-primary)] font-medium transition-colors flex items-center gap-1 sm:p-0"
                     title={t('downloadLogs')}
                   >
                     <AppIcon name="download" className="w-4 h-4" />
-                    {t('downloadLogs')}
+                    <span className="hidden sm:inline">{t('downloadLogs')}</span>
                   </a>
                 </>
 

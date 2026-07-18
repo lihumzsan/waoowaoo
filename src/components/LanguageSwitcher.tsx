@@ -90,17 +90,17 @@ export default function LanguageSwitcher() {
 
     return (
         <>
-            <div ref={containerRef} className="relative inline-block">
+            <div ref={containerRef} className="relative inline-block shrink-0">
                 <button
                     type="button"
                     onClick={() => setIsMenuOpen((prev) => !prev)}
                     aria-label={SWITCH_CONFIRM_COPY[targetLocale].triggerLabel}
                     aria-expanded={isMenuOpen}
-                    className="glass-btn-base glass-btn-secondary inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                    className="glass-btn-base glass-btn-secondary inline-flex items-center gap-0 rounded-lg px-2 py-2 text-sm sm:gap-2 sm:px-3"
                 >
                     <AppIcon name="globe" className="h-4 w-4" />
-                    <span>{LANGUAGE_LABELS[currentLocale]}</span>
-                    <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--glass-text-tertiary)]" />
+                    <span className="hidden sm:inline">{LANGUAGE_LABELS[currentLocale]}</span>
+                    <AppIcon name="chevronDown" className="hidden h-4 w-4 text-[var(--glass-text-tertiary)] sm:block" />
                 </button>
 
                 {isMenuOpen ? (

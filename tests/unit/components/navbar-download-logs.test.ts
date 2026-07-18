@@ -50,6 +50,7 @@ vi.mock('@/i18n/navigation', () => ({
 const messages = {
   nav: {
     workspace: '工作区',
+    videoTools: '视频工具',
     assetHub: '资产中心',
     profile: '设置中心',
     downloadLogs: '下载日志',
@@ -99,6 +100,9 @@ describe('Navbar download logs entry', () => {
     expect(html).toContain('href="/home"')
     expect(html).toContain('href="/api/admin/download-logs"')
     expect(html).toContain('download=""')
+    expect(html).toMatch(/href="\/workspace"[^>]*class="[^"]*shrink-0[^"]*"/)
+    expect(html).toMatch(/href="\/workspace\/video-tools"[^>]*class="[^"]*shrink-0[^"]*"/)
+    expect(html).toContain('hidden sm:inline')
   })
 
   it('does not render the download logs entry for signed-out users', () => {

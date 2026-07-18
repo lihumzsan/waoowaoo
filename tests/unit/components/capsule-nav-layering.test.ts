@@ -38,7 +38,12 @@ describe('CapsuleNav layering', () => {
       ),
     )
 
-    expect(html).toContain('fixed top-20 left-1/2 -translate-x-1/2 z-40')
+    expect(html).toContain('fixed top-20 left-4 z-40 animate-fadeInDown sm:left-1/2 sm:-translate-x-1/2')
+    expect(html).toContain('aria-label="配置"')
+    expect(html).toContain('sm:hidden')
+    expect(html).toContain('whitespace-nowrap px-1')
+    expect(html).toContain('sm:px-6')
+    expect(html).toContain('hidden text-sm font-semibold sm:inline sm:text-base')
     expect(html).toContain('relative z-40')
     expect(html).not.toContain('z-50 animate-fadeInDown')
     expect(html).not.toContain('z-[60]')

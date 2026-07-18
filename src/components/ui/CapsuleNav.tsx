@@ -31,6 +31,7 @@ interface CapsuleNavProps {
 function NavItem({
     active,
     onClick,
+    icon,
     label,
     status,
     href,
@@ -39,6 +40,7 @@ function NavItem({
 }: {
     active: boolean
     onClick: () => void
+    icon: string
     label: string
     status: StepStatus
     href?: string
@@ -70,8 +72,9 @@ function NavItem({
                 onClick={handleClick}
                 onAuxClick={handleAuxClick}
                 disabled={disabled}
+                aria-label={label}
                 className={`
-                    relative flex min-h-[52px] items-center gap-1 px-6 pt-3.5 pb-4 transition-all duration-300 ease-out
+                    relative flex min-h-[52px] items-center gap-1 whitespace-nowrap px-1 pt-3.5 pb-4 transition-all duration-300 ease-out sm:px-6
                     ${disabled
                         ? 'cursor-not-allowed'
                         : active
@@ -80,12 +83,18 @@ function NavItem({
                     ${!disabled && 'active:scale-[0.98]'}
                 `}
             >
+                <span
+                    aria-hidden="true"
+                    className="inline-flex h-6 w-6 items-center justify-center text-xs font-bold sm:hidden"
+                >
+                    {icon}
+                </span>
                 {disabled ? (
-                    <span className="text-base font-medium text-[var(--glass-text-tertiary)] opacity-80">
+                    <span className="hidden text-sm font-medium text-[var(--glass-text-tertiary)] opacity-80 sm:inline sm:text-base">
                         {label}
                     </span>
                 ) : (
-                    <span className="text-base font-semibold">{label}</span>
+                    <span className="hidden text-sm font-semibold sm:inline sm:text-base">{label}</span>
                 )}
                 {/* 底部指示条 */}
                 <span className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 h-[3px] rounded-full transition-all duration-300 ease-out
@@ -133,9 +142,9 @@ export function CapsuleNav({ items, activeId, onItemClick, projectId, episodeId 
     }
 
     return (
-        <nav className="fixed top-20 left-1/2 -translate-x-1/2 z-40 animate-fadeInDown">
+        <nav className="fixed top-20 left-4 z-40 animate-fadeInDown sm:left-1/2 sm:-translate-x-1/2">
             <div
-                className="flex rounded-full px-2 py-1"
+                className="flex rounded-full px-1 py-1 sm:px-2"
                 style={{
                     background: 'rgba(255,255,255,0.55)',
                     backdropFilter: 'blur(24px) saturate(1.6)',
@@ -149,6 +158,7 @@ export function CapsuleNav({ items, activeId, onItemClick, projectId, episodeId 
                         key={item.id}
                         active={activeId === item.id}
                         onClick={() => onItemClick(item.id)}
+                        icon={item.icon}
                         label={item.label}
                         status={item.status}
                         href={buildHref(item.id)}

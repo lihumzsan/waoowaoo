@@ -49,9 +49,9 @@ export default function VideoToolbar({
     })
     : null
   return (
-    <div className="glass-surface p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="glass-surface overflow-hidden p-4">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
           <span className="text-sm font-semibold text-[var(--glass-text-secondary)]">
              {t('toolbar.title')}
           </span>
@@ -68,11 +68,11 @@ export default function VideoToolbar({
             )}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <button
             onClick={onGenerateAll}
             disabled={isAnyTaskRunning}
-            className="glass-btn-base glass-btn-primary flex items-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="glass-btn-base glass-btn-primary flex min-w-0 items-center justify-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isAnyTaskRunning ? (
               <TaskStatusInline state={videoTaskRunningState} className="text-white [&>span]:text-white [&_svg]:text-white" />
@@ -86,7 +86,7 @@ export default function VideoToolbar({
           <button
             onClick={onDownloadAll}
             disabled={videosWithUrl === 0 || isDownloading}
-            className="glass-btn-base glass-btn-tone-info flex items-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="glass-btn-base glass-btn-tone-info flex min-w-0 items-center justify-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             title={videosWithUrl === 0 ? t('toolbar.noVideos') : t('toolbar.downloadCount', { count: videosWithUrl })}
           >
             {isDownloading ? (
@@ -102,7 +102,7 @@ export default function VideoToolbar({
             <button
               onClick={onEnterEditor}
               disabled={!videosReady}
-              className="glass-btn-base glass-btn-secondary flex items-center gap-2 px-4 py-2 text-sm font-medium border border-[var(--glass-stroke-base)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="glass-btn-base glass-btn-secondary flex min-w-0 items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-[var(--glass-stroke-base)] disabled:opacity-50 disabled:cursor-not-allowed"
               title={videosReady ? t('toolbar.enterEditor') : t('panelCard.needVideo')}
             >
               <AppIcon name="wandOff" className="w-4 h-4" />
@@ -111,7 +111,7 @@ export default function VideoToolbar({
           )}
           <button
             onClick={onBack}
-            className="glass-btn-base glass-btn-secondary flex items-center gap-2 px-4 py-2 text-sm font-medium border border-[var(--glass-stroke-base)] hover:text-[var(--glass-tone-info-fg)]"
+            className="glass-btn-base glass-btn-secondary flex min-w-0 items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-[var(--glass-stroke-base)] hover:text-[var(--glass-tone-info-fg)]"
           >
             <AppIcon name="chevronLeft" className="w-4 h-4" />
             <span>{t('toolbar.back')}</span>
