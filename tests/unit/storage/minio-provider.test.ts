@@ -46,11 +46,13 @@ describe('minio storage provider', () => {
     }
     vi.spyOn(internals, 'loadSdk').mockResolvedValue({ PutObjectCommand })
     vi.spyOn(internals, 'getClient').mockResolvedValue({ send })
+    const cancel = vi.fn()
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(new Uint8Array([1, 2, 3]))
         controller.close()
       },
+      cancel,
     })
 
     await provider.uploadObjectStream({
@@ -70,6 +72,37 @@ describe('minio storage provider', () => {
     expect(putInputs[0]?.Body).not.toBe(body)
     expect((putInputs[0]?.Body as Readable).readableFlowing).toBeNull()
     expect(send).toHaveBeenCalledTimes(1)
+    expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it('cancels and unlocks the web stream when S3 send fails before consuming the node adapter', async () => {
+    const provider = createProvider()
+    const sendError = new Error('send failed immediately')
+    const send = vi.fn(async () => {
+      throw sendError
+    })
+    class PutObjectCommand {}
+    const internals = provider as unknown as {
+      loadSdk: () => Promise<unknown>
+      getClient: () => Promise<unknown>
+    }
+    vi.spyOn(internals, 'loadSdk').mockResolvedValue({ PutObjectCommand })
+    vi.spyOn(internals, 'getClient').mockResolvedValue({ send })
+    const cancel = vi.fn(async () => {
+      throw new Error('cancel failed')
+    })
+    const body = new ReadableStream<Uint8Array>({ cancel })
+
+    await expect(provider.uploadObjectStream({
+      body,
+      key: 'video-tools/user-1/inputs/failed.mp4',
+      contentLength: 3,
+      contentType: 'video/mp4',
+    })).rejects.toBe(sendError)
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
   })
 
   it('reaches a local server through the real AWS SDK middleware without pre-consuming or retrying the stream', async () => {

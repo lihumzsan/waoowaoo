@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import { finished } from 'node:stream/promises'
 import type {
   DeleteObjectsResult,
   SignedUrlParams,
@@ -89,16 +90,20 @@ export class MinioStorageProvider implements StorageProvider {
   async uploadObjectStream(params: UploadObjectStreamParams): Promise<UploadObjectResult> {
     const sdk = await this.loadSdk()
     const client = await this.getClient()
-    const body = Readable.fromWeb(
-      params.body as unknown as import('node:stream/web').ReadableStream,
-    )
-    await client.send(new sdk.PutObjectCommand({
-      Bucket: this.bucket,
-      Key: params.key,
-      Body: body,
-      ContentLength: params.contentLength,
-      ContentType: params.contentType,
-    }))
+    const body = Readable.from(params.body as unknown as AsyncIterable<Uint8Array>)
+    try {
+      await client.send(new sdk.PutObjectCommand({
+        Bucket: this.bucket,
+        Key: params.key,
+        Body: body,
+        ContentLength: params.contentLength,
+        ContentType: params.contentType,
+      }))
+    } catch (error) {
+      body.destroy()
+      await finished(body).catch(() => undefined)
+      throw error
+    }
 
     return { key: params.key }
   }
