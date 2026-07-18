@@ -23,7 +23,7 @@ import {
   shouldProjectPromptTaskSnapshot,
   type FirstLastFramePromptEntry,
 } from './first-last-frame-prompt-entry'
-import { runPromptAutoEnsureQueue } from './prompt-auto-ensure-queue'
+import { createPromptAutoEnsureQueue, type PromptAutoEnsureQueue } from './prompt-auto-ensure-queue'
 
 interface PromptTaskStates {
   isFetching: boolean
@@ -60,6 +60,7 @@ export function useFirstLastFramePromptEntries({
   const [promptEntries, setPromptEntries] = useState<Map<string, FirstLastFramePromptEntry>>(new Map())
   const [durationRevision, setDurationRevision] = useState(0)
   const ensureMutation = useGenerateFirstLastFramePrompt(projectId)
+  const autoEnsureQueueRef = useRef<PromptAutoEnsureQueue | null>(null)
   const ensuredSignaturesRef = useRef(new Map<string, string>())
   const requestRevisionsRef = useRef(new Map<string, number>())
   const activeOperationsRef = useRef(new Set<string>())
@@ -270,6 +271,20 @@ export function useFirstLastFramePromptEntries({
       locallySettledPanelsRef.current.add(panelKey)
     }
   }, [buildDerivedEntry, buildSourceSignature, ensureMutation, episodeId, getPanelPair])
+  const ensurePromptRef = useRef(ensurePrompt)
+  ensurePromptRef.current = ensurePrompt
+
+  useEffect(() => {
+    const queue = createPromptAutoEnsureQueue(
+      (panelKey) => ensurePromptRef.current(panelKey, 'source_change'),
+      { concurrency: 2 },
+    )
+    autoEnsureQueueRef.current = queue
+    return () => {
+      queue.dispose()
+      if (autoEnsureQueueRef.current === queue) autoEnsureQueueRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     setPromptEntries((previous) => {
@@ -326,16 +341,8 @@ export function useFirstLastFramePromptEntries({
       ) continue
       candidates.push(panelKey)
     }
-    let cancelled = false
-    void runPromptAutoEnsureQueue(
-      candidates,
-      (panelKey) => ensurePrompt(panelKey, 'source_change'),
-      { concurrency: 2, isCancelled: () => cancelled },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [allPanels, ensurePrompt, linkedPanels, promptEntries, promptTaskStates, visiblePanelKeys])
+    autoEnsureQueueRef.current?.enqueue(candidates)
+  }, [allPanels, linkedPanels, promptEntries, promptTaskStates, visiblePanelKeys])
 
   const resolvedPromptEntries = useMemo(() => {
     const next = new Map(promptEntries)

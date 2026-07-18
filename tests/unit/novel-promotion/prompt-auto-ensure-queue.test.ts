@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { runPromptAutoEnsureQueue } from '@/lib/novel-promotion/stages/video-stage-runtime/prompt-auto-ensure-queue'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  createPromptAutoEnsureQueue,
+  runPromptAutoEnsureQueue,
+} from '@/lib/novel-promotion/stages/video-stage-runtime/prompt-auto-ensure-queue'
 
 describe('runPromptAutoEnsureQueue', () => {
   it('limits automatic prompt ensures to two concurrent panel keys', async () => {
@@ -13,7 +16,7 @@ describe('runPromptAutoEnsureQueue', () => {
       completed.push(panelKey)
       await new Promise((resolve) => setTimeout(resolve, 1))
       active -= 1
-    }, { concurrency: 2 })
+    }, { concurrency: 8 })
 
     expect(maxActive).toBe(2)
     expect(completed).toEqual(['a', 'b', 'c', 'd'])
@@ -29,5 +32,34 @@ describe('runPromptAutoEnsureQueue', () => {
     }, { isCancelled: () => cancelled })
 
     expect(completed).toEqual(['a'])
+  })
+
+  it('keeps one two-worker queue across repeated candidate enqueues', async () => {
+    let active = 0
+    let maxActive = 0
+    const started: string[] = []
+    const release = new Map<string, () => void>()
+    const queue = createPromptAutoEnsureQueue(async (panelKey) => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      started.push(panelKey)
+      await new Promise<void>((resolve) => release.set(panelKey, resolve))
+      active -= 1
+    }, { concurrency: 8 })
+
+    queue.enqueue(['a', 'b'])
+    queue.enqueue(['b', 'c', 'd', 'd'])
+
+    expect(started).toEqual(['a', 'b'])
+    release.get('a')?.()
+    await vi.waitFor(() => expect(started).toEqual(['a', 'b', 'c']))
+    release.get('b')?.()
+    await vi.waitFor(() => expect(started).toEqual(['a', 'b', 'c', 'd']))
+    release.get('c')?.()
+    release.get('d')?.()
+    await queue.whenIdle()
+
+    expect(maxActive).toBe(2)
+    expect(started).toEqual(['a', 'b', 'c', 'd'])
   })
 })
