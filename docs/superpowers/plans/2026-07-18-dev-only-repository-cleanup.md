@@ -1,38 +1,38 @@
-# Dev-Only Repository Cleanup Implementation Plan
+# Remote-Infrastructure Development Cleanup Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remove the application deployment surface while retaining a safe, infrastructure-only Docker Compose stack for host-based development.
+**Goal:** Remove local Docker completely and make `192.168.0.112` the repository's only documented MySQL, Redis, MinIO, and ComfyUI host.
 
-**Architecture:** Next.js, workers, watchdog, Bull Board, and warmup continue to run on the host through `npm run dev`. Docker Compose exposes only MySQL, Redis, and MinIO on loopback addresses, and existing test bootstrap continues to use those services with its derived `_test` database.
+**Architecture:** The development machine runs Next.js, workers, watchdog, Bull Board, and warmup through `npm run dev`. It does not run or manage Docker; all infrastructure and GPU calls go to the already-running services on `192.168.0.112`.
 
-**Tech Stack:** Node.js, npm scripts, Next.js 15, Vitest, Docker Compose, MySQL 8, Redis 7, MinIO.
+**Tech Stack:** Node.js, npm scripts, Next.js 15, Vitest, MySQL 8, Redis 7, MinIO, ComfyUI.
 
 ## Global Constraints
 
-- Preserve the existing Docker volume keys `mysql_data`, `redis_data`, and `minio_data`.
-- Never run `docker compose down -v` or another volume-deleting command.
-- Do not modify `.env`, Prisma schema, business code, API behavior, ComfyUI workflows, or historical Superpowers documents.
-- Bind all published development infrastructure ports to `127.0.0.1`.
-- Keep `npm run dev`, all `dev:*` processes, `storage:init`, `build`, lint, typecheck, and test commands.
-- Do not add a replacement deployment or image-publishing path.
-- Do not remove npm dependencies without repository-wide evidence plus verification.
+- Do not start, stop, recreate, migrate, or inspect remote Docker volumes.
+- Do not connect to a Docker Remote API.
+- Do not run Prisma schema mutation commands against `192.168.0.112`.
+- Do not modify the ignored local `.env` or print credentials.
+- Do not add a local fallback infrastructure path.
+- Keep `npm run dev`, all `dev:*` processes, `storage:init`, build, lint, typecheck, and test commands.
+- Keep application behavior, provider logic, queues, database schema, and ComfyUI workflows unchanged.
+- Use read-only remote protocol checks only.
 
 ---
 
-### Task 1: Add the dev-only repository contract
+### Task 1: Replace the local-infrastructure contract with a remote-only contract
 
 **Files:**
-- Create: `tests/unit/config/dev-only-repository.test.ts`
-- Modify: `tests/unit/scripts/dev-warmup-wiring.test.ts`
+- Modify: `tests/unit/config/dev-only-repository.test.ts`
 
 **Interfaces:**
-- Consumes: root `package.json`, `docker-compose.yml`, and deployment file paths.
-- Produces: an executable contract for the infrastructure-only Compose topology and development-only npm scripts.
+- Consumes: root deployment paths, `package.json`, and `.env.example`.
+- Produces: a file-based regression contract that prohibits local Docker and requires the remote endpoints.
 
-- [ ] **Step 1: Add the failing repository contract test**
+- [ ] **Step 1: Write the remote-only contract before implementation**
 
-Create `tests/unit/config/dev-only-repository.test.ts` with:
+Replace `tests/unit/config/dev-only-repository.test.ts` with:
 
 ```ts
 import { existsSync, readFileSync } from 'node:fs'
@@ -46,406 +46,261 @@ function readRootFile(path: string) {
   return readFileSync(join(root, path), 'utf8')
 }
 
-describe('dev-only repository contract', () => {
-  test('Docker Compose contains local infrastructure only', () => {
-    const compose = readRootFile('docker-compose.yml')
-
-    expect(compose).toMatch(/^services:/)
-    expect(compose).toMatch(/^  mysql:/m)
-    expect(compose).toMatch(/^  redis:/m)
-    expect(compose).toMatch(/^  minio:/m)
-    expect(compose).not.toMatch(/^  app:/m)
-    expect(compose).not.toContain('container_name:')
-    expect(compose).not.toContain('restart:')
-    expect(compose).toContain('"127.0.0.1:13306:3306"')
-    expect(compose).toContain('"127.0.0.1:16379:6379"')
-    expect(compose).toContain('"127.0.0.1:19000:9000"')
-    expect(compose).toContain('"127.0.0.1:19001:9001"')
-    expect(compose).toMatch(/^  mysql_data:$/m)
-    expect(compose).toMatch(/^  redis_data:$/m)
-    expect(compose).toMatch(/^  minio_data:$/m)
-  })
-
-  test('application deployment files are absent', () => {
+describe('remote-only development repository contract', () => {
+  test('local Docker entry points are absent', () => {
     for (const path of [
       'Dockerfile',
       '.dockerignore',
+      'docker-compose.yml',
+      'docker-compose.test.yml',
       '.github/workflows/docker-publish.yml',
       'caddyfile',
-      'docker-compose.test.yml',
     ]) {
       expect(existsSync(join(root, path)), path).toBe(false)
     }
   })
 
-  test('npm scripts expose development infrastructure without production start commands', () => {
+  test('npm scripts contain no infrastructure or production start commands', () => {
     const packageJson = JSON.parse(readRootFile('package.json')) as {
       scripts: Record<string, string>
     }
 
-    expect(packageJson.scripts['infra:up']).toBe('docker compose up -d --wait')
-    expect(packageJson.scripts['infra:down']).toBe('docker compose down')
-    expect(packageJson.scripts['infra:logs']).toBe('docker compose logs -f')
-    expect(packageJson.scripts['infra:status']).toBe('docker compose ps')
+    expect(packageJson.scripts.dev).toContain('npm run dev:warmup')
+    expect(packageJson.scripts['infra:up']).toBeUndefined()
+    expect(packageJson.scripts['infra:down']).toBeUndefined()
+    expect(packageJson.scripts['infra:logs']).toBeUndefined()
+    expect(packageJson.scripts['infra:status']).toBeUndefined()
     expect(packageJson.scripts.start).toBeUndefined()
     expect(packageJson.scripts['start:next']).toBeUndefined()
     expect(packageJson.scripts['start:worker']).toBeUndefined()
     expect(packageJson.scripts['start:watchdog']).toBeUndefined()
     expect(packageJson.scripts['start:board']).toBeUndefined()
   })
+
+  test('environment template targets the remote infrastructure host', () => {
+    const envTemplate = readRootFile('.env.example')
+
+    expect(envTemplate).toContain(
+      'DATABASE_URL="mysql://root:waoowaoo123@192.168.0.112:13306/waoowaoo"',
+    )
+    expect(envTemplate).toContain('REDIS_HOST=192.168.0.112')
+    expect(envTemplate).toContain('REDIS_PORT=16379')
+    expect(envTemplate).toContain('MINIO_ENDPOINT=http://192.168.0.112:19000')
+    expect(envTemplate).not.toMatch(
+      /(?:localhost|127\.0\.0\.1):(13306|16379|19000|19001)/,
+    )
+    expect(envTemplate).not.toMatch(
+      /^REDIS_HOST=(?:localhost|127\.0\.0\.1)$/m,
+    )
+  })
 })
 ```
 
-- [ ] **Step 2: Tighten the existing warmup wiring contract**
-
-Replace the final assertion in `tests/unit/scripts/dev-warmup-wiring.test.ts`:
-
-```ts
-  expect(packageJson.scripts.start).not.toContain('dev:warmup')
-```
-
-with:
-
-```ts
-  expect(packageJson.scripts.start).toBeUndefined()
-```
-
-- [ ] **Step 3: Run the tests to verify the current deployment surface violates them**
+- [ ] **Step 2: Run the contract and verify RED**
 
 Run:
 
 ```bash
-npx vitest run tests/unit/config/dev-only-repository.test.ts tests/unit/scripts/dev-warmup-wiring.test.ts
+npx vitest run tests/unit/config/dev-only-repository.test.ts
 ```
 
-Expected: FAIL because `app`, production scripts, and deployment files still exist.
+Expected: FAIL because `docker-compose.yml`, the four `infra:*` scripts, and local endpoint values still exist.
 
 ---
 
-### Task 2: Implement the infrastructure-only runtime boundary
+### Task 2: Remove local Docker and point configuration to the remote host
 
 **Files:**
-- Modify: `docker-compose.yml`
+- Delete: `docker-compose.yml`
 - Modify: `package.json`
-- Delete: `Dockerfile`
-- Delete: `.dockerignore`
-- Delete: `.github/workflows/docker-publish.yml`
-- Delete: `caddyfile`
-- Delete: `docker-compose.test.yml`
+- Modify: `.env.example`
 - Test: `tests/unit/config/dev-only-repository.test.ts`
 - Test: `tests/unit/scripts/dev-warmup-wiring.test.ts`
 
 **Interfaces:**
-- Consumes: the contract introduced in Task 1 and current `.env.example` port values.
-- Produces: `infra:up`, `infra:down`, `infra:logs`, `infra:status`, and a three-service Compose stack.
+- Consumes: the RED contract from Task 1 and verified remote endpoints.
+- Produces: a repository with no Docker command and a remote-ready environment template.
 
-- [ ] **Step 1: Replace Compose with the exact development infrastructure configuration**
+- [ ] **Step 1: Delete the remaining Compose file**
 
-Set `docker-compose.yml` to:
+Delete `docker-compose.yml` with the patch tool. Do not run any Docker command locally or remotely.
 
-```yaml
-services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: waoowaoo123
-      MYSQL_DATABASE: waoowaoo
-      MYSQL_ROOT_HOST: "%"
-    ports:
-      - "127.0.0.1:13306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    command:
-      - "--default-authentication-plugin=mysql_native_password"
-      - "--sql_mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pwaoowaoo123"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 15s
+- [ ] **Step 2: Remove local infrastructure scripts**
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "127.0.0.1:16379:6379"
-    volumes:
-      - redis_data:/data
-    command: ["redis-server", "--appendonly", "yes"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 5s
-
-  minio:
-    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    ports:
-      - "127.0.0.1:19000:9000"
-      - "127.0.0.1:19001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-
-volumes:
-  mysql_data:
-  redis_data:
-  minio_data:
-```
-
-- [ ] **Step 2: Replace production scripts with infrastructure helpers**
-
-After `dev:turbo` in `package.json`, use:
+Delete exactly these lines from `package.json`:
 
 ```json
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
     "infra:status": "docker compose ps",
-    "build": "prisma generate && next build",
-    "build:turbo": "next build --turbopack",
-    "storage:init": "tsx --env-file=.env src/lib/storage/init.ts",
 ```
 
-Remove `start`, `start:next`, `start:worker`, `start:watchdog`, and `start:board`. Do not modify any other script or dependency.
+Do not change dependencies or any other script.
 
-- [ ] **Step 3: Delete deployment-only files with the patch tool**
+- [ ] **Step 3: Change only infrastructure endpoints and comments**
 
-Delete exactly the five deployment files and disconnected test Compose file listed in this task. Do not delete Docker volumes or runtime data directories.
+Use these exact lines in `.env.example`:
 
-- [ ] **Step 4: Validate the Compose model and targeted contracts**
+```dotenv
+# 远端开发数据库固定运行在 192.168.0.112:13306。
+DATABASE_URL="mysql://root:waoowaoo123@192.168.0.112:13306/waoowaoo"
+```
+
+```dotenv
+# 远端 MinIO API 固定运行在 192.168.0.112:19000。
+MINIO_ENDPOINT=http://192.168.0.112:19000
+```
+
+```dotenv
+# 远端 Redis 固定运行在 192.168.0.112:16379。
+REDIS_HOST=192.168.0.112
+REDIS_PORT=16379
+```
+
+Add this comment to the ComfyUI section without inventing a new environment variable:
+
+```dotenv
+# ComfyUI 服务地址在应用设置中心配置为 http://192.168.0.112:8878。
+```
+
+Keep all credential fields and unrelated values unchanged.
+
+- [ ] **Step 4: Run targeted tests and verify GREEN**
 
 Run:
 
 ```bash
-docker compose config
 npx vitest run tests/unit/config/dev-only-repository.test.ts tests/unit/scripts/dev-warmup-wiring.test.ts
 ```
 
-Expected: Compose renders exactly `mysql`, `redis`, and `minio`; both test files PASS.
-
-- [ ] **Step 5: Commit the runtime boundary**
-
-```bash
-git add docker-compose.yml package.json tests/unit/config/dev-only-repository.test.ts tests/unit/scripts/dev-warmup-wiring.test.ts Dockerfile .dockerignore .github/workflows/docker-publish.yml caddyfile docker-compose.test.yml
-git commit -m "refactor: keep Docker for development infrastructure only"
-```
+Expected: both files PASS.
 
 ---
 
-### Task 3: Remove tracked verification output
+### Task 3: Rewrite the bilingual remote-only development instructions
 
 **Files:**
-- Modify: `.gitignore`
-- Delete: `.codex-artifacts/**`
-
-**Interfaces:**
-- Consumes: the confirmed list of 31 tracked verification files.
-- Produces: a repository where regenerated Codex verification evidence remains local and ignored.
-
-- [ ] **Step 1: Add the generated directory ignore rule**
-
-Add this line alongside the other IDE and AI tool paths in `.gitignore`:
-
-```gitignore
-.codex-artifacts/
-```
-
-Remove this obsolete application-container log rule:
-
-```gitignore
-docker-logs/
-```
-
-- [ ] **Step 2: Delete only the tracked verification artifacts**
-
-Run this exact, recoverable Git deletion for the tracked directory:
-
-```bash
-git rm -r -- .codex-artifacts
-```
-
-Do not delete `.artifacts/`, `.codex-run/`, or `.codex-ui-verification/` rules.
-
-- [ ] **Step 3: Verify deletion and ignore behavior**
-
-Run:
-
-```bash
-test ! -e .codex-artifacts
-git check-ignore .codex-artifacts/example.png
-git diff --check
-```
-
-Expected: the working-tree directory is gone, a regenerated example path is ignored, and the diff has no whitespace errors.
-
-- [ ] **Step 4: Commit repository hygiene**
-
-```bash
-git add .gitignore
-git commit -m "chore: remove generated verification artifacts"
-test -z "$(git ls-files .codex-artifacts)"
-```
-
----
-
-### Task 4: Rewrite the supported development documentation
-
-**Files:**
-- Modify: `.env.example`
 - Modify: `README.md`
 - Modify: `README_en.md`
 
 **Interfaces:**
-- Consumes: the `infra:*` scripts and loopback ports from Task 2.
-- Produces: Chinese and English setup instructions for the single supported host-development workflow.
+- Consumes: the remote endpoint template from Task 2.
+- Produces: one supported startup flow with no Docker or schema mutation instructions.
 
-- [ ] **Step 1: Remove container-application comments from `.env.example`**
+- [ ] **Step 1: Document the exact startup sequence**
 
-Use host-development comments only:
-
-```dotenv
-# Docker Compose 仅提供本地开发基础设施，MySQL 映射到 127.0.0.1:13306。
-DATABASE_URL="mysql://root:waoowaoo123@localhost:13306/waoowaoo"
-```
-
-```dotenv
-# Docker Compose 仅提供本地开发基础设施，MinIO API 映射到 127.0.0.1:19000。
-MINIO_ENDPOINT=http://localhost:19000
-```
-
-```dotenv
-# 宿主机开发服务地址。
-NEXTAUTH_URL=http://localhost:3000
-```
-
-```dotenv
-# 服务端在宿主机上自调用本应用 API / 文件。
-INTERNAL_APP_URL=http://127.0.0.1:3000
-```
-
-```dotenv
-# Docker Compose 仅提供本地开发基础设施，Redis 映射到 127.0.0.1:16379。
-REDIS_HOST=127.0.0.1
-REDIS_PORT=16379
-```
-
-Keep every environment variable and value unchanged.
-
-- [ ] **Step 2: Replace README startup sections with the host-development workflow**
-
-Both README files must document these exact commands in the appropriate language:
+Both README files must contain:
 
 ```bash
 git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 cp .env.example .env
 npm install
-npm run infra:up
-npx prisma db push
 npm run dev
 ```
 
-Document application access at `http://localhost:3000`, Bull Board at `http://localhost:3010/admin/queues`, MinIO console at `http://localhost:19001`, and safe shutdown with:
+The prerequisites are Node.js >= 18.18.0, npm >= 9.0.0, and network access to `192.168.0.112`. Docker Desktop is not a prerequisite.
 
-```bash
-npm run infra:down
-```
+- [ ] **Step 2: Document the runtime boundary**
 
-State that existing remote MySQL, Redis, and MinIO users may skip `infra:up` and configure `.env`. Remove prebuilt-image, application-image build, GHCR, `13000`/`13010`, Caddy, destructive volume reset, and Docker-container migration instructions.
+Document:
 
-- [ ] **Step 3: Verify stale deployment guidance is gone**
+- local application: `http://localhost:3000`;
+- local Bull Board: `http://localhost:3010/admin/queues`;
+- remote MySQL: `192.168.0.112:13306`;
+- remote Redis: `192.168.0.112:16379`;
+- remote MinIO API: `http://192.168.0.112:19000`;
+- remote MinIO Console: `http://192.168.0.112:19001`;
+- remote ComfyUI: `http://192.168.0.112:8878`.
+
+Remove every `infra:*` command, Docker Desktop instruction, local infrastructure alternative, volume command, and `npx prisma db push` instruction.
+
+- [ ] **Step 3: Verify stale local-infrastructure guidance is absent**
 
 Run:
 
 ```bash
-rg -n 'ghcr\.io|docker compose up -d --build|docker rmi|13000|13010|caddy run|localhost:1443|纯 Docker|Pre-built Image|Docker Build' README.md README_en.md .env.example
+if rg -n 'Docker Desktop|docker compose|infra:(up|down|logs|status)|localhost:(13306|16379|19000|19001)|127\.0\.0\.1:(13306|16379|19000|19001)|prisma db push' README.md README_en.md .env.example package.json; then exit 1; fi
 ```
 
 Expected: no matches.
 
-- [ ] **Step 4: Commit developer documentation**
+- [ ] **Step 4: Commit the remote-only implementation**
 
 ```bash
-git add README.md README_en.md .env.example
-git commit -m "docs: focus setup on host development"
+git add -A -- docker-compose.yml package.json .env.example README.md README_en.md tests/unit/config/dev-only-repository.test.ts tests/unit/scripts/dev-warmup-wiring.test.ts
+git commit -m "refactor: use remote development infrastructure only"
 ```
 
 ---
 
-### Task 5: Verify the complete cleanup
+### Task 4: Verify remote connectivity and repository quality
 
 **Files:**
-- Review: all files changed by Tasks 1-4.
+- Review: all files changed in Tasks 1-3.
 
 **Interfaces:**
-- Consumes: the complete implementation diff.
-- Produces: test, build, runtime, and diff evidence for handoff.
+- Consumes: the complete remote-only implementation.
+- Produces: read-only service evidence plus static, test, build, and Git evidence.
 
-- [ ] **Step 1: Check repository consistency**
+- [ ] **Step 1: Verify remote ports and protocols without mutation**
 
-Run:
+Check TCP ports `13306`, `16379`, `19000`, `19001`, and `8878`.
 
-```bash
-git diff HEAD~3 --check
-rg -n 'waoowaoo-local|NEXTAUTH_URL.*13000|13010:3010|caddy run|ghcr\.io/saturndec/waoowaoo' --glob '!docs/superpowers/**' --glob '!.git/**' .
-```
+Use repository dependencies with values sourced from `.env.example` to perform:
 
-Expected: no whitespace errors and no live deployment-path matches.
+- MySQL `SELECT DATABASE()` and an information-schema table count;
+- Redis `PING` and `DBSIZE`;
+- MinIO `HeadBucket` and `ListObjectsV2` with `MaxKeys: 1`;
+- ComfyUI `/system_stats`, `/queue`, and `/object_info` metadata reads.
 
-- [ ] **Step 2: Start and verify development infrastructure**
+Expected: every endpoint succeeds without writing remote state.
 
-Run:
-
-```bash
-npm run infra:up
-docker compose ps
-npx prisma db push
-```
-
-Expected: MySQL, Redis, and MinIO are healthy and Prisma reports the development database schema is synchronized.
-
-- [ ] **Step 3: Run static and test verification**
+- [ ] **Step 2: Run targeted and static verification**
 
 Run:
 
 ```bash
+git diff --check
+npx vitest run tests/unit/config/dev-only-repository.test.ts tests/unit/scripts/dev-warmup-wiring.test.ts
 npm run lint:all
 npm run typecheck
+```
+
+Expected: targeted tests, lint, and typecheck exit 0. Existing lint warnings may remain non-failing.
+
+- [ ] **Step 3: Run the full test suite and compare baseline failures**
+
+Run:
+
+```bash
 npm run test:all
+```
+
+Expected: the remote-only correction adds no failure. The recorded baseline contains two unrelated failures: missing `MINIO_ENDPOINT` in the panel image handler test and an obsolete Goon duration list assertion.
+
+- [ ] **Step 4: Build with the corrected template without creating `.env`**
+
+Run:
+
+```bash
+set -a
+source ./.env.example
+set +a
 npm run build
 ```
 
-Expected: all commands exit 0. Existing lint warnings are reported separately if they remain non-failing.
+Expected: build exits 0.
 
-- [ ] **Step 4: Stop infrastructure without deleting data**
-
-Run:
-
-```bash
-npm run infra:down
-docker volume ls --format '{{.Name}}' | rg 'mysql_data|redis_data|minio_data'
-```
-
-Expected: the Compose containers stop and the named data volumes still exist.
-
-- [ ] **Step 5: Review final history and status**
+- [ ] **Step 5: Review final Git state**
 
 Run:
 
 ```bash
-git log -5 --oneline --decorate
+git diff origin/main..HEAD --check
 git status --short --branch
+git log -8 --oneline --decorate
 ```
 
-Expected: the design, plan, runtime cleanup, artifact cleanup, and documentation commits are present; the worktree is clean.
+Expected: the correction commits are present and the worktree is clean.
