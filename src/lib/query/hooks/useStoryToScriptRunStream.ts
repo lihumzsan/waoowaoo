@@ -51,20 +51,27 @@ export function useStoryToScriptRunStream({
         method: 'GET',
         cache: 'no-store',
       })
-      if (!response.ok) return null
-      const data = await response.json().catch(() => null)
-      const runs = data && typeof data === 'object' && Array.isArray((data as { runs?: unknown[] }).runs)
-        ? (data as {
-          runs: Array<{
-            id?: unknown
-            status?: unknown
-            createdAt?: unknown
-            updatedAt?: unknown
-            leaseExpiresAt?: unknown
-            heartbeatAt?: unknown
-          }>
-        }).runs
-        : []
+      if (!response.ok) {
+        throw new Error('Failed to load active story-to-script runs')
+      }
+      const data: unknown = await response.json()
+      if (
+        !data
+        || typeof data !== 'object'
+        || !Array.isArray((data as { runs?: unknown }).runs)
+      ) {
+        throw new Error('Invalid active story-to-script runs response')
+      }
+      const runs = (data as {
+        runs: Array<{
+          id?: unknown
+          status?: unknown
+          createdAt?: unknown
+          updatedAt?: unknown
+          leaseExpiresAt?: unknown
+          heartbeatAt?: unknown
+        }>
+      }).runs
       const decision = selectRecoverableRun(runs.map((run) => ({
         id: typeof run?.id === 'string' ? run.id : null,
         status: typeof run?.status === 'string' ? run.status : null,

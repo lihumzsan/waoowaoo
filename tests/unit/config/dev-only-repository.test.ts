@@ -28,7 +28,8 @@ describe('remote-only development repository contract', () => {
       scripts: Record<string, string>
     }
 
-    expect(packageJson.scripts.dev).toContain('npm run dev:warmup')
+    expect(packageJson.scripts.dev).not.toContain('npm run dev:warmup')
+    expect(packageJson.scripts['dev:full']).toContain('npm run dev:warmup')
     expect(packageJson.scripts['infra:up']).toBeUndefined()
     expect(packageJson.scripts['infra:down']).toBeUndefined()
     expect(packageJson.scripts['infra:logs']).toBeUndefined()

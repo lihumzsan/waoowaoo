@@ -8,7 +8,8 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "dev": "npm run storage:init && concurrently \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:watchdog\" \"npm run dev:board\" \"npm run dev:warmup\"",
+    "dev": "npm run storage:init && concurrently \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:watchdog\" \"npm run dev:board\"",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:warmup\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev -H 0.0.0.0",
     "dev:worker": "tsx watch --env-file=.env src/lib/workers/index.ts",
     "dev:watchdog": "tsx watch --env-file=.env scripts/watchdog.ts",

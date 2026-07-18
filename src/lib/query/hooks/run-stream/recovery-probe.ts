@@ -28,6 +28,7 @@ function scheduleProbe(
 export function startRecoveryProbe(args: StartRecoveryProbeArgs): () => void {
   let cancelled = false
   let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let nextRetryDelayMs = PROBE_RETRY_INTERVAL_MS
 
   const clearRetryTimer = () => {
     if (retryTimer) {
@@ -57,20 +58,29 @@ export function startRecoveryProbe(args: StartRecoveryProbeArgs): () => void {
       }
     }
 
-    const activeRunId = await args.resolveActiveRunId({
-      projectId: args.projectId,
-      storageScopeKey: args.storageScopeKey,
-    }).catch(() => null)
+    try {
+      const activeRunId = await args.resolveActiveRunId({
+        projectId: args.projectId,
+        storageScopeKey: args.storageScopeKey,
+      })
 
-    if (cancelled || args.hasRunState()) return
+      if (cancelled || args.hasRunState()) return
 
-    if (!activeRunId) {
-      scheduleRetry(PROBE_RETRY_INTERVAL_MS)
-      return
+      successfulProbeScopes.set(args.storageKey, Date.now())
+
+      if (!activeRunId) {
+        scheduleRetry(PROBE_SUCCESS_COOLDOWN_MS)
+        return
+      }
+
+      args.onRecovered(activeRunId)
+    } catch {
+      scheduleRetry(nextRetryDelayMs)
+      nextRetryDelayMs = Math.min(
+        nextRetryDelayMs * 2,
+        PROBE_SUCCESS_COOLDOWN_MS,
+      )
     }
-
-    successfulProbeScopes.set(args.storageKey, Date.now())
-    args.onRecovered(activeRunId)
   }
 
   void probe()
