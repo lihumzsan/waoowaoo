@@ -281,4 +281,48 @@ describe('ComfyUI video generator', () => {
       height: 848,
     }))
   })
+
+  it('uses the exact Bernini 848x464 canvas for landscape project requests', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'hero turns toward the camera',
+      options: {
+        modelId: BERNINI_WORKFLOW_ID,
+        aspectRatio: '16:9',
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: BERNINI_WORKFLOW_ID,
+      width: 848,
+      height: 464,
+    }))
+  })
+
+  it('keeps the LTX Goon landscape request size unchanged', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'bridge the two frames',
+      options: {
+        modelId: COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'https://example.com/last.png',
+        aspectRatio: '16:9',
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
+      width: 1280,
+      height: 736,
+    }))
+  })
 })

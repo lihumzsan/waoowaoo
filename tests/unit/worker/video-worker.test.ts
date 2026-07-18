@@ -44,6 +44,7 @@ const BERNINI_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
 const BERNINI_AUDIO_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
 
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
+const videoSeamConcatHandlerMock = vi.hoisted(() => vi.fn(async () => ({ videoKey: 'output.mp4' })))
 const withTaskLifecycleMock = vi.hoisted(() =>
   vi.fn(async (job: Job<TaskJobData>, handler: WorkerProcessor) => await handler(job)),
 )
@@ -138,6 +139,9 @@ vi.mock('bullmq', () => ({
 }))
 
 vi.mock('@/lib/redis', () => ({ queueRedis: {} }))
+vi.mock('@/lib/workers/handlers/video-seam-concat', () => ({
+  handleVideoSeamConcatTask: videoSeamConcatHandlerMock,
+}))
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: reportTaskProgressMock,
   withTaskLifecycle: withTaskLifecycleMock,
@@ -1269,5 +1273,23 @@ describe('worker video processor behavior', () => {
     })
 
     await expect(processor!(unsupportedJob)).rejects.toThrow('Unsupported video task type')
+  })
+
+  it('VIDEO_SEAM_CONCAT: routes standalone tool tasks to the focused handler', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: 'video_seam_concat' as TaskJobData['type'],
+      targetType: 'VideoSeamConcat',
+      targetId: 'target-1',
+      payload: {
+        input1Key: 'video-tools/user-1/inputs/one.mp4',
+        input2Key: 'video-tools/user-1/inputs/two.mp4',
+      },
+    })
+
+    await expect(processor!(job)).resolves.toEqual({ videoKey: 'output.mp4' })
+    expect(videoSeamConcatHandlerMock).toHaveBeenCalledWith(job)
   })
 })

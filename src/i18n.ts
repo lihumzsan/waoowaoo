@@ -47,7 +47,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
         assetPicker,
         layout,
         workspaceRedesign,
-        home
+        home,
+        videoTools
     ] = await Promise.all([
         import(`../messages/${locale}/common.json`),
         import(`../messages/${locale}/stages.json`),
@@ -79,7 +80,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
         import(`../messages/${locale}/assetPicker.json`),
         import(`../messages/${locale}/layout.json`),
         import(`../messages/${locale}/workspaceRedesign.json`),
-        import(`../messages/${locale}/home.json`)
+        import(`../messages/${locale}/home.json`),
+        import(`../messages/${locale}/videoTools.json`)
     ]);
 
     return {
@@ -115,7 +117,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
             assetPicker: assetPicker.default,
             layout: layout.default,
             workspaceRedesign: workspaceRedesign.default,
-            home: home.default
+            home: home.default,
+            videoTools: videoTools.default
         }
     };
 });

@@ -10,10 +10,12 @@ import {
   comfyUiWorkflowRequiresLlmApi,
   getComfyUiWorkflowParameterContract,
   getComfyUiWorkflowImageInputCount,
+  getComfyUiWorkflowVideoInputCount,
   listComfyUiWorkflowKeys,
   resolveComfyUiWorkflow,
   validateResolvedWorkflowPreflight,
 } from '@/lib/providers/comfyui/workflow-registry'
+import { VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES } from '@/lib/video-tools/trim-frames'
 
 function getLoadImageNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>) {
   return Object.values(workflow).filter((node) => node.class_type.toLowerCase().includes('loadimage'))
@@ -31,6 +33,209 @@ describe('comfyui workflow registry', () => {
   let workflowRoot: string | null = null
   const BERNINI_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v'
   const BERNINI_AUDIO_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
+  const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
+
+  it('injects both video files and exact frame trims into the fixed seam-concat workflow', () => {
+    expect(getComfyUiWorkflowVideoInputCount(VIDEO_SEAM_CONCAT_WORKFLOW_KEY)).toBe(2)
+
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'second.mp4'],
+      videoTrimFrames: [3, 4],
+    })
+
+    expect(workflow['1']).toMatchObject({
+      class_type: 'LoadVideo',
+      inputs: { file: 'first.mp4' },
+    })
+    expect(workflow['2']).toMatchObject({
+      class_type: 'LoadVideo',
+      inputs: { file: 'second.mp4' },
+    })
+    expect(workflow['1']?.inputs).not.toHaveProperty('upload')
+    expect(workflow['2']?.inputs).not.toHaveProperty('upload')
+    expect(workflow['3']).toMatchObject({
+      class_type: 'GetVideoComponents',
+      inputs: { video: ['1', 0] },
+    })
+    expect(workflow['4']).toMatchObject({
+      class_type: 'GetVideoComponents',
+      inputs: { video: ['2', 0] },
+    })
+    expect(workflow['5']).toMatchObject({
+      class_type: 'GetImageSize',
+      inputs: { image: ['3', 0] },
+    })
+    expect(workflow['6']).toMatchObject({
+      class_type: 'GetImageSize',
+      inputs: { image: ['4', 0] },
+    })
+    expect(workflow['7']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: '(a - b) / (a > b)',
+        'values.a': ['5', 2],
+        'values.b': 3,
+      },
+    })
+    expect(workflow['8']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: '(a - b) / (a > b)',
+        'values.a': ['6', 2],
+        'values.b': 4,
+      },
+    })
+    expect(workflow['9']).toMatchObject({
+      class_type: 'ImageFromBatch',
+      inputs: {
+        image: ['3', 0],
+        batch_index: 0,
+        length: ['7', 1],
+      },
+    })
+    expect(workflow['10']).toMatchObject({
+      class_type: 'ImageFromBatch',
+      inputs: {
+        image: ['4', 0],
+        batch_index: 4,
+        length: ['8', 1],
+      },
+    })
+    expect(workflow['11']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': ['7', 0],
+        'values.b': ['3', 2],
+      },
+    })
+    expect(workflow['12']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': ['8', 0],
+        'values.b': ['4', 2],
+      },
+    })
+    expect(workflow['13']).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: 'a / b',
+        'values.a': 4,
+        'values.b': ['4', 2],
+      },
+    })
+    expect(workflow['14']).toMatchObject({
+      class_type: 'TrimAudioDuration',
+      inputs: {
+        audio: ['3', 1],
+        start_index: 0,
+        duration: ['11', 0],
+      },
+    })
+    expect(workflow['15']).toMatchObject({
+      class_type: 'TrimAudioDuration',
+      inputs: {
+        audio: ['4', 1],
+        start_index: ['13', 0],
+        duration: ['12', 0],
+      },
+    })
+    expect(workflow['16']?.inputs).toMatchObject({
+      images_A: ['9', 0],
+      images_B: ['10', 0],
+    })
+    expect(workflow['17']?.inputs).toMatchObject({
+      audio1: ['14', 0],
+      audio2: ['15', 0],
+    })
+    expect(workflow['18']).toMatchObject({
+      class_type: 'VHS_VideoCombine',
+      inputs: {
+        frame_rate: ['3', 2],
+        images: ['16', 0],
+        audio: ['17', 0],
+        format: 'video/nvenc_h264-mp4',
+        pix_fmt: 'yuv420p',
+        bitrate: 10,
+        megabit: true,
+      },
+    })
+  })
+
+  it.each([
+    { label: 'Video 1 exact-full-length trim', nodeId: '7', frameCountNodeId: '5', totalFrames: 24, trimFrames: 24 },
+    { label: 'Video 1 over-length trim', nodeId: '7', frameCountNodeId: '5', totalFrames: 24, trimFrames: 25 },
+    { label: 'Video 2 exact-full-length trim', nodeId: '8', frameCountNodeId: '6', totalFrames: 48, trimFrames: 48 },
+    { label: 'Video 2 over-length trim', nodeId: '8', frameCountNodeId: '6', totalFrames: 48, trimFrames: 49 },
+  ])('uses a video-frame-only assertion for $label, including silent inputs', ({
+    nodeId,
+    frameCountNodeId,
+    totalFrames,
+    trimFrames,
+  }) => {
+    const trims: [number, number] = nodeId === '7' ? [trimFrames, 0] : [0, trimFrames]
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: trims,
+    })
+    const retainedFrameNode = workflow[nodeId]
+
+    expect(retainedFrameNode).toMatchObject({
+      class_type: 'ComfyMathExpression',
+      inputs: {
+        expression: '(a - b) / (a > b)',
+        'values.a': [frameCountNodeId, 2],
+        'values.b': trimFrames,
+      },
+    })
+
+    // ComfyMathExpression treats booleans numerically. False becomes zero, so
+    // exact-full and over-length trims both fail with division by zero. The
+    // assertion reads only GetImageSize's batch count and therefore also
+    // applies when the source video has no audio stream.
+    const retainedFrames = (totalFrames - trimFrames) / Number(totalFrames > trimFrames)
+    expect(Number.isFinite(retainedFrames)).toBe(false)
+    expect(retainedFrameNode?.inputs['values.a']).not.toEqual(['3', 1])
+    expect(retainedFrameNode?.inputs['values.a']).not.toEqual(['4', 1])
+  })
+
+  it('accepts seam trim frame boundaries in direct workflow resolution', () => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: [0, VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES],
+    })
+
+    expect(workflow['7']?.inputs['values.b']).toBe(0)
+    expect(workflow['8']?.inputs['values.b']).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+    expect(workflow['10']?.inputs.batch_index).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+    expect(workflow['13']?.inputs['values.a']).toBe(VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES)
+  })
+
+  it.each([
+    {
+      name: 'negative end trim',
+      videoTrimFrames: [-1, 0] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'fractional start trim',
+      videoTrimFrames: [0, 1.5] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'over-limit end trim',
+      videoTrimFrames: [VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES + 1, 0] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'non-finite start trim',
+      videoTrimFrames: [0, Number.POSITIVE_INFINITY] as [number, number],
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+  ])('rejects $name in direct seam workflow resolution', ({ videoTrimFrames, error }) => {
+    expect(() => resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames,
+    })).toThrow(error)
+  })
 
   afterEach(() => {
     delete process.env.COMFYUI_WORKFLOW_ROOT
@@ -47,6 +252,40 @@ describe('comfyui workflow registry', () => {
     mkdirSync(dirname(filePath), { recursive: true })
     writeFileSync(filePath, JSON.stringify(workflow), 'utf-8')
   }
+
+  it.each([
+    {
+      label: 'missing retained-frame node',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        delete workflow['7']
+      },
+      expected: 'node 7 must be ComfyMathExpression with input values.b',
+    },
+    {
+      label: 'wrong head-trim node class',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        workflow['10'].class_type = 'PreviewImage'
+      },
+      expected: 'node 10 must be ImageFromBatch with input batch_index',
+    },
+    {
+      label: 'missing audio-start trim input',
+      mutate: (workflow: ReturnType<typeof resolveComfyUiWorkflow>) => {
+        delete workflow['13'].inputs['values.a']
+      },
+      expected: 'node 13 must be ComfyMathExpression with input values.a',
+    },
+  ])('rejects a malformed fixed seam workflow contract: $label', ({ mutate, expected }) => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'second.mp4'],
+    })
+    mutate(workflow)
+    writeExternalWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, workflow)
+
+    expect(() => resolveComfyUiWorkflow(VIDEO_SEAM_CONCAT_WORKFLOW_KEY, {
+      videoTrimFrames: [3, 4],
+    })).toThrow(`COMFYUI_VIDEO_SEAM_WORKFLOW_CONTRACT_INVALID: ${expected}`)
+  })
 
   it('detects and injects OpenRouter config into RH LLM API nodes', () => {
     writeExternalWorkflow('basevideo/test/rh-llm', {
@@ -728,6 +967,37 @@ describe('comfyui workflow registry', () => {
     expect(userPrompt).toContain('motion strength: 3')
     expect(rolePrompt).not.toBe('hero punches forward through rain')
     expect(userPrompt).not.toBe('hero punches forward through rain')
+  })
+
+  it('keeps the exact 53:29 landscape canvas in both Bernini workflows', () => {
+    const cases: Array<{ workflowKey: string; audioFilenames?: string[] }> = [
+      { workflowKey: BERNINI_WORKFLOW_KEY },
+      { workflowKey: BERNINI_AUDIO_WORKFLOW_KEY, audioFilenames: ['voice-line.wav'] },
+    ]
+
+    for (const { workflowKey, audioFilenames } of cases) {
+      const workflow = resolveComfyUiWorkflow(workflowKey, {
+        prompt: 'hero turns toward the camera',
+        imageFilenames: ['source.png'],
+        ...(audioFilenames ? { audioFilenames } : {}),
+        width: 848,
+        height: 464,
+        durationSeconds: 5,
+        fps: 24,
+        motionStrength: 1,
+      })
+
+      expect(workflow['416']?.inputs.aspect_ratio).toBe('custom')
+      expect(workflow['416']?.inputs.proportional_width).toBe(53)
+      expect(workflow['416']?.inputs.proportional_height).toBe(29)
+      expect(workflow['416']?.inputs.fit).toBe('crop')
+      expect(workflow['416']?.inputs.method).toBe('lanczos')
+      expect(workflow['416']?.inputs.round_to_multiple).toBe('16')
+      expect(workflow['416']?.inputs.scale_to_side).toBe('longest')
+      expect(workflow['417']?.inputs.value).toBe(848)
+      expect(workflow['384']?.inputs.width).toEqual(['416', 3])
+      expect(workflow['384']?.inputs.height).toEqual(['416', 4])
+    }
   })
 
   it('renders Seedance2 Bernini calm 5 second prompts without stale 10 second wording', () => {

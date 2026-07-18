@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
+  VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES,
+  isValidVideoTrimFrames,
+} from '@/lib/video-tools/trim-frames'
+import {
   COMFYUI_LTX23_GOON_FPS,
   COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
@@ -79,6 +83,8 @@ export type ComfyUiWorkflowInject = {
   height?: number
   imageFilenames?: string[]
   audioFilenames?: string[]
+  videoFilenames?: string[]
+  videoTrimFrames?: [number, number]
   llmApi?: ComfyUiWorkflowLlmApiInject
   fps?: number
   durationSeconds?: number
@@ -1651,6 +1657,89 @@ function applyAudioInjection(graph: ComfyUiWorkflowGraph, audioFilenames?: strin
   })
 }
 
+function applyVideoInjection(graph: ComfyUiWorkflowGraph, videoFilenames?: string[]): void {
+  const loadNodes = Object.entries(graph)
+    .filter(([, node]) => node.class_type.toLowerCase().includes('loadvideo'))
+    .sort(([a], [b]) => compareNodeIds(a, b))
+
+  if (loadNodes.length === 0) return
+
+  const filenames = Array.isArray(videoFilenames)
+    ? videoFilenames.filter((filename): filename is string => typeof filename === 'string' && filename.trim().length > 0)
+    : []
+  const fallbackFilename = filenames[filenames.length - 1] || null
+
+  loadNodes.forEach(([, node], index) => {
+    const filename = filenames[index] || fallbackFilename
+    if (filename) {
+      node.inputs.file = filename
+    } else {
+      delete node.inputs.file
+    }
+    delete node.inputs.upload
+  })
+}
+
+function validateVideoSeamWorkflowContract(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+): void {
+  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-concat-nvenc') return
+
+  const expectedNodes = [
+    { nodeId: '1', classType: 'LoadVideo', inputField: 'file' },
+    { nodeId: '2', classType: 'LoadVideo', inputField: 'file' },
+    { nodeId: '7', classType: 'ComfyMathExpression', inputField: 'values.b' },
+    { nodeId: '8', classType: 'ComfyMathExpression', inputField: 'values.b' },
+    { nodeId: '10', classType: 'ImageFromBatch', inputField: 'batch_index' },
+    { nodeId: '13', classType: 'ComfyMathExpression', inputField: 'values.a' },
+  ] as const
+
+  for (const { nodeId, classType, inputField } of expectedNodes) {
+    const node = graph[nodeId]
+    if (
+      !node
+      || node.class_type !== classType
+      || !isRecord(node.inputs)
+      || !Object.prototype.hasOwnProperty.call(node.inputs, inputField)
+    ) {
+      throw new Error(
+        `COMFYUI_VIDEO_SEAM_WORKFLOW_CONTRACT_INVALID: node ${nodeId} must be ${classType} with input ${inputField}`,
+      )
+    }
+  }
+}
+
+function applyVideoSeamTrimInjection(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  videoTrimFrames?: [number, number],
+): void {
+  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-concat-nvenc') return
+  if (!videoTrimFrames) return
+
+  const [trimEndFrames, trimStartFrames] = videoTrimFrames
+  if (!isValidVideoTrimFrames(trimEndFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
+  if (!isValidVideoTrimFrames(trimStartFrames)) {
+    throw new Error(
+      `COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
+    )
+  }
+  const video1RetainedFrames = graph['7']
+  const video2RetainedFrames = graph['8']
+  const video2Images = graph['10']
+  const video2AudioStart = graph['13']
+
+  video1RetainedFrames.inputs['values.b'] = trimEndFrames
+  video2RetainedFrames.inputs['values.b'] = trimStartFrames
+  video2Images.inputs.batch_index = trimStartFrames
+  video2AudioStart.inputs['values.a'] = trimStartFrames
+}
+
 function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs)) continue
@@ -1970,9 +2059,24 @@ function alignToMultiple(value: number, multiple: number): number {
   return Math.max(multiple, Math.round(value / multiple) * multiple)
 }
 
+const SEEDANCE2_BERNINI_LANDSCAPE_SIZE = {
+  width: 848,
+  height: 464,
+  longestSide: 848,
+} as const
+
+function isSeedance2BerniniLandscapeSize(size: { width: number; height: number }): boolean {
+  return size.width === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.width
+    && size.height === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.height
+}
+
 function resolveSeedance2BerniniSize(width?: number, height?: number): { width: number; height: number; longestSide: number } {
   const inputWidth = clampDimension(width) ?? 480
   const inputHeight = clampDimension(height) ?? 848
+  if (inputWidth === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.width
+    && inputHeight === SEEDANCE2_BERNINI_LANDSCAPE_SIZE.height) {
+    return { ...SEEDANCE2_BERNINI_LANDSCAPE_SIZE }
+  }
   const ratio = inputWidth > 0 && inputHeight > 0 ? inputWidth / inputHeight : 480 / 848
   const shortSide = 480
   const maxLongSide = 848
@@ -2344,7 +2448,13 @@ function applySeedance2BerniniWorkflowControls(
   setNumericNodeValue(graph, '417', size.longestSide)
   const resizeNode = graph['416']
   if (resizeNode && isRecord(resizeNode.inputs)) {
-    resizeNode.inputs.aspect_ratio = formatAspectRatio(size.width, size.height)
+    if (isSeedance2BerniniLandscapeSize(size)) {
+      resizeNode.inputs.aspect_ratio = 'custom'
+      resizeNode.inputs.proportional_width = 53
+      resizeNode.inputs.proportional_height = 29
+    } else {
+      resizeNode.inputs.aspect_ratio = formatAspectRatio(size.width, size.height)
+    }
     resizeNode.inputs.fit = 'crop'
     resizeNode.inputs.method = 'lanczos'
     resizeNode.inputs.round_to_multiple = '16'
@@ -3061,6 +3171,9 @@ export function resolveComfyUiWorkflow(
   const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
+  validateVideoSeamWorkflowContract(graph, workflowKey)
+  applyVideoInjection(graph, inject.videoFilenames)
+  applyVideoSeamTrimInjection(graph, workflowKey, inject.videoTrimFrames)
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
@@ -3102,6 +3215,15 @@ export function getComfyUiWorkflowAudioInputCount(workflowKey: string): number {
 
   return Object.values(readWorkflowGraphFromFile(filePath))
     .filter((node) => node.class_type.toLowerCase().includes('loadaudio'))
+    .length
+}
+
+export function getComfyUiWorkflowVideoInputCount(workflowKey: string): number {
+  const filePath = resolveWorkflowFilePath(workflowKey)
+  if (!filePath) return 0
+
+  return Object.values(readWorkflowGraphFromFile(filePath))
+    .filter((node) => node.class_type.toLowerCase().includes('loadvideo'))
     .length
 }
 

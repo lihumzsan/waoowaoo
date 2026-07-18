@@ -210,6 +210,29 @@
         "uploadFailed": "上传失败",
         "uploadSuccess": "上传成功"
     },
+    "freeVoice": {
+        "title": "自由配音",
+        "summary": "{records} 条记录 · {running} 个版本生成中",
+        "character": "角色",
+        "selectCharacter": "请选择角色",
+        "voice": "音色",
+        "characterDefault": "{name} 的默认音色",
+        "selectCharacterFirst": "请先选择角色",
+        "referenceRequired": "该角色尚未设置参考音色，请先设置或改选其他音色",
+        "text": "朗读文字",
+        "textPlaceholder": "输入需要朗读的文字",
+        "generate": "生成自由配音",
+        "submitting": "提交中...",
+        "loading": "加载中...",
+        "empty": "还没有自由配音记录",
+        "newVersion": "生成新版本",
+        "deleteRecord": "删除记录",
+        "download": "下载",
+        "keepOnly": "仅保留此版本",
+        "confirmKeep": "确认仅保留选中的版本吗？其他版本的音频将永久删除。",
+        "confirmDelete": "确认删除这条自由配音记录及其全部版本吗？此操作不可撤销。",
+        "actionFailed": "操作失败"
+    },
     "voiceDesign": {
         "presets": {
             "maleBroadcaster": "男播音",

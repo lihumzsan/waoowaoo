@@ -1,6 +1,7 @@
 import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { generateVoiceLine } from '@/lib/voice/generate-voice-line'
+import { generateFreeVoiceVersion } from '@/lib/voice/free-voice'
 import { QUEUE_NAME } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
@@ -44,6 +45,19 @@ async function processVoiceTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.VOICE_LINE:
       return await handleVoiceLineTask(job)
+    case TASK_TYPE.FREE_VOICE: {
+      const versionId = job.data.targetId
+      if (!versionId) throw new Error('FREE_VOICE task missing versionId')
+      await reportTaskProgress(job, 20, { stage: 'generate_free_voice_submit', versionId })
+      const generated = await generateFreeVoiceVersion({
+        projectId: job.data.projectId,
+        versionId,
+        userId: job.data.userId,
+        locale: job.data.locale,
+      })
+      await reportTaskProgress(job, 95, { stage: 'generate_free_voice_persist', versionId })
+      return generated
+    }
     case TASK_TYPE.VOICE_DESIGN:
     case TASK_TYPE.ASSET_HUB_VOICE_DESIGN:
       return await handleVoiceDesignTask(job)

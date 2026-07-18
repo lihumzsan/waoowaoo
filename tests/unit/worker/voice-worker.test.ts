@@ -9,6 +9,7 @@ const workerState = vi.hoisted(() => ({
 }))
 
 const generateVoiceLineMock = vi.hoisted(() => vi.fn())
+const generateFreeVoiceVersionMock = vi.hoisted(() => vi.fn())
 const handleVoiceDesignTaskMock = vi.hoisted(() => vi.fn())
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
@@ -43,6 +44,10 @@ vi.mock('@/lib/redis', () => ({
 
 vi.mock('@/lib/voice/generate-voice-line', () => ({
   generateVoiceLine: generateVoiceLineMock,
+}))
+
+vi.mock('@/lib/voice/free-voice', () => ({
+  generateFreeVoiceVersion: generateFreeVoiceVersionMock,
 }))
 
 vi.mock('@/lib/workers/shared', () => ({
@@ -84,6 +89,10 @@ describe('worker voice processor behavior', () => {
     generateVoiceLineMock.mockResolvedValue({
       lineId: 'line-1',
       audioUrl: 'cos/voice-line-1.mp3',
+    })
+    generateFreeVoiceVersionMock.mockResolvedValue({
+      versionId: 'version-1',
+      audioUrl: '/m/free-voice-1',
     })
     handleVoiceDesignTaskMock.mockResolvedValue({
       presetId: 'preset-1',
@@ -160,6 +169,26 @@ describe('worker voice processor behavior', () => {
 
     expect(handleVoiceDesignTaskMock).toHaveBeenCalledTimes(2)
     expect(generateVoiceLineMock).not.toHaveBeenCalled()
+  })
+
+  it('FREE_VOICE: routes the version target to the free voice generator', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const result = await processor!(buildJob({
+      type: TASK_TYPE.FREE_VOICE,
+      targetType: 'NovelPromotionFreeVoiceVersion',
+      targetId: 'version-1',
+      episodeId: null,
+    }))
+
+    expect(result).toEqual({ versionId: 'version-1', audioUrl: '/m/free-voice-1' })
+    expect(generateFreeVoiceVersionMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      versionId: 'version-1',
+      userId: 'user-1',
+      locale: 'zh',
+    })
   })
 
   it('未知任务类型: 显式报错', async () => {

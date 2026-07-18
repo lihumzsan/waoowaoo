@@ -16,6 +16,7 @@ import {
   type SpeakerVoiceMap,
 } from '@/lib/voice/provider-voice-binding'
 import { buildComfyUiLineRenderText } from '@/lib/voice/generate-voice-line-context'
+import { resolveComfyUiSingleVoiceWorkflowKey } from '@/lib/voice/comfyui-voice-workflow'
 
 type CheckCancelled = () => Promise<void>
 type CharacterVoiceProfile = CharacterVoiceFields & {
@@ -27,17 +28,6 @@ type CharacterVoiceProfile = CharacterVoiceFields & {
     changeReason?: string | null
     description?: string | null
   }>
-}
-
-const COMFYUI_VOICE_LINE_WORKFLOW_FALLBACKS: Record<string, string> = {
-  'baseaudio/多人/LongCat-two': 'baseaudio/单人/LongCat-one',
-  'baseaudio/多人/s2-two': 'baseaudio/单人/s2-one',
-  'baseaudio/三人/s2-three': 'baseaudio/单人/s2-one',
-}
-
-function resolveComfyUiVoiceLineWorkflowKey(modelId: string): string {
-  const normalized = modelId.trim()
-  return COMFYUI_VOICE_LINE_WORKFLOW_FALLBACKS[normalized] || normalized
 }
 
 function normalizeBailianVoiceGenerationError(errorMessage: string | null | undefined) {
@@ -362,7 +352,7 @@ export async function generateVoiceLine(params: {
     }
 
     const referenceAudioUrl = await resolveComfyUiReferenceAudioUrl(voiceBinding.referenceAudioUrl)
-    const workflowKey = resolveComfyUiVoiceLineWorkflowKey(audioSelection.modelId)
+    const workflowKey = resolveComfyUiSingleVoiceWorkflowKey(audioSelection.modelId)
     const renderPrompt = await buildComfyUiLineRenderText({
       userId: params.userId,
       locale: params.locale || 'zh',

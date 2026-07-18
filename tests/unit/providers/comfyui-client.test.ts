@@ -6,6 +6,7 @@ import {
   collectMediaRefsFromOutputs,
   resolveComfyUiPromptQueuePhase,
   runComfyUiImageWorkflow,
+  runComfyUiVideoSeamConcatWorkflow,
   runComfyUiVideoWorkflow,
   runComfyUiWorkflow,
 } from '@/lib/providers/comfyui/client'
@@ -957,6 +958,141 @@ describe('comfyui client media refs', () => {
 
     expect(result.mimeType).toBe('video/mp4')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.vae_name).toBe('ltx\\LTX23_audio_vae_bf16.safetensors')
+  })
+
+  it('uploads two videos in order and submits the seam-concat graph', async () => {
+    vi.useFakeTimers()
+    const uploadedNames = [
+      'first-upload.mp4',
+      'second-upload.mp4',
+      'default-first-upload.mp4',
+      'default-second-upload.mp4',
+    ]
+    const submittedGraphs: Array<Record<string, { class_type: string; inputs: Record<string, unknown> }>> = []
+    let uploadIndex = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.startsWith('https://assets.test/')) {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      if (url.endsWith('/upload/image')) {
+        const name = uploadedNames[uploadIndex]
+        uploadIndex += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/prompt')) {
+        const body = JSON.parse(String(init?.body)) as { prompt: Record<string, { class_type: string; inputs: Record<string, unknown> }> }
+        submittedGraphs.push(body.prompt)
+        return new Response(JSON.stringify({ prompt_id: 'prompt-seam-concat' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-seam-concat')) {
+        return new Response(JSON.stringify({
+          'prompt-seam-concat': {
+            outputs: {
+              '18': {
+                gifs: [{ filename: 'shot-3-video.mp4', subfolder: '', type: 'output' }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=shot-3-video.mp4')) {
+        return new Response(new Uint8Array([9, 8, 7]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoSeamConcatWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+      trimEndFrames: 3,
+      trimStartFrames: 4,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(result).toEqual({ videoBase64: 'CQgH', mimeType: 'video/mp4' })
+    expect(uploadIndex).toBe(2)
+    expect(submittedGraphs).toHaveLength(1)
+    expect(submittedGraphs[0]?.['1']?.inputs.file).toBe('first-upload.mp4')
+    expect(submittedGraphs[0]?.['2']?.inputs.file).toBe('second-upload.mp4')
+    expect(submittedGraphs[0]?.['7']?.inputs['values.b']).toBe(3)
+    expect(submittedGraphs[0]?.['8']?.inputs['values.b']).toBe(4)
+    expect(submittedGraphs[0]?.['10']?.inputs.batch_index).toBe(4)
+    expect(submittedGraphs[0]?.['13']?.inputs['values.a']).toBe(4)
+
+    const defaultResultPromise = runComfyUiVideoSeamConcatWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    await defaultResultPromise
+
+    expect(uploadIndex).toBe(4)
+    expect(submittedGraphs).toHaveLength(2)
+    expect(submittedGraphs[1]?.['7']?.inputs['values.b']).toBe(0)
+    expect(submittedGraphs[1]?.['8']?.inputs['values.b']).toBe(1)
+    expect(submittedGraphs[1]?.['10']?.inputs.batch_index).toBe(1)
+    expect(submittedGraphs[1]?.['13']?.inputs['values.a']).toBe(1)
+  })
+
+  it.each([
+    {
+      name: 'negative end trim',
+      trimEndFrames: -1,
+      trimStartFrames: 0,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'fractional start trim',
+      trimEndFrames: 0,
+      trimStartFrames: 1.5,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+    {
+      name: 'over-limit end trim',
+      trimEndFrames: 100_001,
+      trimStartFrames: 0,
+      error: 'COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and 100000',
+    },
+  ])('rejects $name before uploading seam inputs', async ({ trimEndFrames, trimStartFrames, error }) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+    await expect(runComfyUiVideoSeamConcatWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: ['https://assets.test/shot-1.mp4', 'https://assets.test/shot-2.mp4'],
+      trimEndFrames,
+      trimStartFrames,
+    })).rejects.toThrow(error)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it('dumps resolved ComfyUI video prompts to stdout when prompt dump is enabled', async () => {

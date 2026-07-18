@@ -68,6 +68,10 @@ export const queryKeys = {
             ['voice-lines', projectId, episodeId, 'matched'] as const,
     },
 
+    freeVoices: {
+        all: (projectId: string) => ['free-voices', projectId] as const,
+    },
+
     // ============ 用户模型 ============
     userModels: {
         all: () => ['user-models'] as const,
