@@ -4,6 +4,7 @@ import { useRunStreamState, type RunResult } from './useRunStreamState'
 import { TASK_TYPE } from '@/lib/task/types'
 import { apiFetch } from '@/lib/api-fetch'
 import { selectRecoverableRun } from '@/lib/run-runtime/recovery'
+import { parseRecoverableRuns } from './run-stream/recovery-response'
 
 export type ScriptToStoryboardRunParams = {
   episodeId: string
@@ -53,32 +54,8 @@ export function useScriptToStoryboardRunStream({
       if (!response.ok) {
         throw new Error('Failed to load active script-to-storyboard runs')
       }
-      const data: unknown = await response.json()
-      if (
-        !data
-        || typeof data !== 'object'
-        || !Array.isArray((data as { runs?: unknown }).runs)
-      ) {
-        throw new Error('Invalid active script-to-storyboard runs response')
-      }
-      const runs = (data as {
-        runs: Array<{
-          id?: unknown
-          status?: unknown
-          createdAt?: unknown
-          updatedAt?: unknown
-          leaseExpiresAt?: unknown
-          heartbeatAt?: unknown
-        }>
-      }).runs
-      const decision = selectRecoverableRun(runs.map((run) => ({
-        id: typeof run?.id === 'string' ? run.id : null,
-        status: typeof run?.status === 'string' ? run.status : null,
-        createdAt: typeof run?.createdAt === 'string' ? run.createdAt : null,
-        updatedAt: typeof run?.updatedAt === 'string' ? run.updatedAt : null,
-        leaseExpiresAt: typeof run?.leaseExpiresAt === 'string' ? run.leaseExpiresAt : null,
-        heartbeatAt: typeof run?.heartbeatAt === 'string' ? run.heartbeatAt : null,
-      })))
+      const runs = parseRecoverableRuns(await response.json())
+      const decision = selectRecoverableRun(runs)
       return decision.runId
     },
     validateParams: (params) => {
