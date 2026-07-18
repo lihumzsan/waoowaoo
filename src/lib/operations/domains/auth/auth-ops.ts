@@ -8,6 +8,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { getPrismaErrorCode } from '@/lib/prisma-error'
 import { AUTH_REGISTER_RESULT_CODES, type AuthRegisterResultCode } from '@/lib/auth/register-result-codes'
 import { createRegisteredUser } from '@/lib/auth/register-gate'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -77,7 +78,7 @@ export function createAuthOperations(): ProjectAgentOperationRegistryDraft {
           logAuthAction('REGISTER', name, { error: 'Missing password' })
           throwRegisterInvalidParams(AUTH_REGISTER_RESULT_CODES.missingPassword)
         }
-        if (password.length < 6) {
+        if (password.length < AUTH_PASSWORD_MIN_LENGTH) {
           logAuthAction('REGISTER', name, { error: 'Password too short' })
           throwRegisterInvalidParams(AUTH_REGISTER_RESULT_CODES.passwordTooShort)
         }

@@ -38,6 +38,11 @@ No need to clone the repository. Just download and run:
 ```bash
 # Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
+cp .env.example .env
+
+# Edit .env: generate a distinct random value for every blank secret. Keep
+# MYSQL_PASSWORD in sync with DATABASE_URL and COMPOSE_DATABASE_URL (URL-encode special characters).
 
 # Start all services
 docker compose up -d
@@ -59,6 +64,8 @@ docker compose up -d
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
+cp .env.example .env
+# Fill .env as described above; Compose refuses to start when required secrets are missing.
 docker compose up -d
 ```
 
@@ -76,7 +83,8 @@ cd waoowaoo
 
 # Copy environment config (must be done before npm install)
 cp .env.example .env
-# ⚠️ Edit .env to fill in your AI API Keys (NEXTAUTH_URL defaults to http://localhost:3000, no change needed)
+# ⚠️ Fill independent random values for database, Redis, MinIO, authentication,
+# encryption, and Bull Board secrets. MYSQL_PASSWORD must match both database URLs.
 
 npm install
 

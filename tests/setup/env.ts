@@ -47,6 +47,7 @@ export function loadTestEnv() {
   setIfMissing('REDIS_HOST', '127.0.0.1')
   setIfMissing('REDIS_PORT', '6380')
   setIfMissing('STORAGE_TYPE', 'local')
+  setIfMissing('PROVIDER_OUTBOUND_PRIVATE_HOST_ALLOWLIST', 'localhost,127.0.0.1,::1')
 
   if (mutableEnv.ALLOW_TEST_NETWORK !== '1') {
     mutableEnv.NO_PROXY = '*'

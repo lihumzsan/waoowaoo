@@ -1,5 +1,5 @@
 # ==================== Stage 1: Dependencies ====================
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -7,7 +7,7 @@ COPY prisma ./prisma
 RUN npm ci
 
 # ==================== Stage 2: Build ====================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -17,13 +17,13 @@ COPY . .
 RUN npm run build
 
 # ==================== Stage 3: Production ====================
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
 # Install tini for proper signal handling
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini su-exec
 
 # node_modules（含 devDeps，因为 npm run start 需要 concurrently + tsx）
 COPY --from=builder /app/node_modules ./node_modules
@@ -52,9 +52,12 @@ COPY --from=builder /app/middleware.ts ./middleware.ts
 COPY --from=builder /app/postcss.config.mjs ./postcss.config.mjs
 
 # 运行日志目录 + 空 .env（tsx --env-file=.env 需要文件存在，实际 env 由 docker-compose 注入）
-RUN mkdir -p /app/logs && touch /app/.env
+RUN mkdir -p /app/data /app/logs && touch /app/.env && chown -R node:node /app
+
+COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/waoowaoo-entrypoint
+RUN chmod 0755 /usr/local/bin/waoowaoo-entrypoint
 
 EXPOSE 3000 3010
 
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/waoowaoo-entrypoint"]
 CMD ["npm", "run", "start"]

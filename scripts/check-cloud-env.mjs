@@ -7,6 +7,14 @@ const REQUIRED_KEYS = [
   'PROVIDER_CREDENTIAL_MODE',
   'BILLING_MODE',
   'NEXTAUTH_URL',
+  'NEXTAUTH_SECRET',
+  'CRON_SECRET',
+  'API_ENCRYPTION_KEY',
+  'ADMIN_USER_IDS',
+  'ADMIN_CREDIT_TOKEN',
+  'BULL_BOARD_USER',
+  'BULL_BOARD_PASSWORD',
+  'TRUSTED_PROXY_HOPS',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'INTERNAL_APP_URL',
@@ -69,6 +77,24 @@ function isMissing(value) {
   return typeof value !== 'string' || value.trim() === ''
 }
 
+function isWeakSecret(value) {
+  if (isMissing(value)) return true
+  const normalized = value.trim().toLowerCase()
+  return value.trim().length < 24
+    || normalized.includes('please-change')
+    || normalized.includes('changeme')
+    || normalized.includes('default-secret')
+    || normalized.includes('example')
+}
+
+function isHttpsUrl(value) {
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 function readModelProvider(modelKey) {
   if (isMissing(modelKey)) return null
   const separatorIndex = modelKey.indexOf('::')
@@ -94,6 +120,19 @@ if (env.PROVIDER_CREDENTIAL_MODE !== 'platform-key') {
 }
 if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
+}
+
+for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY', 'ADMIN_CREDIT_TOKEN', 'BULL_BOARD_PASSWORD']) {
+  if (!isMissing(env[key]) && isWeakSecret(env[key])) missing.push(`${key}=strong-secret-at-least-24-characters`)
+}
+
+const allowInsecureLocalhost = env.CLOUD_ENV_ALLOW_INSECURE_LOCALHOST === 'true'
+if (!allowInsecureLocalhost && !isHttpsUrl(env.NEXTAUTH_URL)) missing.push('NEXTAUTH_URL=https://...')
+if (!allowInsecureLocalhost && !isHttpsUrl(env.PAYMENT_PUBLIC_BASE_URL)) missing.push('PAYMENT_PUBLIC_BASE_URL=https://...')
+
+const trustedProxyHops = Number(env.TRUSTED_PROXY_HOPS)
+if (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops <= 0) {
+  missing.push('TRUSTED_PROXY_HOPS=positive-integer')
 }
 
 const requiredPlatformKeys = new Set()

@@ -5,7 +5,6 @@
 
 import { getServerSession } from 'next-auth/next'
 import { NextResponse } from 'next/server'
-import { headers as readHeaders } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
@@ -40,28 +39,6 @@ function bindAuthLogContext(session: AuthSession, projectId?: string) {
     })
 }
 
-async function getInternalTaskSession(): Promise<AuthSession | null> {
-    const expectedToken = process.env.INTERNAL_TASK_TOKEN || ''
-
-    const incomingHeaders = await readHeaders()
-    const token = incomingHeaders.get('x-internal-task-token') || ''
-    const userId = incomingHeaders.get('x-internal-user-id') || ''
-    if (!userId) return null
-    if (expectedToken) {
-        if (token !== expectedToken) return null
-    } else if (process.env.NODE_ENV === 'production') {
-        return null
-    }
-
-    return {
-        user: {
-            id: userId,
-            name: 'internal-worker',
-            email: null,
-        }
-    }
-}
-
 function withCanonicalSessionUser(session: AuthSession, user: ExistingAuthUser): AuthSession {
     return {
         user: {
@@ -70,14 +47,6 @@ function withCanonicalSessionUser(session: AuthSession, user: ExistingAuthUser):
             email: user.email ?? session.user.email ?? null,
         },
     }
-}
-
-function getSessionUserNameCandidates(session: AuthSession): string[] {
-    const candidates = [session.user.name, session.user.email]
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0)
-    return Array.from(new Set(candidates))
 }
 
 async function resolveExistingSession(session: AuthSession): Promise<AuthSession | null> {
@@ -89,20 +58,7 @@ async function resolveExistingSession(session: AuthSession): Promise<AuthSession
             select: { id: true, name: true, email: true },
         }),
     })
-    if (userById) return withCanonicalSessionUser(session, userById)
-
-    const nameCandidates = getSessionUserNameCandidates(session)
-    if (nameCandidates.length === 0) return null
-
-    const userByName = await withRetry({
-        scope: 'prisma:requireUserAuthByName',
-        policy: RETRY_POLICY.prisma,
-        run: async () => await prisma.user.findFirst({
-            where: { name: { in: nameCandidates } },
-            select: { id: true, name: true, email: true },
-        }),
-    })
-    return userByName ? withCanonicalSessionUser(session, userByName) : null
+    return userById ? withCanonicalSessionUser(session, userById) : null
 }
 
 async function requireExistingSession(): Promise<AuthSession | null> {
@@ -226,8 +182,6 @@ export function serverError(message = 'Internal server error') {
  * @returns session 或 null
  */
 export async function getAuthSession(): Promise<AuthSession | null> {
-    const internalSession = await getInternalTaskSession()
-    if (internalSession) return internalSession
     const session = await getServerSession(authOptions)
     return session as AuthSession | null
 }

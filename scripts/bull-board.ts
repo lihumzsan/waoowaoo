@@ -1,4 +1,5 @@
 import { createScopedLogger } from '@/lib/logging/core'
+import { timingSafeEqual } from 'node:crypto'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { createBullBoard } from '@bull-board/api'
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
@@ -13,6 +14,24 @@ const authPassword = process.env.BULL_BOARD_PASSWORD
 const logger = createScopedLogger({
   module: 'ops.bull_board',
 })
+
+function isLoopbackHost(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost'
+}
+
+if (Boolean(authUser) !== Boolean(authPassword)) {
+  throw new Error('BULL_BOARD_AUTH_INCOMPLETE')
+}
+if ((!authUser || !authPassword) && (process.env.NODE_ENV === 'production' || !isLoopbackHost(host))) {
+  throw new Error('BULL_BOARD_AUTH_REQUIRED')
+}
+
+function secureEqual(left: string, right: string): boolean {
+  const leftBytes = Buffer.from(left, 'utf8')
+  const rightBytes = Buffer.from(right, 'utf8')
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
+}
 
 function unauthorized(res: Response) {
   res.setHeader('WWW-Authenticate', 'Basic realm="BullMQ Board"')
@@ -49,7 +68,7 @@ function basicAuthMiddleware(req: Request, res: Response, next: NextFunction) {
 
   const username = decoded.slice(0, index)
   const password = decoded.slice(index + 1)
-  if (username !== (authUser || '') || password !== (authPassword || '')) {
+  if (!secureEqual(username, authUser || '') || !secureEqual(password, authPassword || '')) {
     unauthorized(res)
     return
   }

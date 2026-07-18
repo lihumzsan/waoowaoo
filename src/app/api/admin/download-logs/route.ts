@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler } from '@/lib/api-errors'
 import { readAllLogs } from '@/lib/logging/file-writer'
+import { requireAdminUserId } from '@/lib/admin/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export const GET = apiHandler(async () => {
     const authResult = await requireUserAuth()
     if (isErrorResponse(authResult)) return authResult
+    requireAdminUserId(authResult.session.user.id)
 
     const logs = await readAllLogs()
     if (!logs) {

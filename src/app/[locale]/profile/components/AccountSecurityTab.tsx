@@ -7,6 +7,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { parseApiErrorPayload } from '@/lib/api-error-payload'
 import { getPathname } from '@/i18n/navigation'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 
 type AccountSecuritySnapshot = {
   email: string | null
@@ -104,7 +105,7 @@ export default function AccountSecurityTab() {
       setPasswordStatus(t('currentPasswordRequired'))
       return
     }
-    if (password.length < 6) {
+    if (password.length < AUTH_PASSWORD_MIN_LENGTH) {
       setPasswordStatus(t('passwordTooShort'))
       return
     }

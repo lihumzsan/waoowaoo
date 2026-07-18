@@ -29,6 +29,35 @@ function sharedDependencyTurbopackRoot(): string | null {
 
 const turbopackRoot = sharedDependencyTurbopackRoot()
 
+const allowedDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+
+const securityHeaders = [
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "form-action 'self'",
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "media-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https: wss:",
+      "worker-src 'self' blob:",
+    ].join('; '),
+  },
+]
+
 const globalFunctionTraceExcludes = [
   './.git/**/*',
   `./${nextDistDir}/cache/**/*`,
@@ -49,10 +78,10 @@ const nextConfig: NextConfig = {
     '/api/*': globalFunctionTraceExcludes,
     '/api/**/*': globalFunctionTraceExcludes,
   },
-  allowedDevOrigins: [
-    'http://192.168.31.218:3000',
-    'http://192.168.31.*:3000',
-  ],
+  ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
+  async headers() {
+    return [{ source: '/(.*)', headers: securityHeaders }]
+  },
 };
 
 export default withNextIntl(nextConfig);

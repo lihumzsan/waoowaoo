@@ -45,6 +45,11 @@
 ```bash
 # 下载 docker-compose.yml
 curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
+cp .env.example .env
+
+# 编辑 .env：为所有空白密钥生成独立随机值，并让 MYSQL_PASSWORD、
+# DATABASE_URL 与 COMPOSE_DATABASE_URL 中的密码保持一致（URL 中需编码特殊字符）
 
 # 启动所有服务
 docker compose up -d
@@ -66,6 +71,8 @@ docker compose up -d
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
+cp .env.example .env
+# 按上面的说明填写 .env；Compose 会在必需密钥缺失时拒绝启动
 docker compose up -d
 ```
 
@@ -83,7 +90,8 @@ cd waoowaoo
 
 # 复制环境变量配置文件（必须在 npm install 之前完成）
 cp .env.example .env
-# ⚠️ 编辑 .env，填入你的 AI API Key（NEXTAUTH_URL 默认已是 http://localhost:3000，无需修改）
+# ⚠️ 编辑 .env，填写数据库、Redis、MinIO、认证、加密与 Bull Board 的独立随机密钥
+# MYSQL_PASSWORD 必须与两个数据库 URL 中的密码一致
 
 npm install
 

@@ -6,18 +6,14 @@ import { logAuthAction } from './logging/semantic'
 import { prisma } from './prisma'
 import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
 import { readGoogleOAuthConfig, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
+import { isCloudDeployment } from '@/lib/deployment/config'
 
-type AppNextAuthOptions = NextAuthOptions & {
-  trustHost?: boolean
-}
+const secureCookieRequired = (isCloudDeployment() && process.env.NODE_ENV === 'production')
+  || (process.env.NEXTAUTH_URL || '').startsWith('https://')
 
-export const authOptions: AppNextAuthOptions = {
+export const authOptions: NextAuthOptions = {
   adapter: createAuthAdapter(),
-  // 🔥 允许从任意 Host 访问（解决局域网访问问题）
-  trustHost: true,
-  // 🔥 根据 URL 协议决定是否使用 Secure Cookie
-  // 局域网 HTTP 访问时需要关闭，否则 Cookie 无法设置
-  useSecureCookies: (process.env.NEXTAUTH_URL || '').startsWith('https://'),
+  useSecureCookies: secureCookieRequired,
   providers: [
     CredentialsProvider({
       name: "credentials",

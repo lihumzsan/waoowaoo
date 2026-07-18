@@ -13,6 +13,7 @@ import { readAuthRegisterResultCode } from '@/lib/auth/register-result-response'
 import { isPublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 import { Link, useRouter } from '@/i18n/navigation'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 
 function readServerDetailCode(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -114,7 +115,7 @@ export default function SignUp() {
       return
     }
 
-    if (password.length < 6) {
+    if (password.length < AUTH_PASSWORD_MIN_LENGTH) {
       setError(t('passwordTooShort'))
       setLoading(false)
       return

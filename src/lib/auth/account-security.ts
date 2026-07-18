@@ -1,8 +1,9 @@
 import bcrypt from 'bcryptjs'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
+import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 
-export const ACCOUNT_SECURITY_PASSWORD_MIN_LENGTH = 6
+export const ACCOUNT_SECURITY_PASSWORD_MIN_LENGTH = AUTH_PASSWORD_MIN_LENGTH
 
 export const ACCOUNT_SECURITY_RESULT_CODES = {
   bodyParseFailed: 'ACCOUNT_SECURITY_BODY_PARSE_FAILED',

@@ -71,6 +71,26 @@ describe('normalizeAnyError provider-specific mapping', () => {
     expect(normalized.provider).toBe('openrouter')
   })
 
+  it('maps AI SDK statusCode 429 to retryable RATE_LIMIT', () => {
+    const error = Object.assign(new Error('Ark rate limit exceeded'), { statusCode: 429 })
+
+    const normalized = normalizeAnyError(error)
+
+    expect(normalized.code).toBe('RATE_LIMIT')
+    expect(normalized.retryable).toBe(true)
+  })
+
+  it('preserves Ark overdue classification when AI SDK reports statusCode 403', () => {
+    const error = Object.assign(new Error('AccountOverdueError: account has an overdue balance'), {
+      statusCode: 403,
+    })
+
+    const normalized = normalizeAnyError(error)
+
+    expect(normalized.code).toBe('INSUFFICIENT_BALANCE')
+    expect(normalized.retryable).toBe(false)
+  })
+
   it('maps explicit video API format errors to VIDEO_API_FORMAT_UNSUPPORTED', () => {
     const normalized = normalizeAnyError(
       new Error('VIDEO_API_FORMAT_UNSUPPORTED: provider response did not include a task id'),

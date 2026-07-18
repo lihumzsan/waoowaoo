@@ -12,6 +12,7 @@ export type NormalizeOptions = {
 type ErrorLike = {
   code?: unknown
   status?: unknown
+  statusCode?: unknown
   message?: unknown
   details?: unknown
   provider?: unknown
@@ -313,7 +314,9 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
     return buildNormalizedError('EMPTY_RESPONSE', message, options.details, provider)
   }
 
-  const httpStatus = readHttpStatus(errorLike.status) ?? readHttpStatus(errorLike.code)
+  const httpStatus = readHttpStatus(errorLike.status)
+    ?? readHttpStatus(errorLike.statusCode)
+    ?? readHttpStatus(errorLike.code)
   if (httpStatus !== null) {
     const code = codeFromHttpStatus(httpStatus)
     if (httpStatus === 403 && containsAny(lowerMessage, ['accountoverdueerror', 'overdue balance', 'overdue', 'account has an overdue'])) {

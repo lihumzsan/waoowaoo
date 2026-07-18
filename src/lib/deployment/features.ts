@@ -26,7 +26,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: DeploymentFeatures = {
   showApiConfig: true,
   showAccountSecurity: false,
   showGoogleOAuth: false,
-  showDownloadLogs: true,
+  showDownloadLogs: false,
   showUpdateCheck: true,
   requireInviteCodeOnSignup: false,
   usePlatformProviderConfig: false,
