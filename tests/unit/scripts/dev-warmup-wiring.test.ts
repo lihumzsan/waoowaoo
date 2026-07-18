@@ -12,5 +12,5 @@ test('the full development command includes the one-shot warmup process', () => 
     .toBe('tsx --env-file=.env scripts/dev-warmup.ts')
   expect(packageJson.scripts.dev).toContain('npm run dev:warmup')
   expect(packageJson.scripts['dev:warmup']).not.toContain('watch')
-  expect(packageJson.scripts.start).not.toContain('dev:warmup')
+  expect(packageJson.scripts.start).toBeUndefined()
 })
