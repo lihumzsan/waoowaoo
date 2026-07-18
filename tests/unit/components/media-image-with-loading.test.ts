@@ -1,5 +1,33 @@
-import { describe, expect, it } from 'vitest'
-import { isCurrentImageElement, readCompletedImageState } from '@/components/media/MediaImageWithLoading'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  MediaImageWithLoading,
+  isCurrentImageElement,
+  readCompletedImageState,
+  shouldAnimateImagePlaceholder,
+} from '@/components/media/MediaImageWithLoading'
+import { MediaImage } from '@/components/media/MediaImage'
+
+vi.stubGlobal('React', React)
+
+vi.mock('next/image', async () => {
+  const ReactModule = await import('react')
+  return {
+    default: ReactModule.forwardRef<HTMLImageElement, {
+      src: string
+      alt: string
+      unoptimized?: boolean
+    }>(function MockNextImage({ src, alt, unoptimized }, ref) {
+      return ReactModule.createElement('img', {
+        ref,
+        src,
+        alt,
+        'data-unoptimized': String(Boolean(unoptimized)),
+      })
+    }),
+  }
+})
 
 describe('MediaImageWithLoading', () => {
   it('marks a cached completed image as loaded', () => {
@@ -26,5 +54,30 @@ describe('MediaImageWithLoading', () => {
 
     expect(isCurrentImageElement(previousImage, currentImage)).toBe(false)
     expect(isCurrentImageElement(currentImage, currentImage)).toBe(true)
+  })
+
+  it('animates a loading placeholder only near the viewport', () => {
+    expect(shouldAnimateImagePlaceholder(true, false)).toBe(false)
+    expect(shouldAnimateImagePlaceholder(true, true)).toBe(true)
+    expect(shouldAnimateImagePlaceholder(false, true)).toBe(false)
+  })
+
+  it('renders an offscreen loading placeholder without animation work', () => {
+    const markup = renderToStaticMarkup(React.createElement(MediaImageWithLoading, {
+      src: '/m/project/frame.png',
+      alt: 'frame',
+    }))
+
+    expect(markup).not.toContain('animate-pulse')
+    expect(markup).not.toContain('animate-spin')
+  })
+
+  it('allows Next.js to optimize stable media routes', () => {
+    const markup = renderToStaticMarkup(React.createElement(MediaImage, {
+      src: '/m/project/frame.png',
+      alt: 'frame',
+    }))
+
+    expect(markup).toContain('data-unoptimized="false"')
   })
 })

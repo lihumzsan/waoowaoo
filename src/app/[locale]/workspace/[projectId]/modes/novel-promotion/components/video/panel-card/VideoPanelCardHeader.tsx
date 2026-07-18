@@ -66,6 +66,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
             alt={t('panelCard.shot', { number: panelIndex + 1 })}
             containerClassName="w-full h-full bg-black"
             className="w-full h-full object-contain bg-black"
+            sizes="(max-width: 767px) 100vw, (max-width: 1023px) 50vw, 33vw"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-[var(--glass-overlay)] group-hover:bg-[var(--glass-overlay)] transition-colors pointer-events-none">
             <div className="w-16 h-16 bg-[var(--glass-bg-surface-strong)] rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
@@ -79,6 +80,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
           alt={t('panelCard.shot', { number: panelIndex + 1 })}
           containerClassName="w-full h-full bg-[var(--glass-bg-muted)]"
           className={`w-full h-full object-contain bg-[var(--glass-bg-muted)] ${media.onPreviewImage ? 'cursor-zoom-in' : ''}`}
+          sizes="(max-width: 767px) 100vw, (max-width: 1023px) 50vw, 33vw"
           onClick={media.onPreviewImage ? player.handlePreviewImage : undefined}
         />
       ) : (

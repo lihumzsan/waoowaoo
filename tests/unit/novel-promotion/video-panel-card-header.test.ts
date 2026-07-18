@@ -9,7 +9,10 @@ vi.mock('@/components/task/TaskStatusOverlay', () => ({
 }))
 
 vi.mock('@/components/media/MediaImageWithLoading', () => ({
-  MediaImageWithLoading: () => React.createElement('img', { alt: 'preview' }),
+  MediaImageWithLoading: ({ sizes }: { sizes?: string }) => React.createElement('img', {
+    alt: 'preview',
+    'data-sizes': sizes,
+  }),
 }))
 
 vi.mock('@/components/ui/icons', () => ({
@@ -101,6 +104,18 @@ describe('VideoPanelCardHeader', () => {
     )
 
     expect(markup).toContain('Restore Previous')
+  })
+
+  it('provides responsive thumbnail sizes', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardHeader, {
+        runtime: createRuntime(),
+      }),
+    )
+
+    expect(markup).toContain(
+      'data-sizes="(max-width: 767px) 100vw, (max-width: 1023px) 50vw, 33vw"',
+    )
   })
 
   it('hides previous button when no previous version exists', () => {

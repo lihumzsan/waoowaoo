@@ -94,6 +94,11 @@
     "enterEdit": "Enter Editor",
     "back": "Back"
   },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "status": "Page {page} of {totalPages}"
+  },
   "stage": {
     "title": "Video Generation",
     "generateAll": "Generate All",

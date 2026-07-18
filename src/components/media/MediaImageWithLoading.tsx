@@ -27,6 +27,10 @@ export function isCurrentImageElement(target: HTMLImageElement, current: HTMLIma
   return target === current
 }
 
+export function shouldAnimateImagePlaceholder(isLoading: boolean, isNearViewport: boolean) {
+  return isLoading && isNearViewport
+}
+
 export function MediaImageWithLoading({
   src,
   alt,
@@ -40,9 +44,11 @@ export function MediaImageWithLoading({
   onError,
   ...restProps
 }: MediaImageWithLoadingProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [isError, setIsError] = useState(false)
+  const [isNearViewport, setIsNearViewport] = useState(false)
 
   useEffect(() => {
     setIsLoaded(false)
@@ -54,9 +60,25 @@ export function MediaImageWithLoading({
     }
   }, [src])
 
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsNearViewport(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsNearViewport(entry.isIntersecting)
+    }, { rootMargin: '300px' })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [src])
+
   if (!src) return null
 
   const shouldShowSkeleton = !isLoaded && (!isError || keepSkeletonOnError)
+  const shouldAnimatePlaceholder = shouldAnimateImagePlaceholder(shouldShowSkeleton, isNearViewport)
 
   const imageClassName = mergeClassNames(
     className,
@@ -79,11 +101,15 @@ export function MediaImageWithLoading({
   }
 
   return (
-    <div className={mergeClassNames('relative overflow-hidden bg-[var(--glass-bg-muted)]', containerClassName)}>
+    <div
+      ref={containerRef}
+      className={mergeClassNames('relative overflow-hidden bg-[var(--glass-bg-muted)]', containerClassName)}
+    >
       {shouldShowSkeleton && (
         <div
           className={mergeClassNames(
-            'pointer-events-none absolute inset-0 z-0 animate-pulse bg-[var(--glass-bg-muted)]',
+            'pointer-events-none absolute inset-0 z-0 bg-[var(--glass-bg-muted)]',
+            shouldAnimatePlaceholder && 'animate-pulse',
             skeletonClassName,
           )}
         />
@@ -95,7 +121,10 @@ export function MediaImageWithLoading({
             loadingIndicatorClassName,
           )}
         >
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--glass-stroke-strong)] border-t-[var(--glass-tone-info-fg)]" />
+          <span className={mergeClassNames(
+            'h-5 w-5 rounded-full border-2 border-[var(--glass-stroke-strong)] border-t-[var(--glass-tone-info-fg)]',
+            shouldAnimatePlaceholder && 'animate-spin',
+          )} />
           <span className="sr-only">Loading</span>
         </div>
       )}

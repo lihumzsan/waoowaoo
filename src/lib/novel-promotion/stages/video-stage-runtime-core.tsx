@@ -48,6 +48,10 @@ import {
   type VideoSubmissionBaseline,
 } from './video-stage-runtime/immediate-video-submission'
 import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
+import {
+  getVideoPanelPage,
+  paginateVideoPanels,
+} from './video-stage-runtime/video-panel-pagination'
 
 export type { VideoStageShellProps } from './video-stage-runtime/types'
 
@@ -98,12 +102,6 @@ export function useVideoStageRuntime({
     closePreviewImage,
   } = useVideoStageUiState()
 
-  const {
-    panelRefs,
-    highlightedPanelKey,
-    locateVoiceLinePanel,
-  } = useVideoPanelViewport()
-
   const lipSyncMutation = useLipSync(projectId, episodeId)
   const listEpisodeVideoUrlsMutation = useListProjectEpisodeVideoUrls(projectId)
   const updatePanelLinkMutation = useUpdateProjectPanelLink(projectId)
@@ -120,6 +118,32 @@ export function useVideoStageRuntime({
     panelVideoStates,
     panelLipStates,
   })
+
+  const [videoPanelPage, setVideoPanelPage] = useState(1)
+  const visibleVideoPanelPage = useMemo(
+    () => paginateVideoPanels(allPanels, videoPanelPage),
+    [allPanels, videoPanelPage],
+  )
+  const visiblePanelKeys = useMemo(
+    () => new Set(visibleVideoPanelPage.items.map(
+      (panel) => `${panel.storyboardId}-${panel.panelIndex}`,
+    )),
+    [visibleVideoPanelPage.items],
+  )
+  const revealPanel = useCallback((panelKey: string) => {
+    setVideoPanelPage(getVideoPanelPage(allPanels, panelKey))
+  }, [allPanels])
+  const {
+    panelRefs,
+    highlightedPanelKey,
+    locateVoiceLinePanel,
+  } = useVideoPanelViewport({ revealPanel })
+
+  useEffect(() => {
+    if (videoPanelPage !== visibleVideoPanelPage.page) {
+      setVideoPanelPage(visibleVideoPanelPage.page)
+    }
+  }, [videoPanelPage, visibleVideoPanelPage.page])
 
   const {
     savingPrompts,
@@ -425,6 +449,7 @@ export function useVideoStageRuntime({
     episodeId,
     allPanels,
     linkedPanels,
+    visiblePanelKeys,
     videoModelOptions: allVideoModelOptions,
     onGenerateVideo: handleGenerateVideoWithImmediateLock,
     promptTaskStates: firstLastFramePromptStates,
@@ -578,6 +603,8 @@ export function useVideoStageRuntime({
 
       <VideoRenderPanel
         allPanels={projectedPanels}
+        currentPage={visibleVideoPanelPage.page}
+        onPageChange={setVideoPanelPage}
         linkedPanels={linkedPanels}
         highlightedPanelKey={highlightedPanelKey}
         panelRefs={panelRefs}

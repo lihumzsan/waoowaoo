@@ -43,7 +43,6 @@ export const MediaImage = forwardRef<HTMLImageElement, MediaImageProps>(function
           src={src}
           alt={alt}
           fill
-          unoptimized
           sizes={sizes || '100vw'}
           priority={priority}
           className={className}
@@ -59,7 +58,6 @@ export const MediaImage = forwardRef<HTMLImageElement, MediaImageProps>(function
         ref={ref}
         src={src}
         alt={alt}
-        unoptimized
         width={width}
         height={height}
         sizes={sizes}

@@ -2,7 +2,11 @@
 
 import { useCallback, useRef, useState } from 'react'
 
-export function useVideoPanelViewport() {
+interface UseVideoPanelViewportParams {
+  revealPanel: (panelKey: string) => void
+}
+
+export function useVideoPanelViewport({ revealPanel }: UseVideoPanelViewportParams) {
   const [highlightedPanelKey, setHighlightedPanelKey] = useState<string | null>(null)
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
@@ -19,8 +23,13 @@ export function useVideoPanelViewport() {
   }, [])
 
   const locateVoiceLinePanel = useCallback((storyboardId: string, panelIndex: number) => {
-    scrollToPanel(storyboardId, panelIndex)
-  }, [scrollToPanel])
+    revealPanel(`${storyboardId}-${panelIndex}`)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        scrollToPanel(storyboardId, panelIndex)
+      })
+    })
+  }, [revealPanel, scrollToPanel])
 
   return {
     panelRefs,
