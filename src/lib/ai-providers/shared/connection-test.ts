@@ -1,8 +1,12 @@
-import OpenAI from 'openai'
+import { generateText, type LanguageModel } from 'ai'
+import { composeModelKey } from '@/lib/ai-registry/selection'
+import { DEFAULT_REASONING_EFFORT } from '@/lib/ai-registry/reasoning-effort'
+import type { AiLlmProtocol } from '@/lib/ai-registry/types'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import type {
   AiProviderConnectionTester,
   AiProviderConnectionTestStep,
+  AiProviderLanguageModelContext,
 } from '@/lib/ai-providers/runtime-types'
 
 export function connectionTestErrorMessage(error: unknown): string {
@@ -25,49 +29,74 @@ export function classifyConnectionProbeFailure(status: number): string {
   return `Provider error (${status})`
 }
 
-function createOpenAiClient(input: { apiKey: string; baseURL: string }): OpenAI {
-  return new OpenAI({
-    apiKey: input.apiKey,
-    baseURL: input.baseURL,
-    timeout: 30000,
-    fetch: fetchWithProviderProxy,
-  })
+function buildModelsUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, '')}/models`
 }
 
-export function createOpenAiStyleConnectionTester(defaults: {
+export function createAiSdkConnectionTester(defaults: {
+  providerKey: string
   displayName: string
   defaultBaseUrl: string
   defaultTestModel: string
+  protocol: AiLlmProtocol
+  createLanguageModel: (input: AiProviderLanguageModelContext) => LanguageModel
 }): AiProviderConnectionTester {
-  return {
-    testLlm: async (input) => {
-      const client = createOpenAiClient({
+  const createModel = (input: { apiKey: string; baseUrl?: string; model?: string }) => {
+    const modelId = input.model || defaults.defaultTestModel
+    const modelKey = composeModelKey(defaults.providerKey, modelId)
+    return defaults.createLanguageModel({
+      providerKey: defaults.providerKey,
+      selection: {
+        provider: defaults.providerKey,
+        modelId,
+        modelKey,
+      },
+      providerConfig: {
+        id: defaults.providerKey,
+        name: defaults.displayName,
         apiKey: input.apiKey,
-        baseURL: input.baseUrl || defaults.defaultBaseUrl,
-      })
-      const model = input.model || defaults.defaultTestModel
-      const response = await client.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: '1+1=? Reply with only the number.' }],
-        max_tokens: 8,
-        temperature: 0,
-      })
-      const answer = response.choices[0]?.message?.content?.trim() || ''
-      return {
-        model: response.model || model,
-        answer,
-      }
-    },
-    diagnose: async (input) => {
-      const client = createOpenAiClient({
-        apiKey: input.apiKey,
-        baseURL: input.baseUrl || defaults.defaultBaseUrl,
-      })
-      const model = input.llmModel || defaults.defaultTestModel
-      const steps: AiProviderConnectionTestStep[] = []
+        baseUrl: input.baseUrl || defaults.defaultBaseUrl,
+      },
+      protocol: defaults.protocol,
+      executionMode: 'sync',
+      reasoning: false,
+      reasoningEffort: DEFAULT_REASONING_EFFORT,
+      temperature: 0,
+    })
+  }
 
+  const probeText = async (input: { apiKey: string; baseUrl?: string; model?: string }) => {
+    const modelId = input.model || defaults.defaultTestModel
+    const response = await generateText({
+      model: createModel(input),
+      prompt: '1+1=? Reply with only the number.',
+      maxOutputTokens: 8,
+      temperature: 0,
+      maxRetries: 0,
+    })
+    return { model: response.response.modelId || modelId, answer: response.text.trim() }
+  }
+
+  return {
+    testLlm: probeText,
+    diagnose: async (input) => {
+      const model = input.llmModel || defaults.defaultTestModel
+      const baseUrl = input.baseUrl || defaults.defaultBaseUrl
+      const steps: AiProviderConnectionTestStep[] = []
       try {
-        await client.models.list()
+        const response = await fetchWithProviderProxy(buildModelsUrl(baseUrl), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${input.apiKey}` },
+        })
+        if (!response.ok) {
+          steps.push({
+            name: 'models',
+            status: 'fail',
+            message: connectionTestErrorMessage(new Error(String(response.status))),
+          })
+          steps.push({ name: 'textGen', status: 'skip', message: 'Skipped because models probe failed', model })
+          return { success: false, steps }
+        }
         steps.push({ name: 'models', status: 'pass', message: `${defaults.displayName} models endpoint ok` })
       } catch (error) {
         steps.push({ name: 'models', status: 'fail', message: connectionTestErrorMessage(error) })
@@ -76,23 +105,16 @@ export function createOpenAiStyleConnectionTester(defaults: {
       }
 
       try {
-        const response = await client.chat.completions.create({
-          model,
-          messages: [{ role: 'user', content: '1+1=? Reply with only the number.' }],
-          max_tokens: 8,
-          temperature: 0,
-        })
-        const answer = response.choices[0]?.message?.content?.trim()
+        const response = await probeText({ apiKey: input.apiKey, baseUrl, model })
         steps.push({
           name: 'textGen',
-          status: answer ? 'pass' : 'fail',
-          message: answer ? 'Text generation ok' : 'Text generation returned empty response',
-          model: response.model || model,
+          status: response.answer ? 'pass' : 'fail',
+          message: response.answer ? 'Text generation ok' : 'Text generation returned empty response',
+          model: response.model,
         })
       } catch (error) {
         steps.push({ name: 'textGen', status: 'fail', message: connectionTestErrorMessage(error), model })
       }
-
       return { success: steps.every((step) => step.status !== 'fail'), steps }
     },
   }

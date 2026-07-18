@@ -1,4 +1,3 @@
-import type OpenAI from 'openai'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
@@ -7,6 +6,11 @@ import { isReasoningEffort, type ReasoningEffort } from '@/lib/ai-registry/reaso
 export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
+export type AiLlmProtocol =
+  | 'openai-responses'
+  | 'openai-compatible-chat'
+  | 'openrouter-chat'
+  | 'google-generative-ai'
 
 export type AiOptionValidationResult =
   | { ok: true }
@@ -72,7 +76,7 @@ export type AiLlmMessage = {
   content: ChatMessageContent
 }
 
-export interface ChatCompletionOptions {
+export interface AiLlmCallOptions {
   temperature?: number
   reasoning?: boolean
   reasoningEffort?: ReasoningEffort
@@ -87,7 +91,7 @@ export interface ChatCompletionOptions {
   __skipAutoStream?: boolean
 }
 
-export interface ChatCompletionStreamCallbacks {
+export interface AiLlmStreamCallbacks {
   onStage?: (stage: {
     stage: 'submit' | 'streaming' | 'fallback' | 'completed'
     provider?: string | null
@@ -131,16 +135,7 @@ export type AiStepExecutionInput = {
   reasoningEffort?: ReasoningEffort
 }
 
-export type AiStepExecutionResult = {
-  text: string
-  reasoning: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  completion: OpenAI.Chat.Completions.ChatCompletion
-}
+export type AiStepExecutionResult = AiLlmExecutionResult
 
 export type AiVisionStepExecutionInput = {
   userId: string
@@ -155,16 +150,7 @@ export type AiVisionStepExecutionInput = {
   reasoningEffort?: ReasoningEffort
 }
 
-export type AiVisionStepExecutionResult = {
-  text: string
-  reasoning: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  completion: OpenAI.Chat.Completions.ChatCompletion
-}
+export type AiVisionStepExecutionResult = AiLlmExecutionResult
 
 export type AiLlmProviderConfig = {
   id: string
@@ -188,6 +174,7 @@ export type AiLlmExecutionInput = {
 export type AiLlmUsage = {
   promptTokens: number
   completionTokens: number
+  totalTokens: number
   cachedInputTokens?: number
   cacheWriteTokens?: number
   cacheHitRate?: number
@@ -200,13 +187,19 @@ export type AiLlmTermination = {
 }
 
 export type AiLlmExecutionResult = {
-  completion: OpenAI.Chat.Completions.ChatCompletion
-  logProvider: string
+  schemaVersion: 1
+  provider: string
+  modelId: string
   text: string
   reasoning: string
   termination: AiLlmTermination
-  usage?: AiLlmUsage | null
-  successDetails?: AiUnknownObject
+  usage: AiLlmUsage
+  response: {
+    id?: string
+    modelId?: string
+    timestamp?: string
+  }
+  providerMetadata?: AiUnknownObject
 }
 
 export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music'
@@ -236,6 +229,7 @@ export interface CapabilityFieldI18n {
 export type CapabilityFieldI18nMap = Record<string, CapabilityFieldI18n>
 
 export interface LLMCapabilities {
+  protocol: AiLlmProtocol
   reasoningEffortOptions?: ReasoningEffort[]
   fieldI18n?: CapabilityFieldI18nMap
 }
@@ -287,6 +281,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
 ])
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
+  'protocol',
   'reasoningEffortOptions',
   'fieldI18n',
 ])
@@ -476,6 +471,16 @@ function validateNamespaceAllowedFields(
 
 function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
+  const protocol = raw.protocol
+  const allowedProtocols: readonly AiLlmProtocol[] = [
+    'openai-responses',
+    'openai-compatible-chat',
+    'openrouter-chat',
+    'google-generative-ai',
+  ]
+  if (!allowedProtocols.includes(protocol as AiLlmProtocol)) {
+    issues.push(makeAllowedIssue('capabilities.llm.protocol', protocol, allowedProtocols))
+  }
   const options = raw.reasoningEffortOptions
   const normalizedOptions = isReasoningEffortArray(options) ? options : undefined
   if (options !== undefined && !normalizedOptions) {

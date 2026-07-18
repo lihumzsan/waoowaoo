@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
 const workflow = createEditFirstWorkflowView({
@@ -185,13 +184,28 @@ vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
 
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
-import { getProjectAgentSessionSnapshot, getProjectAgentSessionState } from '@/lib/project-agent/session-state'
-import { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
+const [sessionState, threadSnapshot, choiceTools] = await Promise.all([
+  import('@/lib/project-agent/session-state'),
+  import('@/lib/project-agent/thread-snapshot'),
+  import('@/lib/project-agent/edit-first-choice-tools'),
+])
+const { getProjectAgentSessionSnapshot, getProjectAgentSessionState } = sessionState
+const { getProjectAssistantThreadWatermarkedSnapshot } = threadSnapshot
+const { EDIT_FIRST_CHOICE_TOOL_IDS } = choiceTools
 
 export { beforeEach, describe, expect, it, vi } from 'vitest'
-export { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-export { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
-export { getProjectAgentSessionSnapshot } from '@/lib/project-agent/session-state'
-export { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
-export { choiceCardMock, eventMock, interruptionsMock, prismaMock, runsMock, waitsMock, workflow, workflowMock }
+export {
+  choiceCardMock,
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+  eventMock,
+  getProjectAgentSessionSnapshot,
+  getProjectAgentSessionState,
+  getProjectAssistantThreadWatermarkedSnapshot,
+  interruptionsMock,
+  prismaMock,
+  runsMock,
+  waitsMock,
+  workflow,
+  workflowMock,
+}
 export type { MockInterruption, MockRun }

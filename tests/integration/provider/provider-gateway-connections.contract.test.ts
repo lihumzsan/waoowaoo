@@ -8,6 +8,7 @@ import {
   it,
   jsonResponse,
   requestUrlOf,
+  responsesApiResponse,
   testLlmConnection,
   testProviderConnection,
   vi,
@@ -21,15 +22,16 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
   describe('testLlmConnection routes through provider connection testers', () => {
     it('uses the Ark default base URL and test model when none are supplied', async () => {
-      fetchMock.mockResolvedValueOnce(chatCompletionResponse('doubao-seed-2-0-lite-260215', '2'))
+      fetchMock.mockResolvedValueOnce(responsesApiResponse('doubao-seed-2-0-lite-260215', '2'))
 
       const result = await testLlmConnection({ provider: 'ark', apiKey: 'sk-ark' })
 
       const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit]
       const url = requestUrlOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      expect(url).toBe('https://ark.cn-beijing.volces.com/api/v3/chat/completions')
+      expect(url).toBe('https://ark.cn-beijing.volces.com/api/v3/responses')
       const body = JSON.parse(String(init.body)) as Record<string, unknown>
       expect(body.model).toBe('doubao-seed-2-0-lite-260215')
+      expect(body.thinking).toEqual({ type: 'disabled' })
       expect(result).toEqual({
         provider: 'ark',
         message: 'ark connection ok',

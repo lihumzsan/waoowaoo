@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
-import { encryptApiKey, decryptApiKey } from '@/lib/crypto-utils'
+import { encryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
@@ -71,8 +71,11 @@ export async function getUserApiConfig(userId: string) {
   })
 
   const providers = parseStoredProviders(pref?.customProviders).map((provider) => ({
-    ...provider,
-    apiKey: provider.apiKey ? decryptApiKey(provider.apiKey) : '',
+    id: provider.id,
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    hidden: provider.hidden,
+    hasApiKey: Boolean(provider.apiKey),
   }))
 
   const billingMode = await getBillingMode()

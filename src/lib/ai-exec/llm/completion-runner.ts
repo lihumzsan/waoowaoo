@@ -1,49 +1,198 @@
-import OpenAI from 'openai'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getProviderKey } from '@/lib/ai-registry/selection'
-import type { ChatCompletionOptions, ChatCompletionStreamCallbacks } from '@/lib/ai-registry/types'
+import type {
+  AiLlmExecutionResult,
+  AiLlmCallOptions,
+  AiLlmStreamCallbacks,
+  ChatMessage,
+} from '@/lib/ai-registry/types'
 import { getInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import {
   _ulogError,
   llmLogger,
   logLlmRawInput,
   logLlmRawOutput,
-  recordCompletionUsage,
-  completionUsageSummary,
+  recordLlmUsage,
   resolveLlmRuntimeModel,
 } from '@/lib/ai-exec/llm-runtime'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
-import type { AiLlmExecutionInput, AiLlmExecutionResult, ChatMessage } from '@/lib/ai-registry/types'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
+import { prepareAiTextModelMessages } from '@/lib/ai-exec/language-model'
+import { runAiSdkLanguageModel } from '@/lib/ai-exec/llm/sdk-runner'
 
 ensureAiCatalogsRegistered()
 
-async function executeLlmCompletionViaAdapter(
-  input: AiLlmExecutionInput,
-): Promise<AiLlmExecutionResult> {
-  const provider = resolveAiProviderAdapter(input.selection.provider)
-  if (!provider.completeLlm) {
-    throw new Error(`UNSUPPORTED_LLM_PROVIDER: ${input.providerKey}`)
-  }
-  const result = await provider.completeLlm(input)
+type ResolvedTextExecution = {
+  selection: Awaited<ReturnType<typeof resolveLlmRuntimeModel>>
+  providerConfig: Awaited<ReturnType<typeof getProviderConfig>>
+  providerKey: string
+  projectId?: string
+  temperature: number
+  reasoning: boolean
+  reasoningEffort: Awaited<ReturnType<typeof resolveReasoningEffort>>
+  openRouterSessionId?: string
+  options: AiLlmCallOptions
+}
+
+async function resolveTextExecution(input: {
+  userId: string
+  model: string
+  messages: ChatMessage[]
+  options: AiLlmCallOptions
+  stream: boolean
+}): Promise<ResolvedTextExecution> {
+  const selection = await resolveLlmRuntimeModel(input.userId, input.model)
+  const providerKey = getProviderKey(selection.provider).toLowerCase()
+  const providerConfig = await getProviderConfig(input.userId, selection.provider)
+  const projectId = typeof input.options.projectId === 'string' && input.options.projectId.trim()
+    ? input.options.projectId.trim()
+    : undefined
+  const reasoningEffort = await resolveReasoningEffort({
+    userId: input.userId,
+    modelKey: selection.modelKey,
+    purpose: 'analysis',
+    projectId,
+    explicit: input.options.reasoningEffort,
+  })
+  const options = { ...input.options, reasoningEffort }
+  validateAiOptions({
+    schema: describeLlmVariantBase({
+      modality: 'llm',
+      selection,
+      executionMode: input.stream ? 'stream' : 'sync',
+    }).optionSchema,
+    options,
+    context: `${input.stream ? 'llm_stream' : 'llm'}:${selection.modelKey}`,
+  })
+  const temperature = input.options.temperature ?? 0.7
+  const reasoning = input.options.reasoning ?? true
+  const openRouterSessionId = resolveAiProviderAdapter(selection.provider).resolveLlmSessionId?.({
+    kind: 'llm',
+    userId: input.userId,
+    projectId,
+    action: input.options.action,
+    modelKey: selection.modelKey,
+    explicitSessionId: input.options.openRouterSessionId,
+  })
+  logLlmRawInput({
+    userId: input.userId,
+    projectId,
+    provider: providerKey,
+    modelId: selection.modelId,
+    modelKey: selection.modelKey,
+    stream: input.stream,
+    reasoning,
+    reasoningEffort,
+    temperature,
+    action: input.options.action,
+    openRouterSessionId,
+    messages: input.messages,
+  })
   return {
-    ...result,
-    usage: result.usage ?? completionUsageSummary(result.completion),
+    selection,
+    providerConfig,
+    providerKey,
+    projectId,
+    temperature,
+    reasoning,
+    reasoningEffort,
+    openRouterSessionId,
+    options,
   }
 }
 
-export async function chatCompletionStream(
+function logTextResult(input: {
+  userId: string
+  resolved: ResolvedTextExecution
+  result: AiLlmExecutionResult
+  stream: boolean
+}): void {
+  logLlmRawOutput({
+    userId: input.userId,
+    projectId: input.resolved.projectId,
+    provider: input.result.provider,
+    modelId: input.resolved.selection.modelId,
+    modelKey: input.resolved.selection.modelKey,
+    stream: input.stream,
+    action: input.resolved.options.action,
+    text: input.result.text,
+    reasoning: input.result.reasoning,
+    termination: input.result.termination,
+    usage: input.result.usage,
+    providerResponse: input.result.providerMetadata ?? null,
+  })
+  recordLlmUsage(input.resolved.selection.modelId, input.result.usage)
+}
+
+async function executeText(input: {
+  userId: string
+  model: string
+  messages: ChatMessage[]
+  options: AiLlmCallOptions
+  callbacks?: AiLlmStreamCallbacks
+  stream: boolean
+}): Promise<AiLlmExecutionResult> {
+  const resolved = await resolveTextExecution(input)
+  const startedAt = Date.now()
+  try {
+    const result = await runAiSdkLanguageModel({
+      providerKey: resolved.providerKey,
+      selection: resolved.selection,
+      providerConfig: resolved.providerConfig,
+      modelMessages: prepareAiTextModelMessages(resolved.selection.provider, input.messages),
+      sourceMessages: input.messages,
+      temperature: resolved.temperature,
+      reasoning: resolved.reasoning,
+      reasoningEffort: resolved.reasoningEffort,
+      modality: 'llm',
+      executionMode: input.stream ? 'stream' : 'sync',
+      openRouterSessionId: resolved.openRouterSessionId,
+      options: resolved.options,
+      callbacks: input.callbacks,
+    })
+    logTextResult({ userId: input.userId, resolved, result, stream: input.stream })
+    llmLogger.info({
+      action: 'llm.call.success',
+      message: 'llm call succeeded',
+      provider: result.provider,
+      durationMs: Date.now() - startedAt,
+      details: {
+        model: resolved.selection.modelId,
+        stream: input.stream,
+        responseId: result.response.id ?? null,
+      },
+    })
+    return result
+  } catch (error) {
+    llmLogger.warn({
+      action: input.stream ? 'llm.stream.failed' : 'llm.call.failed',
+      message: input.stream ? 'llm stream failed' : 'llm call failed',
+      userId: input.userId,
+      projectId: resolved.projectId,
+      provider: resolved.providerKey,
+      durationMs: Date.now() - startedAt,
+      details: {
+        model: resolved.selection.modelId,
+        action: input.options.action ?? null,
+      },
+      error,
+    })
+    input.callbacks?.onError?.(error, resolveStreamStepMeta(resolved.options))
+    throw error
+  }
+}
+
+export async function runLlmStream(
   userId: string,
   model: string | null | undefined,
   messages: ChatMessage[],
-  options: ChatCompletionOptions = {},
-  callbacks?: ChatCompletionStreamCallbacks,
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  options: AiLlmCallOptions = {},
+  callbacks?: AiLlmStreamCallbacks,
+): Promise<AiLlmExecutionResult> {
   const streamStep = resolveStreamStepMeta(options)
   emitStreamStage(callbacks, streamStep, 'submit')
   if (!model) {
@@ -51,138 +200,18 @@ export async function chatCompletionStream(
     callbacks?.onError?.(error, streamStep)
     throw error
   }
-
-  const selection = await resolveLlmRuntimeModel(userId, model)
-  const resolvedModelId = selection.modelId
-  const provider = selection.provider
-  const providerKey = getProviderKey(provider).toLowerCase()
-  const providerConfig = await getProviderConfig(userId, provider)
-  const projectId =
-    typeof options.projectId === 'string' && options.projectId.trim().length > 0
-      ? options.projectId.trim()
-      : undefined
-  const reasoningEffort = await resolveReasoningEffort({
-    userId,
-    modelKey: selection.modelKey,
-    purpose: 'analysis',
-    projectId,
-    explicit: options.reasoningEffort,
-  })
-  const resolvedOptions = { ...options, reasoningEffort }
-
-  validateAiOptions({
-    schema: describeLlmVariantBase({ modality: 'llm', selection, executionMode: 'stream' }).optionSchema,
-    options: resolvedOptions,
-    context: `llm_stream:${selection.modelKey}`,
-  })
-
-  const temperature = options.temperature ?? 0.7
-  const reasoning = options.reasoning ?? true
-  const providerRuntime = resolveAiProviderAdapter(provider)
-  const openRouterSessionId = providerRuntime.resolveLlmSessionId?.({
-    kind: 'llm',
-    userId,
-    projectId,
-    action: options.action,
-    modelKey: selection.modelKey,
-    explicitSessionId: options.openRouterSessionId,
-  })
-  logLlmRawInput({
-    userId,
-    projectId,
-    provider: providerKey,
-    modelId: resolvedModelId,
-    modelKey: selection.modelKey,
-    stream: true,
-    reasoning,
-    reasoningEffort,
-    temperature,
-    action: options.action,
-    openRouterSessionId,
-    messages,
-  })
-
-  if (!providerRuntime.streamLlm) {
-    const error = new Error(`UNSUPPORTED_STREAM_PROVIDER: ${providerKey}`)
-    callbacks?.onError?.(error, streamStep)
-    throw error
-  }
-  const streamLlm = providerRuntime.streamLlm
-
-  let mainTextChunkEmitted = false
-  const wrappedCallbacks: ChatCompletionStreamCallbacks | undefined = callbacks
-    ? {
-      ...callbacks,
-      onChunk: (chunk) => {
-        if (chunk.kind === 'text' && chunk.delta.trim().length > 0) mainTextChunkEmitted = true
-        callbacks.onChunk?.(chunk)
-      },
-    }
-    : undefined
-
-  try {
-    const streamOptions = openRouterSessionId
-      ? { ...resolvedOptions, openRouterSessionId }
-      : resolvedOptions
-    const result = await withRetry({
-      scope: `llm_stream:${selection.modelKey}`,
-      policy: RETRY_POLICY.llmStream,
-      shouldRetry: () => !mainTextChunkEmitted,
-      run: async () => await streamLlm({
-        userId,
-        selection,
-        providerConfig,
-        messages,
-        options: streamOptions,
-        callbacks: wrappedCallbacks,
-      }),
-    })
-    logLlmRawOutput({
-      userId,
-      projectId,
-      provider: result.logProvider,
-      modelId: resolvedModelId,
-      modelKey: selection.modelKey,
-      stream: true,
-      action: options.action,
-      text: result.text,
-      reasoning: result.reasoning,
-      termination: result.termination,
-      usage: result.usage ?? undefined,
-      providerResponse: result.successDetails?.openRouterResponse ?? null,
-    })
-    recordCompletionUsage(resolvedModelId, result.completion)
-    return result.completion
-  } catch (error) {
-    if (typeof llmLogger.error === 'function') {
-      llmLogger.error({
-        audit: false,
-        action: 'llm.stream.failed',
-        message: '[LLM] stream provider failed',
-        userId,
-        projectId,
-        provider: providerKey,
-        details: {
-          model: { id: resolvedModelId, key: selection.modelKey },
-          action: options.action ?? null,
-        },
-        error,
-      })
-    }
-    callbacks?.onError?.(error, streamStep)
-    throw error
-  }
+  return await executeText({ userId, model, messages, options, callbacks, stream: true })
 }
 
-export async function runChatCompletion(
+export async function runLlmCompletion(
   userId: string,
   model: string | null | undefined,
   messages: ChatMessage[],
-  options: ChatCompletionOptions = {},
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  options: AiLlmCallOptions = {},
+): Promise<AiLlmExecutionResult> {
   const internalCallbacks = getInternalLLMStreamCallbacks()
   if (internalCallbacks && !options.__skipAutoStream) {
-    return await chatCompletionStream(
+    return await runLlmStream(
       userId,
       model,
       messages,
@@ -190,120 +219,9 @@ export async function runChatCompletion(
       internalCallbacks,
     )
   }
-
   if (!model) {
     _ulogError('[LLM] 模型未配置，调用栈:', new Error().stack)
     throw new Error('ANALYSIS_MODEL_NOT_CONFIGURED: 请先在设置页面配置分析模型')
   }
-
-  const selection = await resolveLlmRuntimeModel(userId, model)
-  const resolvedModelId = selection.modelId
-  const provider = selection.provider
-  const providerKey = getProviderKey(provider).toLowerCase()
-  const providerConfig = await getProviderConfig(userId, provider)
-  const projectId =
-    typeof options.projectId === 'string' && options.projectId.trim().length > 0
-      ? options.projectId.trim()
-      : undefined
-  const reasoningEffort = await resolveReasoningEffort({
-    userId,
-    modelKey: selection.modelKey,
-    purpose: 'analysis',
-    projectId,
-    explicit: options.reasoningEffort,
-  })
-  const resolvedOptions = { ...options, reasoningEffort }
-
-  validateAiOptions({
-    schema: describeLlmVariantBase({ modality: 'llm', selection, executionMode: 'sync' }).optionSchema,
-    options: resolvedOptions,
-    context: `llm:${selection.modelKey}`,
-  })
-
-  const {
-    temperature = 0.7,
-    reasoning = true,
-  } = resolvedOptions
-  const openRouterSessionId = resolveAiProviderAdapter(provider).resolveLlmSessionId?.({
-    kind: 'llm',
-    userId,
-    projectId,
-    action: options.action,
-    modelKey: selection.modelKey,
-    explicitSessionId: options.openRouterSessionId,
-  })
-  logLlmRawInput({
-    userId,
-    projectId,
-    provider: providerKey,
-    modelId: resolvedModelId,
-    modelKey: selection.modelKey,
-    stream: false,
-    reasoning,
-    reasoningEffort,
-    temperature,
-    action: options.action,
-    openRouterSessionId,
-    messages,
-  })
-
-  return await withRetry({
-    scope: `llm:${selection.modelKey}`,
-    policy: RETRY_POLICY.llm,
-    run: async ({ attempt, maxAttempts }) => {
-      const attemptStartedAt = Date.now()
-      const result = await executeLlmCompletionViaAdapter({
-        userId,
-        providerKey,
-        selection,
-        providerConfig,
-        messages,
-        temperature,
-        reasoning,
-        reasoningEffort,
-        openRouterSessionId,
-      })
-      logLlmRawOutput({
-        userId,
-        projectId,
-        provider: result.logProvider,
-        modelId: resolvedModelId,
-        modelKey: selection.modelKey,
-        stream: false,
-        action: options.action,
-        text: result.text,
-        reasoning: result.reasoning,
-        termination: result.termination,
-        usage: result.usage,
-        providerResponse: result.successDetails?.openRouterResponse ?? null,
-      })
-      recordCompletionUsage(resolvedModelId, result.completion)
-      llmLogger.info({
-        action: 'llm.call.success',
-        message: 'llm call succeeded',
-        provider: result.logProvider,
-        durationMs: Date.now() - attemptStartedAt,
-        details: {
-          model: resolvedModelId,
-          attempt,
-          maxAttempts,
-          ...(result.successDetails || {}),
-        },
-      })
-      return result.completion
-    },
-    onAttemptFailed: ({ error, attempt, maxAttempts, raw }) => {
-      llmLogger.warn({
-        action: 'llm.call.attempt_failed',
-        message: error.message || 'llm call attempt failed',
-        provider,
-        details: {
-          model: resolvedModelId,
-          attempt,
-          maxAttempts,
-        },
-        error: raw,
-      })
-    },
-  })
+  return await executeText({ userId, model, messages, options, stream: false })
 }

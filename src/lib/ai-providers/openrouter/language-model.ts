@@ -1,10 +1,18 @@
-import type { LanguageModel } from 'ai'
-import type { AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import {
+  defaultSettingsMiddleware,
+  wrapLanguageModel,
+} from 'ai'
+import type { LanguageModelV3 } from '@ai-sdk/provider'
+import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
+import type {
+  AiProviderLanguageModelContext,
+  AiProviderLanguageModelValidationContext,
+} from '@/lib/ai-providers/runtime-types'
 import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
-import { createOpenAiSdkLanguageModel } from '@/lib/ai-providers/shared/language-model'
-import type { ProviderChatMessage, ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
 import { createScopedLogger } from '@/lib/logging/core'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { AppError } from '@/lib/errors/app-error'
 
 const openRouterLanguageModelLogger = createScopedLogger({
   module: 'ai-provider.openrouter.language-model',
@@ -35,115 +43,47 @@ function parseResponseBody(text: string): unknown {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
+    ? value as Record<string, unknown>
     : null
 }
 
-function parseRequestBody(text: string): Record<string, unknown> | null {
-  if (!text) return null
-  try {
-    return asRecord(JSON.parse(text) as unknown)
-  } catch {
-    return null
-  }
+async function readRequestBody(input: RequestInfo | URL, init?: RequestInit): Promise<Record<string, unknown>> {
+  const bodyText = typeof init?.body === 'string'
+    ? init.body
+    : typeof Request !== 'undefined' && input instanceof Request
+      ? await input.clone().text()
+      : ''
+  if (!bodyText) throw new Error('OPENROUTER_LANGUAGE_MODEL_REQUEST_BODY_MISSING')
+  const body = asRecord(JSON.parse(bodyText) as unknown)
+  if (!body) throw new Error('OPENROUTER_LANGUAGE_MODEL_REQUEST_BODY_INVALID')
+  return body
 }
 
-function toProviderMessageContent(value: unknown): ProviderChatMessageContent | null {
-  if (typeof value === 'string') return value
-  if (!Array.isArray(value)) return null
-  const parts = value.flatMap((item) => {
-    const record = asRecord(item)
-    if (!record || record.type !== 'text' || typeof record.text !== 'string') return []
-    return [{ type: 'text' as const, text: record.text }]
-  })
-  return parts.length > 0 ? parts : null
-}
-
-function toProviderMessages(value: unknown): ProviderChatMessage[] | null {
-  if (!Array.isArray(value)) return null
-  const messages: ProviderChatMessage[] = []
-  for (const item of value) {
-    const record = asRecord(item)
-    if (!record) return null
-    const rawRole = record.role
-    if (rawRole !== 'user' && rawRole !== 'assistant' && rawRole !== 'system') return null
-    const content = toProviderMessageContent(record.content)
-    if (content === null) return null
-    messages.push({ role: rawRole, content })
-  }
-  return messages
-}
-
-async function readFetchRequestBody(input: RequestInfo | URL, init?: RequestInit): Promise<string | null> {
-  if (typeof init?.body === 'string') return init.body
-  if (typeof Request !== 'undefined' && input instanceof Request) {
-    return await input.clone().text().catch(() => null)
-  }
-  return null
-}
-
-async function withOpenRouterRequestOptions(input: {
-  requestInput: RequestInfo | URL
-  requestInit?: RequestInit
-  modelId: string
-  reasoningEffort: AiProviderLanguageModelContext['reasoningEffort']
-}): Promise<{ requestInput: RequestInfo | URL; requestInit?: RequestInit }> {
-  const bodyText = await readFetchRequestBody(input.requestInput, input.requestInit)
-  const body = bodyText ? parseRequestBody(bodyText) : null
-  if (!body) {
-    throw new Error('OPENROUTER_LANGUAGE_MODEL_REQUEST_BODY_INVALID')
-  }
-  const modelId = typeof body.model === 'string' ? body.model : input.modelId
-  const messages = toProviderMessages(body.messages)
-  const promptCacheRequest = messages
-    ? buildOpenRouterPromptCacheRequest({ modelId, messages })
-    : null
-  const existingReasoning = asRecord(body.reasoning)
-
-  const nextBody = JSON.stringify({
-    ...body,
-    reasoning: {
-      ...(existingReasoning || {}),
-      effort: input.reasoningEffort,
-    },
-    ...(!body.cache_control && promptCacheRequest?.cacheControl
-      ? { cache_control: promptCacheRequest.cacheControl }
-      : {}),
-  })
-  if (typeof input.requestInit?.body === 'string') {
-    return {
-      requestInput: input.requestInput,
-      requestInit: {
-        ...input.requestInit,
-        body: nextBody,
-      },
-    }
-  }
-  if (typeof Request !== 'undefined' && input.requestInput instanceof Request) {
-    return {
-      requestInput: new Request(input.requestInput, { body: nextBody }),
-      requestInit: input.requestInit,
-    }
-  }
-  return input
-}
-
-function createOpenRouterLoggingFetch(input: {
-  sessionId?: string
-  modelId: string
-  reasoningEffort: AiProviderLanguageModelContext['reasoningEffort']
-}): typeof fetch {
+function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): typeof fetch {
   return async (requestInput, requestInit) => {
     const startedAt = Date.now()
-    const prepared = await withOpenRouterRequestOptions({
-      requestInput,
-      requestInit,
-      modelId: input.modelId,
-      reasoningEffort: input.reasoningEffort,
+    const body = await readRequestBody(requestInput, requestInit)
+    const promptCacheRequest = input.messages
+      ? buildOpenRouterPromptCacheRequest({
+        modelId: input.selection.modelId,
+        messages: input.messages,
+      })
+      : null
+    const nextBody = JSON.stringify({
+      ...body,
+      ...(promptCacheRequest ? { messages: promptCacheRequest.messages } : {}),
+      ...(!body.cache_control && promptCacheRequest?.cacheControl
+        ? { cache_control: promptCacheRequest.cacheControl }
+        : {}),
     })
-    const response = await fetchWithProviderProxy(prepared.requestInput, prepared.requestInit)
-    const responseClone = response.clone()
-    void responseClone.text()
+    const preparedInput = typeof Request !== 'undefined' && requestInput instanceof Request
+      ? new Request(requestInput, { body: nextBody })
+      : requestInput
+    const preparedInit = typeof requestInit?.body === 'string'
+      ? { ...requestInit, body: nextBody }
+      : requestInit
+    const response = await fetchWithProviderProxy(preparedInput, preparedInit)
+    void response.clone().text()
       .then((bodyText) => {
         openRouterLanguageModelLogger.info({
           action: 'openrouter.language_model.response',
@@ -155,7 +95,7 @@ function createOpenRouterLoggingFetch(input: {
             status: response.status,
             statusText: response.statusText,
             headers: headersToRecord(response.headers),
-            openRouterSessionId: input.sessionId ?? null,
+            openRouterSessionId: input.openRouterSessionId ?? null,
             body: parseResponseBody(bodyText),
           },
         })
@@ -168,7 +108,7 @@ function createOpenRouterLoggingFetch(input: {
           durationMs: Date.now() - startedAt,
           details: {
             url: requestUrl(requestInput),
-            openRouterSessionId: input.sessionId ?? null,
+            openRouterSessionId: input.openRouterSessionId ?? null,
           },
           error: error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
@@ -179,18 +119,78 @@ function createOpenRouterLoggingFetch(input: {
   }
 }
 
-export function createOpenRouterLanguageModel(input: AiProviderLanguageModelContext): LanguageModel {
-  if (!input.providerConfig.baseUrl) {
-    throw new Error('PROVIDER_BASE_URL_MISSING: openrouter (language-model)')
+function withOpenRouterCallDefaults(
+  model: LanguageModelV3,
+  input: AiProviderLanguageModelContext,
+): LanguageModelV3 {
+  const shouldSetTemperature = input.temperature !== undefined
+    && (input.executionMode !== 'stream' || !input.reasoning)
+  if (!shouldSetTemperature) return model
+  return wrapLanguageModel({
+    model,
+    middleware: defaultSettingsMiddleware({ settings: { temperature: input.temperature } }),
+  })
+}
+
+export function createOpenRouterLanguageModel(input: AiProviderLanguageModelContext): LanguageModelV3 {
+  if (input.protocol !== 'openrouter-chat') {
+    throw new Error(`LLM_PROTOCOL_PROVIDER_MISMATCH:openrouter:${input.protocol}`)
   }
-  return createOpenAiSdkLanguageModel(input, {
-    fetch: createOpenRouterLoggingFetch({
-      sessionId: input.openRouterSessionId,
-      modelId: input.selection.modelId,
-      reasoningEffort: input.reasoningEffort,
-    }),
+  const baseURL = input.providerConfig.baseUrl?.trim()
+  if (!baseURL) throw new Error('PROVIDER_BASE_URL_MISSING: openrouter (language-model)')
+  const openRouter = createOpenRouter({
+    baseURL,
+    apiKey: input.providerConfig.apiKey,
+    compatibility: 'strict',
+    fetch: createOpenRouterLoggingFetch(input),
     ...(input.openRouterSessionId
       ? { headers: { 'x-session-id': input.openRouterSessionId } }
       : {}),
   })
+  const model = openRouter.chat(input.selection.modelId, {
+    usage: { include: true },
+    ...(input.reasoning
+      ? { extraBody: { reasoning: { effort: input.reasoningEffort } } }
+      : {}),
+  })
+  return withOpenRouterCallDefaults(model, input)
+}
+
+export function validateOpenRouterLanguageModelResult(
+  result: AiLlmExecutionResult,
+  context: AiProviderLanguageModelValidationContext,
+): void {
+  if (context.executionMode === 'vision') return
+  if (result.termination.kind === 'token_limit') {
+    throw new AppError('MODEL_OUTPUT_TRUNCATED', 'OpenRouter output reached the token limit', {
+      provider: 'openrouter',
+      details: {
+        rawReason: result.termination.rawReason,
+        textChars: result.text.length,
+        reasoningChars: result.reasoning.length,
+      },
+    })
+  }
+  if (context.executionMode === 'stream' && result.termination.kind === 'safety') {
+    throw new AppError('SENSITIVE_CONTENT', 'OpenRouter blocked the response for safety reasons', {
+      provider: 'openrouter',
+      details: { rawReason: result.termination.rawReason },
+    })
+  }
+  if (context.executionMode === 'stream' && result.termination.kind === 'unknown') {
+    throw new AppError('EXTERNAL_ERROR', 'OpenRouter stream ended without a recognized final status', {
+      provider: 'openrouter',
+      details: { rawReason: result.termination.rawReason },
+    })
+  }
+  if (!result.text.trim()) {
+    throw new AppError('EMPTY_RESPONSE', 'OpenRouter returned no response body', {
+      provider: 'openrouter',
+      details: {
+        rawReason: result.termination.rawReason,
+        textChars: 0,
+        reasoningChars: result.reasoning.length,
+      },
+    })
+  }
 }

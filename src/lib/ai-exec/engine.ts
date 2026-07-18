@@ -1,26 +1,25 @@
-import OpenAI from 'openai'
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type {
   AiModality,
+  AiLlmExecutionResult,
   AiStepExecutionInput,
   AiStepExecutionResult,
   AiVisionStepExecutionInput,
   AiVisionStepExecutionResult,
-  ChatCompletionOptions,
-  ChatCompletionStreamCallbacks,
+  AiLlmCallOptions,
+  AiLlmStreamCallbacks,
   ChatMessage,
 } from '@/lib/ai-registry/types'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
-import { runChatCompletion } from '@/lib/ai-exec/llm/completion-runner'
-import { chatCompletionStream as runChatCompletionStream } from '@/lib/ai-exec/llm/completion-runner'
+import { runLlmCompletion, runLlmStream } from '@/lib/ai-exec/llm/completion-runner'
 import {
-  runChatCompletionWithVision,
-  runChatCompletionWithVisionStream,
+  runVisionCompletion,
+  runVisionStream,
 } from '@/lib/ai-exec/llm/vision-runner'
-import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
+import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
 import { AppError, toAppError } from '@/lib/errors/app-error'
 import { getLogContext } from '@/lib/logging/context'
 import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
@@ -76,11 +75,11 @@ export type AiLlmExecutionInput = {
   userId: string
   model: string | null | undefined
   messages: ChatMessage[]
-  options?: ChatCompletionOptions
+  options?: AiLlmCallOptions
 }
 
 export type AiLlmStreamExecutionInput = AiLlmExecutionInput & {
-  callbacks?: ChatCompletionStreamCallbacks
+  callbacks?: AiLlmStreamCallbacks
 }
 
 export type AiVisionExecutionInput = {
@@ -89,11 +88,11 @@ export type AiVisionExecutionInput = {
   model: string | null | undefined
   textPrompt: string
   imageUrls?: string[]
-  options?: ChatCompletionOptions
+  options?: AiLlmCallOptions
 }
 
 export type AiVisionStreamExecutionInput = AiVisionExecutionInput & {
-  callbacks?: ChatCompletionStreamCallbacks
+  callbacks?: AiLlmStreamCallbacks
 }
 
 export type AiMediaExecutionInput =
@@ -236,16 +235,16 @@ export async function executeMediaGeneration(
   }
 }
 
-export async function executeLlmCompletion(input: AiLlmExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await runChatCompletion(input.userId, input.model, input.messages, input.options || {})
+export async function executeLlmCompletion(input: AiLlmExecutionInput): Promise<AiLlmExecutionResult> {
+  return await runLlmCompletion(input.userId, input.model, input.messages, input.options || {})
 }
 
-export async function executeLlmStreamCompletion(input: AiLlmStreamExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await runChatCompletionStream(input.userId, input.model, input.messages, input.options || {}, input.callbacks)
+export async function executeLlmStreamCompletion(input: AiLlmStreamExecutionInput): Promise<AiLlmExecutionResult> {
+  return await runLlmStream(input.userId, input.model, input.messages, input.options || {}, input.callbacks)
 }
 
-export async function executeVisionCompletion(input: AiVisionExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await runChatCompletionWithVision(
+export async function executeVisionCompletion(input: AiVisionExecutionInput): Promise<AiLlmExecutionResult> {
+  return await runVisionCompletion(
     input.userId,
     input.model,
     input.textPrompt,
@@ -254,8 +253,8 @@ export async function executeVisionCompletion(input: AiVisionExecutionInput): Pr
   )
 }
 
-export async function executeVisionStreamCompletion(input: AiVisionStreamExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await runChatCompletionWithVisionStream(
+export async function executeVisionStreamCompletion(input: AiVisionStreamExecutionInput): Promise<AiLlmExecutionResult> {
+  return await runVisionStream(
     input.userId,
     input.model,
     input.textPrompt,
@@ -263,46 +262,6 @@ export async function executeVisionStreamCompletion(input: AiVisionStreamExecuti
     input.options || {},
     input.callbacks,
   )
-}
-
-export async function chatCompletion(
-  userId: string,
-  model: string | null | undefined,
-  messages: ChatMessage[],
-  options: ChatCompletionOptions = {},
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await executeLlmCompletion({ modality: 'llm', userId, model, messages, options })
-}
-
-export async function chatCompletionStream(
-  userId: string,
-  model: string | null | undefined,
-  messages: ChatMessage[],
-  options: ChatCompletionOptions = {},
-  callbacks?: ChatCompletionStreamCallbacks,
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await executeLlmStreamCompletion({ modality: 'llm', userId, model, messages, options, callbacks })
-}
-
-export async function chatCompletionWithVision(
-  userId: string,
-  model: string | null | undefined,
-  textPrompt: string,
-  imageUrls: string[] = [],
-  options: ChatCompletionOptions = {},
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await executeVisionCompletion({ modality: 'vision', userId, model, textPrompt, imageUrls, options })
-}
-
-export async function chatCompletionWithVisionStream(
-  userId: string,
-  model: string | null | undefined,
-  textPrompt: string,
-  imageUrls: string[] = [],
-  options: ChatCompletionOptions = {},
-  callbacks?: ChatCompletionStreamCallbacks,
-): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  return await executeVisionStreamCompletion({ modality: 'vision', userId, model, textPrompt, imageUrls, options, callbacks })
 }
 
 export async function generateImage(
@@ -353,50 +312,6 @@ export async function generateMusic(
   }, invocation)
 }
 
-function toInt(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value))
-  return 0
-}
-
-function extractUsage(completion: AiStepExecutionResult['completion']) {
-  const promptTokens = toInt(completion.usage?.prompt_tokens)
-  const completionTokens = toInt(completion.usage?.completion_tokens)
-  const totalTokens = toInt(completion.usage?.total_tokens) || (promptTokens + completionTokens)
-  return {
-    promptTokens,
-    completionTokens,
-    totalTokens,
-  }
-}
-
-function extractTextAndReasoning(completion: OpenAI.Chat.Completions.ChatCompletion): {
-  text: string
-  reasoning: string
-} {
-  try {
-    return getCompletionParts(completion)
-  } catch {
-    const text = typeof getCompletionContent === 'function'
-      ? (getCompletionContent(completion) || '')
-      : ''
-    return {
-      text,
-      reasoning: '',
-    }
-  }
-}
-
-function parseStoredChatCompletion(value: unknown): OpenAI.Chat.Completions.ChatCompletion {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('TASK_LLM_INVOCATION_RESULT_INVALID')
-  }
-  const record = value as Record<string, unknown>
-  if (typeof record.id !== 'string' || !Array.isArray(record.choices)) {
-    throw new Error('TASK_LLM_INVOCATION_RESULT_INVALID')
-  }
-  return value as OpenAI.Chat.Completions.ChatCompletion
-}
-
 export function taskAiInvocationKey(input: {
   readonly modality: 'llm' | 'vision'
   readonly action?: string
@@ -435,8 +350,8 @@ async function executeTaskAwareLlmCompletion(input: {
   readonly action?: string
   readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
   readonly request: unknown
-  readonly execute: () => Promise<OpenAI.Chat.Completions.ChatCompletion>
-}): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  readonly execute: () => Promise<AiLlmExecutionResult>
+}): Promise<AiLlmExecutionResult> {
   const taskId = getLogContext().taskId
   if (!taskId) return await input.execute()
   return await executeTaskDurableInvocation({
@@ -448,7 +363,7 @@ async function executeTaskAwareLlmCompletion(input: {
     request: input.request,
     execute: input.execute,
     resultPolicy: {
-      parse: parseStoredChatCompletion,
+      parse: parseStoredAiLlmExecutionResult,
       isKnownRejectionError: (error) => !toAppError(error, { context: 'worker' }).retryable,
     },
   })
@@ -475,23 +390,21 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
       streamStepIndex: input.meta.stepIndex,
       streamStepTotal: input.meta.stepTotal,
     }
-    const completion = await executeTaskAwareLlmCompletion({
+    return await executeTaskAwareLlmCompletion({
       modality: 'llm',
       userId: input.userId,
       model: input.model,
       action: input.action,
       meta: input.meta,
       request: { messages: input.messages, options },
-      execute: async () => await chatCompletion(input.userId, input.model, input.messages, options),
+      execute: async () => await executeLlmCompletion({
+        modality: 'llm',
+        userId: input.userId,
+        model: input.model,
+        messages: input.messages,
+        options,
+      }),
     })
-
-    const parts = extractTextAndReasoning(completion)
-    return {
-      text: parts.text,
-      reasoning: parts.reasoning,
-      usage: extractUsage(completion),
-      completion,
-    }
   } catch (error) {
     throw toAppError(error, { context: 'worker' })
   }
@@ -518,29 +431,22 @@ export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Pr
       streamStepIndex: input.meta?.stepIndex,
       streamStepTotal: input.meta?.stepTotal,
     }
-    const completion = await executeTaskAwareLlmCompletion({
+    return await executeTaskAwareLlmCompletion({
       modality: 'vision',
       userId: input.userId,
       model: input.model,
       action: input.action,
       meta: input.meta,
       request: { prompt: input.prompt, imageUrls: input.imageUrls, options },
-      execute: async () => await chatCompletionWithVision(
-        input.userId,
-        input.model,
-        input.prompt,
-        input.imageUrls,
+      execute: async () => await executeVisionCompletion({
+        modality: 'vision',
+        userId: input.userId,
+        model: input.model,
+        textPrompt: input.prompt,
+        imageUrls: input.imageUrls,
         options,
-      ),
+      }),
     })
-
-    const parts = extractTextAndReasoning(completion)
-    return {
-      text: parts.text,
-      reasoning: parts.reasoning,
-      usage: extractUsage(completion),
-      completion,
-    }
   } catch (error) {
     throw toAppError(error, { context: 'worker' })
   }

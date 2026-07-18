@@ -188,25 +188,37 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'llm',
     provider: 'ark',
     modelId: 'doubao-seed-1-8-251228',
-    capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
+    capabilities: { llm: { protocol: 'openai-responses', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
   },
   {
     modelType: 'llm',
     provider: 'ark',
     modelId: 'doubao-seed-2-0-pro-260215',
-    capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
+    capabilities: { llm: { protocol: 'openai-responses', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
   },
   {
     modelType: 'llm',
     provider: 'ark',
     modelId: 'doubao-seed-2-0-lite-260215',
-    capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
+    capabilities: { llm: { protocol: 'openai-responses', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
   },
   {
     modelType: 'llm',
     provider: 'ark',
     modelId: 'doubao-seed-2-0-mini-260215',
-    capabilities: { llm: { reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
+    capabilities: { llm: { protocol: 'openai-responses', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } },
+  },
+  {
+    modelType: 'llm',
+    provider: 'ark',
+    modelId: 'doubao-seed-1-6-251015',
+    capabilities: { llm: { protocol: 'openai-responses' } },
+  },
+  {
+    modelType: 'llm',
+    provider: 'ark',
+    modelId: 'doubao-seed-1-6-lite-251015',
+    capabilities: { llm: { protocol: 'openai-responses' } },
   },
 ] as const
 

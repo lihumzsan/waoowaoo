@@ -1,5 +1,6 @@
 import { ApiError } from '@/lib/api-errors'
 import type { StoredProvider } from './api-config-types'
+import { assertProviderBaseUrlShape } from '@/lib/http/outbound-url-policy'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 
 const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google'])
@@ -71,7 +72,16 @@ export function normalizeProvidersInput(rawProviders: unknown): StoredProvider[]
       })
     }
 
-    const baseUrl = readTrimmedString(item.baseUrl) || undefined
+    const rawBaseUrl = readTrimmedString(item.baseUrl)
+    let baseUrl: string | undefined
+    try {
+      baseUrl = rawBaseUrl ? assertProviderBaseUrlShape(rawBaseUrl) : undefined
+    } catch {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'PROVIDER_BASE_URL_UNSAFE',
+        field: `providers[${index}].baseUrl`,
+      })
+    }
 
     normalized.push({
       id,

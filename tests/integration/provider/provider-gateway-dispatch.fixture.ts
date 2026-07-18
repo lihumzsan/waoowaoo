@@ -1,34 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-
-import { testLlmConnection } from '@/lib/ai-exec/llm-test-connection'
-
-import { testProviderConnection } from '@/lib/ai-exec/provider-test'
-
-import { supportsAssetReferenceMultiReferenceVideoModel } from '@/lib/ai-registry/video-model-helpers'
-
-import { arkAdapter } from '@/lib/ai-providers/ark/adapter'
-
-import { googleAdapter } from '@/lib/ai-providers/google/adapter'
-
-import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
-
-import {
-  buildOpenRouterSessionId,
-  normalizeOpenRouterSessionId,
-} from '@/lib/ai-providers/openrouter/session'
-
-import {
-  FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
-  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
-} from '@/lib/ai-providers/fal/models'
-
 const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>())
 
 vi.mock('@/lib/http/outbound-proxy', () => ({
@@ -57,6 +28,32 @@ function chatCompletionResponse(model: string, answer: string): Response {
   })
 }
 
+function responsesApiResponse(model: string, answer: string): Response {
+  return jsonResponse({
+    id: 'resp-test',
+    created_at: 0,
+    model,
+    output: [{
+      type: 'message',
+      role: 'assistant',
+      id: 'msg-test',
+      content: [{
+        type: 'output_text',
+        text: answer,
+        logprobs: null,
+        annotations: [],
+      }],
+    }],
+  })
+}
+
+function responsesApiStream(events: readonly Record<string, unknown>[]): Response {
+  return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
 function requestUrlOf(call: [RequestInfo | URL, RequestInit?]): string {
   const [input] = call
   if (typeof input === 'string') return input
@@ -64,14 +61,67 @@ function requestUrlOf(call: [RequestInfo | URL, RequestInit?]): string {
   return input.url
 }
 
+const [
+  catalogBootstrap,
+  llmConnection,
+  providerConnection,
+  videoModelHelpers,
+  ark,
+  google,
+  openRouter,
+  openRouterSession,
+  falModels,
+] = await Promise.all([
+  import('@/lib/ai-exec/catalog-bootstrap'),
+  import('@/lib/ai-exec/llm-test-connection'),
+  import('@/lib/ai-exec/provider-test'),
+  import('@/lib/ai-registry/video-model-helpers'),
+  import('@/lib/ai-providers/ark/adapter'),
+  import('@/lib/ai-providers/google/adapter'),
+  import('@/lib/ai-providers/openrouter/adapter'),
+  import('@/lib/ai-providers/openrouter/session'),
+  import('@/lib/ai-providers/fal/models'),
+])
+const { ensureAiCatalogsRegistered } = catalogBootstrap
+const { testLlmConnection } = llmConnection
+const { testProviderConnection } = providerConnection
+const { supportsAssetReferenceMultiReferenceVideoModel } = videoModelHelpers
+const { arkAdapter } = ark
+const { googleAdapter } = google
+const { openRouterAdapter } = openRouter
+const { buildOpenRouterSessionId, normalizeOpenRouterSessionId } = openRouterSession
+const {
+  FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+} = falModels
+
 export { beforeEach, describe, expect, it, vi } from 'vitest'
-export { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-export { testLlmConnection } from '@/lib/ai-exec/llm-test-connection'
-export { testProviderConnection } from '@/lib/ai-exec/provider-test'
-export { supportsAssetReferenceMultiReferenceVideoModel } from '@/lib/ai-registry/video-model-helpers'
-export { arkAdapter } from '@/lib/ai-providers/ark/adapter'
-export { googleAdapter } from '@/lib/ai-providers/google/adapter'
-export { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
-export { buildOpenRouterSessionId, normalizeOpenRouterSessionId } from '@/lib/ai-providers/openrouter/session'
-export { FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID, FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID, FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID, FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID, FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID, FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID, FAL_SEEDANCE_2_VIDEO_MODEL_ID } from '@/lib/ai-providers/fal/models'
-export { chatCompletionResponse, fetchMock, jsonResponse, requestUrlOf }
+export {
+  arkAdapter,
+  buildOpenRouterSessionId,
+  chatCompletionResponse,
+  ensureAiCatalogsRegistered,
+  FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_O3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
+  FAL_SEEDANCE_2_VIDEO_MODEL_ID,
+  fetchMock,
+  googleAdapter,
+  jsonResponse,
+  normalizeOpenRouterSessionId,
+  openRouterAdapter,
+  requestUrlOf,
+  responsesApiResponse,
+  responsesApiStream,
+  supportsAssetReferenceMultiReferenceVideoModel,
+  testLlmConnection,
+  testProviderConnection,
+}

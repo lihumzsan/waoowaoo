@@ -16,6 +16,7 @@
         "src/app/api/projects/[projectId]/operations",
         "src/app/api/operation-approval-grants",
         "src/app/api/payments",
+        "src/lib/payments",
         "src/app/api/user/transactions/route.ts",
         "src/lib/operations/planning.ts",
         "src/lib/operations/operation-plan-snapshot.ts",
@@ -59,7 +60,8 @@
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
         "tests/integration/task/task-target-terminal-ownership.integration.test.ts",
         "tests/unit/operations/registry.test.ts",
-        "tests/integration/billing/submitter.integration.test.ts"
+        "tests/integration/billing/submitter.integration.test.ts",
+        "tests/integration/billing/stripe-recharge.integration.test.ts"
       ],
       "guardPaths": [
         "scripts/check-pricing-catalog.mjs",
@@ -467,7 +469,18 @@
         "src/lib/task/provider-invocation.ts",
         "src/lib/task/artifact-storage.ts",
         "src/lib/user-api",
-        "src/app/[locale]/profile/components/api-config"
+        "src/app/[locale]/profile/components/api-config",
+        "src/lib/http/outbound-proxy.ts",
+        "src/lib/http/outbound-url-policy.ts",
+        "src/lib/http/body-limits.ts",
+        "src/lib/image-cache.ts",
+        "src/lib/media-process.ts",
+        "src/lib/media/outbound-image.ts",
+        "src/lib/media/outbound-image.test.ts",
+        "src/lib/operations/api-only/user-api-config-connection-ops.ts",
+        "src/lib/operations/domains/config/user-api-config-ops.ts",
+        "tests/setup/env.ts",
+        "tests/golden-journey/runtime/start-environment.ts"
       ],
       "testPaths": [
         "tests/integration/provider/fal-provider.contract.test.ts",
@@ -477,9 +490,13 @@
         "tests/integration/provider/provider-gateway-capabilities.contract.test.ts",
         "tests/integration/provider/provider-gateway-connections.contract.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
+        "tests/unit/ai-exec/llm-result-projector.test.ts",
         "tests/unit/ai-exec/structured-json.test.ts",
+        "src/lib/media/outbound-image.test.ts",
         "tests/unit/provider/llm-stream-finalization.test.ts",
-        "tests/unit/task/async-poll-external-id.test.ts"
+        "tests/unit/task/async-poll-external-id.test.ts",
+        "tests/unit/http/outbound-url-policy.test.ts",
+        "tests/unit/http/body-limits.test.ts"
       ],
       "guardPaths": [
         "scripts/check-capability-catalog.mjs",
@@ -538,18 +555,44 @@
         "src/app/[locale]/profile/page.tsx",
         "src/app/[locale]/workspace/page.tsx",
         "src/app/[locale]/auth",
+        "src/app/[locale]/profile/components/AccountSecurityTab.tsx",
         "src/app/api/auth",
         "src/lib/auth",
+        "src/lib/auth.ts",
+        "src/lib/api-auth.ts",
+        "src/lib/api-errors.ts",
+        "src/lib/llm-observe",
+        "src/lib/operations/domains/auth",
         "src/lib/rate-limit.ts",
         "src/i18n",
         "src/lib/deployment",
         "src/app/api/deployment",
         "src/app/[locale]/workspace/[projectId]/page.tsx",
         "messages/en/workspaceDetail.json",
-        "messages/zh/workspaceDetail.json"
+        "messages/zh/workspaceDetail.json",
+        "src/app/api/admin",
+        "scripts/check-cloud-env.mjs",
+        "scripts/bull-board.ts",
+        "docker-compose.yml",
+        "Dockerfile",
+        "docker-entrypoint.sh",
+        ".env.example",
+        ".env.cloud.example",
+        "next.config.ts",
+        "package.json",
+        "package-lock.json",
+        "README.md",
+        "README_en.md",
+        "vitest.config.ts",
+        "messages/en/auth.json",
+        "messages/zh/auth.json",
+        "messages/en/profile.json",
+        "messages/zh/profile.json"
       ],
       "testPaths": [
-        "tests/golden-journey/journeys/auth-project-permission.spec.ts"
+        "tests/golden-journey/journeys/auth-project-permission.spec.ts",
+        "tests/unit/auth/rate-limit-client-ip.test.ts",
+        "tests/unit/deployment/config.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/locale-navigation-guard.mjs"
@@ -564,10 +607,20 @@
         "src/lib/assets/services/asset-actions.ts",
         "src/lib/assets/services/location-backed-assets.ts",
         "src/lib/assets/services/project-upload-render.ts",
+        "src/lib/assets/upload-render-form.ts",
         "scripts/guards/asset-scope-ownership-guard.mjs",
         "src/lib/assets/services/project-location-backed-selection.ts",
         "src/lib/media/attach.ts",
         "src/lib/media/service.ts",
+        "src/lib/media/storage-access-policy.ts",
+        "src/components/media",
+        "src/lib/storage/index.ts",
+        "src/app/m",
+        "src/app/api/files",
+        "src/app/api/storage/sign",
+        "scripts/migrate-local-to-minio.ts",
+        "scripts/migrate-to-minio.ts",
+        "scripts/migrate-to-minio.sh",
         "src/lib/operations/domains/project/project-crud-ops.ts",
         "src/app/api/projects/[projectId]/route.ts",
         "src/lib/assets/services/read-assets.ts",
@@ -579,7 +632,9 @@
       ],
       "testPaths": [
         "tests/golden-journey/journeys/asset-hub-ownership.spec.ts",
-        "tests/integration/api/specific/asset-scope-ownership.integration.test.ts"
+        "tests/integration/api/specific/asset-scope-ownership.integration.test.ts",
+        "tests/golden-journey/journeys/auth-project-permission.spec.ts",
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/asset-scope-ownership-guard.mjs"

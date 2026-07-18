@@ -213,7 +213,14 @@ export function useProviders(): UseProvidersReturn {
                 p.id === providerId ? { ...p, apiKey, hasApiKey: !!apiKey } : p
             )
             latestProvidersRef.current = next
-            void performSave()
+            void performSave().then((saved) => {
+                if (!saved) return
+                const scrubbed = latestProvidersRef.current.map((provider) => provider.id === providerId
+                    ? { ...provider, apiKey: undefined, hasApiKey: Boolean(apiKey) }
+                    : provider)
+                latestProvidersRef.current = scrubbed
+                setProviders(scrubbed)
+            })
             return next
         })
     }, [performSave])

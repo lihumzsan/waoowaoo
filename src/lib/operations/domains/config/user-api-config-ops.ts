@@ -45,7 +45,7 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
   return {
     get_user_api_config: defineOperation({
       id: 'get_user_api_config',
-      summary: 'Read user API config (decrypted providers, pricing/capabilities enrichment).',
+      summary: 'Read user API config (masked provider credential state, pricing/capabilities enrichment).',
       intent: 'query',
       effects: {
         writes: false,

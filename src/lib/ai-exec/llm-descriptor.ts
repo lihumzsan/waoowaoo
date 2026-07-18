@@ -14,7 +14,6 @@ export function describeLlmVariantBase(input: {
     modelKey: input.selection.modelKey,
     providerId: input.selection.provider,
     modelId: input.selection.modelId,
-    selection: input.selection,
   })
   return {
     modelKey: input.selection.modelKey,

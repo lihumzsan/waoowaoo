@@ -33,7 +33,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   const referenceImages = options.referenceImages ?? []
 
   if (modelId === 'gemini-3-pro-image-preview-batch') {
-    const { submitGeminiBatch } = await import('@/lib/ai-providers/google/llm')
+    const { submitGeminiBatch } = await import('@/lib/ai-providers/google/batch')
     const result = await withRetry({
       scope: `google:image:batch:${modelId}`,
       policy: RETRY_POLICY.providerSubmit,

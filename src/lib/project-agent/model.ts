@@ -57,6 +57,8 @@ export async function resolveProjectAgentLanguageModel(input: {
       providerKey,
       selection,
       providerConfig,
+      executionMode: 'agent',
+      reasoning: true,
       reasoningEffort,
       openRouterSessionId: input.openRouterSessionId,
     }),

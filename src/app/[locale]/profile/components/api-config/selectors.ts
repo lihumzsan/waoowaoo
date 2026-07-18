@@ -71,11 +71,9 @@ export function mergeProvidersForDisplay(
     const providerKey = getProviderKey(savedProvider.id)
     const matchedPreset = presetProviders.find((presetProvider) => presetProvider.id === providerKey)
     if (matchedPreset) {
-      const apiKey = savedProvider.apiKey || ''
       merged.push({
         ...matchedPreset,
-        apiKey,
-        hasApiKey: apiKey.length > 0,
+        hasApiKey: savedProvider.hasApiKey === true,
         hidden: savedProvider.hidden === true,
         baseUrl: savedProvider.baseUrl || matchedPreset.baseUrl,
       })
@@ -85,7 +83,8 @@ export function mergeProvidersForDisplay(
 
     merged.push({
       ...savedProvider,
-      hasApiKey: !!savedProvider.apiKey,
+      apiKey: undefined,
+      hasApiKey: savedProvider.hasApiKey === true,
     })
   }
 

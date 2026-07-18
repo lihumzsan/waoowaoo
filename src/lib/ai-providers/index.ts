@@ -13,6 +13,14 @@ import { geminiBatchAsyncTaskProvider, googleVideoAsyncTaskProvider } from '@/li
 import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
 import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async-task'
 import type { AiProviderAdapter, AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
+import type {
+  AiProviderLanguageModelRequestContext,
+  AiProviderLanguageModelValidationContext,
+} from '@/lib/ai-providers/runtime-types'
+import type { AiLlmExecutionResult, AiLlmMessage } from '@/lib/ai-registry/types'
+import type { ModelMessage } from 'ai'
+import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
+import { resolveRegisteredLlmProtocol } from '@/lib/ai-registry/llm-protocol'
 import type { VideoTokenPricingContract } from '@/lib/ai-providers/shared/video-token-pricing'
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
@@ -65,10 +73,44 @@ export function tryResolveAiProviderAdapter(providerId: string): AiProviderAdapt
   return runtimeProviderRegistry.tryGetAdapterByProviderId(providerId)
 }
 
-export function createRegisteredLanguageModel(input: AiProviderLanguageModelContext) {
+export function createRegisteredLanguageModel(input: AiProviderLanguageModelRequestContext) {
   const languageModelProvider = resolveAiProviderAdapter(input.selection.provider).languageModel
   if (!languageModelProvider) {
     throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${input.selection.provider}:languageModel`)
   }
-  return languageModelProvider.create(input)
+  const context: AiProviderLanguageModelContext = {
+    ...input,
+    protocol: resolveRegisteredLlmProtocol(input.selection.modelKey),
+  }
+  return languageModelProvider.create(context)
+}
+
+function defaultTextModelMessages(messages: AiLlmMessage[]): ModelMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: flattenChatMessageContent(message.content),
+  }))
+}
+
+export function prepareRegisteredTextModelMessages(
+  providerId: string,
+  messages: AiLlmMessage[],
+): ModelMessage[] {
+  const languageModelProvider = resolveAiProviderAdapter(providerId).languageModel
+  if (!languageModelProvider) {
+    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${providerId}:languageModel`)
+  }
+  return languageModelProvider.prepareTextMessages?.(messages) ?? defaultTextModelMessages(messages)
+}
+
+export function validateRegisteredLanguageModelResult(
+  providerId: string,
+  result: AiLlmExecutionResult,
+  context: AiProviderLanguageModelValidationContext,
+): void {
+  const languageModelProvider = resolveAiProviderAdapter(providerId).languageModel
+  if (!languageModelProvider) {
+    throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${providerId}:languageModel`)
+  }
+  languageModelProvider.validateResult?.(result, context)
 }

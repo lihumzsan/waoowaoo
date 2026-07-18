@@ -8,6 +8,8 @@ import {
 import { withLogContext } from '@/lib/logging/context'
 import { FetchStatusError } from '@/lib/retry'
 import { TASK_TYPE } from '@/lib/task/types'
+import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
+import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
 import { resetBillingState } from '../../helpers/db-reset'
 import {
   createQueuedTask,
@@ -256,6 +258,32 @@ describe('provider invocation at-most-once DB integration', () => {
     })).resolves.toEqual({ state: 'submitted' })
   })
 
+  it('treats AI SDK statusCode as an explicit retryable non-acceptance', async () => {
+    await seedTask('provider-ai-sdk-status-retry-task')
+    const firstAttempt = vi.fn(async () => {
+      throw Object.assign(new Error('AI SDK request failed with rate limit'), { statusCode: 429 })
+    })
+    const recovered = vi.fn(async () => ({
+      success: true,
+      audioUrl: 'https://provider/recovered-from-ai-sdk-status.mp3',
+    }))
+
+    await expect(invoke('provider-ai-sdk-status-retry-task', firstAttempt, 1)).rejects.toMatchObject({
+      code: 'PROVIDER_SUBMIT_FAILED',
+      retryable: true,
+    })
+    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
+      where: { taskId: 'provider-ai-sdk-status-retry-task' },
+      select: { state: true },
+    })).resolves.toEqual({ state: 'retryable_rejected' })
+
+    await expect(invoke('provider-ai-sdk-status-retry-task', recovered, 2)).resolves.toMatchObject({
+      success: true,
+    })
+    expect(firstAttempt).toHaveBeenCalledTimes(1)
+    expect(recovered).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps an explicit permanent provider rejection closed across newer Task attempts', async () => {
     await seedTask('provider-permanent-rejection-task')
     const rejectedExecute = vi.fn(async () => {
@@ -282,7 +310,17 @@ describe('provider invocation at-most-once DB integration', () => {
 
   it('persists and replays an LLM completion before handler checkpoint settlement', async () => {
     await seedTask('llm-replay-task')
-    const execute = vi.fn(async () => ({ id: 'completion-1', choices: [{ index: 0 }] }))
+    const storedResult: AiLlmExecutionResult = {
+      schemaVersion: 1 as const,
+      provider: 'ark',
+      modelId: 'analysis-model',
+      text: 'completed answer',
+      reasoning: 'completed reasoning',
+      termination: { kind: 'normal' as const, rawReason: 'stop' },
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      response: { id: 'response-1' },
+    }
+    const execute = vi.fn(async (): Promise<AiLlmExecutionResult> => storedResult)
     const invokeLlm = async () => await withLogContext({
       taskId: 'llm-replay-task',
       taskAttempt: 1,
@@ -295,17 +333,18 @@ describe('provider invocation at-most-once DB integration', () => {
       request: { messages: [{ role: 'user', content: 'immutable prompt' }] },
       execute,
       resultPolicy: {
-        parse: (value) => {
-          if (!value || typeof value !== 'object' || Array.isArray(value)) {
-            throw new Error('LLM_RESULT_INVALID')
-          }
-          return value as { id: string; choices: Array<{ index: number }> }
-        },
+        parse: parseStoredAiLlmExecutionResult,
       },
     }))
 
-    await expect(invokeLlm()).resolves.toMatchObject({ id: 'completion-1' })
-    await expect(invokeLlm()).resolves.toMatchObject({ id: 'completion-1' })
+    await expect(invokeLlm()).resolves.toMatchObject({
+      schemaVersion: 1,
+      response: { id: 'response-1' },
+    })
+    await expect(invokeLlm()).resolves.toMatchObject({
+      schemaVersion: 1,
+      response: { id: 'response-1' },
+    })
 
     expect(execute).toHaveBeenCalledTimes(1)
     await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({

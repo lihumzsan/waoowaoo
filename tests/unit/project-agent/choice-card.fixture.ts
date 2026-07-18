@@ -31,10 +31,10 @@ vi.mock('@/lib/storage', () => ({
   getSignedUrl: (key: string) => `/signed/${key}`,
 }))
 
-import {
+const {
   buildEditFirstAssistantChoiceCard,
   readEditFirstAspectRatio,
-} from '@/lib/project-agent/choice-card'
+} = await import('@/lib/project-agent/choice-card')
 
 function workflow(
   step: EditFirstWorkflowStep,
@@ -50,5 +50,4 @@ function workflow(
 
 export { beforeEach, describe, expect, it, vi } from 'vitest'
 export type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
-export { buildEditFirstAssistantChoiceCard, readEditFirstAspectRatio } from '@/lib/project-agent/choice-card'
-export { prismaState, workflow }
+export { buildEditFirstAssistantChoiceCard, prismaState, readEditFirstAspectRatio, workflow }

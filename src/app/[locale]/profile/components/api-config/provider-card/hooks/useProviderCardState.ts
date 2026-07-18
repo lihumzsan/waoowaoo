@@ -27,9 +27,6 @@ interface KeyTestStep {
   detail?: string
 }
 type KeyTestStatus = 'idle' | 'testing' | 'passed' | 'failed'
-
-
-
 interface UseProviderCardStateParams {
   provider: ProviderCardProps['provider']
   models: ProviderCardProps['models']
@@ -48,9 +45,8 @@ const EMPTY_MODEL_FORM: ModelFormState = {
 }
 
 interface ProviderConnectionPayload {
-  apiType: string
-  apiKey: string
-  llmModel?: string
+  providerId: string; apiType: string
+  apiKey?: string; baseUrl?: string; llmModel?: string
 }
 
 function pickConfiguredLlmModel(params: {
@@ -66,16 +62,21 @@ function pickConfiguredLlmModel(params: {
 }
 
 export function buildProviderConnectionPayload(params: {
+  providerId: string
   providerKey: string
-  apiKey: string
+  apiKey?: string
+  baseUrl?: string
   llmModel?: string
 }): ProviderConnectionPayload {
-  const apiKey = params.apiKey.trim()
+  const apiKey = params.apiKey?.trim()
+  const baseUrl = params.baseUrl?.trim()
   const llmModel = params.llmModel?.trim()
 
   return {
+    providerId: params.providerId,
     apiType: params.providerKey,
-    apiKey,
+    ...(apiKey ? { apiKey } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
     ...(llmModel ? { llmModel } : {}),
   }
 }
@@ -211,7 +212,7 @@ export function useProviderCardState({
   }
 
   const startEditKey = () => {
-    setTempKey(provider.apiKey || '')
+    setTempKey('')
     setIsEditing(true)
   }
 
@@ -243,8 +244,10 @@ export function useProviderCardState({
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
+        providerId: provider.id,
         providerKey,
         apiKey: tempKey,
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -268,7 +271,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, defaultModels.assistantModel, doSaveKey, models, providerKey, tempKey])
+  }, [defaultModels.analysisModel, defaultModels.assistantModel, doSaveKey, models, provider.baseUrl, provider.id, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -285,8 +288,9 @@ export function useProviderCardState({
         defaultAnalysisModel: defaultModels.analysisModel,
       })
       const payload = buildProviderConnectionPayload({
+        providerId: provider.id,
         providerKey,
-        apiKey: provider.apiKey || '',
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -301,7 +305,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, defaultModels.assistantModel, models, provider.apiKey, providerKey])
+  }, [defaultModels.analysisModel, defaultModels.assistantModel, models, provider.baseUrl, provider.id, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')
@@ -309,7 +313,7 @@ export function useProviderCardState({
   }, [])
 
   const handleCancelEdit = () => {
-    setTempKey(provider.apiKey || '')
+    setTempKey('')
     setIsEditing(false)
     setKeyTestStatus('idle')
     setKeyTestSteps([])
@@ -420,11 +424,7 @@ export function useProviderCardState({
     setBatchMode(false)
   }
 
-  const maskedKey = (() => {
-    const key = provider.apiKey || ''
-    if (key.length <= 8) return '•'.repeat(key.length)
-    return `${key.slice(0, 4)}${'•'.repeat(50)}`
-  })()
+  const maskedKey = '••••••••••••'
 
   return {
     providerKey,

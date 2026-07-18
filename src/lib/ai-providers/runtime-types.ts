@@ -1,16 +1,12 @@
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 import type {
-  AiLlmExecutionInput,
   AiLlmExecutionResult,
+  AiLlmMessage,
+  AiLlmProtocol,
   AiResolvedSelection,
   AiVariantDescriptor,
   AiLlmProviderConfig,
 } from '@/lib/ai-registry/types'
-import type {
-  ProviderChatCompletionOptions,
-  ProviderChatCompletionStreamCallbacks,
-  ProviderChatMessage,
-} from '@/lib/ai-providers/shared/llm-support'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export type GenerateResult = {
@@ -30,38 +26,6 @@ export type GenerateResult = {
   externalId?: string
 }
 
-export type AiProviderLlmResult = Pick<
-  AiLlmExecutionResult,
-  'completion' | 'logProvider' | 'text' | 'reasoning' | 'termination' | 'usage' | 'successDetails'
->
-
-export type AiProviderLlmStreamContext = {
-  userId: string
-  selection: {
-    provider: string
-    modelId: string
-    modelKey: string
-    variantData?: { [key: string]: unknown }
-  }
-  providerConfig: AiLlmProviderConfig
-  messages: ProviderChatMessage[]
-  options: ProviderChatCompletionOptions & { reasoningEffort: ReasoningEffort }
-  callbacks?: ProviderChatCompletionStreamCallbacks
-}
-
-export type AiProviderVisionExecutionContext = {
-  userId: string
-  providerKey: string
-  selection: AiLlmExecutionInput['selection']
-  providerConfig: AiLlmExecutionInput['providerConfig']
-  textPrompt: string
-  imageUrls: string[]
-  temperature: number
-  reasoning: boolean
-  reasoningEffort: ReasoningEffort
-  options?: ProviderChatCompletionOptions
-}
-
 export type AiProviderLanguageModelContext = {
   providerKey: string
   selection: {
@@ -70,9 +34,20 @@ export type AiProviderLanguageModelContext = {
     modelKey: string
   }
   providerConfig: AiLlmProviderConfig
+  protocol: AiLlmProtocol
+  executionMode: 'sync' | 'stream' | 'vision' | 'agent'
+  reasoning: boolean
   reasoningEffort: ReasoningEffort
+  temperature?: number
+  messages?: AiLlmMessage[]
   openRouterSessionId?: string
 }
+
+export type AiProviderLanguageModelRequestContext = Omit<AiProviderLanguageModelContext, 'protocol'>
+export type AiProviderLanguageModelValidationContext = Pick<
+  AiProviderLanguageModelContext,
+  'executionMode'
+>
 
 export type AiProviderImageExecutionContext = {
   userId: string
@@ -152,6 +127,11 @@ export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'
 
 export type AiProviderLanguageModelAdapter = {
   create: (input: AiProviderLanguageModelContext) => LanguageModel
+  prepareTextMessages?: (messages: AiLlmMessage[]) => ModelMessage[]
+  validateResult?: (
+    result: AiLlmExecutionResult,
+    context: AiProviderLanguageModelValidationContext,
+  ) => void
 }
 
 export type AiProviderLlmSessionContext = {
@@ -202,7 +182,4 @@ export interface AiProviderAdapter {
   languageModel?: AiProviderLanguageModelAdapter
   resolveLlmSessionId?: (input: AiProviderLlmSessionContext) => string | undefined
   connectionTest?: AiProviderConnectionTester
-  completeLlm?: (input: AiLlmExecutionInput) => Promise<AiProviderLlmResult>
-  streamLlm?: (input: AiProviderLlmStreamContext) => Promise<AiProviderLlmResult>
-  completeVision?: (input: AiProviderVisionExecutionContext) => Promise<AiProviderLlmResult>
 }

@@ -2,6 +2,15 @@ import { z } from 'zod'
 import { testLlmConnection } from '@/lib/ai-exec/llm-test-connection'
 import { testProviderConnection } from '@/lib/ai-exec/provider-test'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { getProviderConfig } from '@/lib/user-api/runtime-config'
+
+const providerDiagnosticInputSchema = z.object({
+  providerId: z.string().trim().min(1),
+  apiType: z.string().trim().min(1),
+  apiKey: z.string().trim().min(1).optional(),
+  baseUrl: z.string().trim().min(1).optional(),
+  llmModel: z.string().trim().min(1).optional(),
+}).strict()
 
 export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgentOperationRegistryDraft {
   return {
@@ -45,11 +54,20 @@ export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgen
         externalSideEffects: true,
         longRunning: true,
       },
-      inputSchema: z.unknown(),
+      inputSchema: providerDiagnosticInputSchema,
       outputSchema: z.unknown(),
-      execute: async (_ctx, input) => {
+      execute: async (ctx, input) => {
         const startedAt = Date.now()
-        const payload = input as Parameters<typeof testProviderConnection>[0]
+        const parsed = providerDiagnosticInputSchema.parse(input)
+        const storedProvider = parsed.apiKey
+          ? null
+          : await getProviderConfig(ctx.userId, parsed.providerId)
+        const payload: Parameters<typeof testProviderConnection>[0] = {
+          apiType: parsed.apiType,
+          apiKey: parsed.apiKey ?? storedProvider?.apiKey ?? '',
+          baseUrl: parsed.baseUrl ?? storedProvider?.baseUrl,
+          llmModel: parsed.llmModel,
+        }
         const result = await testProviderConnection(payload)
         return {
           ...result,

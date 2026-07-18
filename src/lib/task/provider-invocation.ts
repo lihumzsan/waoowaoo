@@ -178,10 +178,20 @@ function isRetryableSubmissionStatus(status: number): boolean {
 function readExplicitHttpStatus(error: unknown): number | null {
   if (error instanceof FetchStatusError) return error.status
   if (!error || typeof error !== 'object' || Array.isArray(error)) return null
-  const status = (error as { readonly status?: unknown }).status
-  return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
-    ? status
-    : null
+  const record = error as {
+    readonly status?: unknown
+    readonly statusCode?: unknown
+    readonly code?: unknown
+  }
+  for (const candidate of [record.status, record.statusCode, record.code]) {
+    const status = typeof candidate === 'number'
+      ? candidate
+      : typeof candidate === 'string' && /^\d{3}$/.test(candidate.trim())
+        ? Number.parseInt(candidate.trim(), 10)
+        : NaN
+    if (Number.isInteger(status) && status >= 100 && status <= 599) return status
+  }
+  return null
 }
 
 function requireTaskAttempt(taskId: string): number {
