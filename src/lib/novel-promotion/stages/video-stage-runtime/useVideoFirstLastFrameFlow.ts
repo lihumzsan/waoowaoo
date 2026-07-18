@@ -53,6 +53,7 @@ interface UseVideoFirstLastFrameFlowParams {
   episodeId: string
   allPanels: VideoPanel[]
   linkedPanels: Map<string, boolean>
+  visiblePanelKeys?: ReadonlySet<string>
   videoModelOptions: VideoModelOption[]
   onGenerateVideo: (
     storyboardId: string,
@@ -95,6 +96,7 @@ export function useVideoFirstLastFrameFlow({
   episodeId,
   allPanels,
   linkedPanels,
+  visiblePanelKeys,
   videoModelOptions,
   onGenerateVideo,
   promptTaskStates,
@@ -222,6 +224,7 @@ export function useVideoFirstLastFrameFlow({
     episodeId,
     allPanels,
     linkedPanels,
+    visiblePanelKeys,
     promptTaskStates,
     onUpdatePrompt,
   })

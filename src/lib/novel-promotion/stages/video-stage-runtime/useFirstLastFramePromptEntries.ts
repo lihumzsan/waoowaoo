@@ -23,6 +23,7 @@ import {
   shouldProjectPromptTaskSnapshot,
   type FirstLastFramePromptEntry,
 } from './first-last-frame-prompt-entry'
+import { runPromptAutoEnsureQueue } from './prompt-auto-ensure-queue'
 
 interface PromptTaskStates {
   isFetching: boolean
@@ -37,6 +38,7 @@ interface UseFirstLastFramePromptEntriesParams {
   episodeId: string
   allPanels: VideoPanel[]
   linkedPanels: Map<string, boolean>
+  visiblePanelKeys?: ReadonlySet<string>
   promptTaskStates: PromptTaskStates
   onUpdatePrompt: (
     storyboardId: string,
@@ -51,6 +53,7 @@ export function useFirstLastFramePromptEntries({
   episodeId,
   allPanels,
   linkedPanels,
+  visiblePanelKeys,
   promptTaskStates,
   onUpdatePrompt,
 }: UseFirstLastFramePromptEntriesParams) {
@@ -301,10 +304,12 @@ export function useFirstLastFramePromptEntries({
   }, [allPanels, buildDerivedEntry, getPanelPair, promptEntries, promptTaskStates])
 
   useEffect(() => {
+    const candidates: string[] = []
     for (let index = 0; index < allPanels.length - 1; index += 1) {
       const firstPanel = allPanels[index]
       const lastPanel = allPanels[index + 1]
       const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
+      if (visiblePanelKeys && !visiblePanelKeys.has(panelKey)) continue
       const task = firstPanel.panelId
         ? promptTaskStates.getTaskState(`panel-first-last-prompt:${firstPanel.panelId}`)
         : null
@@ -319,9 +324,18 @@ export function useFirstLastFramePromptEntries({
           ignoreActiveSnapshot: locallySettledPanelsRef.current.has(panelKey),
         })
       ) continue
-      void ensurePrompt(panelKey, 'source_change')
+      candidates.push(panelKey)
     }
-  }, [allPanels, ensurePrompt, linkedPanels, promptEntries, promptTaskStates])
+    let cancelled = false
+    void runPromptAutoEnsureQueue(
+      candidates,
+      (panelKey) => ensurePrompt(panelKey, 'source_change'),
+      { concurrency: 2, isCancelled: () => cancelled },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [allPanels, ensurePrompt, linkedPanels, promptEntries, promptTaskStates, visiblePanelKeys])
 
   const resolvedPromptEntries = useMemo(() => {
     const next = new Map(promptEntries)

@@ -43,8 +43,6 @@ export async function invalidateFirstLastFramePromptCaches(
 }
 
 export function useGenerateFirstLastFramePrompt(projectId: string) {
-  const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: async (payload: {
       firstPanelId: string
@@ -62,9 +60,6 @@ export function useGenerateFirstLastFramePrompt(projectId: string) {
         'generate first/last frame prompt failed',
       )
       return await resolveTaskResponse<FirstLastFramePromptResult>(response)
-    },
-    onSettled: (_data, _error, variables) => {
-      void invalidateFirstLastFramePromptCaches(queryClient, projectId, variables.episodeId)
     },
   })
 }
