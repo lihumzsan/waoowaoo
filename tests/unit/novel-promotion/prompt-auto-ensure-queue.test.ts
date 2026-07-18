@@ -87,4 +87,24 @@ describe('runPromptAutoEnsureQueue', () => {
     release.get('new-b')?.()
     await queue.whenIdle()
   })
+
+  it('clears pending work on an empty replacement without duplicating active keys', async () => {
+    const started: string[] = []
+    const release = new Map<string, () => void>()
+    const queue = createPromptAutoEnsureQueue(async (panelKey) => {
+      started.push(panelKey)
+      await new Promise<void>((resolve) => release.set(panelKey, resolve))
+    })
+
+    queue.enqueue(['active-a', 'active-b', 'pending-a', 'pending-b'])
+    expect(started).toEqual(['active-a', 'active-b'])
+
+    queue.replace(['active-a'])
+    queue.replace([])
+    release.get('active-a')?.()
+    release.get('active-b')?.()
+    await queue.whenIdle()
+
+    expect(started).toEqual(['active-a', 'active-b'])
+  })
 })
