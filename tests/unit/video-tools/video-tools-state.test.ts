@@ -37,6 +37,12 @@ describe('video tools state', () => {
     expect(canSubmitVideoSeamConcat(upload, upload, task({ status: 'completed' }))).toBe(true)
   })
 
+  it('rejects seam-concat submission when either trim is invalid', () => {
+    expect(canSubmitVideoSeamConcat(upload, upload, null, 0, 1)).toBe(true)
+    expect(canSubmitVideoSeamConcat(upload, upload, null, 0.5, 1)).toBe(false)
+    expect(canSubmitVideoSeamConcat(upload, upload, null, 0, -1)).toBe(false)
+  })
+
   it('maps queued, processing, failed, and completed tasks to truthful views', () => {
     expect(resolveVideoToolTaskView(task({ status: 'queued' }))).toMatchObject({ phase: 'queued', active: true })
     expect(resolveVideoToolTaskView(task({ status: 'processing', payload: { stage: 'persist_output' } })))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import * as seamConcat from '@/lib/video-tools/seam-concat'
 import {
   VIDEO_TOOL_MAX_UPLOAD_BYTES,
   buildVideoToolInputKey,
@@ -43,9 +44,43 @@ describe('video seam concat validation', () => {
     })).toEqual({
       input1Key: 'video-tools/user-1/inputs/one.mp4',
       input1Name: 'one.mp4',
+      input1TrimEndFrames: 0,
       input2Key: 'video-tools/user-1/inputs/two.mp4',
       input2Name: 'two.mp4',
+      input2TrimStartFrames: 1,
     })
+  })
+
+  it('parses custom input trim frame values', () => {
+    expect(parseVideoSeamConcatSubmission('user-1', {
+      input1: {
+        key: 'video-tools/user-1/inputs/one.mp4',
+        name: 'one.mp4',
+        trimEndFrames: 12,
+      },
+      input2: {
+        key: 'video-tools/user-1/inputs/two.mp4',
+        name: 'two.mp4',
+        trimStartFrames: 3,
+      },
+    })).toMatchObject({ input1TrimEndFrames: 12, input2TrimStartFrames: 3 })
+  })
+
+  it('rejects invalid input trim frame values', () => {
+    const input1 = { key: 'video-tools/user-1/inputs/one.mp4', name: 'one.mp4' }
+    const input2 = { key: 'video-tools/user-1/inputs/two.mp4', name: 'two.mp4' }
+
+    for (const trimFrames of [0.5, -1, '1', 100_001]) {
+      expect(() => parseVideoSeamConcatSubmission('user-1', {
+        input1: { ...input1, trimEndFrames: trimFrames },
+        input2,
+      })).toThrow('VIDEO_SEAM_CONCAT_TRIM_FRAMES_INVALID')
+    }
+  })
+
+  it('exposes a frame-trim validity predicate', () => {
+    expect('isValidVideoTrimFrames' in seamConcat).toBe(true)
+    expect('VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES' in seamConcat).toBe(true)
   })
 
   it('rejects missing or cross-user input keys', () => {

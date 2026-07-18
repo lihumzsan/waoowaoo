@@ -4,6 +4,7 @@ import { extname } from 'node:path'
 export const VIDEO_TOOLS_PROJECT_ID = 'video-tools'
 export const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
 export const VIDEO_TOOL_MAX_UPLOAD_BYTES = 256 * 1024 * 1024
+export const VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES = 100_000
 
 const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
   mp4: 'video/mp4',
@@ -21,8 +22,10 @@ type UploadMetadata = {
 type SeamConcatSubmission = {
   input1Key: string
   input1Name: string
+  input1TrimEndFrames: number
   input2Key: string
   input2Name: string
+  input2TrimStartFrames: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,6 +34,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+export function isValidVideoTrimFrames(value: unknown): value is number {
+  return Number.isFinite(value)
+    && Number.isInteger(value)
+    && value >= 0
+    && value <= VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES
+}
+
+function readVideoTrimFrames(value: unknown, defaultValue: number): number {
+  if (value === undefined) return defaultValue
+  if (!isValidVideoTrimFrames(value)) {
+    throw new Error('VIDEO_SEAM_CONCAT_TRIM_FRAMES_INVALID')
+  }
+  return value
 }
 
 function safePathSegment(value: string): string {
@@ -89,6 +107,8 @@ export function parseVideoSeamConcatSubmission(userId: string, value: unknown): 
   const input2Key = readTrimmedString(value.input2.key)
   const input1Name = readTrimmedString(value.input1.name)
   const input2Name = readTrimmedString(value.input2.name)
+  const input1TrimEndFrames = readVideoTrimFrames(value.input1.trimEndFrames, 0)
+  const input2TrimStartFrames = readVideoTrimFrames(value.input2.trimStartFrames, 1)
   if (!input1Key || !input2Key || !input1Name || !input2Name) {
     throw new Error('VIDEO_TOOL_INPUTS_REQUIRED')
   }
@@ -96,5 +116,12 @@ export function parseVideoSeamConcatSubmission(userId: string, value: unknown): 
     throw new Error('VIDEO_TOOL_INPUT_NOT_OWNED')
   }
 
-  return { input1Key, input1Name, input2Key, input2Name }
+  return {
+    input1Key,
+    input1Name,
+    input1TrimEndFrames,
+    input2Key,
+    input2Name,
+    input2TrimStartFrames,
+  }
 }

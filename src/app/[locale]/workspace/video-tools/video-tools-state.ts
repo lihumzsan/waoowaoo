@@ -1,3 +1,5 @@
+import { isValidVideoTrimFrames } from '@/lib/video-tools/seam-concat'
+
 export type UploadedVideo = {
   key: string
   url: string
@@ -46,8 +48,14 @@ export function canSubmitVideoSeamConcat(
   input1: UploadedVideo | null,
   input2: UploadedVideo | null,
   currentTask: VideoToolTask | null,
+  input1TrimEndFrames: unknown = 0,
+  input2TrimStartFrames: unknown = 1,
 ): boolean {
-  return !!input1 && !!input2 && !isActiveTask(currentTask)
+  return !!input1
+    && !!input2
+    && isValidVideoTrimFrames(input1TrimEndFrames)
+    && isValidVideoTrimFrames(input2TrimStartFrames)
+    && !isActiveTask(currentTask)
 }
 
 export function resolveVideoToolTaskView(task: VideoToolTask | null): VideoToolTaskView {
