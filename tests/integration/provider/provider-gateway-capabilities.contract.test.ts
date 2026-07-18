@@ -217,6 +217,89 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(await stream.reasoningText).toBe('think')
     })
 
+    it('encodes Ark and Google vision images through their native AI SDK protocols', async () => {
+      fetchMock
+        .mockResolvedValueOnce(responsesApiResponse('doubao-seed-2-0-lite-260215', 'ark vision ok'))
+        .mockResolvedValueOnce(jsonResponse({
+          responseId: 'google-vision-response',
+          modelVersion: 'gemini-3.1-pro-preview',
+          candidates: [{
+            content: { role: 'model', parts: [{ text: 'google vision ok' }] },
+            finishReason: 'STOP',
+            safetyRatings: [],
+          }],
+          usageMetadata: {
+            promptTokenCount: 8,
+            candidatesTokenCount: 3,
+            totalTokenCount: 11,
+          },
+        }))
+
+      const image = 'data:image/png;base64,aGVsbG8='
+      const visionMessages = [{
+        role: 'user' as const,
+        content: [
+          { type: 'image' as const, image },
+          { type: 'text' as const, text: 'describe' },
+        ],
+      }]
+      const providerConfig = {
+        id: 'test-provider',
+        name: 'Test Provider',
+        apiKey: 'test-key',
+      }
+      const arkModel = createAiLanguageModel({
+        providerKey: 'ark',
+        selection: {
+          provider: 'ark',
+          modelId: 'doubao-seed-2-0-lite-260215',
+          modelKey: 'ark::doubao-seed-2-0-lite-260215',
+        },
+        providerConfig: {
+          ...providerConfig,
+          baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+        },
+        executionMode: 'vision',
+        reasoning: false,
+        reasoningEffort: 'medium',
+      })
+      const googleModel = createAiLanguageModel({
+        providerKey: 'google',
+        selection: {
+          provider: 'google',
+          modelId: 'gemini-3.1-pro-preview',
+          modelKey: 'google::gemini-3.1-pro-preview',
+        },
+        providerConfig: {
+          ...providerConfig,
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        },
+        executionMode: 'vision',
+        reasoning: false,
+        reasoningEffort: 'medium',
+      })
+
+      await generateText({ model: arkModel, messages: visionMessages, maxRetries: 0 })
+      await generateText({ model: googleModel, messages: visionMessages, maxRetries: 0 })
+
+      const arkBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
+      expect(arkBody.input).toEqual([{
+        role: 'user',
+        content: [
+          { type: 'input_image', image_url: image },
+          { type: 'input_text', text: 'describe' },
+        ],
+      }])
+      const googleBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
+      expect(googleBody.contents).toEqual([{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } },
+          { text: 'describe' },
+        ],
+      }])
+    })
+
     it('preserves OpenRouter cache breakpoints and session identity on the SDK request', async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse({
         id: 'openrouter-response',
