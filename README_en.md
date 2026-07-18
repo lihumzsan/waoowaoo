@@ -13,7 +13,7 @@
 </p>
 
 > [!IMPORTANT]
-> This repository currently supports development mode only. Next.js, workers, watchdog, Bull Board, and warmup run on the host through `npm run dev`. Docker Compose provides local MySQL, Redis, and MinIO only; it does not build or deploy the application.
+> This repository supports development mode only. The development machine runs Next.js, workers, watchdog, Bull Board, and warmup through `npm run dev`. MySQL, Redis, MinIO, and ComfyUI use the existing services on `192.168.0.112`; the development machine does not run or manage Docker.
 
 ## ✨ Features
 
@@ -29,7 +29,7 @@
 
 - Node.js >= 18.18.0
 - npm >= 9.0.0
-- Docker Desktop, only when running MySQL, Redis, and MinIO locally
+- Network access to `192.168.0.112`
 
 ### Initialize
 
@@ -38,39 +38,28 @@ git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 cp .env.example .env
 npm install
-npm run infra:up
-npx prisma db push
 npm run dev
 ```
 
-Edit `.env` as needed for development and AI provider settings. After startup, open:
+Edit `.env` for AI provider settings as needed. `.env.example` already contains the remote infrastructure endpoints. After startup, open:
 
 - App: [http://localhost:3000](http://localhost:3000)
 - Bull Board: [http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
-- MinIO Console: [http://localhost:19001](http://localhost:19001)
+
+### Remote Development Services
+
+| Service | Address |
+| --- | --- |
+| MySQL | `192.168.0.112:13306` |
+| Redis | `192.168.0.112:16379` |
+| MinIO API | `http://192.168.0.112:19000` |
+| MinIO Console | `http://192.168.0.112:19001` |
+| ComfyUI | `http://192.168.0.112:8878` |
+
+Configure the ComfyUI service URL in Settings with the address above. The repository has no local infrastructure fallback and does not manage remote containers.
 
 > [!WARNING]
-> Run `npx prisma db push` before the first startup. Otherwise the database tables will not exist.
-
-### Infrastructure Commands
-
-```bash
-# Start MySQL, Redis, and MinIO and wait for health checks
-npm run infra:up
-
-# Show service status
-npm run infra:status
-
-# Follow infrastructure logs
-npm run infra:logs
-
-# Stop services without deleting data volumes
-npm run infra:down
-```
-
-Do not run `docker compose down -v`; it deletes local development data volumes.
-
-If you already use local or remote MySQL, Redis, and MinIO services, skip `npm run infra:up` and configure their addresses in `.env`.
+> `192.168.0.112` is an active shared development environment. Do not run schema pushes, rebuilds, or other destructive database operations against it from this repository.
 
 ## 🧪 Verification
 

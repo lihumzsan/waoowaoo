@@ -13,7 +13,7 @@
 </p>
 
 > [!IMPORTANT]
-> 本仓库当前只支持开发模式：Next.js、Worker、Watchdog、Bull Board 和 Warmup 均通过 `npm run dev` 在宿主机运行。Docker Compose 只用于提供本地 MySQL、Redis 和 MinIO，不包含应用镜像或部署流程。
+> 本仓库只支持开发模式。本机通过 `npm run dev` 运行 Next.js、Worker、Watchdog、Bull Board 和 Warmup；MySQL、Redis、MinIO 与 ComfyUI 固定使用 `192.168.0.112` 上的现有服务。本机不运行或管理 Docker。
 
 ## ✨ 功能特性
 
@@ -29,7 +29,7 @@
 
 - Node.js >= 18.18.0
 - npm >= 9.0.0
-- Docker Desktop（仅在本机运行 MySQL、Redis、MinIO 时需要）
+- 本机能够访问 `192.168.0.112`
 
 ### 初始化
 
@@ -38,39 +38,28 @@ git clone https://github.com/lihumzsan/waoowaoo.git
 cd waoowaoo
 cp .env.example .env
 npm install
-npm run infra:up
-npx prisma db push
 npm run dev
 ```
 
-按需编辑 `.env` 中的开发配置和 AI 服务配置。启动后访问：
+按需编辑 `.env` 中的 AI 服务配置。`.env.example` 已预置远端基础设施地址；启动后访问：
 
 - 应用：[http://localhost:3000](http://localhost:3000)
 - Bull Board：[http://localhost:3010/admin/queues](http://localhost:3010/admin/queues)
-- MinIO 控制台：[http://localhost:19001](http://localhost:19001)
+
+### 远端开发服务
+
+| 服务 | 地址 |
+| --- | --- |
+| MySQL | `192.168.0.112:13306` |
+| Redis | `192.168.0.112:16379` |
+| MinIO API | `http://192.168.0.112:19000` |
+| MinIO 控制台 | `http://192.168.0.112:19001` |
+| ComfyUI | `http://192.168.0.112:8878` |
+
+在设置中心将 ComfyUI 服务地址配置为上表地址。仓库不提供本地基础设施备用方案，也不管理远端容器。
 
 > [!WARNING]
-> 首次启动前必须执行 `npx prisma db push`。跳过后数据库表不会创建。
-
-### 基础设施命令
-
-```bash
-# 启动并等待 MySQL、Redis、MinIO 健康
-npm run infra:up
-
-# 查看服务状态
-npm run infra:status
-
-# 跟随基础设施日志
-npm run infra:logs
-
-# 停止服务但保留数据卷
-npm run infra:down
-```
-
-不要使用 `docker compose down -v`，该命令会删除本地开发数据卷。
-
-如果已经有本机或远程 MySQL、Redis、MinIO，可以跳过 `npm run infra:up`，直接在 `.env` 中配置对应地址。
+> `192.168.0.112` 是正在使用的共享开发环境。不要从本仓库对该数据库执行结构推送、重建或其他破坏性操作。
 
 ## 🧪 验证命令
 
