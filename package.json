@@ -151,6 +151,7 @@
     "@openai/agents": "^0.13.2",
     "@openai/agents-extensions": "^0.13.2",
     "@openrouter/ai-sdk-provider": "^2.10.0",
+    "@openrouter/sdk": "^0.13.65",
     "@prisma/client": "^6.19.3",
     "@remotion/cli": "^4.0.491",
     "@remotion/player": "^4.0.491",
@@ -188,6 +189,7 @@
     "remark-gfm": "^4.0.1",
     "remotion": "^4.0.491",
     "sharp": "^0.34.5",
+    "stripe": "^22.3.2",
     "undici": "^7.28.0",
     "zod": "^4.4.3"
   },
