@@ -10,7 +10,7 @@
     "postinstall": "prisma generate",
     "prepare": "husky",
     "dev": "npm run storage:init && concurrently --kill-others \"npm run dev:next\" \"npm run dev:worker\" \"npm run dev:log-cleanup\" \"npm run dev:board\"",
-    "dev:cloud": "npm run env:cloud:check:dev && npm run storage:init:cloud && concurrently --kill-others \"npm run dev:next:cloud\" \"npm run dev:worker:cloud\" \"npm run dev:log-cleanup:cloud\" \"npm run dev:board:cloud\"",
+    "dev:cloud": "npm run env:cloud:check:dev && npm run storage:init:cloud && concurrently --kill-others \"npm run dev:next:cloud\" \"npm run dev:worker:cloud\" \"npm run dev:log-cleanup:cloud\"",
     "dev:next": "cross-env NODE_OPTIONS=\"--no-deprecation\" next dev --turbopack -H 0.0.0.0",
     "dev:next:cloud": "node scripts/run-with-env.mjs .env .env.cloud.local -- node_modules/next/dist/bin/next dev --turbopack -H 0.0.0.0",
     "dev:worker": "tsx watch --env-file=.env src/lib/workers/index.ts",
