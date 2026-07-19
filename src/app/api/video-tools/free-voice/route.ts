@@ -19,16 +19,18 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const auth = await requireUserAuth()
   if (isErrorResponse(auth)) return auth
   const body = await request.json().catch(() => null)
-  const text = typeof body?.text === 'string' ? body.text : ''
-  const voiceSourceId = typeof body?.voiceSourceId === 'string' ? body.voiceSourceId : ''
-  if (!text.trim() || !voiceSourceId.trim()) throw new ApiError('INVALID_PARAMS')
+  const text = typeof body?.text === 'string' ? body.text.trim() : ''
+  const projectId = typeof body?.projectId === 'string' ? body.projectId.trim() : ''
+  const characterId = typeof body?.characterId === 'string' ? body.characterId.trim() : ''
+  if (!text || !projectId || !characterId) throw new ApiError('INVALID_PARAMS')
 
   const result = await createVideoToolFreeVoiceTask({
     userId: auth.session.user.id,
     locale: resolveRequiredTaskLocale(request, body),
     requestId: getRequestId(request),
     text,
-    voiceSourceId,
+    projectId,
+    characterId,
   })
 
   return NextResponse.json({

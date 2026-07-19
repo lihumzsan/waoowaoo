@@ -327,7 +327,8 @@ describe('video tools routes', () => {
       method: 'POST',
       body: {
         text: 'hello',
-        voiceSourceId: 'voice-1',
+        projectId: 'project-1',
+        characterId: 'character-1',
         meta: { locale: 'zh' },
       },
     })
@@ -346,8 +347,25 @@ describe('video tools routes', () => {
       userId: 'user-1',
       locale: 'zh',
       text: 'hello',
-      voiceSourceId: 'voice-1',
+      projectId: 'project-1',
+      characterId: 'character-1',
     }))
     expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['projectId', { text: 'hello', characterId: 'character-1' }],
+    ['characterId', { text: 'hello', projectId: 'project-1' }],
+  ])('rejects free voice submission without %s', async (_field, body) => {
+    const request = buildMockRequest({
+      path: '/api/video-tools/free-voice',
+      method: 'POST',
+      body,
+    })
+
+    const response = await submitFreeVoice(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(400)
+    expect(createVideoToolFreeVoiceTaskMock).not.toHaveBeenCalled()
   })
 })
