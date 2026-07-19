@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import Stripe from 'stripe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { handleStripeWebhook } from '@/lib/payments/stripe-webhook'
 import { getBalance } from '@/lib/billing'
@@ -9,10 +9,11 @@ import { createTestUser } from '../../helpers/billing-fixtures'
 const WEBHOOK_SECRET = 'stripe_webhook_test_secret'
 
 function signPayload(payload: string, timestamp: number): string {
-  const signature = createHmac('sha256', WEBHOOK_SECRET)
-    .update(`${timestamp}.${payload}`, 'utf8')
-    .digest('hex')
-  return `t=${timestamp},v1=${signature}`
+  return Stripe.webhooks.generateTestHeaderString({
+    payload,
+    secret: WEBHOOK_SECRET,
+    timestamp,
+  })
 }
 
 function currentStripeTimestamp(): number {

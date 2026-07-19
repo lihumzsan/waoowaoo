@@ -1,4 +1,6 @@
+import type Stripe from 'stripe'
 import { quoteRecharge, type RechargeQuote } from './recharge-config'
+import { createStripeClient } from './stripe-client'
 
 export interface CreateStripeCheckoutSessionInput {
   userId: string
@@ -14,14 +16,6 @@ export interface StripeCheckoutSessionResult {
   quote: RechargeQuote
 }
 
-function readStripeSecretKey(): string {
-  const key = process.env.STRIPE_SECRET_KEY
-  if (typeof key !== 'string' || key.trim() === '') {
-    throw new Error('STRIPE_SECRET_KEY_REQUIRED')
-  }
-  return key.trim()
-}
-
 function normalizeOrigin(origin: string): string {
   const trimmed = origin.trim().replace(/\/+$/, '')
   if (!/^https?:\/\//.test(trimmed)) {
@@ -30,36 +24,15 @@ function normalizeOrigin(origin: string): string {
   return trimmed
 }
 
-function readString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function readStripeSessionResponse(value: unknown): { id: string; url: string } {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('STRIPE_CHECKOUT_RESPONSE_INVALID')
+function buildCheckoutMetadata(quote: RechargeQuote, userId: string): Stripe.MetadataParam {
+  return {
+    waoowaoo_kind: 'credit_recharge',
+    user_id: userId,
+    credits: quote.credits.toFixed(2),
+    credit_value_currency: quote.creditValueCurrency,
+    payment_amount: quote.paymentAmount.toFixed(2),
+    payment_currency: quote.paymentCurrency.toLowerCase(),
   }
-  const id = readString(Reflect.get(value, 'id'))
-  const url = readString(Reflect.get(value, 'url'))
-  if (!id || !url) {
-    throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
-  }
-  return { id, url }
-}
-
-function readStripeErrorMessage(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  const error = Reflect.get(value, 'error')
-  if (typeof error !== 'object' || error === null || Array.isArray(error)) return null
-  return readString(Reflect.get(error, 'message'))
-}
-
-function appendMetadata(params: URLSearchParams, prefix: string, quote: RechargeQuote, userId: string): void {
-  params.set(`${prefix}[waoowaoo_kind]`, 'credit_recharge')
-  params.set(`${prefix}[user_id]`, userId)
-  params.set(`${prefix}[credits]`, quote.credits.toFixed(2))
-  params.set(`${prefix}[credit_value_currency]`, quote.creditValueCurrency)
-  params.set(`${prefix}[payment_amount]`, quote.paymentAmount.toFixed(2))
-  params.set(`${prefix}[payment_currency]`, quote.paymentCurrency.toLowerCase())
 }
 
 function getCheckoutProductText(locale: 'zh' | 'en', quote: RechargeQuote): { name: string; description: string } {
@@ -78,41 +51,32 @@ function getCheckoutProductText(locale: 'zh' | 'en', quote: RechargeQuote): { na
 export async function createStripeCheckoutSession(input: CreateStripeCheckoutSessionInput): Promise<StripeCheckoutSessionResult> {
   const quote = quoteRecharge(input.credits)
   const origin = normalizeOrigin(input.origin)
-  const params = new URLSearchParams()
   const successUrl = `${origin}/${input.locale}/profile?section=billing&payment=success&session_id={CHECKOUT_SESSION_ID}`
   const cancelUrl = `${origin}/${input.locale}/profile?section=billing&payment=cancel`
   const productText = getCheckoutProductText(input.locale, quote)
+  const metadata = buildCheckoutMetadata(quote, input.userId)
 
-  params.set('mode', 'payment')
-  params.set('success_url', successUrl)
-  params.set('cancel_url', cancelUrl)
-  params.set('client_reference_id', input.userId)
-  params.set('line_items[0][quantity]', '1')
-  params.set('line_items[0][price_data][currency]', quote.paymentCurrency.toLowerCase())
-  params.set('line_items[0][price_data][unit_amount]', String(quote.paymentUnitAmount))
-  params.set('line_items[0][price_data][product_data][name]', productText.name)
-  params.set('line_items[0][price_data][product_data][description]', productText.description)
-  if (input.email) {
-    params.set('customer_email', input.email)
-  }
-  appendMetadata(params, 'metadata', quote, input.userId)
-  appendMetadata(params, 'payment_intent_data[metadata]', quote, input.userId)
-
-  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${readStripeSecretKey()}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: params,
+  const session = await createStripeClient().checkout.sessions.create({
+    mode: 'payment',
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: input.userId,
+    ...(input.email ? { customer_email: input.email } : {}),
+    line_items: [{
+      quantity: 1,
+      price_data: {
+        currency: quote.paymentCurrency.toLowerCase(),
+        unit_amount: quote.paymentUnitAmount,
+        product_data: {
+          name: productText.name,
+          description: productText.description,
+        },
+      },
+    }],
+    metadata,
+    payment_intent_data: { metadata },
   })
-
-  const payload: unknown = await response.json()
-  if (!response.ok) {
-    throw new Error(readStripeErrorMessage(payload) || `STRIPE_CHECKOUT_CREATE_FAILED_${response.status}`)
-  }
-
-  const session = readStripeSessionResponse(payload)
+  if (!session.url) throw new Error('STRIPE_CHECKOUT_RESPONSE_MISSING_URL')
   return {
     id: session.id,
     url: session.url,

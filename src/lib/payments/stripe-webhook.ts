@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from '@/lib/billing/ledger'
 import { roundMoney, toMoneyNumber } from '@/lib/billing/money'
@@ -54,27 +54,50 @@ function readStripeWebhookSecret(): string {
   return secret.trim()
 }
 
-function parseSignatureHeader(header: string): { timestamp: number; signatures: string[] } {
-  const pairs = header.split(',').map((part) => part.trim()).filter(Boolean)
-  const timestampRaw = pairs
-    .map((pair) => pair.split('='))
+function readStripeSignatureTimestamp(header: string): number {
+  const timestampText = header
+    .split(',')
+    .map((part) => part.trim().split('='))
     .find(([key]) => key === 't')?.[1]
-  const timestamp = Number(timestampRaw)
-  const signatures = pairs
-    .map((pair) => pair.split('='))
-    .filter(([key, value]) => key === 'v1' && typeof value === 'string' && value.length > 0)
-    .map(([, value]) => value)
-  if (!Number.isFinite(timestamp) || signatures.length === 0) {
-    throw new Error('STRIPE_SIGNATURE_HEADER_INVALID')
-  }
-  return { timestamp, signatures }
+  const timestamp = Number(timestampText)
+  if (!Number.isFinite(timestamp)) throw new Error('STRIPE_SIGNATURE_HEADER_INVALID')
+  return timestamp
 }
 
-function secureCompareHex(expectedHex: string, receivedHex: string): boolean {
-  const expected = Buffer.from(expectedHex, 'hex')
-  const received = Buffer.from(receivedHex, 'hex')
-  if (expected.length !== received.length) return false
-  return timingSafeEqual(expected, received)
+function constructStripeEvent(
+  rawBody: string,
+  signatureHeader: string | null,
+  secret = readStripeWebhookSecret(),
+  nowMs = Date.now(),
+): Stripe.Event {
+  if (!signatureHeader) {
+    throw new Error('STRIPE_SIGNATURE_HEADER_REQUIRED')
+  }
+  const timestamp = readStripeSignatureTimestamp(signatureHeader)
+  const ageSeconds = Math.abs(Math.floor(nowMs / 1000) - timestamp)
+  if (ageSeconds > STRIPE_SIGNATURE_TOLERANCE_SECONDS) {
+    throw new Error('STRIPE_SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE')
+  }
+  try {
+    return Stripe.webhooks.constructEvent(
+      rawBody,
+      signatureHeader,
+      secret,
+      STRIPE_SIGNATURE_TOLERANCE_SECONDS,
+      undefined,
+      nowMs,
+    )
+  } catch (error) {
+    if (error instanceof Stripe.errors.StripeSignatureVerificationError) {
+      const code = error.message.includes('Timestamp outside')
+        ? 'STRIPE_SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE'
+        : error.message.includes('matching the expected signature')
+          ? 'STRIPE_SIGNATURE_MISMATCH'
+          : 'STRIPE_SIGNATURE_HEADER_INVALID'
+      throw new Error(code, { cause: error })
+    }
+    throw error
+  }
 }
 
 export function verifyStripeWebhookSignature(
@@ -83,20 +106,7 @@ export function verifyStripeWebhookSignature(
   secret = readStripeWebhookSecret(),
   nowMs = Date.now(),
 ): void {
-  if (!signatureHeader) {
-    throw new Error('STRIPE_SIGNATURE_HEADER_REQUIRED')
-  }
-  const { timestamp, signatures } = parseSignatureHeader(signatureHeader)
-  const ageSeconds = Math.abs(Math.floor(nowMs / 1000) - timestamp)
-  if (ageSeconds > STRIPE_SIGNATURE_TOLERANCE_SECONDS) {
-    throw new Error('STRIPE_SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE')
-  }
-  const signedPayload = `${timestamp}.${rawBody}`
-  const expected = createHmac('sha256', secret).update(signedPayload, 'utf8').digest('hex')
-  const matched = signatures.some((signature) => secureCompareHex(expected, signature))
-  if (!matched) {
-    throw new Error('STRIPE_SIGNATURE_MISMATCH')
-  }
+  constructStripeEvent(rawBody, signatureHeader, secret, nowMs)
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -108,31 +118,21 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function readMetadata(value: unknown): Record<string, string> {
-  const record = readRecord(value)
-  if (!record) return {}
-  const out: Record<string, string> = {}
-  for (const [key, item] of Object.entries(record)) {
-    if (typeof item === 'string') out[key] = item
-  }
-  return out
+function readExpandableId(value: string | { id: string } | null | undefined): string | null {
+  return readString(typeof value === 'string' ? value : value?.id)
 }
 
-function readCheckoutSession(value: unknown): StripeCheckoutSessionLike {
-  const record = readRecord(value)
-  if (!record) {
-    throw new Error('STRIPE_CHECKOUT_SESSION_INVALID')
-  }
-  const id = readString(record.id)
-  const paymentIntentId = readString(record.payment_intent)
+function readCheckoutSession(value: Stripe.Checkout.Session): StripeCheckoutSessionLike {
+  const id = readString(value.id)
+  const paymentIntentId = readExpandableId(value.payment_intent)
   if (!id) {
     throw new Error('STRIPE_CHECKOUT_SESSION_ID_REQUIRED')
   }
   return {
     id,
     paymentIntentId,
-    paymentStatus: readString(record.payment_status),
-    metadata: readMetadata(record.metadata),
+    paymentStatus: readString(value.payment_status),
+    metadata: value.metadata ?? {},
   }
 }
 
@@ -141,31 +141,27 @@ function readPositiveInteger(value: unknown, code: string): number {
   return value
 }
 
-function readRefund(value: unknown): StripeRefundLike {
-  const record = readRecord(value)
-  if (!record) throw new Error('STRIPE_REFUND_INVALID')
-  const id = readString(record.id)
-  const paymentIntentId = readString(record.payment_intent)
-  const currency = readString(record.currency)?.toLowerCase() || null
+function readRefund(value: Stripe.Refund): StripeRefundLike {
+  const id = readString(value.id)
+  const paymentIntentId = readExpandableId(value.payment_intent)
+  const currency = readString(value.currency)?.toLowerCase() || null
   if (!id) throw new Error('STRIPE_REFUND_ID_REQUIRED')
   if (!paymentIntentId) throw new Error('STRIPE_REFUND_PAYMENT_INTENT_REQUIRED')
   if (!currency) throw new Error('STRIPE_REFUND_CURRENCY_REQUIRED')
   return {
     id,
     paymentIntentId,
-    amountMinor: readPositiveInteger(record.amount, 'STRIPE_REFUND_AMOUNT_INVALID'),
+    amountMinor: readPositiveInteger(value.amount, 'STRIPE_REFUND_AMOUNT_INVALID'),
     currency,
-    status: readString(record.status),
+    status: readString(value.status),
   }
 }
 
-function readDispute(value: unknown): StripeDisputeLike {
-  const record = readRecord(value)
-  if (!record) throw new Error('STRIPE_DISPUTE_INVALID')
-  const id = readString(record.id)
-  const paymentIntentId = readString(record.payment_intent)
-  const currency = readString(record.currency)?.toLowerCase() || null
-  const status = readString(record.status)
+function readDispute(value: Stripe.Dispute): StripeDisputeLike {
+  const id = readString(value.id)
+  const paymentIntentId = readExpandableId(value.payment_intent)
+  const currency = readString(value.currency)?.toLowerCase() || null
+  const status = readString(value.status)
   if (!id) throw new Error('STRIPE_DISPUTE_ID_REQUIRED')
   if (!paymentIntentId) throw new Error('STRIPE_DISPUTE_PAYMENT_INTENT_REQUIRED')
   if (!currency) throw new Error('STRIPE_DISPUTE_CURRENCY_REQUIRED')
@@ -173,7 +169,7 @@ function readDispute(value: unknown): StripeDisputeLike {
   return {
     id,
     paymentIntentId,
-    amountMinor: readPositiveInteger(record.amount, 'STRIPE_DISPUTE_AMOUNT_INVALID'),
+    amountMinor: readPositiveInteger(value.amount, 'STRIPE_DISPUTE_AMOUNT_INVALID'),
     currency,
     status,
   }
@@ -377,31 +373,14 @@ async function restoreDisputeFunds(eventId: string, dispute: StripeDisputeLike):
     : { received: true, action: 'ignored', eventType: 'charge.dispute.funds_reinstated', objectId: dispute.id, reason: 'dispute_debit_missing' }
 }
 
-function parseStripeEvent(rawBody: string): { id: string; type: string; object: unknown } {
-  const payload: unknown = JSON.parse(rawBody)
-  const record = readRecord(payload)
-  if (!record) {
-    throw new Error('STRIPE_EVENT_INVALID')
-  }
-  const id = readString(record.id)
-  const type = readString(record.type)
-  const data = readRecord(record.data)
-  if (!id || !type || !data) {
-    throw new Error('STRIPE_EVENT_MISSING_REQUIRED_FIELDS')
-  }
-  return {
-    id,
-    type,
-    object: data.object,
-  }
-}
-
 export async function handleStripeWebhook(rawBody: string, signatureHeader: string | null): Promise<StripeWebhookHandleResult> {
-  verifyStripeWebhookSignature(rawBody, signatureHeader)
-  const event = parseStripeEvent(rawBody)
+  const event = constructStripeEvent(rawBody, signatureHeader)
+  const eventId = readString(event.id)
+  const eventType = readString(event.type)
+  if (!eventId || !eventType) throw new Error('STRIPE_EVENT_MISSING_REQUIRED_FIELDS')
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-    const session = readCheckoutSession(event.object)
+    const session = readCheckoutSession(event.data.object)
     const result = await creditCheckoutSession(session)
     return {
       ...result,
@@ -410,7 +389,7 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   }
 
   if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
-    const session = readCheckoutSession(event.object)
+    const session = readCheckoutSession(event.data.object)
     return {
       received: true,
       action: 'ignored',
@@ -421,37 +400,37 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
   }
 
   if (event.type === 'refund.created') {
-    const result = await debitRefund(event.id, readRefund(event.object))
+    const result = await debitRefund(eventId, readRefund(event.data.object))
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'refund.failed') {
-    const result = await restoreFailedRefund(event.id, readRefund(event.object))
+    const result = await restoreFailedRefund(eventId, readRefund(event.data.object))
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'refund.updated') {
-    const refund = readRefund(event.object)
+    const refund = readRefund(event.data.object)
     if (refund.status === 'failed' || refund.status === 'canceled') {
-      const result = await restoreFailedRefund(event.id, refund)
+      const result = await restoreFailedRefund(eventId, refund)
       return { ...result, eventType: event.type }
     }
-    const result = await debitRefund(event.id, refund)
+    const result = await debitRefund(eventId, refund)
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'charge.dispute.funds_withdrawn') {
-    const result = await debitDispute(event.id, readDispute(event.object))
+    const result = await debitDispute(eventId, readDispute(event.data.object))
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'charge.dispute.funds_reinstated') {
-    const result = await restoreDisputeFunds(event.id, readDispute(event.object))
+    const result = await restoreDisputeFunds(eventId, readDispute(event.data.object))
     return { ...result, eventType: event.type }
   }
 
   if (event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') {
-    const dispute = readDispute(event.object)
+    const dispute = readDispute(event.data.object)
     return { received: true, action: 'ignored', eventType: event.type, objectId: dispute.id, reason: 'non_financial_dispute_event' }
   }
 
