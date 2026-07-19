@@ -88,15 +88,15 @@ export function WorkspaceAssistantSettings() {
           style={style}
           className="glass-surface-modal z-[9999] rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 shadow-[0_14px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl"
         >
-          <div className="px-1 pb-2 text-xs font-semibold text-[var(--glass-text-primary)]">
+          <div className="px-1 pb-2 text-base font-semibold leading-6 text-[var(--glass-text-primary)]">
             {t('panel.settings')}
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-[var(--glass-bg-surface-soft)] px-3 py-2.5">
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-[var(--glass-text-primary)]">
+              <div className="text-base font-medium leading-6 text-[var(--glass-text-primary)]">
                 {t('panel.billingConfirmationTitle')}
               </div>
-              <div className="mt-0.5 text-[11px] leading-4 text-[var(--glass-text-tertiary)]">
+              <div className="mt-0.5 text-base leading-6 text-[var(--glass-text-tertiary)]">
                 {t('panel.billingConfirmationDescription')}
               </div>
             </div>
