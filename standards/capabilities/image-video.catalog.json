@@ -1212,6 +1212,36 @@
   {
     "modelType": "video",
     "provider": "comfyui",
+    "modelId": "basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p",
+    "capabilities": {
+      "video": {
+        "generationModeOptions": [
+          "normal"
+        ],
+        "durationOptions": [
+          4,
+          5,
+          6,
+          8,
+          10,
+          12,
+          16,
+          20
+        ],
+        "fpsOptions": [
+          25
+        ],
+        "resolutionOptions": [
+          "720p"
+        ],
+        "firstlastframe": false,
+        "supportGenerateAudio": false
+      }
+    }
+  },
+  {
+    "modelType": "video",
+    "provider": "comfyui",
     "modelId": "basevideo/seedance2/bernini-480p-i2v",
     "capabilities": {
       "video": {

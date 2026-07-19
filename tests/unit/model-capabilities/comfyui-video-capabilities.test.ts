@@ -44,6 +44,21 @@ describe('comfyui video capabilities catalog', () => {
     expect(capabilities?.video?.supportGenerateAudio).toBe(false)
   })
 
+  it('registers the KJ multi-shot PromptRelay workflow as fixed 720p at 25 fps', () => {
+    const capabilities = findBuiltinCapabilities(
+      'video',
+      'comfyui',
+      'basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+    )
+
+    expect(capabilities?.video?.generationModeOptions).toEqual(['normal'])
+    expect(capabilities?.video?.durationOptions).toEqual([4, 5, 6, 8, 10, 12, 16, 20])
+    expect(capabilities?.video?.fpsOptions).toEqual([25])
+    expect(capabilities?.video?.resolutionOptions).toEqual(['720p'])
+    expect(capabilities?.video?.firstlastframe).toBe(false)
+    expect(capabilities?.video?.supportGenerateAudio).toBe(false)
+  })
+
   it('registers Seedance2 Bernini 480p with motion strength controls', () => {
     for (const modelId of [
       'basevideo/seedance2/bernini-480p-i2v',

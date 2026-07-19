@@ -1310,15 +1310,30 @@ function collectPromptRelaySectionMarkers(text: string): Array<{
 
 function extractPromptRelaySection(text: string, section: 'GLOBAL' | 'LOCAL'): string {
   const markers = collectPromptRelaySectionMarkers(text)
-  const markerIndex = markers.findIndex((marker) => marker.section === section)
-  if (markerIndex < 0) return ''
+  const sectionValues = markers.flatMap((marker, index) => {
+    if (marker.section !== section) return []
+    const nextMarker = markers[index + 1]
+    const value = text.slice(marker.valueStart, nextMarker?.markerStart ?? text.length).trim()
+    return value ? [value] : []
+  })
+  return sectionValues.join(' | ')
+}
 
-  const endSections = section === 'GLOBAL'
-    ? new Set<PromptRelaySectionName>(['LOCAL', 'LENGTHS'])
-    : new Set<PromptRelaySectionName>(['GLOBAL', 'LENGTHS'])
-  const nextMarker = markers.slice(markerIndex + 1).find((marker) => endSections.has(marker.section))
+function extractPromptRelayLengths(text: string): number[] | null {
+  const markers = collectPromptRelaySectionMarkers(text)
+  const markerIndex = markers.findIndex((marker) => marker.section === 'LENGTHS')
+  if (markerIndex < 0) return null
+
   const marker = markers[markerIndex]
-  return text.slice(marker.valueStart, nextMarker?.markerStart ?? text.length).trim()
+  const rawValue = text.slice(marker.valueStart, markers[markerIndex + 1]?.markerStart ?? text.length).trim()
+  const numericPrefix = rawValue.match(/^(\d+(?:\s*,\s*\d+)*)(?=\s*(?:$|[\r\n.!?。；;]))/)?.[1]
+  if (!numericPrefix) return null
+
+  const parts = numericPrefix.split(',').map((item) => item.trim())
+  if (parts.length === 0 || parts.some((item) => !/^\d+$/.test(item))) return null
+
+  const values = parts.map(Number)
+  return values.every((value) => Number.isSafeInteger(value) && value > 0) ? values : null
 }
 
 function derivePromptRelayInput(prompt: string, field: 'global_prompt' | 'local_prompts'): string {
@@ -1843,6 +1858,9 @@ type Ltx23WorkflowNodeContract = {
   frameCountNodeIds?: string[]
   promptRelaySegmentCount?: number
   promptRelaySmartSegmentCount?: number
+  lockPromptRelayInputs?: boolean
+  fixedResizeNodeIds?: string[]
+  fixedResizeLongestSide?: number
 }
 
 const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> = {
@@ -1876,6 +1894,13 @@ const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> =
     fpsNodeIds: ['474'],
     promptRelaySegmentCount: 3,
   },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj]: {
+    frameCountNodeIds: ['618'],
+    promptRelaySegmentCount: 8,
+    lockPromptRelayInputs: true,
+    fixedResizeNodeIds: ['619'],
+    fixedResizeLongestSide: 1280,
+  },
 }
 
 function setNumericNodeValue(graph: ComfyUiWorkflowGraph, nodeId: string, value: number): void {
@@ -1895,6 +1920,47 @@ function splitFramesEvenly(totalFrames: number, segmentCount: number): number[] 
     remainder -= 1
     return Math.max(1, value)
   })
+}
+
+function normalizePromptRelayLengths(
+  lengths: number[] | null,
+  totalFrames: number,
+  segmentCount: number,
+): number[] | null {
+  const safeTotal = Math.max(1, Math.round(totalFrames))
+  const safeCount = Math.max(1, Math.round(segmentCount))
+  if (!lengths || lengths.length !== safeCount || safeTotal < safeCount) return null
+  if (!lengths.every((value) => Number.isSafeInteger(value) && value > 0)) return null
+
+  const sourceTotal = lengths.reduce((sum, value) => sum + value, 0)
+  if (sourceTotal <= 0) return null
+
+  const exact = lengths.map((value) => (value * safeTotal) / sourceTotal)
+  const normalized = exact.map((value) => Math.max(1, Math.floor(value)))
+  let remaining = safeTotal - normalized.reduce((sum, value) => sum + value, 0)
+
+  const addOrder = exact
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+  let cursor = 0
+  while (remaining > 0) {
+    normalized[addOrder[cursor % addOrder.length].index] += 1
+    remaining -= 1
+    cursor += 1
+  }
+
+  const removeOrder = [...addOrder].reverse()
+  cursor = 0
+  while (remaining < 0) {
+    const candidate = removeOrder[cursor % removeOrder.length].index
+    if (normalized[candidate] > 1) {
+      normalized[candidate] -= 1
+      remaining += 1
+    }
+    cursor += 1
+  }
+
+  return normalized
 }
 
 function parsePromptRelaySegmentCount(raw: unknown): number | null {
@@ -2633,6 +2699,7 @@ function applyPromptRelayTimelineControls(
     segmentCount?: number
     largeMotionStages?: boolean
     audioTalkingHeadStages?: boolean
+    lockInputs?: boolean
   },
 ): void {
   if (!params.prompt || params.targetFrameCount === null) return
@@ -2644,7 +2711,11 @@ function applyPromptRelayTimelineControls(
       || params.segmentCount
       || parsePromptRelaySegmentCount(node.inputs.segment_lengths)
       || 1
-    const lengths = splitFramesEvenly(params.targetFrameCount, segmentCount)
+    const lengths = normalizePromptRelayLengths(
+      params.lockInputs ? extractPromptRelayLengths(params.prompt) : null,
+      params.targetFrameCount,
+      segmentCount,
+    ) || splitFramesEvenly(params.targetFrameCount, segmentCount)
     const segmentPrompts = buildPromptRelaySegmentPrompts(
       params.prompt,
       lengths.length,
@@ -2653,15 +2724,18 @@ function applyPromptRelayTimelineControls(
     )
 
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
-      assignStringInputValue(
-        graph,
-        node,
+      const globalPrompt = derivePromptRelayPositiveInput(
+        params.prompt,
         'global_prompt',
-        derivePromptRelayPositiveInput(params.prompt, 'global_prompt', params.audioTalkingHeadStages === true),
+        params.audioTalkingHeadStages === true,
       )
+      if (params.lockInputs) node.inputs.global_prompt = globalPrompt
+      else assignStringInputValue(graph, node, 'global_prompt', globalPrompt)
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'local_prompts')) {
-      assignStringInputValue(graph, node, 'local_prompts', segmentPrompts.join(' | '))
+      const localPrompts = segmentPrompts.join(' | ')
+      if (params.lockInputs) node.inputs.local_prompts = localPrompts
+      else assignStringInputValue(graph, node, 'local_prompts', localPrompts)
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'segment_lengths')) {
       node.inputs.segment_lengths = lengths.join(', ')
@@ -2794,6 +2868,13 @@ function applyLtx23WorkflowProfileControls(
   for (const nodeId of contract?.frameCountNodeIds || []) {
     setNumericNodeValue(graph, nodeId, targetFrameCount)
   }
+  for (const nodeId of contract?.fixedResizeNodeIds || []) {
+    const resizeNode = graph[nodeId]
+    if (!resizeNode || !isRecord(resizeNode.inputs) || !contract?.fixedResizeLongestSide) continue
+    resizeNode.inputs.scale_to_length = contract.fixedResizeLongestSide
+    resizeNode.inputs.scale_to_side = 'longest'
+    resizeNode.inputs.round_to_multiple = '8'
+  }
 
   applyPromptRelayTimelineControls(graph, {
     prompt: readTrimmedString(inject.prompt),
@@ -2802,6 +2883,7 @@ function applyLtx23WorkflowProfileControls(
     segmentCount: contract?.promptRelaySegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
     audioTalkingHeadStages,
+    lockInputs: contract?.lockPromptRelayInputs,
   })
   applyPromptRelaySmartControls(graph, {
     prompt: readTrimmedString(inject.prompt),

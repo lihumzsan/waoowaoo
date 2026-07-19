@@ -641,6 +641,102 @@ describe('comfyui workflow registry', () => {
     expect(videoOutputs.every((node) => Object.prototype.hasOwnProperty.call(node.inputs, 'images'))).toBe(true)
   })
 
+  it('locks the KJ multi-shot workflow to project PromptRelay timing and 720p controls', () => {
+    expect(comfyUiWorkflowRequiresLlmApi(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj)).toBe(false)
+
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: [
+        'GLOBAL: 同一电影级连续镜头，主体与光影保持一致',
+        'LOCAL 1: 雄鹰在高空振翅飞行',
+        'LOCAL 2: 镜头推近雄鹰的瞳孔',
+        'LOCAL 3: 瞳孔中的赛博朋克城市逐渐清晰',
+        'LENGTHS: 50, 100, 150',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      width: 1280,
+      height: 720,
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelayEncode')
+    expect(relay).toBeTruthy()
+    expect(relay?.inputs.global_prompt).toBe('同一电影级连续镜头，主体与光影保持一致')
+    expect(relay?.inputs.local_prompts).toBe(
+      '雄鹰在高空振翅飞行 | 镜头推近雄鹰的瞳孔 | 瞳孔中的赛博朋克城市逐渐清晰',
+    )
+    expect(relay?.inputs.segment_lengths).toBe('50, 100, 150')
+
+    expect(workflow['584']?.inputs.image).toBe('source.png')
+    expect(workflow['618']?.inputs.value).toBe(300)
+    expect(workflow['619']?.inputs).toMatchObject({
+      aspect_ratio: '16:9',
+      round_to_multiple: '8',
+      scale_to_side: 'longest',
+      scale_to_length: 1280,
+    })
+    expect(workflow['604']?.class_type).toBe('VHS_VideoCombine')
+    expect(workflow['604']?.inputs.frame_rate).toBe(25)
+
+    const classTypes = Object.values(workflow).map((node) => node.class_type)
+    expect(classTypes).not.toContain('RH_CODEX_NODE')
+    expect(classTypes).not.toContain('RegexExtract')
+    expect(classTypes).not.toContain('PreviewAny')
+  })
+
+  it('normalizes KJ multi-shot LENGTHS to the requested frame count and falls back on invalid counts', () => {
+    const normalized = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle\nLENGTHS: 1, 2, 1',
+      imageFilenames: ['source.png'],
+      targetFrameCount: 100,
+    })
+    expect(getPromptRelayNodes(normalized)[0]?.inputs.segment_lengths).toBe('25, 50, 25')
+
+    const invalid = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle\nLENGTHS: 30, nope',
+      imageFilenames: ['source.png'],
+      targetFrameCount: 100,
+    })
+    expect(getPromptRelayNodes(invalid)[0]?.inputs.segment_lengths).toBe('34, 33, 33')
+  })
+
+  it('keeps KJ LENGTHS when project safety constraints follow the structured prompt', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: [
+        'GLOBAL: office',
+        'LOCAL 1: prepare',
+        'LOCAL 2: move',
+        'LOCAL 3: settle',
+        'LENGTHS: 1, 2, 1. Source-frame continuity lock: preserve the subject and room.',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      targetFrameCount: 100,
+    })
+
+    expect(getPromptRelayNodes(workflow)[0]?.inputs.segment_lengths).toBe('25, 50, 25')
+  })
+
+  it.each([
+    [1920, 1080, '16:9'],
+    [1080, 1920, '9:16'],
+  ])('locks KJ %sx%s requests to fixed 720p while preserving %s', (width, height, aspectRatio) => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+      imageFilenames: ['source.png'],
+      width,
+      height,
+      targetFrameCount: 100,
+    })
+
+    expect(workflow['619']?.inputs).toMatchObject({
+      aspect_ratio: aspectRatio,
+      round_to_multiple: '8',
+      scale_to_side: 'longest',
+      scale_to_length: 1280,
+    })
+  })
+
   it('locks PromptRelaySmartEncode global and smart prompts for updated single-image workflows', () => {
     for (const workflowKey of [
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,

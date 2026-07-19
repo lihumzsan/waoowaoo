@@ -26,7 +26,22 @@ describe('ltx23 workflow profiles', () => {
     })
   })
 
-  it('exposes only the seven current selectable workflow profiles', () => {
+  it('registers the KJ multi-shot PromptRelay workflow as a fixed 720p profile', () => {
+    expect(getLtx23WorkflowProfile(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj)).toMatchObject({
+      workflowKey: 'basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      label: 'ComfyUI · LTX2.3 多镜头精准 PromptRelay 720p',
+      category: 'multi_shot_precise',
+      promptPolicy: 'long_promptrelay',
+      imageSlotPolicy: 'single',
+      maxDurationSeconds: 20,
+      defaultDurationSeconds: 19.56,
+      durationOptions: [4, 5, 6, 8, 10, 12, 16, 20],
+      fps: 25,
+      selectableInPanel: true,
+    })
+  })
+
+  it('exposes only the eight current selectable workflow profiles', () => {
     expect(getLtx23WorkflowProfiles().map((profile) => profile.workflowKey)).toEqual([
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
       COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
@@ -35,6 +50,7 @@ describe('ltx23 workflow profiles', () => {
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2,
+      COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj,
     ])
   })
 

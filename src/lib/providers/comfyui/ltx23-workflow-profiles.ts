@@ -16,6 +16,7 @@ export const COMFYUI_LTX23_WORKFLOW_KEYS = {
   damaichaImageTo30s: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
   damaichaLongPromptRelay: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
   damaichaAioV2: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
+  multiShotPromptRelayKj: 'basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
 } as const
 
 export const COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
@@ -26,6 +27,7 @@ export type Ltx23WorkflowCategory =
   | 'single_image_large_motion'
   | 'first_last_frame'
   | 'long_video'
+  | 'multi_shot_precise'
   | 'aio_fallback'
 
 export type Ltx23PromptPolicy =
@@ -137,6 +139,18 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     maxDurationSeconds: 12,
     defaultDurationSeconds: 8,
     durationOptions: [6, 8, 10, 12],
+    fps: 25,
+    selectableInPanel: true,
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj]: {
+    workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj,
+    label: 'ComfyUI · LTX2.3 多镜头精准 PromptRelay 720p',
+    category: 'multi_shot_precise',
+    promptPolicy: 'long_promptrelay',
+    imageSlotPolicy: 'single',
+    maxDurationSeconds: 20,
+    defaultDurationSeconds: 19.56,
+    durationOptions: [4, 5, 6, 8, 10, 12, 16, 20],
     fps: 25,
     selectableInPanel: true,
   },

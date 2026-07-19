@@ -110,6 +110,13 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
     type: 'video',
     provider: 'comfyui',
   },
+  {
+    modelId: 'basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+    name: 'ComfyUI · LTX2.3 多镜头精准 PromptRelay 720p',
+    type: 'video',
+    provider: 'comfyui',
+  },
 ]
 
 const AUDIO_MODEL_EXCLUDED_IDS = new Set([
