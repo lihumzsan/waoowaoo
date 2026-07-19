@@ -40,7 +40,7 @@
   },
   "plan": {
     "title": "Plan",
-    "progress": "{completed}/{total}"
+    "stepProgress": "Step {current} / {total}"
   },
   "attachments": {
     "openUpload": "Attach text file",

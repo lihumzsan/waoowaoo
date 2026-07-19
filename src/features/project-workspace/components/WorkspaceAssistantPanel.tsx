@@ -232,9 +232,6 @@ export default function WorkspaceAssistantPanel({
                     <ThreadPrimitive.Messages>
                       {() => <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />}
                     </ThreadPrimitive.Messages>
-                    {assistantRuntime.sessionState?.plan ? (
-                      <WorkspaceAssistantPlanCard plan={assistantRuntime.sessionState.plan} />
-                    ) : null}
                     {showAssistantReplyLoading ? <WorkspaceAssistantPendingTurnPlaceholder /> : null}
                     {assistantRuntime.sessionStateError ? (
                       <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">
@@ -302,6 +299,11 @@ export default function WorkspaceAssistantPanel({
                       data={displayedActiveChoiceCard.data}
                       onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
                     />
+                  </div>
+                ) : null}
+                {assistantRuntime.sessionState?.plan ? (
+                  <div className="mb-2">
+                    <WorkspaceAssistantPlanCard plan={assistantRuntime.sessionState.plan} />
                   </div>
                 ) : null}
                 <div>

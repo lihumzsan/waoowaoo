@@ -40,7 +40,7 @@
   },
   "plan": {
     "title": "执行计划",
-    "progress": "{completed}/{total}"
+    "stepProgress": "Step {current} / {total}"
   },
   "attachments": {
     "openUpload": "上传文本文件",
