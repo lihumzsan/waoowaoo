@@ -26,6 +26,7 @@ export interface AiReadonlyUnknownObject {
 
 export type AiOptionValidator = (value: unknown) => AiOptionValidationResult
 export type AiOptionObjectValidator = (options: AiReadonlyUnknownObject) => AiOptionValidationResult
+export type AiOptionNormalizer = (options: AiReadonlyUnknownObject) => AiUnknownObject
 
 export type AiOptionSchema = {
   allowedKeys: ReadonlySet<string>
@@ -34,6 +35,7 @@ export type AiOptionSchema = {
   conflicts?: ReadonlyArray<{ keys: readonly string[]; message: string; allowSameValue?: boolean }>
   validators: { readonly [key: string]: AiOptionValidator }
   objectValidators?: readonly AiOptionObjectValidator[]
+  normalize?: AiOptionNormalizer
 }
 
 export type AiVariantDescriptor = {

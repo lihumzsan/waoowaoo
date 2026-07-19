@@ -8,12 +8,13 @@ import {
   integerRangeValidator,
   nonEmptyStringValidator,
   numberRangeValidator,
+  stringArrayValidator,
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
 import {
-  OPENAI_IMAGE_OUTPUT_FORMATS,
-  OPENAI_OFFICIAL_IMAGE_QUALITIES,
-} from '@/lib/ai-providers/shared/openai-image'
+  buildGptImage2OptionSchema,
+  IMAGE_OUTPUT_FORMAT_OPTIONS,
+} from '@/lib/ai-providers/shared/gpt-image-2'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
@@ -351,21 +352,28 @@ export const FAL_VIDEO_OPTION_SCHEMA_CONFIG = {
 export function resolveFalOptionSchema(modality: MediaModality, modelId: string): AiOptionSchema {
   if (modality === 'image') {
     if (modelId === FAL_GPT_IMAGE_2_MODEL_ID) {
-      return buildMediaOptionSchema('image', {
-        validators: {
-          size: enumValidator(FAL_IMAGE_RESOLUTIONS),
-          resolution: enumValidator(FAL_IMAGE_RESOLUTIONS),
-          outputFormat: enumValidator(OPENAI_IMAGE_OUTPUT_FORMATS),
-          quality: enumValidator(OPENAI_OFFICIAL_IMAGE_QUALITIES),
-        },
+      return buildGptImage2OptionSchema({
+        resolutionOptions: FAL_IMAGE_RESOLUTIONS,
+        qualityOptions: FAL_GPT_IMAGE_2_QUALITY_OPTIONS,
+        defaultResolution: '1K',
+        defaultOutputFormat: 'png',
+        excludedKeys: ['keepOriginalAspectRatio', 'responseFormat'],
       })
     }
     return buildMediaOptionSchema('image', {
       ...FAL_IMAGE_OPTION_SCHEMA_CONFIG,
+      excludedKeys: ['keepOriginalAspectRatio', 'responseFormat', 'size', 'quality'],
       validators: {
         resolution: enumValidator(FAL_IMAGE_RESOLUTIONS),
-        outputFormat: enumValidator(OPENAI_IMAGE_OUTPUT_FORMATS),
+        aspectRatio: nonEmptyStringValidator(),
+        outputFormat: enumValidator(IMAGE_OUTPUT_FORMAT_OPTIONS),
+        referenceImages: stringArrayValidator(),
       },
+      normalize: (options) => ({
+        ...options,
+        outputFormat: options.outputFormat ?? 'png',
+        referenceImages: options.referenceImages ?? [],
+      }),
     })
   }
   if (modality === 'music') {

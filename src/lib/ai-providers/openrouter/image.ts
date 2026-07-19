@@ -124,6 +124,6 @@ export async function executeOpenRouterImageGeneration(
     apiKey,
     modelId,
     prompt: input.prompt,
-    options: input.options ?? {},
+    options: input.options as OpenRouterImageOptions,
   })
 }

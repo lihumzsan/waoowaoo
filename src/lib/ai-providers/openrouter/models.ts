@@ -7,6 +7,7 @@ import {
   integerRangeValidator,
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
+import { buildGptImage2OptionSchema } from '@/lib/ai-providers/shared/gpt-image-2'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
@@ -268,18 +269,28 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
     if (modelId !== OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
       throw new Error(`OPENROUTER_OPTION_SCHEMA_UNSUPPORTED_IMAGE_MODEL:${modelId || '<missing>'}`)
     }
-    return buildMediaOptionSchema('image', {
+    return buildGptImage2OptionSchema({
+      resolutionOptions: OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS,
+      aspectRatioOptions: OPENROUTER_GPT_IMAGE_2_ASPECT_RATIO_OPTIONS,
+      qualityOptions: OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS,
+      defaultResolution: '1K',
+      defaultQuality: 'high',
+      defaultOutputFormat: 'png',
+      maxReferenceImages: 16,
       allowedKeys: ['background', 'outputCompression', 'moderation'],
+      excludedKeys: ['keepOriginalAspectRatio', 'responseFormat'],
       validators: {
-        size: enumValidator(OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS),
-        resolution: enumValidator(OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS),
-        aspectRatio: enumValidator(OPENROUTER_GPT_IMAGE_2_ASPECT_RATIO_OPTIONS),
-        quality: enumValidator(OPENROUTER_GPT_IMAGE_2_QUALITY_OPTIONS),
         background: enumValidator(['auto', 'opaque']),
-        outputFormat: enumValidator(['png', 'jpeg', 'webp']),
         outputCompression: integerRangeValidator({ min: 0, max: 100 }),
         moderation: enumValidator(['auto', 'low']),
       },
+      objectValidators: [(options) => {
+        if (options.outputCompression === undefined) return { ok: true }
+        const outputFormat = options.outputFormat ?? 'png'
+        return outputFormat === 'jpeg' || outputFormat === 'webp'
+          ? { ok: true }
+          : { ok: false, reason: 'outputCompression_requires_jpeg_or_webp' }
+      }],
     })
   }
   if (modality === 'video') {

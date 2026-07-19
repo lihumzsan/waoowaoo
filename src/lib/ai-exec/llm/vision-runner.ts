@@ -16,7 +16,7 @@ import {
   resolveLlmRuntimeModel,
 } from '@/lib/ai-exec/llm-runtime'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
-import { validateAiOptions } from '@/lib/ai-exec/normalize'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
@@ -71,7 +71,7 @@ async function executeVision(input: {
     explicit: input.options.reasoningEffort,
   })
   const options = { ...input.options, reasoningEffort }
-  validateAiOptions({
+  normalizeAiOptions({
     schema: describeLlmVariantBase({
       modality: 'vision',
       selection,

@@ -5,22 +5,18 @@ import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import {
-  FAL_IMAGE_RESOLUTIONS,
-  FAL_GPT_IMAGE_2_MODEL_ID,
-} from '@/lib/ai-providers/fal/models'
-import {
-  OPENAI_IMAGE_OUTPUT_FORMATS,
-  OPENAI_OFFICIAL_IMAGE_QUALITIES,
-} from '@/lib/ai-providers/shared/openai-image'
-import {
-  resolveGptImage2ImageSize,
-  type GptImage2ImageSize,
-  type GptImage2Resolution,
+import { FAL_GPT_IMAGE_2_MODEL_ID } from '@/lib/ai-providers/fal/models'
+import type {
+  GptImage2ImageSize,
+  GptImage2NormalizedOptions,
 } from '@/lib/ai-providers/shared/gpt-image-2'
 import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 
-type FalImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
+type FalImageOptions = NonNullable<AiProviderImageExecutionContext['options']> & {
+  outputFormat: string
+  referenceImages: string[]
+}
+type FalGptImage2Options = FalImageOptions & GptImage2NormalizedOptions
 
 type FalImageSubmitBody = {
   prompt: string
@@ -42,74 +38,6 @@ const FAL_IMAGE_ENDPOINTS: Record<string, { base: string; edit: string }> = {
   },
 }
 
-const FAL_GPT_IMAGE_2_RESOLUTIONS = new Set<string>(FAL_IMAGE_RESOLUTIONS)
-const FAL_IMAGE_OUTPUT_FORMATS = new Set<string>(OPENAI_IMAGE_OUTPUT_FORMATS)
-const FAL_GPT_IMAGE_2_QUALITIES = new Set<string>(OPENAI_OFFICIAL_IMAGE_QUALITIES)
-function assertAllowedFalImageOptions(options: FalImageOptions) {
-  const allowedOptionKeys = new Set([
-    'provider',
-    'modelId',
-    'modelKey',
-    'aspectRatio',
-    'resolution',
-    'outputFormat',
-    'size',
-    'quality',
-    'referenceImages',
-  ])
-  for (const [key, value] of Object.entries(options)) {
-    if (value === undefined) continue
-    if (!allowedOptionKeys.has(key)) {
-      throw new Error(`FAL_IMAGE_OPTION_UNSUPPORTED: ${key}`)
-    }
-  }
-}
-
-function readOptionalStringOption(value: unknown, optionName: string): string | undefined {
-  if (value === undefined || value === null) return undefined
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`FAL_IMAGE_OPTION_INVALID: ${optionName}`)
-  }
-  return value.trim()
-}
-
-function assertFalImageOutputFormat(outputFormat: string): void {
-  if (!FAL_IMAGE_OUTPUT_FORMATS.has(outputFormat)) {
-    throw new Error(`FAL_IMAGE_OPTION_VALUE_UNSUPPORTED: outputFormat=${outputFormat}`)
-  }
-}
-
-function normalizeFalGptImage2Quality(value: unknown): string | undefined {
-  const quality = readOptionalStringOption(value, 'quality')
-  if (!quality) return undefined
-  if (!FAL_GPT_IMAGE_2_QUALITIES.has(quality)) {
-    throw new Error(`FAL_IMAGE_OPTION_VALUE_UNSUPPORTED: quality=${quality}`)
-  }
-  return quality
-}
-
-function resolveFalGptImage2RawResolution(options: FalImageOptions): GptImage2Resolution {
-  const size = readOptionalStringOption(options.size, 'size')
-  const resolution = readOptionalStringOption(options.resolution, 'resolution')
-  if (size && resolution && size !== resolution) {
-    throw new Error('FAL_IMAGE_OPTION_CONFLICT: size and resolution must match')
-  }
-  const selected = size || resolution || '1K'
-  if (!FAL_GPT_IMAGE_2_RESOLUTIONS.has(selected)) {
-    throw new Error(`FAL_IMAGE_OPTION_VALUE_UNSUPPORTED: resolution=${selected}`)
-  }
-  return selected as GptImage2Resolution
-}
-
-function resolveFalGptImage2ImageSize(options: FalImageOptions): GptImage2ImageSize {
-  const resolution = resolveFalGptImage2RawResolution(options)
-  const aspectRatio = readOptionalStringOption(options.aspectRatio, 'aspectRatio')
-  if (!aspectRatio) {
-    throw new Error('FAL_IMAGE_OPTION_REQUIRED: aspectRatio')
-  }
-  return resolveGptImage2ImageSize({ aspectRatio, resolution })
-}
-
 function buildFalImageSubmitBody(input: {
   modelId: string
   prompt: string
@@ -123,17 +51,12 @@ function buildFalImageSubmitBody(input: {
   }
 
   if (input.modelId === FAL_GPT_IMAGE_2_MODEL_ID) {
-    const imageSize = resolveFalGptImage2ImageSize(input.options)
-    const quality = normalizeFalGptImage2Quality(input.options.quality)
-    body.image_size = imageSize
-    if (quality) body.quality = quality
+    const options = input.options as FalGptImage2Options
+    body.image_size = options.imageSize
+    if (options.quality) body.quality = options.quality
     return body
   }
 
-  if (input.options.quality !== undefined || input.options.size !== undefined) {
-    const key = input.options.quality !== undefined ? 'quality' : 'size'
-    throw new Error(`FAL_IMAGE_OPTION_UNSUPPORTED: ${key}`)
-  }
   if (input.options.aspectRatio) body.aspect_ratio = input.options.aspectRatio
   if (input.options.resolution) body.resolution = input.options.resolution
   return body
@@ -142,25 +65,13 @@ function buildFalImageSubmitBody(input: {
 export async function executeFalImageGeneration(input: AiProviderImageExecutionContext): Promise<GenerateResult> {
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
 
-  const referenceImages = input.options?.referenceImages || []
-  const options: FalImageOptions = input.options ?? {}
-  assertAllowedFalImageOptions(options)
+  const options = input.options as FalImageOptions
+  const referenceImages = options.referenceImages
 
   const aspectRatio = options.aspectRatio
   const resolution = options.resolution
-  const outputFormat = options.outputFormat ?? 'png'
-  assertFalImageOutputFormat(outputFormat)
+  const outputFormat = options.outputFormat
   const modelId = requireSelectedModelId(input.selection, 'fal:image')
-
-  if (
-    modelId !== FAL_GPT_IMAGE_2_MODEL_ID
-    && resolution !== undefined
-    && resolution !== '1K'
-    && resolution !== '2K'
-    && resolution !== '4K'
-  ) {
-    throw new Error(`FAL_IMAGE_OPTION_VALUE_UNSUPPORTED: resolution=${resolution}`)
-  }
 
   const hasReferenceImages = referenceImages.length > 0
   const endpointConfig = FAL_IMAGE_ENDPOINTS[modelId]

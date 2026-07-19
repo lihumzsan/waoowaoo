@@ -17,7 +17,7 @@ import {
 } from '@/lib/ai-exec/llm-runtime'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
-import { validateAiOptions } from '@/lib/ai-exec/normalize'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
@@ -59,7 +59,7 @@ async function resolveTextExecution(input: {
     explicit: input.options.reasoningEffort,
   })
   const options = { ...input.options, reasoningEffort }
-  validateAiOptions({
+  normalizeAiOptions({
     schema: describeLlmVariantBase({
       modality: 'llm',
       selection,

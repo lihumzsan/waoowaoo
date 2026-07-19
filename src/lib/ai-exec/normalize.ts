@@ -1,4 +1,4 @@
-import type { AiOptionSchema } from '@/lib/ai-registry/types'
+import type { AiOptionSchema, AiUnknownObject } from '@/lib/ai-registry/types'
 
 interface NormalizedOptionObject {
   [key: string]: unknown
@@ -8,25 +8,17 @@ function isRecord(value: unknown): value is NormalizedOptionObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-export function validateAiOptions(input: {
+export function normalizeAiOptions(input: {
   schema: AiOptionSchema
   options: unknown
   context: string
-}): void {
-  if (input.options === undefined || input.options === null) {
-    if (input.schema.required?.length) {
-      throw new Error(`AI_OPTION_REQUIRED:${input.context}:${input.schema.required[0]}`)
-    }
-    if (input.schema.requiresOneOf?.length) {
-      throw new Error(`AI_OPTION_REQUIRED:${input.context}:${input.schema.requiresOneOf[0].message}`)
-    }
-    return
-  }
-  if (!isRecord(input.options)) {
+}): AiUnknownObject | undefined {
+  const hasOptions = input.options !== undefined && input.options !== null
+  if (hasOptions && !isRecord(input.options)) {
     throw new Error(`AI_OPTIONS_INVALID:${input.context}`)
   }
-  const options = input.options
-  for (const [key, value] of Object.entries(options)) {
+  const options = hasOptions ? input.options as NormalizedOptionObject : {}
+  for (const key of Object.keys(options)) {
     if (!input.schema.allowedKeys.has(key)) {
       throw new Error(`AI_OPTION_UNSUPPORTED:${input.context}:${key}`)
     }
@@ -75,4 +67,6 @@ export function validateAiOptions(input: {
       throw new Error(`AI_OPTION_INVALID:${input.context}:${result.reason}`)
     }
   }
+  if (input.schema.normalize) return input.schema.normalize(options)
+  return hasOptions ? { ...options } : undefined
 }

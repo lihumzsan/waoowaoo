@@ -1,7 +1,43 @@
+import type {
+  AiOptionObjectValidator,
+  AiOptionSchema,
+  AiOptionValidator,
+  AiReadonlyUnknownObject,
+  AiUnknownObject,
+} from '@/lib/ai-registry/types'
+import {
+  buildMediaOptionSchema,
+  enumValidator,
+  stringArrayValidator,
+} from '@/lib/ai-providers/shared/option-schema'
+
 export const GPT_IMAGE_2_RESOLUTION_OPTIONS = ['1K', '2K', '4K'] as const
+export const IMAGE_OUTPUT_FORMAT_OPTIONS = ['png', 'jpeg', 'webp'] as const
 
 export type GptImage2Resolution = typeof GPT_IMAGE_2_RESOLUTION_OPTIONS[number]
 export type GptImage2ImageSize = { width: number; height: number }
+export type GptImage2NormalizedOptions = AiUnknownObject & {
+  aspectRatio: string
+  resolution: GptImage2Resolution
+  quality?: string
+  outputFormat: string
+  referenceImages: string[]
+  imageSize: GptImage2ImageSize
+}
+
+type GptImage2OptionPolicy = {
+  resolutionOptions: readonly GptImage2Resolution[]
+  aspectRatioOptions?: readonly string[]
+  qualityOptions: readonly string[]
+  defaultResolution: GptImage2Resolution
+  defaultQuality?: string
+  defaultOutputFormat: string
+  maxReferenceImages?: number
+  allowedKeys?: readonly string[]
+  excludedKeys?: readonly string[]
+  validators?: Readonly<Record<string, AiOptionValidator>>
+  objectValidators?: readonly AiOptionObjectValidator[]
+}
 
 const GPT_IMAGE_2_MIN_PIXELS = 655_360
 const GPT_IMAGE_2_MAX_PIXELS = 8_294_400
@@ -49,6 +85,18 @@ function readAspectRatioValue(aspectRatio: string): number {
   return ratio
 }
 
+function aspectRatioValidator(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { ok: false, reason: 'expected_non_empty_aspect_ratio' } as const
+  }
+  try {
+    readAspectRatioValue(value)
+    return { ok: true } as const
+  } catch {
+    return { ok: false, reason: `unsupported_value=${value}` } as const
+  }
+}
+
 function constrainGptImage2ImageSize(imageSize: GptImage2ImageSize): GptImage2ImageSize {
   let next = imageSize
   const maxEdge = Math.max(next.width, next.height)
@@ -80,4 +128,52 @@ export function resolveGptImage2ImageSize(input: {
     : { width: shortEdge, height: Math.round(shortEdge / ratio) }
 
   return constrainGptImage2ImageSize(rawSize)
+}
+
+function normalizeGptImage2Options(
+  options: AiReadonlyUnknownObject,
+  policy: GptImage2OptionPolicy,
+): GptImage2NormalizedOptions {
+  const resolution = (options.size ?? options.resolution ?? policy.defaultResolution) as GptImage2Resolution
+  const aspectRatio = options.aspectRatio as string
+  const quality = (options.quality ?? policy.defaultQuality) as string | undefined
+  const outputFormat = (options.outputFormat ?? policy.defaultOutputFormat) as string
+  const referenceImages = (options.referenceImages ?? []) as string[]
+  const normalized: AiUnknownObject = {
+    ...options,
+    aspectRatio,
+    resolution,
+    outputFormat,
+    referenceImages,
+    imageSize: resolveGptImage2ImageSize({ aspectRatio, resolution }),
+    ...(quality ? { quality } : {}),
+  }
+  delete normalized.size
+  return normalized as GptImage2NormalizedOptions
+}
+
+export function buildGptImage2OptionSchema(policy: GptImage2OptionPolicy): AiOptionSchema {
+  return buildMediaOptionSchema('image', {
+    allowedKeys: policy.allowedKeys,
+    excludedKeys: policy.excludedKeys,
+    required: ['aspectRatio'],
+    conflicts: [{
+      keys: ['size', 'resolution'],
+      message: 'size_and_resolution_must_match',
+      allowSameValue: true,
+    }],
+    validators: {
+      size: enumValidator(policy.resolutionOptions),
+      resolution: enumValidator(policy.resolutionOptions),
+      aspectRatio: policy.aspectRatioOptions
+        ? enumValidator(policy.aspectRatioOptions)
+        : aspectRatioValidator,
+      quality: enumValidator(policy.qualityOptions),
+      outputFormat: enumValidator(IMAGE_OUTPUT_FORMAT_OPTIONS),
+      referenceImages: stringArrayValidator({ maxLength: policy.maxReferenceImages }),
+      ...policy.validators,
+    },
+    objectValidators: policy.objectValidators,
+    normalize: (options) => normalizeGptImage2Options(options, policy),
+  })
 }

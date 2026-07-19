@@ -1,9 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { requestOpenRouterImage } from '@/lib/ai-providers/openrouter/image'
+import type { OpenRouterImageOptions } from '@/lib/ai-providers/openrouter/image-options'
+import {
+  OPENROUTER_GPT_IMAGE_2_MODEL_ID,
+  resolveOpenRouterOptionSchema,
+} from '@/lib/ai-providers/openrouter/models'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
 const PNG_1X1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 const PNG_1X1_DATA_URL = `data:image/png;base64,${PNG_1X1_BASE64}`
+
+function normalizeImageOptions(options: Record<string, unknown>): OpenRouterImageOptions {
+  return normalizeAiOptions({
+    schema: resolveOpenRouterOptionSchema('image', OPENROUTER_GPT_IMAGE_2_MODEL_ID),
+    options,
+    context: 'openrouter-image-contract',
+  }) as OpenRouterImageOptions
+}
 
 describe('provider contract - OpenRouter image', () => {
   let server: Awaited<ReturnType<typeof startScenarioServer>> | null = null
@@ -15,6 +29,30 @@ describe('provider contract - OpenRouter image', () => {
   afterEach(async () => {
     await server?.close()
     server = null
+  })
+
+  it('normalizes model defaults and conflicts before SDK execution', () => {
+    expect(normalizeImageOptions({ aspectRatio: '1:1' })).toMatchObject({
+      aspectRatio: '1:1',
+      resolution: '1K',
+      quality: 'high',
+      outputFormat: 'png',
+      referenceImages: [],
+      imageSize: { width: 1080, height: 1080 },
+    })
+    expect(() => normalizeImageOptions({
+      aspectRatio: '1:1',
+      size: '1K',
+      resolution: '2K',
+    })).toThrow('size_and_resolution_must_match')
+    expect(() => normalizeImageOptions({
+      aspectRatio: '1:1',
+      outputCompression: 50,
+    })).toThrow('outputCompression_requires_jpeg_or_webp')
+    expect(() => normalizeImageOptions({
+      aspectRatio: '1:1',
+      keepOriginalAspectRatio: true,
+    })).toThrow('AI_OPTION_UNSUPPORTED')
   })
 
   it('submits the dedicated image API payload and projects the buffered image response', async () => {
@@ -41,7 +79,7 @@ describe('provider contract - OpenRouter image', () => {
       apiKey: 'openrouter-image-key',
       modelId: 'openai/gpt-image-2',
       prompt: 'paint this as a watercolor scene',
-      options: {
+      options: normalizeImageOptions({
         referenceImages: [PNG_1X1_DATA_URL],
         aspectRatio: '9:16',
         resolution: '1K',
@@ -50,7 +88,7 @@ describe('provider contract - OpenRouter image', () => {
         background: 'opaque',
         outputCompression: 60,
         moderation: 'low',
-      },
+      }),
     })
 
     expect(result).toEqual({
@@ -103,7 +141,7 @@ describe('provider contract - OpenRouter image', () => {
       apiKey: 'openrouter-image-key',
       modelId: 'openai/gpt-image-2',
       prompt: 'generate once',
-      options: { aspectRatio: '1:1', resolution: '1K', quality: 'low' },
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({ statusCode: 503 })
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
@@ -122,7 +160,7 @@ describe('provider contract - OpenRouter image', () => {
       apiKey: 'openrouter-image-key',
       modelId: 'openai/gpt-image-2',
       prompt: 'missing output',
-      options: { aspectRatio: '1:1', resolution: '1K', quality: 'low' },
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toThrow('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE')
   })
 })

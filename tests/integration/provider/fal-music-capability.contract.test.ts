@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { validateAiOptions } from '@/lib/ai-exec/normalize'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import {
   FAL_LYRIA_3_PRO_MODEL_ID,
@@ -49,11 +49,11 @@ describe('FAL Lyria continuous duration capability', () => {
     if (!music) throw new Error('TEST_FAL_MUSIC_ADAPTER_REQUIRED')
     const schema = music.describe(selection).optionSchema
     for (const durationSeconds of [120, 149.5, 180]) {
-      expect(() => validateAiOptions({ schema, options: { durationSeconds }, context: 'fal-music-test' }))
+      expect(() => normalizeAiOptions({ schema, options: { durationSeconds }, context: 'fal-music-test' }))
         .not.toThrow()
     }
     for (const durationSeconds of [119.999, 180.001]) {
-      expect(() => validateAiOptions({ schema, options: { durationSeconds }, context: 'fal-music-test' }))
+      expect(() => normalizeAiOptions({ schema, options: { durationSeconds }, context: 'fal-music-test' }))
         .toThrow('AI_OPTION_INVALID:fal-music-test:durationSeconds')
     }
     expect(fetchMock).not.toHaveBeenCalled()

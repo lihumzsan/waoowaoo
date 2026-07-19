@@ -54,6 +54,19 @@ export function nonEmptyStringValidator(): AiOptionValidator {
   }
 }
 
+export function stringArrayValidator(input?: { maxLength?: number }): AiOptionValidator {
+  return (value) => {
+    if (value === undefined) return { ok: true }
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
+      return { ok: false, reason: 'expected_non_empty_string_array' }
+    }
+    if (input?.maxLength !== undefined && value.length > input.maxLength) {
+      return { ok: false, reason: `max_length=${input.maxLength}` }
+    }
+    return { ok: true }
+  }
+}
+
 function passthroughValidator(): AiOptionValidationResult {
   return { ok: true }
 }
@@ -62,17 +75,20 @@ export function buildMediaOptionSchema(
   modality: MediaModality,
   override?: {
     allowedKeys?: readonly string[]
+    excludedKeys?: readonly string[]
     required?: readonly string[]
     requiresOneOf?: AiOptionSchema['requiresOneOf']
     conflicts?: AiOptionSchema['conflicts']
     validators?: Readonly<Record<string, AiOptionValidator>>
     objectValidators?: readonly AiOptionObjectValidator[]
+    normalize?: AiOptionSchema['normalize']
   },
 ): AiOptionSchema {
   const allowedKeys = new Set([
     ...Array.from(buildAllowedKeys(modality)),
     ...(override?.allowedKeys || []),
   ])
+  for (const key of override?.excludedKeys || []) allowedKeys.delete(key)
   const validators = Object.fromEntries(
     Array.from(allowedKeys).map((key) => [key, passthroughValidator]),
   ) as Record<string, AiOptionValidator>
@@ -86,6 +102,7 @@ export function buildMediaOptionSchema(
     conflicts: override?.conflicts,
     validators,
     objectValidators: override?.objectValidators,
+    normalize: override?.normalize,
   }
 }
 

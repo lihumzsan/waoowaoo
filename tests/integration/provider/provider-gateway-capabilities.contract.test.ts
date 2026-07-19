@@ -33,9 +33,13 @@ import {
   OPENROUTER_GPT_5_6_SOL_MODEL_ID,
   OPENROUTER_GPT_5_6_TERRA_MODEL_ID,
 } from '@/lib/ai-providers/openrouter/models'
+import {
+  FAL_GPT_IMAGE_2_MODEL_ID,
+  resolveFalOptionSchema,
+} from '@/lib/ai-providers/fal/models'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
-import { validateAiOptions } from '@/lib/ai-exec/normalize'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 import { listApiConfigCatalogModels } from '@/lib/ai-registry/api-config-catalog'
 import { resolveRegisteredLlmProtocol } from '@/lib/ai-registry/llm-protocol'
@@ -75,6 +79,27 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     restoreEnvValue('PROVIDER_CREDENTIAL_MODE')
     restoreEnvValue('PLATFORM_DEFAULT_ASSISTANT_REASONING_EFFORT')
     restoreEnvValue('PLATFORM_DEFAULT_ANALYSIS_REASONING_EFFORT')
+  })
+
+  it('normalizes FAL GPT Image 2 options from its production schema', () => {
+    const schema = resolveFalOptionSchema('image', FAL_GPT_IMAGE_2_MODEL_ID)
+    expect(normalizeAiOptions({
+      schema,
+      options: { aspectRatio: '4:3', size: '2K', quality: 'medium' },
+      context: 'fal-gpt-image-2',
+    })).toMatchObject({
+      aspectRatio: '4:3',
+      resolution: '2K',
+      quality: 'medium',
+      outputFormat: 'png',
+      referenceImages: [],
+      imageSize: { width: 1920, height: 1440 },
+    })
+    expect(() => normalizeAiOptions({
+      schema,
+      options: { aspectRatio: '1:1', quality: 'auto' },
+      context: 'fal-gpt-image-2',
+    })).toThrow('AI_OPTION_INVALID:fal-gpt-image-2:quality:unsupported_value=auto')
   })
 
   it('registers one explicit transport protocol for every configured LLM model', () => {
@@ -451,9 +476,9 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         executionMode: 'sync',
       }).optionSchema
 
-      expect(() => validateAiOptions({ schema, options: { reasoningEffort: 'max' }, context: 'test' }))
+      expect(() => normalizeAiOptions({ schema, options: { reasoningEffort: 'max' }, context: 'test' }))
         .not.toThrow()
-      expect(() => validateAiOptions({ schema, options: { reasoningEffort: 'minimal' }, context: 'test' }))
+      expect(() => normalizeAiOptions({ schema, options: { reasoningEffort: 'minimal' }, context: 'test' }))
         .toThrow('AI_OPTION_INVALID:test:reasoningEffort:unsupported_value=minimal')
     })
 

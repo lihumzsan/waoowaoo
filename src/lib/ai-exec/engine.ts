@@ -12,7 +12,7 @@ import type {
   ChatMessage,
 } from '@/lib/ai-registry/types'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
-import { validateAiOptions } from '@/lib/ai-exec/normalize'
+import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { runLlmCompletion, runLlmStream } from '@/lib/ai-exec/llm/completion-runner'
 import {
@@ -133,16 +133,16 @@ export async function executeMediaGeneration(
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
       }
       const descriptor = modalityAdapter.describe(selection)
-      validateAiOptions({
+      const options = normalizeAiOptions({
         schema: descriptor.optionSchema,
         options: input.options,
         context: `${input.modality}:${selection.modelKey}`,
-      })
+      }) as AiImageExecutionOptions | undefined
       return await modalityAdapter.execute({
         userId: input.userId,
         selection,
         prompt: input.prompt,
-        options: input.options,
+        options,
       })
     }
     case 'video': {
@@ -151,16 +151,16 @@ export async function executeMediaGeneration(
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
       }
       const descriptor = modalityAdapter.describe(selection)
-      validateAiOptions({
+      const options = normalizeAiOptions({
         schema: descriptor.optionSchema,
         options: input.options,
         context: `${input.modality}:${selection.modelKey}`,
-      })
+      }) as AiVideoExecutionOptions | undefined
       return await modalityAdapter.execute({
         userId: input.userId,
         selection,
         imageUrl: input.imageUrl,
-        options: input.options,
+        options,
       })
     }
     case 'music': {
@@ -169,16 +169,16 @@ export async function executeMediaGeneration(
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
       }
       const descriptor = modalityAdapter.describe(selection)
-      validateAiOptions({
+      const options = normalizeAiOptions({
         schema: descriptor.optionSchema,
         options: input.options,
         context: `${input.modality}:${selection.modelKey}`,
-      })
+      }) as AiMusicExecutionOptions | undefined
       return await modalityAdapter.execute({
         userId: input.userId,
         selection,
         prompt: input.prompt,
-        options: input.options,
+        options,
       })
     }
     }
