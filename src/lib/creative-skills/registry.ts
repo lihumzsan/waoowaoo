@@ -76,18 +76,32 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
       en: ['director', 'editing', 'production timeline', 'shot', 'camera', 'performance', 'segmentation', 'sync sound'],
     },
   }),
-  'visual-development': defineSkill({
-    id: 'visual-development',
+  'style-development': defineSkill({
+    id: 'style-development',
     version: '1.0.0',
-    title: { zh: '视觉开发与资产设计', en: 'Visual Development and Asset Design' },
+    title: { zh: '视觉风格开发', en: 'Visual Style Development' },
     summary: {
-      zh: '统一视觉风格以及角色、场景、道具、参考图和候选资产的设计方法。',
-      en: 'Methods for unified visual style, characters, locations, props, reference images, and asset candidates.',
+      zh: '跨图片与视频共享的视觉风格、资产图专用画面规则、风格候选与预览设计方法。',
+      en: 'Methods for cross-media visual style, asset-image-specific presentation rules, style candidates, and previews.',
     },
-    tags: ['visual', 'image', 'character', 'location', 'prop', 'style'],
+    tags: ['style', 'art-direction', 'palette', 'medium', 'preview'],
     keywords: {
-      zh: ['视觉', '图片', '生图', '角色', '人物', '场景', '地点', '道具', '风格', '参考图', '资产'],
-      en: ['visual', 'image', 'character', 'location', 'scene', 'prop', 'style', 'reference', 'asset'],
+      zh: ['视觉风格', '画风', '美术指导', '媒介', '质感', '色彩', '滤镜', '风格候选', '风格预览', '风格圣经'],
+      en: ['visual style', 'art style', 'art direction', 'medium', 'finish', 'palette', 'filter', 'style candidate', 'style preview', 'style bible'],
+    },
+  }),
+  'asset-development': defineSkill({
+    id: 'asset-development',
+    version: '1.0.0',
+    title: { zh: '资产设计与生成提示词', en: 'Asset Development and Generation Prompts' },
+    summary: {
+      zh: '角色、场景、道具、参考图、候选资产与已有资产修改的设计方法。',
+      en: 'Methods for characters, locations, props, reference images, asset candidates, and existing-asset modifications.',
+    },
+    tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
+    keywords: {
+      zh: ['资产', '图片', '生图提示词', '角色', '人物', '场景', '地点', '道具', '参考图', '候选', '资产修改'],
+      en: ['asset', 'image prompt', 'character', 'location', 'scene', 'prop', 'reference image', 'candidate', 'asset modification'],
     },
   }),
   'video-direction': defineSkill({

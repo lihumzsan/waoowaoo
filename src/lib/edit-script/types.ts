@@ -351,7 +351,7 @@ export const editStylePreviewOptionSchema = z.object({
   summary: z.string().trim().min(1),
   styleBible: editScriptStyleBibleSchema.shape.styleBible,
   gridImagePrompt: z.string().trim().min(1),
-})
+}).strict()
 
 export const editStylePreviewKeySchema = z
   .string()
@@ -362,6 +362,7 @@ export const editStylePreviewOptionsSchema = z
   .object({
     stylePreviews: z.array(editStylePreviewOptionSchema).min(1).max(EDIT_STYLE_PREVIEW_MAX_COUNT),
   })
+  .strict()
   .superRefine((value, context) => {
     const actualKeys = new Set(value.stylePreviews.map((preview) => preview.styleKey))
     if (actualKeys.size !== value.stylePreviews.length) {

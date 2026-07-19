@@ -15,15 +15,29 @@ const creativeWorkSourceMaterialSchema = z.object({
     .describe('The media or data category of the supplied source material; this does not grant the worker access to the underlying project.'),
   content: z.string().max(600_000)
     .describe('The complete source content made available to the worker for this run, such as text, a media description, or serialized structured data.'),
-  resourceRef: z.object({
-    resourceId: z.string().trim().min(1).max(200)
-      .describe('Canonical creative resource identity supplied by the caller for provenance only.'),
-    revisionId: z.string().trim().min(1).max(200)
-      .describe('Exact immutable revision identity of the supplied resource content.'),
-    fingerprint: z.string().trim().min(1).max(500)
-      .describe('Fingerprint of the exact resource revision supplied to the worker.'),
-  }).strict().nullable()
-    .describe('Exact resource revision provenance when the material came from a saved resource, otherwise null.'),
+  provenance: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('none') }).strict(),
+    z.object({
+      kind: z.literal('resource'),
+      resourceId: z.string().trim().min(1).max(200)
+        .describe('Canonical Creative Resource identity supplied by the caller.'),
+      revisionId: z.string().trim().min(1).max(200)
+        .describe('Exact immutable Resource Revision identity.'),
+      fingerprint: z.string().trim().min(1).max(500)
+        .describe('Persisted fingerprint of the exact Resource Revision.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('domain'),
+      sourceType: z.string().trim().min(1).max(120)
+        .describe('Registered domain source type, such as edit_source_document.'),
+      sourceId: z.string().trim().min(1).max(200)
+        .describe('Canonical domain entity identity.'),
+      revision: z.string().trim().min(1).max(200)
+        .describe('Exact domain revision or version identity.'),
+      fingerprint: z.string().trim().min(1).max(500)
+        .describe('Persisted fingerprint of the exact domain revision.'),
+    }).strict(),
+  ]).describe('Exact provenance for this copied source material, or kind=none when it is not backed by a persisted fact.'),
 }).strict().describe('One source item explicitly copied into the stateless worker input by the primary agent.')
 
 export const creativeWorkRequestSchema = z.object({

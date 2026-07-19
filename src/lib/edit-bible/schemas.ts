@@ -121,6 +121,15 @@ export const rawEditBibleLedgerSchema = z.object({
 
 export type RawEditBibleLedger = z.infer<typeof rawEditBibleLedgerSchema>
 
+export const rawEditBibleBundleSchema = z.object({
+  bible: rawEditBibleSchema,
+  beatSheet: rawEditBibleBeatSheetSchema,
+  ledger: rawEditBibleLedgerSchema,
+  emotionalCurve: rawEditBibleEmotionalCurveSchema,
+}).strict()
+
+export type RawEditBibleBundle = z.infer<typeof rawEditBibleBundleSchema>
+
 export const editBibleBundleSchema = z.object({
   bible: editBibleSchema,
   beatSheet: editBibleBeatSheetSchema,

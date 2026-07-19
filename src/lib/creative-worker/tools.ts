@@ -9,7 +9,7 @@ import type { CreativeWorkerRunContext } from './types'
 
 const discoverSkillsInputSchema = z.object({
   query: z.string().trim().min(1).max(1_000)
-    .describe('Describe the professional knowledge needed for the current task, such as story structure, continuity, directing, visual assets, video prompts, music, or review.'),
+    .describe('Describe the professional knowledge needed for the current task, such as story structure, continuity, directing, visual style, asset design, video prompts, music, or review.'),
   tags: z.array(z.string().trim().min(1).max(120)).max(32)
     .describe('Optional narrowing terms expressed as an array; pass an empty array when query text is sufficient.'),
 }).strict()

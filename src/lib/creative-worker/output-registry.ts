@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import type { CreativeSkillId } from '@/lib/creative-skills'
+import { rawEditBibleBundleSchema } from '@/lib/edit-bible/schemas'
+import {
+  editScriptStyleBibleSchema,
+  editStylePreviewOptionsSchema,
+} from '@/lib/edit-script/types'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
@@ -18,29 +23,11 @@ const screenplayDraftOutputSchema = z.object({
   openQuestions: textList(64, 2_000),
 }).strict()
 
-const storyAnalysisOutputSchema = z.object({
-  kind: z.literal('story_analysis'),
-  summary: z.string().min(1).max(20_000),
-  themes: textList(64, 2_000),
-  characters: z.array(z.object({
-    key: z.string().trim().min(1).max(160),
-    name: z.string().trim().min(1).max(300),
-    role: z.string().max(2_000),
-    arc: z.string().max(6_000),
-  }).strict()).max(256),
-  locations: z.array(z.object({
-    key: z.string().trim().min(1).max(160),
-    name: z.string().trim().min(1).max(300),
-    narrativeFunction: z.string().max(4_000),
-  }).strict()).max(256),
-  chronology: z.array(z.object({
-    order: z.number().int().nonnegative(),
-    event: z.string().min(1).max(6_000),
-    source: nullableText(2_000),
-  }).strict()).max(1_024),
-  conflicts: textList(256, 4_000),
+const editBibleBundleOutputSchema = z.object({
+  kind: z.literal('edit_bible_bundle'),
+  bundle: rawEditBibleBundleSchema,
   assumptions: textList(64, 2_000),
-  openQuestions: textList(64, 2_000),
+  warnings: textList(64, 2_000),
 }).strict()
 
 const continuityAnalysisOutputSchema = z.object({
@@ -70,9 +57,17 @@ const assetPromptSetOutputSchema = z.object({
   assets: z.array(z.object({
     key: z.string().trim().min(1).max(160),
     title: z.string().trim().min(1).max(300),
-    semanticKind: z.enum(['character', 'location', 'prop', 'style', 'other']),
-    prompt: z.string().min(1).max(16_000),
+    semanticKind: z.enum(['character', 'location', 'prop', 'other']),
+    stableDescription: z.string().min(1).max(16_000)
+      .describe('Stable visible asset identity and structure only; exclude transient action and project visual-style wording.'),
+    generationPrompt: z.string().min(1).max(24_000)
+      .describe('Final image-generation prompt assembled from stable asset facts plus any explicitly supplied Style Bible.'),
     negativePrompt: nullableText(8_000),
+    styleSource: z.object({
+      sourceMaterialLabel: z.string().trim().min(1).max(240),
+      fingerprint: z.string().trim().min(1).max(500).nullable(),
+    }).strict().nullable()
+      .describe('Exact supplied style source used by generationPrompt, or null when the asset is intentionally designed without a Style Bible.'),
     referenceRequirements: textList(64, 2_000),
     continuityRequirements: textList(64, 2_000),
   }).strict()).min(1).max(256),
@@ -80,14 +75,53 @@ const assetPromptSetOutputSchema = z.object({
   warnings: textList(64, 2_000),
 }).strict()
 
+const styleBibleOutputSchema = z.object({
+  kind: z.literal('style_bible'),
+  design: z.discriminatedUnion('mode', [
+    z.object({
+      mode: z.literal('final'),
+      styleBible: editScriptStyleBibleSchema.shape.styleBible,
+    }).strict(),
+    z.object({
+      mode: z.literal('candidates'),
+      options: editStylePreviewOptionsSchema,
+    }).strict(),
+  ]).describe('Return one finalized Style Bible, or a validated candidate set when the user needs comparison.'),
+  assumptions: textList(64, 2_000),
+  warnings: textList(64, 2_000),
+}).strict()
+
 const videoPromptSetOutputSchema = z.object({
   kind: z.literal('video_prompt_set'),
   overview: z.string().max(8_000),
+  globalDirection: z.object({
+    narrativeIntent: z.string().min(1).max(6_000),
+    visualContinuity: z.string().min(1).max(6_000),
+    performanceDirection: z.string().min(1).max(6_000),
+    cameraLanguage: z.string().min(1).max(6_000),
+    editingRhythm: z.string().min(1).max(6_000),
+    soundStrategy: z.string().min(1).max(6_000),
+  }).strict(),
   segments: z.array(z.object({
     key: z.string().trim().min(1).max(160),
     title: z.string().trim().min(1).max(300),
     durationSeconds: z.number().finite().positive(),
-    prompt: z.string().min(1).max(20_000),
+    narrativePurpose: z.string().min(1).max(4_000),
+    entryState: z.string().min(1).max(4_000),
+    exitState: z.string().min(1).max(4_000),
+    directorTimeline: z.array(z.object({
+      startSeconds: z.number().finite().nonnegative(),
+      endSeconds: z.number().finite().positive(),
+      shotPurpose: z.string().min(1).max(2_000),
+      framing: z.string().min(1).max(2_000),
+      cameraExecution: z.string().min(1).max(3_000),
+      performance: z.string().min(1).max(3_000),
+      action: z.string().min(1).max(4_000),
+      dialogue: textList(32, 2_000),
+      synchronousSound: z.string().min(1).max(3_000),
+      transition: nullableText(2_000),
+    }).strict()).min(1).max(32),
+    finalPrompt: z.string().min(1).max(30_000),
     referenceKeys: textList(64, 300),
     continuityRequirements: textList(64, 2_000),
     audioIntent: nullableText(4_000),
@@ -129,8 +163,9 @@ const creativeReviewOutputSchema = z.object({
 
 export const creativeWorkOutputSchemas = {
   screenplay_draft: screenplayDraftOutputSchema,
-  story_analysis: storyAnalysisOutputSchema,
+  edit_bible_bundle: editBibleBundleOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
+  style_bible: styleBibleOutputSchema,
   asset_prompt_set: assetPromptSetOutputSchema,
   video_prompt_set: videoPromptSetOutputSchema,
   music_direction: musicDirectionOutputSchema,
@@ -143,44 +178,49 @@ export type CreativeWorkOutput = {
 
 export interface CreativeWorkOutputDefinition {
   kind: CreativeWorkOutputKind
-  baselineSkillIds: readonly CreativeSkillId[]
+  requiredSkillIds: readonly CreativeSkillId[]
   schema: z.ZodObject
 }
 
 export const creativeWorkOutputRegistry = {
   screenplay_draft: {
     kind: 'screenplay_draft',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'story-development'],
     schema: creativeWorkOutputSchemas.screenplay_draft,
   },
-  story_analysis: {
-    kind: 'story_analysis',
-    baselineSkillIds: ['creative-core'],
-    schema: creativeWorkOutputSchemas.story_analysis,
+  edit_bible_bundle: {
+    kind: 'edit_bible_bundle',
+    requiredSkillIds: ['creative-core', 'story-development', 'continuity-memory'],
+    schema: creativeWorkOutputSchemas.edit_bible_bundle,
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'continuity-memory'],
     schema: creativeWorkOutputSchemas.continuity_analysis,
+  },
+  style_bible: {
+    kind: 'style_bible',
+    requiredSkillIds: ['creative-core', 'style-development'],
+    schema: creativeWorkOutputSchemas.style_bible,
   },
   asset_prompt_set: {
     kind: 'asset_prompt_set',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'asset-development'],
     schema: creativeWorkOutputSchemas.asset_prompt_set,
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'director-core', 'video-direction'],
     schema: creativeWorkOutputSchemas.video_prompt_set,
   },
   music_direction: {
     kind: 'music_direction',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'music-direction'],
     schema: creativeWorkOutputSchemas.music_direction,
   },
   creative_review: {
     kind: 'creative_review',
-    baselineSkillIds: ['creative-core'],
+    requiredSkillIds: ['creative-core', 'quality-review'],
     schema: creativeWorkOutputSchemas.creative_review,
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>

@@ -16,9 +16,35 @@ export {
 export { runCreativeWorker } from './runtime'
 export { buildCreativeWorkerSystemPrompt } from './system-prompt'
 export {
+  CREATIVE_CONTEXT_COMPILER_ERROR_CODES,
+  CreativeContextCompilerError,
+  compileCreativeChapterContext,
+  compileCreativeChapterContextInputSchema,
+  compiledCreativeChapterContextResultSchema,
+} from './context-compiler'
+export {
+  buildCreativeWorkInputFingerprint,
+  creativeWorkChapterBatchInputSchema,
+  creativeWorkDelegationInputSchema,
+  creativeWorkTaskLifecycleProjectionSchema,
+  creativeWorkTaskPayloadSchema,
+  creativeWorkTaskResultSchema,
+  creativeWorkerResultSchema,
+  listCreativeWorkDelegationItems,
+  resolveCreativeWorkDelegationInput,
+  summarizeCreativeWorkOutput,
+} from './task-contract'
+export {
   creativeWorkRequestSchema,
   defaultCreativeWorkerBudgets,
 } from './types'
+export type {
+  CompileCreativeChapterContextInput,
+  CompiledCreativeChapterContext,
+  CompiledCreativeChapterContextResult,
+  CreativeContextAsset,
+  CreativeContextCompilerErrorCode,
+} from './context-compiler'
 export type {
   CreativeWorkerErrorCode,
 } from './errors'
@@ -38,3 +64,12 @@ export type {
   CreativeWorkerResult,
   RunCreativeWorkerInput,
 } from './types'
+export type {
+  CreativeWorkDelegationInput,
+  CreativeWorkDelegationItem,
+  CreativeWorkChapterBatchInput,
+  ResolvedCreativeWorkDelegationInput,
+  CreativeWorkTaskLifecycleProjection,
+  CreativeWorkTaskPayload,
+  CreativeWorkTaskResult,
+} from './task-contract'
