@@ -285,7 +285,7 @@ git diff --check HEAD~3..HEAD
 
 Expected: focused tests and lint pass. Typecheck must be reported from its actual output; pre-existing unrelated failures may be triaged but not hidden.
 
-- [ ] **Step 2: Run real-browser functional and visual acceptance**
+- [x] **Step 2: Run real-browser functional and visual acceptance**
 
 Open `/zh/workspace/video-tools` in the authenticated local app. Capture:
 
@@ -323,13 +323,13 @@ git commit -m "docs: record project free voice verification"
 - Risk: project lists over 1,000 entries are not represented because the existing paginated endpoint is intentionally reused without adding search. Observe project selector completeness for unusually large accounts.
 - Risk: an old Redis record lacks project/character snapshots. Compatibility display falls back to its existing `voiceName`.
 - Risk: a role's reference audio can be removed after the page loads. The server revalidates at submission and fails before queueing.
-- Rollback: revert the three implementation commits; no database rollback is required because no schema or persistent data changes are introduced.
+- Rollback: revert the three implementation commits plus the zero-warning character-list stabilization commit; no database rollback is required because no schema or persistent data changes are introduced.
 - Observe: free-voice submission 4xx rate and worker failures mentioning `FREE_VOICE_REFERENCE_AUDIO_REQUIRED` after release.
 
 ## Delivery Metadata
 
 - Plan Path: `docs/superpowers/plans/2026-07-19-video-tools-project-character-free-voice.md`
-- Plan Status: implementation complete; verification recorded with one browser-data gap
+- Plan Status: complete; authenticated-data limitations recorded as non-blocking risks
 - Evidence Profile: standard
 - Story ID: not requested
 - Task IDs: not requested; Superpowers Tasks 1-4 map to one user-visible bug-fix slice
@@ -345,11 +345,13 @@ The free-voice server contract now requires `projectId` and `characterId`, autho
 
 The API route trims and validates `text`, `projectId`, and `characterId`. The client now loads the existing project list, loads characters only for the selected project, clears the selected character when the project changes, keeps missing-reference characters visible but disabled with localized copy, submits the new request shape, and displays `projectName · characterName` for new result snapshots with the existing `voiceName` fallback for older records.
 
+The character-query fallback is memoized against `charactersQuery.data`, preserving the same empty-list behavior while keeping the two downstream memo dependency lists stable and warning-free.
+
 ### Plan Deviations
 
-There was no production implementation deviation. Browser acceptance could not exercise the missing-reference option because the two projects available to the authenticated account contained 19 characters in total and every rendered character option had reference audio. No user data was created or modified to manufacture that state.
+There was no production implementation deviation. Browser acceptance could not exercise the missing-reference option because the two projects available to the authenticated account contained 19 characters in total and every rendered character option had reference audio. This is accepted as a non-blocking evidence limitation; no user data was created or modified to manufacture that state.
 
-No live generation was submitted during browser acceptance, so the empty authenticated result panel did not provide a live result-card identity screenshot. Project/character result attribution remains covered by the service and Redis assertions.
+No live generation was submitted during browser acceptance, so the empty authenticated result panel did not provide a live result-card identity screenshot. This is accepted as a non-blocking evidence limitation because project/character result attribution is covered by the service and Redis assertions and a generation will not be spent only for evidence.
 
 ### Impact
 
@@ -360,9 +362,15 @@ Impact is limited to the video-tools free-voice UI, its POST contract, transient
 Fresh automated verification on 2026-07-19:
 
 - `npx vitest run tests/unit/video-tools/free-voice-project-source.test.ts tests/unit/video-tools/free-voice-redis.test.ts tests/unit/video-tools/free-voice-tool-state.test.ts tests/unit/video-tools/video-tools-page.test.ts tests/unit/worker/voice-worker.test.ts tests/integration/api/contract/video-tools-routes.test.ts` exited `0`: 6 test files passed, 38 tests passed, 0 failed, duration 1.72 seconds. The route suite's expected rejection cases emitted error logs while their assertions passed.
-- `npm run lint -- 'src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx' 'src/app/[locale]/workspace/video-tools/free-voice-tool-state.ts' 'src/app/api/video-tools/free-voice/route.ts' 'src/lib/video-tools/free-voice.ts'` exited `0`: 0 errors and 2 `react-hooks/exhaustive-deps` warnings at `FreeVoiceToolCard.tsx:57` about the `characters` fallback expression used by the two `useMemo` dependency lists.
+- The original focused lint command exited `0` with 0 errors and 2 `react-hooks/exhaustive-deps` warnings at `FreeVoiceToolCard.tsx:57`. A strict RED run, `npm run lint -- --max-warnings=0 'src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx' 'src/app/[locale]/workspace/video-tools/free-voice-tool-state.ts' 'src/app/api/video-tools/free-voice/route.ts' 'src/lib/video-tools/free-voice.ts'`, exited `1` with exactly those 2 warnings and `ESLint found too many warnings (maximum: 0)`.
 - `npm run typecheck` exited `0` with no TypeScript diagnostics.
 - `git diff --check HEAD~3..HEAD` exited `0` with no output.
+
+Fresh zero-warning follow-up verification after memoizing the query fallback:
+
+- `npx vitest run tests/unit/video-tools/free-voice-tool-state.test.ts tests/unit/video-tools/video-tools-page.test.ts` exited `0`: 2 test files passed, 10 tests passed, 0 failed, duration 579 ms.
+- The strict focused lint command above exited `0` with 0 errors and 0 warnings.
+- `npm run typecheck` exited `0` with no TypeScript diagnostics.
 
 Authenticated real-browser acceptance used the checkout-owned local app at `http://localhost:3000/zh/workspace/video-tools`; the existing Next.js listener on port 3000 belonged to this checkout, rendered the committed UI, and did not require a restart. A new-page load completed with no browser warning or error logs.
 
@@ -377,13 +385,11 @@ Authenticated real-browser acceptance used the checkout-owned local app at `http
 
 ### Remaining Risks
 
-The release risks listed above remain applicable. Browser acceptance still needs authenticated data containing at least one character without `customVoiceUrl` to prove the disabled `(缺少参考音频)` option visually. A disposable live generation would also be required if live result-card identity evidence is mandatory rather than the existing service/Redis assertions.
-
-Focused lint passes but retains the two `react-hooks/exhaustive-deps` warnings described above; they did not affect this acceptance run.
+The release risks listed above remain applicable. The authenticated account did not contain a character without `customVoiceUrl`, so the disabled `(缺少参考音频)` option has automated evidence but no live screenshot. The authenticated result list was empty and no disposable generation was spent solely for evidence, so live result-card identity has service/Redis evidence but no browser screenshot. These are accepted non-blocking evidence limitations and do not require further interaction for this delivery.
 
 ### Follow-ups
 
-Provide or identify an authenticated project containing a missing-reference character, then repeat the desktop capture without changing production code. If live result rendering must also be proven, authorize one disposable free-voice generation and capture the resulting `projectName · characterName` card.
+No follow-up is required for completion. If future release policy requires live evidence for either unavailable state, use pre-arranged disposable test data and an explicitly authorized disposable generation rather than modifying current user data.
 
 ### ZenTao Closeout
 

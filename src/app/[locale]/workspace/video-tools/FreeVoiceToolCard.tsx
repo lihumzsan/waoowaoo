@@ -54,7 +54,7 @@ export default function FreeVoiceToolCard() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const charactersQuery = useProjectCharacters(projectId || null)
-  const characters = charactersQuery.data || []
+  const characters = useMemo(() => charactersQuery.data || [], [charactersQuery.data])
   const characterOptions = useMemo(
     () => buildProjectCharacterOptions(characters, t('missingReference')),
     [characters, t],
