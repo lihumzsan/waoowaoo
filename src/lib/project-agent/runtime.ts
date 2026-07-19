@@ -1156,7 +1156,6 @@ export async function createProjectAgentChatResponse(input: {
     instructions: systemPrompt,
     model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
-      temperature: 0.2,
       parallelToolCalls: true,
     },
     tools,

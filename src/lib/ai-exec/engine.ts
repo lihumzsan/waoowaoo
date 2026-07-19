@@ -379,7 +379,6 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
       explicit: input.reasoningEffort,
     })
     const options = {
-      temperature: input.temperature,
       reasoning: input.reasoning,
       reasoningEffort,
       projectId: input.projectId,
@@ -420,7 +419,6 @@ export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Pr
       explicit: input.reasoningEffort,
     })
     const options = {
-      temperature: input.temperature,
       reasoning: input.reasoning,
       reasoningEffort,
       projectId: input.projectId,

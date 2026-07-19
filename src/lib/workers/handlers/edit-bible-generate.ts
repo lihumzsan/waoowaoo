@@ -71,7 +71,6 @@ async function expandPromptGeneratedSource(input: {
     userId: input.userId,
     model: input.model,
     messages: [{ role: 'user', content: finalPromptContent }],
-    temperature: 0.4,
     projectId: input.projectId,
     action: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
     meta: {

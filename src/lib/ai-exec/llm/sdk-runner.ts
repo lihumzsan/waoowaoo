@@ -27,7 +27,6 @@ export type AiSdkRunnerInput = {
   providerConfig: AiLlmProviderConfig
   modelMessages: ModelMessage[]
   sourceMessages?: AiLlmMessage[]
-  temperature: number
   reasoning: boolean
   reasoningEffort: ReasoningEffort
   modality: 'llm' | 'vision'
@@ -45,7 +44,6 @@ function createModel(input: AiSdkRunnerInput) {
     executionMode: input.modality === 'vision' ? 'vision' : input.executionMode,
     reasoning: input.reasoning,
     reasoningEffort: input.reasoningEffort,
-    temperature: input.temperature,
     messages: input.sourceMessages,
     openRouterSessionId: input.openRouterSessionId,
   })

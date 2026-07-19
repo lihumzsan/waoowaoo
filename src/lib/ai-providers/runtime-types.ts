@@ -38,7 +38,6 @@ export type AiProviderLanguageModelContext = {
   executionMode: 'sync' | 'stream' | 'vision' | 'agent'
   reasoning: boolean
   reasoningEffort: ReasoningEffort
-  temperature?: number
   messages?: AiLlmMessage[]
   openRouterSessionId?: string
 }

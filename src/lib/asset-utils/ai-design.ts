@@ -83,7 +83,6 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
             userId,
             model: analysisModel,
             messages: [{ role: 'user', content: finalPrompt }],
-            temperature: 0.7,
             projectId,
             action,
             locale,

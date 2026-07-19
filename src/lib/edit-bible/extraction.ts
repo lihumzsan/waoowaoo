@@ -84,7 +84,6 @@ async function runEditBibleStructuredStep<TData>(input: {
     userId: input.userId,
     model: input.model,
     messages: [{ role: 'user', content: finalPromptContent }],
-    temperature: 0.3,
     projectId: input.projectId,
     action,
     locale: input.locale,

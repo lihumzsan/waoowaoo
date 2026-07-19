@@ -183,7 +183,6 @@ export async function runCreativeWorker(
       instructions: buildCreativeWorkerSystemPrompt(input.locale),
       model: input.model,
       modelSettings: {
-        temperature: 0.2,
         parallelToolCalls: false,
       },
       outputType: definition.schema,

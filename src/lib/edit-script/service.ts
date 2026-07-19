@@ -460,7 +460,6 @@ async function runStructuredPromptStep<TData>(input: {
     userId: input.userId,
     model: input.model,
     messages: [{ role: 'user', content: finalPromptContent }],
-    temperature: 0.4,
     projectId: input.projectId,
     action,
     locale: input.locale,

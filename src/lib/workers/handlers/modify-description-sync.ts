@@ -94,7 +94,6 @@ export async function generateModifiedAssetDescription(params: {
       model: params.model,
       prompt: finalPrompt,
       imageUrls: params.referenceImages ?? [],
-      temperature: 0.7,
       ...(params.projectId ? { projectId: params.projectId } : {}),
       locale: params.locale,
       schema: z.unknown(),
@@ -108,7 +107,6 @@ export async function generateModifiedAssetDescription(params: {
     userId: params.userId,
     model: params.model,
     messages: [{ role: 'user', content: finalPrompt }],
-    temperature: 0.7,
     ...(params.projectId ? { projectId: params.projectId } : {}),
     action: params.type === 'character'
       ? 'sync_character_description_after_image_modify'

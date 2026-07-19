@@ -26,7 +26,6 @@ export async function runShotPromptCompletion(params: {
             userId: params.job.data.userId,
             model: params.model,
             messages: [{ role: 'user', content: params.prompt }],
-            temperature: 0.7,
             projectId: params.job.data.projectId,
             action: params.action,
             locale: params.job.data.locale,

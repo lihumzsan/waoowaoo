@@ -41,16 +41,6 @@ function integerRangeValidator(input: { min?: number; max?: number }): AiOptionV
   }
 }
 
-function numberRangeValidator(input: { min?: number; max?: number }): AiOptionValidator {
-  return (value) => {
-    if (value === undefined) return ok()
-    if (typeof value !== 'number' || !Number.isFinite(value)) return fail('expected_number')
-    if (input.min !== undefined && value < input.min) return fail(`min=${input.min}`)
-    if (input.max !== undefined && value > input.max) return fail(`max=${input.max}`)
-    return ok()
-  }
-}
-
 function enumValidator(values: readonly string[]): AiOptionValidator {
   const allowed = new Set(values)
   return (value) => {
@@ -61,7 +51,6 @@ function enumValidator(values: readonly string[]): AiOptionValidator {
 }
 
 const LLM_ALLOWED_KEYS = [
-  'temperature',
   'reasoning',
   'reasoningEffort',
   'projectId',
@@ -82,7 +71,6 @@ export function buildLlmOptionSchema(
     Array.from(allowedKeys).map((key) => [key, passthroughValidator]),
   ) as Record<string, AiOptionValidator>
 
-  validators.temperature = numberRangeValidator({ min: 0, max: 2 })
   validators.reasoning = booleanValidator()
   validators.reasoningEffort = enumValidator(reasoningEffortOptions)
 

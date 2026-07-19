@@ -73,7 +73,6 @@ async function generateLocationCandidatePrompt(input: {
     userId: input.userId,
     model: input.analysisModel,
     messages: [{ role: 'user', content: input.strategy.draftInstruction }],
-    temperature: 0.72,
     projectId: input.projectId,
     action: 'location_candidate_prompt',
     locale: input.locale,

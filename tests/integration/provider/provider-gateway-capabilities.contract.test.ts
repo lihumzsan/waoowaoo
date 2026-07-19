@@ -226,7 +226,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         executionMode: 'stream',
         reasoning: true,
         reasoningEffort: 'medium',
-        temperature: 0.7,
       })
       const stream = streamText({ model, prompt: 'hello', maxRetries: 0 })
       let text = ''
@@ -528,7 +527,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         providerConfig,
         executionMode: 'sync',
         messages: [{ role: 'user', content: 'hello' }],
-        temperature: 0.7,
         reasoning: true,
         reasoningEffort: 'max',
       })
@@ -542,7 +540,6 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         providerConfig,
         executionMode: 'vision',
         messages: [{ role: 'user', content: 'describe' }],
-        temperature: 0.7,
         reasoning: true,
         reasoningEffort: 'max',
       })

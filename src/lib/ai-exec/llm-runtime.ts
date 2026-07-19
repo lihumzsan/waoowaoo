@@ -29,7 +29,6 @@ export function logLlmRawInput(params: {
   stream: boolean
   reasoning: boolean
   reasoningEffort: ReasoningEffort
-  temperature: number
   action?: string
   openRouterSessionId?: string
   messages: LlmRawMessage[]
@@ -49,7 +48,6 @@ export function logLlmRawInput(params: {
         key: params.modelKey,
       },
       options: {
-        temperature: params.temperature,
         reasoning: params.reasoning,
         reasoningEffort: params.reasoningEffort,
         openRouterSessionId: params.openRouterSessionId ?? null,

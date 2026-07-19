@@ -154,7 +154,6 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
         locale: job.data.locale,
       }),
       imageUrls: allReferenceImages,
-      temperature: 0.3,
       ...(isProject ? { projectId: job.data.projectId } : {}),
       action: 'reference_to_character_extract',
       meta: {

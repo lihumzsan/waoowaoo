@@ -61,7 +61,6 @@ export function createAiSdkConnectionTester(defaults: {
       executionMode: 'sync',
       reasoning: false,
       reasoningEffort: DEFAULT_REASONING_EFFORT,
-      temperature: 0,
     })
   }
 
@@ -71,7 +70,6 @@ export function createAiSdkConnectionTester(defaults: {
       model: createModel(input),
       prompt: '1+1=? Reply with only the number.',
       maxOutputTokens: 8,
-      temperature: 0,
       maxRetries: 0,
     })
     return { model: response.response.modelId || modelId, answer: response.text.trim() }

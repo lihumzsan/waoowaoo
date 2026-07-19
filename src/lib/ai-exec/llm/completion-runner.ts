@@ -31,7 +31,6 @@ type ResolvedTextExecution = {
   providerConfig: Awaited<ReturnType<typeof getProviderConfig>>
   providerKey: string
   projectId?: string
-  temperature: number
   reasoning: boolean
   reasoningEffort: Awaited<ReturnType<typeof resolveReasoningEffort>>
   openRouterSessionId?: string
@@ -68,7 +67,6 @@ async function resolveTextExecution(input: {
     options,
     context: `${input.stream ? 'llm_stream' : 'llm'}:${selection.modelKey}`,
   })
-  const temperature = input.options.temperature ?? 0.7
   const reasoning = input.options.reasoning ?? true
   const openRouterSessionId = resolveAiProviderAdapter(selection.provider).resolveLlmSessionId?.({
     kind: 'llm',
@@ -87,7 +85,6 @@ async function resolveTextExecution(input: {
     stream: input.stream,
     reasoning,
     reasoningEffort,
-    temperature,
     action: input.options.action,
     openRouterSessionId,
     messages: input.messages,
@@ -97,7 +94,6 @@ async function resolveTextExecution(input: {
     providerConfig,
     providerKey,
     projectId,
-    temperature,
     reasoning,
     reasoningEffort,
     openRouterSessionId,
@@ -145,7 +141,6 @@ async function executeText(input: {
       providerConfig: resolved.providerConfig,
       modelMessages: prepareAiTextModelMessages(resolved.selection.provider, input.messages),
       sourceMessages: input.messages,
-      temperature: resolved.temperature,
       reasoning: resolved.reasoning,
       reasoningEffort: resolved.reasoningEffort,
       modality: 'llm',

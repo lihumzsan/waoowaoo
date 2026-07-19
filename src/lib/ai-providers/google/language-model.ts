@@ -32,13 +32,12 @@ export function createGoogleSdkLanguageModel(input: AiProviderLanguageModelConte
       },
     }
     : undefined
+  const model = google.chat(input.selection.modelId)
+  if (!providerOptions) return model
   return wrapLanguageModel({
-    model: google.chat(input.selection.modelId),
+    model,
     middleware: defaultSettingsMiddleware({
-      settings: {
-        ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
-        ...(providerOptions ? { providerOptions } : {}),
-      },
+      settings: { providerOptions },
     }),
   })
 }

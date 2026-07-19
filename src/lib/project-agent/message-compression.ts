@@ -125,7 +125,6 @@ export async function compressMessages(params: {
     model: params.model,
     system: compressionPrompt.system,
     prompt: compressionPrompt.prompt,
-    temperature: 0,
     abortSignal: params.signal,
   })
   const summary = normalizeText(summaryResult.text)

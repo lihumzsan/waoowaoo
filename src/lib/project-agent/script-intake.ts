@@ -263,7 +263,6 @@ export async function planScriptIntakeQuestions(input: {
     userId: input.userId,
     model: config.analysisModel,
     messages: [{ role: 'user', content: prompt }],
-    temperature: 0.2,
     projectId: input.projectId,
     action: AI_PROMPT_IDS.PROJECT_AGENT_SCRIPT_INTAKE,
     locale: input.locale,

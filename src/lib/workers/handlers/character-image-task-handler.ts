@@ -80,7 +80,6 @@ async function generateCharacterCandidatePrompts(input: {
     userId: input.userId,
     model: input.analysisModel,
     messages: [{ role: 'user', content: instruction }],
-    temperature: 0.75,
     projectId: input.projectId,
     action: 'character_candidate_prompts',
     locale: input.locale,

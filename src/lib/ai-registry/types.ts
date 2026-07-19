@@ -79,7 +79,6 @@ export type AiLlmMessage = {
 }
 
 export interface AiLlmCallOptions {
-  temperature?: number
   reasoning?: boolean
   reasoningEffort?: ReasoningEffort
   projectId?: string
@@ -132,7 +131,6 @@ export type AiStepExecutionInput = {
   projectId?: string
   action: string
   meta: AiStepMeta
-  temperature?: number
   reasoning?: boolean
   reasoningEffort?: ReasoningEffort
 }
@@ -147,7 +145,6 @@ export type AiVisionStepExecutionInput = {
   projectId?: string
   action?: string
   meta?: AiStepMeta
-  temperature?: number
   reasoning?: boolean
   reasoningEffort?: ReasoningEffort
 }
@@ -167,7 +164,6 @@ export type AiLlmExecutionInput = {
   selection: AiResolvedLlmSelection
   providerConfig: AiLlmProviderConfig
   messages: AiLlmMessage[]
-  temperature: number
   reasoning: boolean
   reasoningEffort: ReasoningEffort
   openRouterSessionId?: string

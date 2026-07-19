@@ -80,7 +80,6 @@ async function executeVision(input: {
     options,
     context: `${input.stream ? 'vision_stream' : 'vision'}:${selection.modelKey}`,
   })
-  const temperature = input.options.temperature ?? 0.7
   const reasoning = input.options.reasoning ?? true
   const normalizedImageUrls = await normalizeVisionImageUrls(input.imageUrls, input.userId)
   const openRouterSessionId = resolveAiProviderAdapter(selection.provider).resolveLlmSessionId?.({
@@ -98,7 +97,6 @@ async function executeVision(input: {
       selection,
       providerConfig,
       modelMessages: buildVisionModelMessages(input.textPrompt, normalizedImageUrls),
-      temperature,
       reasoning,
       reasoningEffort,
       modality: 'vision',

@@ -104,7 +104,6 @@ export async function handleAssetHubAIModifyTask(job: Job<TaskJobData>) {
         userId: job.data.userId,
         model: userConfig.analysisModel!,
         messages: [{ role: 'user', content: finalPrompt }],
-        temperature: 0.7,
         projectId: 'asset-hub',
         action: isCharacter ? 'ai_modify_character' : isProp ? 'ai_modify_prop' : 'ai_modify_location',
         locale: job.data.locale,

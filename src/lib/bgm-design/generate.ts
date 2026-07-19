@@ -68,7 +68,6 @@ export async function handleBgmDesignPlanTask(job: Job<TaskJobData>): Promise<Re
         userId: job.data.userId,
         model: analysisModel,
         messages: [{ role: 'user', content: buildBgmDesignPlanPrompt({ planningInput, locale: job.data.locale }) }],
-        temperature: 0.25,
         projectId: job.data.projectId,
         action: 'bgm_design_plan',
         locale: job.data.locale,
