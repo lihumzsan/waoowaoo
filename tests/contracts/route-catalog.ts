@@ -174,6 +174,10 @@ const ROUTE_FILES = [
   'src/app/api/user/ai-story-expand/route.ts',
   'src/app/api/user/models/route.ts',
   'src/app/api/user/transactions/route.ts',
+  'src/app/api/video-tools/free-voice/[recordId]/audio/route.ts',
+  'src/app/api/video-tools/free-voice/route.ts',
+  'src/app/api/video-tools/seam-concat/route.ts',
+  'src/app/api/video-tools/uploads/route.ts',
 ] as const
 
 function resolveCategory(routeFile: string): RouteCategory {

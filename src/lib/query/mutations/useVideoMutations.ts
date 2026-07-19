@@ -49,6 +49,9 @@ export function useGenerateFirstLastFramePrompt(projectId: string) {
       lastPanelId: string
       episodeId: string
       reason: FirstLastFramePromptReason
+      onTaskUpdate?: (task: {
+        status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
+      }) => void
     }) => {
       const response = await requestTaskResponseWithError(
         `/api/novel-promotion/${projectId}/first-last-frame-prompt`,
@@ -59,7 +62,9 @@ export function useGenerateFirstLastFramePrompt(projectId: string) {
         },
         'generate first/last frame prompt failed',
       )
-      return await resolveTaskResponse<FirstLastFramePromptResult>(response)
+      return await resolveTaskResponse<FirstLastFramePromptResult>(response, {
+        onTaskUpdate: payload.onTaskUpdate,
+      })
     },
   })
 }

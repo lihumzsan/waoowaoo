@@ -12,8 +12,6 @@ export type VideoToolTask = {
   id: string
   status: string
   progress: number
-  createdAt: string
-  updatedAt: string
   payload: Record<string, unknown> | null
   result: Record<string, unknown> | null
   error: { message?: string | null } | null
@@ -34,11 +32,6 @@ export type VideoToolTaskView = {
   videoUrl: string | null
   videoKey: string | null
   errorMessage: string | null
-}
-
-export type VideoToolTaskTrimFrames = {
-  input1TrimEndFrames: number
-  input2TrimStartFrames: number
 }
 
 function readString(value: unknown): string | null {
@@ -93,32 +86,4 @@ export function resolveVideoToolTaskView(task: VideoToolTask | null): VideoToolT
       ? 'preparing'
       : 'processing'
   return { phase, active: true, videoUrl: null, videoKey: null, errorMessage: null }
-}
-
-function readTaskTrimFrames(resultValue: unknown, payloadValue: unknown, defaultValue: number): number {
-  if (isValidVideoTrimFrames(resultValue)) return resultValue
-  if (isValidVideoTrimFrames(payloadValue)) return payloadValue
-  return defaultValue
-}
-
-export function resolveVideoToolTaskTrimFrames(task: VideoToolTask): VideoToolTaskTrimFrames {
-  return {
-    input1TrimEndFrames: readTaskTrimFrames(
-      task.result?.input1TrimEndFrames,
-      task.payload?.input1TrimEndFrames,
-      0,
-    ),
-    input2TrimStartFrames: readTaskTrimFrames(
-      task.result?.input2TrimStartFrames,
-      task.payload?.input2TrimStartFrames,
-      1,
-    ),
-  }
-}
-
-export function selectCurrentVideoToolTask(tasks: VideoToolTask[]): VideoToolTask | null {
-  const newestFirst = [...tasks].sort((left, right) => {
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-  })
-  return newestFirst.find((task) => isActiveTask(task)) || newestFirst[0] || null
 }

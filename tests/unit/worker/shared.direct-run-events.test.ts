@@ -3,6 +3,10 @@ import type { Job } from 'bullmq'
 import type { TaskJobData } from '@/lib/task/types'
 
 const tryUpdateTaskProgressMock = vi.hoisted(() => vi.fn(async () => true))
+const touchTaskHeartbeatMock = vi.hoisted(() => vi.fn(async () => undefined))
+const tryMarkTaskCompletedMock = vi.hoisted(() => vi.fn(async () => true))
+const tryMarkTaskFailedMock = vi.hoisted(() => vi.fn(async () => true))
+const tryMarkTaskProcessingMock = vi.hoisted(() => vi.fn(async () => true))
 const publishTaskEventMock = vi.hoisted(() => vi.fn(async () => ({})))
 const publishTaskStreamEventMock = vi.hoisted(() => vi.fn(async () => ({})))
 const publishRunEventMock = vi.hoisted(() => vi.fn(async () => undefined))
@@ -36,10 +40,10 @@ vi.mock('@/lib/logging/core', () => ({
 }))
 
 vi.mock('@/lib/task/service', () => ({
-  touchTaskHeartbeat: vi.fn(async () => undefined),
-  tryMarkTaskCompleted: vi.fn(async () => true),
-  tryMarkTaskFailed: vi.fn(async () => true),
-  tryMarkTaskProcessing: vi.fn(async () => true),
+  touchTaskHeartbeat: touchTaskHeartbeatMock,
+  tryMarkTaskCompleted: tryMarkTaskCompletedMock,
+  tryMarkTaskFailed: tryMarkTaskFailedMock,
+  tryMarkTaskProcessing: tryMarkTaskProcessingMock,
   tryUpdateTaskProgress: tryUpdateTaskProgressMock,
 }))
 
@@ -96,6 +100,15 @@ function buildJob(taskType: TaskJobData['type']): Job<TaskJobData> {
   } as unknown as Job<TaskJobData>
 }
 
+function buildTransientJob() {
+  const job = buildJob('video_seam_concat') as Job<TaskJobData> & {
+    updateProgress: ReturnType<typeof vi.fn>
+  }
+  ;(job.data as TaskJobData & { persistence: 'transient' }).persistence = 'transient'
+  job.updateProgress = vi.fn(async () => undefined)
+  return job
+}
+
 describe('worker shared direct run events', () => {
   beforeEach(() => {
     tryUpdateTaskProgressMock.mockReset()
@@ -104,6 +117,10 @@ describe('worker shared direct run events', () => {
     publishTaskStreamEventMock.mockReset()
     publishRunEventMock.mockReset()
     mapTaskSSEEventToRunEventsMock.mockClear()
+    touchTaskHeartbeatMock.mockClear()
+    tryMarkTaskCompletedMock.mockClear()
+    tryMarkTaskFailedMock.mockClear()
+    tryMarkTaskProcessingMock.mockClear()
   })
 
   it('publishes run events directly for core analysis progress updates', async () => {
@@ -157,5 +174,30 @@ describe('worker shared direct run events', () => {
       runId: 'run-1',
       eventType: 'run.start',
     }))
+  })
+
+  it('runs transient jobs without reading or writing database task lifecycle state', async () => {
+    const job = buildTransientJob()
+
+    await expect(withTaskLifecycle(job, async () => ({ ok: true }))).resolves.toEqual({ ok: true })
+
+    expect(tryMarkTaskProcessingMock).not.toHaveBeenCalled()
+    expect(tryMarkTaskCompletedMock).not.toHaveBeenCalled()
+    expect(tryMarkTaskFailedMock).not.toHaveBeenCalled()
+    expect(touchTaskHeartbeatMock).not.toHaveBeenCalled()
+    expect(publishTaskEventMock).not.toHaveBeenCalled()
+  })
+
+  it('stores transient progress only on the BullMQ job', async () => {
+    const job = buildTransientJob()
+
+    await reportTaskProgress(job, 42, { stage: 'prepare_inputs' })
+
+    expect(job.updateProgress).toHaveBeenCalledWith(expect.objectContaining({
+      progress: 42,
+      stage: 'prepare_inputs',
+    }))
+    expect(tryUpdateTaskProgressMock).not.toHaveBeenCalled()
+    expect(publishTaskEventMock).not.toHaveBeenCalled()
   })
 })

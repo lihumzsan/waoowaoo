@@ -47,4 +47,22 @@ describe('first-last-frame prompt task registration', () => {
     expect(workerSource).toContain('case TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT:')
     expect(workerSource).toContain('handleFirstLastFramePromptTask(job)')
   })
+
+  it('relays polled task progress into the prompt card while regeneration is running', () => {
+    const mutationSource = fs.readFileSync(
+      path.join(process.cwd(), 'src/lib/query/mutations/useVideoMutations.ts'),
+      'utf8',
+    )
+    const promptEntriesSource = fs.readFileSync(
+      path.join(
+        process.cwd(),
+        'src/lib/novel-promotion/stages/video-stage-runtime/useFirstLastFramePromptEntries.ts',
+      ),
+      'utf8',
+    )
+
+    expect(mutationSource).toMatch(/resolveTaskResponse<FirstLastFramePromptResult>\(response,\s*\{\s*onTaskUpdate:\s*payload\.onTaskUpdate,?\s*\}\s*\)/)
+    expect(promptEntriesSource).toContain('onTaskUpdate: (task) => {')
+    expect(promptEntriesSource).toContain("projectPromptTaskState(current, { phase: task.status })")
+  })
 })

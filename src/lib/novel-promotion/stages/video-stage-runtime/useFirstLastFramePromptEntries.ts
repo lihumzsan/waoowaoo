@@ -79,9 +79,14 @@ export function useFirstLastFramePromptEntries({
     return { firstPanel: allPanels[index], lastPanel: allPanels[index + 1] }
   }, [allPanels])
 
-  const buildSourceSignature = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel) => {
+  const buildSourceSignature = useCallback((
+    firstPanel: VideoPanel,
+    lastPanel: VideoPanel,
+    explicitDurationOverride?: VideoDurationBinding,
+  ) => {
     const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
-    const durationOverride = persistedDurationOverridesRef.current.get(panelKey)
+    const durationOverride = explicitDurationOverride
+      || persistedDurationOverridesRef.current.get(panelKey)
     const firstSource = firstPanel.firstLastFramePromptFingerprintSource
       ? { ...firstPanel.firstLastFramePromptFingerprintSource, ...(durationOverride ? { videoDurationBinding: durationOverride } : {}) }
       : {
@@ -220,8 +225,35 @@ export function useFirstLastFramePromptEntries({
         lastPanelId: pair.lastPanel.panelId,
         episodeId,
         reason,
+        onTaskUpdate: (task) => {
+          if (task.status !== 'queued' && task.status !== 'processing') return
+          setPromptEntries((previous) => {
+            if (
+              requestRevisionsRef.current.get(panelKey) !== requestRevision
+              || (!linkedPanelsRef.current.get(panelKey) && reason !== 'link')
+            ) return previous
+            const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
+            const projected = projectPromptTaskState(current, { phase: task.status })
+            if (projected.status === current.status) return previous
+            return new Map(previous).set(panelKey, projected)
+          })
+        },
       })
-      if (!isPromptResultCurrent(signature, currentSignaturesRef.current.get(panelKey))) {
+      const currentBinding = persistedDurationOverridesRef.current.get(panelKey)
+        || pair.firstPanel.videoDurationBinding
+      const nextSmartDurationBinding = result.applied
+        && result.smartDuration
+        && shouldApplyFirstLastFrameSmartDurationBinding(currentBinding)
+        ? buildFirstLastFrameSmartDurationBinding(result.smartDuration)
+        : undefined
+      const appliedSignature = nextSmartDurationBinding
+        ? buildSourceSignature(pair.firstPanel, pair.lastPanel, nextSmartDurationBinding)
+        : undefined
+      if (!isPromptResultCurrent(
+        signature,
+        currentSignaturesRef.current.get(panelKey),
+        appliedSignature,
+      )) {
         clearSuperseded()
         return
       }
@@ -236,16 +268,11 @@ export function useFirstLastFramePromptEntries({
       }
       if (!result.applied) ensuredSignaturesRef.current.delete(panelKey)
       let verifiedSourceSignature = signature
-      if (result.applied && result.smartDuration) {
-        const currentBinding = persistedDurationOverridesRef.current.get(panelKey)
-          || pair.firstPanel.videoDurationBinding
-        if (shouldApplyFirstLastFrameSmartDurationBinding(currentBinding)) {
-          const nextBinding = buildFirstLastFrameSmartDurationBinding(result.smartDuration)
-          persistedDurationOverridesRef.current.set(panelKey, nextBinding)
-          verifiedSourceSignature = buildSourceSignature(pair.firstPanel, pair.lastPanel)
-          currentSignaturesRef.current.set(panelKey, verifiedSourceSignature)
-          setDurationRevision((revision) => revision + 1)
-        }
+      if (nextSmartDurationBinding && appliedSignature) {
+        persistedDurationOverridesRef.current.set(panelKey, nextSmartDurationBinding)
+        verifiedSourceSignature = appliedSignature
+        currentSignaturesRef.current.set(panelKey, verifiedSourceSignature)
+        setDurationRevision((revision) => revision + 1)
       }
       setPromptEntries((previous) => new Map(previous).set(panelKey, {
         ...applyPromptResult(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel), result),

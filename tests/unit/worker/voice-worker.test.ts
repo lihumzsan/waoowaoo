@@ -10,6 +10,7 @@ const workerState = vi.hoisted(() => ({
 
 const generateVoiceLineMock = vi.hoisted(() => vi.fn())
 const generateFreeVoiceVersionMock = vi.hoisted(() => vi.fn())
+const generateVideoToolFreeVoiceMock = vi.hoisted(() => vi.fn())
 const handleVoiceDesignTaskMock = vi.hoisted(() => vi.fn())
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
@@ -48,6 +49,10 @@ vi.mock('@/lib/voice/generate-voice-line', () => ({
 
 vi.mock('@/lib/voice/free-voice', () => ({
   generateFreeVoiceVersion: generateFreeVoiceVersionMock,
+}))
+vi.mock('@/lib/video-tools/free-voice', () => ({
+  VIDEO_TOOL_FREE_VOICE_TARGET_TYPE: 'VideoToolsFreeVoice',
+  generateVideoToolFreeVoice: generateVideoToolFreeVoiceMock,
 }))
 
 vi.mock('@/lib/workers/shared', () => ({
@@ -93,6 +98,10 @@ describe('worker voice processor behavior', () => {
     generateFreeVoiceVersionMock.mockResolvedValue({
       versionId: 'version-1',
       audioUrl: '/m/free-voice-1',
+    })
+    generateVideoToolFreeVoiceMock.mockResolvedValue({
+      recordId: 'record-1',
+      audioUrl: '/api/video-tools/free-voice/record-1/audio',
     })
     handleVoiceDesignTaskMock.mockResolvedValue({
       presetId: 'preset-1',
@@ -189,6 +198,37 @@ describe('worker voice processor behavior', () => {
       userId: 'user-1',
       locale: 'zh',
     })
+  })
+
+  it('FREE_VOICE: routes video-tools transient targets to Redis-backed generation', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const result = await processor!(buildJob({
+      type: TASK_TYPE.FREE_VOICE,
+      targetType: 'VideoToolsFreeVoice',
+      targetId: 'record-1',
+      episodeId: null,
+      payload: {
+        text: 'hello',
+        referenceAudioUrl: '/m/reference',
+        audioModel: 'comfyui::baseaudio/多人/LongCat-two',
+      },
+    }))
+
+    expect(result).toEqual({
+      recordId: 'record-1',
+      audioUrl: '/api/video-tools/free-voice/record-1/audio',
+    })
+    expect(generateVideoToolFreeVoiceMock).toHaveBeenCalledWith({
+      recordId: 'record-1',
+      userId: 'user-1',
+      locale: 'zh',
+      text: 'hello',
+      referenceAudioUrl: '/m/reference',
+      audioModel: 'comfyui::baseaudio/多人/LongCat-two',
+    })
+    expect(generateFreeVoiceVersionMock).not.toHaveBeenCalled()
   })
 
   it('未知任务类型: 显式报错', async () => {

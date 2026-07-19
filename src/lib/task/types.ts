@@ -116,6 +116,7 @@ export type TaskBillingInfo =
 
 export type TaskJobData = {
   taskId: string
+  persistence?: 'database' | 'transient'
   type: TaskType
   locale: Locale
   projectId: string

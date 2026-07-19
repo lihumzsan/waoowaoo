@@ -1,7 +1,11 @@
 {
-  "eyebrow": "Standalone Video Tool",
-  "title": "Seamless Video Concatenation",
-  "subtitle": "Upload two videos in order, choose the tail and head trim counts, and join both streams at the frame rate of Video 1.",
+  "eyebrow": "Standalone creation tools",
+  "title": "Video Tools",
+  "subtitle": "Temporary video and audio tools whose results do not enter project history.",
+  "seamConcat": {
+    "title": "Seamless Video Concatenation",
+    "description": "Upload two videos in order, choose the tail and head trim counts, and join both streams at the frame rate of Video 1."
+  },
   "workflowNote": "Output is fixed to NVENC H.264 MP4, yuv420p, and 10 Mbit/s. No workflow tuning is required.",
   "input1": {
     "title": "Video 1",
@@ -20,8 +24,7 @@
     "replace": "Replace",
     "remove": "Remove",
     "start": "Start Concatenation",
-    "download": "Download Video",
-    "refresh": "Refresh"
+    "download": "Download Video"
   },
   "status": {
     "idle": "Waiting for uploads",
@@ -37,17 +40,36 @@
     "title": "Concatenated Result",
     "description": "Preview and download the output when the task completes.",
     "emptyHint": "Upload two videos and start concatenation. The result will appear here.",
-    "processingHint": "ComfyUI is processing the videos. The task continues if you leave this page."
+    "processingHint": "ComfyUI is processing the videos. Keep this page open to preview and download the result."
   },
-  "history": {
-    "title": "Recent Concatenations",
-    "input1TrimLabel": "Video 1 tail frames",
-    "input2TrimLabel": "Video 2 head frames",
-    "empty": "No concatenation history yet"
+  "freeVoice": {
+    "title": "Free Voice",
+    "description": "Choose a reference voice from the asset library, enter text, and generate one temporary voice clip.",
+    "ttl": "Redis stores it for 1 day",
+    "voice": "Reference voice",
+    "text": "Voice text",
+    "textPlaceholder": "Enter the text to read aloud",
+    "loadingVoices": "Loading voices",
+    "emptyVoices": "No usable voices in the asset library",
+    "generate": "Generate free voice",
+    "submitting": "Submitting",
+    "resultTitle": "Voice results",
+    "emptyResults": "Generated audio appears here and expires automatically after 1 day.",
+    "download": "Download",
+    "status": {
+      "queued": "Queued",
+      "processing": "Generating",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "errors": {
+      "loadFailed": "Failed to load free voice results",
+      "submitFailed": "Failed to submit free voice"
+    }
   },
   "errors": {
     "uploadFailed": "Video upload failed",
     "submitFailed": "Could not submit the concatenation task",
-    "loadTasks": "Could not load recent tasks"
+    "statusFailed": "Could not load the current concatenation status"
   }
 }

@@ -21,7 +21,6 @@ import { useLipSync } from '@/lib/query/hooks/useStoryboards'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
 import VideoTimelinePanel from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video-stage/VideoTimelinePanel'
-import FreeVoicePanel from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video-stage/FreeVoicePanel'
 import VideoRenderPanel from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video-stage/VideoRenderPanel'
 import type { VideoStageShellProps } from './video-stage-runtime/types'
 import {
@@ -598,8 +597,6 @@ export function useVideoStageRuntime({
         onLocateVoiceLine={locateVoiceLinePanel}
         onOpenAssetLibraryForCharacter={onOpenAssetLibraryForCharacter}
       />
-
-      <FreeVoicePanel projectId={projectId} />
 
       <VideoRenderPanel
         allPanels={projectedPanels}

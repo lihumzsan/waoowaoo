@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { POST as uploadVideo } from '@/app/api/video-tools/uploads/route'
 import { POST as submitSeamConcat } from '@/app/api/video-tools/seam-concat/route'
+import * as seamConcatRoute from '@/app/api/video-tools/seam-concat/route'
+import { POST as submitFreeVoice } from '@/app/api/video-tools/free-voice/route'
 import { buildMockRequest } from '../../../helpers/request'
 
 const authState = vi.hoisted(() => ({ authenticated: true }))
@@ -19,6 +21,22 @@ const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
   runId: 'run-1',
   status: 'queued',
   deduped: false,
+})))
+const addTaskJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'job-1' })))
+const queueState = vi.hoisted(() => ({ job: null as null | Record<string, unknown> }))
+const getVideoJobMock = vi.hoisted(() => vi.fn(async () => queueState.job))
+const createVideoToolFreeVoiceTaskMock = vi.hoisted(() => vi.fn(async () => ({
+  record: {
+    id: 'free-record-1',
+    taskId: 'free-task-1',
+    text: 'hello',
+    voiceName: 'Narrator',
+    status: 'queued',
+    progress: 0,
+    createdAt: '2026-07-19T00:00:00.000Z',
+    updatedAt: '2026-07-19T00:00:00.000Z',
+  },
+  taskId: 'free-task-1',
 })))
 
 vi.mock('@/lib/api-auth', () => ({
@@ -40,13 +58,24 @@ vi.mock('@/lib/storage', () => ({
 }))
 
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
+vi.mock('@/lib/task/queues', () => ({
+  addTaskJob: addTaskJobMock,
+  videoQueue: { getJob: getVideoJobMock },
+}))
 vi.mock('@/lib/task/resolve-locale', () => ({ resolveRequiredTaskLocale: vi.fn(() => 'zh') }))
+vi.mock('@/lib/video-tools/free-voice', () => ({
+  createVideoToolFreeVoiceTask: createVideoToolFreeVoiceTaskMock,
+}))
 
 describe('video tools routes', () => {
   beforeEach(() => {
     authState.authenticated = true
     uploadObjectStreamMock.mockClear()
     submitTaskMock.mockClear()
+    addTaskJobMock.mockClear()
+    getVideoJobMock.mockClear()
+    createVideoToolFreeVoiceTaskMock.mockClear()
+    queueState.job = null
   })
 
   it('streams authenticated raw MP4 bytes to a user-scoped input key', async () => {
@@ -195,7 +224,7 @@ describe('video tools routes', () => {
     expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
   })
 
-  it('submits two owned inputs to the video queue contract', async () => {
+  it('queues two owned inputs without creating a persisted task', async () => {
     const request = buildMockRequest({
       path: '/api/video-tools/seam-concat',
       method: 'POST',
@@ -208,17 +237,75 @@ describe('video tools routes', () => {
 
     const response = await submitSeamConcat(request, { params: Promise.resolve({}) })
     expect(response.status).toBe(200)
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(addTaskJobMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       projectId: 'video-tools',
       type: 'video_seam_concat',
       targetType: 'VideoSeamConcat',
-      maxAttempts: 1,
+      persistence: 'transient',
       payload: expect.objectContaining({
         input1Key: 'video-tools/user-1/inputs/one.mp4',
         input2Key: 'video-tools/user-1/inputs/two.mp4',
       }),
-    }))
+    }), expect.objectContaining({ attempts: 1 }))
+    expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('exposes a transient job status endpoint instead of task history', () => {
+    expect(typeof (seamConcatRoute as { GET?: unknown }).GET).toBe('function')
+  })
+
+  it('returns the completed result from the authenticated user transient job', async () => {
+    queueState.job = {
+      data: {
+        taskId: 'job-1',
+        persistence: 'transient',
+        type: 'video_seam_concat',
+        userId: 'user-1',
+      },
+      progress: { progress: 90, stage: 'persist_output' },
+      returnvalue: { videoKey: 'output.mp4', videoUrl: '/api/storage/sign?key=output.mp4' },
+      failedReason: null,
+      getState: vi.fn(async () => 'completed'),
+    }
+    const request = buildMockRequest({
+      path: '/api/video-tools/seam-concat?taskId=job-1',
+      method: 'GET',
+    })
+    const getStatus = (seamConcatRoute as { GET: typeof submitSeamConcat }).GET
+
+    const response = await getStatus(request, { params: Promise.resolve({}) })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      id: 'job-1',
+      status: 'completed',
+      progress: 100,
+      result: { videoKey: 'output.mp4', videoUrl: '/api/storage/sign?key=output.mp4' },
+      error: null,
+    })
+  })
+
+  it('does not expose another user transient job', async () => {
+    queueState.job = {
+      data: {
+        taskId: 'job-1',
+        persistence: 'transient',
+        type: 'video_seam_concat',
+        userId: 'user-2',
+      },
+      getState: vi.fn(async () => 'active'),
+    }
+    const request = buildMockRequest({
+      path: '/api/video-tools/seam-concat?taskId=job-1',
+      method: 'GET',
+    })
+    const getStatus = (seamConcatRoute as { GET: typeof submitSeamConcat }).GET
+
+    const response = await getStatus(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(404)
   })
 
   it('requires authentication before submission', async () => {
@@ -231,6 +318,36 @@ describe('video tools routes', () => {
 
     const response = await submitSeamConcat(request, { params: Promise.resolve({}) })
     expect(response.status).toBe(401)
+    expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('queues standalone free voice as a transient video-tool result', async () => {
+    const request = buildMockRequest({
+      path: '/api/video-tools/free-voice',
+      method: 'POST',
+      body: {
+        text: 'hello',
+        voiceSourceId: 'voice-1',
+        meta: { locale: 'zh' },
+      },
+    })
+
+    const response = await submitFreeVoice(request, { params: Promise.resolve({}) })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      async: true,
+      taskId: 'free-task-1',
+      record: { id: 'free-record-1', status: 'queued' },
+    })
+    expect(createVideoToolFreeVoiceTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      locale: 'zh',
+      text: 'hello',
+      voiceSourceId: 'voice-1',
+    }))
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 })

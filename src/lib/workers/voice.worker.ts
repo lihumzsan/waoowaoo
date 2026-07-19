@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { generateVoiceLine } from '@/lib/voice/generate-voice-line'
 import { generateFreeVoiceVersion } from '@/lib/voice/free-voice'
+import { generateVideoToolFreeVoice, VIDEO_TOOL_FREE_VOICE_TARGET_TYPE } from '@/lib/video-tools/free-voice'
 import { QUEUE_NAME } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
@@ -48,6 +49,23 @@ async function processVoiceTask(job: Job<TaskJobData>) {
     case TASK_TYPE.FREE_VOICE: {
       const versionId = job.data.targetId
       if (!versionId) throw new Error('FREE_VOICE task missing versionId')
+      if (job.data.targetType === VIDEO_TOOL_FREE_VOICE_TARGET_TYPE) {
+        const payload = (job.data.payload || {}) as AnyObj
+        const text = typeof payload.text === 'string' ? payload.text : ''
+        const referenceAudioUrl = typeof payload.referenceAudioUrl === 'string' ? payload.referenceAudioUrl : ''
+        const audioModel = typeof payload.audioModel === 'string' ? payload.audioModel : null
+        await reportTaskProgress(job, 20, { stage: 'generate_free_voice_submit', recordId: versionId })
+        const generated = await generateVideoToolFreeVoice({
+          recordId: versionId,
+          userId: job.data.userId,
+          locale: job.data.locale,
+          text,
+          referenceAudioUrl,
+          audioModel,
+        })
+        await reportTaskProgress(job, 95, { stage: 'generate_free_voice_persist', recordId: versionId })
+        return generated
+      }
       await reportTaskProgress(job, 20, { stage: 'generate_free_voice_submit', versionId })
       const generated = await generateFreeVoiceVersion({
         projectId: job.data.projectId,

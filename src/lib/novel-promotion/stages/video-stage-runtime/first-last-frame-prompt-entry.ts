@@ -118,8 +118,13 @@ export function shouldApplyPromptResult(params: {
   return params.linked && params.requestRevision === params.currentRevision
 }
 
-export function isPromptResultCurrent(requestSignature: string, currentSignature?: string) {
-  return !!currentSignature && requestSignature === currentSignature
+export function isPromptResultCurrent(
+  requestSignature: string,
+  currentSignature?: string,
+  appliedSignature?: string,
+) {
+  return !!currentSignature
+    && (requestSignature === currentSignature || appliedSignature === currentSignature)
 }
 
 export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 'status'>) {

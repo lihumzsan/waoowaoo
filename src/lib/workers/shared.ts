@@ -315,6 +315,9 @@ async function resolveProjectNameForLogging(projectId: string): Promise<void> {
 
 export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>) {
   const data = job.data
+  if (data.persistence === 'transient') {
+    return await handler(job)
+  }
   const taskId = data.taskId
   const logger = buildWorkerLogger(data, job.queueName)
   const startedAt = Date.now()
@@ -655,6 +658,14 @@ export async function reportTaskProgress(job: Job<TaskJobData>, progress: number
       ...nextPayload,
     },
   })
+
+  if (job.data.persistence === 'transient') {
+    await job.updateProgress({
+      progress: value,
+      ...nextPayload,
+    })
+    return
+  }
 
   const updated = await tryUpdateTaskProgress(job.data.taskId, value, nextPayload)
   if (!updated) {

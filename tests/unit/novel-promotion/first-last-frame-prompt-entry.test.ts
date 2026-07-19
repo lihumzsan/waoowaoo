@@ -546,9 +546,12 @@ describe('first/last-frame prompt entry', () => {
     const isCurrent = promptState.isPromptResultCurrent as (
       requestSignature: string,
       currentSignature: string | undefined,
+      appliedSignature?: string,
     ) => boolean
     expect(isCurrent('source-a', 'source-b')).toBe(false)
     expect(isCurrent('source-b', 'source-b')).toBe(true)
+    expect(isCurrent('source-before-smart-duration', 'source-after-smart-duration', 'source-after-smart-duration')).toBe(true)
+    expect(isCurrent('source-before-smart-duration', 'unrelated-source-change', 'source-after-smart-duration')).toBe(false)
   })
 
   it('restores a superseded queued entry so relinking can start a new ensure', async () => {

@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canSubmitVideoSeamConcat,
-  resolveVideoToolTaskTrimFrames,
   resolveVideoToolTaskView,
-  selectCurrentVideoToolTask,
   type UploadedVideo,
   type VideoToolTask,
 } from '@/app/[locale]/workspace/video-tools/video-tools-state'
@@ -21,8 +19,6 @@ function task(overrides: Partial<VideoToolTask>): VideoToolTask {
     id: 'task-1',
     status: 'queued',
     progress: 0,
-    createdAt: '2026-07-16T10:00:00.000Z',
-    updatedAt: '2026-07-16T10:00:00.000Z',
     payload: {},
     result: null,
     error: null,
@@ -62,29 +58,4 @@ describe('video tools state', () => {
     })
   })
 
-  it('resolves history trim counts from result, then payload, then legacy defaults', () => {
-    expect(resolveVideoToolTaskTrimFrames(task({
-      result: { input1TrimEndFrames: 12, input2TrimStartFrames: 3 },
-      payload: { input1TrimEndFrames: 8, input2TrimStartFrames: 9 },
-    }))).toEqual({ input1TrimEndFrames: 12, input2TrimStartFrames: 3 })
-
-    expect(resolveVideoToolTaskTrimFrames(task({
-      result: {},
-      payload: { input1TrimEndFrames: 5, input2TrimStartFrames: 6 },
-    }))).toEqual({ input1TrimEndFrames: 5, input2TrimStartFrames: 6 })
-
-    expect(resolveVideoToolTaskTrimFrames(task({
-      result: null,
-      payload: {},
-    }))).toEqual({ input1TrimEndFrames: 0, input2TrimStartFrames: 1 })
-  })
-
-  it('prefers the newest active task, otherwise the newest task', () => {
-    const completed = task({ id: 'completed', status: 'completed', createdAt: '2026-07-16T12:00:00.000Z' })
-    const active = task({ id: 'active', status: 'processing', createdAt: '2026-07-16T11:00:00.000Z' })
-    const older = task({ id: 'older', status: 'failed', createdAt: '2026-07-16T09:00:00.000Z' })
-
-    expect(selectCurrentVideoToolTask([completed, active, older])?.id).toBe('active')
-    expect(selectCurrentVideoToolTask([completed, older])?.id).toBe('completed')
-  })
 })
