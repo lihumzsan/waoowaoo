@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
-const REQUIRED_KEYS = [
+const COMMON_REQUIRED_KEYS = [
   'DEPLOYMENT_EDITION',
   'PROVIDER_CREDENTIAL_MODE',
   'BILLING_MODE',
@@ -10,11 +10,6 @@ const REQUIRED_KEYS = [
   'NEXTAUTH_SECRET',
   'CRON_SECRET',
   'API_ENCRYPTION_KEY',
-  'ADMIN_USER_IDS',
-  'ADMIN_CREDIT_TOKEN',
-  'BULL_BOARD_USER',
-  'BULL_BOARD_PASSWORD',
-  'TRUSTED_PROXY_HOPS',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'INTERNAL_APP_URL',
@@ -25,6 +20,16 @@ const REQUIRED_KEYS = [
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
 ]
+
+const PRODUCTION_REQUIRED_KEYS = [
+  'ADMIN_USER_IDS',
+  'ADMIN_CREDIT_TOKEN',
+  'BULL_BOARD_USER',
+  'BULL_BOARD_PASSWORD',
+  'TRUSTED_PROXY_HOPS',
+]
+
+const VALIDATION_MODES = new Set(['development', 'production'])
 
 const DEFAULT_MODEL_KEYS = [
   'PLATFORM_DEFAULT_ASSISTANT_MODEL',
@@ -95,6 +100,24 @@ function isHttpsUrl(value) {
   }
 }
 
+function isLoopbackHost(value) {
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'localhost'
+    || normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized === '[::1]'
+}
+
+function isDevelopmentUrl(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:'
+      || (url.protocol === 'http:' && isLoopbackHost(url.hostname))
+  } catch {
+    return false
+  }
+}
+
 function readModelProvider(modelKey) {
   if (isMissing(modelKey)) return null
   const separatorIndex = modelKey.indexOf('::')
@@ -103,6 +126,16 @@ function readModelProvider(modelKey) {
 }
 
 const envFile = process.argv[2] || '.env.cloud.local'
+const modeArgument = process.argv[3] || '--mode=production'
+const validationMode = modeArgument.startsWith('--mode=')
+  ? modeArgument.slice('--mode='.length)
+  : ''
+if (!VALIDATION_MODES.has(validationMode)) {
+  console.error(`CLOUD_ENV_MODE_INVALID:${modeArgument}`)
+  console.error('Use --mode=development or --mode=production.')
+  process.exit(1)
+}
+
 if (!existsSync(envFile)) {
   console.error(`CLOUD_ENV_FILE_MISSING:${envFile}`)
   console.error('Copy .env.cloud.example to .env.cloud.local and fill the private values.')
@@ -110,7 +143,10 @@ if (!existsSync(envFile)) {
 }
 
 const env = readEnvFile(envFile)
-const missing = REQUIRED_KEYS.filter((key) => isMissing(env[key]))
+const requiredKeys = validationMode === 'production'
+  ? [...COMMON_REQUIRED_KEYS, ...PRODUCTION_REQUIRED_KEYS]
+  : COMMON_REQUIRED_KEYS
+const missing = requiredKeys.filter((key) => isMissing(env[key]))
 
 if (env.DEPLOYMENT_EDITION !== 'cloud') {
   missing.push('DEPLOYMENT_EDITION=cloud')
@@ -122,17 +158,44 @@ if (env.BILLING_MODE !== 'ENFORCE') {
   missing.push('BILLING_MODE=ENFORCE')
 }
 
-for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY', 'ADMIN_CREDIT_TOKEN', 'BULL_BOARD_PASSWORD']) {
+for (const key of ['NEXTAUTH_SECRET', 'CRON_SECRET', 'API_ENCRYPTION_KEY']) {
   if (!isMissing(env[key]) && isWeakSecret(env[key])) missing.push(`${key}=strong-secret-at-least-24-characters`)
 }
+if (!isMissing(env.ADMIN_CREDIT_TOKEN) && isWeakSecret(env.ADMIN_CREDIT_TOKEN)) {
+  missing.push('ADMIN_CREDIT_TOKEN=strong-secret-at-least-24-characters')
+}
 
-const allowInsecureLocalhost = env.CLOUD_ENV_ALLOW_INSECURE_LOCALHOST === 'true'
-if (!allowInsecureLocalhost && !isHttpsUrl(env.NEXTAUTH_URL)) missing.push('NEXTAUTH_URL=https://...')
-if (!allowInsecureLocalhost && !isHttpsUrl(env.PAYMENT_PUBLIC_BASE_URL)) missing.push('PAYMENT_PUBLIC_BASE_URL=https://...')
+const isAllowedUrl = validationMode === 'production' ? isHttpsUrl : isDevelopmentUrl
+const requiredUrlDescription = validationMode === 'production'
+  ? 'https://...'
+  : 'https://... or http://localhost'
+if (!isMissing(env.NEXTAUTH_URL) && !isAllowedUrl(env.NEXTAUTH_URL)) {
+  missing.push(`NEXTAUTH_URL=${requiredUrlDescription}`)
+}
+if (!isMissing(env.PAYMENT_PUBLIC_BASE_URL) && !isAllowedUrl(env.PAYMENT_PUBLIC_BASE_URL)) {
+  missing.push(`PAYMENT_PUBLIC_BASE_URL=${requiredUrlDescription}`)
+}
 
 const trustedProxyHops = Number(env.TRUSTED_PROXY_HOPS)
-if (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops <= 0) {
-  missing.push('TRUSTED_PROXY_HOPS=positive-integer')
+if (validationMode === 'production') {
+  if (!isMissing(env.TRUSTED_PROXY_HOPS) && (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops <= 0)) {
+    missing.push('TRUSTED_PROXY_HOPS=positive-integer')
+  }
+} else if (!isMissing(env.TRUSTED_PROXY_HOPS) && (!Number.isSafeInteger(trustedProxyHops) || trustedProxyHops < 0)) {
+  missing.push('TRUSTED_PROXY_HOPS=non-negative-integer')
+}
+
+const bullBoardUserMissing = isMissing(env.BULL_BOARD_USER)
+const bullBoardPasswordMissing = isMissing(env.BULL_BOARD_PASSWORD)
+if (bullBoardUserMissing !== bullBoardPasswordMissing) {
+  missing.push('BULL_BOARD_AUTH=both-user-and-password-or-neither')
+}
+if (!bullBoardPasswordMissing && isWeakSecret(env.BULL_BOARD_PASSWORD)) {
+  missing.push('BULL_BOARD_PASSWORD=strong-secret-at-least-24-characters')
+}
+const bullBoardHost = env.BULL_BOARD_HOST || '127.0.0.1'
+if (validationMode === 'development' && !isLoopbackHost(bullBoardHost) && (bullBoardUserMissing || bullBoardPasswordMissing)) {
+  missing.push('BULL_BOARD_AUTH=required-for-non-loopback-host')
 }
 
 const requiredPlatformKeys = new Set()
