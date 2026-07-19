@@ -66,7 +66,7 @@ const MODEL_TYPES: readonly ProviderCardVisibleType[] = ['llm', 'image', 'video'
 
 export function getAddableModelTypesForProvider(providerId: string): ProviderCardModelType[] {
   const providerKey = getProviderKey(providerId)
-  if (providerKey === 'openrouter') return ['llm', 'video']
+  if (providerKey === 'openrouter') return ['llm', 'image', 'video']
   if (providerKey === 'fal') return ['image', 'video']
   if (providerKey === 'google') return ['llm', 'image', 'video', 'music']
   if (providerKey === 'ark') return ['llm', 'image', 'video']

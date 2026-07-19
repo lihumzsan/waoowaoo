@@ -1,6 +1,7 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { openRouterConnectionTester } from './connection-test'
+import { executeOpenRouterImageGeneration } from './image'
 import {
   createOpenRouterLanguageModel,
   validateOpenRouterLanguageModelResult,
@@ -10,19 +11,23 @@ import { buildOpenRouterSessionId, normalizeOpenRouterSessionId } from './sessio
 import { executeOpenRouterVideoGeneration } from './video'
 
 function describeOpenRouterMediaVariant(
-  modality: 'video',
-  selection: Parameters<NonNullable<AiProviderAdapter['video']>['describe']>[0],
+  modality: 'image' | 'video',
+  selection: Parameters<NonNullable<AiProviderAdapter['image']>['describe']>[0],
 ) {
   return describeMediaVariantBase({
     modality,
     selection,
-    executionMode: 'async',
+    executionMode: modality === 'image' ? 'sync' : 'async',
     optionSchema: resolveOpenRouterOptionSchema(modality, selection.modelId),
   })
 }
 
 export const openRouterAdapter: AiProviderAdapter = {
   providerKey: 'openrouter',
+  image: {
+    describe: (selection) => describeOpenRouterMediaVariant('image', selection),
+    execute: executeOpenRouterImageGeneration,
+  },
   languageModel: {
     create: createOpenRouterLanguageModel,
     validateResult: validateOpenRouterLanguageModelResult,

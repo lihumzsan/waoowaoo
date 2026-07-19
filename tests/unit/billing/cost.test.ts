@@ -55,6 +55,16 @@ describe('billing/cost provider catalog pricing', () => {
     expect(cost).toBeCloseTo(0.288, 8)
   })
 
+  it('charges OpenRouter GPT Image 2 at the underlying OpenAI image rate', () => {
+    const cost = calcImage('openrouter::openai/gpt-image-2', 1, {
+      resolution: '1K',
+      aspectRatio: '9:16',
+      quality: 'high',
+    })
+
+    expect(cost).toBeCloseTo(1.188, 8)
+  })
+
   it('charges OpenRouter Seedance video by provider per-second tiers', () => {
     const cost = calcVideo('openrouter::bytedance/seedance-2.0-fast', '720p', 1, {
       duration: 4,

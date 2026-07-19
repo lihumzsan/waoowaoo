@@ -28,6 +28,7 @@ describe('platform model catalog', () => {
 
     expect(modelKeys).toContain('google::gemini-3.5-flash')
     expect(modelKeys).toContain('openrouter::google/gemini-3.5-flash')
+    expect(modelKeys).toContain('openrouter::openai/gpt-image-2')
     expect(modelKeys).toContain('fal::gpt-image-2')
     expect(modelKeys).toContain('fal::fal-ai/lyria3/pro')
     expect(modelKeys).toContain('ark::doubao-seedance-2-0-260128')
