@@ -5,7 +5,7 @@ import type { ProjectEditScript, ProjectEditShotExecutionPlan, ProjectVideoSegme
 
 /**
  * Logic Specification
- * Authority: CN-01/CN-06/CN-07 and the editScript multi-chapter reference projection.
+ * Authority: CN-01/CN-06/CN-07/CN-10 and the editScript multi-chapter reference projection.
  * Rejects: waiting for workflow refresh or the first stream item before projecting active shot-plan Tasks.
  * Production entry: buildWorkspaceNodeCanvasProjection.
  * Oracle: one stable node and one canonical Task target per active chapter Task before workflow advances.
@@ -143,16 +143,7 @@ describe('multi-chapter shot execution Canvas projection', () => {
       [{ targetType: 'ProjectEditScript', targetId: 'edit-script-1', types: ['edit_shot_execution_plan_generate'] }],
       [{ targetType: 'ProjectEditScript', targetId: 'edit-script-2', types: ['edit_shot_execution_plan_generate'] }],
     ])
-    expect(projection.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        source: workspaceNodeId.editScript('episode-1', 'chapter-1'),
-        target: workspaceNodeId.editShotExecutionPlan('edit-script-1'),
-      }),
-      expect.objectContaining({
-        source: workspaceNodeId.editScript('episode-1', 'chapter-2'),
-        target: workspaceNodeId.editShotExecutionPlan('edit-script-2'),
-      }),
-    ]))
+    expect(projection.edges).toEqual([])
   })
 
   it('projects canonical video Task identities before Segment rows exist', () => {
@@ -239,16 +230,7 @@ describe('multi-chapter shot execution Canvas projection', () => {
       [{ targetType: 'ProjectVideoSegment', targetId: 'video-segment-2', types: ['video_segment'] }],
     ])
     expect(nodes[0]?.position).not.toEqual(nodes[1]?.position)
-    expect(projection.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        source: workspaceNodeId.editScript('episode-1', 'chapter-1'),
-        target: workspaceNodeId.videoPlan('edit-script-1', 1),
-      }),
-      expect.objectContaining({
-        source: workspaceNodeId.editScript('episode-1', 'chapter-2'),
-        target: workspaceNodeId.videoPlan('edit-script-2', 1),
-      }),
-    ]))
+    expect(projection.edges).toEqual([])
     expect(projection.nodes.some((node) => node.data.kind === 'editShotExecutionPlan')).toBe(false)
   })
 })

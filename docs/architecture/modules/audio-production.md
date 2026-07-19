@@ -23,6 +23,7 @@
 - 严格契约与签名：`src/lib/bgm-design/types.ts`、`contract.ts`。
 - 规划输入与 prompt：`src/lib/bgm-design/planning-input.ts`、`prompt.ts`；唯一 route：`src/app/api/projects/[projectId]/plan-bgm-design/route.ts`；唯一 worker：`src/lib/bgm-design/generate.ts`；唯一持久入口：`src/lib/bgm-design/project-data.ts`。
 - BGM presence 与 automation：`src/lib/bgm-design/automation.ts`。
+- BGM 规划流的唯一 presentation adapter：`src/lib/structured-stream/workspace-structured-stream-adapters.ts`；其 TaskEvent 检查点只恢复 Canvas 展示，不是第二个 BgmDesign writer。
 - 配乐能力、prompt 与候选质量：`score-duration.ts`、`lyria-prompt.ts`、`score-quality.ts`；模型能力声明：`src/lib/ai-providers/fal/models.ts`。
 - 收费生成入口：`src/lib/operations/domains/music/generation/music-generation-ops.ts`；生成 worker：`src/lib/bgm-score/generate.ts`。
 - 最终混音：`src/lib/workers/final-video-render.ts`、`src/lib/video-compose/final-render-audio.ts`。

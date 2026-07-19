@@ -12,6 +12,11 @@ import {
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
+import {
+  TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
+  buildTaskStructuredStreamCheckpoint,
+  type TaskStructuredStreamCheckpointWrite,
+} from './structured-stream-checkpoint'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -37,6 +42,7 @@ type TaskMeta = {
 
 type TaskEventModel = {
   create: (args: unknown) => Promise<TaskEventRow>
+  upsert: (args: unknown) => Promise<TaskEventRow>
   findUnique: (args: unknown) => Promise<TaskEventRow | null>
   findMany: (args: unknown) => Promise<TaskEventRow[]>
 }
@@ -68,6 +74,10 @@ function normalizeLifecycleType(type: TaskEventType): TaskLifecycleEventType {
 
 function isStreamEventType(type: string) {
   return type === TASK_SSE_EVENT_TYPE.STREAM
+}
+
+function isStreamCheckpointEventType(type: string) {
+  return type === TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE
 }
 
 function shouldReplayLifecycleRow(type: string) {
@@ -206,7 +216,7 @@ async function mapRowsToReplayEvents(rows: TaskEventRow[]): Promise<TaskSSEEvent
 
   return rows.map((row): TaskSSEEvent => {
     const task = taskMap.get(row.taskId)
-    if (isStreamEventType(row.eventType)) {
+    if (isStreamEventType(row.eventType) || isStreamCheckpointEventType(row.eventType)) {
       return buildStreamEvent({
         id: String(row.id),
         ts: row.createdAt.toISOString(),
@@ -429,29 +439,39 @@ export async function publishTaskStreamEvent(params: {
   targetId?: string | null
   episodeId?: string | null
   payload?: Record<string, unknown> | null
-  persist?: boolean
+  checkpoint: TaskStructuredStreamCheckpointWrite
 }) {
   if (!STREAM_EPHEMERAL_ENABLED) return null
 
-  const persist = params.persist === true
   const normalizedPayload = normalizeStreamPayload(params.taskType, params.payload || null)
-  const event = persist
-    ? await taskEventModel.create({
-        data: {
-          taskId: params.taskId,
-          projectId: params.projectId,
-          userId: params.userId,
-          eventType: TASK_SSE_EVENT_TYPE.STREAM,
-          payload: normalizedPayload,
-        },
-      })
-    : null
-  const ts = (event?.createdAt || new Date()).toISOString()
-  const id = event?.id ? String(event.id) : createEphemeralId()
+  const checkpointedAt = new Date().toISOString()
+  const checkpoint = buildTaskStructuredStreamCheckpoint({
+    taskId: params.taskId,
+    taskType: params.taskType,
+    payload: normalizedPayload,
+    checkpoint: params.checkpoint,
+    checkpointedAt,
+  })
+  if (checkpoint) {
+    await taskEventModel.upsert({
+      where: { idempotencyKey: checkpoint.idempotencyKey },
+      create: {
+        taskId: params.taskId,
+        projectId: params.projectId,
+        userId: params.userId,
+        eventType: TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
+        idempotencyKey: checkpoint.idempotencyKey,
+        payload: checkpoint.payload,
+      },
+      update: {
+        payload: checkpoint.payload,
+      },
+    })
+  }
 
   const message = buildStreamEvent({
-    id,
-    ts,
+    id: createEphemeralId(),
+    ts: checkpointedAt,
     taskId: params.taskId,
     projectId: params.projectId,
     userId: params.userId,
@@ -464,6 +484,33 @@ export async function publishTaskStreamEvent(params: {
 
   await redis.publish(getProjectChannel(params.projectId), JSON.stringify(message))
   return message
+}
+
+export async function listTaskStructuredStreamCheckpointEvents(params: {
+  projectId: string
+  userId: string
+  taskIds: readonly string[]
+  limit?: number
+}): Promise<TaskSSEEvent[]> {
+  const taskIds = Array.from(new Set(params.taskIds.filter((taskId) => taskId.trim().length > 0)))
+  if (taskIds.length === 0) return []
+  const safeLimit = Number.isFinite(params.limit)
+    ? Math.min(Math.max(Math.floor(params.limit ?? 1000), 1), 5000)
+    : 1000
+  const rows = await taskEventModel.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      taskId: { in: taskIds },
+      eventType: TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
+    },
+    orderBy: { id: 'asc' },
+    take: safeLimit + 1,
+  })
+  if (rows.length > safeLimit) {
+    throw new Error(`TASK_STRUCTURED_STREAM_CHECKPOINT_LIMIT_EXCEEDED:${String(safeLimit)}`)
+  }
+  return await mapRowsToReplayEvents(rows)
 }
 
 export async function listEventsAfter(projectId: string, afterId: number, limit = 200) {

@@ -10,8 +10,18 @@ import {
   WORKSPACE_CANVAS_OPERATION_FOCUS_KIND_PRIORITY,
   WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY,
 } from '@/features/project-workspace/canvas/registry/workspace-canvas-focus-policy'
+import { STRUCTURED_STREAM_ADAPTERS } from '@/lib/structured-stream/workspace-structured-stream-adapters'
 
 const definitions = Object.values(WORKSPACE_CANVAS_NODE_DEFINITIONS)
+
+it('keeps every Canvas stream capability backed by the shared recoverable adapter registry', () => {
+  const canvasStreamKinds = new Set(definitions.flatMap((definition) => (
+    definition.stream.kind === 'supported' ? [definition.stream.value] : []
+  )))
+  const adapterStreamKinds = new Set(STRUCTURED_STREAM_ADAPTERS.map((adapter) => adapter.streamKind))
+
+  expect([...adapterStreamKinds].sort()).toEqual([...canvasStreamKinds].sort())
+})
 
 describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
   const fixture = WORKSPACE_CANVAS_CONFORMANCE_FIXTURES[definition.conformanceFixture]

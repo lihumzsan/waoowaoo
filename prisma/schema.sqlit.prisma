@@ -634,13 +634,14 @@ model Task {
 }
 
 model TaskEvent {
-  id        Int      @id @default(autoincrement())
-  taskId    String
-  projectId String
-  userId    String
-  eventType String
-  payload   Json?
-  createdAt DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  taskId         String
+  projectId      String
+  userId         String
+  eventType      String
+  idempotencyKey String?  @unique
+  payload        Json?
+  createdAt      DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

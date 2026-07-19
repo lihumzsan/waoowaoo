@@ -1,11 +1,13 @@
 import type { WorkspaceCanvasNodeData } from '../node-canvas-types'
+import type { WorkspaceCanvasStructuredStreamKind } from '@/lib/structured-stream/workspace-structured-stream-adapters'
 
-export type WorkspaceCanvasStreamKind =
-  | 'editSourceScript'
-  | 'editBible'
-  | 'editScript'
-  | 'editShotExecutionPlan'
-  | 'bgmScore'
+export type WorkspaceCanvasStreamKind = WorkspaceCanvasStructuredStreamKind
+
+export interface WorkspaceStructuredStreamHandoffIdentity {
+  readonly taskId: string
+  readonly targetType: string | null
+  readonly targetId: string | null
+}
 
 export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   WorkspaceCanvasNodeData,

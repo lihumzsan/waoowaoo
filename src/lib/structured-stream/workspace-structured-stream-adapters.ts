@@ -81,6 +81,7 @@ export interface StructuredStreamItem {
 
 export interface StructuredStreamAdapter {
   readonly key: StructuredStreamAdapterKey
+  readonly streamKind: WorkspaceCanvasStructuredStreamKind
   readonly taskTypes: readonly TaskType[]
   readonly stepIds: readonly string[]
   readonly mode: 'array' | 'object'
@@ -88,6 +89,13 @@ export interface StructuredStreamAdapter {
   readonly parseItem: (value: unknown) => StructuredStreamParsedItem
   readonly itemKey: (item: StructuredStreamParsedItem, fallbackIndex: number) => string
 }
+
+export type WorkspaceCanvasStructuredStreamKind =
+  | 'editSourceScript'
+  | 'editBible'
+  | 'editScript'
+  | 'editShotExecutionPlan'
+  | 'bgmScore'
 
 export interface TextStreamAdapter {
   readonly key: TextStreamAdapterKey
@@ -104,6 +112,7 @@ function numberKey(value: number | null | undefined, fallbackIndex: number): str
 export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   {
     key: 'sourceScript.segments',
+    streamKind: 'editSourceScript',
     taskTypes: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
     mode: 'array',
@@ -118,6 +127,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'productionPlanning.globalBible',
+    streamKind: 'editBible',
     taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL],
     mode: 'object',
@@ -130,6 +140,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'productionPlanning.beats',
+    streamKind: 'editBible',
     taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET],
     mode: 'array',
@@ -144,6 +155,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'productionPlanning.ledgerEvents',
+    streamKind: 'editBible',
     taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER],
     mode: 'array',
@@ -158,6 +170,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'productionPlanning.emotionalCues',
+    streamKind: 'editBible',
     taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE],
     mode: 'array',
@@ -172,6 +185,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'editScript.shots',
+    streamKind: 'editScript',
     taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE],
     mode: 'array',
@@ -186,6 +200,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'shotExecutionPlan.shots',
+    streamKind: 'editShotExecutionPlan',
     taskTypes: [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN],
     mode: 'array',
@@ -200,6 +215,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'bgmDesign.scoreCue',
+    streamKind: 'bgmScore',
     taskTypes: [TASK_TYPE.BGM_DESIGN_PLAN],
     stepIds: ['bgm_design_plan'],
     mode: 'object',

@@ -142,10 +142,14 @@ export function appendWorkspacePlanningProjection(context: WorkspaceNodeProjecti
       editBible.status === 'confirmed' ||
       (editBible.status === 'failed' && editBible.sourceKind !== 'prompt_generated_outline')),
   )
+  const hasProductionPlanningResource = hasProductionPlanningArtifact || Boolean(
+    editBible?.status === 'generating'
+    && editBible.sourceKind === 'prompt_generated_script',
+  )
   const bibleStreamAvailable = Boolean(editBibleStreamTarget) || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const bibleProjection = resolveWorkspaceCanvasNodeMaterialization('editBible', activeTaskTargets, {
     identityAvailable: true,
-    resourceAvailable: hasProductionPlanningArtifact,
+    resourceAvailable: hasProductionPlanningResource,
     streamAvailable: bibleStreamAvailable,
     submissionAvailable: editScriptPending,
     targetId: editBible?.id ?? null,

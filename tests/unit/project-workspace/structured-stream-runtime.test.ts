@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildStreamRuntimeEntries,
   isTerminalStructuredStreamLifecycle,
   processStructuredStreamEvent,
   snapshotsFromAccumulators,
-  type StructuredStreamSnapshot,
 } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime'
+import {
+  buildStreamRuntimeEntries,
+  type StructuredStreamSnapshot,
+} from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-projection'
 import { markTaskEntriesForTerminalHandoff } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-handoff'
 import { addBoundedIdentity } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-identity'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
@@ -167,6 +169,86 @@ describe('workspace structured stream runtime', () => {
       lastSeq: 1,
     })
     expect(lateOldAttempt).toEqual(retryAttempt)
+  })
+
+  it('replaces an older run at the same step attempt instead of merging retry output', () => {
+    const firstRun = processStructuredStreamEvent(new Map(), chunk({
+      seq: 1,
+      attempt: 1,
+      streamRunId: 'run-old',
+    }))
+    const replacementRun = processStructuredStreamEvent(firstRun, chunk({
+      seq: 1,
+      attempt: 1,
+      streamRunId: 'run-current',
+    }))
+
+    expect([...replacementRun.values()]).toHaveLength(1)
+    expect([...replacementRun.values()][0]).toMatchObject({
+      streamRunId: 'run-current',
+      stepAttempt: 1,
+      lastSeq: 1,
+    })
+  })
+
+  it('hydrates an absolute recovery checkpoint and continues with the next live seq', () => {
+    const checkpoint = {
+      ...chunk({ seq: 3, streamRunId: 'run-recovered', delta: '{"segments":[' }),
+      payload: {
+        ...chunk({ seq: 3, streamRunId: 'run-recovered' }).payload,
+        streamCheckpoint: {
+          fromSeq: 1,
+          throughSeq: 3,
+          checkpointedAt: '2026-07-11T00:00:03.000Z',
+        },
+        stream: {
+          kind: 'text',
+          lane: 'main',
+          seq: 3,
+          delta: '{"segments":[',
+        },
+      },
+    } satisfies TaskSSEEvent
+    const hydrated = processStructuredStreamEvent(new Map(), checkpoint)
+    const continued = processStructuredStreamEvent(hydrated, chunk({
+      seq: 4,
+      streamRunId: 'run-recovered',
+      delta: ']}',
+    }))
+
+    expect([...hydrated.values()][0]?.lastSeq).toBe(3)
+    expect([...continued.values()][0]?.lastSeq).toBe(4)
+  })
+
+  it('replaces a partial accumulator with a newer absolute checkpoint', () => {
+    const partial = processStructuredStreamEvent(new Map(), chunk({
+      seq: 1,
+      streamRunId: 'run-recovered',
+    }))
+    const checkpoint = {
+      ...chunk({ seq: 4, streamRunId: 'run-recovered' }),
+      payload: {
+        ...chunk({ seq: 4, streamRunId: 'run-recovered' }).payload,
+        streamCheckpoint: {
+          fromSeq: 1,
+          throughSeq: 4,
+          checkpointedAt: '2026-07-11T00:00:04.000Z',
+        },
+        stream: {
+          kind: 'text',
+          lane: 'main',
+          seq: 4,
+          delta: '{"segments":[]}',
+        },
+      },
+    } satisfies TaskSSEEvent
+    const recovered = processStructuredStreamEvent(partial, checkpoint)
+
+    expect([...recovered.values()]).toHaveLength(1)
+    expect([...recovered.values()][0]).toMatchObject({
+      streamRunId: 'run-recovered',
+      lastSeq: 4,
+    })
   })
 
   it('bounds terminal stream identities instead of growing for the lifetime of the tab', () => {

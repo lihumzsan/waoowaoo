@@ -15,7 +15,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-02C — 节点与动作不受 Workflow gating。** 任一持久专业资源、CreativeResource、active Task 或 structured stream 事实都可按自身 canonical identity 物化；不得用 Workflow step、stage rank、`allowedOperationIds` 或推荐位置隐藏。卡片动作只来自节点 registry、Operation channel、显式 scope/input 与计费计划；主链 recommendation 只用于非约束性引导。
 - **CN-02D — ResourceCard 优先复用专业节点。** `CreativeResource.origin(sourceType, sourceId)` 能与已有专业节点 identity 对齐时，Resource provenance、Lineage、Prompt 和模型信息必须附加到该专业节点，不得再生成一个重复通用节点；无法匹配专业 renderer 时才创建通用 text/image/audio/video ResourceCard。`schemaId` 表达专业语义，`mediaType` 只选择 fallback。
 - **CN-02E — 候选与采用不改变节点事实。** 同一 candidateSet 的多个 Resource 都保持独立 identity；选中项来自持久 Binding，未选候选仍可见且可继续被引用。renderer 不得通过数组位置、当前 head 或本地选中态覆盖 canonical Binding。
-- **CN-03 — 流式预览无裁决权。** 每种 stream payload 必须复用 worker 接收的 production raw schema，并声明 stable item key 与 merge rule。stream parse 失败不写业务失败，completed stream 只是可丢弃 presentation handoff。声音阶段只有 `bgm_design_plan` 一个 planning stream 和一个 BGM 节点，并以同一个 BgmDesign taskId 完成正式 Query 交接。生成 Task 只提供 MusicScore lifecycle，不得重新解释 plan。
+- **CN-03 — 流式预览无裁决权。** 每种 stream payload 必须在共享 adapter registry 复用 worker 接收的 production raw schema，并声明 stream kind、stable item key 与 merge rule。实时 delta 与刷新恢复的绝对检查点必须进入同一 accumulator；检查点只保存 presentation，不能写业务状态。stream parse 失败不写业务失败，completed stream 只是可丢弃 presentation handoff；释放必须精确匹配 `taskId + targetType + targetId`，且同 taskId 的正式 Query owner 已终态。声音阶段只有 `bgm_design_plan` 一个 planning stream 和一个 BGM 节点，并以同一个 BgmDesign taskId 完成正式 Query 交接。生成 Task 只提供 MusicScore lifecycle，不得重新解释 plan。
 - **CN-04 — 生命周期只有一个 resolver。** 持久资源、Task runtime、stream presentation 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据 `generating`、有无字段、timer 或 refetch 推断 succeeded/failed。
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
 - **CN-06 — 视频节点只有 Segment。** Canvas 不存在 Storyboard、Panel Image、Shot Image、VideoGroup 或单镜头/连续/全能参考模式分支。每个 `videoPlan` 节点只投影一个 `ProjectVideoSegment`，展示时长、所属镜头、continuity 和成品视频；其收费 action 必须原样携带该节点的 `chapterId + editScriptId + segmentId`，报价与执行不得退化为 episode 批量 scope。
@@ -32,7 +32,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - 计划/资产/执行投影：`workspace-node-{planning,asset-execution}-projection.ts`。
 - Segment 投影：`workspace-node-video-segment-projection.ts`；音频/成片：`workspace-node-audio-final-projection.ts`。
 - 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
-- structured stream：`src/features/project-workspace/canvas/structured-stream/**`。
+- structured stream adapter registry：`src/lib/structured-stream/workspace-structured-stream-adapters.ts`；累积、投影与精确 handoff：`src/features/project-workspace/canvas/structured-stream/**`；恢复检查点协议：`src/lib/task/structured-stream-checkpoint.ts`。
 - 资源通知契约：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`。
 
 ## 验证
@@ -46,6 +46,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 
 - BGM/环境音的生成 Task 曾覆盖资源 `taskId`，Canvas 又把该字段当作规划 stream 的终态 owner，导致正式资源虽已成功，规划 presentation 仍会在交接时短暂清空。第一次修正为两个资源分别增加 `planTaskId`，随后虽统一为 AudioDesign stream，仍保留两个节点。当前只剩 `bgm_design_plan` adapter、BGM 节点和 BgmDesign taskId 交接；主 Journey 的同一 observer 对 Task identity、presentation 与正式资源交接连续性 fail closed，并拒绝旧节点回流。
 - 环境音链删除后，BGM 节点仍顺序承载 BgmDesign 与 MusicScore；主 Golden 首次暴露 BGM 空窗，完整 canonical suite 又稳定复现源剧本同类空窗。第一次根因是共享 release effect 用尚未合并 Task runtime 的原始投影判断可释放，DOM 却消费唯一 resolver 的最终 View；当前 release 只读取 `resolvedProjectedNodes`。解除 Workflow 占位后又暴露第二个同根因：Episode API 把 BgmDesign/MusicScore 错误包在必须先存在 FinalOutput 的汇总里，真实 BGM 已成功却没有正式 View 接手 stream。当前 Episode media View 在 BgmDesign、MusicScore 或 FinalOutput 任一真实资源存在时成立，BGM identity 仍为 episode，FinalOutput identity 只在真实渲染记录存在时出现；主 Golden observer 同时反证两种提前消失。
+- 上述防线仍只覆盖同一挂载周期：结构化 accumulator 是组件 Map，Task 生命周期可恢复但 stream delta 只经 Redis 广播；processing 刷新后，Task/正式资源最终都正确，两个镜头执行计划与 BGM presentation 仍出现空窗。当前共享 adapter registry 同时作为可恢复能力声明，TaskEvent 唯一入口按 logical lane upsert 绝对检查点，SSE bootstrap 用不推进 cursor 的版本化 snapshot 恢复，客户端可从 `throughSeq` 继续实时 seq；终态释放从 taskId 粗粒度删除收紧为 task+target owner。制作规划节点只因持久 `status=generating + prompt_generated_script` 或真实 artifact/Task/stream 物化，不再凭 sourceKind 创建空卡；旧多章节测试中的推断边已按 CN-10 删除。
 
 - Storyboard/Panel 曾把“文本镜头记录存在”误解释为“图片已成功”，18 个未提交图片 Task 的节点因此同时显示成功。首次修正只分离 Panel 与媒体 lifecycle，仍保留了不再需要的分镜图阶段。当前防线直接删除 Panel/图片节点与全部入口。
 - 多章节“全部”范围曾因 nullable 单实例 `editScript` 而不投影任何 VideoGroup，最终时间线却另外统计到视频；后续修复又依赖 `segmentIndex/gridMode`。当前投影从正式 `ProjectVideoSegment` 集合展平，identity 不再来自位置或生成模式。

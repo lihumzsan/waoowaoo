@@ -11,6 +11,12 @@ interface TargetedTerminalHandoffEntry extends TerminalHandoffEntry {
   readonly targetId: string | null
 }
 
+interface ExactTerminalHandoffIdentity {
+  readonly taskId: string
+  readonly targetType: string | null
+  readonly targetId: string | null
+}
+
 export function isTerminalHandoffResourceCurrent(input: {
   readonly terminalHandoff: boolean
   readonly streamTaskId: string
@@ -66,6 +72,26 @@ export function removeTargetTerminalHandoffs<T extends TargetedTerminalHandoffEn
   let changed = false
   next.forEach((entry, key) => {
     if (!entry.terminalHandoff || entry.targetType !== targetType || entry.targetId !== targetId) return
+    next.delete(key)
+    changed = true
+  })
+  return changed ? next : current
+}
+
+export function removeExactTerminalHandoffs<T extends TargetedTerminalHandoffEntry>(
+  current: ReadonlyMap<string, T>,
+  identities: readonly ExactTerminalHandoffIdentity[],
+): ReadonlyMap<string, T> {
+  if (identities.length === 0) return current
+  const identityKeys = new Set(identities.map((identity) => (
+    [identity.taskId, identity.targetType ?? '', identity.targetId ?? ''].join('\u0000')
+  )))
+  const next = new Map(current)
+  let changed = false
+  next.forEach((entry, key) => {
+    if (!entry.terminalHandoff) return
+    const identityKey = [entry.taskId, entry.targetType ?? '', entry.targetId ?? ''].join('\u0000')
+    if (!identityKeys.has(identityKey)) return
     next.delete(key)
     changed = true
   })

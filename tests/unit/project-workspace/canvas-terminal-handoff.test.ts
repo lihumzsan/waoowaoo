@@ -7,6 +7,7 @@ import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/can
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import type { ProjectEditBible } from '@/types/project'
+import { removeExactTerminalHandoffs } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-handoff'
 
 /**
  * Logic Specification
@@ -69,6 +70,31 @@ function editBible(status: ProjectEditBible['status'], sourceKind: string): Proj
 }
 
 describe('Canvas terminal handoff', () => {
+  it('releases only the exact task and target owner', () => {
+    const current = new Map([
+      ['chapter-a', {
+        taskId: 'task-shared',
+        targetType: 'ProjectEditScript',
+        targetId: 'script-a',
+        terminalHandoff: true,
+      }],
+      ['chapter-b', {
+        taskId: 'task-shared',
+        targetType: 'ProjectEditScript',
+        targetId: 'script-b',
+        terminalHandoff: true,
+      }],
+    ])
+
+    const released = removeExactTerminalHandoffs(current, [{
+      taskId: 'task-shared',
+      targetType: 'ProjectEditScript',
+      targetId: 'script-a',
+    }])
+
+    expect([...released.keys()]).toEqual(['chapter-b'])
+  })
+
   it('keeps the durable source and planning nodes materialized without active Task or stream facts', () => {
     const sourceProjection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
