@@ -48,7 +48,7 @@ Out of scope: global voice selection, changing character voice configuration, da
 - Consumes: `createVideoToolFreeVoiceTask({ userId, locale, requestId, text, projectId, characterId })`.
 - Produces: a `VideoToolFreeVoiceRecord` with optional compatibility fields `projectId`, `projectName`, `characterId`, and `characterName`; a transient `TaskJobData` whose `projectId` is the real project ID.
 
-- [ ] **Step 1: Write the failing service tests**
+- [x] **Step 1: Write the failing service tests**
 
 Add tests that mock Prisma, model resolution, Redis, and the queue. The success case must assert the lookup and payload:
 
@@ -76,13 +76,13 @@ expect(result.record).toMatchObject({
 
 Add isolated failures for an unowned/missing project, a character outside the selected project, and a character without `customVoiceUrl`; each must reject before `addTaskJob` runs.
 
-- [ ] **Step 2: Run the service test and verify RED**
+- [x] **Step 2: Run the service test and verify RED**
 
 Run: `npx vitest run tests/unit/video-tools/free-voice-project-source.test.ts`
 
 Expected: FAIL because `createVideoToolFreeVoiceTask` still accepts `voiceSourceId` and queries `globalVoice`.
 
-- [ ] **Step 3: Implement the minimal server-side source resolution**
+- [x] **Step 3: Implement the minimal server-side source resolution**
 
 Change the input and lookup flow to:
 
@@ -112,13 +112,13 @@ if (!character.customVoiceUrl) {
 
 Pass `project.novelPromotionData.audioModel` to model selection, write project/character snapshot fields to Redis, use `character.customVoiceUrl` in the job payload, and set `jobData.projectId = project.id`. Keep the existing TTL and transient persistence unchanged.
 
-- [ ] **Step 4: Run the service and Redis tests and verify GREEN**
+- [x] **Step 4: Run the service and Redis tests and verify GREEN**
 
 Run: `npx vitest run tests/unit/video-tools/free-voice-project-source.test.ts tests/unit/video-tools/free-voice-redis.test.ts tests/unit/worker/voice-worker.test.ts`
 
 Expected: all selected tests pass with zero failures.
 
-- [ ] **Step 5: Commit the server behavior**
+- [x] **Step 5: Commit the server behavior**
 
 ```bash
 git add src/lib/video-tools/free-voice.ts tests/unit/video-tools/free-voice-project-source.test.ts
@@ -135,7 +135,7 @@ git commit -m "fix(video-tools): use project character voice source"
 - Consumes: authenticated JSON `{ text: string, projectId: string, characterId: string }`.
 - Produces: the existing async response containing `record` and `taskId`.
 
-- [ ] **Step 1: Write failing route-contract tests**
+- [x] **Step 1: Write failing route-contract tests**
 
 Replace the old `voiceSourceId` fixture with:
 
@@ -149,13 +149,13 @@ body: {
 
 Assert `createVideoToolFreeVoiceTaskMock` receives both IDs. Add table-driven missing-field cases for `projectId` and `characterId`, expecting HTTP 400 and no service call.
 
-- [ ] **Step 2: Run the route test and verify RED**
+- [x] **Step 2: Run the route test and verify RED**
 
 Run: `npx vitest run tests/integration/api/contract/video-tools-routes.test.ts`
 
 Expected: FAIL because the route still reads `voiceSourceId`.
 
-- [ ] **Step 3: Implement the route input mapping**
+- [x] **Step 3: Implement the route input mapping**
 
 Read trimmed strings for `text`, `projectId`, and `characterId`; reject when any are empty; call:
 
@@ -170,13 +170,13 @@ await createVideoToolFreeVoiceTask({
 })
 ```
 
-- [ ] **Step 4: Run the contract test and verify GREEN**
+- [x] **Step 4: Run the contract test and verify GREEN**
 
 Run: `npx vitest run tests/integration/api/contract/video-tools-routes.test.ts`
 
 Expected: all video-tools route tests pass.
 
-- [ ] **Step 5: Commit the API contract**
+- [x] **Step 5: Commit the API contract**
 
 ```bash
 git add src/app/api/video-tools/free-voice/route.ts tests/integration/api/contract/video-tools-routes.test.ts
@@ -196,7 +196,7 @@ git commit -m "fix(video-tools): require project character for free voice"
 - Consumes: `GET /api/projects?page=1&pageSize=1000`, `useProjectCharacters(projectId)`, and the new free-voice POST contract.
 - Produces: project select, dependent character select, disabled missing-voice options, and source-labelled result cards.
 
-- [ ] **Step 1: Write failing client-state regression tests**
+- [x] **Step 1: Write failing client-state regression tests**
 
 Test pure option and request derivation without adding a DOM-testing dependency:
 
@@ -221,13 +221,13 @@ expect(buildFreeVoiceSubmitInput({
 
 Add invalid cases for missing text, project, character, or reference audio. Read the component source and assert it imports `useProjectCharacters`, does not import `useGlobalVoices`, and clears `characterId` in the project change handler.
 
-- [ ] **Step 2: Run the component test and verify RED**
+- [x] **Step 2: Run the component test and verify RED**
 
 Run: `npx vitest run tests/unit/video-tools/free-voice-tool-state.test.ts`
 
 Expected: FAIL because the state module does not exist and the current component uses the global-voice hook.
 
-- [ ] **Step 3: Implement the client data and selection flow**
+- [x] **Step 3: Implement the client data and selection flow**
 
 Implement `buildProjectCharacterOptions` and `buildFreeVoiceSubmitInput`, then replace `useGlobalVoices` with `useProjectCharacters`. Load project options once through the existing projects endpoint. Maintain `projectId` and `characterId`; on project change run:
 
@@ -238,11 +238,11 @@ setCharacterId('')
 
 Render project and character selects in a responsive two-column grid. Character options use `disabled={!character.customVoiceUrl}` and append the localized missing-reference suffix. Submit `text`, `projectId`, and `characterId`. Result cards display `projectName · characterName` when both snapshots exist, otherwise retain `voiceName` for old Redis records.
 
-- [ ] **Step 4: Add matching Chinese and English messages**
+- [x] **Step 4: Add matching Chinese and English messages**
 
 Add the same keys to both locales: `project`, `selectProject`, `loadingProjects`, `emptyProjects`, `character`, `selectProjectFirst`, `selectCharacter`, `loadingCharacters`, `emptyCharacters`, `missingReference`, and `errors.loadProjectsFailed`. Update the description to say that a project and its character reference voice are required.
 
-- [ ] **Step 5: Run component and message checks and verify GREEN**
+- [x] **Step 5: Run component and message checks and verify GREEN**
 
 Run: `npx vitest run tests/unit/video-tools/free-voice-tool-state.test.ts tests/unit/video-tools/video-tools-page.test.ts`
 
@@ -250,7 +250,7 @@ Run: `node -e "const fs=require('node:fs'); const zh=JSON.parse(fs.readFileSync(
 
 Expected: both commands exit zero.
 
-- [ ] **Step 6: Commit the frontend behavior**
+- [x] **Step 6: Commit the frontend behavior**
 
 ```bash
 git add src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx src/app/[locale]/workspace/video-tools/free-voice-tool-state.ts messages/zh/videoTools.json messages/en/videoTools.json tests/unit/video-tools/free-voice-tool-state.test.ts
@@ -266,7 +266,7 @@ git commit -m "fix(video-tools): select project character reference voice"
 - Consumes: completed Tasks 1-3.
 - Produces: fresh automated and browser evidence plus an updated delivery record.
 
-- [ ] **Step 1: Run focused and repository checks**
+- [x] **Step 1: Run focused and repository checks**
 
 Run:
 
@@ -294,11 +294,11 @@ Open `/zh/workspace/video-tools` in the authenticated local app. Capture:
 
 Verify project switching clears the role, missing-reference roles are disabled and labelled, a configured role enables generation when text is present, controls share coherent heights and baselines, and there is no horizontal overflow.
 
-- [ ] **Step 3: Update Delivery Record with exact evidence**
+- [x] **Step 3: Update Delivery Record with exact evidence**
 
 Record commands, pass/fail counts, screenshot paths, viewport/route/state, actual implementation, deviations, risks, and follow-ups in this file.
 
-- [ ] **Step 4: Commit delivery evidence**
+- [x] **Step 4: Commit delivery evidence**
 
 ```bash
 git add docs/superpowers/plans/2026-07-19-video-tools-project-character-free-voice.md
@@ -311,10 +311,10 @@ git commit -m "docs: record project free voice verification"
 | --- | --- | --- |
 | User must select a project before a character | Task 3 dependent selectors | Client-state/source test and browser interaction |
 | Characters come only from the selected project | `useProjectCharacters(projectId)` plus server ownership lookup | Client-state/source test and service test |
-| Missing-reference characters stay visible but disabled | Character option state | Client-state test and desktop screenshot |
+| Missing-reference characters stay visible but disabled | Character option state | Client-state test; authenticated browser data had no missing-reference character to capture |
 | Cross-project and unowned sources are rejected | Project and character Prisma constraints | Service failure tests |
 | Generation uses the project model and real project attribution | Service model resolution and `TaskJobData.projectId` | Queue-payload assertion |
-| Results identify project and character | Redis snapshot and result heading | Service test and browser screenshot |
+| Results identify project and character | Redis snapshot and result heading | Service test; the authenticated Redis list was empty and no live generation was submitted during acceptance |
 | Transient one-day behavior remains intact | Existing Redis storage path | Redis TTL regression test |
 | Layout remains aligned and responsive | Responsive grid using existing glass tokens | Desktop and mobile screenshots |
 
@@ -329,7 +329,7 @@ git commit -m "docs: record project free voice verification"
 ## Delivery Metadata
 
 - Plan Path: `docs/superpowers/plans/2026-07-19-video-tools-project-character-free-voice.md`
-- Plan Status: approved, implementation in progress
+- Plan Status: implementation complete; verification recorded with one browser-data gap
 - Evidence Profile: standard
 - Story ID: not requested
 - Task IDs: not requested; Superpowers Tasks 1-4 map to one user-visible bug-fix slice
@@ -341,27 +341,49 @@ git commit -m "docs: record project free voice verification"
 
 ### Actual Implementation
 
-No production implementation has been applied at plan creation time.
+The free-voice server contract now requires `projectId` and `characterId`, authorizes the user-owned project and a character belonging to that project's novel-promotion data, rejects missing reference audio before queueing, resolves the project's audio model, snapshots project and character identity into the transient Redis record, and attributes the queued task to the real project ID. The Redis-only `86_400`-second TTL remains unchanged.
+
+The API route trims and validates `text`, `projectId`, and `characterId`. The client now loads the existing project list, loads characters only for the selected project, clears the selected character when the project changes, keeps missing-reference characters visible but disabled with localized copy, submits the new request shape, and displays `projectName · characterName` for new result snapshots with the existing `voiceName` fallback for older records.
 
 ### Plan Deviations
 
-No deviations recorded at plan creation time.
+There was no production implementation deviation. Browser acceptance could not exercise the missing-reference option because the two projects available to the authenticated account contained 19 characters in total and every rendered character option had reference audio. No user data was created or modified to manufacture that state.
+
+No live generation was submitted during browser acceptance, so the empty authenticated result panel did not provide a live result-card identity screenshot. Project/character result attribution remains covered by the service and Redis assertions.
 
 ### Impact
 
-Planned impact is limited to the video-tools free-voice UI, its POST contract, transient source resolution, localized copy, and focused tests.
+Impact is limited to the video-tools free-voice UI, its POST contract, transient project-character source resolution, localized copy, and focused tests. No schema, migration, persistent free-voice history, dependency, or seam-concat change was introduced.
 
 ### Verification
 
-The design has been approved; implementation verification has not run yet.
+Fresh automated verification on 2026-07-19:
+
+- `npx vitest run tests/unit/video-tools/free-voice-project-source.test.ts tests/unit/video-tools/free-voice-redis.test.ts tests/unit/video-tools/free-voice-tool-state.test.ts tests/unit/video-tools/video-tools-page.test.ts tests/unit/worker/voice-worker.test.ts tests/integration/api/contract/video-tools-routes.test.ts` exited `0`: 6 test files passed, 38 tests passed, 0 failed, duration 1.72 seconds. The route suite's expected rejection cases emitted error logs while their assertions passed.
+- `npm run lint -- 'src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx' 'src/app/[locale]/workspace/video-tools/free-voice-tool-state.ts' 'src/app/api/video-tools/free-voice/route.ts' 'src/lib/video-tools/free-voice.ts'` exited `0`: 0 errors and 2 `react-hooks/exhaustive-deps` warnings at `FreeVoiceToolCard.tsx:57` about the `characters` fallback expression used by the two `useMemo` dependency lists.
+- `npm run typecheck` exited `0` with no TypeScript diagnostics.
+- `git diff --check HEAD~3..HEAD` exited `0` with no output.
+
+Authenticated real-browser acceptance used the checkout-owned local app at `http://localhost:3000/zh/workspace/video-tools`; the existing Next.js listener on port 3000 belonged to this checkout, rendered the committed UI, and did not require a restart. A new-page load completed with no browser warning or error logs.
+
+- Initial state: the character selector was disabled with `请先选择项目` until a project was selected.
+- Project-scoped population: selecting `蛊真人后传` exposed 13 characters; selecting `mountain` exposed 6. No global voice list was present.
+- Reset interaction: after selecting `蛊真人后传 · 方源`, switching to `mountain` immediately reset the character value to empty, showed the loading state, and left generation disabled.
+- Enabled interaction: selecting `mountain · 陈迹` with text `浏览器验收测试文本` enabled `生成自由配音`; no generation was submitted.
+- Missing-reference state: all 19 authenticated character options were enabled, so the real account did not supply a missing-reference role. The disabled-and-suffixed behavior passed the focused client-state test but remains unproven by a live screenshot.
+- Desktop CSS viewport `1536x960`: the project and character selects were each 43.75 px high with identical 363.70 px center lines; the document and free-voice card both reported no horizontal overflow (`1215 == 1215` card client/scroll width). Screenshot: `/Users/tigli/workspace/work/github/waoowaoo/.superpowers/sdd/evidence/task-4-free-voice-desktop-1536x960.png` (raw PNG 1920x1200 because the browser session used a 0.8 device scale/zoom).
+- Mobile CSS viewport `390x844`: project and character fields stacked vertically; both selects measured 316.76x43.75 px, the generate button remained inside the card, and document/card overflow checks both passed (`390 == 390` document width and `357 == 357` card width). Screenshot: `/Users/tigli/workspace/work/github/waoowaoo/.superpowers/sdd/evidence/task-4-free-voice-mobile-390x844.png` (raw PNG 488x1054 at the same browser scale).
+- Screenshot review: control outer boxes and selected text were visually centered and coherent on desktop and mobile; the mobile reading order was continuous, with no clipped selector or horizontal scroll. The Next.js development toolbar visible near the screenshot bottom is a development-only overlay, not application content.
 
 ### Remaining Risks
 
-The risks listed above remain open until implementation and browser acceptance complete.
+The release risks listed above remain applicable. Browser acceptance still needs authenticated data containing at least one character without `customVoiceUrl` to prove the disabled `(缺少参考音频)` option visually. A disposable live generation would also be required if live result-card identity evidence is mandatory rather than the existing service/Redis assertions.
+
+Focused lint passes but retains the two `react-hooks/exhaustive-deps` warnings described above; they did not affect this acceptance run.
 
 ### Follow-ups
 
-No follow-up feature is planned beyond completing Tasks 1-4.
+Provide or identify an authenticated project containing a missing-reference character, then repeat the desktop capture without changing production code. If live result rendering must also be proven, authorize one disposable free-voice generation and capture the resulting `projectName · characterName` card.
 
 ### ZenTao Closeout
 
