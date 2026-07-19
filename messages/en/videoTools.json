@@ -44,13 +44,20 @@
   },
   "freeVoice": {
     "title": "Free Voice",
-    "description": "Choose a reference voice from the asset library, enter text, and generate one temporary voice clip.",
+    "description": "A project and its character reference voice are required to generate one temporary voice clip.",
     "ttl": "Redis stores it for 1 day",
-    "voice": "Reference voice",
+    "project": "Project",
+    "selectProject": "Select a project",
+    "loadingProjects": "Loading projects",
+    "emptyProjects": "No projects available",
+    "character": "Character",
+    "selectProjectFirst": "Select a project first",
+    "selectCharacter": "Select a character",
+    "loadingCharacters": "Loading characters",
+    "emptyCharacters": "No characters in this project",
+    "missingReference": "missing reference audio",
     "text": "Voice text",
     "textPlaceholder": "Enter the text to read aloud",
-    "loadingVoices": "Loading voices",
-    "emptyVoices": "No usable voices in the asset library",
     "generate": "Generate free voice",
     "submitting": "Submitting",
     "resultTitle": "Voice results",
@@ -63,6 +70,7 @@
       "failed": "Failed"
     },
     "errors": {
+      "loadProjectsFailed": "Failed to load projects",
       "loadFailed": "Failed to load free voice results",
       "submitFailed": "Failed to submit free voice"
     }

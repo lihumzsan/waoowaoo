@@ -5,7 +5,11 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import { useGlobalVoices } from '@/lib/query/hooks'
+import { useProjectCharacters } from '@/lib/query/hooks'
+import {
+  buildFreeVoiceSubmitInput,
+  buildProjectCharacterOptions,
+} from './free-voice-tool-state'
 
 type FreeVoiceStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -14,6 +18,8 @@ type FreeVoiceRecord = {
   taskId: string
   text: string
   voiceName: string
+  projectName?: string | null
+  characterName?: string | null
   status: FreeVoiceStatus
   progress: number
   audioUrl?: string | null
@@ -21,6 +27,11 @@ type FreeVoiceRecord = {
   errorMessage?: string | null
   createdAt: string
   updatedAt: string
+}
+
+type ProjectOption = {
+  id: string
+  name: string
 }
 
 function isActive(record: FreeVoiceRecord) {
@@ -34,21 +45,48 @@ function formatDuration(value?: number | null) {
 
 export default function FreeVoiceToolCard() {
   const t = useTranslations('videoTools.freeVoice')
-  const voicesQuery = useGlobalVoices()
-  const voices = useMemo(
-    () => (voicesQuery.data || []).filter((voice) => !!voice.customVoiceUrl),
-    [voicesQuery.data],
-  )
-  const [voiceSourceId, setVoiceSourceId] = useState('')
+  const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [projectId, setProjectId] = useState('')
+  const [characterId, setCharacterId] = useState('')
   const [text, setText] = useState('')
   const [records, setRecords] = useState<FreeVoiceRecord[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const charactersQuery = useProjectCharacters(projectId || null)
+  const characters = charactersQuery.data || []
+  const characterOptions = useMemo(
+    () => buildProjectCharacterOptions(characters, t('missingReference')),
+    [characters, t],
+  )
+  const selectedCharacter = useMemo(
+    () => characters.find((character) => character.id === characterId),
+    [characterId, characters],
+  )
 
   useEffect(() => {
-    if (voiceSourceId || voices.length === 0) return
-    setVoiceSourceId(voices[0].id)
-  }, [voiceSourceId, voices])
+    let cancelled = false
+
+    const loadProjects = async () => {
+      try {
+        const response = await apiFetch('/api/projects?page=1&pageSize=1000')
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.loadProjectsFailed')))
+        const data = await response.json() as { projects?: ProjectOption[] }
+        if (!cancelled) setProjects(data.projects || [])
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : t('errors.loadProjectsFailed'))
+        }
+      } finally {
+        if (!cancelled) setLoadingProjects(false)
+      }
+    }
+
+    void loadProjects()
+    return () => {
+      cancelled = true
+    }
+  }, [t])
 
   const loadRecords = useCallback(async () => {
     const response = await apiFetch('/api/video-tools/free-voice')
@@ -74,15 +112,20 @@ export default function FreeVoiceToolCard() {
   }, [loadRecords, records, t])
 
   const submit = async () => {
-    const trimmed = text.trim()
-    if (!trimmed || !voiceSourceId || submitting) return
+    const input = buildFreeVoiceSubmitInput({
+      text,
+      projectId,
+      characterId,
+      characterHasReference: !!selectedCharacter?.customVoiceUrl,
+    })
+    if (!input || submitting) return
     setSubmitting(true)
     setError(null)
     try {
       const response = await apiFetch('/api/video-tools/free-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: trimmed, voiceSourceId }),
+        body: JSON.stringify(input),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
       const data = await response.json() as { record: FreeVoiceRecord }
@@ -95,7 +138,12 @@ export default function FreeVoiceToolCard() {
     }
   }
 
-  const canSubmit = !!text.trim() && !!voiceSourceId && !submitting
+  const canSubmit = !!buildFreeVoiceSubmitInput({
+    text,
+    projectId,
+    characterId,
+    characterHasReference: !!selectedCharacter?.customVoiceUrl,
+  }) && !submitting
 
   return (
     <section data-free-voice-tool className="glass-surface overflow-hidden rounded-3xl border border-[var(--glass-stroke-base)]">
@@ -118,21 +166,56 @@ export default function FreeVoiceToolCard() {
 
       <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <div className="space-y-4">
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-[var(--glass-text-primary)]">{t('voice')}</span>
-            <select
-              value={voiceSourceId}
-              onChange={(event) => setVoiceSourceId(event.target.value)}
-              className="glass-select-base w-full px-3 py-2.5"
-              disabled={voices.length === 0 || submitting}
-            >
-              {voices.length === 0 ? (
-                <option value="">{voicesQuery.isLoading ? t('loadingVoices') : t('emptyVoices')}</option>
-              ) : voices.map((voice) => (
-                <option key={voice.id} value={voice.id}>{voice.name}</option>
-              ))}
-            </select>
-          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-[var(--glass-text-primary)]">{t('project')}</span>
+              <select
+                value={projectId}
+                onChange={(event) => {
+                  setProjectId(event.target.value)
+                  setCharacterId('')
+                }}
+                className="glass-select-base w-full px-3 py-2.5"
+                disabled={loadingProjects || projects.length === 0 || submitting}
+              >
+                {loadingProjects || projects.length === 0 ? (
+                  <option value="">{loadingProjects ? t('loadingProjects') : t('emptyProjects')}</option>
+                ) : (
+                  <>
+                    <option value="">{t('selectProject')}</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-[var(--glass-text-primary)]">{t('character')}</span>
+              <select
+                value={characterId}
+                onChange={(event) => setCharacterId(event.target.value)}
+                className="glass-select-base w-full px-3 py-2.5"
+                disabled={!projectId || charactersQuery.isLoading || characters.length === 0 || submitting}
+              >
+                {!projectId ? (
+                  <option value="">{t('selectProjectFirst')}</option>
+                ) : charactersQuery.isLoading ? (
+                  <option value="">{t('loadingCharacters')}</option>
+                ) : characters.length === 0 ? (
+                  <option value="">{t('emptyCharacters')}</option>
+                ) : (
+                  <>
+                    <option value="">{t('selectCharacter')}</option>
+                    {characterOptions.map((character) => (
+                      <option key={character.id} value={character.id} disabled={character.disabled}>{character.label}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </label>
+          </div>
 
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--glass-text-primary)]">{t('text')}</span>
@@ -179,7 +262,11 @@ export default function FreeVoiceToolCard() {
               {records.map((record) => (
                 <article key={record.id} className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-3">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium text-[var(--glass-text-secondary)]">{record.voiceName}</span>
+                    <span className="text-xs font-medium text-[var(--glass-text-secondary)]">
+                      {record.projectName && record.characterName
+                        ? `${record.projectName} · ${record.characterName}`
+                        : record.voiceName}
+                    </span>
                     <span className="text-xs text-[var(--glass-text-tertiary)]">{t(`status.${record.status}`)}</span>
                   </div>
                   <p className="line-clamp-2 text-sm font-medium leading-5 text-[var(--glass-text-primary)]">{record.text}</p>
