@@ -373,6 +373,7 @@ export function createProjectAgentOperationTool(
           writer: params.writer,
           input: normalizedInput,
           toolCallId,
+          activityId: operationActivityId,
           executionFence,
           taskBatchBinding,
           approvedInvocation: automaticApprovedInvocation,

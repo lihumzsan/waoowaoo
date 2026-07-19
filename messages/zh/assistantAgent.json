@@ -42,6 +42,28 @@
     "title": "执行计划",
     "stepProgress": "Step {current} / {total}"
   },
+  "subagents": {
+    "tabsLabel": "运行中的 Subagent",
+    "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
+    "outputKinds": {
+      "screenplayDraft": "剧本创作",
+      "storyAnalysis": "故事分析",
+      "continuityAnalysis": "连续性分析",
+      "assetPromptSet": "视觉资产设计",
+      "videoPromptSet": "视频生成设计",
+      "musicDirection": "配乐设计",
+      "creativeReview": "创作质量审查"
+    },
+    "events": {
+      "started": "已接收委派目标",
+      "skillsDiscovered": "发现 {count} 个相关 Skill",
+      "skillRead": "读取 {skill}",
+      "composing": "正在整理结构化结果",
+      "completed": "已完成",
+      "failed": "执行失败",
+      "cancelled": "已取消"
+    }
+  },
   "attachments": {
     "openUpload": "上传文本文件",
     "dialogTitle": "上传文本文件",

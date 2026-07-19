@@ -33,6 +33,8 @@ export type {
   CreativeWorkerBudgetOverrides,
   CreativeWorkerBudgets,
   CreativeWorkerMetrics,
+  CreativeWorkerEvent,
+  CreativeWorkerEventListener,
   CreativeWorkerResult,
   RunCreativeWorkerInput,
 } from './types'

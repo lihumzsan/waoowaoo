@@ -37,6 +37,11 @@ import {
   readProjectAgentPlan,
   type ProjectAgentPlanSnapshot,
 } from './plan'
+import {
+  parseProjectAgentSubagentEventPartData,
+  resolveActiveProjectAgentSubagents,
+  type ProjectAgentSubagentView,
+} from './subagent-events'
 
 interface ProjectAgentSessionScopeInput {
   projectId: string
@@ -92,6 +97,7 @@ export interface ProjectAgentSessionState {
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
+  activeSubagents: ProjectAgentSubagentView[]
   plan: ProjectAgentPlanSnapshot | null
   editFirstWorkflow: EditFirstWorkflowView
 }
@@ -390,6 +396,42 @@ async function listActiveTasksForWaits(params: {
   }))
 }
 
+async function listActiveSubagentsForActivity(params: {
+  run: ProjectAgentSessionRunCandidate | null
+  activity: ProjectAgentActivitySnapshot | null
+}): Promise<ProjectAgentSubagentView[]> {
+  if (
+    !params.run
+    || !params.activity
+    || params.activity.type !== 'operation'
+    || params.activity.operationId !== 'delegate_creative_work'
+  ) return []
+  const rows = await prisma.projectAgentEvent.findMany({
+    where: {
+      runId: params.run.id,
+      activityId: params.activity.activityId,
+      kind: 'subagent.progressed',
+    },
+    orderBy: { id: 'asc' },
+    select: { payload: true },
+  })
+  const events = rows.map((row) => {
+    const payload = readRecord(row.payload)
+    return parseProjectAgentSubagentEventPartData(payload.subagentEvent)
+  })
+  const activeSubagents = resolveActiveProjectAgentSubagents(events)
+  for (const subagent of activeSubagents) {
+    if (
+      subagent.runId !== params.run.id
+      || subagent.activityId !== params.activity.activityId
+      || subagent.toolCallId !== params.activity.toolCallId
+    ) {
+      throw new Error(`PROJECT_AGENT_SESSION_SUBAGENT_ACTIVITY_MISMATCH:${subagent.subagentId}`)
+    }
+  }
+  return activeSubagents
+}
+
 async function buildProjectAgentSessionState(
   input: ProjectAgentSessionScopeInput,
 ): Promise<ProjectAgentSessionState> {
@@ -463,7 +505,7 @@ async function buildProjectAgentSessionState(
     activity: currentActivity,
     openFacts,
   })
-  const [pendingInteraction, activeTasks] = await Promise.all([
+  const [pendingInteraction, activeTasks, activeSubagents] = await Promise.all([
     buildPendingInteraction({
       scope,
       workflow,
@@ -473,6 +515,10 @@ async function buildProjectAgentSessionState(
       projectId: input.projectId,
       userId: input.userId,
       waits,
+    }),
+    listActiveSubagentsForActivity({
+      run,
+      activity: facts.activity,
     }),
   ])
   const currentRun: ProjectAgentSessionRun | null = run
@@ -490,6 +536,7 @@ async function buildProjectAgentSessionState(
     pendingInteraction,
     activeWaits: waits,
     activeTasks,
+    activeSubagents,
     plan,
     editFirstWorkflow: workflow,
   }

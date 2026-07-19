@@ -4,6 +4,7 @@ import type { ProjectAgentRunControlKind, ProjectAgentRunStatus } from '../runs'
 import type { ProjectAgentWaitFollowUpMode, ProjectAgentWaitTerminalStatus } from '../waits'
 import type { ProjectAssistantId } from '../types'
 import type { ProjectAgentRunFence } from '../run-fence'
+import type { ProjectAgentSubagentEventPartData } from '../subagent-events'
 
 export type ProjectAgentActivityType =
   | 'operation'
@@ -105,6 +106,12 @@ export type ProjectAgentEventPayload =
     runId: string
     activityId: string
     reason: string
+  }
+  | {
+    kind: 'subagent.progressed'
+    runId: string
+    activityId: string
+    subagentEvent: ProjectAgentSubagentEventPartData
   }
   | {
     kind: 'task.collection_started'

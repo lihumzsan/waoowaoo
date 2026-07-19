@@ -8,10 +8,17 @@ import {
   creativeWorkRequestSchema,
   isCreativeWorkerError,
   runCreativeWorker,
+  type CreativeWorkerEventListener,
 } from '@/lib/creative-worker'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  writeOperationDataPart,
+  type ProjectAgentOperationContext,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
+import { appendProjectAgentEvents } from '@/lib/project-agent/event'
+import type { ProjectAgentSubagentPartData } from '@/lib/project-agent/types'
 import {
   resolveProjectAgentAssistantModelKey,
   resolveProjectAgentLanguageModel,
@@ -73,6 +80,55 @@ const EFFECTS_CREATIVE_REASONING = {
   longRunning: false,
 } as const
 
+function createCreativeWorkerEventListener(
+  context: ProjectAgentOperationContext,
+): CreativeWorkerEventListener | undefined {
+  if (context.source !== 'assistant-panel') return undefined
+  const runId = context.context.runId?.trim() || ''
+  const activityId = context.activityId?.trim() || ''
+  const toolCallId = context.toolCallId?.trim() || ''
+  const runFence = context.executionFence?.runFence ?? null
+  if (!runId || !activityId || !toolCallId || !runFence) {
+    throw new Error('CREATIVE_WORK_SUBAGENT_EVENT_IDENTITY_REQUIRED')
+  }
+  let sequence = 0
+  return async (event) => {
+    sequence += 1
+    const part: ProjectAgentSubagentPartData = {
+      subagentId: activityId,
+      runId,
+      activityId,
+      toolCallId,
+      sequence,
+      occurredAt: new Date().toISOString(),
+      event,
+    }
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: context.projectId,
+        userId: context.userId,
+        episodeId: context.context.episodeId ?? null,
+        assistantId: 'workspace-command',
+      },
+      events: [{
+        runFence,
+        idempotencyKey: `subagent-progressed:${activityId}:${String(sequence)}`,
+        event: {
+          kind: 'subagent.progressed',
+          runId,
+          activityId,
+          subagentEvent: part,
+        },
+      }],
+    })
+    writeOperationDataPart<ProjectAgentSubagentPartData>(
+      context.writer,
+      'data-agent-subagent-event',
+      part,
+    )
+  }
+}
+
 export function createAssistantCreativeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     delegate_creative_work: defineOperation({
@@ -83,6 +139,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
       inputSchema: creativeWorkRequestSchema,
       outputSchema: creativeWorkerResultSchema,
       execute: async (context, input) => {
+        const onEvent = createCreativeWorkerEventListener(context)
         const assistantModelKey = await resolveProjectAgentAssistantModelKey(context.userId)
         const resolved = await resolveProjectAgentLanguageModel({
           userId: context.userId,
@@ -99,12 +156,17 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
         })
 
         try {
-          return await runCreativeWorker({
+          const result = await runCreativeWorker({
             model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
             locale: resolveOperationLocale(context.context),
             signal: context.executionFence?.signal ?? context.request.signal,
             request: input,
+            ...(onEvent ? { onEvent } : {}),
           })
+          return {
+            ...result,
+            skillTrace: [...result.skillTrace],
+          }
         } catch (error) {
           if (!isCreativeWorkerError(error)) throw error
           throw new ApiError('EXTERNAL_ERROR', {

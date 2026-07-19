@@ -394,6 +394,9 @@
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantActiveRunCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPlanCard.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts",
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-control-transport.ts",
         "src/features/project-workspace/components/workspace-assistant/choice-card-actions.ts",
         "src/features/project-workspace/components/workspace-assistant/EditStylePreviewGenerationDataCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceStylePreviewGenerationView.ts",
@@ -476,7 +479,10 @@
       "sourcePaths": [
         "src/lib/creative-skills",
         "src/lib/creative-worker",
-        "src/lib/operations/domains/assistant/creative-ops.ts"
+        "src/lib/operations/domains/assistant/creative-ops.ts",
+        "src/lib/project-agent/subagent-events.ts",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts"

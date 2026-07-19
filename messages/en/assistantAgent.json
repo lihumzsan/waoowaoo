@@ -42,6 +42,28 @@
     "title": "Plan",
     "stepProgress": "Step {current} / {total}"
   },
+  "subagents": {
+    "tabsLabel": "Running Subagents",
+    "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
+    "outputKinds": {
+      "screenplayDraft": "Screenplay Writing",
+      "storyAnalysis": "Story Analysis",
+      "continuityAnalysis": "Continuity Analysis",
+      "assetPromptSet": "Visual Asset Design",
+      "videoPromptSet": "Video Generation Design",
+      "musicDirection": "Music Direction",
+      "creativeReview": "Creative Quality Review"
+    },
+    "events": {
+      "started": "Delegation received",
+      "skillsDiscovered": "Found {count, plural, one {1 relevant Skill} other {# relevant Skills}}",
+      "skillRead": "Read {skill}",
+      "composing": "Preparing the structured result",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    }
+  },
   "attachments": {
     "openUpload": "Attach text file",
     "dialogTitle": "Attach a text file",

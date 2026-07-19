@@ -740,6 +740,7 @@ export function useWorkspaceAssistantMessagePartComponents({
       by_name: {
         'agent-run': HiddenRuntimeContextDataCard,
         'agent-operation-start': HiddenRuntimeContextDataCard,
+        'agent-subagent-event': HiddenRuntimeContextDataCard,
         'agent-operation-plan-preview': OperationPlanPreviewDataCard,
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
@@ -765,9 +766,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   ])
 }
 
-function HiddenConversationSummaryMessage(props: {
-  children: React.ReactNode
-}) {
+function HiddenConversationSummaryMessage(props: { children: React.ReactNode }) {
   const shouldHide = useMessage((state) => (
     state.metadata.custom?.projectAgentConversationSummary === true
       || isWorkspaceAssistantHiddenMetadata(state.metadata)

@@ -36,6 +36,7 @@ export async function executeProjectAgentOperationFromApi(params: {
     source: params.source || 'project-ui',
     writer: null,
     toolCallId: null,
+    activityId: null,
   }
 
   try {

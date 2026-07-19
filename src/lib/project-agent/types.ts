@@ -20,6 +20,7 @@ import type {
   ProjectAgentActivityType,
 } from './event'
 import type { ProjectAgentRunFence } from './run-fence'
+import type { ProjectAgentSubagentEventPartData } from './subagent-events'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -63,6 +64,8 @@ export interface ProjectAgentActivityPartData {
   toolCallId?: string | null
   choiceType?: EditFirstChoiceType | null
 }
+
+export type ProjectAgentSubagentPartData = ProjectAgentSubagentEventPartData
 
 export interface ProjectContextPartData {
   context: ProjectAssistantContextSnapshot
@@ -279,6 +282,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-operation-start'
   | 'data-agent-operation-plan-preview'
   | 'data-agent-activity'
+  | 'data-agent-subagent-event'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'

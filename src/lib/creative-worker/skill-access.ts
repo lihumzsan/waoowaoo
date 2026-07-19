@@ -48,15 +48,15 @@ function assertResourceBudget(
   }
 }
 
-function recordRead(
+async function recordRead(
   context: CreativeWorkerRunContext,
   resource: CreativeSkillResource,
   source: CreativeSkillReadTraceEntry['source'],
-): void {
+): Promise<void> {
   const contentChars = resource.content.length
   context.counters.readCalls += 1
   context.counters.skillContentChars += contentChars
-  context.skillTrace.push({
+  const trace: CreativeSkillReadTraceEntry = {
     ordinal: context.skillTrace.length + 1,
     source,
     skillId: resource.skillId,
@@ -64,6 +64,11 @@ function recordRead(
     uri: resource.uri,
     checksum: resource.checksum,
     contentChars,
+  }
+  context.skillTrace.push(trace)
+  await context.onEvent?.({
+    kind: 'skill_read',
+    trace,
   })
 }
 
@@ -78,7 +83,7 @@ export async function readCreativeWorkerSkillResource(input: {
     uri: input.uri,
   })
   assertResourceBudget(input.context, resource)
-  recordRead(input.context, resource, input.source)
+  await recordRead(input.context, resource, input.source)
   return resource
 }
 

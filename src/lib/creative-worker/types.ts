@@ -1,6 +1,6 @@
 import type { Model } from '@openai/agents'
 import { z } from 'zod'
-import type { CreativeSkillLocale } from '@/lib/creative-skills'
+import type { CreativeSkillId, CreativeSkillLocale } from '@/lib/creative-skills'
 import {
   CREATIVE_WORK_OUTPUT_KINDS,
   DEFAULT_CREATIVE_WORKER_BUDGETS,
@@ -58,7 +58,7 @@ export type CreativeWorkerBudgetOverrides = Partial<CreativeWorkerBudgets>
 export interface CreativeSkillReadTraceEntry {
   ordinal: number
   source: 'required' | 'tool'
-  skillId: string
+  skillId: CreativeSkillId
   version: string
   uri: string
   checksum: string
@@ -71,12 +71,46 @@ export interface CreativeWorkerMetrics {
   skillContentChars: number
 }
 
+export type CreativeWorkerEvent =
+  | {
+    kind: 'started'
+    outputKind: CreativeWorkOutputKind
+    goal: string
+  }
+  | {
+    kind: 'skills_discovered'
+    query: string
+    tags: readonly string[]
+    skillIds: readonly CreativeSkillId[]
+  }
+  | {
+    kind: 'skill_read'
+    trace: CreativeSkillReadTraceEntry
+  }
+  | {
+    kind: 'completed'
+    outputKind: CreativeWorkOutputKind
+  }
+  | {
+    kind: 'failed'
+    code: import('./errors').CreativeWorkerErrorCode
+  }
+  | {
+    kind: 'cancelled'
+    code: 'CREATIVE_WORK_ABORTED'
+  }
+
+export type CreativeWorkerEventListener = (
+  event: CreativeWorkerEvent,
+) => void | Promise<void>
+
 export interface RunCreativeWorkerInput {
   model: Model
   locale: CreativeSkillLocale
   signal: AbortSignal
   request: CreativeWorkRequest
   budgets?: CreativeWorkerBudgetOverrides
+  onEvent?: CreativeWorkerEventListener
 }
 
 export interface CreativeWorkerResult<TOutput = CreativeWorkOutput> {
@@ -96,6 +130,7 @@ export interface CreativeWorkerRunContext {
     skillContentChars: number
   }
   skillTrace: CreativeSkillReadTraceEntry[]
+  onEvent?: CreativeWorkerEventListener
 }
 
 export const defaultCreativeWorkerBudgets: CreativeWorkerBudgets = {

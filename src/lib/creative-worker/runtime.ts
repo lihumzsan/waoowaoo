@@ -57,7 +57,7 @@ function resolveCreativeWorkerBudgets(
 }
 
 function createRunContext(
-  input: Pick<RunCreativeWorkerInput, 'locale'>,
+  input: Pick<RunCreativeWorkerInput, 'locale' | 'onEvent'>,
   budgets: CreativeWorkerBudgets,
 ): CreativeWorkerRunContext {
   return {
@@ -69,6 +69,7 @@ function createRunContext(
       skillContentChars: 0,
     },
     skillTrace: [],
+    ...(input.onEvent ? { onEvent: input.onEvent } : {}),
   }
 }
 
@@ -167,8 +168,28 @@ export async function runCreativeWorker(
   const budgets = resolveCreativeWorkerBudgets(input.budgets)
   const context = createRunContext(input, budgets)
   const definition = readCreativeWorkOutputDefinition(request.outputKind)
+  let eventDeliveryFailed = false
+
+  const emitEvent = async (
+    event: Parameters<NonNullable<RunCreativeWorkerInput['onEvent']>>[0],
+  ): Promise<void> => {
+    if (!input.onEvent) return
+    try {
+      await input.onEvent(event)
+    } catch (error) {
+      eventDeliveryFailed = true
+      throw new CreativeWorkerError('CREATIVE_WORK_EVENT_DELIVERY_FAILED', {
+        eventKind: event.kind,
+      }, { cause: error })
+    }
+  }
 
   try {
+    await emitEvent({
+      kind: 'started',
+      outputKind: request.outputKind,
+      goal: request.goal,
+    })
     const requiredSkills = await loadRequiredCreativeSkills({
       context,
       skillIds: definition.baselineSkillIds,
@@ -202,6 +223,10 @@ export async function runCreativeWorker(
       raw: result.finalOutput,
       maxOutputChars: budgets.maxOutputChars,
     })
+    await emitEvent({
+      kind: 'completed',
+      outputKind: request.outputKind,
+    })
     return {
       outputKind: request.outputKind,
       output,
@@ -210,15 +235,26 @@ export async function runCreativeWorker(
       budgets,
     }
   } catch (error) {
-    if (isCreativeWorkerError(error)) throw error
-    if (input.signal.aborted) {
-      throw new CreativeWorkerError('CREATIVE_WORK_ABORTED', {}, { cause: error })
+    const normalizedError = isCreativeWorkerError(error)
+      ? error
+      : input.signal.aborted
+        ? new CreativeWorkerError('CREATIVE_WORK_ABORTED', {}, { cause: error })
+        : error instanceof MaxTurnsExceededError
+          ? new CreativeWorkerError('CREATIVE_WORK_MAX_TURNS_EXCEEDED', {
+              maxTurns: budgets.maxTurns,
+            }, { cause: error })
+          : new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
+    if (!eventDeliveryFailed) {
+      await emitEvent(normalizedError.code === 'CREATIVE_WORK_ABORTED'
+        ? {
+            kind: 'cancelled',
+            code: 'CREATIVE_WORK_ABORTED',
+          }
+        : {
+            kind: 'failed',
+            code: normalizedError.code,
+          })
     }
-    if (error instanceof MaxTurnsExceededError) {
-      throw new CreativeWorkerError('CREATIVE_WORK_MAX_TURNS_EXCEEDED', {
-        maxTurns: budgets.maxTurns,
-      }, { cause: error })
-    }
-    throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
+    throw normalizedError
   }
 }

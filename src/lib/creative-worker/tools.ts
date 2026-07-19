@@ -32,13 +32,21 @@ function createDiscoverSkillsTool(): Tool<CreativeWorkerRunContext> {
     description: 'Find relevant read-only creative skills. Returns metadata and entry URIs, not skill content.',
     parameters: discoverSkillsInputSchema,
     strict: true,
-    execute: async (input, runContext) => ({
-      skills: discoverCreativeWorkerSkills({
-        context: requireRunContext(runContext),
+    execute: async (input, runContext) => {
+      const context = requireRunContext(runContext)
+      const skills = discoverCreativeWorkerSkills({
+        context,
         query: input.query,
         tags: input.tags,
-      }),
-    }),
+      })
+      await context.onEvent?.({
+        kind: 'skills_discovered',
+        query: input.query,
+        tags: input.tags,
+        skillIds: skills.map((skill) => skill.id),
+      })
+      return { skills }
+    },
   })
 }
 

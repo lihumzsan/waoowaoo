@@ -24,6 +24,8 @@ export interface ProjectAgentOperationContext {
   source: string
   writer?: UIMessageStreamWriter<UIMessage> | null
   toolCallId?: string | null
+  /** Host-owned Activity identity for nested execution projection only. */
+  activityId?: string | null
   executionAuthorization?: OperationExecutionAuthorization | null
   executionFence?: ProjectAgentOperationExecutionFence | null
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null

@@ -4,11 +4,9 @@ import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import {
-  DefaultChatTransport,
   readUIMessageStream,
   type ChatStatus,
   type UIMessage,
-  type UIMessageChunk,
 } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -47,6 +45,12 @@ import {
   type WorkspaceAssistantControlIntent,
   type WorkspaceAssistantRunStatus,
 } from './workspace-assistant-runtime-state'
+import type { ProjectAgentSubagentView } from '@/lib/project-agent/subagent-events'
+import { resolveWorkspaceAssistantActiveSubagents } from './workspace-assistant-subagents'
+import {
+  buildWorkspaceAssistantControlError,
+  WorkspaceAssistantControlTransport,
+} from './workspace-assistant-control-transport'
 
 /**
  * 'approve' resumes the run and executes the approved operation, so the UI may
@@ -73,12 +77,6 @@ export interface WorkspaceAssistantSendMessageInput {
 
 type WorkspaceAssistantPendingApproval = Extract<ProjectAgentSessionPendingInteraction, { kind: 'approval' }>
 
-class WorkspaceAssistantControlTransport extends DefaultChatTransport<UIMessage> {
-  public toUIMessageChunkStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
-    return this.processResponseStream(stream)
-  }
-}
-
 interface UseWorkspaceAssistantRuntimeParams {
   projectId: string
   episodeId?: string
@@ -104,6 +102,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageLoading: boolean
   pendingOperationId: string | null
   activeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
+  activeSubagents: ProjectAgentSubagentView[]
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
@@ -125,11 +124,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   }) => Promise<void>
   replaceMessages: (messages: UIMessage[]) => void
   appendMessages: (messages: UIMessage[]) => void
-}
-
-function buildWorkspaceAssistantControlError(endpoint: WorkspaceAssistantControlEndpoint, error: unknown): Error {
-  const message = error instanceof Error ? error.message : String(error)
-  return new Error(`PROJECT_ASSISTANT_CARD_RESPONSE_FAILED:${message}`)
 }
 
 export function useWorkspaceAssistantRuntime({
@@ -552,6 +546,10 @@ export function useWorkspaceAssistantRuntime({
     controlRunActive: controlPending,
     serverRunActive,
   })
+  const activeSubagents = useMemo(() => resolveWorkspaceAssistantActiveSubagents({
+    sessionSubagents: sessionState?.activeSubagents ?? [],
+    messages: chat.messages,
+  }), [chat.messages, sessionState?.activeSubagents])
 
   useEffect(() => {
     if (!replyActivity || !replyActivity.requestSettled) return
@@ -577,6 +575,7 @@ export function useWorkspaceAssistantRuntime({
     storageLoading: assistantThread.isLoading,
     pendingOperationId,
     activeFocusRequest,
+    activeSubagents,
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,

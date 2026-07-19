@@ -27,6 +27,10 @@ import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssis
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
+  WorkspaceAssistantSubagentDock,
+  WorkspaceAssistantSubagentSummary,
+} from './workspace-assistant/WorkspaceAssistantSubagents'
+import {
   buildWorkspaceAssistantPanelLayout,
   WORKSPACE_ASSISTANT_TOP_OFFSET,
 } from './workspace-assistant/panel-layout'
@@ -114,6 +118,17 @@ export default function WorkspaceAssistantPanel({
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
   const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const activeSubagents = assistantRuntime.activeSubagents
+    if (activeSubagents.length === 0) {
+      setSelectedSubagentId(null)
+      return
+    }
+    if (selectedSubagentId && activeSubagents.some((item) => item.subagentId === selectedSubagentId)) return
+    setSelectedSubagentId(activeSubagents[0]?.subagentId ?? null)
+  }, [assistantRuntime.activeSubagents, selectedSubagentId])
 
   useWorkspaceAssistantMessageDispatch({
     autoStartDraft,
@@ -222,9 +237,14 @@ export default function WorkspaceAssistantPanel({
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantSettings />
+              <WorkspaceAssistantSubagentDock
+                subagents={assistantRuntime.activeSubagents}
+                selectedSubagentId={selectedSubagentId}
+                onSelect={setSelectedSubagentId}
+              />
               <ThreadPrimitive.Viewport
                 autoScroll
-                className="flex-1 overflow-y-auto px-5 pb-4 pt-12"
+                className={`flex-1 overflow-y-auto px-5 pb-4 ${assistantRuntime.activeSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 <div>
@@ -249,6 +269,10 @@ export default function WorkspaceAssistantPanel({
                         taskCount={activeExternalTasks.length}
                       />
                     ) : null}
+                    <WorkspaceAssistantSubagentSummary
+                      subagents={assistantRuntime.activeSubagents}
+                      onSelect={setSelectedSubagentId}
+                    />
                     {serverPendingApproval ? (
                       <ConfirmationActionCard
                         operationId={serverPendingApproval.operationId}

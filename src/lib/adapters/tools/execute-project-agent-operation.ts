@@ -35,6 +35,7 @@ export async function executeProjectAgentOperationFromTool(params: {
   writer: UIMessageStreamWriter<UIMessage>
   input: unknown
   toolCallId?: string | null
+  activityId?: string | null
   executionFence: ProjectAgentOperationExecutionFence
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
   approvedInvocation?: PlannedOperationInvocation | null
@@ -57,6 +58,7 @@ export async function executeProjectAgentOperationFromTool(params: {
     source: params.source,
     writer: params.writer,
     toolCallId: params.toolCallId,
+    activityId: params.activityId ?? null,
     executionFence: params.executionFence,
     taskBatchBinding: params.taskBatchBinding ?? null,
   }

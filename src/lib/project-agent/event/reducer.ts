@@ -811,6 +811,19 @@ export async function reduceProjectAgentEvent(params: {
     case 'activity.cancelled':
       activity = await cancelActivity(tx, event)
       break
+    case 'subagent.progressed':
+      if (
+        event.subagentEvent.runId !== event.runId
+        || event.subagentEvent.activityId !== event.activityId
+        || event.subagentEvent.subagentId !== event.activityId
+      ) {
+        throw new Error(`PROJECT_AGENT_SUBAGENT_EVENT_IDENTITY_MISMATCH:${event.activityId}`)
+      }
+      activity = await getActivitySnapshot(tx, event.activityId)
+      if (!activity || activity.runId !== event.runId || activity.status !== 'running') {
+        throw new Error(`PROJECT_AGENT_SUBAGENT_ACTIVITY_NOT_RUNNING:${event.activityId}`)
+      }
+      break
     case 'task.collection_started':
       activity = await applyTaskCollectionStarted(tx, scope, event, nextFence)
       break
