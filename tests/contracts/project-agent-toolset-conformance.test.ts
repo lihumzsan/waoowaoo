@@ -1,4 +1,16 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import {
+  CREATIVE_SKILL_IDS,
+  CREATIVE_SKILL_REGISTRY,
+  readCreativeSkillResource,
+} from '@/lib/creative-skills'
+import {
+  CREATIVE_WORK_OUTPUT_KINDS,
+  creativeWorkOutputRegistry,
+} from '@/lib/creative-worker'
+import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
@@ -153,6 +165,94 @@ describe('project agent toolset conformance', () => {
     ])
     expect(Object.keys(registry.update_user_preference.toolInputSchema.properties)).toContain('assistantModel')
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toContain('capabilityOverrides')
+  })
+
+  it('exposes one stateless Creative Worker delegation contract without project write authority', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.delegate_creative_work
+
+    expect(operation).toBeDefined()
+    expect(operation.channels).toEqual({ tool: true, api: false })
+    expect(operation.groupPath).toEqual(['assistant', 'creative'])
+    expect(operation.intent).toBe('query')
+    expect(operation.confirmation).toMatchObject({ kind: 'none', required: false })
+    expect(operation.effects).toEqual({
+      writes: false,
+      billable: false,
+      destructive: false,
+      overwrite: false,
+      bulk: false,
+      externalSideEffects: true,
+      longRunning: false,
+    })
+    expect(Object.keys(operation.toolInputSchema.properties)).toEqual([
+      'outputKind', 'goal', 'context',
+    ])
+    expect(operation.inputSchema.safeParse({
+      outputKind: 'video_prompt_set',
+      goal: 'Design one 10-second vertical video prompt.',
+      context: {
+        userRequest: 'A lantern wakes in an abandoned shrine.',
+        sourceMaterials: [],
+        constraints: ['9:16', '10 seconds'],
+      },
+    }).success).toBe(true)
+  })
+
+  it('keeps every Creative Skill flat, localized, registry-addressed, and Worker-readable', async () => {
+    expect(Object.keys(CREATIVE_SKILL_REGISTRY)).toEqual([...CREATIVE_SKILL_IDS])
+
+    for (const skillId of CREATIVE_SKILL_IDS) {
+      const definition = CREATIVE_SKILL_REGISTRY[skillId]
+      const skillDir = path.join(process.cwd(), 'src', 'lib', 'creative-skills', 'skills', skillId)
+      expect(fs.readdirSync(skillDir).sort(), skillId).toEqual([
+        'SKILL.en.md', 'SKILL.zh.md',
+      ])
+      expect(definition.entryUri).toBe(`skill://${skillId}/SKILL.md`)
+
+      for (const locale of ['zh', 'en'] as const) {
+        const resource = await readCreativeSkillResource({
+          locale,
+          uri: definition.entryUri,
+        })
+        expect(resource.skillId).toBe(skillId)
+        expect(resource.locale).toBe(locale)
+        expect(resource.content.trim().length).toBeGreaterThan(0)
+        expect(resource.checksum).toMatch(/^[a-f0-9]{64}$/)
+      }
+    }
+  })
+
+  it('gives the Creative Worker only Skill discovery/read tools and a common baseline Skill', () => {
+    expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual([
+      'discover_skills', 'read_skill',
+    ])
+    expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
+    for (const definition of Object.values(creativeWorkOutputRegistry)) {
+      expect(definition.baselineSkillIds).toEqual(['creative-core'])
+    }
+
+    const videoOutput = {
+      kind: 'video_prompt_set',
+      overview: 'Two independently generated clips.',
+      segments: [{
+        key: 'clip-1',
+        title: 'Complete first clip',
+        durationSeconds: 10,
+        prompt: '0-4s shot one; 4-10s shot two.',
+        referenceKeys: [],
+        continuityRequirements: [],
+        audioIntent: null,
+      }],
+      assumptions: [],
+      warnings: [],
+    }
+    expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse(videoOutput).success).toBe(true)
+    expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse({
+      ...videoOutput,
+      segments: undefined,
+      shots: videoOutput.segments,
+    }).success).toBe(false)
   })
 
   it('contains no anonymous permissive schemas or nullable enums that reject null', () => {

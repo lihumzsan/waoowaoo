@@ -470,6 +470,22 @@
       ]
     },
     {
+      "id": "creative-skill-worker",
+      "document": "docs/architecture/modules/creative-skill-worker.md",
+      "title": "Creative Skill 与无状态 Worker",
+      "sourcePaths": [
+        "src/lib/creative-skills",
+        "src/lib/creative-worker",
+        "src/lib/operations/domains/assistant/creative-ops.ts"
+      ],
+      "testPaths": [
+        "tests/contracts/project-agent-toolset-conformance.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/prompt-semantic-regression.mjs"
+      ]
+    },
+    {
       "id": "provider-gateway",
       "document": "docs/architecture/modules/provider-gateway.md",
       "title": "Provider Gateway",
@@ -537,6 +553,8 @@
       "title": "AI Prompt 与模型输出契约",
       "sourcePaths": [
         "src/lib/ai-prompts",
+        "src/lib/creative-skills",
+        "src/lib/creative-worker",
         "src/lib/bgm-design/prompt.ts",
         "src/lib/bgm-design/types.ts",
         "src/lib/bgm-design/contract.ts",

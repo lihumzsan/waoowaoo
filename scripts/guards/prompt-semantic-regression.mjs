@@ -36,11 +36,12 @@ const criticalLocalizedTemplateTokens = new Map([
       '# Resource rules',
       '`create_text`, `create_image`, `create_audio`, and `create_video` can be called from an empty project.',
       'Professional Operations remain available.',
-      '# General creative capabilities',
+      '# Creative Worker and general creative capabilities',
+      '`delegate_creative_work` is the primary Agent\'s only delegation entry for professional creative results.',
+      'The Worker is stateless and can only discover and read Creative Skills.',
+      'It cannot read the project, call business Operations, create Tasks, charge, persist Resources, or change state.',
+      'For a one-line idea or simple request, delegate one minimal task',
       '# Freeform production loop',
-      '# Video direction and generation',
-      'The Nth item in the `references` array is “Image N” in the final video prompt.',
-      'use only the lightweight marker “Cut to the location in Image N,”',
       '# Result inspection and correction',
       '# Optional professional capabilities',
       'References must use the exact `resourceId + revisionId + fingerprint` tuple.',
@@ -76,11 +77,12 @@ const criticalLocalizedTemplateTokens = new Map([
       '# Resource 规则',
       '`create_text`、`create_image`、`create_audio`、`create_video` 可从空项目直接调用。',
       '专业 Operation 保持可用',
-      '# 通用创作能力',
+      '# Creative Worker 与通用创作能力',
+      '`delegate_creative_work` 是主 Agent 获取专业创作结果的唯一委派入口。',
+      'Worker 无状态，只能发现和读取 Creative Skill',
+      '它不能读取项目、调用业务 Operation、创建 Task、收费、持久化 Resource 或改变任何状态。',
+      '用户只给一句简单创意时，委派一次最小任务',
       '# 自由制作循环',
-      '# 视频导演与生成',
-      '`references` 数组中的第 N 张图片对应最终视频 prompt 中的“图片N”。',
-      '只使用“镜头切至图片N中的……”这一轻量标记',
       '# 结果检查与修正',
       '# 可选专业能力',
       '引用必须使用 `resourceId + revisionId + fingerprint` 的精确组合。',
@@ -119,6 +121,7 @@ const forbiddenLocalizedTemplateTokens = new Map([
       'allowedOperationIds',
       'enabledOperationIds',
       '`generate_video_segments` is the only video-segment generation entry.',
+      '# Video direction and generation',
     ],
     zh: [
       'selectedPanelId',
@@ -135,7 +138,43 @@ const forbiddenLocalizedTemplateTokens = new Map([
       'allowedOperationIds',
       'enabledOperationIds',
       '`generate_video_segments` 是唯一视频片段生成入口。',
+      '# 视频导演与生成',
     ],
+  }],
+])
+
+const criticalCreativeSkillTokens = new Map([
+  ['creative-core', {
+    en: ['# Creative Core', '# Facts, inferences, and creative additions', 'shortest sufficient path'],
+    zh: ['# 创作核心', '事实、推断与创作补充', '最短充分路径'],
+  }],
+  ['story-development', {
+    en: ['# Story Development', 'Runtime comes from dialogue, action, reaction, pauses, and transitions', 'Scene body text must be a complete filmable scene'],
+    zh: ['# 故事与剧本开发', '时长来自对白、动作、反应、停顿和转场的实际时间', '真正可拍摄的完整场景'],
+  }],
+  ['continuity-memory', {
+    en: ['# Continuity Memory', 'The source text is the only factual authority.', '## Minimum sufficient chapter context'],
+    zh: ['# 连续性记忆', '原文是唯一事实来源。', '面向章节的最小充分上下文'],
+  }],
+  ['director-core', {
+    en: ['# Director and Production Timeline Core', 'Do not split one unfinished action across independent generations.', 'add only scale, primary movement, and stability'],
+    zh: ['# 导演与制作时间线核心', '不把一个未完成动作切到两次独立生成中。', '只补景别、主要运镜和稳定性'],
+  }],
+  ['visual-development', {
+    en: ['# Visual Development and Asset Design', 'Shoes are mandatory', '### Non-human characters', 'Do not use uncertainty', 'at least three stable, clearly visible spatial anchors', 'clear, sharp, richly detailed, and production-quality', 'occupation- or identity-specific pose/context samples', 'foundational location description stored as project fact'],
+    zh: ['# 视觉开发与资产设计', '鞋子是完整人物设计的必要部分', '### 非人类角色', '不用“或”“可能”“也许”“大概”等不确定词', '至少三个稳定、清晰可见的空间锚点', '清晰锐利、细节丰富并达到专业生产质量', '与职业或身份相符、可复用于分镜的轻微姿态或语境样本', '作为项目事实保存的基础地点描述'],
+  }],
+  ['video-direction', {
+    en: ['# Video Direction and Generation Design', 'explicitly ordered reference manifest', '“cut to the location in image N,”', 'one to three core actions', 'never divide one unfinished action across two generations', '`{spoken line}`', '`<sound description>`', 'objects crossing the lens', 'otherwise tell the user plainly', '## Dialogue, sound, and native audio'],
+    zh: ['# 视频导演与生成设计', '有明确顺序的参考清单', '“镜头切至图片N中的……”', '一到三个核心动作', '不把一个未完成动作切到两次独立生成', '`{逐字台词}`', '`<声音描述>`', '物体擦过镜头', '没有该能力时必须明确告诉用户', '## 对白、声音和原生音频'],
+  }],
+  ['music-direction', {
+    en: ['# Music and Score Direction', 'one unified but continuously changing instrumental BGM score', 'Reserve midrange space for dialogue', '`videoRatio` and a Style Bible', 'soundstage width/depth, rhythmic density, and orchestration direction'],
+    zh: ['# 音乐与配乐设计', '统一但持续变化的纯器乐 BGM', '为对白和旁白保留中频空间', '`videoRatio` 与 Style Bible', '音乐气质、声场宽度与纵深、节奏密度和配器取向'],
+  }],
+  ['quality-review', {
+    en: ['# Creative Quality Review', 'Use actually visible evidence', 'minimum correction scope'],
+    zh: ['# 创作质量审查', '根据真实可见输入', '最小范围修正'],
   }],
 ])
 
@@ -258,6 +297,24 @@ for (const entry of entries) {
     for (const token of tokens) {
       if (localizedTemplate.includes(token)) {
         violations.push(`forbidden legacy semantic token ${token} in ${relLocalizedTemplatePath}`)
+      }
+    }
+  }
+}
+
+for (const [skillId, localizedTokens] of criticalCreativeSkillTokens) {
+  const skillDir = path.join(root, 'src', 'lib', 'creative-skills', 'skills', skillId)
+  for (const [locale, tokens] of Object.entries(localizedTokens)) {
+    const skillPath = path.join(skillDir, `SKILL.${locale}.md`)
+    const relativeSkillPath = `src/lib/creative-skills/skills/${skillId}/SKILL.${locale}.md`
+    if (!fs.existsSync(skillPath)) {
+      violations.push(`missing Creative Skill resource: ${relativeSkillPath}`)
+      continue
+    }
+    const skill = fs.readFileSync(skillPath, 'utf8')
+    for (const token of tokens) {
+      if (!skill.includes(token)) {
+        violations.push(`missing Creative Skill semantic token ${token} in ${relativeSkillPath}`)
       }
     }
   }

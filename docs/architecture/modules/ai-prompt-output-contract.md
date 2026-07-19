@@ -19,12 +19,14 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - **AP-06 — Fixture 只是外部协议替身。** Golden provider fixture 必须通过同一生产 raw schema，但只能证明受控外部边界与内部真实主链兼容，不能证明真实模型必然服从 Prompt。Prompt 或 schema 变化时必须审计 fixture；不得让 fixture 自己定义期望协议。
 - **AP-07 — 流式展示无业务裁决权。** structured stream 只消费已声明 raw item、stable key 与 merge rule，提供可丢弃预览。stream parse rejection 不得写 Task/resource 失败，最终业务状态仍由 durable owner 决定。
 - **AP-08 — Freeform Playbook 不获得执行门禁。** 项目助手 Prompt 可以说明推荐完整制作配方、Choice 时机、失败重试、Resource 引用和非阻塞 Task 行为，但不得把 recommendation 写成工具 allowlist 或固定 next step。所有注入 Tool 可调用；同模型步骤 OperationBatch、聚合 Approval、后台 Run/Wait、内在输入、owner/scope、provider capability、破坏性确认和 Run fence 必须由代码 fail closed。Prompt 只能要求模型收到 Task receipt 后继续独立工作、不得轮询，并在 terminal update 时重新规划；它无权决定 Task 是否真正提交、Wait membership 或续跑次数。Prompt 遗漏 Choice 或停止调用时不得伪造领域事实或死锁用户；UI 与下一次用户消息仍可调用同一开放 Operation。
+- **AP-09 — 专业知识与运行 Prompt 分层。** 主 Agent System Prompt 只保留身份、loop、工具与事实边界、Task/Wait、Approval/Choice、Resource identity、失败、沟通和安全等运行规则；剧本、连续性、导演、视觉、视频、音乐和质量方法由注册式 Creative Skill 按需读取。Skill 不得包含或重定义 Operation schema、Task 生命周期、Approval/Choice、数据库 identity 或 provider wire 参数；严格 adapter 和确定性 builder 继续是原执行协议 owner。迁移以原中英文有效规则并集为基线，只有完成调用者与替代证据审计的 obsolete 内容才可删除。
 
 ## 权威入口
 
 - Prompt identity、模板路径与变量：`src/lib/ai-prompts/ids.ts`、`src/lib/ai-prompts/registry.ts`。
 - Prompt 构建与模板读取：`src/lib/ai-prompts/build-prompt.ts`、`src/lib/ai-prompts/template-store.ts`。
 - Prompt 模板：`src/lib/ai-prompts/templates/**`；非 catalog 历史模板仍须按 Prompt i18n guard 的迁移规则收敛。
+- 按需专业知识：`src/lib/creative-skills/registry.ts` 与 `skills/**/SKILL.{zh,en}.md`；无状态模型输出边界：`src/lib/creative-worker/output-registry.ts`。它们服从独立的 Skill identity 与 output-kind registry，不得塞回 `AI_PROMPT_CATALOG` 或从 Operation 名称推断。
 - `standards/prompt-canary/**` 当前没有生产或测试消费者，只是未挂载的历史 canary 数据；它不是 Prompt、schema 或测试证据的 owner。修改时仍路由本模块以显式暴露该状态，不得把文件存在当成已验证。
 - 生产 raw schema：由各领域 schema module 拥有；不得在本模块建立第二份通用字段 registry。调用链必须从 Prompt ID/字段引用追到实际 worker parser。
 - Canvas raw stream 消费：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`，并同时服从 `canvas-node/CN-03`。
