@@ -6,7 +6,7 @@ import {
   submitGoldenBoundary,
 } from '../browser/pages/workspace'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
-import { failNextGoldenFalRequests } from '../providers/control'
+import { failNextGoldenFalRequests, setGoldenStreamPacing } from '../providers/control'
 import {
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_AUDIO_REQUEST,
@@ -16,6 +16,8 @@ import {
   GOLDEN_FREEFORM_TEXT_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
   GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
+  GOLDEN_STOP_RECOVERY_REQUEST,
+  GOLDEN_STOP_REPLY_REQUEST,
 } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -201,6 +203,54 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   expect(snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toHaveLength(1)
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE)).toBe(false)
   browserObservations.assertClean()
+})
+
+test('[GJ-ASSISTANT-STOP-REPLY] stopping a streamed reply cancels its Run and permits a new turn', async ({
+  page,
+  browserObservations,
+}, testInfo) => {
+  test.setTimeout(5 * 60_000)
+  await registerGoldenUser(page, {
+    username: `golden-stop-reply-${String(Date.now())}`,
+    password: 'golden-stop-reply-password',
+  })
+
+  await setGoldenStreamPacing({ chunkSize: 8, delayMs: 5 })
+  let scope: GoldenWorkspaceScope | null = null
+  try {
+    scope = await launchGoldenStoryFromHome(page, GOLDEN_STOP_REPLY_REQUEST)
+    await expect(page.getByText(/STOP_REPLY_STREAM_BEGIN/).first()).toBeVisible({ timeout: 60_000 })
+    const stopReply = page.getByRole('button', { name: '停止生成', exact: true }).filter({ visible: true })
+    await expect(stopReply).toBeVisible()
+    await stopReply.click()
+  } finally {
+    await setGoldenStreamPacing(null)
+  }
+  if (!scope) throw new Error('GOLDEN_STOP_REPLY_SCOPE_MISSING')
+
+  await expect(page.getByRole('button', { name: '发送', exact: true }).filter({ visible: true })).toBeVisible()
+  await sendNaturalLanguage(page, GOLDEN_STOP_RECOVERY_REQUEST)
+  await expect(page.getByText('STOP_REPLY_RECOVERY_COMPLETED', { exact: true })).toBeVisible({ timeout: 60_000 })
+  await expect.poll(async () => (await readGoldenOracleSnapshot(scope)).runs.map((run) => ({
+    status: run.status,
+    stopReason: run.stopReason,
+  })), {
+    timeout: 60_000,
+    message: 'the stop click must cancel its Run and an immediate new user turn must acquire the released lock',
+  }).toEqual([
+    { status: 'cancelled', stopReason: 'stream_cancelled' },
+    { status: 'completed', stopReason: 'completed' },
+  ])
+
+  const snapshot = await readGoldenOracleSnapshot(scope)
+  expect(snapshot.tasks).toHaveLength(0)
+  expect(snapshot.waits).toHaveLength(0)
+  expect(snapshot.handoffs).toHaveLength(0)
+  browserObservations.assertClean()
+  await testInfo.attach('stop-reply-oracle', {
+    body: Buffer.from(JSON.stringify(snapshot, null, 2)),
+    contentType: 'application/json',
+  })
 })
 
 test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote and one background continuation', async ({

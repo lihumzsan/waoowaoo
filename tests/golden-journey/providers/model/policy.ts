@@ -78,6 +78,8 @@ export const GOLDEN_FREEFORM_VIDEO_REQUEST = '复用成功图片生成两个视�
 export const GOLDEN_FREEFORM_AUDIO_REQUEST = '根据成功视频生成一段配乐'
 export const GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST = '从空项目直接生成一个视频'
 export const GOLDEN_FREEFORM_ADOPT_REQUEST = '选择第二张图片作为主视觉'
+export const GOLDEN_STOP_REPLY_REQUEST = '停止当前 AI 回复验证'
+export const GOLDEN_STOP_RECOVERY_REQUEST = '取消后新对话恢复验证'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -228,6 +230,8 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_AUDIO_REQUEST,
   GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
   GOLDEN_FREEFORM_ADOPT_REQUEST,
+  GOLDEN_STOP_REPLY_REQUEST,
+  GOLDEN_STOP_RECOVERY_REQUEST,
 ] as const
 
 function messageContentText(message: GoldenChatCompletionRequest['messages'][number]): string {
@@ -791,6 +795,18 @@ export function decideGoldenModelResponse(input: {
   }
 
   const freeformInstruction = latestFreeformInstruction(input.request)
+  if (freeformInstruction?.text.includes(GOLDEN_STOP_REPLY_REQUEST)) {
+    return {
+      kind: 'text',
+      text: `STOP_REPLY_STREAM_BEGIN ${'deterministic-stream-chunk '.repeat(200)}`,
+    }
+  }
+  if (freeformInstruction?.text.includes(GOLDEN_STOP_RECOVERY_REQUEST)) {
+    return {
+      kind: 'text',
+      text: 'STOP_REPLY_RECOVERY_COMPLETED',
+    }
+  }
   if (freeformInstruction?.text.includes(GOLDEN_PARALLEL_IMAGE_REQUEST)) {
     const alreadyCalled = calledToolsAfter(input.request, freeformInstruction.index).has('create_image')
     const isTaskContinuation = messageText(input.request).includes('[task_update]')

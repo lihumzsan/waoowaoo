@@ -1,7 +1,8 @@
 # Product Journey
 
-This directory contains one repeatable Playwright product Journey and the
-small security boundary that cannot be proved by the creative mainline.
+This directory contains one full repeatable Playwright product Journey,
+focused freeform lifecycle scenarios, and the small security boundary that
+cannot be proved by the creative mainline.
 
 The main Journey starts from an empty project, drives the real UI, API,
 services, database, queue, workers, Outbox, SSE, and projector, and finishes
@@ -29,6 +30,7 @@ npm run test:journey
 `test:fast` contains pure logic and registry conformance. `test:critical`
 contains real infrastructure failure, transaction, retry, idempotency, and
 concurrency evidence. `test:journey` runs harness self-checks, then the one
-multi-chapter mainline and the unauthenticated, cross-user, and cross-project
-security scenarios. Playwright writes its JSON, HTML, trace, screenshot, and
-video artifacts under `artifacts/golden-journey/runs/<run-id>/`.
+multi-chapter mainline, focused freeform semantics, and the unauthenticated,
+cross-user, and cross-project security scenarios. Playwright writes its JSON,
+HTML, trace, screenshot, and video artifacts under
+`artifacts/golden-journey/runs/<run-id>/`.

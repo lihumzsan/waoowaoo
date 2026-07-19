@@ -231,7 +231,9 @@ export function createProjectAgentUiMessageStream(params: {
           }
         }
       } finally {
-        await settleOnce()
+        // Consumer cancellation owns terminal ordering: onCancel must persist
+        // the cancelled Run before shared settlement releases its lock.
+        if (!cancelled) await settleOnce()
       }
     },
     async cancel() {

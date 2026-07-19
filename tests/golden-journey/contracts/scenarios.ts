@@ -42,6 +42,15 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     zeroPaidProviderCalls: true,
   },
   {
+    id: 'GJ-ASSISTANT-STOP-REPLY',
+    kind: 'freeform',
+    title: 'the composer stop control cancels one streamed foreground Run and permits the next user turn',
+    startStep: 'unavailable',
+    expectedTerminal: 'cancelled_reply_then_new_turn_completed',
+    requiresWorkers: false,
+    zeroPaidProviderCalls: true,
+  },
+  {
     id: 'GJ-AUTH-UNAUTHENTICATED-DENIAL',
     kind: 'security',
     title: 'an unauthenticated browser cannot open a workspace or read project data',
