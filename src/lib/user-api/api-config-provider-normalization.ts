@@ -1,6 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
 import type { StoredProvider } from './api-config-types'
-import { assertProviderBaseUrlShape } from '@/lib/http/outbound-url-policy'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 
 const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google'])
@@ -11,6 +10,19 @@ function assertSupportedProvider(providerId: string, field: string) {
     code: 'PROVIDER_NOT_SUPPORTED',
     field,
   })
+}
+
+function normalizeProviderBaseUrl(value: string, field: string): string {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('PROTOCOL_INVALID')
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROVIDER_BASE_URL_INVALID',
+      field,
+    })
+  }
 }
 
 export function resolveProviderByIdOrKey(providers: StoredProvider[], providerId: string): StoredProvider | null {
@@ -73,15 +85,9 @@ export function normalizeProvidersInput(rawProviders: unknown): StoredProvider[]
     }
 
     const rawBaseUrl = readTrimmedString(item.baseUrl)
-    let baseUrl: string | undefined
-    try {
-      baseUrl = rawBaseUrl ? assertProviderBaseUrlShape(rawBaseUrl) : undefined
-    } catch {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'PROVIDER_BASE_URL_UNSAFE',
-        field: `providers[${index}].baseUrl`,
-      })
-    }
+    const baseUrl = rawBaseUrl
+      ? normalizeProviderBaseUrl(rawBaseUrl, `providers[${index}].baseUrl`)
+      : undefined
 
     normalized.push({
       id,

@@ -100,7 +100,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createUserApiConfigOperations(), {
       groupPath: ['config', 'api'],
-      channels: CHANNELS_TOOL_API,
+      channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),

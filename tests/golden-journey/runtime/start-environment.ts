@@ -75,7 +75,6 @@ function baseEnvironment(
     PLATFORM_OPENROUTER_BASE_URL: `${gatewayBaseUrl}/v1`,
     PLATFORM_FAL_API_KEY: 'golden-fal-key',
     FAL_QUEUE_BASE_URL: gatewayBaseUrl,
-    PROVIDER_OUTBOUND_PRIVATE_HOST_ALLOWLIST: '127.0.0.1,localhost,::1',
     PLATFORM_ELEVENLABS_API_KEY: 'golden-elevenlabs-key',
     PLATFORM_ELEVENLABS_BASE_URL: gatewayBaseUrl,
     OUTBOX_DISPATCH_INTERVAL_MS: '1000',

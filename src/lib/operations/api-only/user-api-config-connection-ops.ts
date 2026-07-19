@@ -3,6 +3,7 @@ import { testLlmConnection } from '@/lib/ai-exec/llm-test-connection'
 import { testProviderConnection } from '@/lib/ai-exec/provider-test'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { assertUserProviderConfigurationAvailable } from '@/lib/user-api/availability'
 
 const providerDiagnosticInputSchema = z.object({
   providerId: z.string().trim().min(1),
@@ -30,6 +31,7 @@ export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgen
       inputSchema: z.unknown(),
       outputSchema: z.unknown(),
       execute: async (_ctx, input) => {
+        assertUserProviderConfigurationAvailable()
         const startedAt = Date.now()
         const payload = input as Parameters<typeof testLlmConnection>[0]
         const result = await testLlmConnection(payload)
@@ -57,6 +59,7 @@ export function createUserApiConfigConnectionDiagnosticOperations(): ProjectAgen
       inputSchema: providerDiagnosticInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
+        assertUserProviderConfigurationAvailable()
         const startedAt = Date.now()
         const parsed = providerDiagnosticInputSchema.parse(input)
         const storedProvider = parsed.apiKey

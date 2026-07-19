@@ -1,5 +1,4 @@
 import type { Dispatcher, RequestInit as UndiciRequestInit } from 'undici'
-import { assertSafeProviderOutboundUrl, UnsafeOutboundUrlError } from './outbound-url-policy'
 
 type ProxyDispatcherCache = {
   proxyUrl: string
@@ -117,37 +116,22 @@ export async function fetchWithProviderProxy(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  const rawUrl = readFetchInputUrl(input)
-  if (!rawUrl) throw new UnsafeOutboundUrlError('provider request URL is missing')
-  await assertSafeProviderOutboundUrl(rawUrl)
   const proxy = shouldProxyProviderUrl(input) ? await resolveProxyDispatcher() : null
-  const guardedInit: RequestInit = { ...(init ?? {}), redirect: 'manual' }
-  const response = !proxy
-    ? await fetch(input, guardedInit)
-    : await (async () => {
-        const { fetch: undiciFetch } = await import('undici')
-        type UndiciFetchInput = Parameters<typeof undiciFetch>[0]
-        const requestInit: RequestInitWithDispatcher = {
-          ...(guardedInit as unknown as UndiciRequestInit),
-          dispatcher: proxy.dispatcher,
-        }
-        return await undiciFetch(input as unknown as UndiciFetchInput, requestInit) as unknown as Response
-      })()
+  if (!proxy) return await fetch(input, init)
 
-  if (response.status >= 300 && response.status < 400) {
-    await response.body?.cancel()
-    throw new UnsafeOutboundUrlError('provider redirect responses are not allowed')
+  const { fetch: undiciFetch } = await import('undici')
+  type UndiciFetchInput = Parameters<typeof undiciFetch>[0]
+  const requestInit: RequestInitWithDispatcher = {
+    ...((init ?? {}) as unknown as UndiciRequestInit),
+    dispatcher: proxy.dispatcher,
   }
-  return response
+  return await undiciFetch(input as unknown as UndiciFetchInput, requestInit) as unknown as Response
 }
 
 export async function withProviderProxyDispatcher<T>(
   targetUrl: RequestInfo | URL,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const rawUrl = readFetchInputUrl(targetUrl)
-  if (!rawUrl) throw new UnsafeOutboundUrlError('provider dispatcher target URL is missing')
-  await assertSafeProviderOutboundUrl(rawUrl)
   if (!shouldProxyProviderUrl(targetUrl)) return await operation()
   const proxy = await resolveProxyDispatcher()
   if (!proxy) return await operation()

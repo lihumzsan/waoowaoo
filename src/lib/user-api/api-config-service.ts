@@ -12,7 +12,7 @@ import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
-import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
 import type { ApiConfigPutBody, DefaultModelsPayload } from './api-config-types'
@@ -49,8 +49,10 @@ import {
   capabilitySelectionCommandSchema,
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
+import { assertUserProviderConfigurationAvailable } from './availability'
 
 export async function getUserApiConfig(userId: string) {
+  assertUserProviderConfigurationAvailable()
   const pref = await prisma.userPreference.findUnique({
     where: { userId },
     select: {
@@ -127,6 +129,7 @@ export async function putUserApiConfig(
   body: unknown,
   client: Pick<Prisma.TransactionClient, 'userPreference'> = prisma,
 ) {
+  assertUserProviderConfigurationAvailable()
   if (!isRecord(body)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
@@ -155,13 +158,6 @@ export async function putUserApiConfig(
     ? undefined
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)
   const billingMode = await getBillingMode()
-  const deployment = getDeploymentConfig()
-  if (isPlatformProviderCredentialMode(deployment)) {
-    throw new ApiError('FORBIDDEN', {
-      code: 'API_CONFIG_MANAGED_BY_PLATFORM',
-    })
-  }
-
   const updateData: Record<string, unknown> = {}
   const existingPref = await client.userPreference.findUnique({
     where: { userId },

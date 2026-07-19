@@ -22,7 +22,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-09 — 结构化输出只有一个严格解释器。** 所有声明 JSON object/array 的 LLM 与 vision 结果必须经 `ai-exec/structured-json.ts` 解析，再进入 schema 与业务校验。解释器只可去除包裹整份响应的一个完整、匹配、无额外正文的 Markdown `json` 或无标签 fence；不得截取正文中的 JSON、修复内容、接受未知 fence 标签或从说明文字中猜测结果。外层包装以外的任何协议偏差必须显式失败。
 - **PG-10 — 音乐时长能力由 registry 唯一声明。** FAL Lyria 只声明连续 `120–180` 秒能力；业务调用方必须从生产 registry 解析 provider 请求时长，不得维护固定时长枚举或复制范围。目标短于 120 秒时生成 120 秒后在本地精确贴合，目标位于范围内时按目标生成，超过 180 秒必须原地失败；`negative_prompt` 必须经 provider adapter 原样进入外部协议。
 - **PG-11 — Provider 密钥只写不读。** 用户配置 View 只能返回 `hasApiKey`，不得解密或回传已有密钥；编辑界面以空 secret 字段表达“保持不变”，连接诊断缺省 key 时只在服务端按 provider owner 解密并立即交给 adapter。浏览器状态、日志和 API 错误不得保存或显示明文 key。
-- **PG-12 — 出站网络与响应体有同一安全边界。** 用户提供的 base URL 必须是无凭据的绝对 HTTP(S) URL，公网强制 HTTPS，并在实际调用前拒绝 localhost、metadata 与私有/保留地址；私网 Provider 只能通过精确主机 allowlist 显式授权。重定向不得绕过校验。图片、音频、视频、multipart 与 base64 必须经共享字节上限读取，禁止无界 `arrayBuffer/formData/Buffer.from(base64)`。
+- **PG-12 — Provider 连接所有权服从部署模式。** `platform-key` 下 Provider identity、base URL 与密钥只由服务器环境配置拥有；用户 API 配置的读取、写入和连接诊断必须在任何数据库或外部请求前拒绝，相关 Operation 只允许 API channel，不能进入主 Agent 工具集。`user-key` 下个人设置继续是自定义 Provider 的唯一 writer。Provider transport 只负责按已选配置发请求与可选代理转发，不得再按 DNS 结果、私网/保留 IP、metadata、HTTPS、重定向或本地 allowlist 建立第二套可用性裁决；本地部署者对自定义网络目标负责。图片、音频、视频、multipart 与 base64 仍必须经共享字节上限读取，禁止无界 `arrayBuffer/formData/Buffer.from(base64)`。
 - **PG-13 — 普通 LLM/Vision 只有一套 SDK 执行与结果协议。** 每个 LLM 模型必须在生产 capability registry 穷尽声明 `openai-responses | openai-compatible-chat | openrouter-chat | google-generative-ai` 传输协议；`ai-exec` 只通过一个 AI SDK `LanguageModel` runner 执行 `generateText/streamText`，并只通过一个 versioned、可序列化的项目 result projector 生成 durable result。Provider adapter 只拥有模型 factory、消息准备、专属 option/header、proxy、metadata/error 校验，禁止返回私有 completion shape、直用原生 Chat Completions、手写 Responses HTTP/SSE parser 或另建 LLM/Vision 执行链。Video 的 submit/status/result durable lifecycle 不属于该同步结果协议；会在进程内自动 poll/download 的高层 Video SDK 不得替换现有 durable handoff。
 - **PG-14 — Provider 先按生命周期分类，再选择传输实现。** Runtime 只有 `sync final result` 与 `async durable job` 两种执行语义，图片、视频或 provider 名称不得代替该分类。同步接口优先由能保留参数 policy、proxy、安全上限、错误语义且可关闭提交重试的高层 SDK 执行；异步接口必须让项目分别调用 `submit/status/result`、在 submit 后立即持久化 canonical external id，并由 worker/reconciler 拥有恢复和终态。任何 SDK 若隐藏进程内 polling/download、自动 fallback，或无法关闭不确定 POST 的重试，均不得接管该边界；保留项目低层 transport 不构成第二生命周期。OpenRouter Image 使用 AI SDK `generateImage`；OpenRouter Video 使用官方低层 SDK 的独立 `generate/getGeneration`；FAL Queue 因官方客户端当前固定重试 submit，继续使用零自动重提的项目 transport。
 - **PG-15 — 模型 option 只规范化一次。** `AiOptionSchema` 同时拥有允许字段、必填/冲突、值域和 canonical normalize；`ai-exec` 必须把其结果交给 provider adapter。adapter 只能把 canonical option 映射为 provider SDK/wire 字段，不得再次维护同义 allowed-key、枚举、默认值或跨字段裁决。跨 provider 的同模型族规则必须由共享 policy builder 生成，各 provider 只声明自身 capability/policy 差异；把重复解释移动到 shared wrapper 但保留第二裁判不算收敛。
@@ -39,7 +39,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - LLM 推理强度的唯一运行时解析：`src/lib/ai-exec/reasoning-effort.ts`；平台 assistant/analysis 模型 identity 与角色环境配置入口：`src/lib/platform-models/` 和 `.env*.example`。
 - 结构化 LLM/vision 输出的唯一 envelope 解析、shape 校验与 schema 执行入口：`src/lib/ai-exec/structured-json.ts`、`src/lib/ai-exec/structured-step.ts`。
 - 用户 provider 配置的严格解析与写入：`src/lib/user-api/**`；运行时选择入口为 `src/lib/user-api/runtime-config.ts`。
-- Provider 出站 URL 与代理裁决：`src/lib/http/outbound-url-policy.ts`、`src/lib/http/outbound-proxy.ts`；请求/响应体积入口：`src/lib/http/body-limits.ts`。
+- Provider 可选出站代理：`src/lib/http/outbound-proxy.ts`；请求/响应体积入口：`src/lib/http/body-limits.ts`。部署模式与用户 Provider 配置可用性的唯一裁决分别是 `src/lib/deployment/config.ts` 与 `src/lib/user-api/availability.ts`。
 - `standards/capabilities/**` 与 `standards/pricing/**` 当前分别由 catalog 检查脚本读取，不是生产 runtime registry 的 writer；运行时仍从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力或价格已切换。
 
 ## 验证
@@ -56,7 +56,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 穷尽验证 runtime LLM protocol，并观察 Ark Responses thinking/SSE、Ark/Google Vision 图片编码、OpenRouter reasoning/cache/session/cost 与 provider 连接请求的真实 wire contract。
 - provider guards 只阻止 API/媒体绕过、跨 provider 猜测和 fallback 等结构旁路，不替代协议或用户旅程证据。
 - `npm run check:capability-catalog` 与 `npm run check:pricing-catalog` 验证 standards 文件自身及 tier/capability 字段关系；它们不证明 standards 与运行时代码 catalog 值一致。
-- `tests/unit/http/{outbound-url-policy,body-limits}.test.ts` 反证私网/metadata 地址、明文公网 URL、凭据 URL、超限 chunk 与 base64；provider contract 的本地服务器只通过测试环境精确 allowlist 开放。
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 反证用户 API 配置重新进入主 Agent；`tests/unit/deployment/config.test.ts` 验证 `platform-key/user-key` 的唯一部署能力投影；`tests/unit/http/body-limits.test.ts` 继续反证超限 chunk 与 base64。
 ## 历史回归
 
 - `ccdd10be6` 修复 FAL 异步失败未被 surface 的问题：provider 的失败终态必须进入统一任务失败边界，不能留在 polling 中静默消失。
@@ -71,7 +71,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - 官方 OpenAI Image provider 在 `e12f7ecdc` 删除 legacy provider surface 时已失去全部执行入口，但共享的 348 行 SDK transport 因 FAL 继续引用两个枚举而残留，根依赖也未移除；之后 FAL 与 OpenRouter GPT Image 2 又分别在 adapter 复制 registry 已声明的尺寸、质量与格式规则。旧防线只证明各自请求可工作，无法反证死 transport 或两套 option 裁判。现在中立格式常量与 GPT Image 2 schema/pixel policy 合并为一个共享 builder，`AiOptionSchema.normalize` 是唯一 canonical 解释，adapter 只做 provider 映射；死 transport 和根 `openai` 直接依赖已删除。Agents SDK 自身的传递 `openai` 依赖不属于 Provider Gateway 执行入口。
 - 音乐模型能力曾以少数固定秒数枚举表达，业务层因此无法为任意时间线声明明确请求。现在 FAL Lyria 在生产 registry 唯一声明连续 `120–180` 秒；短时间线统一请求 120 秒并由本地确定性 conform，范围内精确请求，超长请求拒绝。provider contract 直接观察真实 HTTP payload，防止调用方重新写死枚举、丢失负向提示词或绕过范围校验。
 - 用户 Provider 配置 GET 曾直接解密并把 API key 回传浏览器，连接测试也依赖客户端重新提交明文；设置页鉴权只能防跨用户，不能防浏览器扩展、XSS、前端日志或缓存泄露。当前 View 永远只返回 `hasApiKey`，保存成功后立即清空客户端 secret，诊断按 providerId 在服务端解析既有 key。浏览器端明文回归由响应契约与真实 Profile Journey 复验，恶意浏览器扩展不在应用可控制边界内。
-- 出站代理曾把 localhost/私网地址视为“无需代理即可直连”，用户 baseUrl 因而成为 SSRF；旧 provider 协议测试只验证请求格式，还主动依赖 loopback，未能反证默认私网访问。当前 URL policy 默认拒绝私网、保留/metadata、凭据和公网 HTTP，测试 loopback 需精确 allowlist，fetch 重定向失败关闭。DNS 校验与实际连接之间在外部代理解析场景仍依赖受信任代理的 egress policy，是部署侧需复验的盲区。
+- `98e1c725e` 为用户可配置 Provider 增加统一 SSRF/DNS 防线，却把平台环境变量、Self-hosted 配置和 Provider 动态地址都解释成同一种不可信 URL；Cloud 同时只隐藏 API 配置页面，仍把配置 Operation 暴露给主 Agent并保留连接诊断 API。Clash Fake-IP 将合法 `openrouter.ai` 解析到 `198.18.0.0/15` 后，真实 Assistant 模型请求在交给显式代理前被误拒绝，既有安全测试因为依赖测试 allowlist 而没有覆盖该组合。当前以部署模式重新划定所有权：Cloud 用户配置和诊断在统一 availability 入口原地拒绝，配置 Operation 改为 API-only；Self-hosted 部署者继续拥有自定义连接。旧 URL policy、DNS/IP/metadata/redirect 裁决、私网 allowlist 和对应测试环境分支整体删除，代理只负责路由。Self-hosted 多个互不信任用户共享同一网络时的出站风险由部署者承担，不再由运行时阻断。
 
 ## 修改检查表
 

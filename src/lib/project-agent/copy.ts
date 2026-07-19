@@ -260,8 +260,6 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   list_user_models: { zh: '查看可用模型', en: 'List available models' },
   list_user_transactions: { zh: '查看交易记录', en: 'List transactions' },
   get_user_costs: { zh: '查看用户费用', en: 'Read user costs' },
-  get_user_api_config: { zh: '读取 API 配置', en: 'Read API configuration' },
-  put_user_api_config: { zh: '更新 API 配置', en: 'Update API configuration' },
   get_task_batch: { zh: '读取任务批次', en: 'Read task batch' },
   get_project_basic: { zh: '读取项目基本信息', en: 'Read project basics' },
   update_project: { zh: '更新项目', en: 'Update project' },

@@ -63,6 +63,10 @@ export function isPlatformProviderCredentialMode(config: DeploymentConfig = getD
   return config.providerCredentialMode === 'platform-key'
 }
 
+export function isUserProviderCredentialMode(config: DeploymentConfig = getDeploymentConfig()): boolean {
+  return config.providerCredentialMode === 'user-key'
+}
+
 export function toPublicDeploymentConfig(config: DeploymentConfig = getDeploymentConfig()) {
   return {
     edition: config.edition,

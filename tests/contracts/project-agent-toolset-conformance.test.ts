@@ -65,6 +65,10 @@ describe('project agent toolset conformance', () => {
     expect(toolset.source).toBe('operation-registry')
     expect(toolset.disabledOperationIds).toEqual([])
     expect(toolset.operationIds).toEqual(expectedOperationIds)
+    expect(toolset.operationIds).not.toContain('get_user_api_config')
+    expect(toolset.operationIds).not.toContain('put_user_api_config')
+    expect(registry.get_user_api_config.channels).toEqual({ tool: false, api: true })
+    expect(registry.put_user_api_config.channels).toEqual({ tool: false, api: true })
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
@@ -159,9 +163,6 @@ describe('project agent toolset conformance', () => {
     ]))
     expect(Object.keys(registry.get_task.toolInputSchema.properties)).toEqual([
       'taskId', 'includeEvents', 'eventsLimit',
-    ])
-    expect(Object.keys(registry.put_user_api_config.toolInputSchema.properties)).toEqual([
-      'providers', 'models', 'defaultModels', 'capabilityDefaults', 'workflowConcurrency',
     ])
     expect(Object.keys(registry.update_user_preference.toolInputSchema.properties)).toContain('assistantModel')
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toContain('capabilityOverrides')

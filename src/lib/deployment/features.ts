@@ -1,4 +1,5 @@
 import type { DeploymentConfig } from './config'
+import { isPlatformProviderCredentialMode, isUserProviderCredentialMode } from './config'
 
 export interface DeploymentFeatures {
   showOfficialPublicPages: boolean
@@ -16,48 +17,51 @@ export interface DeploymentFeatures {
   usePlatformProviderConfig: boolean
 }
 
-const SELF_HOSTED_DEPLOYMENT_FEATURES: DeploymentFeatures = {
+type EditionDeploymentFeatures = Omit<DeploymentFeatures, 'showApiConfig' | 'usePlatformProviderConfig'>
+
+const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: false,
   showPricingPage: false,
   showLegalPages: false,
   showRecharge: false,
   showInviteCode: false,
   showBilling: false,
-  showApiConfig: true,
   showAccountSecurity: false,
   showGoogleOAuth: false,
   showDownloadLogs: false,
   showUpdateCheck: true,
   requireInviteCodeOnSignup: false,
-  usePlatformProviderConfig: false,
 }
 
-const CLOUD_DEPLOYMENT_FEATURES: DeploymentFeatures = {
+const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showOfficialPublicPages: true,
   showPricingPage: true,
   showLegalPages: true,
   showRecharge: true,
   showInviteCode: true,
   showBilling: true,
-  showApiConfig: false,
   showAccountSecurity: true,
   showGoogleOAuth: true,
   showDownloadLogs: false,
   showUpdateCheck: false,
   requireInviteCodeOnSignup: false,
-  usePlatformProviderConfig: true,
 }
 
-function cloneDeploymentFeatures(features: DeploymentFeatures): DeploymentFeatures {
+function cloneEditionDeploymentFeatures(features: EditionDeploymentFeatures): EditionDeploymentFeatures {
   return { ...features }
 }
 
 export function getDeploymentFeatures(config: DeploymentConfig): DeploymentFeatures {
-  return cloneDeploymentFeatures(config.edition === 'cloud'
+  const base = cloneEditionDeploymentFeatures(config.edition === 'cloud'
     ? CLOUD_DEPLOYMENT_FEATURES
     : SELF_HOSTED_DEPLOYMENT_FEATURES)
+  return {
+    ...base,
+    showApiConfig: isUserProviderCredentialMode(config),
+    usePlatformProviderConfig: isPlatformProviderCredentialMode(config),
+  }
 }
 
 export function toPublicDeploymentFeatures(features: DeploymentFeatures): DeploymentFeatures {
-  return cloneDeploymentFeatures(features)
+  return { ...features }
 }
