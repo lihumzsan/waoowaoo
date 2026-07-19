@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
-import { AnimatedBackground } from '@/components/ui/SharedComponents'
+import { WorkspaceBackground } from '@/components/ui/SharedComponents'
 import { useTranslations } from 'next-intl'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceRunStreamConsoles from './components/WorkspaceRunStreamConsoles'
@@ -76,7 +76,7 @@ function NovelPromotionWorkspaceContent(props: NovelPromotionWorkspaceProps) {
 
   return (
     <div>
-      <AnimatedBackground />
+      <WorkspaceBackground />
 
       <WorkspaceHeaderShell
         isSettingsModalOpen={vm.ui.isSettingsModalOpen}

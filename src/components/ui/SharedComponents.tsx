@@ -1,19 +1,21 @@
 'use client'
 
 /**
- * AnimatedBackground - 流光极光背景动画
- * 用于页面全局背景
+ * Static blue-gray background for the project workspace.
  */
-export function AnimatedBackground() {
+export function WorkspaceBackground() {
     return (
-        <div className="fixed inset-0 -z-10 overflow-hidden bg-[var(--glass-bg-canvas)]">
-            <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-40 animate-aurora filter blur-[100px]">
-                <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-[var(--glass-bg-surface)] rounded-full mix-blend-multiply animate-blob" />
-                <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-[var(--glass-bg-muted)] rounded-full mix-blend-multiply animate-blob animation-delay-2000" />
-                <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-[var(--glass-bg-surface-strong)] rounded-full mix-blend-multiply animate-blob animation-delay-4000" />
-            </div>
-            <div className="absolute inset-0 bg-white/60 backdrop-blur-3xl" />
-        </div>
+        <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 -z-10 bg-[var(--glass-bg-canvas)]"
+            style={{
+                background: [
+                    'radial-gradient(ellipse at 18% 12%, color-mix(in srgb, var(--glass-bg-surface-strong) 72%, transparent) 0%, transparent 58%)',
+                    'radial-gradient(ellipse at 82% 88%, color-mix(in srgb, var(--glass-bg-muted) 70%, transparent) 0%, transparent 62%)',
+                    'var(--glass-bg-canvas)',
+                ].join(', '),
+            }}
+        />
     )
 }
 
