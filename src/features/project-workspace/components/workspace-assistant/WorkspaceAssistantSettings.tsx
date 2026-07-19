@@ -111,7 +111,7 @@ export function WorkspaceAssistantSettings() {
               }}
               className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:cursor-wait disabled:opacity-50 ${required === false ? 'bg-slate-300' : 'bg-[var(--glass-accent-from)]'}`}
             >
-              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${required === false ? 'translate-x-0.5' : 'translate-x-[18px]'}`} />
+              <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${required === false ? 'translate-x-0' : 'translate-x-4'}`} />
             </button>
           </div>
           {settings.error ? (
