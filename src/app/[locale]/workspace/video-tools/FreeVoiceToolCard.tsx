@@ -9,6 +9,7 @@ import { useProjectCharacters } from '@/lib/query/hooks'
 import {
   buildFreeVoiceSubmitInput,
   buildProjectCharacterOptions,
+  resolveCharacterPickerState,
 } from './free-voice-tool-state'
 
 type FreeVoiceStatus = 'queued' | 'processing' | 'completed' | 'failed'
@@ -55,6 +56,12 @@ export default function FreeVoiceToolCard() {
   const [error, setError] = useState<string | null>(null)
   const charactersQuery = useProjectCharacters(projectId || null)
   const characters = useMemo(() => charactersQuery.data || [], [charactersQuery.data])
+  const characterPickerState = resolveCharacterPickerState({
+    projectId,
+    isLoading: charactersQuery.isLoading,
+    isError: charactersQuery.isError,
+    characterCount: characters.length,
+  })
   const characterOptions = useMemo(
     () => buildProjectCharacterOptions(characters, t('missingReference')),
     [characters, t],
@@ -63,6 +70,9 @@ export default function FreeVoiceToolCard() {
     () => characters.find((character) => character.id === characterId),
     [characterId, characters],
   )
+  const characterLoadError = characterPickerState === 'error'
+    ? t('errors.loadCharactersFailed')
+    : null
 
   useEffect(() => {
     let cancelled = false
@@ -174,6 +184,7 @@ export default function FreeVoiceToolCard() {
                 onChange={(event) => {
                   setProjectId(event.target.value)
                   setCharacterId('')
+                  setError(null)
                 }}
                 className="glass-select-base w-full px-3 py-2.5"
                 disabled={loadingProjects || projects.length === 0 || submitting}
@@ -197,13 +208,15 @@ export default function FreeVoiceToolCard() {
                 value={characterId}
                 onChange={(event) => setCharacterId(event.target.value)}
                 className="glass-select-base w-full px-3 py-2.5"
-                disabled={!projectId || charactersQuery.isLoading || characters.length === 0 || submitting}
+                disabled={characterPickerState !== 'ready' || submitting}
               >
-                {!projectId ? (
+                {characterPickerState === 'select-project' ? (
                   <option value="">{t('selectProjectFirst')}</option>
-                ) : charactersQuery.isLoading ? (
+                ) : characterPickerState === 'loading' ? (
                   <option value="">{t('loadingCharacters')}</option>
-                ) : characters.length === 0 ? (
+                ) : characterPickerState === 'error' ? (
+                  <option value="">{t('errors.loadCharactersFailed')}</option>
+                ) : characterPickerState === 'empty' ? (
                   <option value="">{t('emptyCharacters')}</option>
                 ) : (
                   <>
@@ -243,8 +256,8 @@ export default function FreeVoiceToolCard() {
             </button>
           </div>
 
-          {error ? (
-            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-600">{error}</p>
+          {characterLoadError || error ? (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-600">{characterLoadError || error}</p>
           ) : null}
         </div>
 

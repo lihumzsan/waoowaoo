@@ -347,6 +347,10 @@ The API route trims and validates `text`, `projectId`, and `characterId`. The cl
 
 The character-query fallback is memoized against `charactersQuery.data`, preserving the same empty-list behavior while keeping the two downstream memo dependency lists stable and warning-free.
 
+### Final Review Fix
+
+Final whole-branch review found that a failed `useProjectCharacters` query was indistinguishable from an empty character list. The client now resolves the character picker into the ordered states `select-project`, `loading`, `error`, `empty`, and `ready`; with a selected project, `error` is evaluated before `empty`. The localized `errors.loadCharactersFailed` message is rendered both in the disabled picker and through the existing error area. The character-load error is derived from the current query rather than stored locally, so it is discarded when TanStack Query changes project or successfully retries; project changes also clear the card's prior local error and selected character.
+
 ### Plan Deviations
 
 There was no production implementation deviation. Browser acceptance could not exercise the missing-reference option because the two projects available to the authenticated account contained 19 characters in total and every rendered character option had reference audio. This is accepted as a non-blocking evidence limitation; no user data was created or modified to manufacture that state.
@@ -372,6 +376,14 @@ Fresh zero-warning follow-up verification after memoizing the query fallback:
 - The strict focused lint command above exited `0` with 0 errors and 0 warnings.
 - `npm run typecheck` exited `0` with no TypeScript diagnostics.
 
+Fresh final-review-fix verification on 2026-07-19:
+
+- TDD RED: after adding the pure `resolveCharacterPickerState` regression, `npx vitest run tests/unit/video-tools/free-voice-tool-state.test.ts` exited `1` because `resolveCharacterPickerState is not a function`; the new assertion specifically supplied `isError: true` and `characterCount: 0`.
+- TDD GREEN: `npx vitest run tests/unit/video-tools/free-voice-tool-state.test.ts tests/unit/video-tools/video-tools-page.test.ts` exited `0`: 2 test files passed, 10 tests passed, 0 failed, duration 943 ms.
+- `npm run lint -- --max-warnings=0 'src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx' 'src/app/[locale]/workspace/video-tools/free-voice-tool-state.ts' 'tests/unit/video-tools/free-voice-tool-state.test.ts'` exited `0` with 0 errors and 0 warnings.
+- `npm run typecheck` exited `0` with no TypeScript diagnostics.
+- `git diff --check` exited `0`; both locale JSON files contain `freeVoice.errors.loadCharactersFailed`.
+
 Authenticated real-browser acceptance used the checkout-owned local app at `http://localhost:3000/zh/workspace/video-tools`; the existing Next.js listener on port 3000 belonged to this checkout, rendered the committed UI, and did not require a restart. A new-page load completed with no browser warning or error logs.
 
 - Initial state: the character selector was disabled with `请先选择项目` until a project was selected.
@@ -386,6 +398,8 @@ Authenticated real-browser acceptance used the checkout-owned local app at `http
 ### Remaining Risks
 
 The release risks listed above remain applicable. The authenticated account did not contain a character without `customVoiceUrl`, so the disabled `(缺少参考音频)` option has automated evidence but no live screenshot. The authenticated result list was empty and no disposable generation was spent solely for evidence, so live result-card identity has service/Redis evidence but no browser screenshot. These are accepted non-blocking evidence limitations and do not require further interaction for this delivery.
+
+The final-review fix has focused state, lint, and type evidence but no additional browser run; it only changes the disabled selector/error rendering when the existing project-asset request fails. The current-query derivation prevents a prior project's character-load failure from persisting after a project change or successful retry.
 
 ### Follow-ups
 

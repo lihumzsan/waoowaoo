@@ -10,6 +10,8 @@ type FreeVoiceSubmitInput = {
   characterId: string
 }
 
+type CharacterPickerState = 'select-project' | 'loading' | 'error' | 'empty' | 'ready'
+
 export function buildProjectCharacterOptions(
   characters: ProjectCharacter[],
   missingReference: string,
@@ -37,4 +39,17 @@ export function buildFreeVoiceSubmitInput(input: {
     projectId: input.projectId,
     characterId: input.characterId,
   }
+}
+
+export function resolveCharacterPickerState(input: {
+  projectId: string
+  isLoading: boolean
+  isError: boolean
+  characterCount: number
+}): CharacterPickerState {
+  if (!input.projectId) return 'select-project'
+  if (input.isLoading) return 'loading'
+  if (input.isError) return 'error'
+  if (input.characterCount === 0) return 'empty'
+  return 'ready'
 }

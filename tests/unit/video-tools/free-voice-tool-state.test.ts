@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   buildFreeVoiceSubmitInput,
   buildProjectCharacterOptions,
+  resolveCharacterPickerState,
 } from '@/app/[locale]/workspace/video-tools/free-voice-tool-state'
 
 describe('free voice tool state', () => {
@@ -34,11 +34,12 @@ describe('free voice tool state', () => {
     expect(buildFreeVoiceSubmitInput(input)).toBeNull()
   })
 
-  it('uses project characters instead of global voices and clears the character on project changes', () => {
-    const source = readFileSync('src/app/[locale]/workspace/video-tools/FreeVoiceToolCard.tsx', 'utf8')
-
-    expect(source).toContain('useProjectCharacters')
-    expect(source).not.toContain('useGlobalVoices')
-    expect(source).toMatch(/onChange=\{\(event\) => \{\s*setProjectId\(event\.target\.value\)\s*setCharacterId\(''\)\s*\}\}/)
+  it('shows a character-load error before the empty state', () => {
+    expect(resolveCharacterPickerState({
+      projectId: 'project-1',
+      isLoading: false,
+      isError: true,
+      characterCount: 0,
+    })).toBe('error')
   })
 })

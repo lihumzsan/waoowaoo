@@ -71,6 +71,7 @@
     },
     "errors": {
       "loadProjectsFailed": "无法读取项目列表",
+      "loadCharactersFailed": "无法读取角色列表",
       "loadFailed": "无法读取自由配音结果",
       "submitFailed": "自由配音提交失败"
     }

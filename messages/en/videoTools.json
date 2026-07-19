@@ -71,6 +71,7 @@
     },
     "errors": {
       "loadProjectsFailed": "Failed to load projects",
+      "loadCharactersFailed": "Failed to load characters",
       "loadFailed": "Failed to load free voice results",
       "submitFailed": "Failed to submit free voice"
     }
