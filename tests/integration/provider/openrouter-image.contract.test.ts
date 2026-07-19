@@ -26,7 +26,12 @@ describe('provider contract - OpenRouter image', () => {
         status: 200,
         body: {
           data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/webp' }],
-          usage: { total_tokens: 4175, cost: 0.165 },
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 4075,
+            total_tokens: 4175,
+            cost: 0.165,
+          },
         },
       },
     })
@@ -51,8 +56,10 @@ describe('provider contract - OpenRouter image', () => {
     expect(result).toEqual({
       success: true,
       imageBase64: PNG_1X1_BASE64,
-      imageUrl: `data:image/webp;base64,${PNG_1X1_BASE64}`,
-      metadata: { openRouterUsage: { total_tokens: 4175, cost: 0.165 } },
+      imageUrl: `data:image/png;base64,${PNG_1X1_BASE64}`,
+      metadata: {
+        openRouterUsage: { inputTokens: 100, outputTokens: 4075, totalTokens: 4175 },
+      },
     })
     const requests = server!.getRequests('POST', '/openrouter/images')
     expect(requests).toHaveLength(1)
@@ -97,7 +104,7 @@ describe('provider contract - OpenRouter image', () => {
       modelId: 'openai/gpt-image-2',
       prompt: 'generate once',
       options: { aspectRatio: '1:1', resolution: '1K', quality: 'low' },
-    })).rejects.toMatchObject({ status: 503 })
+    })).rejects.toMatchObject({ statusCode: 503 })
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })
@@ -107,7 +114,7 @@ describe('provider contract - OpenRouter image', () => {
       method: 'POST',
       path: '/openrouter/images',
       mode: 'malformed_response',
-      submitResponse: { status: 200, body: { data: [], usage: { cost: 0 } } },
+      submitResponse: { status: 200, body: { data: [] } },
     })
 
     await expect(requestOpenRouterImage({

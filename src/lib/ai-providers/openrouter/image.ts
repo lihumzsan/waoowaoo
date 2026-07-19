@@ -1,6 +1,7 @@
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { generateImage as generateImageWithAiSdk, NoContentGeneratedError } from 'ai'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
   decodeBase64WithLimit,
@@ -14,20 +15,12 @@ import type {
   GenerateResult,
 } from '@/lib/ai-providers/runtime-types'
 import {
-  assertAllowedOpenRouterImageOptions,
-  buildOpenRouterImageRequest,
+  resolveOpenRouterImageInput,
   type OpenRouterImageOptions,
-} from './image-protocol'
+} from './image-options'
 import { OPENROUTER_GPT_IMAGE_2_MODEL_ID } from './models'
 
-const OPENROUTER_IMAGE_ENDPOINT_PATH = '/images'
 const OPENROUTER_IMAGE_TIMEOUT_MS = 5 * 60 * 1000
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
 
 function requireOpenRouterBaseUrl(baseUrl: string | undefined): string {
   const normalized = typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/, '') : ''
@@ -35,45 +28,29 @@ function requireOpenRouterBaseUrl(baseUrl: string | undefined): string {
   return normalized
 }
 
-function resolveResponseMediaType(data: Record<string, unknown>, outputFormat: string): string {
-  const mediaType = typeof data.media_type === 'string' ? data.media_type.trim().toLowerCase() : ''
+function resolveResponseMediaType(mediaTypeValue: string): string {
+  const mediaType = mediaTypeValue.trim().toLowerCase()
   if (mediaType === 'image/png' || mediaType === 'image/jpeg' || mediaType === 'image/webp') {
     return mediaType
   }
-  if (mediaType) throw new Error(`OPENROUTER_IMAGE_RESPONSE_MEDIA_TYPE_UNSUPPORTED: ${mediaType}`)
-  if (outputFormat === 'jpeg') return 'image/jpeg'
-  if (outputFormat === 'webp') return 'image/webp'
-  return 'image/png'
+  throw new Error(`OPENROUTER_IMAGE_RESPONSE_MEDIA_TYPE_UNSUPPORTED: ${mediaType}`)
 }
 
-async function readOpenRouterImageResponse(response: Response, outputFormat: string): Promise<GenerateResult> {
+async function fetchBoundedOpenRouterImageResponse(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const response = await fetchWithProviderProxy(input, init)
   const buffer = await readResponseBufferWithLimit(
     response,
     MAX_BASE64_IMAGE_REQUEST_BYTES,
     'OpenRouter image response',
   )
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(buffer.toString('utf8')) as unknown
-  } catch {
-    throw new Error('OPENROUTER_IMAGE_RESPONSE_INVALID_JSON')
-  }
-  const record = asRecord(parsed)
-  const data = Array.isArray(record?.data) ? record.data : []
-  const firstImage = asRecord(data[0])
-  if (!firstImage) throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE')
-  const imageBase64 = typeof firstImage?.b64_json === 'string' ? firstImage.b64_json.trim() : ''
-  if (!imageBase64) throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE')
-  decodeBase64WithLimit(imageBase64, MAX_IMAGE_BYTES, 'OpenRouter generated image')
-  const mediaType = resolveResponseMediaType(firstImage, outputFormat)
-  const usage = asRecord(record?.usage)
-
-  return {
-    success: true,
-    imageBase64,
-    imageUrl: `data:${mediaType};base64,${imageBase64}`,
-    ...(usage ? { metadata: { openRouterUsage: usage } } : {}),
-  }
+  return new Response(buffer.toString('utf8'), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  })
 }
 
 export async function requestOpenRouterImage(input: {
@@ -87,8 +64,7 @@ export async function requestOpenRouterImage(input: {
   if (input.modelId !== OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
     throw new Error(`OPENROUTER_IMAGE_MODEL_UNSUPPORTED: ${input.modelId}`)
   }
-  assertAllowedOpenRouterImageOptions(input.options)
-  const payload = await buildOpenRouterImageRequest(input)
+  const resolved = await resolveOpenRouterImageInput(input)
   const logger = createScopedLogger({
     module: 'worker.openrouter-image',
     action: 'openrouter_image_generate',
@@ -97,27 +73,45 @@ export async function requestOpenRouterImage(input: {
     message: 'OpenRouter image generation request',
     details: {
       modelId: input.modelId,
-      size: payload.size,
-      quality: payload.quality,
-      outputFormat: payload.output_format,
-      referenceImagesCount: payload.input_references?.length ?? 0,
+      size: resolved.size,
+      quality: resolved.quality,
+      outputFormat: resolved.outputFormat,
+      referenceImagesCount: resolved.referenceImagesCount,
     },
   })
 
-  const response = await fetchWithRetry(`${input.baseUrl}${OPENROUTER_IMAGE_ENDPOINT_PATH}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${input.apiKey}`,
-    },
-    body: JSON.stringify(payload),
-    policy: RETRY_POLICY.providerSubmit,
-    timeoutMs: OPENROUTER_IMAGE_TIMEOUT_MS,
-    cache: 'no-store',
-    scope: `openrouter:image:submit:${input.modelId}`,
-    fetchFn: fetchWithProviderProxy,
+  const openRouter = createOpenRouter({
+    apiKey: input.apiKey,
+    baseURL: input.baseUrl,
+    compatibility: 'strict',
+    fetch: fetchBoundedOpenRouterImageResponse,
   })
-  return await readOpenRouterImageResponse(response, payload.output_format)
+  try {
+    const result = await generateImageWithAiSdk({
+      model: openRouter.imageModel(input.modelId),
+      prompt: resolved.prompt,
+      n: 1,
+      size: resolved.size,
+      providerOptions: resolved.providerOptions,
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(OPENROUTER_IMAGE_TIMEOUT_MS),
+    })
+    const imageBase64 = result.image.base64
+    decodeBase64WithLimit(imageBase64, MAX_IMAGE_BYTES, 'OpenRouter generated image')
+    const mediaType = resolveResponseMediaType(result.image.mediaType)
+    const hasUsage = Object.values(result.usage).some((value) => value !== undefined)
+    return {
+      success: true,
+      imageBase64,
+      imageUrl: `data:${mediaType};base64,${imageBase64}`,
+      ...(hasUsage ? { metadata: { openRouterUsage: result.usage } } : {}),
+    }
+  } catch (error) {
+    if (NoContentGeneratedError.isInstance(error)) {
+      throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE', { cause: error })
+    }
+    throw error
+  }
 }
 
 export async function executeOpenRouterImageGeneration(

@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import {
+  queryOpenRouterVideoStatus,
+  submitOpenRouterVideoTask,
+} from '@/lib/ai-providers/openrouter/video'
 import type { GoldenMediaServer } from '../providers/media/server'
 import { startGoldenMediaServer } from '../providers/media/server'
 
@@ -26,19 +30,32 @@ describe('Golden local media provider', () => {
     expect((await audio.arrayBuffer()).byteLength).toBeGreaterThan(100)
   })
 
-  it('implements FAL queue and OpenRouter video terminal protocols', async () => {
+  it('implements FAL queue and the production OpenRouter SDK submit/status boundary', async () => {
     runningServer = await startGoldenMediaServer()
     const falSubmit = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })
     const falRequest = await falSubmit.json() as { request_id: string }
     const falStatus = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2/requests/${falRequest.request_id}/status`)
     await expect(falStatus.json()).resolves.toMatchObject({ status: 'COMPLETED' })
 
-    const videoSubmit = await fetch(`${runningServer.baseUrl}/v1/videos`, { method: 'POST' })
-    const videoRequest = await videoSubmit.json() as { id: string }
-    const videoStatus = await fetch(`${runningServer.baseUrl}/v1/videos/${videoRequest.id}`)
-    await expect(videoStatus.json()).resolves.toMatchObject({
+    const requestId = await submitOpenRouterVideoTask({
+      baseUrl: `${runningServer.baseUrl}/v1`,
+      apiKey: 'golden-openrouter-key',
+      payload: {
+        model: 'bytedance/seedance-2.0',
+        prompt: 'golden provider protocol',
+        duration: 5,
+        resolution: '720p',
+        aspectRatio: '16:9',
+      },
+    })
+    await expect(queryOpenRouterVideoStatus({
+      baseUrl: `${runningServer.baseUrl}/v1`,
+      apiKey: 'golden-openrouter-key',
+      requestId,
+    })).resolves.toMatchObject({
       status: 'completed',
-      unsigned_urls: [expect.stringContaining('/assets/golden.mp4')],
+      videoUrl: expect.stringContaining('/assets/golden.mp4'),
+      downloadHeaders: { Authorization: 'Bearer golden-openrouter-key' },
     })
   })
 

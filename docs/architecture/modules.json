@@ -492,6 +492,8 @@
         "tests/integration/provider/fal-queue-result-errors.contract.test.ts",
         "tests/integration/provider/fal-video-seedance.contract.test.ts",
         "tests/integration/provider/fal-music-capability.contract.test.ts",
+        "tests/integration/provider/openrouter-image.contract.test.ts",
+        "tests/integration/provider/openrouter-video.contract.test.ts",
         "tests/integration/provider/provider-gateway-capabilities.contract.test.ts",
         "tests/integration/provider/provider-gateway-connections.contract.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
@@ -501,7 +503,8 @@
         "tests/unit/provider/llm-stream-finalization.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts",
         "tests/unit/http/outbound-url-policy.test.ts",
-        "tests/unit/http/body-limits.test.ts"
+        "tests/unit/http/body-limits.test.ts",
+        "tests/golden-journey/self-tests/media-provider.test.ts"
       ],
       "guardPaths": [
         "scripts/check-capability-catalog.mjs",

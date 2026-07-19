@@ -1,3 +1,4 @@
+import type { DataContent, ProviderOptions } from '@ai-sdk/provider-utils'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import {
   resolveGptImage2ImageSize,
@@ -12,26 +13,13 @@ import {
 
 export type OpenRouterImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 
-type OpenRouterInputReference = {
-  type: 'image_url'
-  image_url: { url: string }
-}
-
-export type OpenRouterImageRequest = {
-  model: string
-  prompt: string
-  n: 1
-  size: string
+export type ResolvedOpenRouterImageInput = {
+  prompt: string | { images: DataContent[]; text: string }
+  size: `${number}x${number}`
   quality: string
-  output_format: string
-  input_references?: OpenRouterInputReference[]
-  background?: string
-  output_compression?: number
-  provider: {
-    only: ['openai']
-    allow_fallbacks: false
-    options?: { openai: { moderation: string } }
-  }
+  outputFormat: string
+  referenceImagesCount: number
+  providerOptions: ProviderOptions
 }
 
 const MAX_REFERENCE_IMAGES = 16
@@ -50,7 +38,7 @@ function readOptionalString(value: unknown, optionName: string): string | undefi
   return value.trim()
 }
 
-export function assertAllowedOpenRouterImageOptions(options: OpenRouterImageOptions): void {
+function assertAllowedOpenRouterImageOptions(options: OpenRouterImageOptions): void {
   const allowedOptionKeys = new Set([
     'provider',
     'modelId',
@@ -138,23 +126,20 @@ function resolveModeration(options: OpenRouterImageOptions): string | undefined 
   return moderation
 }
 
-async function normalizeReferences(referenceImages: readonly string[]): Promise<OpenRouterInputReference[]> {
+async function normalizeReferences(referenceImages: readonly string[]): Promise<DataContent[]> {
   if (referenceImages.length > MAX_REFERENCE_IMAGES) {
     throw new Error(`OPENROUTER_IMAGE_REFERENCE_LIMIT_EXCEEDED: ${referenceImages.length}`)
   }
-  return await Promise.all(referenceImages.map(async (image) => ({
-    type: 'image_url' as const,
-    image_url: { url: await normalizeToBase64ForGeneration(image) },
-  })))
+  return await Promise.all(referenceImages.map(normalizeToBase64ForGeneration))
 }
 
-export async function buildOpenRouterImageRequest(input: {
-  modelId: string
+export async function resolveOpenRouterImageInput(input: {
   prompt: string
   options: OpenRouterImageOptions
-}): Promise<OpenRouterImageRequest> {
-  const prompt = input.prompt.trim()
-  if (!prompt) throw new Error('OPENROUTER_IMAGE_PROMPT_REQUIRED')
+}): Promise<ResolvedOpenRouterImageInput> {
+  assertAllowedOpenRouterImageOptions(input.options)
+  const promptText = input.prompt.trim()
+  if (!promptText) throw new Error('OPENROUTER_IMAGE_PROMPT_REQUIRED')
   const resolution = resolveResolution(input.options)
   const aspectRatio = resolveAspectRatio(input.options)
   const quality = resolveQuality(input.options)
@@ -163,22 +148,28 @@ export async function buildOpenRouterImageRequest(input: {
   const outputCompression = resolveOutputCompression(input.options, outputFormat)
   const moderation = resolveModeration(input.options)
   const imageSize = resolveGptImage2ImageSize({ aspectRatio, resolution })
-  const inputReferences = await normalizeReferences(input.options.referenceImages ?? [])
+  const referenceImages = await normalizeReferences(input.options.referenceImages ?? [])
 
   return {
-    model: input.modelId,
-    prompt,
-    n: 1,
+    prompt: referenceImages.length > 0
+      ? { images: referenceImages, text: promptText }
+      : promptText,
     size: `${imageSize.width}x${imageSize.height}`,
     quality,
-    output_format: outputFormat,
-    ...(inputReferences.length > 0 ? { input_references: inputReferences } : {}),
-    ...(background ? { background } : {}),
-    ...(outputCompression !== undefined ? { output_compression: outputCompression } : {}),
-    provider: {
-      only: ['openai'],
-      allow_fallbacks: false,
-      ...(moderation ? { options: { openai: { moderation } } } : {}),
+    outputFormat,
+    referenceImagesCount: referenceImages.length,
+    providerOptions: {
+      openrouter: {
+        quality,
+        output_format: outputFormat,
+        ...(background ? { background } : {}),
+        ...(outputCompression !== undefined ? { output_compression: outputCompression } : {}),
+        provider: {
+          only: ['openai'],
+          allow_fallbacks: false,
+          ...(moderation ? { options: { openai: { moderation } } } : {}),
+        },
+      },
     },
   }
 }

@@ -127,16 +127,20 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
     }
     if (request.method === 'POST' && url.pathname === '/v1/videos') {
       requestOrdinal += 1
-      writeJson(response, 200, {
-        id: `golden_video_${requestOrdinal}`,
+      const id = `golden_video_${requestOrdinal}`
+      writeJson(response, 202, {
+        id,
         status: 'pending',
+        polling_url: `${requestOrigin(request)}/v1/videos/${id}`,
       })
       return
     }
     if (request.method === 'GET' && /^\/v1\/videos\/[^/]+$/.test(url.pathname)) {
+      const id = url.pathname.split('/').at(-1)
       writeJson(response, 200, {
-        id: url.pathname.split('/').at(-1),
+        id,
         status: 'completed',
+        polling_url: `${requestOrigin(request)}/v1/videos/${id}`,
         unsigned_urls: [`${requestOrigin(request)}/assets/golden.mp4`],
       })
       return
