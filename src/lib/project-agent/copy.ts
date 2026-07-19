@@ -7,6 +7,10 @@ type ProjectAgentOperationTitleCopy = {
 }
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
+  delegate_creative_work: {
+    zh: '把一次专业创作推理委派给无状态 Creative Worker。简单图片、视频、音乐或文字请求只需委派一次最小任务；长剧本可按计划分阶段委派。Worker 会自行发现并读取相关 Skill，但不能读取项目、调用业务 Operation、创建 Task、收费、持久化或改变状态；你必须传入全部真实上下文，并在返回后使用现有 Operation 执行实际动作。',
+    en: 'Delegate one professional creative reasoning task to the stateless Creative Worker. A simple image, video, music, or text request needs one minimal delegation; a long script can be delegated in planned stages. The Worker discovers and reads relevant Skills by itself, but cannot read the project, call business Operations, create Tasks, charge, persist, or change state. Supply all real context, then use existing Operations for actual execution.',
+  },
   update_plan: {
     zh: '为复杂或多阶段工作维护一份简短计划。每次调用完整替换当前计划，最多一个步骤处于 in_progress，进展变化后及时更新；传空 plan 可清除。它只是可见便签，不执行工作、不创建 Task，也不控制工具或项目状态。',
     en: 'Maintain a concise plan for complex or multi-step work. Each call replaces the whole current plan; keep at most one item in_progress, update it when progress changes, and pass an empty plan to clear it. This is a visible notebook only: it executes no work, creates no Tasks, and controls no tool or project state.',
@@ -68,12 +72,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Show the generated character and location assets for review and a go/no-go decision. Use it only for asset review, not as a generic execution gate.',
   },
   request_script_intake_choice: {
-    zh: '当用户的输入缺少剧本的基础结构信息（时代与背景、主角与人物动机、核心冲突、关键人物关系、类型基调、结局走向等标准剧本要素）时，用它发起扩写前创作问诊，让用户先把这些基本结构补齐，再进入扩写。在绝大部分情况下，除非用户直接给出了完整可拍剧本，否则都要先调用这个工具来问诊；只有用户已经贴出完整可拍剧本时才跳过它。',
-    en: 'Use this for pre-expansion creative intake whenever the user\'s input lacks the basic structural information of a script (era and setting, protagonist and character motivation, core conflict, key relationships, genre and tone, ending direction — the standard script elements). Have the user fill in that basic structure before expansion. In the vast majority of cases you should run intake first; skip it only when the user has directly provided a complete, filmable script.',
+    zh: '当用户明确选择专业剧本扩写路径，而输入又缺少时代背景、主角动机、核心冲突、关键关系、类型基调或结局走向等必要结构时，用它发起一次扩写前创作问诊。直接创建普通文字、图片、音频或视频不受此问诊约束；用户已经提供完整可拍剧本时也不需要问诊。',
+    en: 'Use this for one pre-expansion intake when the user explicitly chooses the professional screenplay-expansion path and the brief lacks necessary structure such as setting, protagonist motivation, core conflict, key relationships, tone, or ending direction. Direct creation of ordinary text, images, audio, or video is not gated by this intake, and a complete filmable script does not need it.',
   },
   ingest_script: {
-    zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报。用户贴完整可拍剧本时，sourceKind=paste，任务会生成制作规划；问诊后的 normalizedBrief 使用 sourceKind=prompt_generated_outline，任务只扩写出完整剧本并等待用户确认。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',
-    en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough. When the user pasted a complete filmable script, set sourceKind=paste and the task generates the production plan. For a post-intake normalizedBrief, set sourceKind=prompt_generated_outline; the task only expands a full script and then waits for user script confirmation. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
+    zh: '接收本集的完整剧本，或专业剧本问诊后已经整理充分的创作简报。用户贴完整可拍剧本时，sourceKind=paste，任务会生成制作规划；问诊后的 normalizedBrief 使用 sourceKind=prompt_generated_outline，任务只扩写出完整剧本并等待用户确认。短创意只有在用户选择这条专业剧本扩写路径且简报不足时才需要先问诊；它不限制通用媒体创作。',
+    en: 'Take this episode\'s complete script, or a sufficiently detailed brief from the professional screenplay intake. For a complete pasted script, use sourceKind=paste and the task generates the production plan. For the normalizedBrief returned by intake, use sourceKind=prompt_generated_outline; the task expands one full script and waits for user confirmation. A short idea needs intake only when the user chose this professional screenplay path and the brief is insufficient; it does not gate general media creation.',
   },
   approve_script: {
     zh: '确认剧本',
@@ -138,6 +142,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
 }
 
 const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
+  delegate_creative_work: {
+    zh: '专业创作推理',
+    en: 'Creative reasoning',
+  },
   update_plan: {
     zh: '更新计划',
     en: 'Update plan',

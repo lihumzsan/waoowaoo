@@ -33,6 +33,7 @@ import { createCreativeResourceGenerationOperations } from './domains/creative-r
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
+import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -45,6 +46,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
   return {
     ...withOperationPack(createAssistantPlanOperations(), {
       groupPath: ['assistant', 'plan'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createAssistantCreativeOperations(), {
+      groupPath: ['assistant', 'creative'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
