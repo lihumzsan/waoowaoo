@@ -12,7 +12,6 @@ import { addTaskJob } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { resolveComfyUiSingleVoiceWorkflowKey } from '@/lib/voice/comfyui-voice-workflow'
 
-export const VIDEO_TOOL_FREE_VOICE_PROJECT_ID = 'video-tools'
 export const VIDEO_TOOL_FREE_VOICE_TARGET_TYPE = 'VideoToolsFreeVoice'
 export const VIDEO_TOOL_FREE_VOICE_TTL_SECONDS = 86_400
 const MAX_RECORDS = 20
@@ -24,6 +23,10 @@ export type VideoToolFreeVoiceRecord = {
   taskId: string
   text: string
   voiceName: string
+  projectId?: string
+  projectName?: string
+  characterId?: string
+  characterName?: string
   status: VideoToolFreeVoiceStatus
   progress: number
   audioUrl?: string | null
@@ -157,8 +160,8 @@ async function resolveComfyUiReferenceAudioUrl(value: string): Promise<string> {
   return toFetchableUrl(getSignedUrl(storageKey, 3600))
 }
 
-async function resolveVideoToolFreeVoiceModel(userId: string) {
-  const selection = await resolveModelSelectionOrSingle(userId, null, 'audio')
+async function resolveVideoToolFreeVoiceModel(userId: string, configuredModel: string | null) {
+  const selection = await resolveModelSelectionOrSingle(userId, configuredModel, 'audio')
   if (getProviderKey(selection.provider).toLowerCase() !== 'comfyui') {
     throw new ApiError('INVALID_PARAMS', { message: 'FREE_VOICE_COMFYUI_REQUIRED' })
   }
@@ -174,22 +177,37 @@ export async function createVideoToolFreeVoiceTask(params: {
   locale: Locale
   requestId?: string | null
   text: string
-  voiceSourceId: string
+  projectId: string
+  characterId: string
 }) {
   const text = params.text.trim()
-  const voiceSourceId = params.voiceSourceId.trim()
-  if (!text || !voiceSourceId) throw new ApiError('INVALID_PARAMS')
+  const projectId = params.projectId.trim()
+  const characterId = params.characterId.trim()
+  if (!text || !projectId || !characterId) throw new ApiError('INVALID_PARAMS')
 
-  const voice = await prisma.globalVoice.findFirst({
-    where: { id: voiceSourceId, userId: params.userId },
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, userId: params.userId },
+    select: {
+      id: true,
+      name: true,
+      novelPromotionData: { select: { id: true, audioModel: true } },
+    },
+  })
+  if (!project?.novelPromotionData) throw new ApiError('NOT_FOUND')
+
+  const character = await prisma.novelPromotionCharacter.findFirst({
+    where: {
+      id: characterId,
+      novelPromotionProjectId: project.novelPromotionData.id,
+    },
     select: { id: true, name: true, customVoiceUrl: true },
   })
-  if (!voice) throw new ApiError('NOT_FOUND')
-  if (!voice.customVoiceUrl) {
+  if (!character) throw new ApiError('NOT_FOUND')
+  if (!character.customVoiceUrl) {
     throw new ApiError('INVALID_PARAMS', { message: 'FREE_VOICE_REFERENCE_AUDIO_REQUIRED' })
   }
 
-  const { selection } = await resolveVideoToolFreeVoiceModel(params.userId)
+  const { selection } = await resolveVideoToolFreeVoiceModel(params.userId, project.novelPromotionData.audioModel)
   const recordId = randomUUID()
   const taskId = `free_voice:${recordId}`
   const now = new Date().toISOString()
@@ -197,7 +215,11 @@ export async function createVideoToolFreeVoiceTask(params: {
     id: recordId,
     taskId,
     text,
-    voiceName: voice.name,
+    voiceName: character.name,
+    projectId: project.id,
+    projectName: project.name,
+    characterId: character.id,
+    characterName: character.name,
     status: 'queued',
     progress: 0,
     audioModel: selection.modelKey,
@@ -211,13 +233,13 @@ export async function createVideoToolFreeVoiceTask(params: {
     persistence: 'transient',
     type: TASK_TYPE.FREE_VOICE,
     locale: params.locale,
-    projectId: VIDEO_TOOL_FREE_VOICE_PROJECT_ID,
+    projectId: project.id,
     episodeId: null,
     targetType: VIDEO_TOOL_FREE_VOICE_TARGET_TYPE,
     targetId: recordId,
     payload: {
       text,
-      referenceAudioUrl: voice.customVoiceUrl,
+      referenceAudioUrl: character.customVoiceUrl,
       audioModel: selection.modelKey,
     },
     userId: params.userId,
