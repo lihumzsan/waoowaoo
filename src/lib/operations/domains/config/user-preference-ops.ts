@@ -24,6 +24,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'videoModel',
   'musicModel',
   'videoRatio',
+  'assistantBillingConfirmationRequired',
 ]
 
 const MODEL_FIELDS = new Set([
@@ -49,6 +50,8 @@ const updateUserPreferenceInputSchema = z.object({
   musicModel: modelKeyPreferenceSchema.optional(),
   videoRatio: z.string().trim().min(1).optional()
     .describe('Default output aspect ratio, for example 16:9 or 9:16.'),
+  assistantBillingConfirmationRequired: z.boolean().optional()
+    .describe('Whether billable Assistant operations must pause for an immutable quote approval.'),
 }).strict()
 
 async function lockUserPreferenceOwner(

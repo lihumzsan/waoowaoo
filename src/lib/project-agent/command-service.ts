@@ -23,7 +23,6 @@ import {
   type DeclinedProjectAgentInterruption,
 } from './interruptions'
 import { buildEditFirstChoiceResultFromDecision } from './edit-first-choice-result'
-import type { AssistantPermissionMode } from './permission-mode'
 import {
   createProjectAgentConsumedControlRetryRun,
   createProjectAgentUserTurnRun,
@@ -65,7 +64,6 @@ export interface ExecuteProjectAgentCommandInput {
   scope: ProjectAgentCommandScope
   context: unknown
   locale: string | null
-  assistantPermissionMode: AssistantPermissionMode
   command: ProjectAgentCommand
 }
 
@@ -357,7 +355,6 @@ export async function executeProjectAgentCommand(
       projectId: scope.projectId,
       context: input.context,
       messages,
-      assistantPermissionMode: input.assistantPermissionMode,
       run,
       control,
       runLock,

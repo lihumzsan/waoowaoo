@@ -19,7 +19,6 @@ import type {
   ProjectAgentSessionPendingInteraction,
   ProjectAgentSessionState,
 } from '@/lib/project-agent/session-state'
-import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   buildProjectAssistantTextAttachmentMetadata,
@@ -85,7 +84,6 @@ interface UseWorkspaceAssistantRuntimeParams {
   episodeId?: string
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
-  assistantPermissionMode: AssistantPermissionMode
 }
 
 interface UseWorkspaceAssistantRuntimeResult {
@@ -139,7 +137,6 @@ export function useWorkspaceAssistantRuntime({
   episodeId,
   selectedScopeRef,
   selectedAssetId,
-  assistantPermissionMode,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
   const chatId = buildWorkspaceAssistantChatId({ projectId, episodeId })
@@ -154,7 +151,6 @@ export function useWorkspaceAssistantRuntime({
     api: `/api/projects/${projectId}/assistant/chat`,
     body: {
       context: contextPayload,
-      assistantPermissionMode,
     },
     prepareSendMessagesRequest: async (options) => {
       const message = options.messages.find((item) => item.id === options.messageId)
@@ -171,7 +167,7 @@ export function useWorkspaceAssistantRuntime({
         },
       }
     },
-  }), [assistantPermissionMode, contextPayload, projectId])
+  }), [contextPayload, projectId])
   const chat = useChat({
     id: chatId,
     transport,
@@ -395,7 +391,6 @@ export function useWorkspaceAssistantRuntime({
           signal: abortController.signal,
           body: JSON.stringify({
             context: contextPayload,
-            assistantPermissionMode,
             ...(visibleUserText ? { visibleUserText } : {}),
             ...params.payload,
           }),
@@ -440,7 +435,6 @@ export function useWorkspaceAssistantRuntime({
       await refreshSessionState().catch(() => undefined)
     }
   }, [
-    assistantPermissionMode,
     beginReplyActivity,
     chat,
     clearReplyActivity,

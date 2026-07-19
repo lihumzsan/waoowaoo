@@ -5,7 +5,7 @@ import {
   type Tool,
 } from '@openai/agents'
 import type { NextRequest } from 'next/server'
-import { buildToolError } from '@/lib/adapters/operation-error-normalizer'
+import { buildToolError, normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
@@ -17,11 +17,9 @@ import type {
   ProjectAgentTaskSubmissionReceipt,
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
+import { shouldRequireInteractiveToolApproval } from './tool-approval-policy'
 import {
-  shouldRequireAssistantToolApproval,
-  type AssistantPermissionMode,
-} from './permission-mode'
-import {
+  authorizeProjectAgentToolAutomatically,
   preflightProjectAgentToolApproval,
   type ProjectAgentApprovalPreflightStore,
 } from './approval-preflight'
@@ -86,7 +84,7 @@ export interface CreateProjectAgentOperationToolParams {
   runFence: ProjectAgentRunFence
   operationSignal: AbortSignal
   continuationClaim?: ProjectAgentOperationExecutionFence['continuationClaim']
-  assistantPermissionMode: AssistantPermissionMode
+  billingConfirmationRequired: boolean
   operationBatch: ProjectAgentOperationBatchCoordinator
   writer: UIMessageStreamWriter<UIMessage>
   /** Called exactly once after an execution attempt with its typed outcome. */
@@ -104,10 +102,12 @@ export interface CreateProjectAgentOperationToolParams {
 export function createProjectAgentOperationTool(
   params: CreateProjectAgentOperationToolParams,
 ): Tool {
-  const requiresApproval = shouldRequireAssistantToolApproval({
-    mode: params.assistantPermissionMode,
+  const requiresApproval = shouldRequireInteractiveToolApproval({
     operation: params.operation,
+    billingConfirmationRequired: params.billingConfirmationRequired,
   })
+  const automaticallyAuthorizeBilling = params.operation.confirmation.kind === 'billable_media'
+    && !params.billingConfirmationRequired
   const identifyToolCall = (toolCallId: string | null | undefined): string | null => {
     const normalizedToolCallId = toolCallId?.trim() || null
     if (normalizedToolCallId) {
@@ -193,6 +193,35 @@ export function createProjectAgentOperationTool(
           return budgetFailure
         }
       }
+      let automaticApprovedInvocation = null
+      const persistedApprovedInvocation = toolCallId
+        ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
+        : null
+      if (automaticallyAuthorizeBilling && !persistedApprovedInvocation) {
+        if (!toolCallId) {
+          throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${params.operation.id}`)
+        }
+        try {
+          automaticApprovedInvocation = await authorizeProjectAgentToolAutomatically({
+            request: params.request,
+            operation: params.operation,
+            projectId: params.projectId,
+            userId: params.userId,
+            context: params.context,
+            source: 'assistant-panel',
+            input: normalizedInput,
+            toolCallId,
+          })
+        } catch (error) {
+          const toolError = normalizeOperationExecutionToolError({
+            error,
+            operation: params.operation,
+            operationId: params.operation.id,
+          })
+          reportExecutionSettled({ kind: 'failed', error: toolError })
+          return { ok: false, error: toolError }
+        }
+      }
       const createTaskBatchBinding = (): ProjectAgentOperationTaskBatchBinding => {
         let bound = false
         let committed = false
@@ -271,13 +300,13 @@ export function createProjectAgentOperationTool(
             projectId: params.projectId,
             userId: params.userId,
             context: params.context,
-            assistantPermissionMode: params.assistantPermissionMode,
             source: 'assistant-panel',
             writer: params.writer,
             input: normalizedInput,
             toolCallId,
             executionFence,
             taskBatchBinding,
+            approvedInvocation: automaticApprovedInvocation,
           })
           reportExecutionSettled(execution.outcome)
           return execution.result
@@ -340,13 +369,13 @@ export function createProjectAgentOperationTool(
           projectId: params.projectId,
           userId: params.userId,
           context: params.context,
-          assistantPermissionMode: params.assistantPermissionMode,
           source: 'assistant-panel',
           writer: params.writer,
           input: normalizedInput,
           toolCallId,
           executionFence,
           taskBatchBinding,
+          approvedInvocation: automaticApprovedInvocation,
         })
         const result = execution.result
         const settledActivity = !operationActivityId ? null : await appendProjectAgentEvents({

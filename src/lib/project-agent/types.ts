@@ -7,7 +7,6 @@ import type {
 import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import type { EditFirstChoiceDecision } from './edit-first-choice-result'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
-import type { AssistantPermissionMode } from './permission-mode'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
@@ -136,7 +135,7 @@ export interface AgentRuntimeContextPartData {
   requestId: string
   modelKey: string
   locale: string
-  assistantPermissionMode: AssistantPermissionMode
+  billingConfirmationRequired: boolean
   projectId: string
   episodeId?: string | null
   messageCounts: {

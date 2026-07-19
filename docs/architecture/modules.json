@@ -37,6 +37,10 @@
         "src/lib/edit-script/style-preview-operation-plan.ts",
         "src/lib/project-agent/edit-first-choice-result.ts",
         "src/lib/project-agent/runtime.ts",
+        "src/lib/project-agent/billing-confirmation.ts",
+        "src/lib/project-agent/approval-preflight.ts",
+        "src/lib/project-agent/tool-approval-policy.ts",
+        "src/app/api/user-preference/route.ts",
         "src/lib/project-agent/operation-batch.ts",
         "src/lib/task/submitter.ts",
         "src/lib/task/transactional-create.ts",
@@ -47,9 +51,11 @@
         "src/lib/edit-script/asset-revision.ts",
         "src/lib/operations/domains",
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
-        "prisma/migrations/20260713110000_remove_operation_plan_expiry/migration.sql"
+        "prisma/migrations/20260713110000_remove_operation_plan_expiry/migration.sql",
+        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
       ],
       "testPaths": [
+        "tests/unit/project-agent/tool-approval-policy.test.ts",
         "tests/unit/billing/media-approval-policy.test.ts",
         "tests/unit/operations/planning.test.ts",
         "tests/unit/project-agent/edit-first-choice-serialization.test.ts",
@@ -382,6 +388,9 @@
         "src/app/api/projects/[projectId]/assistant",
         "src/app/api/assistant/text-attachments",
         "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantComposer.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSettings.tsx",
+        "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSettings.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantActiveRunCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPlanCard.tsx",
@@ -408,9 +417,11 @@
         "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql",
         "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql",
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
-        "prisma/migrations/20260718120000_add_project_assistant_plan_snapshot/migration.sql"
+        "prisma/migrations/20260718120000_add_project_assistant_plan_snapshot/migration.sql",
+        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
       ],
       "testPaths": [
+        "tests/unit/project-agent/tool-approval-policy.test.ts",
         "tests/integration/task/project-agent-continuation-settlement.integration.test.ts",
         "tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts",
         "tests/integration/task/project-agent-session-broadcast.integration.test.ts",

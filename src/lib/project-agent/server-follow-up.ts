@@ -341,7 +341,6 @@ async function runClaimedFollowUp(params: {
         episodeId: params.episodeId,
       },
       messages,
-      assistantPermissionMode: 'ask',
       run,
       control: {
         kind: 'task_follow_up',

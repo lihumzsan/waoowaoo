@@ -40,7 +40,7 @@ import {
 } from './copy'
 import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
-import type { AssistantPermissionMode } from './permission-mode'
+import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
 import { stableArgsHash } from './stable-args-hash'
 import { compressMessages } from './message-compression'
 import {
@@ -682,7 +682,6 @@ export async function createProjectAgentChatResponse(input: {
   projectId: string
   context: unknown
   messages: unknown
-  assistantPermissionMode: AssistantPermissionMode
   run: ProjectAgentRunRecord
   control: ProjectAgentResolvedControl
   runLock?: ProjectAgentRunLock | null
@@ -704,6 +703,7 @@ export async function createProjectAgentChatResponse(input: {
   }
 
   const assistantModelKey = await resolveProjectAgentAssistantModelKey(input.userId)
+  const billingConfirmationRequired = await readAssistantBillingConfirmationRequired(input.userId)
 
   const control = input.control
   const executionSegment = control.kind === 'user_turn'
@@ -929,7 +929,7 @@ export async function createProjectAgentChatResponse(input: {
       requestId,
       modelKey: assistantModelKey,
       locale,
-      assistantPermissionMode: input.assistantPermissionMode,
+      billingConfirmationRequired,
       projectId: input.projectId,
       episodeId: context.episodeId || null,
       messageCounts: {
@@ -1104,7 +1104,7 @@ export async function createProjectAgentChatResponse(input: {
       runFence,
       operationSignal: runAbortController.signal,
       continuationClaim: input.continuationClaim ?? null,
-      assistantPermissionMode: input.assistantPermissionMode,
+      billingConfirmationRequired,
       operationBatch,
       writer: {
         write: (chunk) => {
@@ -1150,7 +1150,6 @@ export async function createProjectAgentChatResponse(input: {
     locale,
     projectId: input.projectId,
     episodeId: context.episodeId || 'unknown',
-    assistantPermissionMode: input.assistantPermissionMode,
   })
   const agent = new Agent<ProjectAgentAgentsRunContext>({
     name: 'Project Workspace Agent',

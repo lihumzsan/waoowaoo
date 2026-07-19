@@ -24,6 +24,7 @@ import {
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
+import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -33,7 +34,6 @@ import { useWorkspaceAssistantCanvasFocus } from './workspace-assistant/useWorks
 import { useWorkspaceAssistantComposer } from './workspace-assistant/useWorkspaceAssistantComposer'
 import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useWorkspaceAssistantMessageDispatch'
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
-import { useWorkspaceAssistantPermissionMode } from './workspace-assistant/useWorkspaceAssistantPermissionMode'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { EditStylePreviewGenerationDataCard } from './workspace-assistant/EditStylePreviewGenerationDataCard'
 import { useWorkspaceStylePreviewGenerationView } from './workspace-assistant/useWorkspaceStylePreviewGenerationView'
@@ -103,13 +103,11 @@ export default function WorkspaceAssistantPanel({
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
-  const [assistantPermissionMode, setAssistantPermissionMode] = useWorkspaceAssistantPermissionMode()
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
     episodeId,
     selectedScopeRef: selection?.selectedScopeRef ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
-    assistantPermissionMode,
   })
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
@@ -223,9 +221,10 @@ export default function WorkspaceAssistantPanel({
         <div className="h-full opacity-100 transition-opacity duration-200">
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
+              <WorkspaceAssistantSettings />
               <ThreadPrimitive.Viewport
                 autoScroll
-                className="flex-1 overflow-y-auto px-5 pb-4 pt-4"
+                className="flex-1 overflow-y-auto px-5 pb-4 pt-12"
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 <div>
@@ -313,7 +312,6 @@ export default function WorkspaceAssistantPanel({
                     canStopReply={assistantRuntime.canStopReply}
                     attachments={composer.attachments}
                     attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
-                    assistantPermissionMode={assistantPermissionMode}
                     onChange={composer.setText}
                     onSubmit={async () => {
                       setStylePreviewDockCollapsed(true)
@@ -322,7 +320,6 @@ export default function WorkspaceAssistantPanel({
                     onStopReply={assistantRuntime.stopReply}
                     onAttachClick={() => composer.setAttachmentDialogOpen(true)}
                     onRemoveAttachment={composer.removeAttachment}
-                    onAssistantPermissionModeChange={setAssistantPermissionMode}
                   />
                 </div>
               </div>

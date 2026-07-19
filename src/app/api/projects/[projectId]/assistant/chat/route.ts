@@ -6,7 +6,6 @@ import { executeProjectAgentCommand } from '@/lib/project-agent/command-service'
 import { clearProjectAssistantThread } from '@/lib/project-agent/thread-clear'
 import { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
-import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
   mapProjectAgentCommandError,
@@ -98,7 +97,6 @@ export const POST = apiHandler(async (
   try {
     const body = await readProjectAgentCommandHttpBody(request)
     assertChatCommandShape(body)
-    const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
     const message = await validateUserMessage(body.message)
     return await executeProjectAgentCommand({
       request,
@@ -110,7 +108,6 @@ export const POST = apiHandler(async (
       },
       context: body.context,
       locale: readProjectAgentCommandString(body.locale),
-      assistantPermissionMode,
       command: {
         kind: 'user_turn',
         message,

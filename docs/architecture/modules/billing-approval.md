@@ -6,11 +6,11 @@
 
 确认不是“调用了 AI 就询问用户”的通用开关。只有执行前可以确定具体媒体输入与价格的收费媒体，才需要媒体报价确认。LLM 文本规划默认无需媒体确认；删除或不可逆覆盖属于破坏性确认，不伪装成媒体报价。
 
-收费媒体的正确顺序是：先生成最终计划，再准确报价，再由用户批准，最后只提交同一计划中的任务。用户批准的是具体工作，不是一个未来可能发生的最大额度。本系统当前不提供 Run 预算授权、自动批准或“跳过所有计费确认”模式。
+收费媒体的正确顺序是：先生成最终计划，再准确报价，再授权，最后只提交同一计划中的任务。用户设置可以决定由报价卡显式批准，或由系统自动授权这一次精确报价；两者都不构成未来预算、Run grant 或模糊的“跳过计费”能力。
 
 ## 不变量
 
-- **BA-00A — 一个模型步骤对应一次用户收费决定，每个 Tool call 保持精确授权。** Runtime 可以接收同一步骤的多个收费调用，包括同一个 Operation 的多个调用。持久 Approval 必须保存完整 member 列表，每个成员包含自己的 SDK `approvalId/toolCallId`、operation identity、不可变 plan/quote 与同一 serialized RunState；UI 把成员 quote 合计为一张卡，用户只批准或拒绝一次。批准后逐成员签发 Grant 并恢复原调用，拒绝则整组零 Task。聚合不是 Workflow group、Run 预算或未来授权，也不得合并成员的执行 identity。
+- **BA-00A — 一个模型步骤至多对应一次交互收费决定，每个 Tool call 保持精确授权。** Runtime 可以接收同一步骤的多个收费调用，包括同一个 Operation 的多个调用。开启计费确认时，持久 Approval 必须保存完整 member 列表，每个成员包含自己的 SDK `approvalId/toolCallId`、operation identity、不可变 plan/quote 与同一 serialized RunState；UI 把成员 quote 合计为一张卡，用户只批准或拒绝一次。关闭计费确认时不创建 Approval Interruption，每个 Tool call 仍先持久化独立 plan/quote 并签发精确 Grant，然后进入同一个执行与扣费入口。两种模式都不是 Workflow group、Run 预算或未来授权，也不得合并成员的执行 identity。
 
 - **BA-01 — 审批分类唯一。** `none`、`billable_media`、`destructive` 是 operation confirmation 的唯一分类；LLM 文本任务必须显式属于 `none`，不是漏配后的默认值。
 - **BA-02 — 精确计划先于媒体审批。** `billable_media` 的审批前必须确定真实 Task、目标、模型、输入、数量和准确报价。需要 LLM 先生成媒体 Prompt 的用户可见长流程必须先作为独立文本 Task 完成；媒体 plan 只读其持久结果，不得在 approval preflight 调用 LLM、写领域记录或形成第二生命周期。不得先批准、再让 LLM 或媒体 worker 决定实际收费内容。
@@ -34,7 +34,7 @@
 - **BA-20 — 聚合 Approval 不合并执行身份。** 一张 Assistant Approval 卡可以表示同一模型步骤的多个收费成员并合计 quote，但每个成员仍拥有独立的 `toolCallId + OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链。`issueApprovalGrantGroup` 只把“全部成员可授权或全部不授权”放进一个事务，任一 snapshot/owner/identity 错误必须整组回滚；恢复时不得用 operationId、首成员 plan 或聚合 quote 代替成员 Grant。成员 Task 可进入同一个 OperationBatch Wait，但各自 commit、冻结、Execution 与幂等重放保持独立。
 - **BA-21 — 计划必须在批准前证明 Task 资源作用域结构完整。** quote 与不可变 snapshot 写入都必须从 `TaskDefinition.terminalResourceImpact` 穷尽解析每个 PlannedTask 的必需 project/episode scope；最终 Task 提交还必须在写入前验证 episode 真实属于该 project。禁止让缺失必需 scope 的计划先获得报价或 Grant，也禁止让越权 scope 写入任何 Task。Operation planner、snapshot writer 和 Task submitter 必须复用同一个 resolver，不得各自维护 TaskType 或资源名单。
 - **BA-22 — 已运行 Task 是不可变计划依赖，不是待提交 Task。** planner 发现同 canonical target、同输入签名的 active Task 时，必须把其完整 identity、TaskType、target 与 episode 冻结为 `OperationPlan.taskDependencies`，并从报价与新 Task 列表中排除。snapshot writer 在批准前校验该 Task 仍 active 且属于同一 user/project/episode/type/target；变化则使计划失效并重新报价。批准 commit 不得重新提交或重复收费 dependency；Assistant 只能把它与本 Tool member 的新 Task 原子加入当前 OperationBatch Wait。同签名 completed target 直接跳过，active target 输入签名冲突必须显式失败，禁止覆盖运行中的生成。
-- **BA-23 — 失败重试重新报价，不继承授权。** Agent 可以根据 Task terminal 的失败 refs 显式调用同一或其他收费 Operation，但每次调用都必须重新构造当前 exact plan/quote 并等待新的 Approval。失败 Task、旧 Grant、同一 Run 或用户先前的批准均不构成预算授权；系统不得自动批准或在后台静默重提收费工作。
+- **BA-23 — 失败重试重新报价，不继承授权。** Agent 可以根据 Task terminal 的失败 refs 显式调用同一或其他收费 Operation，但每次调用都必须重新构造当前 exact plan/quote，并按当前用户设置重新取得显式 Approval 或这一次精确报价的自动 Grant。失败 Task、旧 Grant、同一 Run 或用户先前的批准均不构成预算授权；系统不得在没有新 Tool call 时静默重提收费工作。
 - **BA-24 — 外部支付终态必须进入同一账本。** Stripe Checkout 充值以 `payment_intent` 作为 canonical external identity，并把 credits、最小货币单位金额与币种冻结在充值流水；refund 以及 `charge.dispute.funds_withdrawn` 只能由已验签 webhook 通过 ledger 的唯一 adjustment writer 按精确比例扣回。退款失败或 `charge.dispute.funds_reinstated` 只恢复此前同一 Stripe object 的实际 debit；`dispute.created/closed` 不解释资金事实。事件乱序、重复、跨币种、超额或找不到原充值必须 fail closed，禁止按用户最近充值猜测。
 - **BA-25 — Stripe SDK 只拥有外部协议，不拥有账本事实。** Checkout Session HTTP、参数编码、响应类型、Webhook HMAC 与 Event union 必须由官方 `stripe` SDK 处理；Checkout client 必须关闭 SDK 网络重试，Webhook 必须从 route 提供的受限 raw body 一次性 `constructEvent`，禁止 SDK 验签后再手写 JSON parser。项目继续唯一拥有 recharge quote、metadata policy、`payment_intent` identity、refund/dispute 解释、幂等键和 ledger transaction；SDK Event 不得直接写余额或建立第二 writer。
 
@@ -44,6 +44,7 @@
 - operation confirmation 分类：`src/lib/operations/types.ts` 和 `src/lib/operations/registry.ts`。
 - 不可变计划与 hash：`src/lib/operations/operation-plan-snapshot.ts`。
 - Grant 发放、聚合 Approval 的全有或全无 `issueApprovalGrantGroup`、registry 驱动的当前计划重验证、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
+- Assistant 计费确认设置的唯一持久事实是 `UserPreference.assistantBillingConfirmationRequired`；UI 只通过既有 `/api/user-preference` Operation writer 更新，runtime 只通过 `src/lib/project-agent/billing-confirmation.ts` 读取。自动模式仍由 `approval-preflight.ts` 创建不可变 snapshot 并通过既有 Grant issuer 授权，不得建立第二种扣费凭证。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
 - API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
 - Project UI 的唯一收费执行 route：`src/app/api/projects/[projectId]/operations/[operationId]/execute/route.ts`；route 只鉴权并把 immutable Grant provenance 交给统一 invocation，不解释媒体类型或 episode。

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
 import { persistOperationPlanView, planOperation, type OperationPlanView } from '@/lib/operations/planning'
 import { prepareProjectAgentOperationInput } from '@/lib/operations/invocation'
+import { issueApprovalGrant, type PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import type {
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
@@ -93,6 +94,77 @@ export function createProjectAgentApprovalPreflightStore(): ProjectAgentApproval
   }
 }
 
+async function createPersistedProjectAgentOperationPlan<Input>(params: {
+  request: NextRequest
+  operation: ProjectAgentOperationDefinition<Input, unknown>
+  projectId: string
+  userId: string
+  context: ProjectAgentContext
+  source: string
+  input: unknown
+  toolCallId?: string | null
+}): Promise<OperationPlanView> {
+  if (!params.operation.plan) {
+    throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_REQUIRED:${params.operation.id}`)
+  }
+  const prepared = prepareProjectAgentOperationInput({
+    channel: 'tool',
+    operation: params.operation,
+    context: params.context,
+    input: params.input,
+  })
+  const plan = await planOperation({
+    operation: params.operation,
+    ctx: {
+      request: params.request,
+      userId: params.userId,
+      projectId: params.projectId,
+      context: params.context,
+      source: params.source,
+      writer: null,
+      toolCallId: params.toolCallId,
+    },
+    input: prepared.input,
+  })
+  return await persistOperationPlanView({
+    plan,
+    normalizedInput: prepared.input,
+    episodeId: params.context.episodeId ?? null,
+  })
+}
+
+export async function authorizeProjectAgentToolAutomatically<Input>(params: {
+  request: NextRequest
+  operation: ProjectAgentOperationDefinition<Input, unknown>
+  projectId: string
+  userId: string
+  context: ProjectAgentContext
+  source: string
+  input: unknown
+  toolCallId: string
+}): Promise<PlannedOperationInvocation> {
+  if (params.operation.confirmation.kind !== 'billable_media') {
+    throw new Error(`PROJECT_AGENT_AUTOMATIC_BILLING_GRANT_NOT_APPLICABLE:${params.operation.id}`)
+  }
+  const operationPlan = await createPersistedProjectAgentOperationPlan(params)
+  if (!operationPlan.planSnapshotId) {
+    throw new Error(`PROJECT_AGENT_OPERATION_PLAN_SNAPSHOT_REQUIRED:${params.operation.id}`)
+  }
+  const executionSegmentId = params.context.executionSegmentId?.trim()
+  if (!executionSegmentId) {
+    throw new Error(`PROJECT_AGENT_EXECUTION_SEGMENT_REQUIRED:${params.operation.id}`)
+  }
+  const grant = await issueApprovalGrant({
+    userId: params.userId,
+    planSnapshotId: operationPlan.planSnapshotId,
+    requestId: `assistant-auto:${executionSegmentId}:${params.toolCallId}`,
+  })
+  return {
+    approvalGrantId: grant.approvalGrantId,
+    requestId: grant.operationRequestId,
+  }
+}
+
 export async function preflightProjectAgentToolApproval<Input>(params: {
   request: NextRequest
   operation: ProjectAgentOperationDefinition<Input, unknown>
@@ -107,34 +179,11 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
   if (!params.operation.plan) return true
 
   try {
-    const prepared = prepareProjectAgentOperationInput({
-      channel: 'tool',
-      operation: params.operation,
-      context: params.context,
-      input: params.input,
-    })
-    const plan = await planOperation({
-      operation: params.operation,
-      ctx: {
-        request: params.request,
-        userId: params.userId,
-        projectId: params.projectId,
-        context: params.context,
-        source: params.source,
-        writer: null,
-        toolCallId: params.toolCallId,
-      },
-      input: prepared.input,
-    })
     params.store.setPlanned({
       operationId: params.operation.id,
       toolCallId: params.toolCallId,
       input: params.input,
-      operationPlan: await persistOperationPlanView({
-        plan,
-        normalizedInput: prepared.input,
-        episodeId: params.context.episodeId ?? null,
-      }),
+      operationPlan: await createPersistedProjectAgentOperationPlan(params),
     })
     return true
   } catch (error) {

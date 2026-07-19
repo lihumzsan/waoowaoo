@@ -893,6 +893,7 @@ model UserPreference {
   updatedAt           DateTime @default(now()) @updatedAt
   imageResolution     String   @default("2K")
   capabilityDefaults  String?  @db.Text
+  assistantBillingConfirmationRequired Boolean @default(true)
 
   // API Key 配置（极简版）
   llmBaseUrl  String? @default("https://openrouter.ai/api/v1")

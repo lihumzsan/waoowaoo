@@ -6,7 +6,7 @@ import {
   type ProjectAgentOperationOutcome,
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
-import { type AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import type { ProjectAgentContext } from '@/lib/project-agent/types'
 import { buildToolError, normalizeOperationExecutionToolError, withOperationErrorDetails } from '@/lib/adapters/operation-error-normalizer'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
@@ -31,20 +31,24 @@ export async function executeProjectAgentOperationFromTool(params: {
   projectId: string
   userId: string
   context: ProjectAgentContext
-  assistantPermissionMode: AssistantPermissionMode
   source: string
   writer: UIMessageStreamWriter<UIMessage>
   input: unknown
   toolCallId?: string | null
   executionFence: ProjectAgentOperationExecutionFence
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
+  approvedInvocation?: PlannedOperationInvocation | null
 }): Promise<ProjectAgentToolExecutionResult> {
   const registry = createProjectAgentOperationRegistry()
   const operation = registry[params.operationId]
   const toolCallId = params.toolCallId?.trim() || null
-  const approvedInvocation = toolCallId
+  const persistedApprovedInvocation = toolCallId
     ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
     : null
+  if (params.approvedInvocation && persistedApprovedInvocation) {
+    throw new Error(`PROJECT_AGENT_OPERATION_APPROVAL_PROVENANCE_AMBIGUOUS:${params.operationId}`)
+  }
+  const approvedInvocation = params.approvedInvocation ?? persistedApprovedInvocation
   const operationContext = {
     request: params.request,
     userId: params.userId,

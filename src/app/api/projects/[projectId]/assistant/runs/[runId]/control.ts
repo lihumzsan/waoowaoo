@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { executeProjectAgentCommand, type ProjectAgentCommand } from '@/lib/project-agent/command-service'
 import { parseProjectAgentControlAction } from '@/lib/project-agent/control'
-import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import {
   mapProjectAgentCommandError,
   readProjectAgentCommandEpisodeId,
@@ -88,7 +87,6 @@ export async function handleProjectAgentRunControlRequest(params: {
       },
       context: body.context,
       locale: readProjectAgentCommandString(body.locale),
-      assistantPermissionMode: parseAssistantPermissionMode(body.assistantPermissionMode),
       command: buildProjectAgentControlCommand({
         kind: params.kind,
         runId: params.runId,
