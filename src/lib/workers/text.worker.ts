@@ -16,10 +16,12 @@ import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
 import { handleBgmDesignPlanTask } from '@/lib/bgm-design/generate'
+import { handleCreativeWorkTask } from './handlers/creative-work'
 
 type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const TEXT_TASK_HANDLERS = {
+  creative_work: handleCreativeWorkTask,
   bgm_design_plan: handleBgmDesignPlanTask,
   edit_bible_generate: handleEditBibleGenerateTask,
   edit_style_preview_options_generate: handleEditStylePreviewOptionsTask,

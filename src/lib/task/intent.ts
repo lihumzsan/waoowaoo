@@ -22,6 +22,7 @@ export const TASK_INTENTS: TaskIntent[] = [
 const TASK_INTENT_SET = new Set<string>(TASK_INTENTS)
 
 const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
+  [TASK_TYPE.CREATIVE_WORK]: 'analyze',
   [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: 'generate',
   [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: 'generate',
   [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: 'generate',

@@ -548,8 +548,7 @@ export function useWorkspaceAssistantRuntime({
   })
   const activeSubagents = useMemo(() => resolveWorkspaceAssistantActiveSubagents({
     sessionSubagents: sessionState?.activeSubagents ?? [],
-    messages: chat.messages,
-  }), [chat.messages, sessionState?.activeSubagents])
+  }), [sessionState?.activeSubagents])
 
   useEffect(() => {
     if (!replyActivity || !replyActivity.requestSettled) return

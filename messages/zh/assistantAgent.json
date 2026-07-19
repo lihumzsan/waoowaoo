@@ -47,8 +47,9 @@
     "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
     "outputKinds": {
       "screenplayDraft": "剧本创作",
-      "storyAnalysis": "故事分析",
+      "editBibleBundle": "制作 Bible",
       "continuityAnalysis": "连续性分析",
+      "styleBible": "视觉风格设计",
       "assetPromptSet": "视觉资产设计",
       "videoPromptSet": "视频生成设计",
       "musicDirection": "配乐设计",

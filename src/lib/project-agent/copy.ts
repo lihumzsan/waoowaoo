@@ -8,8 +8,16 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   delegate_creative_work: {
-    zh: '把一次专业创作推理委派给无状态 Creative Worker。简单图片、视频、音乐或文字请求只需委派一次最小任务；长剧本可按计划分阶段委派。Worker 会自行发现并读取相关 Skill，但不能读取项目、调用业务 Operation、创建 Task、收费、持久化或改变状态；你必须传入全部真实上下文，并在返回后使用现有 Operation 执行实际动作。',
-    en: 'Delegate one professional creative reasoning task to the stateless Creative Worker. A simple image, video, music, or text request needs one minimal delegation; a long script can be delegated in planned stages. The Worker discovers and reads relevant Skills by itself, but cannot read the project, call business Operations, create Tasks, charge, persist, or change state. Supply all real context, then use existing Operations for actual execution.',
+    zh: '把一个或一批专业创作推理请求委派成后台 Creative Task。每个请求对应一个无状态 Subagent；长片可用 chapter_batch 在服务端为每章编译最小上下文，避免把整部剧本的全部上下文灌入主 Agent。Worker 会自行发现并读取相关 Skill，但不能调用业务 Operation、收费、持久化创作产物或改变项目状态。完成后按 taskId 读取完整结构化结果，再由主 Agent执行实际动作。',
+    en: 'Delegate one or many professional creative reasoning requests as background Creative Tasks. Every request becomes one stateless Subagent; chapter_batch compiles minimal per-Chapter contexts server-side so the Primary Agent does not absorb the entire long-work payload. The Worker discovers and reads relevant Skills, but cannot call business Operations, charge, persist creative outputs, or change project state. Read each full result by taskId, then let the Primary Agent execute real actions.',
+  },
+  save_edit_source: {
+    zh: '把用户提供或上传的完整长剧本文本保存为不可变 SourceDocument，不调用 AI。返回的 normalizedText、id、version 和 checksum 是委派 edit_bible_bundle 时必须原样携带的领域来源事实。',
+    en: 'Save a user-provided or uploaded long script as an immutable SourceDocument without calling AI. Preserve the returned normalizedText, id, version, and checksum exactly when delegating edit_bible_bundle work.',
+  },
+  adopt_edit_bible_bundle: {
+    zh: '把一个已完成的 edit_bible_bundle Creative Task 采用为正式 Bible，并由唯一切分器写出 Chapter。必须传精确 sourceDocumentId 和 taskId；系统会重新验证来源版本、内容与结构化结果，不会自动启动资产、Chapter Subagent 或视频任务。',
+    en: 'Adopt one completed edit_bible_bundle Creative Task as the formal Bible and let the sole splitter write Chapters. Pass the exact sourceDocumentId and taskId. The system revalidates source revision, content, and strict output, and starts no asset, Chapter Subagent, or video task automatically.',
   },
   update_plan: {
     zh: '为复杂或多阶段工作维护一份简短计划。每次调用完整替换当前计划，最多一个步骤处于 in_progress，进展变化后及时更新；传空 plan 可清除。它只是可见便签，不执行工作、不创建 Task，也不控制工具或项目状态。',
@@ -145,6 +153,14 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   delegate_creative_work: {
     zh: '专业创作推理',
     en: 'Creative reasoning',
+  },
+  save_edit_source: {
+    zh: '保存剧本源文档',
+    en: 'Save script source',
+  },
+  adopt_edit_bible_bundle: {
+    zh: '采用制作 Bible',
+    en: 'Adopt production Bible',
   },
   update_plan: {
     zh: '更新计划',

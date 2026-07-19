@@ -18,15 +18,19 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - **AP-05 — 未知输出显式失败。** 结构化 raw schema 应在协议边界拒绝未知或缺失字段；不得静默删除、补默认、降级成自由文本或让下游消费者各自容错。协议失败与 Task retry/terminal 继续服从异步生命周期模块。
 - **AP-06 — Fixture 只是外部协议替身。** Golden provider fixture 必须通过同一生产 raw schema，但只能证明受控外部边界与内部真实主链兼容，不能证明真实模型必然服从 Prompt。Prompt 或 schema 变化时必须审计 fixture；不得让 fixture 自己定义期望协议。
 - **AP-07 — 流式展示无业务裁决权。** structured stream 只消费已声明 raw item、stable key 与 merge rule，提供可丢弃预览。stream parse rejection 不得写 Task/resource 失败，最终业务状态仍由 durable owner 决定。
-- **AP-08 — Freeform Playbook 不获得执行门禁。** 项目助手 Prompt 可以说明推荐完整制作配方、Choice 时机、失败重试、Resource 引用和非阻塞 Task 行为，但不得把 recommendation 写成工具 allowlist 或固定 next step。所有注入 Tool 可调用；同模型步骤 OperationBatch、聚合 Approval、后台 Run/Wait、内在输入、owner/scope、provider capability、破坏性确认和 Run fence 必须由代码 fail closed。Prompt 只能要求模型收到 Task receipt 后继续独立工作、不得轮询，并在 terminal update 时重新规划；它无权决定 Task 是否真正提交、Wait membership 或续跑次数。Prompt 遗漏 Choice 或停止调用时不得伪造领域事实或死锁用户；UI 与下一次用户消息仍可调用同一开放 Operation。
-- **AP-09 — 专业知识与运行 Prompt 分层。** 主 Agent System Prompt 只保留身份、loop、工具与事实边界、Task/Wait、Approval/Choice、Resource identity、失败、沟通和安全等运行规则；剧本、连续性、导演、视觉、视频、音乐和质量方法由注册式 Creative Skill 按需读取。Skill 不得包含或重定义 Operation schema、Task 生命周期、Approval/Choice、数据库 identity 或 provider wire 参数；严格 adapter 和确定性 builder 继续是原执行协议 owner。迁移以原中英文有效规则并集为基线，只有完成调用者与替代证据审计的 obsolete 内容才可删除。
+- **AP-08 — Freeform Playbook 不获得执行门禁。** 项目助手 Prompt 可以说明推荐完整制作配方、Choice 时机、失败重试、Resource 引用和非阻塞 Task 行为，但不得把 recommendation 写成工具 allowlist 或固定 next step。所有注入 Tool 可调用；同模型步骤 OperationBatch、聚合 Approval、后台 Run/Wait、输入 prerequisite、owner/scope、provider capability、破坏性确认和 Run fence 必须由代码 fail closed。Prompt 只能要求模型收到 Task receipt 后继续独立工作、不得轮询，并在 terminal update 时重新规划；它无权决定 Task 是否真正提交、Wait membership 或续跑次数。Prompt 遗漏 Choice 或停止调用时不得伪造领域事实或死锁用户；UI 与下一次用户消息仍可调用同一开放 Operation。
+- **AP-09 — 专业知识与运行 Prompt 分层。** 主 Agent System Prompt 只保留身份、loop、工具与事实边界、计划与委派纪律、Task/Wait、Approval/Choice、Resource identity、失败、沟通和安全等运行规则；剧本、连续性、导演、风格、资产、视频、音乐和质量方法由注册式 Creative Skill 按需读取。Skill 不得包含或重定义 Operation schema、Task 生命周期、Approval/Choice、数据库 identity 或 provider wire 参数；严格 adapter 和确定性 builder 继续是原执行协议 owner。`style-development` 独占 Style Bible 与全局视觉语言；`asset-development` 独占角色/场景/道具资产设计，允许没有风格输入时独立工作，并在提供确认 Style Bible 时只消费而不改写它；旧 `visual-development` identity 已删除。迁移以原中英文有效规则并集为基线，只有完成调用者与替代证据审计的 obsolete 内容才可删除。
+- **AP-10 — Creative Worker 输出协议穷尽且与 Task 分层。** Creative Worker 结构化输出只由 `creativeWorkOutputRegistry` 声明，当前只有 `screenplay_draft`、`edit_bible_bundle`、`continuity_analysis`、`style_bible`、`asset_prompt_set`、`video_prompt_set`、`music_direction` 与 `creative_review`，不存在 `story_analysis`。`style_bible` 区分 finalized 与 candidates；`asset_prompt_set` 区分稳定身份、最终生图 Prompt 与可选风格来源；`video_prompt_set` 必须在同一 strict 结果中同时表达全局导演方向、逐时间段导演执行和可直接交给视频模型的 `finalPrompt`。导演知识与视频模型表达可以来自不同 Skill，但不能拆成两个隐藏必经模型协议。完整结果只保存于 Creative Task result，Task lifecycle 与 Assistant continuation 只携带 reference projection；不能让 UI、Wait 或消息从摘要重建结构化结果。
+- **AP-11 — 长片 Playbook 显式但不自动串行。** 对长剧本、多段生成或连续性敏感目标，主 Agent System Prompt 必须要求先规划，再建立 source 与全局 Bible，使用唯一 `splitEditBibleIntoChapterPlans` 划分 Chapter，并显式调用 `delegate_creative_work(kind=chapter_batch)`；该唯一委派入口在服务端为每章经纯 `compileCreativeChapterContext` 构造最小上下文，再一章一个 `video_prompt_set` Subagent，禁止先把全部 Chapter 大上下文复制进主 Agent。这个要求约束模型的规划质量，但不成为 Operation allowlist 或代码自动链：Bible 完成只恢复主 Agent，Chapter split、Chapter batch、视频生成和合成都必须由主 Agent 基于正式事实显式决定。短镜头仍可只委派一个最小视频设计后直接生成。
 
 ## 权威入口
 
 - Prompt identity、模板路径与变量：`src/lib/ai-prompts/ids.ts`、`src/lib/ai-prompts/registry.ts`。
 - Prompt 构建与模板读取：`src/lib/ai-prompts/build-prompt.ts`、`src/lib/ai-prompts/template-store.ts`。
 - Prompt 模板：`src/lib/ai-prompts/templates/**`；非 catalog 历史模板仍须按 Prompt i18n guard 的迁移规则收敛。
-- 按需专业知识：`src/lib/creative-skills/registry.ts` 与 `skills/**/SKILL.{zh,en}.md`；无状态模型输出边界：`src/lib/creative-worker/output-registry.ts`。它们服从独立的 Skill identity 与 output-kind registry，不得塞回 `AI_PROMPT_CATALOG` 或从 Operation 名称推断。
+- 按需专业知识：`src/lib/creative-skills/registry.ts` 与 `skills/**/SKILL.{zh,en}.md`；`style-development` 与 `asset-development` 是分离 identity，旧 `visual-development` 不得作为 alias 恢复。
+- 无状态模型输出边界：`src/lib/creative-worker/output-registry.ts`；Task 输入/完整结果/reference projection 契约：`src/lib/creative-worker/task-contract.ts`、`src/lib/task/result-projection.ts`。它们服从独立的 Skill identity、output-kind registry 与 TaskDefinition，不得塞回 `AI_PROMPT_CATALOG`、从 Operation 名称推断或复制进 Assistant message。
+- Bible/Chapter 专业输入边界：正式 Bible 与领域 schema 仍由既有 Edit Bible 模块拥有；`splitEditBibleIntoChapterPlans` 是唯一 Chapter splitter；`src/lib/edit-chapter/creative-context-service.ts` 只读取并校验正式事实与 Resource revision；`src/lib/creative-worker/context-compiler.ts` 只把这些输入纯派生为有界最小上下文，不产生 Prompt identity、领域事实或执行边。
 - `standards/prompt-canary/**` 当前没有生产或测试消费者，只是未挂载的历史 canary 数据；它不是 Prompt、schema 或测试证据的 owner。修改时仍路由本模块以显式暴露该状态，不得把文件存在当成已验证。
 - 生产 raw schema：由各领域 schema module 拥有；不得在本模块建立第二份通用字段 registry。调用链必须从 Prompt ID/字段引用追到实际 worker parser。
 - Canvas raw stream 消费：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`，并同时服从 `canvas-node/CN-03`。
@@ -34,12 +38,15 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 
 ## 验证
 
-- `scripts/guards/prompt-i18n-guard.mjs` 验证 catalog locale 模板、变量和禁止的直接模板读取；`scripts/guards/prompt-semantic-regression.mjs` 验证 catalog 占位符与少量历史关键字段。它们不证明任意 Prompt 与任意 schema 自动一致。
+- `scripts/guards/prompt-i18n-guard.mjs` 验证 catalog locale 模板、变量和禁止的直接模板读取；`scripts/guards/prompt-semantic-regression.mjs` 验证 catalog 占位符、主 Agent 长短任务委派纪律、双语 Skill 关键语义以及 `style-development`/`asset-development` 分离，并拒绝旧 `visual-development` 与同步 Subagent 语义回流。它们不证明任意 Prompt 与任意 schema 自动一致，也不证明真实模型会正确规划长片。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 使 deterministic provider fixture 通过适用生产 parser/schema；它不代替真实外部模型行为。
 - `tests/unit/project-workspace/structured-stream-runtime.test.ts` 验证 raw item merge、attempt/seq 与终态边界；`tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证源剧本的真实逐场 stream 协议。
 - 适用 Golden/Critical Journey 由被改变的用户 observable 和模块不变量决定，禁止根据 Prompt 文件变化机械选择测试。observable 不变时记录不适用原因并运行原 canonical scenario；改变时按 `TG-11` 同步 contract、真实路径和 oracle。
 
 ## 历史回归
+
+- Creative Worker 初版已经把专业知识移进 Skill，却仍在主 Agent 的同步 Tool Activity 内执行，并把完整结构化结果直接返回主模型；长片章节无法由持久后台 Subagent 并行，Activity/消息又开始承担生命周期和结果投影。当前输出 schema 保持 Worker 边界不变，执行容器切换为一个逻辑请求一个 `creative_work` Task；Task.result 保存完整输出，TaskDefinition reference projection 约束 Session/Wait/continuation 体积。
+- 初版 `visual-development` 把 Style Bible 与角色/场景/道具生成知识放在同一 identity，资产变化可以混入全局风格裁决；导演设计与视频模型 Prompt 又主要藏在同一个自由文本字段里，无法验证是否真的完成时间线设计。当前删除旧视觉 identity，拆为 `style-development` 和 `asset-development`；`video_prompt_set` 用 strict `globalDirection + directorTimeline + finalPrompt` 把导演决策与最终模型指令放在同一个 Subagent 结果中。
 
 - 制作规划 Prompt 的 raw beat/ledger/emotional cue 与 Canvas final-schema adapter 漂移，真实 Task processing 时预览失败，而终态 Journey 曾通过；现在 browser adapter 与 worker 复用生产 raw schema。
 - 核心剪辑 Prompt 曾让模型重复输出 ledger persistent facts，再用字符重合率校验，形成第二事实 writer；现在模型只写镜头结构，事实由 ledger projector 独占。

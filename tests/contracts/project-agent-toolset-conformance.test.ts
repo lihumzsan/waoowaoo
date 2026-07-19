@@ -167,35 +167,42 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toContain('capabilityOverrides')
   })
 
-  it('exposes one stateless Creative Worker delegation contract without project write authority', () => {
+  it('exposes one background Creative Worker delegation contract without domain write authority', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.delegate_creative_work
 
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: false })
     expect(operation.groupPath).toEqual(['assistant', 'creative'])
-    expect(operation.intent).toBe('query')
+    expect(operation.intent).toBe('act')
     expect(operation.confirmation).toMatchObject({ kind: 'none', required: false })
     expect(operation.effects).toEqual({
-      writes: false,
+      writes: true,
+      workspaceResourceImpact: 'none',
       billable: false,
       destructive: false,
       overwrite: false,
-      bulk: false,
+      bulk: true,
       externalSideEffects: true,
-      longRunning: false,
+      longRunning: true,
     })
     expect(Object.keys(operation.toolInputSchema.properties)).toEqual([
-      'outputKind', 'goal', 'context',
+      'kind', 'request', 'requests', 'chapterBatch',
     ])
     expect(operation.inputSchema.safeParse({
-      outputKind: 'video_prompt_set',
-      goal: 'Design one 10-second vertical video prompt.',
-      context: {
-        userRequest: 'A lantern wakes in an abandoned shrine.',
-        sourceMaterials: [],
-        constraints: ['9:16', '10 seconds'],
+      kind: 'single',
+      request: {
+        requestKey: 'short-video-1',
+        outputKind: 'video_prompt_set',
+        goal: 'Design one 10-second vertical video prompt.',
+        context: {
+          userRequest: 'A lantern wakes in an abandoned shrine.',
+          sourceMaterials: [],
+          constraints: ['9:16', '10 seconds'],
+        },
       },
+      requests: null,
+      chapterBatch: null,
     }).success).toBe(true)
   })
 
@@ -223,23 +230,56 @@ describe('project agent toolset conformance', () => {
     }
   })
 
-  it('gives the Creative Worker only Skill discovery/read tools and a common baseline Skill', () => {
+  it('gives the Creative Worker only Skill discovery/read tools and exhaustive required Skill bundles', () => {
     expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual([
       'discover_skills', 'read_skill',
     ])
     expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
-    for (const definition of Object.values(creativeWorkOutputRegistry)) {
-      expect(definition.baselineSkillIds).toEqual(['creative-core'])
-    }
+    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => [
+      kind,
+      definition.requiredSkillIds,
+    ]))).toEqual({
+      screenplay_draft: ['creative-core', 'story-development'],
+      edit_bible_bundle: ['creative-core', 'story-development', 'continuity-memory'],
+      continuity_analysis: ['creative-core', 'continuity-memory'],
+      style_bible: ['creative-core', 'style-development'],
+      asset_prompt_set: ['creative-core', 'asset-development'],
+      video_prompt_set: ['creative-core', 'director-core', 'video-direction'],
+      music_direction: ['creative-core', 'music-direction'],
+      creative_review: ['creative-core', 'quality-review'],
+    })
 
     const videoOutput = {
       kind: 'video_prompt_set',
       overview: 'Two independently generated clips.',
+      globalDirection: {
+        narrativeIntent: 'Reveal the shrine awakening.',
+        visualContinuity: 'Keep lantern position and fog direction stable.',
+        performanceDirection: 'Use restrained, apprehensive reactions.',
+        cameraLanguage: 'Slow deliberate pushes and one contained cut.',
+        editingRhythm: 'Hold long enough for the supernatural change to register.',
+        soundStrategy: 'Use native wind, wood creaks, and one ignition pulse.',
+      },
       segments: [{
         key: 'clip-1',
         title: 'Complete first clip',
         durationSeconds: 10,
-        prompt: '0-4s shot one; 4-10s shot two.',
+        narrativePurpose: 'Reveal the lantern awakening.',
+        entryState: 'The shrine is dark and still.',
+        exitState: 'The lantern burns while the doors begin to open.',
+        directorTimeline: [{
+          startSeconds: 0,
+          endSeconds: 10,
+          shotPurpose: 'Build and release supernatural tension.',
+          framing: 'Wide shrine interior tightening to the lantern.',
+          cameraExecution: 'Slow stabilized push.',
+          performance: 'No visible performer.',
+          action: 'The lantern ignites and the doors part.',
+          dialogue: [],
+          synchronousSound: 'Wind, timber creak, ignition pulse.',
+          transition: null,
+        }],
+        finalPrompt: '0-10s: slow push toward a lantern that ignites as the shrine doors open.',
         referenceKeys: [],
         continuityRequirements: [],
         audioIntent: null,

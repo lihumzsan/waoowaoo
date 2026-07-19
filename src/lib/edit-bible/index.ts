@@ -13,6 +13,12 @@ export {
 } from './source-script-segments'
 export { generateEditBibleArtifacts, readEditBibleExtractionDiagnostics } from './extraction'
 export {
+  CREATIVE_EDIT_BIBLE_ADOPTION_ERROR_CODES,
+  adoptCreativeEditBibleBundle,
+  saveCreativeEditSource,
+  type CreativeEditBibleAdoptionErrorCode,
+} from './creative-adoption'
+export {
   confirmEditBibleInputSchema,
   editBibleBeatSchema,
   editBibleBeatSheetSchema,

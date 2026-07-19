@@ -310,12 +310,16 @@
         "src/lib/project-agent/waits.ts",
         "src/lib/project-agent/runs.ts",
         "src/lib/project-agent/session-state.ts",
+        "src/lib/creative-worker/task-contract.ts",
+        "src/lib/edit-bible/creative-adoption.ts",
+        "src/lib/operations/domains/assistant/creative-bible-ops.ts",
         "src/app/api/tasks",
         "src/app/api/task-target-states",
         "src/app/api/sse/route.ts",
         "src/lib/edit-bible/task-submission.ts",
         "src/lib/edit-script/task-submission.ts",
         "src/lib/operations/submit-operation-task.ts",
+        "src/lib/operations/domains/assistant/creative-ops.ts",
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
@@ -370,6 +374,9 @@
         "src/lib/project-projection",
         "src/lib/ai-prompts/templates/project-agent",
         "src/lib/operations",
+        "src/lib/creative-worker/task-contract.ts",
+        "src/lib/task/result-projection.ts",
+        "src/lib/workers/handlers/creative-work.ts",
         "prisma/schema.prisma",
         "messages/en/assistantAgent.json",
         "messages/zh/assistantAgent.json",
@@ -480,9 +487,20 @@
         "src/lib/creative-skills",
         "src/lib/creative-worker",
         "src/lib/operations/domains/assistant/creative-ops.ts",
+        "src/lib/operations/domains/assistant/creative-bible-ops.ts",
+        "src/lib/edit-bible/creative-adoption.ts",
+        "src/lib/workers/handlers/creative-work.ts",
+        "src/lib/task/definition.ts",
+        "src/lib/task/result-projection.ts",
+        "src/lib/project-agent/operation-batch.ts",
+        "src/lib/project-agent/waits.ts",
+        "src/lib/project-agent/session-state.ts",
         "src/lib/project-agent/subagent-events.ts",
+        "src/lib/edit-bible/chapter-split.ts",
+        "src/lib/edit-chapter/creative-context-service.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
-        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts"
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts",
+        "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts"

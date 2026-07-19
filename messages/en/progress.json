@@ -41,6 +41,7 @@
     }
   },
   "taskType": {
+    "creativeWork": "Creative Subagent",
     "generic": "Task",
     "editStylePreviewOptionsGenerate": "Visual style directions",
     "editStylePreviewImage": "Edit style preview grid",

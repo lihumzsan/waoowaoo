@@ -1,7 +1,13 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
+import {
+  isTaskType,
+  TASK_EVENT_TYPE,
+  TASK_STATUS,
+  type TaskLifecycleEventType,
+} from '@/lib/task/types'
+import { projectTaskContinuationResult } from '@/lib/task/result-projection'
 import type { ProjectAssistantId } from './types'
 import type { ProjectAgentTaskSubmissionReceipt } from '@/lib/operations/types'
 import type { ProjectAgentOperationBatchIdentity } from './operation-batch'
@@ -284,12 +290,15 @@ async function readCompletedTaskDetails(input: {
   return completedTaskIds.map((taskId) => {
     const row = rowById.get(taskId)
     if (!row) throw new Error(`PROJECT_AGENT_WAIT_COMPLETED_TASK_MISSING:${taskId}`)
+    if (!row.type || !isTaskType(row.type)) {
+      throw new Error(`PROJECT_AGENT_WAIT_COMPLETED_TASK_TYPE_INVALID:${taskId}:${String(row.type)}`)
+    }
     return {
       taskId,
       taskType: row.type,
       targetType: row.targetType,
       targetId: row.targetId,
-      result: readResultRecord(row.result),
+      result: projectTaskContinuationResult(row.type, readResultRecord(row.result)),
     }
   })
 }

@@ -26,6 +26,7 @@ export type ImageTaskHandlerKey =
 export type VideoTaskHandlerKey = 'creative_resource_video' | 'creative_resource_video_merge' | 'video_segment' | 'final_video_render' | 'chapter_render'
 export type MusicTaskHandlerKey = 'creative_resource_audio' | 'music_generate' | 'music_score_generate'
 export type TextTaskHandlerKey =
+  | 'creative_work'
   | 'bgm_design_plan'
   | 'edit_bible_generate'
   | 'edit_style_preview_options_generate'
@@ -48,6 +49,8 @@ export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
 export type TaskTerminalOutputMaterializer = 'none' | 'creative_resource' | 'domain_creative_resource'
 export type TaskSubmissionTargetOwnership = 'none' | 'chapter_render' | 'final_video_render'
+export type TaskContinuationResultProjection = 'full' | 'reference'
+export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
 export type TaskDefinition<Q extends QueueType = QueueType> = {
   queue: Q
@@ -61,6 +64,8 @@ export type TaskDefinition<Q extends QueueType = QueueType> = {
   terminalResourceImpact: WorkspaceResourceImpact
   terminalFailureProjector: TaskTargetTerminalProjector
   terminalCancelProjector: TaskTargetTerminalProjector
+  continuationResultProjection: TaskContinuationResultProjection
+  lifecyclePayloadProjection: TaskLifecyclePayloadProjection
 }
 
 function definition<Q extends QueueType>(
@@ -73,6 +78,8 @@ function definition<Q extends QueueType>(
   terminalCancelProjector: TaskTargetTerminalProjector,
   submissionTargetOwnership: TaskSubmissionTargetOwnership,
   terminalOutputMaterializer: TaskTerminalOutputMaterializer = 'none',
+  continuationResultProjection: TaskContinuationResultProjection = 'full',
+  lifecyclePayloadProjection: TaskLifecyclePayloadProjection = 'full',
 ): TaskDefinition<Q> {
   return {
     queue,
@@ -83,6 +90,8 @@ function definition<Q extends QueueType>(
     terminalSuccessHandoff: 'handler_result_checkpoint',
     terminalOutputMaterializer,
     submissionTargetOwnership,
+    continuationResultProjection,
+    lifecyclePayloadProjection,
     terminalResourceImpact,
     terminalFailureProjector,
     terminalCancelProjector,
@@ -90,6 +99,7 @@ function definition<Q extends QueueType>(
 }
 
 export const TASK_DEFINITIONS = {
+  [TASK_TYPE.CREATIVE_WORK]: definition('text', 'creative_work', 'none', 3, 'none', 'none', 'none', 'none', 'none', 'reference', 'reference'),
   [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),

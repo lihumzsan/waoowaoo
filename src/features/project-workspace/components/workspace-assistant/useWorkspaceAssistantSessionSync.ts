@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
+  TASK_SSE_EVENT_TYPE,
+  TASK_TYPE,
   WORKSPACE_SSE_EVENT_TYPE,
   type AssistantSessionChangedSSEEvent,
 } from '@/lib/task/types'
@@ -160,6 +162,15 @@ export function useWorkspaceAssistantSessionSync({
   }, [refreshSessionState])
 
   useEffect(() => subscribeTaskEvents((event) => {
+    if (
+      event.type === TASK_SSE_EVENT_TYPE.LIFECYCLE
+      && event.projectId === projectId
+      && event.taskType === TASK_TYPE.CREATIVE_WORK
+      && (event.episodeId ?? undefined) === (episodeId ?? undefined)
+    ) {
+      void refreshSessionState()
+      return
+    }
     if (event.type !== WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) return
     const assistantEvent: AssistantSessionChangedSSEEvent = event
     if (assistantEvent.assistantId !== 'workspace-command') return
@@ -170,7 +181,7 @@ export function useWorkspaceAssistantSessionSync({
     )
     setSessionEventWatermark(latestEventWatermarkRef.current)
     void refreshSessionState(assistantEvent.agentEventId)
-  }), [episodeId, refreshSessionState, subscribeTaskEvents])
+  }), [episodeId, projectId, refreshSessionState, subscribeTaskEvents])
 
   return {
     sessionState,

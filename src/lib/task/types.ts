@@ -62,6 +62,7 @@ export function isTaskTerminalEventType(value: string | null | undefined): value
 }
 
 export const TASK_TYPE = {
+  CREATIVE_WORK: 'creative_work',
   CREATIVE_RESOURCE_IMAGE: 'creative_resource_image',
   CREATIVE_RESOURCE_AUDIO: 'creative_resource_audio',
   CREATIVE_RESOURCE_VIDEO: 'creative_resource_video',

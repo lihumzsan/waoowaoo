@@ -26,6 +26,11 @@ export {
   projectChapterPersistentFacts,
 } from './persistent-facts'
 export {
+  compileEpisodeChapterContexts,
+  type CompileEpisodeChapterContextsInput,
+  type CreativeChapterAssetReference,
+} from './creative-context-service'
+export {
   assertChapterPlanAssetMenuReady,
   buildChapterPlanAssetMenu,
   loadKnownPlanAssets,

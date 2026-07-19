@@ -41,6 +41,7 @@
     }
   },
   "taskType": {
+    "creativeWork": "专业创作 Subagent",
     "generic": "任务",
     "editStylePreviewOptionsGenerate": "视觉风格方案",
     "editStylePreviewImage": "剪辑风格九宫格",

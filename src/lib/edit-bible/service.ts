@@ -381,9 +381,11 @@ async function restoreBibleSnapshot(input: {
   readonly sourceDocumentId: string
   readonly preparedVersion: number
   readonly snapshot: PersistedBibleSnapshot | null
+  readonly client?: PrismaClientLike
 }) {
+  const client = input.client ?? prisma
   if (!input.snapshot) {
-    await prisma.projectEditBible.deleteMany({
+    await client.projectEditBible.deleteMany({
       where: {
         id: input.editBibleId,
         sourceDocumentId: input.sourceDocumentId,
@@ -392,7 +394,7 @@ async function restoreBibleSnapshot(input: {
     })
     return
   }
-  await prisma.projectEditBible.updateMany({
+  await client.projectEditBible.updateMany({
     where: {
       id: input.snapshot.id,
       sourceDocumentId: input.sourceDocumentId,
@@ -419,8 +421,9 @@ export async function prepareEditBibleGenerationTarget(input: {
   readonly userId: string
   readonly episodeId: string
   readonly sourceDocumentId: string
+  readonly client?: Prisma.TransactionClient
 }): Promise<EditBibleGenerationTarget> {
-  const target = await prisma.$transaction(async (tx) => {
+  const prepare = async (tx: Prisma.TransactionClient) => {
     await assertEpisodeAccess({ ...input, client: tx })
     const sourceDocument = await tx.projectEpisodeSourceDocument.findFirst({
       where: {
@@ -486,7 +489,10 @@ export async function prepareEditBibleGenerationTarget(input: {
       baseVersion,
       snapshot,
     }
-  })
+  }
+  const target = input.client
+    ? await prepare(input.client)
+    : await prisma.$transaction(prepare)
 
   return {
     editBibleId: target.editBibleId,
@@ -499,6 +505,7 @@ export async function prepareEditBibleGenerationTarget(input: {
       sourceDocumentId: input.sourceDocumentId,
       preparedVersion: target.version,
       snapshot: target.snapshot,
+      ...(input.client ? { client: input.client } : {}),
     }),
   }
 }
@@ -625,11 +632,12 @@ export async function persistGeneratedEditBibleBundle(input: {
   readonly sourceDocumentId: string
   readonly taskId: string
   readonly bundle: EditBibleBundle
+  readonly client?: Prisma.TransactionClient
 }): Promise<{
   readonly editBible: PersistedEditBibleBundle
   readonly chapters: readonly PersistedEditChapterPlan[]
 }> {
-  return await prisma.$transaction(async (tx) => {
+  const persist = async (tx: Prisma.TransactionClient) => {
     const locked = await tx.$queryRaw<Array<{
       id: string
       episodeId: string
@@ -726,7 +734,10 @@ export async function persistGeneratedEditBibleBundle(input: {
       editBible: mapPersistedBible(persisted, input.projectId),
       chapters,
     }
-  })
+  }
+  return input.client
+    ? await persist(input.client)
+    : await prisma.$transaction(persist)
 }
 
 export async function markEditBibleScriptReadyForReview(input: {
@@ -786,8 +797,10 @@ export async function approveEpisodePromptGeneratedScript(input: {
 export async function readEpisodeEditBible(input: {
   readonly projectId: string
   readonly episodeId: string
+  readonly client?: PrismaClientLike
 }): Promise<PersistedEditBibleBundle | null> {
-  const record = await prisma.projectEditBible.findFirst({
+  const client = input.client ?? prisma
+  const record = await client.projectEditBible.findFirst({
     where: {
       episodeId: input.episodeId,
       episode: { projectId: input.projectId },
@@ -800,8 +813,10 @@ export async function readEpisodeEditBible(input: {
 export async function readEpisodeEditChapters(input: {
   readonly projectId: string
   readonly episodeId: string
+  readonly client?: PrismaClientLike
 }): Promise<readonly PersistedEditChapterPlan[]> {
-  const chapters = await prisma.projectEditChapter.findMany({
+  const client = input.client ?? prisma
+  const chapters = await client.projectEditChapter.findMany({
     where: {
       episodeId: input.episodeId,
       episode: { projectId: input.projectId },

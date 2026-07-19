@@ -6,6 +6,7 @@ import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-
 import { getTaskDefinition } from './definition'
 import { buildTaskLifecycleEventPayload } from './publisher'
 import { createTaskExecutionFingerprint } from './execution-identity'
+import { projectTaskLifecyclePayload } from './result-projection'
 import { claimTaskTargetOwnershipInTransaction } from './target-ownership'
 import {
   TASK_EVENT_TYPE,
@@ -123,12 +124,12 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
         targetId: stored.targetId,
         episodeId: stored.episodeId,
         coveragePayload: input.payload,
-        payload: {
+        payload: projectTaskLifecyclePayload(input.type, {
           ...(input.payload || {}),
           parentTaskId: input.parentTaskId || null,
           billing: preparedBilling,
           trace: { requestId: input.operationRequestId || null },
-        },
+        }),
       })),
     },
   })

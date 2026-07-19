@@ -29,7 +29,8 @@ import {
   type EditFirstWorkflowView,
 } from '@/lib/project-workflow/edit-first-view'
 import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
-import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
+import { TASK_STATUS, TASK_TYPE, type TaskStatus } from '@/lib/task/types'
+import { creativeWorkTaskPayloadSchema } from '@/lib/creative-worker'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { readProjectAgentSessionEventWatermark } from './session-event'
@@ -396,40 +397,37 @@ async function listActiveTasksForWaits(params: {
   }))
 }
 
-async function listActiveSubagentsForActivity(params: {
-  run: ProjectAgentSessionRunCandidate | null
-  activity: ProjectAgentActivitySnapshot | null
+async function listActiveCreativeSubagents(params: {
+  projectId: string
+  userId: string
+  episodeId?: string | null
 }): Promise<ProjectAgentSubagentView[]> {
-  if (
-    !params.run
-    || !params.activity
-    || params.activity.type !== 'operation'
-    || params.activity.operationId !== 'delegate_creative_work'
-  ) return []
-  const rows = await prisma.projectAgentEvent.findMany({
+  const tasks = await prisma.task.findMany({
     where: {
-      runId: params.run.id,
-      activityId: params.activity.activityId,
-      kind: 'subagent.progressed',
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId ?? null,
+      type: TASK_TYPE.CREATIVE_WORK,
+      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
     },
-    orderBy: { id: 'asc' },
-    select: { payload: true },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, payload: true },
   })
-  const events = rows.map((row) => {
-    const payload = readRecord(row.payload)
-    return parseProjectAgentSubagentEventPartData(payload.subagentEvent)
+  const events = tasks.flatMap((task) => {
+    const payload = creativeWorkTaskPayloadSchema.parse(task.payload)
+    return payload.lifecycleProjection.events.map((progressEvent) => (
+      parseProjectAgentSubagentEventPartData({
+        subagentId: task.id,
+        taskId: task.id,
+        runId: payload.origin.runId,
+        toolCallId: payload.origin.toolCallId,
+        sequence: progressEvent.sequence,
+        occurredAt: progressEvent.occurredAt,
+        event: progressEvent.event,
+      })
+    ))
   })
-  const activeSubagents = resolveActiveProjectAgentSubagents(events)
-  for (const subagent of activeSubagents) {
-    if (
-      subagent.runId !== params.run.id
-      || subagent.activityId !== params.activity.activityId
-      || subagent.toolCallId !== params.activity.toolCallId
-    ) {
-      throw new Error(`PROJECT_AGENT_SESSION_SUBAGENT_ACTIVITY_MISMATCH:${subagent.subagentId}`)
-    }
-  }
-  return activeSubagents
+  return resolveActiveProjectAgentSubagents(events)
 }
 
 async function buildProjectAgentSessionState(
@@ -516,9 +514,10 @@ async function buildProjectAgentSessionState(
       userId: input.userId,
       waits,
     }),
-    listActiveSubagentsForActivity({
-      run,
-      activity: facts.activity,
+    listActiveCreativeSubagents({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
     }),
   ])
   const currentRun: ProjectAgentSessionRun | null = run

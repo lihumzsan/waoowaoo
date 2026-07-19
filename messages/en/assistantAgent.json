@@ -47,8 +47,9 @@
     "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
     "outputKinds": {
       "screenplayDraft": "Screenplay Writing",
-      "storyAnalysis": "Story Analysis",
+      "editBibleBundle": "Production Bible",
       "continuityAnalysis": "Continuity Analysis",
+      "styleBible": "Visual Style Design",
       "assetPromptSet": "Visual Asset Design",
       "videoPromptSet": "Video Generation Design",
       "musicDirection": "Music Direction",

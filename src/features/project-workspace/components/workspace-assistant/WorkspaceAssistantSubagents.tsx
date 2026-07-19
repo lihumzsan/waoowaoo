@@ -17,8 +17,9 @@ function localizeOutputKind(
 ): string {
   switch (outputKind) {
     case 'screenplay_draft': return t('subagents.outputKinds.screenplayDraft')
-    case 'story_analysis': return t('subagents.outputKinds.storyAnalysis')
+    case 'edit_bible_bundle': return t('subagents.outputKinds.editBibleBundle')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
+    case 'style_bible': return t('subagents.outputKinds.styleBible')
     case 'asset_prompt_set': return t('subagents.outputKinds.assetPromptSet')
     case 'video_prompt_set': return t('subagents.outputKinds.videoPromptSet')
     case 'music_direction': return t('subagents.outputKinds.musicDirection')

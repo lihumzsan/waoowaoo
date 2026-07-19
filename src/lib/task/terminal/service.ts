@@ -12,6 +12,7 @@ import {
 } from '@/lib/task/execution-checkpoint'
 import { buildTaskLifecycleEventPayload } from '@/lib/task/publisher'
 import { getTaskDefinition } from '@/lib/task/definition'
+import { projectTaskLifecyclePayload } from '@/lib/task/result-projection'
 import { isTaskType, TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
 import {
   dedupeWorkspaceResourceRefs,
@@ -310,14 +311,15 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
         episodeId: task.episodeId,
         coveragePayload: task.payload,
         affectedResources,
-        payload: {
+        payload: projectTaskLifecyclePayload(taskType, {
+          ...toObject(task.payload),
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),
           ...(materializedOutput ?? {}),
           ...(errorCode ? { errorCode } : {}),
           ...(errorMessage ? { message: errorMessage } : {}),
           terminalSource: intent.kind === 'completed' ? 'worker' : intent.source,
-        },
+        }),
       })
       const event = await tx.taskEvent.create({
         data: {

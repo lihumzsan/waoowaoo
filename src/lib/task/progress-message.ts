@@ -1,6 +1,7 @@
 import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 
 const TASK_TYPE_LABELS: Record<string, string> = {
+  [TASK_TYPE.CREATIVE_WORK]: 'progress.taskType.creativeWork',
   [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: 'progress.taskType.creativeResourceImage',
   [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: 'progress.taskType.creativeResourceAudio',
   [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: 'progress.taskType.creativeResourceVideo',
@@ -39,6 +40,9 @@ const TASK_TYPE_LABELS: Record<string, string> = {
 
 const STAGE_LABELS: Record<string, string> = {
   received: 'progress.stage.received',
+  creative_work_prepare: 'progress.stage.creativeWorkPrepare',
+  creative_work_reasoning: 'progress.stage.creativeWorkReasoning',
+  creative_work_finalize: 'progress.stage.creativeWorkFinalize',
   creative_resource_prepare: 'progress.stage.creativeResourcePrepare',
   creative_resource_generate: 'progress.stage.creativeResourceGenerate',
   creative_resource_persist: 'progress.stage.creativeResourcePersist',
