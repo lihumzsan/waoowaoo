@@ -1,4 +1,4 @@
-import { asSchema } from '@ai-sdk/provider-utils'
+import { asSchema } from 'ai'
 import type {
   JsonObject,
   JsonValue,

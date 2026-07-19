@@ -5,11 +5,12 @@ import {
   wrapLanguageModel,
   type ModelMessage,
 } from 'ai'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import type { AiLlmMessage } from '@/lib/ai-registry/types'
 import type { AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+
+type LanguageModelImplementation = Parameters<typeof wrapLanguageModel>[0]['model']
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -46,7 +47,10 @@ function createArkFetch(reasoning: boolean): typeof fetch {
   }
 }
 
-function withArkCallDefaults(model: LanguageModelV3, input: AiProviderLanguageModelContext): LanguageModelV3 {
+function withArkCallDefaults(
+  model: LanguageModelImplementation,
+  input: AiProviderLanguageModelContext,
+): LanguageModelImplementation {
   if (input.executionMode !== 'stream' || input.temperature === undefined) return model
   return wrapLanguageModel({
     model,
@@ -83,7 +87,7 @@ export function prepareArkTextModelMessages(messages: AiLlmMessage[]): ModelMess
   return conversation
 }
 
-export function createArkLanguageModel(input: AiProviderLanguageModelContext): LanguageModelV3 {
+export function createArkLanguageModel(input: AiProviderLanguageModelContext): LanguageModelImplementation {
   const baseURL = input.providerConfig.baseUrl?.trim()
   if (!baseURL) throw new Error('PROVIDER_BASE_URL_MISSING: ark (language-model)')
   const customFetch = createArkFetch(input.reasoning)

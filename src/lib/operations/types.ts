@@ -1,5 +1,4 @@
-import type { UIMessage, UIMessageStreamWriter } from 'ai'
-import type { FlexibleSchema } from '@ai-sdk/provider-utils'
+import type { FlexibleSchema, UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentContext, WorkspaceAssistantPartType } from '@/lib/project-agent/types'
 import type { OperationPlan } from './planning'

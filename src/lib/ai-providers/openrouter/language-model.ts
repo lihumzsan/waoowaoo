@@ -3,7 +3,6 @@ import {
   defaultSettingsMiddleware,
   wrapLanguageModel,
 } from 'ai'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
 import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
 import type {
   AiProviderLanguageModelContext,
@@ -17,6 +16,8 @@ import { AppError } from '@/lib/errors/app-error'
 const openRouterLanguageModelLogger = createScopedLogger({
   module: 'ai-provider.openrouter.language-model',
 })
+
+type LanguageModelImplementation = Parameters<typeof wrapLanguageModel>[0]['model']
 
 function headersToRecord(headers: Headers): Record<string, string> {
   const output: Record<string, string> = {}
@@ -120,9 +121,9 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
 }
 
 function withOpenRouterCallDefaults(
-  model: LanguageModelV3,
+  model: LanguageModelImplementation,
   input: AiProviderLanguageModelContext,
-): LanguageModelV3 {
+): LanguageModelImplementation {
   const shouldSetTemperature = input.temperature !== undefined
     && (input.executionMode !== 'stream' || !input.reasoning)
   if (!shouldSetTemperature) return model
@@ -132,7 +133,7 @@ function withOpenRouterCallDefaults(
   })
 }
 
-export function createOpenRouterLanguageModel(input: AiProviderLanguageModelContext): LanguageModelV3 {
+export function createOpenRouterLanguageModel(input: AiProviderLanguageModelContext): LanguageModelImplementation {
   if (input.protocol !== 'openrouter-chat') {
     throw new Error(`LLM_PROTOCOL_PROVIDER_MISMATCH:openrouter:${input.protocol}`)
   }
