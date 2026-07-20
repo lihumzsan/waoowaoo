@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CREATIVE_RESOURCE_MEDIA_TYPES, type CreativeResourceJsonValue } from './contracts'
+import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelope'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -89,17 +90,7 @@ export type CreativeResourceGenerationTaskPayload = z.infer<
 >
 
 const creativeResourceGenerationTaskEnvelopeSchema = creativeResourceGenerationTaskPayloadSchema.extend({
-  ui: z.record(z.string(), z.unknown()).optional(),
-  meta: z.record(z.string(), z.unknown()).optional(),
-  externalId: z.string().trim().min(1).optional(),
-  flowId: z.string().optional(),
-  flowStageIndex: z.number().optional(),
-  flowStageTotal: z.number().optional(),
-  flowStageTitle: z.string().optional(),
-  stage: z.string().optional(),
-  stageLabel: z.string().optional(),
-  displayMode: z.string().optional(),
-  message: z.string().optional(),
+  ...creativeResourceTaskRuntimeEnvelopeShape,
 }).strict()
 
 /**
