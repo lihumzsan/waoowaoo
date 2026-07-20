@@ -65,15 +65,7 @@ export function startOutboxDispatcher(): void {
   const execute = (): void => {
     if (globalForOutboxDispatcher.__waoowaooOutboxDispatchCycle) return
     globalForOutboxDispatcher.__waoowaooOutboxDispatchCycle = runOutboxDispatchCycle()
-      .then(({ dispatched, reset }) => {
-        if (dispatched > 0 || reset > 0) {
-          logger.info({
-            action: 'outbox.dispatch.cycle',
-            message: 'durable outbox dispatch cycle completed',
-            details: { dispatched, reset },
-          })
-        }
-      })
+      .then(() => undefined)
       .catch((error: unknown) => {
         logger.error({
           action: 'outbox.dispatch.failed',

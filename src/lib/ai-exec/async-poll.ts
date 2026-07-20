@@ -1,4 +1,3 @@
-import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import {
   resolveAsyncTaskProviderByCode,
   resolveAsyncTaskProviderByExternalId,
@@ -30,7 +29,6 @@ export async function pollAsyncTask(
 
   const registration = resolveAsyncTaskProviderByExternalId(externalId)
   const parsed = registration.parseExternalId(externalId)
-  _ulogInfo(`[Poll] 解析 ${externalId.slice(0, 30)}... → provider=${parsed.provider}, type=${parsed.type}`)
   return await registration.poll({
     parsed,
     context: {
@@ -57,4 +55,3 @@ export function formatExternalId(
     modelKeyToken,
   })
 }
-
