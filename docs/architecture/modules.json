@@ -171,12 +171,14 @@
         "messages/en/project-workflow.json",
         "messages/zh/project-workflow.json",
         "prisma/schema.prisma",
-        "prisma/migrations/20260717120000_add_creative_resource_spine/migration.sql"
+        "prisma/migrations/20260717120000_add_creative_resource_spine/migration.sql",
+        "prisma/migrations/20260720190000_add_creative_resource_data/migration.sql"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts",
         "tests/contracts/task-definition-conformance.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",
+        "tests/unit/creative-resource/creative-data.test.ts",
         "tests/golden-journey/journeys/freeform-resources.spec.ts",
         "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],

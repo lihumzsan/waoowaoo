@@ -3,7 +3,9 @@ import { prisma } from '@/lib/prisma'
 import type {
   CreativeResourceBindingView,
   CreativeResourceCardView,
+  CreativeResourceDataView,
   CreativeResourceInputRef,
+  CreativeResourceJsonObject,
   CreativeResourceJsonValue,
   CreativeResourceMediaType,
   CreativeResourcePendingGeneration,
@@ -65,6 +67,14 @@ type ResourceRow = Prisma.CreativeResourceGetPayload<{ include: typeof resourceI
 
 function jsonValue(value: Prisma.JsonValue | null): CreativeResourceJsonValue | null {
   return value as CreativeResourceJsonValue | null
+}
+
+function jsonObject(value: Prisma.JsonValue | null): CreativeResourceJsonObject {
+  if (value === null) return {}
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('CREATIVE_RESOURCE_DATA_ROOT_INVALID')
+  }
+  return value as CreativeResourceJsonObject
 }
 
 function requireMediaType(value: string): CreativeResourceMediaType {
@@ -176,6 +186,8 @@ export function projectCreativeResourceView(
     status: requireStatus(row.status),
     candidateSetId: row.candidateSetId,
     candidateIndex: row.candidateIndex,
+    creativeDataVersion: row.creativeDataVersion,
+    creativeDataKeys: Object.keys(jsonObject(row.creativeData)).sort(),
     headRevision: row.headRevision ? revisionView(row.headRevision) : null,
     pendingGeneration,
     bindings: row.bindings.map((binding) => bindingView(binding, scope)),
@@ -322,6 +334,36 @@ export async function getProjectCreativeResourceCard(input: {
   if (!row) return null
   const pending = await loadPendingGenerations(client, [row.id])
   return projectCreativeResourceCardView(row, pending.get(row.id) ?? null)
+}
+
+export async function getProjectCreativeResourceDataView(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly resourceId: string
+  readonly client?: CreativeResourceReadClient
+}): Promise<CreativeResourceDataView | null> {
+  const client = input.client ?? prisma
+  const row = await client.creativeResource.findFirst({
+    where: {
+      id: input.resourceId,
+      userId: input.userId,
+      OR: [
+        { projectId: input.projectId },
+        { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+      ],
+    },
+    select: {
+      id: true,
+      creativeData: true,
+      creativeDataVersion: true,
+    },
+  })
+  if (!row) return null
+  return {
+    resourceId: row.id,
+    creativeData: jsonObject(row.creativeData),
+    creativeDataVersion: row.creativeDataVersion,
+  }
 }
 
 export async function getProjectCreativeResourceRevisionView(input: {

@@ -22,13 +22,17 @@ export type CreativeResourceCanonicalBinding = typeof CREATIVE_RESOURCE_CANONICA
   keyof typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS
 ]
 
+export type CreativeResourceJsonObject = {
+  readonly [key: string]: CreativeResourceJsonValue
+}
+
 export type CreativeResourceJsonValue =
   | string
   | number
   | boolean
   | null
   | CreativeResourceJsonValue[]
-  | { readonly [key: string]: CreativeResourceJsonValue }
+  | CreativeResourceJsonObject
 
 export interface CreativeResourceScopeRef {
   readonly kind: CreativeResourceScopeKind
@@ -131,6 +135,8 @@ export interface CreativeResourceView {
   readonly status: CreativeResourceStatus
   readonly candidateSetId: string | null
   readonly candidateIndex: number | null
+  readonly creativeDataVersion: number
+  readonly creativeDataKeys: readonly string[]
   readonly headRevision: CreativeResourceRevisionView | null
   readonly pendingGeneration: CreativeResourcePendingGeneration | null
   readonly bindings: readonly CreativeResourceBindingView[]
@@ -140,6 +146,12 @@ export interface CreativeResourceView {
   } | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface CreativeResourceDataView {
+  readonly resourceId: string
+  readonly creativeData: CreativeResourceJsonObject
+  readonly creativeDataVersion: number
 }
 
 export interface CreativeResourceCandidateView {

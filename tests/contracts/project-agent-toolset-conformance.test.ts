@@ -241,6 +241,38 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
   })
 
+  it('exposes one cautious schema-open Resource creative-data editor', () => {
+    const operation = createProjectAgentOperationRegistry().edit_resource
+
+    expect(operation.channels.tool).toBe(true)
+    expect(operation.effects).toMatchObject({
+      writes: true,
+      billable: false,
+      externalSideEffects: false,
+      longRunning: false,
+    })
+    expect(Object.keys(operation.toolInputSchema.properties)).toEqual([
+      'resourceId', 'expectedVersion', 'reason', 'edits',
+    ])
+    expect(operation.inputSchema.safeParse({
+      resourceId: 'resource:video',
+      expectedVersion: 0,
+      reason: 'The user explicitly requested saving corrected production data.',
+      edits: [{
+        op: 'set',
+        path: ['video', 'futureCapability'],
+        valueJson: JSON.stringify({ arbitrary: ['typed', 'json'] }),
+      }],
+    }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      resourceId: 'resource:video',
+      expectedVersion: 0,
+      reason: 'Try to mutate system state.',
+      status: 'ready',
+      edits: [],
+    }).success).toBe(false)
+  })
+
   it('exposes one background Creative Worker delegation contract without domain write authority', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.delegate_creative_work

@@ -1387,6 +1387,8 @@ model CreativeResource {
   headRevisionId String?                    @unique(map: "creative_resources_head_revision_key")
   errorCode      String?                    @db.VarChar(128)
   errorMessage   String?                    @db.Text
+  creativeData        Json?
+  creativeDataVersion Int @default(0)
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
   user           User                       @relation(fields: [userId], references: [id], onDelete: Cascade)

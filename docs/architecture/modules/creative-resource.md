@@ -27,8 +27,9 @@
 - **CR-14 — pending 卡片显示冻结提交事实。** 异步 Resource Operation 必须在提交 Task 的同一事务预留 pending Resource，并写入可 replay 的 Resource broadcast；Resource View 从该 Resource 当前唯一 active Task 的冻结 payload 投影 prompt、model、options 与精确 inputs。它只负责让卡片和原始提示词立即可见，不得把 pending 当成成功 Revision，也不得由客户端从工具文案补造。ready/failed/canceled 仍只由 Task Terminal writer 结算。
 - **CR-15 — 剧本与风格采用使用保留 Binding。** 当前确认剧本只由 `confirm_script_resource` 写入 `scope=episode + role=confirmed_screenplay + slotKey=primary`；当前正式风格只由 `adopt_style_bible` 写入 `scope=episode + role=adopted_style_bible + slotKey=primary`。两者都绑定精确不可变 Revision，不能从最近文字 Resource、历史消息、Canvas 位置或旧专业表猜测。通用 `adopt_resource` 必须拒绝这两个保留角色，避免第二 writer。确认与采用不复制 Resource，也不新建同内容剧本。
 - **CR-16 — 语义上下文与媒体引用分离。** `contextReferences` 只表达会进入 lineage 和专业推理上下文的精确 Resource Revision，可以是文字、图片、音频或视频；`imageReferences` 只表达允许送入图片/视频 provider 的真实图片 Revision。Task payload、报价和 Revision provenance 同时冻结两组引用；provider adapter 只能收到规范化后的 `imageReferences`。不得把 Style Bible、剧本或其他文字 Resource 当作图片 URL 发送，也不得为了兼容旧 `references` 猜测媒体语义。
-- **CR-17 — 读取工具各自只有一种职责。** `get_project_context` 返回当前项目/剧集的紧凑工作集，包含保留 Binding 指向的确认剧本、正式 Style Bible 及必要 fingerprint/version；`list_resources` 用一次有界查询浏览当前剧集、当前项目和用户级通用资产中的候选、历史与可复用资源，按持久 `createdAt,id` 稳定排序并在全局 limit 内返回，同一 Resource identity 只出现一次；`get_resource` 只按 `resourceId + revisionId` 返回一个精确不可变 Revision 的完整内容。三者共同消费 Resource/Binding View service，不得各自推断“当前剧本”或“当前风格”。
+- **CR-17 — 读取工具各自只有一种职责。** `get_project_context` 返回当前项目/剧集的紧凑工作集，包含保留 Binding 指向的确认剧本、正式 Style Bible 及必要 fingerprint/version；`list_resources` 用一次有界查询浏览当前剧集、当前项目和用户级通用资产中的候选、历史与可复用资源，按持久 `createdAt,id` 稳定排序并在全局 limit 内返回，同一 Resource identity 只出现一次，并且只暴露 `creativeData` 的版本与顶层键，不能把开放文档批量塞入模型上下文；`get_resource` 按 `resourceId + revisionId` 返回一个精确不可变 Revision 的完整内容，并返回该 Resource 当前完整 `creativeData + creativeDataVersion` 供显式编辑。三者共同消费 Resource/Binding View service，不得各自推断“当前剧本”或“当前风格”。
 - **CR-18 — Revision 记录实际执行路由。** Agent 和业务 Operation 不选择 provider/model，但每个成功媒体 Revision 的 provenance 必须保存本次 Task invocation 最终实际使用的 `modelKey`。当 Provider Gateway 在同一等价 route set 内进行受控 pre-accept 路由切换时，materializer 只能读取 durable invocation route checkpoint，不能继续记录初始配置、当前配置或模型事后文字。
+- **CR-19 — Resource 提供开放但隔离的创作文档。** 每个 Resource 可以持有一份 schema-open、版本化的 `creativeData` JSON 文档，供用户和 Agent 保存任意当前创作资料；新增创作概念不要求新增数据库字段或 Operation 分支。它只由 `edit_resource` 以 `creativeDataVersion` CAS 和最小 object-path Patch 写入，嵌入的 `$resourceRef` 必须验证精确 Revision owner 与 fingerprint。`creativeData` 不是 Revision、provenance、Lineage、Binding、Task 或生命周期事实，任何消费者不得据此宣称媒体已生成、采用或完成，也不得用它覆盖实际生成来源。Tool 必须明确要求先读、少改、保留无关字段，并禁止为总结、润色或推测而写入。
 
 ## 状态所有权
 
@@ -44,6 +45,7 @@
 | finalized Style Bible revision | `adopt_style_bible` transactional Operation | Asset/video Worker input、Chapter Context、Canvas |
 | 当前确认剧本 Binding | `confirm_script_resource` transactional Operation | Project Context、Primary、Creative Worker inputs |
 | 当前正式风格 Binding | `adopt_style_bible` transactional Operation | Project Context、资产/视频 Worker、Chapter Context |
+| Resource 当前开放创作文档 | `CreativeResource.creativeData` / `edit_resource` CAS transaction | Agent、Resource View、通用或专业 renderer |
 | ResourceCard 最终 View | `view-service.ts` 从上述持久事实纯投影 | API、React Query、Canvas renderer |
 
 ## 权威入口
@@ -58,13 +60,15 @@
 - 失败 Resource 的精确重试输入解析：`src/lib/creative-resource/generation-retry.ts`；它只按 target Resource、Task type/operation 与持久 OperationPlan 的 `request.kind=new` 选择唯一原始失败 Task，不按最近记录或历史消息猜测。
 - Style Bible 专业采用：`src/lib/operations/domains/assistant/creative-style-ops.ts`；它是 `project.style_bible` 的唯一 writer，并复用 Resource persistence，不建立领域旁路。
 - Resource-native 剧本确认与保留角色约束：`src/lib/operations/domains/creative-resource/resource-ops.ts`、`src/lib/creative-resource/contracts.ts`；通用采用入口不能写保留角色。
+- Resource 开放创作文档的唯一写入入口：`src/lib/creative-resource/creative-data.ts` 与 `edit_resource`；任意键只存在于隔离的 `creativeData`，系统字段不进入 Patch namespace。
 - 当前工作集与精确 Revision 查询：`src/lib/creative-resource/view-service.ts`；`get_project_context`、`list_resources`、`get_resource` 只投影该唯一服务的不同 View。
 - Canvas Resource 投影和 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；专业 renderer 仍由 Canvas registry 选择。
-- 数据表：`prisma/schema.prisma` 的 `CreativeResource*`；`20260717120000_add_creative_resource_spine` 只创建 additive schema，本任务不执行共享数据 migration。
+- 数据表：`prisma/schema.prisma` 的 `CreativeResource*`；`20260717120000_add_creative_resource_spine` 创建 Resource 脊柱，`20260720190000_add_creative_resource_data` additive 增加开放创作文档及 CAS version；本任务不执行共享数据 migration。
 
 ## 验证
 
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation/Resource registry 证明所有 tool-visible Operation 对 Agent 可见、不再存在 Workflow allowlist，并穷尽校验 Resource schemaId、new/retry、Agent 模型配置入口为零、nullable enum 与无匿名 permissive schema。
+- `tests/unit/creative-resource/creative-data.test.ts` 以纯 Patch 函数为 oracle，反证新增字段要求领域分支、无关字段被覆盖及原型路径污染；Tool conformance 同时证明开放值通过 JSON string 边界表达，不能越过到系统字段。
 - `tests/contracts/{task-definition,canvas-node}-conformance.test.ts` 穷尽验证 Task materializer 声明和 ResourceCard/专业 renderer 接线。
 - `tests/golden-journey/journeys/freeform-resources.spec.ts` 从空项目通过真实 UI、Agent SDK、Operation、Approval、Task、worker、DB、Outbox、SSE 与 Canvas 验证多候选、部分失败精确重试、显式 Lineage、Binding、刷新恢复和直接文字转视频。
 - `tests/golden-journey/journeys/mainline-complete.spec.ts` 证明现有专业主链仍完整，专业卡片未被通用 fallback 替代，最终成片只显示普通 VideoCard。
