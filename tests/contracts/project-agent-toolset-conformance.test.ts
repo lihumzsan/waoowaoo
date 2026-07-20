@@ -337,43 +337,12 @@ describe('project agent toolset conformance', () => {
 
     const videoOutput = {
       kind: 'video_prompt_set',
-      overview: 'Two independently generated clips.',
-      aspectRatio: '16:9',
-      targetDurationSeconds: 10,
-      globalDirection: {
-        narrativeIntent: 'Reveal the shrine awakening.',
-        visualContinuity: 'Keep lantern position and fog direction stable.',
-        performanceDirection: 'Use restrained, apprehensive reactions.',
-        cameraLanguage: 'Slow deliberate pushes and one contained cut.',
-        editingRhythm: 'Hold long enough for the supernatural change to register.',
-        soundStrategy: 'Use native wind, wood creaks, and one ignition pulse.',
-      },
       segments: [{
         key: 'clip-1',
-        title: 'Complete first clip',
         durationSeconds: 10,
-        narrativePurpose: 'Reveal the lantern awakening.',
-        entryState: 'The shrine is dark and still.',
-        exitState: 'The lantern burns while the doors begin to open.',
-        directorTimeline: [{
-          startSeconds: 0,
-          endSeconds: 10,
-          shotPurpose: 'Build and release supernatural tension.',
-          framing: 'Wide shrine interior tightening to the lantern.',
-          cameraExecution: 'Slow stabilized push.',
-          performance: 'No visible performer.',
-          action: 'The lantern ignites and the doors part.',
-          dialogue: [],
-          synchronousSound: 'Wind, timber creak, ignition pulse.',
-          transition: null,
-        }],
-        finalPrompt: '0-10s: slow push toward a lantern that ignites as the shrine doors open.',
+        prompt: '10-second 16:9 cinematic video. 0-10s: slow push toward a lantern that ignites as the shrine doors open; preserve the shrine layout and generate synchronized wind, timber creaks, and one ignition pulse.',
         referenceKeys: [],
-        continuityRequirements: [],
-        audioIntent: null,
       }],
-      assumptions: [],
-      warnings: [],
     }
     expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse(videoOutput).success).toBe(true)
     expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse({
@@ -381,9 +350,14 @@ describe('project agent toolset conformance', () => {
       segments: undefined,
       shots: videoOutput.segments,
     }).success).toBe(false)
+    expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse({
+      ...videoOutput,
+      globalDirection: { narrativeIntent: 'Legacy parallel planning authority.' },
+    }).success).toBe(false)
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v3')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,
@@ -424,6 +398,10 @@ describe('project agent toolset conformance', () => {
     expect(creativeWorkTaskPayloadSchema.safeParse({
       ...payload,
       protocol: undefined,
+    }).success).toBe(false)
+    expect(creativeWorkTaskPayloadSchema.safeParse({
+      ...payload,
+      protocol: 'creative_work_v2',
     }).success).toBe(false)
 
     const result = {

@@ -129,7 +129,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v2' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v3' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -237,7 +237,7 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
     case 'asset_prompt_set':
       return output.overview || output.assets.map((asset) => asset.title).join(' / ')
     case 'video_prompt_set':
-      return output.overview || output.segments.map((segment) => segment.title).join(' / ')
+      return output.segments.map((segment) => segment.key).join(' / ').slice(0, 4_000)
     case 'music_direction':
       return output.overview
     case 'creative_review':

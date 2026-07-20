@@ -161,15 +161,6 @@ function parseFinalOutput(input: {
         reason: 'video production context and target duration are required',
       })
     }
-    if (
-      output.aspectRatio !== production.aspectRatio
-      || output.targetDurationSeconds !== targetDurationSeconds
-    ) {
-      throw new CreativeWorkerError('CREATIVE_WORK_OUTPUT_INVALID', {
-        outputKind: output.kind,
-        reason: 'video output does not match the server production context',
-      })
-    }
     const allowedDurations = new Set(production.allowedSegmentDurationsSeconds)
     const segmentKeys = new Set<string>()
     let totalDurationSeconds = 0
@@ -188,24 +179,6 @@ function parseFinalOutput(input: {
           reason: 'video segment duration is not supported by the configured production capability',
           segmentKey: segment.key,
           durationSeconds: segment.durationSeconds,
-        })
-      }
-      let timelineCursor = 0
-      for (const shot of segment.directorTimeline) {
-        if (shot.startSeconds !== timelineCursor || shot.endSeconds <= shot.startSeconds) {
-          throw new CreativeWorkerError('CREATIVE_WORK_OUTPUT_INVALID', {
-            outputKind: output.kind,
-            reason: 'video director timeline is not contiguous',
-            segmentKey: segment.key,
-          })
-        }
-        timelineCursor = shot.endSeconds
-      }
-      if (timelineCursor !== segment.durationSeconds) {
-        throw new CreativeWorkerError('CREATIVE_WORK_OUTPUT_INVALID', {
-          outputKind: output.kind,
-          reason: 'video director timeline does not cover the segment duration',
-          segmentKey: segment.key,
         })
       }
       totalDurationSeconds += segment.durationSeconds

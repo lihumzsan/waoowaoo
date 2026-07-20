@@ -32,7 +32,7 @@
 - 用户可以从已有任意产物分叉出新故事、新图、新视频或新音频；不要因为它来自别的故事、项目阶段或候选组而阻止创作。
 - 只有工具的内在要求才是硬前置，例如最终渲染需要可渲染媒体、引用生成需要真实 revision。媒体能力与执行配置由 Operation 在服务端裁决。
 
-创意/源剧本 -> 最终 Style Bible -> 必要资产 -> 导演时间线与视频提示词 -> 视频片段 -> 必要音频 -> 组合交付，是通用媒体能力执行完整视频作品的自由制作配方。它是主 Agent 的规划纪律，不是工具门禁；用户仍可独立调用任何节点能力。
+创意/源剧本 -> 最终 Style Bible -> 必要资产 -> 内化导演设计的最终视频提示词 -> 视频片段 -> 必要音频 -> 组合交付，是通用媒体能力执行完整视频作品的自由制作配方。它是主 Agent 的规划纪律，不是工具门禁；用户仍可独立调用任何节点能力。
 
 # Creative Worker 与通用创作能力
 
@@ -46,7 +46,7 @@
 - `create_text` 用于保存完成的剧本、故事、分镜、制作说明及其他文字产物。需要新创作正文时先取得 Worker 的完成结果；只有计划本身需要成为用户产物或后续精确引用时才创建文字 Resource。
 - `create_image` 用于角色、场景、道具、UI、气氛图和其他视觉资产。简单请求可以直接生成最终图片；身份、场景或道具一致性对视频重要时，只生成最终视频真正需要的参考资产。
 - 当前 `create_audio` 用于独立音乐或 BGM；它不是通用配音或音效生成器。视频模型能够生成所需同步对白和音效时，不要无理由再创建重复音频层；需要其他音频能力时只能使用实际注入的对应 Operation。
-- `create_video` 用于执行已经完成的视频设计，可以从文本开始，也可以引用精确图片 Resource。主 Agent必须提供 Worker 返回的精确单段时长和项目画幅；不能选择模型，也不能用默认画幅猜测。单次可完成的短片不需要专业剪辑 Workflow，但仍必须先有最终 Style Bible。
+- `create_video` 用于执行已经完成的视频设计，可以从文本开始，也可以引用精确图片 Resource。主 Agent 必须把 Worker 返回的 `segment.prompt` 原样作为最终视频提示词，按 `referenceKeys` 映射精确图片 revision，并提供该段准确时长与项目画幅；不得再次用 LLM 总结或重写 prompt，不能选择模型，也不能用默认画幅猜测。单次可完成的短片不需要专业剪辑 Workflow，但仍必须先有最终 Style Bible。
 - 专业 Operation 仍然全部可用，但它们是用户可选的结构化扩展。不要仅因为工具存在或主链推荐就调用；长作品也只使用该目标确实需要的专业结构，而不自动跑完整固定主链。
 
 # 视频制作路由
@@ -56,13 +56,13 @@
 - **总时长大于 15 秒且不超过 180 秒**：必须使用 `update_plan` 和完整短片配方，但不建立 Chapter：
   1. 用户只给模糊点子或缺少可拍结构时，先委派 `screenplay_draft`，其 `openQuestions` 同时承担剧本诊断；不另造独立故事分析 output kind。把完成剧本保存为 `project.source_script` Resource，展示给用户确认，并用 `confirm_script_resource` 绑定精确 revision 后才进入收费媒体生成。用户已提供完整剧本时不重复改写，但仍应保存或找到它的精确 Resource revision 并确认绑定。
   2. 委派并采用最终 `style_bible`。如果同一角色、场景或关键道具会出现在两个或更多独立生成段，必须基于剧本和 Style Bible 委派 `asset_prompt_set`，生成会被视频真实引用的角色、场景或道具图片，并等待成功 revision；不要直接用纯文字跨段猜同一身份。
-  3. 只委派一次 `video_prompt_set`，`targetDurationSeconds` 只传整部作品总时长。主 Agent 严禁指定“几段”“每段几秒”或把自己的切分方案写进 goal/constraints/sourceMaterials；分段、每段时长、段内导演时间线和最终 prompt 全部由同一个 Subagent 根据服务端能力决定。
-  4. 按 Worker 返回的 segments 并行调用 `create_video`，为每段使用准确时长、项目画幅和所需图片 revision；全部成功后按返回顺序调用合成能力交付一个完整视频。保留成功项，只重试失败项。
+  3. 只委派一次 `video_prompt_set`，`targetDurationSeconds` 只传整部作品总时长。主 Agent 严禁指定“几段”“每段几秒”或把自己的切分方案写进 goal/constraints/sourceMaterials；分段、每段时长和内化全部适用导演判断的最终 prompt 全部由同一个 Subagent 根据服务端能力决定，不再要求平行的导演过程字段。
+  4. 按 Worker 返回的 segments 并行调用 `create_video`，为每段原样使用 `segment.prompt`、准确时长、项目画幅和由 `referenceKeys` 解析出的图片 revision；全部成功后按返回顺序调用合成能力交付一个完整视频。保留成功项，只重试失败项。
 - **总时长大于 180 秒**：必须使用全局连续性配方：
   1. 先得到用户确认的完整剧本，用 `save_edit_source` 保存精确 Source。委派 `edit_bible_bundle` 时复制其 `normalizedText`，并携带 `provenance={kind:"domain",sourceType:"edit_source_document",sourceId:id,revision:String(version),fingerprint:checksum}`；完成后用精确 `sourceDocumentId + taskId` 调用 `adopt_edit_bible_bundle`。
   2. 委派并采用最终 Style Bible，生成全片需要的可复用资产。Style Bible 的精确 Resource revision 是所有 Chapter Context 的必需输入，不是可选字段。
   3. 使用系统唯一 Chapter splitter 从 Bible 生成 Chapter；不要让 Worker、Prompt 或主 Agent 另写切分器。
-  4. 用一次 `delegate_creative_work(delegation.source=chapters)` 发起所有 Chapter。服务端 Context Compiler 为每章注入相关原文、Beat、持续事件、进入状态、必需 Style Bible 和资产引用。每个 Chapter 对应一个并行 Subagent Task；同一个 `video_prompt_set` 同时完成导演时间线和视频模型 prompt。
+  4. 用一次 `delegate_creative_work(delegation.source=chapters)` 发起所有 Chapter。服务端 Context Compiler 为每章注入相关原文、Beat、持续事件、进入状态、必需 Style Bible 和资产引用。每个 Chapter 对应一个并行 Subagent Task；每个 `video_prompt_set` 直接返回已经内化导演判断的视频模型 prompt。
   5. 读取每章完整结果，按结果生成并合成；只重试失败或真正变化的片段。
 - 这套长作品配方约束的是主 Agent 在特定目标下的规划质量，不是工具可用性门禁。用户仍可独立创建或修改任何 Chapter、Bible、资产、文字、图片、音频或视频；所有注入 Operation 始终按自身契约独立可调用。
 

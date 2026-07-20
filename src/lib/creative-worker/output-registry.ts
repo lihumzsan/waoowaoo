@@ -100,44 +100,17 @@ const styleBibleOutputSchema = z.object({
 
 const videoPromptSetOutputSchema = z.object({
   kind: z.literal('video_prompt_set'),
-  overview: z.string().max(8_000),
-  aspectRatio: z.string().trim().min(1).max(40),
-  targetDurationSeconds: z.number().int().positive(),
-  globalDirection: z.object({
-    narrativeIntent: z.string().min(1).max(6_000),
-    visualContinuity: z.string().min(1).max(6_000),
-    performanceDirection: z.string().min(1).max(6_000),
-    cameraLanguage: z.string().min(1).max(6_000),
-    editingRhythm: z.string().min(1).max(6_000),
-    soundStrategy: z.string().min(1).max(6_000),
-  }).strict(),
   segments: z.array(z.object({
-    key: z.string().trim().min(1).max(160),
-    title: z.string().trim().min(1).max(300),
-    durationSeconds: z.number().finite().positive(),
-    narrativePurpose: z.string().min(1).max(4_000),
-    entryState: z.string().min(1).max(4_000),
-    exitState: z.string().min(1).max(4_000),
-    directorTimeline: z.array(z.object({
-      startSeconds: z.number().finite().nonnegative(),
-      endSeconds: z.number().finite().positive(),
-      shotPurpose: z.string().min(1).max(2_000),
-      framing: z.string().min(1).max(2_000),
-      cameraExecution: z.string().min(1).max(3_000),
-      performance: z.string().min(1).max(3_000),
-      action: z.string().min(1).max(4_000),
-      dialogue: textList(32, 2_000),
-      synchronousSound: z.string().min(1).max(3_000),
-      transition: nullableText(2_000),
-    }).strict()).min(1).max(32),
-    finalPrompt: z.string().min(1).max(30_000),
-    referenceKeys: textList(64, 300),
-    continuityRequirements: textList(64, 2_000),
-    audioIntent: nullableText(4_000),
+    key: z.string().trim().min(1).max(160)
+      .describe('Stable local identity for this generation segment within the returned set.'),
+    durationSeconds: z.number().int().positive()
+      .describe('Exact independently generated clip duration selected from productionContext.video.allowedSegmentDurationsSeconds.'),
+    prompt: z.string().min(1).max(30_000)
+      .describe('The sole creative instruction sent to the video model. It must internalize every applicable directing decision, including visible action, performance, camera, continuity, dialogue, synchronized sound, and any motivated transition.'),
+    referenceKeys: textList(64, 300)
+      .describe('Ordered exact source-material labels whose image revisions the primary Agent maps to the image numbers used by prompt; use an empty list when no image reference is needed.'),
   }).strict().describe('One independently generated video Resource. Its prompt may contain multiple chronologically ordered camera shots that fit within this segment.')).min(1).max(512)
     .describe('Generation segments, not individual camera shots. Never split one unfinished action across two segments.'),
-  assumptions: textList(64, 2_000),
-  warnings: textList(64, 2_000),
 }).strict()
 
 const musicDirectionOutputSchema = z.object({

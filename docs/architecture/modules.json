@@ -610,6 +610,7 @@
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
+        "tests/contracts/project-agent-toolset-conformance.test.ts",
         "tests/golden-journey/self-tests/model-provider.test.ts",
         "tests/unit/bgm-design/bgm-design-acceptance.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",

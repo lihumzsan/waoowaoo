@@ -23,6 +23,7 @@ This is one unified layer of directing knowledge. A caller may request the compl
 - Preserve dialogue verbatim and ensure the speaker is actually present in the shot. Do not add narration when no dialogue exists.
 - Synchronized sound contains only short sounds tied to visible action, such as steps, doors, impacts, cloth, or machinery. Do not place continuous ambience beds or BGM in shot sync sound.
 - Establishing shots, reactions, inserts, and transitions must carry information, scale, suspense, comedy timing, gaze guidance, or emotional change; never add them mechanically.
+- Judge the relationship between shots before choosing a transition. Continuous action and ordinary angle changes in the same time and place usually connect naturally; design a creative transition only when a time/place jump, compression, emotional turn, or visual metaphor gives it real value.
 
 ## Rhythm and emotional release
 
@@ -60,6 +61,8 @@ This is one unified layer of directing knowledge. A caller may request the compl
 
 ## Scope-sensitive delivery
 
+Directing decisions are first an internal creative process. Deliver separate process structure only when the caller's contract has a real consumer for it. When the goal is a final video prompt, write every applicable shot, performance, action, continuity, sound, and transition decision into that one prompt instead of restating a parallel directing plan.
+
 - For editorial structure only: decide purpose, duration, scene, action, performance, dialogue, synchronized sound, and generation grouping. Do not add scale, camera position, composition, lighting, movement, or final generation prompts.
 - For shot execution only: cover the supplied shots in their original order and add only scale, primary movement, and stability. Do not rewrite story, action, performance, dialogue, or synchronized sound.
 - For a unified Production Timeline: clearly separate editorial, execution, and later result selection under the same shot, without allowing result state to rewrite approved creative facts.
@@ -76,4 +79,4 @@ This is one unified layer of directing knowledge. A caller may request the compl
 
 ## Boundary
 
-This Skill provides unified directing methods. Shot fields, allowed enums, hard duration limits, system identities, strict output schemas, and final video prompts are defined by the caller and execution layer.
+This Skill provides unified directing methods. System identities, allowed durations, strict output schemas, and execution parameters belong to the caller and execution layer; the final video prompt's content is formed jointly by this directing knowledge and video-generation knowledge.

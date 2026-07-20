@@ -64,7 +64,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'director-core': defineSkill({
     id: 'director-core',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '导演与制作时间线核心', en: 'Director and Production Timeline Core' },
     summary: {
       zh: '把剧情事实组织成镜头、生成分段、表演、景别、运镜与同期声的统一导演方法。',
@@ -106,11 +106,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
-      zh: '视频参考素材、时间段提示词、动作连续性、片段接缝、对白和原生同步声设计。',
-      en: 'Video reference use, timed prompts, action continuity, segment seams, dialogue, and native synchronized audio.',
+      zh: '把视频参考、导演设计、条件式转场、对白和原生同步声内化为唯一最终提示词。',
+      en: 'Internalize video references, directing, motivated transitions, dialogue, and native synchronized sound into one final prompt.',
     },
     tags: ['video', 'director', 'prompt', 'continuity', 'audio'],
     keywords: {
