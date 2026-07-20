@@ -7,6 +7,57 @@ function line(label: string, value: string): string {
   return normalized ? `${label}: ${normalized}` : `${label}: none`
 }
 
+function formatSeconds(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function buildSoundCueTimeline(input: {
+  readonly segment: EditGenerationSegment
+  readonly shots: readonly EditScriptShot[]
+  readonly voiceContext: EditScriptDialogueVoiceContext
+}): string {
+  if (input.segment.soundCues.length === 0) return 'AUDIO TIMELINE\nNo optional cross-shot sound cues.'
+
+  const shotById = new Map(input.shots.map((shot) => [shot.shotId, shot]))
+  const shotStartById = new Map<string, number>()
+  let cursorSec = 0
+  input.shots.forEach((shot) => {
+    shotStartById.set(shot.shotId, cursorSec)
+    cursorSec += shot.durationSec
+  })
+  const voiceShotById = new Map(input.voiceContext.shots.map((shot) => [shot.shotId, shot]))
+
+  const lines = input.segment.soundCues.map((cue) => {
+    const sourceShot = cue.sourceShotId ? shotById.get(cue.sourceShotId) : undefined
+    if (cue.sourceShotId && !sourceShot) {
+      throw new Error(`VIDEO_SEGMENT_SOUND_CUE_SOURCE_SHOT_MISSING:${cue.sourceShotId}`)
+    }
+    const sourceStartSec = cue.sourceShotId ? shotStartById.get(cue.sourceShotId) : undefined
+    const sourceEndSec = sourceStartSec === undefined || sourceShot === undefined
+      ? undefined
+      : sourceStartSec + sourceShot.durationSec
+    const sourceShotNumber = sourceShot?.shotNumber ?? 'unknown'
+    const relation = sourceStartSec === undefined || sourceEndSec === undefined
+      ? 'no single visual source; keep it native to the segment'
+      : cue.startSec < sourceStartSec && cue.endSec > sourceEndSec
+        ? `leads before Shot ${String(sourceShotNumber)} and carries beyond it`
+        : cue.startSec < sourceStartSec
+          ? `leads before the visual source of Shot ${String(sourceShotNumber)} is revealed`
+          : cue.endSec > sourceEndSec
+            ? `continues after the visual source of Shot ${String(sourceShotNumber)}`
+            : `plays within Shot ${String(sourceShotNumber)}`
+    if (cue.kind === 'dialogue') {
+      const voiceLines = cue.sourceShotId ? voiceShotById.get(cue.sourceShotId)?.dialogue ?? [] : []
+      if (voiceLines.length === 0) {
+        throw new Error(`VIDEO_SEGMENT_SOUND_CUE_DIALOGUE_MISSING:${cue.sourceShotId ?? 'missing'}`)
+      }
+      return `${formatSeconds(cue.startSec)}s-${formatSeconds(cue.endSec)}s | dialogue cue | ${relation}; use the exact dialogue and intrinsic voice listed in Shot ${String(sourceShotNumber)}; ${cue.description}`
+    }
+    return `${formatSeconds(cue.startSec)}s-${formatSeconds(cue.endSec)}s | ${cue.kind} | ${relation}; ${cue.description}`
+  })
+  return `AUDIO TIMELINE\n${lines.join('\n')}`
+}
+
 export function buildVideoSegmentPrompt(input: {
   readonly visualStyle: string
   readonly segment: EditGenerationSegment
@@ -51,7 +102,8 @@ export function buildVideoSegmentPrompt(input: {
     'Use every supplied image only as an approved character or location reference. Preserve identity, wardrobe, and environment design while following the timeline below.',
     `REFERENCE MANIFEST\n${referenceLines.join('\n')}`,
     `CONTINUITY ACROSS THIS SEGMENT\n${input.segment.continuity}`,
+    buildSoundCueTimeline({ segment: input.segment, shots: input.shots, voiceContext: input.voiceContext }),
     shotBlocks.join('\n\n'),
-    'AUDIO CONTRACT\nGenerate native synchronized audio. Include the written dialogue with the specified intrinsic voices and the listed short synchronized sounds. Do not replace dialogue with narration. Do not plan or depend on a separately generated continuous audio bed.',
+    'AUDIO CONTRACT\nGenerate native audio for this one continuous video segment. Include shot-local synchronized sounds and use the optional audio timeline when present; a cue may begin before its visual source is revealed or continue across a shot boundary. Include written dialogue with the specified intrinsic voices, do not replace dialogue with narration, do not duplicate one sound event in multiple fields, and do not generate BGM or a separate audio track.',
   ].join('\n\n')
 }

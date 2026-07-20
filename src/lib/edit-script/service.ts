@@ -50,6 +50,7 @@ import type {
   EditScriptPayload,
   EditScriptStyleBible,
   EditScriptShot,
+  EditGenerationSegment,
   EditShotExecutionPlanPayload,
 } from './types'
 import {
@@ -254,6 +255,13 @@ function rewriteStructureWithSystemShotIds(structure: NormalizedChapterPlanOutpu
       const systemShotId = shotIdMap.get(shotId)
       if (!systemShotId) throw new Error(`EDIT_SCRIPT_SYSTEM_SHOT_ID_REWRITE_MISSING:${shotId}`)
       return systemShotId
+    }),
+    soundCues: segment.soundCues.map((cue) => {
+      const sourceShotId = cue.sourceShotId ? shotIdMap.get(cue.sourceShotId) ?? null : null
+      if (cue.sourceShotId && !sourceShotId) {
+        throw new Error(`EDIT_SCRIPT_SYSTEM_SOUND_CUE_SOURCE_ID_REWRITE_MISSING:${cue.sourceShotId}`)
+      }
+      return { ...cue, sourceShotId }
     }),
   }))
   return {
@@ -871,7 +879,7 @@ async function persistEditScriptGenerationStep(input: {
   readonly chapterId: string
   readonly durationSec: number
   readonly shots: readonly EditScriptShot[]
-  readonly generationSegments: readonly { readonly shotIds: readonly string[]; readonly continuity: string }[]
+  readonly generationSegments: readonly EditGenerationSegment[]
   readonly taskId: string
 }) {
   const updated = await prisma.projectEditScript.updateMany({

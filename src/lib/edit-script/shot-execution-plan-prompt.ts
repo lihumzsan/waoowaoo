@@ -25,6 +25,13 @@ export interface ShotExecutionPlanPromptStructure {
     readonly segmentRef: string
     readonly shotRefs: readonly string[]
     readonly continuity: string
+    readonly soundCues: readonly {
+      readonly kind: EditGenerationSegment['soundCues'][number]['kind']
+      readonly description: string
+      readonly startSec: number
+      readonly endSec: number
+      readonly sourceShotRef: string | null
+    }[]
   }[]
 }
 
@@ -38,6 +45,7 @@ export function buildShotExecutionPlanPromptStructure(input: {
   const characterNameById = new Map(input.shots.flatMap((shot) => (
     shot.characters.map((character) => [character.characterId, character.name] as const)
   )))
+  const shotRefById = new Map(input.shots.map((shot) => [shot.shotId, editShotModelRef(shot.shotNumber)]))
   return {
     durationSec: input.durationSec,
     shotCount: input.shotCount,
@@ -62,14 +70,30 @@ export function buildShotExecutionPlanPromptStructure(input: {
       }),
       synchronousSound: shot.synchronousSound,
     })),
-    generationSegments: input.generationSegments.map((segment, index) => ({
-      segmentRef: editSegmentModelRef(index),
-      shotRefs: segment.shotIds.map((shotId) => {
+    generationSegments: input.generationSegments.map((segment, index) => {
+      const shotRefs = segment.shotIds.map((shotId) => {
         const shot = input.shots.find((candidate) => candidate.shotId === shotId)
         if (!shot) throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_SHOT_UNKNOWN:${shotId}`)
         return editShotModelRef(shot.shotNumber)
-      }),
-      continuity: segment.continuity,
-    })),
+      })
+      return {
+        segmentRef: editSegmentModelRef(index),
+        shotRefs,
+        continuity: segment.continuity,
+        soundCues: segment.soundCues.map((cue) => {
+          const sourceShotRef = cue.sourceShotId ? shotRefById.get(cue.sourceShotId) ?? null : null
+          if (cue.sourceShotId && !sourceShotRef) {
+            throw new Error(`EDIT_SCRIPT_SOUND_CUE_SOURCE_SHOT_UNKNOWN:${cue.sourceShotId}`)
+          }
+          return {
+            kind: cue.kind,
+            description: cue.description,
+            startSec: cue.startSec,
+            endSec: cue.endSec,
+            sourceShotRef,
+          }
+        }),
+      }
+    }),
   }
 }

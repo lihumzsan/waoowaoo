@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AppError } from '@/lib/errors/app-error'
 import {
+  EDIT_SOUND_CUE_KINDS,
   EDIT_SHOT_PURPOSES,
   editScriptCoreSchema,
   editScriptPerformanceSchema,
@@ -76,6 +77,13 @@ export const chapterPlanRawShotSchema = z.object({
 export const chapterPlanRawGenerationSegmentSchema = z.object({
   shotRefs: z.array(z.string().trim().min(1)).min(1).max(9),
   continuity: z.string().trim().min(1),
+  soundCues: z.array(z.object({
+    kind: z.enum(EDIT_SOUND_CUE_KINDS),
+    description: z.string().trim().min(1),
+    startSec: z.number().finite().min(0),
+    endSec: z.number().finite().positive(),
+    sourceShotRef: z.string().trim().min(1).nullable(),
+  }).strict()).max(20),
 }).strict()
 
 export const chapterPlanRawOutputSchema = z.object({
@@ -175,6 +183,13 @@ export function resolveChapterPlanOutputReferences(raw: unknown, assetMenu: Chap
       segmentId: editSegmentModelRef(index),
       shotIds: segment.shotRefs,
       continuity: segment.continuity,
+      soundCues: segment.soundCues.map((cue) => ({
+        kind: cue.kind,
+        description: cue.description,
+        startSec: cue.startSec,
+        endSec: cue.endSec,
+        sourceShotId: cue.sourceShotRef,
+      })),
     })),
   }
 }

@@ -46,7 +46,7 @@ describe('projectChapterPersistentFacts', () => {
         dialogue: [],
         synchronousSound: '铁门摩擦声',
       }],
-      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
+      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作', soundCues: [] }],
       persistentFactsIntroduced: ['阿杰进入密室。'],
     })
 
@@ -74,7 +74,7 @@ describe('projectChapterPersistentFacts', () => {
         dialogue: [],
         synchronousSound: '铁门摩擦声',
       }],
-      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
+      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作', soundCues: [] }],
     })
 
     expect(result.success).toBe(false)

@@ -87,6 +87,7 @@ function assertGenerationSegments(
 ): readonly EditGenerationSegment[] {
   const shotIds = shots.map((shot) => shot.shotId)
   const shotOrder = new Map(shotIds.map((shotId, index) => [shotId, index]))
+  const shotsById = new Map(shots.map((shot) => [shot.shotId, shot]))
   const segmentIds = new Set<string>()
   const flattened = segments.flatMap((segment) => segment.shotIds)
   if (flattened.length !== shotIds.length) {
@@ -111,10 +112,42 @@ function assertGenerationSegments(
         }
       }
     })
+    const segmentDurationSec = segment.shotIds.reduce((total, shotId) => {
+      const shot = shotsById.get(shotId)
+      if (!shot) throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_UNKNOWN_SHOT:${shotId}`)
+      return total + shot.durationSec
+    }, 0)
+    const segmentShotIds = new Set(segment.shotIds)
+    const soundCues = segment.soundCues.map((cue) => {
+      const sourceShotId = cue.sourceShotId?.trim() || null
+      if (cue.endSec <= cue.startSec) {
+        throw new Error(`EDIT_SCRIPT_SOUND_CUE_RANGE_INVALID:${segmentId}:${cue.startSec}:${cue.endSec}`)
+      }
+      if (cue.endSec > segmentDurationSec) {
+        throw new Error(`EDIT_SCRIPT_SOUND_CUE_OUT_OF_BOUNDS:${segmentId}:${cue.endSec}:${segmentDurationSec}`)
+      }
+      if (sourceShotId && !segmentShotIds.has(sourceShotId)) {
+        throw new Error(`EDIT_SCRIPT_SOUND_CUE_SOURCE_SHOT_NOT_IN_SEGMENT:${segmentId}:${sourceShotId}`)
+      }
+      if (cue.kind === 'dialogue') {
+        const sourceShot = sourceShotId ? shotsById.get(sourceShotId) : undefined
+        if (!sourceShotId || !sourceShot?.dialogue.length) {
+          throw new Error(`EDIT_SCRIPT_SOUND_CUE_DIALOGUE_SOURCE_INVALID:${segmentId}:${sourceShotId ?? 'missing'}`)
+        }
+      }
+      return {
+        kind: cue.kind,
+        description: cue.description.trim(),
+        startSec: cue.startSec,
+        endSec: cue.endSec,
+        sourceShotId,
+      }
+    })
     return {
       segmentId,
       shotIds: [...segment.shotIds],
       continuity: segment.continuity.trim(),
+      soundCues,
     }
   })
   assertEditGenerationSegmentDurationsSupported({

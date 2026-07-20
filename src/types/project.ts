@@ -277,6 +277,13 @@ export interface ProjectEditScriptGenerationSegment {
   segmentId: string
   shotIds: string[]
   continuity: string
+  soundCues: Array<{
+    kind: 'ambience' | 'effect' | 'dialogue'
+    description: string
+    startSec: number
+    endSec: number
+    sourceShotId: string | null
+  }>
 }
 
 export type ProjectMusicScoreStatus = 'pending' | 'planning' | 'planned' | 'generating' | 'completed' | 'failed'

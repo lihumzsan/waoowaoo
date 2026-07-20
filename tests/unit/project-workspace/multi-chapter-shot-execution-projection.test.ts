@@ -58,6 +58,7 @@ function editScriptWithVideoSegment(
       segmentId: `segment-${chapterId}`,
       shotIds: [shotId],
       continuity: `continuity-${chapterId}`,
+      soundCues: [],
     }],
   }
 }

@@ -213,7 +213,10 @@
       ],
       "testPaths": [
         "tests/unit/edit-chapter/persistent-facts.test.ts",
+        "tests/unit/edit-chapter/sound-cues.test.ts",
+        "tests/unit/edit-script/core-plan-normalize.test.ts",
         "tests/unit/project-workflow/edit-first-planning.test.ts",
+        "tests/unit/video-segments/prompt.test.ts",
         "tests/unit/video-segments/planning-policy.test.ts",
         "tests/golden-journey/self-tests/model-provider.test.ts",
         "tests/golden-journey/journeys/mainline-complete.spec.ts"

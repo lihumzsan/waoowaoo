@@ -15,7 +15,7 @@ import {
 } from '@/lib/edit-script/task-submission'
 import { assertChapterReplanHasNoRunningVideoSegments } from '@/lib/edit-script/replan-guard'
 import type { EditScriptPayload } from '@/lib/edit-script/types'
-import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
+import { editGenerationSegmentSoundCueSchema, editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -297,6 +297,7 @@ const editScriptSummaryOutputSchema = z
         .object({
           shotIds: z.array(z.string().min(1)),
           continuity: z.string().min(1),
+          soundCues: z.array(editGenerationSegmentSoundCueSchema).max(20),
         })
         .passthrough(),
     ),
@@ -498,6 +499,7 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
     generationSegments: payload.generationSegments.map((segment) => ({
       shotIds: [...segment.shotIds],
       continuity: segment.continuity,
+      soundCues: segment.soundCues.map((cue) => ({ ...cue })),
     })),
   }
 }

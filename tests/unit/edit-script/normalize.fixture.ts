@@ -42,6 +42,7 @@ function corePlan() {
         segmentId: 'segment-1',
         shotIds: ['shot-1', 'shot-2'],
         continuity: 'Anna approaches the same high-backed chair in one continuous space.',
+        soundCues: [],
       },
     ],
   } as const

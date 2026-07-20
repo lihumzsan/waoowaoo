@@ -74,6 +74,9 @@ export interface EditStylePreviewGenerationPayload {
 export const EDIT_SHOT_PURPOSES = ['establishing', 'action', 'reaction', 'insert', 'atmosphere', 'transition'] as const
 export type EditShotPurpose = (typeof EDIT_SHOT_PURPOSES)[number]
 
+export const EDIT_SOUND_CUE_KINDS = ['ambience', 'effect', 'dialogue'] as const
+export type EditSoundCueKind = (typeof EDIT_SOUND_CUE_KINDS)[number]
+
 export const editScriptPerformanceSchema = z.string().trim().min(1)
 
 export interface EditScriptCharacter {
@@ -103,10 +106,19 @@ export interface EditScriptShot {
   readonly synchronousSound: string
 }
 
+export interface EditGenerationSegmentSoundCue {
+  readonly kind: EditSoundCueKind
+  readonly description: string
+  readonly startSec: number
+  readonly endSec: number
+  readonly sourceShotId: string | null
+}
+
 export interface EditGenerationSegment {
   readonly segmentId: string
   readonly shotIds: readonly string[]
   readonly continuity: string
+  readonly soundCues: readonly EditGenerationSegmentSoundCue[]
 }
 
 export interface EditAssetRequirement {
@@ -271,11 +283,20 @@ export const editScriptShotSchema = z
   })
   .strict()
 
+export const editGenerationSegmentSoundCueSchema = z.object({
+  kind: z.enum(EDIT_SOUND_CUE_KINDS),
+  description: z.string().trim().min(1),
+  startSec: z.number().finite().min(0),
+  endSec: z.number().finite().positive(),
+  sourceShotId: z.string().trim().min(1).nullable(),
+}).strict()
+
 export const editGenerationSegmentSchema = z
   .object({
     segmentId: z.string().trim().min(1),
     shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
     continuity: z.string().trim().min(1),
+    soundCues: z.array(editGenerationSegmentSoundCueSchema).max(20),
   })
   .strict()
 

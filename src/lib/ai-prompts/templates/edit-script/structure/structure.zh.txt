@@ -17,13 +17,15 @@
 - characters：只列这个镜头需要视频模型表演的人物；每个人只包含 characterName 与 performance。
 - performance：写可见的表情、身体动作、停顿、反应和运动，不写人物站位、屏幕位置、朝向、视线坐标或摄影调度。
 - dialogue：逐字保留剧本中的对白；speakerName 必须出现在本镜头 characters 中。没有对白时输出空数组。
-- synchronousSound：只写与当前画面同步的短声音，例如脚步、开门、碰撞、衣物摩擦；不要规划单独生成的连续声音底，也不要写 BGM。
+- synchronousSound：只写与当前画面同步的短声音，例如脚步、开门、碰撞、衣物摩擦；这是 shot 内的同期声，不要写 BGM。
 
 # 分段
 
 - generationSegments 必须按 shotNumber 顺序完整覆盖所有 shots，每段只包含连续 shotRef。
 - 每段镜头总时长不得超过 {{generation_segment_max_duration_seconds}} 秒。
-- continuity 只说明本段需要保持的动作、人物表演、空间、情绪或同期声音连续性。
+- continuity 只说明本段需要保持的动作、人物表演、空间、情绪或声音连续性。
+- soundCues 是可选的 Segment 级原生声音时间线，只在声音需要先于其画面来源出现、跨镜头延续或先以画外对白揭示人物时使用；不适合时输出空数组，不要为了形式强行添加。
+- soundCues 的 startSec/endSec 使用本 Segment 的相对秒数，必须落在 Segment 总时长内；sourceShotRef 必须指向本 Segment 内的 shotRef，dialogue cue 必须指向包含对应逐字对白的 shot。不要在 soundCues 中重写 dialogue、synchronousSound 或 BGM。
 - 不输出 segmentId；系统会为每段创建稳定 identity。
 - 不输出可见性、角色作用、关键物体清单、灯光、机位、空间站位或生成 Prompt。
 - 只输出严格 JSON。
@@ -89,7 +91,8 @@
   "generationSegments": [
     {
       "shotRefs": ["shot-001", "shot-002"],
-      "continuity": "本段镜头共享的动作、表演、空间、情绪或同期声音连续性"
+      "continuity": "本段镜头共享的动作、表演、空间、情绪或声音连续性",
+      "soundCues": []
     }
   ]
 }
@@ -100,4 +103,4 @@
 - 是否完整保留逐字对白，没有发明对白。
 - 人物是否只有 characterName 和 performance。
 - 是否没有 visibility、role、keyObjects、灯光、机位、站位、构图或 Prompt。
-- generationSegments 是否连续、完整且不超时长。
+- generationSegments 是否连续、完整且不超时长；soundCues 是否只在有明确声音先行、延续或画外揭示需要时使用，时间范围和 sourceShotRef 是否有效。

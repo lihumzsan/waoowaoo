@@ -4,12 +4,12 @@
 
 ## 设计理念
 
-声音阶段只生成 BGM。锁定脚本和章节成片的 identity、顺序、时长与镜头映射先被转换成一份整集 `BgmDesign`，再由 MusicScore 生成与最终混音消费同一冻结事实。视频模型自己的对白和同步声音属于原生片段音轨并继续保留；系统不再规划、生成、持久化、计费或混合独立环境音层，也不观看/听取最终视频来生成第二份语义判断。
+声音阶段只生成 BGM。锁定脚本和章节成片的 identity、顺序、时长与镜头映射先被转换成一份整集 `BgmDesign`，再由 MusicScore 生成与最终混音消费同一冻结事实。视频模型自己的对白、Shot 同期声和 Segment 内可选的声音先行/延续 cue 都属于原生片段音轨并继续保留；系统不再规划、生成、持久化、计费或混合独立环境音层，也不观看/听取最终视频来生成第二份语义判断。
 
 ## 不变量
 
 - **AP-01 — 一个规划事实、一个 writer。** 每集只有一个 `ProjectEditBgmDesign`，唯一写入入口是 `BGM_DESIGN_PLAN` worker。MusicScore 不保存第二份 plan，也不解释规划状态；收费生成 Operation 只能消费已持久化且签名匹配的 `BgmDesign`。
-- **AP-02 — 输入边界不含媒体语义分析。** 规划输入只允许 ready EditScript 事实和 canonical chapter output 的 identity、顺序、时长与镜头映射。不得读取视频帧、原生波形、最终视频或最终混音来推导 BGM；原生对白与同步声音不由 BGM presence 静音。
+- **AP-02 — 输入边界不含媒体语义分析。** 规划输入只允许 ready EditScript 事实和 canonical chapter output 的 identity、顺序、时长与镜头映射。不得读取视频帧、原生波形、最终视频或最终混音来推导 BGM；原生对白、同期声和 Segment 声音 cue 不由 BGM presence 静音。
 - **AP-03 — BGM 时间轴完整。** `BgmDesign.clock` 固定为 24 fps / 48 kHz；`scorePresence` 必须连续、无重叠地覆盖整集，模式只允许 `score_on` 与 `score_off`。唯一 compiler 只生成 score automation lane；不存在环境音或 native bus lane。
 - **AP-04 — 配乐是一条整集连续 cue。** `BgmDesign` 必须有且只有一条覆盖全时间线的 `scoreCue`，并显式声明曲式、音高集合、和声、织体、配器、动态、阶段和禁止项。生成 prompt 由该 music-theory contract 确定性编译，禁止把剧情动作、角色、对白、暴力词、现场录音或字面音效语义传给音乐模型。
 - **AP-05 — 音乐模型与时长能力只由服务端解释。** Agent-facing BGM/音乐 Operation 不接受 `musicModel`；实际模型只由 `resolveSystemModelKey` 和正式配置 owner 解析。FAL Lyria 的连续时长能力由 model capability registry 唯一声明为 120–180 秒，不维护离散时长清单或调用方副本。目标短于 120 秒时请求 120 秒并按 canonical timeline 精确裁切；120–180 秒请求精确连续值；超过 180 秒原地失败。模型短回包只允许在比例不低于 0.95 时做有界 tempo conform。

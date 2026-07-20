@@ -232,6 +232,7 @@ describe('project agent operation registry', () => {
           {
             shotIds: ['shot-1'],
             continuity: '同一空间连续行动。',
+            soundCues: [],
           },
         ],
       },

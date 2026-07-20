@@ -18,6 +18,7 @@ describe('edit-first core plan normalization', () => {
         segmentId: 'segment-1',
         shotIds: ['shot-1', 'shot-2'],
         continuity: 'Anna approaches the same high-backed chair in one continuous space.',
+        soundCues: [],
       },
     ])
     expect(normalized.shots[0]?.characters).toContainEqual({
@@ -46,6 +47,63 @@ describe('edit-first core plan normalization', () => {
         plan.shots[1],
       ],
     })).toThrow()
+  })
+
+  it('preserves optional Segment sound timing without replacing shot-synchronous sound', () => {
+    const plan = corePlan()
+    const normalized = normalizeEditScriptCore({
+      ...plan,
+      generationSegments: [{
+        ...plan.generationSegments[0],
+        soundCues: [{
+          kind: 'dialogue',
+          description: 'The voice is heard over the chair detail before Anna is shown.',
+          startSec: 1,
+          endSec: 4,
+          sourceShotId: 'shot-2',
+        }],
+      }],
+    })
+
+    expect(normalized.shots[0]?.synchronousSound).toBe('Soft floor creak.')
+    expect(normalized.generationSegments[0]?.soundCues).toEqual([{
+      kind: 'dialogue',
+      description: 'The voice is heard over the chair detail before Anna is shown.',
+      startSec: 1,
+      endSec: 4,
+      sourceShotId: 'shot-2',
+    }])
+  })
+
+  it('rejects Segment sound cues outside the generated timeline or without a dialogue source', () => {
+    const plan = corePlan()
+    expect(() => normalizeEditScriptCore({
+      ...plan,
+      generationSegments: [{
+        ...plan.generationSegments[0],
+        soundCues: [{
+          kind: 'effect',
+          description: 'A sound that starts too late.',
+          startSec: 5,
+          endSec: 7,
+          sourceShotId: null,
+        }],
+      }],
+    })).toThrow('EDIT_SCRIPT_SOUND_CUE_OUT_OF_BOUNDS')
+
+    expect(() => normalizeEditScriptCore({
+      ...plan,
+      generationSegments: [{
+        ...plan.generationSegments[0],
+        soundCues: [{
+          kind: 'dialogue',
+          description: 'A dialogue cue without a dialogue source.',
+          startSec: 1,
+          endSec: 2,
+          sourceShotId: 'shot-1',
+        }],
+      }],
+    })).toThrow('EDIT_SCRIPT_SOUND_CUE_DIALOGUE_SOURCE_INVALID')
   })
 
   it('projects current asset names from canonical ids', () => {
@@ -128,7 +186,7 @@ describe('edit-first core plan normalization', () => {
 
     const reordered = {
       ...plan,
-      generationSegments: [{ segmentId: 'segment-1', shotIds: ['shot-2', 'shot-1'], continuity: 'wrong order' }],
+      generationSegments: [{ segmentId: 'segment-1', shotIds: ['shot-2', 'shot-1'], continuity: 'wrong order', soundCues: [] }],
     }
     expect(() => normalizeEditScriptCore(reordered)).toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID')
   })
@@ -162,6 +220,7 @@ describe('edit-first core plan normalization', () => {
           segmentId: 'segment-1',
           shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
           continuity: 'One continuous reveal movement that is too long for a single video segment.',
+          soundCues: [],
         },
       ],
     }
