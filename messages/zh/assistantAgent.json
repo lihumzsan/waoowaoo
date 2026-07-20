@@ -44,6 +44,7 @@
   },
   "subagents": {
     "tabsLabel": "运行中的 Subagent",
+    "primary": "Primary",
     "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
     "outputKinds": {
       "screenplayDraft": "剧本创作",

@@ -375,6 +375,7 @@ async function listActiveTasksForWaits(params: {
       id: { in: taskIds },
       projectId: params.projectId,
       userId: params.userId,
+      type: { not: TASK_TYPE.CREATIVE_WORK },
       status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
     },
     orderBy: { updatedAt: 'desc' },

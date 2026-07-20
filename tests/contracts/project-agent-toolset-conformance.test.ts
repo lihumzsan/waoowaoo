@@ -67,8 +67,18 @@ describe('project agent toolset conformance', () => {
     expect(toolset.operationIds).toEqual(expectedOperationIds)
     expect(toolset.operationIds).not.toContain('get_user_api_config')
     expect(toolset.operationIds).not.toContain('put_user_api_config')
+    expect(toolset.operationIds).not.toContain('get_user_preference')
+    expect(toolset.operationIds).not.toContain('update_user_preference')
+    expect(toolset.operationIds).not.toContain('list_user_models')
+    expect(toolset.operationIds).not.toContain('get_project_config')
+    expect(toolset.operationIds).not.toContain('update_project_config')
     expect(registry.get_user_api_config.channels).toEqual({ tool: false, api: true })
     expect(registry.put_user_api_config.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_user_preference.channels).toEqual({ tool: false, api: true })
+    expect(registry.update_user_preference.channels).toEqual({ tool: false, api: true })
+    expect(registry.list_user_models.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_project_config.channels).toEqual({ tool: false, api: true })
+    expect(registry.update_project_config.channels).toEqual({ tool: false, api: true })
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
@@ -107,6 +117,7 @@ describe('project agent toolset conformance', () => {
       ])
       expect(Object.keys(properties)).not.toContain('generationOptions')
       expect(Object.keys(properties)).not.toContain('retryResourceIds')
+      expect(Object.keys(properties)).not.toContain('modelKey')
     }
 
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('content')
@@ -144,9 +155,14 @@ describe('project agent toolset conformance', () => {
       count: 1,
       generationOptions: { durationSeconds: 15 },
     }).success).toBe(false)
+    expect(registry.create_video.inputSchema.safeParse({
+      prompt: 'Agent-selected model input.',
+      modelKey: 'provider::model',
+      request: { kind: 'new', count: 1 },
+    }).success).toBe(false)
   })
 
-  it('publishes exact retry, segment, task, and model-configuration branches', () => {
+  it('publishes exact retry, segment, and task branches without Agent model configuration', () => {
     const registry = createProjectAgentOperationRegistry()
     const requestSchema = readRecord(registry.create_video.toolInputSchema.properties.request)
     const requestKinds = (Array.isArray(requestSchema.oneOf) ? requestSchema.oneOf : [])
@@ -164,8 +180,9 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.get_task.toolInputSchema.properties)).toEqual([
       'taskId', 'includeEvents', 'eventsLimit',
     ])
-    expect(Object.keys(registry.update_user_preference.toolInputSchema.properties)).toContain('assistantModel')
-    expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toContain('capabilityOverrides')
+    expect(Object.keys(registry.generate_project_music.toolInputSchema.properties)).not.toContain('musicModel')
+    expect(Object.keys(registry.plan_episode_bgm_design.toolInputSchema.properties)).not.toContain('musicModel')
+    expect(Object.keys(registry.generate_episode_bgm_score.toolInputSchema.properties)).not.toContain('musicModel')
   })
 
   it('exposes one background Creative Worker delegation contract without domain write authority', () => {

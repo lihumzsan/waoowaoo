@@ -82,13 +82,13 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createUserPreferenceOperations(), {
       groupPath: ['config', 'preference'],
-      channels: CHANNELS_TOOL_API,
+      channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createUserModelsOperations(), {
       groupPath: ['config', 'models'],
-      channels: CHANNELS_TOOL_API,
+      channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
@@ -204,7 +204,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createConfigOperations(), {
       groupPath: ['config'],
-      channels: CHANNELS_TOOL_API,
+      channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),

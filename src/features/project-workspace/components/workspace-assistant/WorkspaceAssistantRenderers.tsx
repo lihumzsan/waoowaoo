@@ -6,7 +6,6 @@ import {
   MessagePrimitive,
   useMessage,
   type DataMessagePartProps,
-  type ReasoningMessagePartProps,
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
 import type { ComponentProps } from 'react'
@@ -84,7 +83,7 @@ export function resolveProgressStageLabel(raw: string | null, progressT: ReturnT
 function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartData>) {
   const t = useTranslations('assistantAgent')
   return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+    <details className="group text-sm leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="chart" className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">
@@ -92,7 +91,7 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
         </span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
-      <div className="ml-5 mt-1 text-[11px] leading-5">
+      <div className="ml-5 mt-1 text-xs leading-5">
         {t('cards.videoSegments', { completed: data.snapshot.progress.completedVideoSegmentCount, total: data.snapshot.progress.plannedVideoSegmentCount })}
       </div>
     </details>
@@ -103,7 +102,7 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
   const t = useTranslations('assistantAgent')
   if (data.reason === 'awaiting_user_confirmation') return null
   return (
-    <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
+    <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-sm leading-5 text-[var(--glass-text-secondary)]">
       <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 truncate">{t('cards.toolErrorBoundary')}</span>
     </div>
@@ -116,16 +115,6 @@ export function HiddenApprovalRequestDataCard() {
 
 export function HiddenRuntimeContextDataCard() {
   return null
-}
-
-export function WorkspaceAssistantReasoningPart(props: ReasoningMessagePartProps) {
-  const text = props.text.trim()
-  if (!text) return null
-  return (
-    <div className="whitespace-pre-wrap border-l-2 border-[var(--glass-stroke-base)] pl-3 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-      {text}
-    </div>
-  )
 }
 
 function toPositiveBillingQuantity(value: number): number {
@@ -449,7 +438,7 @@ export function AssistantChoiceCardView(props: {
         : 'grid grid-cols-2 gap-2'
     const groupLabelClass = isAutoSelectionCard
       ? 'text-sm font-semibold leading-6 text-[var(--glass-text-primary)]'
-      : 'text-[11px] font-semibold text-[var(--glass-text-tertiary)]'
+      : 'text-xs font-semibold text-[var(--glass-text-tertiary)]'
     return (
       <div className="mt-2 space-y-2">
         <div className={groupLabelClass}>{activeGroup.label}</div>
@@ -491,14 +480,14 @@ export function AssistantChoiceCardView(props: {
                 <div className={`${isAutoSelectionCard ? 'p-3' : 'p-2'} ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-1'}`}>
                   {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <span className={`min-w-0 flex-1 ${isAutoSelectionCard ? 'text-[13px] leading-5' : 'truncate text-sm'} font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                    <span className={`min-w-0 flex-1 ${isAutoSelectionCard ? 'text-sm leading-5' : 'truncate text-sm'} font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
                     {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
                   </div>
                   {!isAspectRatioGroup && option.description ? (
-                    <div className={`${isAutoSelectionCard ? 'text-xs leading-5' : 'line-clamp-1 text-[11px] leading-5'} text-[var(--glass-text-secondary)]`}>{option.description}</div>
+                    <div className={`${isAutoSelectionCard ? 'text-xs leading-5' : 'line-clamp-1 text-xs leading-5'} text-[var(--glass-text-secondary)]`}>{option.description}</div>
                   ) : null}
                   {!isAspectRatioGroup && option.meta ? (
-                    <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                    <div className="truncate text-xs text-[var(--glass-text-tertiary)]">{option.meta}</div>
                   ) : null}
                 </div>
               </button>
@@ -584,7 +573,7 @@ export function AssistantChoiceCardView(props: {
         ) : null}
         <div className="min-w-0 flex-1 text-sm font-semibold text-[var(--glass-text-primary)]">{card.title}</div>
         {progressLabel ? (
-          <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
+          <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-xs font-semibold text-[var(--glass-text-tertiary)]">
             {progressLabel}
           </div>
         ) : null}
@@ -617,7 +606,7 @@ export function AssistantChoiceCardView(props: {
           {renderReplyInput()}
         </div>
       ) : activeGroup ? renderActiveGroup() : null}
-      {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
+      {error ? <div className="mt-3 text-xs leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
       {showManualSubmit ? (
         <>
           <button
@@ -628,7 +617,7 @@ export function AssistantChoiceCardView(props: {
           >
             {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
           </button>
-          {!ready ? <div className="mt-1.5 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
+          {!ready ? <div className="mt-1.5 text-xs text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
         </>
       ) : null}
     </div>
@@ -648,13 +637,13 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
 function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPartData>) {
   const t = useTranslations('assistantAgent')
   return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+    <details className="group text-sm leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{t('cards.projectContext')} · {data.context.projectName} · {data.context.episodeName}</span>
         <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
       </summary>
-      <div className="ml-5 mt-1 text-[11px]">
+      <div className="ml-5 mt-1 text-xs">
         {t('cards.workspaceLabel')}: {t('panel.workspaceStatus')}
       </div>
     </details>
@@ -703,13 +692,13 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       : 'settingsHex'
 
   return (
-    <div className={`text-[12px] leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+    <div className={`text-sm leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
       <div className="flex items-center gap-2">
         <AppIcon name={iconName} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
         <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
       </div>
       {failureMessage ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[11px] leading-4">
+        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4">
           {t('toolCall.failedDetail')}
         </div>
       ) : null}
@@ -734,7 +723,7 @@ export function useWorkspaceAssistantMessagePartComponents({
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
-    Reasoning: WorkspaceAssistantReasoningPart,
+    Reasoning: HiddenRuntimeContextDataCard,
     tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
     data: {
       by_name: {
@@ -808,7 +797,7 @@ export function WorkspaceAssistantThreadMessage(props: {
       <MessagePrimitive.If system>
         <HiddenConversationSummaryMessage>
           <div className="space-y-1">
-            <MessagePrimitive.Root className="space-y-2 px-1 py-1 text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+            <MessagePrimitive.Root className="space-y-2 px-1 py-1 text-sm leading-5 text-[var(--glass-text-tertiary)]">
               <MessagePrimitive.Parts components={props.messagePartComponents} />
             </MessagePrimitive.Root>
           </div>

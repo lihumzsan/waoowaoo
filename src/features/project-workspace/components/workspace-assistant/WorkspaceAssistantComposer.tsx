@@ -117,7 +117,7 @@ export function WorkspaceAssistantComposer({
           className="mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
         >
           <p className="font-medium">{t(resolveComposerErrorMessageKey(error))}</p>
-          <p className="mt-0.5 break-all text-[11px] leading-4 opacity-75">{error}</p>
+          <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error}</p>
         </div>
       ) : null}
     </div>

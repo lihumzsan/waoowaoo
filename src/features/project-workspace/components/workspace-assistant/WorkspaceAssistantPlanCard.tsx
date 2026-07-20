@@ -26,10 +26,10 @@ function PlanStatusIcon({ item }: { item: ProjectAgentPlanItem }) {
   }
   if (item.status === 'in_progress') {
     return (
-      <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--glass-tone-info-fg)]/20 border-t-[var(--glass-tone-info-fg)]" />
+      <span className="inline-flex h-4 w-4 shrink-0 rounded-full border-2 border-[var(--glass-tone-info-fg)]" />
     )
   }
-  return <span className="h-4 w-4 shrink-0 rounded-full border border-[var(--glass-stroke-strong)]" />
+  return <span className="inline-flex h-4 w-4 shrink-0 rounded-full border border-[var(--glass-stroke-strong)]" />
 }
 
 function resolveCurrentPlanIndex(plan: ProjectAgentPlanSnapshot): number {
@@ -130,7 +130,7 @@ export function WorkspaceAssistantPlanCard({
         {plan.plan.map((item, index) => (
           <li
             key={`${index}:${item.step}`}
-            className="flex items-start gap-3 text-[14px] leading-5 text-[var(--glass-text-secondary)]"
+            className="flex items-start gap-3 text-sm leading-5 text-[var(--glass-text-secondary)]"
           >
             <span className="mt-0.5">
               <PlanStatusIcon item={item} />
@@ -152,7 +152,7 @@ export function WorkspaceAssistantPlanCard({
         aria-describedby={open ? 'workspace-assistant-plan-status' : undefined}
         aria-expanded={open}
         aria-label={`${t('plan.title')} · ${t('plan.stepProgress', { current: currentIndex + 1, total })}`}
-        className="inline-flex max-w-[70%] items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.88] px-4 py-2.5 text-[13px] font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-tone-info-fg)]/20"
+        className="inline-flex max-w-[70%] items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.88] px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-tone-info-fg)]/20"
         onMouseEnter={showPopover}
         onMouseLeave={hidePopoverSoon}
         onFocus={showPopover}

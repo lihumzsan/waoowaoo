@@ -61,6 +61,33 @@ describe('project agent business stop signals', () => {
     expect(PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION).toBe(2)
   })
 
+  it('[parallel same-operation errors] -> count as one correction opportunity', () => {
+    const controller = createProjectAgentStopController()
+    expect(controller.evaluateStep(Array.from({ length: 6 }, () => (
+      toolErrorOutput('create_video', 'OPERATION_EXECUTION_FAILED')
+    )))).toBeNull()
+
+    const stopPart = controller.evaluateStep([
+      toolErrorOutput('create_video', 'OPERATION_EXECUTION_FAILED'),
+    ])
+    expect(stopPart).toEqual({
+      reason: 'tool_error',
+      stepCount: 2,
+      operationIds: ['create_video'],
+      codes: ['OPERATION_EXECUTION_FAILED'],
+    })
+  })
+
+  it('[parallel mixed-operation errors] -> advance the run budget once', () => {
+    const controller = createProjectAgentStopController()
+    expect(controller.evaluateStep([
+      toolErrorOutput('op_a', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('op_b', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('op_c', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('op_d', 'OPERATION_EXECUTION_FAILED'),
+    ])).toBeNull()
+  })
+
   it('[errors across different operations] -> stops once the per-run budget is exhausted', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([toolErrorOutput('op_a', 'OPERATION_EXECUTION_FAILED')])).toBeNull()

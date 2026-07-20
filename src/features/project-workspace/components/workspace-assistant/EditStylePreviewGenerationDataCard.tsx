@@ -111,7 +111,7 @@ export function EditStylePreviewGenerationDataCard(props: {
               ? t('cards.stylePreviewGenerationTitle')
               : t('cards.stylePreviewChoiceTitle')}
         </div>
-        <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[var(--glass-text-tertiary)]">
+        <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-xs font-semibold text-[var(--glass-text-tertiary)]">
           {props.view.hasConfirmedPreview
             ? t('cards.stylePreviewConfirmedBadge')
             : t('cards.stylePreviewGenerationCount', { count: displayedItems.length })}
@@ -158,8 +158,8 @@ export function EditStylePreviewGenerationDataCard(props: {
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
-                  <div className="truncate text-[11px] leading-4 text-[var(--glass-text-tertiary)]">{item.summary}</div>
+                  <div className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
+                  <div className="truncate text-xs leading-4 text-[var(--glass-text-tertiary)]">{item.summary}</div>
                 </div>
                 {item.confirmed ? (
                   <AppIcon name="badgeCheck" className="h-4 w-4 shrink-0 text-[var(--glass-accent-from)]" />
@@ -207,7 +207,7 @@ export function EditStylePreviewGenerationDataCard(props: {
                   ) : null}
                 </div>
                 {item.confirmed ? (
-                  <div className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-1.5 rounded-full bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md">
+                  <div className="absolute bottom-3 right-3 z-30 inline-flex items-center gap-1.5 rounded-full bg-white/92 px-3 py-1.5 text-xs font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md">
                     <AppIcon name="badgeCheck" className="h-3.5 w-3.5 text-[var(--glass-accent-from)]" />
                     {t('cards.stylePreviewConfirmed')}
                   </div>
@@ -216,7 +216,7 @@ export function EditStylePreviewGenerationDataCard(props: {
                     type="button"
                     disabled={selectingId !== null}
                     onClick={() => void selectStylePreview(item.id)}
-                    className="group/btn absolute bottom-3 right-3 z-30 inline-flex items-center gap-1 rounded-full bg-white/92 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+                    className="group/btn absolute bottom-3 right-3 z-30 inline-flex items-center gap-1 rounded-full bg-white/92 px-3.5 py-1.5 text-xs font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {selectingId === item.id ? t('cards.choiceSubmitting') : t('cards.stylePreviewSelect')}
                     <AppIcon name="chevronRight" className="h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-0.5" />
@@ -224,10 +224,10 @@ export function EditStylePreviewGenerationDataCard(props: {
                 ) : null}
               </div>
               <div className="p-3">
-                <div className="text-[15px] font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
-                <p className="mt-1.5 text-[12px] leading-5 text-[var(--glass-text-secondary)]">{item.summary}</p>
+                <div className="text-base font-semibold text-[var(--glass-text-primary)]">{item.title}</div>
+                <p className="mt-1.5 text-sm leading-5 text-[var(--glass-text-secondary)]">{item.summary}</p>
                 {failed && errorMessage ? (
-                  <div className="mt-2 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[10px] leading-4 text-[var(--glass-tone-warn-fg)]">
+                  <div className="mt-2 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4 text-[var(--glass-tone-warn-fg)]">
                     {t('cards.stylePreviewGenerationFailedReason', { reason: errorMessage })}
                   </div>
                 ) : null}
@@ -237,7 +237,7 @@ export function EditStylePreviewGenerationDataCard(props: {
         })}
       </div>
       {selectionError ? (
-        <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">
+        <div className="mt-3 text-xs leading-5 text-[var(--glass-tone-warn-fg)]">
           {t('cards.choiceSubmitFailed', { error: selectionError })}
         </div>
       ) : null}

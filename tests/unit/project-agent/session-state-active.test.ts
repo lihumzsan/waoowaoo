@@ -13,6 +13,7 @@ import {
   workflow,
   workflowMock,
 } from './session-state.fixture'
+import { TASK_TYPE } from '@/lib/task/types'
 
 describe('project agent session-state', () => {
   beforeEach(() => {
@@ -131,6 +132,11 @@ describe('project agent session-state', () => {
       targetId: 'location-image-1',
       status: 'processing',
     }])
+    expect(prismaMock.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        type: { not: TASK_TYPE.CREATIVE_WORK },
+      }),
+    }))
   })
 
   it('fails explicitly instead of choosing one of multiple active Runs', async () => {

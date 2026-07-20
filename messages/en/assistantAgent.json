@@ -44,6 +44,7 @@
   },
   "subagents": {
     "tabsLabel": "Running Subagents",
+    "primary": "Primary",
     "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
     "outputKinds": {
       "screenplayDraft": "Screenplay Writing",

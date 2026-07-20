@@ -6,7 +6,6 @@ import {
   resolveBuiltinCapabilitiesByModelKey,
   resolveGenerationOptionsForModel,
 } from '@/lib/ai-registry/capabilities-catalog'
-import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { CapabilityValue, UnifiedModelType } from '@/lib/ai-registry/types'
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import { getProjectModelConfig } from '@/lib/config-service'
@@ -30,7 +29,6 @@ import {
   CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
-import { isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { resolveSystemModelKey, type SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -63,9 +61,7 @@ const commonMediaGenerationShape = {
   name: z.string().trim().min(1).max(200).optional()
     .describe('Optional display name for the generated Resource or candidate set.'),
   prompt: z.string().trim().min(1)
-    .describe('Complete generation instruction for the selected media model.'),
-  modelKey: z.string().trim().min(1).optional()
-    .describe('Optional exact provider::modelId returned by list_user_models. Pass null to use the project-configured model.'),
+    .describe('Complete generation instruction for the configured media model.'),
   request: z.discriminatedUnion('kind', [
     z.object({
       kind: z.literal('new'),
@@ -115,11 +111,11 @@ const createImageInputSchema = z.object({
   aspectRatio: z.string().trim().min(1).optional()
     .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
-    .describe('Optional resolution supported by the selected image model, such as 1K or 2K.'),
+    .describe('Optional resolution supported by the configured image generation capability, such as 1K or 2K.'),
   quality: z.string().trim().min(1).optional()
-    .describe('Optional quality tier supported by the selected image model.'),
+    .describe('Optional quality tier supported by the configured image generation capability.'),
   size: z.string().trim().min(1).optional()
-    .describe('Optional provider-independent image size supported by the selected model.'),
+    .describe('Optional provider-independent image size supported by the configured image generation capability.'),
 }).strict()
 
 const createAudioInputSchema = z.object({
@@ -129,7 +125,7 @@ const createAudioInputSchema = z.object({
   durationSeconds: z.number().int().min(1).max(600)
     .describe('Requested audio duration in seconds.'),
   vocalMode: z.enum(['instrumental', 'vocal']).optional()
-    .describe('Whether the music model should produce instrumental or vocal audio.'),
+    .describe('Whether the configured music generation capability should produce instrumental or vocal audio.'),
   genre: z.string().trim().min(1).optional()
     .describe('Optional musical genre.'),
   mood: z.string().trim().min(1).optional()
@@ -145,15 +141,15 @@ const createVideoInputSchema = z.object({
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video).optional()
     .describe('Professional meaning of the video Resource. Pass null to use generic.video.'),
   durationSeconds: z.number().int().min(1).max(600).optional()
-    .describe('Requested video duration in seconds. Pass null to use the selected model default.'),
+    .describe('Requested video duration in seconds. Pass null to use the configured default.'),
   aspectRatio: z.string().trim().min(1).optional()
     .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
-    .describe('Optional resolution supported by the selected video model, such as 720p or 1080p.'),
+    .describe('Optional resolution supported by the configured video generation capability, such as 720p or 1080p.'),
   fps: z.number().int().min(1).max(240).optional()
-    .describe('Optional frame rate supported by the selected video model.'),
+    .describe('Optional frame rate supported by the configured video generation capability.'),
   generateAudio: z.boolean().optional()
-    .describe('Whether the selected video model should generate synchronized native audio.'),
+    .describe('Whether the configured video generation capability should generate synchronized native audio.'),
 }).strict()
 
 type CreateTextInput = z.infer<typeof createTextInputSchema>
@@ -267,36 +263,13 @@ function requireSchemaForMedia(schemaId: string, mediaType: CreativeResourceMedi
 
 async function resolveGenerationModel(input: {
   readonly ctx: ProjectAgentOperationContext
-  readonly requestedModelKey?: string
   readonly purpose: SystemModelPurpose
 }): Promise<string> {
-  const configured = await resolveSystemModelKey({
+  return await resolveSystemModelKey({
     userId: input.ctx.userId,
     projectId: input.ctx.projectId,
     purpose: input.purpose,
   })
-  const requested = input.requestedModelKey?.trim() || ''
-  if (isPlatformProviderCredentialMode()) {
-    if (requested && requested !== configured) {
-      throw new ApiError('FORBIDDEN', {
-        code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
-        field: 'modelKey',
-      })
-    }
-    return configured
-  }
-  if (!requested) return configured
-  const parsed = parseModelKeyStrict(requested)
-  if (!parsed) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'CREATIVE_RESOURCE_MODEL_KEY_INVALID',
-      field: 'modelKey',
-      requestedValue: requested,
-      expectedFormat: 'provider::modelId',
-      agentRetryableAfterCorrection: true,
-    })
-  }
-  return parsed.modelKey
 }
 
 function hashTaskInput(value: unknown): string {
@@ -545,7 +518,6 @@ async function planMediaGeneration(
   )
   const modelKey = await resolveGenerationModel({
     ctx,
-    requestedModelKey: input.modelKey,
     purpose: config.modelPurpose,
   })
   if (config.mediaType === 'video') {
@@ -932,7 +904,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_video: defineOperation({
       id: 'create_video',
-      summary: 'Generate independent video resources directly from a prompt, with optional exact image Resource revisions. Zero-reference text-to-video is allowed only when the selected model declares that capability.',
+      summary: 'Generate independent video resources directly from a prompt, with optional exact image Resource revisions. Zero-reference text-to-video is allowed only when the configured video capability supports it.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {

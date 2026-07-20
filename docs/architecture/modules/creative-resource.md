@@ -22,7 +22,7 @@
 - **CR-10 — Canvas 只投影持久 Resource View。** Resource API/View service 是 ResourceCard 的唯一查询投影；Canvas 优先把 origin 与既有专业节点 identity 对齐并复用专业 renderer，再使用通用 ResourceCard。节点只来自持久 Resource、当前 Task 或 structured stream 的真实事实，边只来自 Lineage。最终渲染完成后显示普通 VideoCard；任何阶段都不得投影专用 final timeline，进行中或失败的渲染仍由通用 Task/Assistant 生命周期表达。
 - **CR-11 — 候选是同一调用的独立资源。** 一次 count=N 的调用必须产生 N 个稳定 candidate Resource，并共享 candidateSetId；成功候选不会因兄弟失败而重提。Agent 重试必须显式引用失败 resourceId，只提交失败候选；同一 provider invocation 的至多一次保证继续由 Task checkpoint 负责，不建立第二套 logicalInvocationId 或 outcome 协议。
 - **CR-12 — Resource 不裁决创作顺序。** Resource 存在、缺失、旧 Revision 或 Lineage 仅是可读事实。Operation 是否可调用由 registry channel、显式输入 schema、owner/scope、provider capability、计费批准和破坏性确认裁决；Workflow step、Canvas 位置和“上游是否推荐完成”不得成为硬门。
-- **CR-13 — Resource Tool 参数只表达产品语义。** `schemaId` 必须从按 mediaType 穷尽分组的生产 Resource registry 生成 enum；通用语义用对应 `generic.*`，不得允许模型发明新 identity。文本结果以 `single|candidates` 分支表达，异步媒体以 `new|retry` 分支表达，retry 只接受失败 Resource identity。Agent-facing 图片/视频/音乐字段使用跨 provider 产品名；`generationOptions` 只是在批准计划与 Revision provenance 中冻结的内部执行快照，不是公开 Tool 参数。所选 `modelKey` 的 capability registry 是允许字段和值的唯一裁判，不支持必须 typed-fail，禁止跨模型默认或 provider 参数透传。
+- **CR-13 — Resource Tool 参数只表达产品语义。** `schemaId` 必须从按 mediaType 穷尽分组的生产 Resource registry 生成 enum；通用语义用对应 `generic.*`，不得允许模型发明新 identity。文本结果以 `single|candidates` 分支表达，异步媒体以 `new|retry` 分支表达，retry 只接受失败 Resource identity。Agent-facing 图片/视频/音乐字段使用跨 provider 产品名，且不得包含 `modelKey`、`*Model` 或 provider 参数；实际模型由服务端正式配置唯一解析。`generationOptions` 只是在批准计划与 Revision provenance 中冻结的内部执行快照，不是公开 Tool 参数。服务端解析出的 modelKey 对应 capability registry 是允许字段和值的唯一裁判，不支持必须 typed-fail，禁止跨模型默认或 provider 参数透传。
 - **CR-14 — pending 卡片显示冻结提交事实。** 异步 Resource Operation 必须在提交 Task 的同一事务预留 pending Resource，并写入可 replay 的 Resource broadcast；Resource View 从该 Resource 当前唯一 active Task 的冻结 payload 投影 prompt、model、options 与精确 inputs。它只负责让卡片和原始提示词立即可见，不得把 pending 当成成功 Revision，也不得由客户端从工具文案补造。ready/failed/canceled 仍只由 Task Terminal writer 结算。
 
 ## 状态所有权
@@ -52,7 +52,7 @@
 
 ## 验证
 
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation/Resource registry 证明所有 tool-visible Operation 对 Agent 可见、不再存在 Workflow allowlist，并穷尽校验 Resource schemaId、new/retry、模型配置 command、nullable enum 与无匿名 permissive schema。
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation/Resource registry 证明所有 tool-visible Operation 对 Agent 可见、不再存在 Workflow allowlist，并穷尽校验 Resource schemaId、new/retry、Agent 模型配置入口为零、nullable enum 与无匿名 permissive schema。
 - `tests/contracts/{task-definition,canvas-node}-conformance.test.ts` 穷尽验证 Task materializer 声明和 ResourceCard/专业 renderer 接线。
 - `tests/golden-journey/journeys/freeform-resources.spec.ts` 从空项目通过真实 UI、Agent SDK、Operation、Approval、Task、worker、DB、Outbox、SSE 与 Canvas 验证多候选、部分失败精确重试、显式 Lineage、Binding、刷新恢复和直接文字转视频。
 - `tests/golden-journey/journeys/mainline-complete.spec.ts` 证明现有专业主链仍完整，专业卡片未被通用 fallback 替代，最终成片只显示普通 VideoCard。

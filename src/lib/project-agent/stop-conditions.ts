@@ -5,11 +5,10 @@ export const PROJECT_AGENT_MAX_TURNS = 12
 
 /**
  * Tool errors are returned to the model so it can correct the call (fix
- * arguments, switch operation, explain the failure). The run only stops when
- * the same operation keeps failing, too many errors accumulate, or the error
- * is fatal (retrying can never succeed). This keeps runtime behavior aligned
- * with the system prompt, which tells the model to read error codes and decide
- * the next step.
+ * arguments, switch operation, explain the failure). Parallel calls emitted
+ * by one model step are one correction opportunity: repeated members of the
+ * same Operation count once for that step, and the run-level budget advances
+ * once. Fatal errors still stop immediately.
  */
 export const PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION = 2
 export const PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN = 4
@@ -86,11 +85,11 @@ export interface ProjectAgentStopController {
 export function createProjectAgentStopController(): ProjectAgentStopController {
   const errorCountByOperation = new Map<string, number>()
   let totalErrorCount = 0
-  let totalStepOutputCount = 0
+  let totalStepCount = 0
 
   return {
     evaluateStep(outcomes) {
-      totalStepOutputCount += outcomes.length
+      totalStepCount += 1
       const descriptors = outcomes.flatMap((outcome) => {
         const descriptor = outcomeToDescriptor(outcome)
         return descriptor ? [descriptor] : []
@@ -100,7 +99,7 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
         descriptor.reason === 'awaiting_user_confirmation'
       ))?.reason
       if (awaitReason === 'awaiting_user_confirmation') {
-        return mergeAwaitDescriptors(totalStepOutputCount, awaitReason, descriptors)
+        return mergeAwaitDescriptors(totalStepCount, awaitReason, descriptors)
       }
 
       const errorDescriptors = descriptors.filter((descriptor): descriptor is Extract<RuntimeSignalDescriptor, { reason: 'tool_error' }> => (
@@ -108,13 +107,16 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
       ))
       if (errorDescriptors.length === 0) return null
 
-      let exhausted = false
-      for (const descriptor of errorDescriptors) {
-        totalErrorCount += 1
-        const operationErrorCount = (errorCountByOperation.get(descriptor.operationId) ?? 0) + 1
-        errorCountByOperation.set(descriptor.operationId, operationErrorCount)
-        if (descriptor.fatal) exhausted = true
-        if (descriptor.code && FATAL_TOOL_ERROR_CODES.has(descriptor.code)) exhausted = true
+      const fatal = errorDescriptors.some((descriptor) => (
+        descriptor.fatal === true
+        || (descriptor.code ? FATAL_TOOL_ERROR_CODES.has(descriptor.code) : false)
+      ))
+      const operationIds = Array.from(new Set(errorDescriptors.map((descriptor) => descriptor.operationId)))
+      totalErrorCount += 1
+      let exhausted = fatal
+      for (const operationId of operationIds) {
+        const operationErrorCount = (errorCountByOperation.get(operationId) ?? 0) + 1
+        errorCountByOperation.set(operationId, operationErrorCount)
         if (operationErrorCount >= PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION) exhausted = true
       }
       if (totalErrorCount >= PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN) exhausted = true
@@ -122,8 +124,8 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
 
       return {
         reason: 'tool_error',
-        stepCount: totalStepOutputCount,
-        operationIds: Array.from(new Set(errorDescriptors.map((descriptor) => descriptor.operationId))).sort(),
+        stepCount: totalStepCount,
+        operationIds: operationIds.sort(),
         codes: Array.from(new Set(errorDescriptors.flatMap((descriptor) => descriptor.code ? [descriptor.code] : []))).sort(),
       }
     },

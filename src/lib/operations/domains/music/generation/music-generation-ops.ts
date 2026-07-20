@@ -2,15 +2,13 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
-import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { ApiError } from '@/lib/api-errors'
-import { isCloudDeployment, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
-import { getProjectModelConfig } from '@/lib/config-service'
+import { isCloudDeployment } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -27,7 +25,7 @@ const outputFormatSchema = z.enum(['mp3', 'wav'])
 
 const musicGenerationInputSchema = z
   .object({
-    musicModel: z.string().min(1).optional(),
+    episodeId: z.string().min(1).optional(),
     prompt: z.string().min(1),
     durationSeconds: z.number().int().min(1).max(600),
     vocalMode: vocalModeSchema.optional(),
@@ -36,45 +34,29 @@ const musicGenerationInputSchema = z
     bpm: z.number().int().min(20).max(300).optional(),
     outputFormat: outputFormatSchema.optional(),
   })
-  .passthrough()
+  .strict()
 
 type MusicGenerationInput = z.infer<typeof musicGenerationInputSchema>
 
 const bgmScoreGenerationInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    musicModel: z.string().min(1).optional(),
     outputFormat: outputFormatSchema.optional(),
   })
-  .passthrough()
+  .strict()
 
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
 
 const bgmDesignPlanningInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    musicModel: z.string().min(1).optional(),
   })
-  .passthrough()
+  .strict()
 
 type BgmDesignPlanningInput = z.infer<typeof bgmDesignPlanningInputSchema>
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function requireModelKey(value: string): string {
-  const parsed = parseModelKeyStrict(value)
-  if (!parsed) throw new Error('PROJECT_AGENT_MUSIC_MODEL_KEY_INVALID')
-  return parsed.modelKey
-}
-
-function assertPlatformMusicModelInput(requested: string, systemModel: string): void {
-  if (!requested || requested === systemModel) return
-  throw new ApiError('FORBIDDEN', {
-    code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
-    field: 'musicModel',
-  })
 }
 
 function resolveCloudMusicOption(
@@ -114,42 +96,12 @@ function hashPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 20)
 }
 
-async function resolveMusicModel(input: MusicGenerationInput, projectId: string, userId: string): Promise<string> {
-  const requested = normalizeString(input.musicModel)
-  if (isPlatformProviderCredentialMode()) {
-    const systemModel = await resolveSystemModelKey({
-      userId,
-      projectId,
-      purpose: 'music',
-    })
-    assertPlatformMusicModelInput(requested, systemModel)
-    return systemModel
-  }
-  if (requested) return requireModelKey(requested)
-
-  const projectModelConfig = await getProjectModelConfig(projectId, userId)
-  const configured = normalizeString(projectModelConfig.musicModel)
-  if (!configured) throw new Error('PROJECT_AGENT_MUSIC_MODEL_REQUIRED')
-  return requireModelKey(configured)
-}
-
-async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, projectId: string, userId: string): Promise<string> {
-  const requested = normalizeString(input.musicModel)
-  if (isPlatformProviderCredentialMode()) {
-    const systemModel = await resolveSystemModelKey({
-      userId,
-      projectId,
-      purpose: 'music',
-    })
-    assertPlatformMusicModelInput(requested, systemModel)
-    return systemModel
-  }
-  if (requested) return requireModelKey(requested)
-
-  const projectModelConfig = await getProjectModelConfig(projectId, userId)
-  const configured = normalizeString(projectModelConfig.musicModel)
-  if (!configured) throw new Error('PROJECT_AGENT_BGM_SCORE_MUSIC_MODEL_REQUIRED')
-  return requireModelKey(configured)
+async function resolveMusicModel(projectId: string, userId: string): Promise<string> {
+  return await resolveSystemModelKey({
+    userId,
+    projectId,
+    purpose: 'music',
+  })
 }
 
 async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectId: string): Promise<number> {
@@ -168,22 +120,16 @@ async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectI
 }
 
 async function resolveAnalysisModel(projectId: string, userId: string): Promise<string> {
-  if (isPlatformProviderCredentialMode()) {
-    return await resolveSystemModelKey({
-      userId,
-      projectId,
-      purpose: 'analysis',
-    })
-  }
-  const projectModelConfig = await getProjectModelConfig(projectId, userId)
-  const analysisModel = normalizeString(projectModelConfig.analysisModel)
-  if (!analysisModel) throw new Error('PROJECT_AGENT_ANALYSIS_MODEL_REQUIRED')
-  return requireModelKey(analysisModel)
+  return await resolveSystemModelKey({
+    userId,
+    projectId,
+    purpose: 'analysis',
+  })
 }
 
 async function planGenerateProjectMusicOperation(ctx: ProjectAgentOperationContext, input: MusicGenerationInput): Promise<OperationPlan> {
-  const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
-  const episodeId = normalizeString((input as Record<string, unknown>).episodeId) || null
+  const musicModel = await resolveMusicModel(ctx.projectId, ctx.userId)
+  const episodeId = normalizeString(input.episodeId) || null
   const durationSeconds = isCloudDeployment()
     ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
     : input.durationSeconds
@@ -292,7 +238,7 @@ async function planEpisodeBgmDesignOperation(
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
-  const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
+  const musicModel = await resolveMusicModel(ctx.projectId, ctx.userId)
   const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
   const payload: Record<string, unknown> = { episodeId, analysisModel, musicModel, maxInputTokens: 12_000 }
   return {
@@ -323,10 +269,6 @@ async function planGenerateEpisodeBgmScoreOperation(
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const approved = await loadApprovedBgmDesign(episodeId, ctx.projectId)
   const musicModel = approved.musicModel
-  const requestedMusicModel = normalizeString(input.musicModel)
-  if (requestedMusicModel && requireModelKey(requestedMusicModel) !== musicModel) {
-    throw new Error(`BGM_SCORE_PLANNED_MODEL_MISMATCH:${musicModel}:${requestedMusicModel}`)
-  }
   const timelineDurationSeconds = approved.design.clock.totalFrames / approved.design.clock.fps
   const providerDurationSeconds = resolveScoreProviderDurationSeconds({ musicModel, targetDurationSeconds: timelineDurationSeconds })
   const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
