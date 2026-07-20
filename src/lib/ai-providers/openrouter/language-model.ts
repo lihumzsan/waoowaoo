@@ -27,15 +27,6 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url
 }
 
-function parseResponseBody(text: string): unknown {
-  if (!text) return null
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return text
-  }
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -78,38 +69,19 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
       ? { ...requestInit, body: nextBody }
       : requestInit
     const response = await fetchWithProviderProxy(preparedInput, preparedInit)
-    void response.clone().text()
-      .then((bodyText) => {
-        openRouterLanguageModelLogger.info({
-          action: 'openrouter.language_model.response',
-          message: 'OpenRouter language model response',
-          provider: 'openrouter',
-          durationMs: Date.now() - startedAt,
-          details: {
-            url: requestUrl(requestInput),
-            status: response.status,
-            statusText: response.statusText,
-            headers: headersToRecord(response.headers),
-            openRouterSessionId: input.openRouterSessionId ?? null,
-            body: parseResponseBody(bodyText),
-          },
-        })
-      })
-      .catch((error: unknown) => {
-        openRouterLanguageModelLogger.warn({
-          action: 'openrouter.language_model.response_log_failed',
-          message: 'Failed to record OpenRouter language model response',
-          provider: 'openrouter',
-          durationMs: Date.now() - startedAt,
-          details: {
-            url: requestUrl(requestInput),
-            openRouterSessionId: input.openRouterSessionId ?? null,
-          },
-          error: error instanceof Error
-            ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
-        })
-      })
+    openRouterLanguageModelLogger.info({
+      action: 'openrouter.language_model.response',
+      message: 'OpenRouter language model response',
+      provider: 'openrouter',
+      durationMs: Date.now() - startedAt,
+      details: {
+        url: requestUrl(requestInput),
+        status: response.status,
+        statusText: response.statusText,
+        headers: headersToRecord(response.headers),
+        openRouterSessionId: input.openRouterSessionId ?? null,
+      },
+    })
     return response
   }
 }
