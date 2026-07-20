@@ -117,6 +117,18 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     expect(result).not.toMatch(/\bsays I\b/i)
   })
 
+  it('does not treat the first letter of speaking or saying as a short dialogue line', () => {
+    const prompt = [
+      'GLOBAL: The visible speaker remains in stable lighting.',
+      'LOCAL 1: The doctor keeps speaking while raising one hand.',
+      'LOCAL 2: The doctor is saying nothing and maintains eye contact.',
+      'LOCAL 3: The doctor settles with restrained lip movement.',
+      'LENGTHS: 45, 105, 75',
+    ].join('\n')
+
+    expect(sanitizeLtx23KjNoSubtitlesPrompt(prompt, ['I'])).toBe(prompt)
+  })
+
   it('removes positive text-artifact prohibition clauses without deleting adjacent action', () => {
     const result = sanitizeLtx23KjNoSubtitlesPrompt([
       'GLOBAL: The same young man remains beside the glowing table.',

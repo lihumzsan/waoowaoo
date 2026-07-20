@@ -33,7 +33,7 @@ function redactKnownDialogue(value: string, knownDialogue: readonly string[]): s
       .map((part) => escapeRegExp(part))
       .join('\\s+')
     const englishSpeechPattern = new RegExp(
-      `\\b(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?|mouths)(\\s+(?:softly|quietly|calmly|aloud))?\\s*[,：:]?\\s*["“]?${literalPattern}["”]?`,
+      `\\b(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?|mouths)\\b(\\s+(?:softly|quietly|calmly|aloud))?(?:\\s*[,：:]\\s*|\\s+)["“]?${literalPattern}["”]?`,
       'giu',
     )
     const chineseSpeechPattern = new RegExp(
