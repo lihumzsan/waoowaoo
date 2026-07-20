@@ -106,7 +106,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
       zh: '把视频参考、导演设计、条件式转场、对白和原生同步声内化为唯一最终提示词。',
