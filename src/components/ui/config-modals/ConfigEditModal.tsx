@@ -50,10 +50,9 @@ interface SettingsModalProps {
     characterModel?: string
     locationModel?: string
     editModel?: string
-
     videoModel?: string
     musicModel?: string
-    videoRatio?: string
+    videoRatio?: string | null
     capabilityOverrides?: CapabilitySelections
     onAnalysisModelChange?: (value: string) => void
     onCharacterModelChange?: (value: string) => void
@@ -193,7 +192,7 @@ export function SettingsModal({
     editModel,
     videoModel,
     musicModel,
-    videoRatio = '9:16',
+    videoRatio = null,
     capabilityOverrides,
     onAnalysisModelChange,
     onCharacterModelChange,
@@ -461,6 +460,7 @@ export function SettingsModal({
                                 <label className="text-sm font-medium text-[var(--glass-text-secondary)]">{t('aspectRatio')}</label>
                                 <RatioSelector
                                     value={videoRatio}
+                                    emptyLabel={t('notSet')}
                                     onChange={(value) => { handleChange(onVideoRatioChange)(value) }}
                                     options={VIDEO_RATIOS}
                                 />

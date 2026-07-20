@@ -33,6 +33,9 @@ This is one unified layer of directing knowledge. A caller may request the compl
 
 ## Generation segmentation
 
+- Complete narrative shot and directing design first, then pack continuous shots into independent generation segments. Segmentation is not a fixed-duration shot template chosen in advance.
+- `productionContext.video.allowedSegmentDurationsSeconds`, its minimum/maximum, and aspect ratio are authoritative execution facts. Minimize independent generations and pack continuous material toward the maximum allowed duration (currently often 15 seconds). Never repeat action, stretch performance, or add empty content merely to fill time.
+- Choose a shorter allowed duration only for a discontinuity in time, place, character state, scene, or unfinished-action continuity, or when the exact total-duration remainder cannot use the maximum. All generation durations must sum exactly to the caller's total delivery duration.
 - Group sequential shots that can share continuity of action, performance, space, emotion, props, and synchronized sound.
 - Each segment completely and sequentially covers its shots and respects the current model's single-generation duration limit. Never omit, reorder, or force discontinuous shots together.
 - Do not split one unfinished action across independent generations. Every independent segment has an established entry state, local task, and ending point.

@@ -723,7 +723,7 @@ model Project {
   imageModel              String?
   videoModel              String?
   musicModel              String?
-  videoRatio              String                          @default("9:16")
+  videoRatio              String?
   globalAssetText         String?                         @db.LongText
   characterModel          String?
   locationModel           String?

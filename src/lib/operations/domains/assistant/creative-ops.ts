@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { ApiError } from '@/lib/api-errors'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
+import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeWorkInputFingerprint,
   creativeWorkDelegationInputSchema,
@@ -6,6 +10,7 @@ import {
   listCreativeWorkDelegationItems,
   resolveCreativeWorkDelegationInput,
   type CreativeWorkDelegationItem,
+  type CreativeWorkTaskRequest,
   type ResolvedCreativeWorkDelegationInput,
 } from '@/lib/creative-worker'
 import { compileEpisodeChapterContexts } from '@/lib/edit-chapter'
@@ -20,11 +25,14 @@ import {
 import {
   resolveProjectAgentAssistantModelKey,
 } from '@/lib/project-agent/model'
+import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
+import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import { createTaskBatchKey } from '@/lib/task/batch'
 import { TASK_TYPE } from '@/lib/task/types'
 import { createAssistantCreativeBibleOperations } from './creative-bible-ops'
+import { createAssistantCreativeStyleOperations } from './creative-style-ops'
 
 const creativeWorkDelegationOutputSchema = refineTaskBatchSubmitOperationOutputSchema(z.object({
   success: z.literal(true),
@@ -99,21 +107,174 @@ async function resolveDelegationRequests(input: {
       requestKey: requestedChapter.requestKey,
       outputKind: chapterBatch.outputKind,
       goal: `${chapterBatch.goal}\nChapter ${String(result.context.chapter.chapterIndex + 1)}: ${result.context.chapter.title}`,
+      targetDurationSeconds: result.context.chapter.targetDurationSec,
       context: {
         userRequest: chapterBatch.userRequest,
-        sourceMaterials: [{
-          label: `Chapter ${String(result.context.chapter.chapterIndex + 1)} context`,
-          kind: 'structured' as const,
-          content: JSON.stringify(result.context),
-          provenance: {
-            kind: 'domain' as const,
-            sourceType: 'creative_chapter_context',
-            sourceId: result.context.chapter.chapterId,
-            revision: `${String(sourceStart)}:${String(sourceEnd)}`,
-            fingerprint: stableArgsHash(result.context),
+        sourceMaterials: [
+          {
+            label: `Chapter ${String(result.context.chapter.chapterIndex + 1)} context`,
+            kind: 'structured' as const,
+            content: JSON.stringify(result.context),
+            provenance: {
+              kind: 'domain' as const,
+              sourceType: 'creative_chapter_context',
+              sourceId: result.context.chapter.chapterId,
+              revision: `${String(sourceStart)}:${String(sourceEnd)}`,
+              fingerprint: stableArgsHash(result.context),
+            },
           },
-        }],
+          {
+            label: 'Final Style Bible',
+            kind: 'structured' as const,
+            content: JSON.stringify(result.context.style.productionStyleBible),
+            provenance: {
+              kind: 'resource' as const,
+              ...result.context.style.source,
+            },
+          },
+        ],
         constraints: chapterBatch.constraints,
+      },
+    }
+  })
+}
+
+type CreativeWorkTaskItem = CreativeWorkTaskRequest & { readonly requestKey: string }
+
+function canComposeDuration(target: number, options: readonly number[]): boolean {
+  const reachable = new Uint8Array(target + 1)
+  reachable[0] = 1
+  for (let duration = 1; duration <= target; duration += 1) {
+    reachable[duration] = options.some((option) => duration >= option && reachable[duration - option] === 1)
+      ? 1
+      : 0
+  }
+  return reachable[target] === 1
+}
+
+async function resolveTaskRequests(input: {
+  readonly requests: readonly CreativeWorkDelegationItem[]
+  readonly projectId: string
+  readonly userId: string
+}): Promise<CreativeWorkTaskItem[]> {
+  const needsVideoProduction = input.requests.some((request) => request.outputKind === 'video_prompt_set')
+  if (!needsVideoProduction) {
+    return input.requests.map((request) => ({
+      ...request,
+      productionContext: { video: null },
+    }))
+  }
+
+  const videoRequests = input.requests.filter((request) => request.outputKind === 'video_prompt_set')
+  for (const request of videoRequests) {
+    const resourceReferences = request.context.sourceMaterials
+      .map((source) => source.provenance)
+      .filter((provenance) => provenance.kind === 'resource')
+    const revisionIds = resourceReferences.map((reference) => reference.revisionId)
+    const revisions = revisionIds.length > 0
+      ? await prisma.creativeResourceRevision.findMany({
+          where: { id: { in: revisionIds } },
+          select: {
+            id: true,
+            resourceId: true,
+            fingerprint: true,
+            resource: {
+              select: {
+                userId: true,
+                projectId: true,
+                status: true,
+                schemaId: true,
+              },
+            },
+          },
+        })
+      : []
+    const byRevisionId = new Map(revisions.map((revision) => [revision.id, revision]))
+    const styleReferences = resourceReferences.filter((reference) => {
+      const revision = byRevisionId.get(reference.revisionId)
+      return revision?.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
+        && revision.resourceId === reference.resourceId
+        && revision.fingerprint === reference.fingerprint
+        && revision.resource.userId === input.userId
+        && revision.resource.projectId === input.projectId
+        && revision.resource.status === 'ready'
+    })
+    if (styleReferences.length !== 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_VIDEO_STYLE_BIBLE_REQUIRED',
+        field: 'context.sourceMaterials',
+        requestedValue: styleReferences.length,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+  }
+
+  const [project, videoModelKey] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: { videoRatio: true },
+    }),
+    resolveSystemModelKey({
+      userId: input.userId,
+      projectId: input.projectId,
+      purpose: 'video',
+    }),
+  ])
+  if (!project) {
+    throw new ApiError('NOT_FOUND', { code: 'PROJECT_NOT_FOUND', field: 'projectId' })
+  }
+  const aspectRatio = project.videoRatio?.trim() || ''
+  if (!aspectRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      field: 'videoRatio',
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const rawDurationOptions = resolveBuiltinCapabilitiesByModelKey('video', videoModelKey)?.video?.durationOptions ?? []
+  const allowedSegmentDurationsSeconds = Array.from(new Set(rawDurationOptions
+    .filter((duration): duration is number => Number.isInteger(duration)
+      && duration > 0
+      && duration <= CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)))
+    .sort((left, right) => left - right)
+  const minSegmentDurationSeconds = allowedSegmentDurationsSeconds[0]
+  const maxSegmentDurationSeconds = allowedSegmentDurationsSeconds.at(-1)
+  if (minSegmentDurationSeconds === undefined || maxSegmentDurationSeconds === undefined) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_DURATION_CAPABILITY_REQUIRED',
+      field: 'durationSeconds',
+    })
+  }
+
+  return input.requests.map((request) => {
+    if (request.outputKind !== 'video_prompt_set') {
+      return { ...request, productionContext: { video: null } }
+    }
+    const targetDurationSeconds = request.targetDurationSeconds
+    if (
+      targetDurationSeconds === undefined
+      || !canComposeDuration(targetDurationSeconds, allowedSegmentDurationsSeconds)
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: targetDurationSeconds === undefined
+          ? 'CREATIVE_VIDEO_TARGET_DURATION_REQUIRED'
+          : 'CREATIVE_VIDEO_TARGET_DURATION_UNSUPPORTED',
+        field: 'targetDurationSeconds',
+        requestedValue: targetDurationSeconds ?? null,
+        allowedValues: allowedSegmentDurationsSeconds,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    return {
+      ...request,
+      productionContext: {
+        video: {
+          aspectRatio,
+          allowedSegmentDurationsSeconds,
+          minSegmentDurationSeconds,
+          maxSegmentDurationSeconds,
+          styleBibleRequired: true as const,
+        },
       },
     }
   })
@@ -122,6 +283,7 @@ async function resolveDelegationRequests(input: {
 export function createAssistantCreativeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     ...createAssistantCreativeBibleOperations(),
+    ...createAssistantCreativeStyleOperations(),
     delegate_creative_work: defineOperation({
       id: 'delegate_creative_work',
       summary: 'Delegate bounded professional creative reasoning requests to background Subagents. Every request becomes one independent Creative Task; the Worker can only discover and read registered Creative Skills, and its structured result is advice until a normal project Operation adopts or executes it. Use kind=single for one request, kind=batch for caller-supplied independent contexts, or kind=chapter_batch to compile persisted Chapter contexts server-side without copying every long context through the Primary Agent.',
@@ -137,11 +299,16 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           toolCallId: context.toolCallId,
         })
         const delegation = resolveCreativeWorkDelegationInput(input)
-        const requests = await resolveDelegationRequests({
+        const delegatedRequests = await resolveDelegationRequests({
           operationInput: delegation,
           projectId: context.projectId,
           userId: context.userId,
           contextEpisodeId: context.context.episodeId,
+        })
+        const requests = await resolveTaskRequests({
+          requests: delegatedRequests,
+          projectId: context.projectId,
+          userId: context.userId,
         })
         const taskEpisodeId = delegation.kind === 'chapter_batch'
           ? resolveEpisodeId(delegation.chapterBatch.episodeId ?? undefined, context.context.episodeId)

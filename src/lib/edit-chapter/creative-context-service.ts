@@ -1,4 +1,5 @@
 import {
+  CREATIVE_RESOURCE_SCHEMA,
   getProjectCreativeResourceCard,
   type CreativeResourceRevisionContent,
 } from '@/lib/creative-resource'
@@ -9,6 +10,7 @@ import {
   type CreativeContextAsset,
 } from '@/lib/creative-worker'
 import { readEpisodeEditBible } from '@/lib/edit-bible'
+import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import type { LedgerEntityRef } from '@/lib/edit-ledger'
 import { prisma } from '@/lib/prisma'
 
@@ -62,11 +64,16 @@ function resourceDescription(input: {
   return input.name
 }
 
-async function resolveCreativeContextAssets(input: {
+interface ResolvedCreativeContextResource {
+  readonly asset: CreativeContextAsset
+  readonly content: CreativeResourceRevisionContent
+}
+
+async function resolveCreativeContextResources(input: {
   readonly projectId: string
   readonly userId: string
   readonly references: readonly CreativeChapterAssetReference[]
-}): Promise<CreativeContextAsset[]> {
+}): Promise<ResolvedCreativeContextResource[]> {
   requireUnique(input.references.map((reference) => reference.resourceId), 'resourceId')
   return await Promise.all(input.references.map(async (reference) => {
     const card = await getProjectCreativeResourceCard({
@@ -93,20 +100,23 @@ async function resolveCreativeContextAssets(input: {
       })
     }
     return {
-      resourceId: resource.resourceId,
-      revisionId: revision.revisionId,
-      fingerprint: revision.fingerprint,
-      mediaType: resource.mediaType,
-      schemaId: resource.schemaId,
-      name: resource.name,
-      description: resourceDescription({
+      asset: {
+        resourceId: resource.resourceId,
+        revisionId: revision.revisionId,
+        fingerprint: revision.fingerprint,
+        mediaType: resource.mediaType,
+        schemaId: resource.schemaId,
         name: resource.name,
+        description: resourceDescription({
+          name: resource.name,
+          prompt: revision.provenance.prompt,
+          content: revision.content,
+        }),
         prompt: revision.provenance.prompt,
-        content: revision.content,
-      }),
-      prompt: revision.provenance.prompt,
-      mediaId: revision.content.kind === 'media' ? revision.content.mediaId : null,
-      entityRef: reference.entityRef,
+        mediaId: revision.content.kind === 'media' ? revision.content.mediaId : null,
+        entityRef: reference.entityRef,
+      },
+      content: revision.content,
     }
   }))
 }
@@ -118,7 +128,7 @@ export async function compileEpisodeChapterContexts(
   if (input.chapterIds.length === 0) {
     fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterIds' })
   }
-  const [persistedBible, chapters, referencedAssets] = await Promise.all([
+  const [persistedBible, chapters, referencedResources] = await Promise.all([
     readEpisodeEditBible({ projectId: input.projectId, episodeId: input.episodeId }),
     prisma.projectEditChapter.findMany({
       where: {
@@ -143,7 +153,7 @@ export async function compileEpisodeChapterContexts(
         eventsJson: true,
       },
     }),
-    resolveCreativeContextAssets({
+    resolveCreativeContextResources({
       projectId: input.projectId,
       userId: input.userId,
       references: input.referencedAssets,
@@ -158,6 +168,29 @@ export async function compileEpisodeChapterContexts(
   ) {
     fail('CREATIVE_CONTEXT_BIBLE_INCOMPLETE', { episodeId: input.episodeId })
   }
+  const styleResources = referencedResources.filter(
+    (resource) => resource.asset.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+  )
+  if (styleResources.length !== 1) {
+    fail('CREATIVE_CONTEXT_STYLE_BIBLE_REQUIRED', {
+      episodeId: input.episodeId,
+      styleBibleCount: styleResources.length,
+    })
+  }
+  const styleResource = styleResources[0]
+  if (!styleResource || styleResource.content.kind !== 'structured') {
+    fail('CREATIVE_CONTEXT_STYLE_BIBLE_REQUIRED', { episodeId: input.episodeId })
+  }
+  const parsedStyleBible = editScriptStyleBibleSchema.shape.styleBible.safeParse(styleResource.content.data)
+  if (!parsedStyleBible.success) {
+    fail('CREATIVE_CONTEXT_INPUT_INVALID', {
+      label: 'styleBible',
+      issueCount: parsedStyleBible.error.issues.length,
+    })
+  }
+  const referencedAssets = referencedResources
+    .filter((resource) => resource.asset.schemaId !== CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE)
+    .map((resource) => resource.asset)
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]))
   return input.chapterIds.map((chapterId) => {
     const chapter = chapterById.get(chapterId)
@@ -174,7 +207,12 @@ export async function compileEpisodeChapterContexts(
         ledger: persistedBible.ledger,
         emotionalCurve: persistedBible.emotionalCurve,
       },
-      styleBible: persistedBible.styleBible,
+      styleBible: parsedStyleBible.data,
+      styleBibleSource: {
+        resourceId: styleResource.asset.resourceId,
+        revisionId: styleResource.asset.revisionId,
+        fingerprint: styleResource.asset.fingerprint,
+      },
       referencedAssets,
       maxChars: input.maxCharsPerChapter,
     })

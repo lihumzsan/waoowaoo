@@ -17,6 +17,7 @@ import {
 import type { Prisma } from '@prisma/client'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import type { NextRequest } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type {
   ProjectAgentOperationOutcome,
@@ -429,10 +430,12 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 }
 
 function buildProjectStateVersion(params: {
+  videoRatio: string | null
   phase: ProjectPhaseSnapshot
 }): string {
   const workflow = params.phase.editFirstWorkflow
   return [
+    params.videoRatio ?? 'none',
     params.phase.phase,
     workflow.step,
     workflow.status.kind,
@@ -447,16 +450,19 @@ function buildProjectStateVersion(params: {
 function buildProjectStateInputItem(params: {
   projectId: string
   episodeId: string | null
+  videoRatio: string | null
   phase: ProjectPhaseSnapshot
 }): AgentInputItem {
   const workflow = params.phase.editFirstWorkflow
   const lines = [
     '[project_state_snapshot]',
     `version=${buildProjectStateVersion({
+      videoRatio: params.videoRatio,
       phase: params.phase,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
+    `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
     `phase=${formatRuntimeStateValue(params.phase.phase)}`,
     `mainlineStep=${formatRuntimeStateValue(workflow.step)}`,
     `mainlineStatus=${workflow.status.kind}`,
@@ -765,11 +771,18 @@ export async function createProjectAgentChatResponse(input: {
         }
       : {}),
   }
-  const resolvedPhase = await resolveProjectPhase({
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: context.episodeId || null,
-  })
+  const [resolvedPhase, projectConfigSnapshot] = await Promise.all([
+    resolveProjectPhase({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: context.episodeId || null,
+    }),
+    prisma.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: { videoRatio: true },
+    }),
+  ])
+  if (!projectConfigSnapshot) throw new Error(`PROJECT_AGENT_PROJECT_NOT_FOUND:${input.projectId}`)
   const phase = resolvedPhase
   const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
@@ -890,6 +903,7 @@ export async function createProjectAgentChatResponse(input: {
   const projectStateInputItem = buildProjectStateInputItem({
     projectId: input.projectId,
     episodeId: context.episodeId || null,
+    videoRatio: projectConfigSnapshot.videoRatio,
     phase,
   })
   const currentPlan = control.kind === 'approval'

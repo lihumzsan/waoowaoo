@@ -17,6 +17,7 @@ export const CREATIVE_CONTEXT_COMPILER_ERROR_CODES = [
   'CREATIVE_CONTEXT_INPUT_INVALID',
   'CREATIVE_CONTEXT_SOURCE_MISMATCH',
   'CREATIVE_CONTEXT_BIBLE_INCOMPLETE',
+  'CREATIVE_CONTEXT_STYLE_BIBLE_REQUIRED',
   'CREATIVE_CONTEXT_CHAPTER_NOT_FOUND',
   'CREATIVE_CONTEXT_RESOURCE_NOT_FOUND',
   'CREATIVE_CONTEXT_RESOURCE_REVISION_CHANGED',
@@ -83,7 +84,12 @@ export const compileCreativeChapterContextInputSchema = z.object({
   }).strict(),
   chapter: chapterContextSourceSchema,
   bibleBundle: editBibleBundleSchema,
-  styleBible: editScriptStyleBibleSchema.shape.styleBible.nullable(),
+  styleBible: editScriptStyleBibleSchema.shape.styleBible,
+  styleBibleSource: z.object({
+    resourceId: z.string().trim().min(1),
+    revisionId: z.string().trim().min(1),
+    fingerprint: z.string().trim().min(1),
+  }).strict(),
   referencedAssets: z.array(creativeContextAssetSchema).max(128),
   maxChars: z.number().int().positive(),
 }).strict()
@@ -128,7 +134,8 @@ const compiledChapterContextSchema = z.object({
   }).strict(),
   style: z.object({
     storyStyleGuide: editBibleStyleGuideSchema,
-    productionStyleBible: editScriptStyleBibleSchema.shape.styleBible.nullable(),
+    productionStyleBible: editScriptStyleBibleSchema.shape.styleBible,
+    source: compileCreativeChapterContextInputSchema.shape.styleBibleSource,
   }).strict(),
   referencedAssets: z.array(creativeContextAssetSchema),
 }).strict()
@@ -448,6 +455,7 @@ export function compileCreativeChapterContext(
     style: {
       storyStyleGuide: bibleBundle.bible.styleGuide,
       productionStyleBible: input.styleBible,
+      source: input.styleBibleSource,
     },
     referencedAssets,
   })

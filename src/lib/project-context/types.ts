@@ -4,13 +4,13 @@ import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-vi
 export interface ProjectPolicySnapshot {
   projectId: string
   episodeId?: string | null
-  videoRatio: string
+  videoRatio: string | null
   analysisModel?: string | null
   overrides: Record<string, unknown>
 }
 
 export interface ProjectPolicyOverrideInput {
-  videoRatio?: string
+  videoRatio?: string | null
   analysisModel?: string | null
   overrides?: Record<string, unknown>
 }

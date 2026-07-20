@@ -69,6 +69,7 @@ export type {
   CreativeWorkDelegationItem,
   CreativeWorkChapterBatchInput,
   ResolvedCreativeWorkDelegationInput,
+  CreativeWorkTaskRequest,
   CreativeWorkTaskLifecycleProjection,
   CreativeWorkTaskPayload,
   CreativeWorkTaskResult,

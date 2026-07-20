@@ -13,6 +13,7 @@
 - **CR-01 — 一个稳定 Resource，多次不可变 Revision。** `CreativeResource.id` 是产物 identity；成功生成、修改或重生成只能追加 `CreativeResourceRevision` 并原子推进 `headRevisionId`，不得原地改写历史 Revision。通用候选以 `operationId + requestId + candidateIndex` 形成唯一 origin；专业产物以 `sourceType + sourceId` 形成唯一 origin，同一专业实体不得创建第二个 Resource。
 - **CR-02 — 专业领域事实不被通用表替代。** 剧本、Bible、剪辑表、角色、场景、BGM 设计、视频 Segment 与渲染结果继续由各自领域 service/table 保存当前可查询业务状态。ResourceRevision 只拥有跨领域引用所需的不可变交付内容、领域快照、fingerprint、provenance 和 lineage。领域 writer 与 Resource materializer 必须位于同一个权威 Operation 或 Task terminal transaction；不得由客户端、Canvas 或后台扫描补写。
 - **CR-03 — 四种媒体只是 fallback。** 每个 Resource 必须声明一个 `mediaType=text|image|audio|video` 和一个穷尽注册的 `schemaId`。`schemaId` 决定专业语义与首选 presentation；仅在没有专业 renderer 时才使用 mediaType renderer。新增剧本变体、图片角色或其他专业内容主要增加 schema/renderer 声明，不得复制 Resource、Revision、Lineage 或 Binding 模型。
+- **CR-03A — Style Bible 是结构化文字 Resource。** finalized Worker 风格结果只经 `adopt_style_bible` 写成 `mediaType=text + schemaId=project.style_bible` 的不可变 revision；Task id 是专业 origin，Worker 输入 Resource revision 是 lineage。候选结果不得写入该 schema。Canvas 使用 schema-aware Style Bible renderer 展示摘要、视觉表达、光线、材质与构图，不把结构化内容退化成 raw JSON；这仍是通用 ResourceCard 的专业变体，不建立第二实体。
 - **CR-04 — Lineage 只记录实际输入 Revision。** 每条 `CreativeResourceLineage` 必须从精确的 `inputRevisionId + fingerprint + role + position` 指向输出 Revision。不得从当前 head、最近资源、数组位置、Prompt、历史消息或 Canvas edge 反推输入。输入后来产生新 Revision 不改写旧 Lineage；陈旧诊断可以提示，但不得自动禁止 Agent 使用旧 Revision。
 - **CR-05 — 生成与采用分离。** 生成候选只创建 Resource/Revision；把某个候选用于项目角色、插槽或 canonical 选择，只能通过 `CreativeResourceBinding` 的 `scope + role + slotKey` CAS 更新。选择不得删除、覆盖或重新生成其他候选。Binding 保存精确 `resourceId + revisionId`，刷新后仍指向同一 Revision。
 - **CR-06 — provenance 冻结真实调用。** 每个成功 Revision 必须保存适用的 `operationId`、稳定输入 hash、Task/OperationExecution/executionSegment/toolCall identity、实际 prompt、modelKey 与生成参数。缺失适用来源时必须显式失败；不得用模型事后总结、UI 文案或当前配置补造历史来源。
@@ -36,6 +37,7 @@
 | 项目采用与 canonical 选择 | `CreativeResourceBinding` / Binding service CAS | Agent、Canvas、后续显式读取 |
 | 异步候选 pending | Operation 的 Task 提交事务（预留 Resource + Task + broadcast） | Resource View、Canvas |
 | 异步候选 ready/failed/canceled | `commitTaskTerminal` | Agent continuation、Resource View |
+| finalized Style Bible revision | `adopt_style_bible` transactional Operation | Asset/video Worker input、Chapter Context、Canvas |
 | ResourceCard 最终 View | `view-service.ts` 从上述持久事实纯投影 | API、React Query、Canvas renderer |
 
 ## 权威入口
@@ -47,6 +49,7 @@
 - 异步 Task 终态物化：`src/lib/creative-resource/task-materializer.ts`，只由 `src/lib/task/terminal/service.ts` 调用。
 - ResourceCard 查询投影：`src/lib/creative-resource/view-service.ts` 与 `src/app/api/projects/[projectId]/resources/route.ts`。
 - Agent 通用生成与读/采用工具：`src/lib/operations/domains/creative-resource/**`；仍通过全局 Operation registry/invocation。
+- Style Bible 专业采用：`src/lib/operations/domains/assistant/creative-style-ops.ts`；它是 `project.style_bible` 的唯一 writer，并复用 Resource persistence，不建立领域旁路。
 - Canvas Resource 投影和 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；专业 renderer 仍由 Canvas registry 选择。
 - 数据表：`prisma/schema.prisma` 的 `CreativeResource*`；`20260717120000_add_creative_resource_spine` 只创建 additive schema，本任务不执行共享数据 migration。
 

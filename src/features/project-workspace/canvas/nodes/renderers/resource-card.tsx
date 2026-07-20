@@ -1,6 +1,7 @@
 'use client'
 
 import type { CreativeResourceView } from '@/lib/creative-resource/contracts'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import type { WorkspaceCanvasNodeRendererProps } from './types'
 import { PreviewableImage, SELECTABLE_TEXT_CLASS, renderSection } from './renderer-shared'
 
@@ -12,7 +13,64 @@ function formatStructured(value: unknown): string {
   }
 }
 
-function ResourceOutput({ resource }: { readonly resource: CreativeResourceView }) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function renderStyleBibleOutput({
+  data,
+  labels,
+}: {
+  readonly data: unknown
+  readonly labels: WorkspaceCanvasNodeRendererProps['labels']
+}) {
+  if (!isRecord(data)) return null
+  const styleSummary = readString(data, 'styleSummary')
+  const visualStyle = readString(data, 'visualStyle')
+  const assetImageStyle = isRecord(data.assetImageStyle) ? data.assetImageStyle : null
+  if (!styleSummary || !visualStyle || !assetImageStyle) return null
+  const lighting = readString(assetImageStyle, 'lighting')
+  const texture = readString(assetImageStyle, 'texture')
+  const composition = readString(assetImageStyle, 'composition')
+  if (!lighting || !texture || !composition) return null
+  return (
+    <div className={`${SELECTABLE_TEXT_CLASS} space-y-4 rounded-2xl bg-slate-50 p-4 text-slate-700`}>
+      <div>
+        <p className="text-[11px] font-medium text-slate-400">{labels('styleSummary')}</p>
+        <p className="mt-1 text-sm font-semibold leading-6">{styleSummary}</p>
+      </div>
+      <div>
+        <p className="text-[11px] font-medium text-slate-400">{labels('visualStyle')}</p>
+        <p className="mt-1 whitespace-pre-wrap text-xs leading-5">{visualStyle}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {([
+          ['styleLighting', lighting],
+          ['styleTexture', texture],
+          ['styleComposition', composition],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="rounded-xl bg-white p-3">
+            <p className="text-[11px] font-medium text-slate-400">{labels(label)}</p>
+            <p className="mt-1 text-xs leading-5">{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ResourceOutput({
+  resource,
+  labels,
+}: {
+  readonly resource: CreativeResourceView
+  readonly labels: WorkspaceCanvasNodeRendererProps['labels']
+}) {
   const content = resource.headRevision?.content ?? null
   if (!content) {
     return <div className="flex h-40 items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-400">—</div>
@@ -34,6 +92,13 @@ function ResourceOutput({ resource }: { readonly resource: CreativeResourceView 
     if (resource.mediaType === 'audio') {
       return <audio src={content.url} aria-label={resource.name} controls preload="metadata" className="w-full" />
     }
+  }
+  if (
+    resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
+    && content.kind === 'structured'
+  ) {
+    const styleBible = renderStyleBibleOutput({ data: content.data, labels })
+    if (styleBible) return styleBible
   }
   const text = content.kind === 'text'
     ? content.text
@@ -100,7 +165,7 @@ export function ResourceCardContent(props: WorkspaceCanvasNodeRendererProps) {
                 {labels('candidateIndex', { index: (resource.candidateIndex ?? 0) + 1 })}
               </p>
             ) : null}
-            <ResourceOutput resource={resource} />
+            <ResourceOutput resource={resource} labels={labels} />
           </div>
         ))}
       </div>

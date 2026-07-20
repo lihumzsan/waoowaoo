@@ -60,7 +60,7 @@ export async function assembleProjectProjectionLite(params: {
     projectPolicy: {
       projectId: params.projectId,
       episodeId,
-      videoRatio: projectModelConfig.videoRatio || project.videoRatio,
+      videoRatio: projectModelConfig.videoRatio ?? project.videoRatio,
       analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },

@@ -4,7 +4,10 @@ import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
 import { creativeWorkOutputSchemas, type CreativeWorkOutput } from './output-registry'
-import { creativeWorkRequestSchema } from './types'
+import {
+  creativeWorkDelegationRequestSchema,
+  creativeWorkRequestSchema,
+} from './types'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay_draft,
@@ -54,7 +57,7 @@ export const creativeWorkerResultSchema = z.object({
   })
 })
 
-export const creativeWorkDelegationItemSchema = creativeWorkRequestSchema.extend({
+export const creativeWorkDelegationItemSchema = creativeWorkDelegationRequestSchema.extend({
   requestKey: z.string().trim().min(1).max(200)
     .describe('Caller-owned stable identity for this one logical Subagent request. It must be unique inside a batch and reused only for an explicit retry of the same logical item.'),
 }).strict()
@@ -75,14 +78,14 @@ export const creativeWorkChapterBatchInputSchema = z.object({
   userRequest: z.string().max(30_000)
     .describe('Relevant original user request preserved for every Chapter Worker.'),
   constraints: z.array(z.string().trim().min(1).max(4_000)).max(64)
-    .describe('Shared duration, delivery, safety, continuity, or model constraints.'),
+    .describe('Shared delivery, safety, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
     resourceId: z.string().trim().min(1),
     revisionId: z.string().trim().min(1),
     fingerprint: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
-    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet.'),
+    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including the required project.style_bible Resource and any image assets.'),
   maxCharsPerChapter: z.number().int().min(4_000).max(200_000)
     .describe('Fail-closed serialized character budget for one compiled Chapter context.'),
 }).strict()
@@ -161,6 +164,7 @@ export type ResolvedCreativeWorkDelegationInput =
   | { readonly kind: 'batch'; readonly requests: readonly CreativeWorkDelegationItem[] }
   | { readonly kind: 'chapter_batch'; readonly chapterBatch: CreativeWorkChapterBatchInput }
 export type CreativeWorkDelegationItem = z.infer<typeof creativeWorkDelegationItemSchema>
+export type CreativeWorkTaskRequest = z.infer<typeof creativeWorkRequestSchema>
 export type CreativeWorkTaskLifecycleProjection = z.infer<typeof creativeWorkTaskLifecycleProjectionSchema>
 export type CreativeWorkTaskPayload = z.infer<typeof creativeWorkTaskPayloadSchema>
 export type CreativeWorkTaskResult = z.infer<typeof creativeWorkTaskResultSchema>
@@ -193,7 +197,7 @@ export function listCreativeWorkDelegationItems(
 }
 
 export function buildCreativeWorkInputFingerprint(input: {
-  request: CreativeWorkDelegationItem
+  request: CreativeWorkTaskRequest & { readonly requestKey: string }
   modelKey: string
 }): string {
   return stableArgsHash({

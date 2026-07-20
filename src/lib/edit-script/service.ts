@@ -1580,6 +1580,12 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     return await mapPersistedEditScript(completed)
   }
   const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
+  if (!effectiveVideoRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      field: 'videoRatio',
+    })
+  }
   if (input.videoRatio && input.videoRatio !== project.videoRatio) {
     await prisma.project.update({
       where: { id: project.id },
@@ -1768,6 +1774,12 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     getProjectModelConfig(input.projectId, input.userId),
   ])
   if (!episode || !project) throw new ApiError('NOT_FOUND')
+  if (!project.videoRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      field: 'videoRatio',
+    })
+  }
   const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
   const editScript = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId, chapterId)
   if (!editScript) throw new ApiError('NOT_FOUND')

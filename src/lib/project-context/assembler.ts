@@ -165,7 +165,7 @@ export async function assembleProjectContext(params: {
     projectPolicy: {
       projectId: params.projectId,
       episodeId: params.episodeId || null,
-      videoRatio: projectModelConfig.videoRatio || project.videoRatio,
+      videoRatio: projectModelConfig.videoRatio ?? project.videoRatio,
       analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },

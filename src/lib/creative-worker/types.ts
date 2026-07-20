@@ -40,11 +40,13 @@ const creativeWorkSourceMaterialSchema = z.object({
   ]).describe('Exact provenance for this copied source material, or kind=none when it is not backed by a persisted fact.'),
 }).strict().describe('One source item explicitly copied into the stateless worker input by the primary agent.')
 
-export const creativeWorkRequestSchema = z.object({
+export const creativeWorkDelegationRequestSchema = z.object({
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS)
     .describe('The strict structured result contract the creative worker must return.'),
   goal: z.string().trim().min(1).max(8_000)
     .describe('A concrete professional creative objective for this one stateless delegation.'),
+  targetDurationSeconds: z.number().int().positive().max(36_000).optional()
+    .describe('Overall requested delivery duration. For video_prompt_set this is the whole work or Chapter duration, never a caller-chosen segment duration or segment count.'),
   context: z.object({
     userRequest: z.string().max(30_000)
       .describe('The relevant original user request, preserved so the worker can remain faithful to user intent.'),
@@ -55,6 +57,34 @@ export const creativeWorkRequestSchema = z.object({
   }).strict().describe('A complete caller-assembled context packet; it is data for analysis and grants no system access.'),
 }).strict().describe('Request for one isolated creative-worker run with a strict output contract.')
 
+const creativeVideoProductionContextSchema = z.object({
+  aspectRatio: z.string().trim().min(1),
+  allowedSegmentDurationsSeconds: z.array(z.number().int().positive()).min(1),
+  minSegmentDurationSeconds: z.number().int().positive(),
+  maxSegmentDurationSeconds: z.number().int().positive(),
+  styleBibleRequired: z.literal(true),
+}).strict().superRefine((context, refinement) => {
+  const sorted = [...context.allowedSegmentDurationsSeconds].sort((left, right) => left - right)
+  if (
+    new Set(sorted).size !== sorted.length
+    || sorted[0] !== context.minSegmentDurationSeconds
+    || sorted.at(-1) !== context.maxSegmentDurationSeconds
+  ) {
+    refinement.addIssue({
+      code: 'custom',
+      message: 'CREATIVE_VIDEO_PRODUCTION_DURATION_OPTIONS_INVALID',
+      path: ['allowedSegmentDurationsSeconds'],
+    })
+  }
+})
+
+export const creativeWorkRequestSchema = creativeWorkDelegationRequestSchema.extend({
+  productionContext: z.object({
+    video: creativeVideoProductionContextSchema.nullable(),
+  }).strict(),
+}).strict().describe('Server-compiled request for one isolated creative-worker run. productionContext is supplied by the execution layer, never by the primary Agent.')
+
+export type CreativeWorkDelegationRequest = z.infer<typeof creativeWorkDelegationRequestSchema>
 export type CreativeWorkRequest = z.infer<typeof creativeWorkRequestSchema>
 
 export interface CreativeWorkerBudgets {

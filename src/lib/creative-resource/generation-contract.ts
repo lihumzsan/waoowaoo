@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { CREATIVE_RESOURCE_MEDIA_TYPES, type CreativeResourceJsonValue } from './contracts'
 
+export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
+
 export const creativeResourceInputRefSchema = z.object({
   resourceId: z.string().trim().min(1)
     .describe('Exact Resource identity returned by list_resources or get_resource.'),

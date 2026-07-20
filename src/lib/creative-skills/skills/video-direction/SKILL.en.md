@@ -6,7 +6,8 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 
 ## When to design video directly
 
-- A single short shot can become a final video prompt directly from the user's goal; it does not require a complete script, Bible, or professional timeline.
+- Video-design input must include a finalized Style Bible with exact provenance. It governs the complete work's visual expression. If it is missing, report that fact in warnings rather than improvising another style and pretending the result is executable.
+- A single short shot can become a final video prompt directly from the user's goal; it does not require a complete screenplay, global continuity Bible, or professional timeline, but it still requires the finalized Style Bible with exact provenance.
 - Multi-shot, multi-segment, or assembled work should first obtain enough shot order, duration, and continuity facts, then generate independently valid video segments.
 - Design only character, location, prop, or UI references that the final result will actually use. Irrelevant inputs dilute identity and location priority.
 
@@ -60,6 +61,9 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 
 ## Long video and independent segment seams
 
+- `targetDurationSeconds` is the total duration of the complete work or current Chapter, never one segment's duration. This Worker owns segment count and per-segment duration from directing needs and `productionContext.video`; ignore caller prose that prescribes “six segments,” “ten seconds each,” or another split.
+- Use only `allowedSegmentDurationsSeconds`, and output the authoritative `aspectRatio` exactly. Prefer the maximum allowed duration and fewer generations when content is continuous. When the current ceiling is 15 seconds, do not split material that naturally fits one 15-second generation into several shorter clips.
+- A shorter segment needs a concrete reason: a time/place/state break, an action that needs its own landing, or an exact-total remainder combination. Every segment duration must sum exactly to the total target.
 - When the work exceeds one generation's duration, split it into independently complete video segments. Each segment has a clear local dramatic and emotional task; never divide one unfinished action across two generations.
 - Use a visible scale or angle difference between the last shot of one segment and the first of the next, reducing the chance that independent blocking changes read as a visual jump.
 - Do not hide seams with black frames, walls, wipes, or objects covering the frame.

@@ -6,6 +6,7 @@
   "visualSettings": "画面设置",
   "modelParams": "模型参数",
   "aspectRatio": "画面比例",
+  "notSet": "未设置",
   "loadingModels": "加载模型列表...",
   "analysisModel": "分析模型",
   "characterModel": "人物生成模型",

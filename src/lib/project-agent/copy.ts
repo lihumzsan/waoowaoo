@@ -19,6 +19,14 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '把一个已完成的 edit_bible_bundle Creative Task 采用为正式 Bible，并由唯一切分器写出 Chapter。必须传精确 sourceDocumentId 和 taskId；系统会重新验证来源版本、内容与结构化结果，不会自动启动资产、Chapter Subagent 或视频任务。',
     en: 'Adopt one completed edit_bible_bundle Creative Task as the formal Bible and let the sole splitter write Chapters. Pass the exact sourceDocumentId and taskId. The system revalidates source revision, content, and strict output, and starts no asset, Chapter Subagent, or video task automatically.',
   },
+  adopt_style_bible: {
+    zh: '把已完成的最终视觉 Style Bible 专业创作结果采用为结构化文字 Resource。后续资产设计与视频生成必须引用返回的精确 resourceId、revisionId 和 fingerprint；候选方案不能直接采用，需先让 Subagent 收敛成 final 结果。',
+    en: 'Adopt a completed final visual Style Bible creative result as a structured text Resource. Subsequent asset and video design must reference the exact returned resourceId, revisionId, and fingerprint. Candidate sets cannot be adopted directly; first ask the Subagent to resolve one final result.',
+  },
+  update_project_config: {
+    zh: '设置或清除项目最终输出画幅。这里只负责 videoRatio，例如 16:9 或 9:16；不要读取、选择或提交模型、provider、分辨率及其他执行配置。',
+    en: 'Set or clear the project final-output aspect ratio. This tool owns only videoRatio, such as 16:9 or 9:16. Never read, select, or submit a model, provider, resolution, or other execution configuration.',
+  },
   update_plan: {
     zh: '为复杂或多阶段工作维护一份简短计划。每次调用完整替换当前计划，最多一个步骤处于 in_progress，进展变化后及时更新；传空 plan 可清除。它只是可见便签，不执行工作、不创建 Task，也不控制工具或项目状态。',
     en: 'Maintain a concise plan for complex or multi-step work. Each call replaces the whole current plan; keep at most one item in_progress, update it when progress changes, and pass an empty plan to clear it. This is a visible notebook only: it executes no work, creates no Tasks, and controls no tool or project state.',
@@ -162,6 +170,10 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '采用制作 Bible',
     en: 'Adopt production Bible',
   },
+  adopt_style_bible: {
+    zh: '采用视觉 Style Bible',
+    en: 'Adopt visual Style Bible',
+  },
   update_plan: {
     zh: '更新计划',
     en: 'Update plan',
@@ -274,7 +286,7 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   update_character_appearance_description: { zh: '更新角色外观描述', en: 'Update character appearance' },
   update_location_image_description: { zh: '更新场景图片描述', en: 'Update location image description' },
   get_project_config: { zh: '读取项目配置', en: 'Read project configuration' },
-  update_project_config: { zh: '更新项目配置', en: 'Update project configuration' },
+  update_project_config: { zh: '设置项目画幅', en: 'Set project aspect ratio' },
   get_project_assets: { zh: '查看项目资产', en: 'List project assets' },
   copy_asset_from_global: { zh: '复制全局资产', en: 'Copy global asset' },
   get_project_costs: { zh: '查看项目费用', en: 'Read project costs' },

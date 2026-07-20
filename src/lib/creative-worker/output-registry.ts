@@ -94,6 +94,8 @@ const styleBibleOutputSchema = z.object({
 const videoPromptSetOutputSchema = z.object({
   kind: z.literal('video_prompt_set'),
   overview: z.string().max(8_000),
+  aspectRatio: z.string().trim().min(1).max(40),
+  targetDurationSeconds: z.number().int().positive(),
   globalDirection: z.object({
     narrativeIntent: z.string().min(1).max(6_000),
     visualContinuity: z.string().min(1).max(6_000),

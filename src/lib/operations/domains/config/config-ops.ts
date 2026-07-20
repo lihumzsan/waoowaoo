@@ -48,8 +48,8 @@ const updateProjectConfigInputSchema = z.object({
   editModel: projectModelKeySchema.optional(),
   videoModel: projectModelKeySchema.optional(),
   musicModel: projectModelKeySchema.optional(),
-  videoRatio: z.string().trim().min(1).optional()
-    .describe('Project output aspect ratio, for example 16:9 or 9:16.'),
+  videoRatio: z.string().trim().min(1).nullable().optional()
+    .describe('Project output aspect ratio, for example 16:9 or 9:16, or null when the project has not decided one yet.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
 }).strict()
 
@@ -242,6 +242,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       id: 'get_project_config',
       summary: 'Get project model and capability override configuration (sanitized).',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,
@@ -305,8 +306,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
     update_project_config: defineOperation({
       id: 'update_project_config',
-      summary: 'Update project model keys and capability overrides.',
+      summary: 'Set or clear the project output aspect ratio. The Agent-facing tool exposes only videoRatio; model and provider configuration remains API-only.',
       intent: 'act',
+      channels: { tool: true, api: true },
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',
@@ -317,7 +319,20 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         externalSideEffects: false,
         longRunning: false,
       },
-      confirmation: { required: true },
+      confirmation: { kind: 'none', required: false },
+      toolInputSchema: {
+        type: 'object',
+        properties: {
+          videoRatio: {
+            anyOf: [
+              { type: 'string', minLength: 1, description: 'Exact project output aspect ratio such as 16:9 or 9:16.' },
+              { type: 'null' },
+            ],
+          },
+        },
+        required: ['videoRatio'],
+        additionalProperties: false,
+      },
       inputSchema: updateProjectConfigInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {

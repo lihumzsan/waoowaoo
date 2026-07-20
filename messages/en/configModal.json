@@ -6,6 +6,7 @@
   "visualSettings": "Visual Settings",
   "modelParams": "Model Parameters",
   "aspectRatio": "Aspect Ratio",
+  "notSet": "Not set",
   "loadingModels": "Loading model list...",
   "analysisModel": "Analysis Model",
   "characterModel": "Character Model",

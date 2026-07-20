@@ -170,7 +170,7 @@ export async function getProjectModelConfig(
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
-      videoRatio: projectData?.videoRatio || '9:16',
+      videoRatio: projectData?.videoRatio ?? null,
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
     }
@@ -188,7 +188,7 @@ export async function getProjectModelConfig(
     editModel: extractModelKey(projectData?.editModel) || extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
-    videoRatio: projectData?.videoRatio || '9:16',
+    videoRatio: projectData?.videoRatio ?? null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
   }

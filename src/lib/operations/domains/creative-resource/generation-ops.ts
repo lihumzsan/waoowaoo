@@ -13,7 +13,10 @@ import type {
   CreativeResourceInputRef,
   CreativeResourceMediaType,
 } from '@/lib/creative-resource/contracts'
-import { creativeResourceInputRefSchema } from '@/lib/creative-resource/generation-contract'
+import {
+  CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS,
+  creativeResourceInputRefSchema,
+} from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeResourceCandidateSetId,
   buildCreativeResourceOriginKey,
@@ -140,8 +143,8 @@ const createVideoInputSchema = z.object({
   ...commonMediaGenerationShape,
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video).optional()
     .describe('Professional meaning of the video Resource. Pass null to use generic.video.'),
-  durationSeconds: z.number().int().min(1).max(600).optional()
-    .describe('Requested video duration in seconds. Pass null to use the configured default.'),
+  durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
+    .describe('Exact duration for this one generated video segment. It must match a duration supported by the server-configured video model and cannot exceed the product ceiling of 15 seconds.'),
   aspectRatio: z.string().trim().min(1).optional()
     .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
@@ -485,14 +488,27 @@ async function resolveFrozenGenerationOptions(input: {
   assertCapabilityResolution(input.modelKey, resolved.issues, completedSelections)
 
   const frozen: Record<string, string | number | boolean> = { ...resolved.options }
-  const projectAspectRatio = projectConfig.videoRatio?.trim() || '9:16'
+  const requestedAspectRatio = input.config.mediaType === 'image'
+    ? (input.publicInput as CreateImageInput).aspectRatio?.trim()
+    : input.config.mediaType === 'video'
+      ? (input.publicInput as CreateVideoInput).aspectRatio?.trim()
+      : undefined
+  const projectAspectRatio = projectConfig.videoRatio?.trim() || null
+  const resolvedAspectRatio = requestedAspectRatio || projectAspectRatio
+  if ((input.config.mediaType === 'image' || input.config.mediaType === 'video') && !resolvedAspectRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      field: 'aspectRatio',
+      agentRetryableAfterCorrection: true,
+    })
+  }
   if (input.config.mediaType === 'image') {
     const publicInput = input.publicInput as CreateImageInput
-    frozen.aspectRatio = publicInput.aspectRatio ?? projectAspectRatio
+    frozen.aspectRatio = resolvedAspectRatio as string
     if (publicInput.size) frozen.size = publicInput.size
   } else if (input.config.mediaType === 'video') {
     const publicInput = input.publicInput as CreateVideoInput
-    frozen.aspectRatio = publicInput.aspectRatio ?? projectAspectRatio
+    frozen.aspectRatio = resolvedAspectRatio as string
     if (typeof publicInput.fps === 'number') frozen.fps = publicInput.fps
   } else {
     const publicInput = input.publicInput as CreateAudioInput
