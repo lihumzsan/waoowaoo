@@ -2043,6 +2043,30 @@ const AUDIO_TALKING_HEAD_TEXT_ARTIFACT_NEGATIVE_PROMPT = [
   'distorted text',
   'artifacts around text',
 ].join(', ')
+const KJ_NO_SUBTITLES_NEGATIVE_PROMPT = [
+  'subtitles',
+  'caption',
+  'captions',
+  'closed captions',
+  'burned-in text',
+  'bottom-center subtitle',
+  'white subtitle text',
+  'lower third',
+  'text overlay',
+  'on-screen text',
+  'readable text',
+  'dialogue text',
+  'speech text',
+  'Chinese characters',
+  'English letters',
+  'glyph-like marks',
+  'signage',
+  'watermark',
+  'logo',
+  'blurry text',
+  'distorted text',
+  'artifacts around text',
+].join(', ')
 const AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN =
   /^\s*(?:Panel continuity packet|Mode|Source text|Current shot action|Visible characters|Location lock|Shot\/camera lock|Props lock|Previous shot context|Next shot context|Dialogue lines|Target duration|Creator prompt intent|Hard constraints|Source-frame continuity lock|Allowed visible subjects|Forbidden additions)\s*:/i
 const AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN =
@@ -2840,6 +2864,40 @@ function applyAudioTalkingHeadTextArtifactNegativeConditioning(graph: ComfyUiWor
   }
 }
 
+function applyKjNoSubtitlesNegativeConditioning(graph: ComfyUiWorkflowGraph): void {
+  const promptRelayClipByNodeId = new Map<string, unknown>()
+
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node) || isPromptRelaySmartEncodeNode(node)) continue
+    if (!isConnectionValue(node.inputs.clip)) continue
+    promptRelayClipByNodeId.set(normalizeNodeId(nodeId), cloneConnectionValue(node.inputs.clip))
+  }
+
+  let convertedNodeCount = 0
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs) || !isConditioningZeroOutNode(node)) continue
+    const sourceNodeId = readConnectionNodeId(node.inputs.conditioning)
+    if (!sourceNodeId) continue
+    const clipConnection = promptRelayClipByNodeId.get(sourceNodeId)
+    if (!clipConnection) continue
+
+    node.class_type = 'CLIPTextEncode'
+    node.inputs = {
+      clip: cloneConnectionValue(clipConnection),
+      text: KJ_NO_SUBTITLES_NEGATIVE_PROMPT,
+    }
+    node._meta = {
+      ...(isRecord(node._meta) ? node._meta : {}),
+      title: 'KJ no-subtitles negative prompt',
+    }
+    convertedNodeCount += 1
+  }
+
+  if (promptRelayClipByNodeId.size === 0 || convertedNodeCount === 0) {
+    throw new Error('COMFYUI_LTX23_KJ_NO_SUBTITLE_CONDITIONING_INVALID')
+  }
+}
+
 function applyLtx23WorkflowProfileControls(
   graph: ComfyUiWorkflowGraph,
   workflowKey: string,
@@ -2883,6 +2941,7 @@ function applyLtx23WorkflowProfileControls(
     if (imageGuideNode && isRecord(imageGuideNode.inputs)) {
       imageGuideNode.inputs['num_images.strength_1'] = resolveLtx23KjImageGuideStrength(inject.motionStrength)
     }
+    applyKjNoSubtitlesNegativeConditioning(graph)
   }
 
   applyPromptRelayTimelineControls(graph, {

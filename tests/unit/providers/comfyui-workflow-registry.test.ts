@@ -681,10 +681,54 @@ describe('comfyui workflow registry', () => {
     expect(workflow['604']?.inputs.frame_rate).toBe(25)
     expect(workflow['620']?.inputs['num_images.strength_1']).toBe(0.85)
 
+    const negativeNode = workflow['420']
+    const negativeText = String(negativeNode?.inputs.text ?? '')
+    expect(negativeNode?.class_type).toBe('CLIPTextEncode')
+    expect(negativeNode?.inputs.clip).toEqual(['416', 0])
+    expect(negativeNode?._meta?.title).toBe('KJ no-subtitles negative prompt')
+    expect(negativeText.toLowerCase()).toContain('subtitle')
+    expect(negativeText.toLowerCase()).toContain('caption')
+    expect(negativeText.toLowerCase()).toContain('burned-in text')
+    expect(negativeText.toLowerCase()).toContain('lower third')
+    expect(negativeText).toContain('Chinese characters')
+    expect(negativeText).toContain('English letters')
+    expect(negativeText.toLowerCase()).toContain('watermark')
+    expect(workflow['164']?.inputs.negative).toEqual(['420', 0])
+
     const classTypes = Object.values(workflow).map((node) => node.class_type)
+    expect(classTypes).not.toContain('ConditioningZeroOut')
     expect(classTypes).not.toContain('RH_CODEX_NODE')
     expect(classTypes).not.toContain('RegexExtract')
     expect(classTypes).not.toContain('PreviewAny')
+  })
+
+  it('rejects a malformed KJ no-subtitles conditioning contract', () => {
+    writeExternalWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      '416': { class_type: 'CLIPLoader', inputs: {} },
+      '605': {
+        class_type: 'PromptRelayEncode',
+        inputs: {
+          clip: ['416', 0],
+          global_prompt: '',
+          local_prompts: '',
+          segment_lengths: '',
+        },
+      },
+      '420': {
+        class_type: 'ConditioningZeroOut',
+        inputs: { conditioning: ['999', 0] },
+      },
+      '164': {
+        class_type: 'LTXVConditioning',
+        inputs: { positive: ['605', 1], negative: ['420', 0], frame_rate: 25 },
+      },
+    })
+
+    expect(() => resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+      imageFilenames: ['source.png'],
+      targetFrameCount: 225,
+    })).toThrow('COMFYUI_LTX23_KJ_NO_SUBTITLE_CONDITIONING_INVALID')
   })
 
   it.each([
