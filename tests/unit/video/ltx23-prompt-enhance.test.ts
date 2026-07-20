@@ -645,6 +645,24 @@ describe('ltx23 video prompt enhance', () => {
       fps: 25,
       motionStrength: 2,
       generationMode: 'normal',
+      continuity: {
+        panelId: 'panel-kj-dialogue',
+        panelIndex: 0,
+        sourceText: 'Hello Chen Ji',
+        currentAction: 'The doctor faces forward and raises one hand while speaking.',
+        location: 'office',
+        shotType: 'frontal medium close-up',
+        cameraMove: 'locked camera',
+        sceneType: 'dialogue',
+        characters: [{ name: 'Doctor', appearance: 'white coat', slot: 'behind desk' }],
+        props: 'desk',
+        previous: null,
+        next: null,
+        dialogueLines: [],
+        targetDurationSeconds: 9,
+        allowedActions: ['lip movement', 'raise one hand'],
+        forbiddenAdditions: ['new people', 'subtitles'],
+      },
     })
 
     const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string

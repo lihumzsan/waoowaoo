@@ -56,6 +56,8 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     const result = sanitizeLtx23KjNoSubtitlesPrompt([
       'Subtitle/dialogue in panel: Hello Chen Ji',
       'Dialogue lines: 1. Doctor: I need to ask you some questions',
+      'Source text: Hello Chen Ji',
+      'Creator prompt intent: Doctor: Hello Chen Ji',
       'GLOBAL: The same doctor remains seated behind the desk.',
       'LOCAL 1: The doctor faces forward and speaks calmly.',
       'LOCAL 2: The doctor mouths Hello Chen Ji while raising one hand.',
@@ -73,6 +75,7 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     expect(result).not.toContain('Hello Chen Ji')
     expect(result).not.toContain('I need to ask you some questions')
     expect(result).not.toMatch(/Subtitle\/dialogue in panel|Dialogue lines:/i)
+    expect(result).not.toMatch(/Source text:\s*Hello|Creator prompt intent:.*Hello/i)
   })
 
   it('removes quote-before-speaker dialogue while preserving the speaker action', () => {

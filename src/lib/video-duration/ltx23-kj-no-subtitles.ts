@@ -15,6 +15,7 @@ const CHINESE_TEXT_ARTIFACT_PROHIBITION_PATTERN = /(?:不要|不得|禁止|避�
 const ENGLISH_TEXT_ARTIFACT_PROHIBITION_PATTERN = /\b(?:do\s+not|don't|never|avoid|without)\b[^.!?;\r\n]*(?:subtitles?|captions?|closed\s+captions?|burned-in\s+text|text\s+overlays?|readable\s+text|watermarks?|Chinese\s+characters?|English\s+letters?|dialogue\s+text|speech\s+text)[^.!?;\r\n]*[.!?;]?/giu
 
 const DIALOGUE_METADATA_LINE_PATTERN = /^\s*(?:subtitle\s*\/\s*dialogue\s+in\s+panel|dialogue\s+lines?)\s*:/iu
+const KNOWN_DIALOGUE_CONTEXT_LINE_PATTERN = /^(\s*(?:source\s+text|creator\s+prompt\s+intent)\s*:\s*)(.*)$/iu
 
 const VISIBLE_SPEAKING_REPLACEMENT =
   'Visible speaking action is present; describe only rhythmic lip and mouth movement, expression, gaze, gesture, posture, and timing.'
@@ -54,10 +55,44 @@ function redactKnownDialogue(value: string, knownDialogue: readonly string[]): s
   }, value)
 }
 
-function redactDialogueMetadataLines(value: string): string {
+function redactKnownDialogueFromContextValue(
+  value: string,
+  knownDialogue: readonly string[],
+): string {
+  return knownDialogue.reduce((result, dialogue) => {
+    const trimmed = dialogue.trim().replace(/\s+/gu, ' ')
+    if (!trimmed) return result
+    const isSingleHanCharacter = /^\p{Script=Han}$/u.test(trimmed)
+    if (isSingleHanCharacter) {
+      const comparable = result
+        .replace(/^.{1,40}[：:]/u, '')
+        .replace(/^[\s"“「『]+|[\s"”」』.,，。!?！？]+$/gu, '')
+      return comparable === trimmed ? '' : result
+    }
+
+    const literalPattern = trimmed
+      .split(/\s+/u)
+      .map((part) => escapeRegExp(part))
+      .join('\\s+')
+    return result.replace(
+      new RegExp(`(^|[^\\p{L}\\p{N}_])${literalPattern}(?=$|[^\\p{L}\\p{N}_])`, 'giu'),
+      '$1',
+    )
+  }, value)
+}
+
+function redactDialogueMetadataLines(value: string, knownDialogue: readonly string[]): string {
   return value
     .split(/\r?\n/u)
-    .map((line) => DIALOGUE_METADATA_LINE_PATTERN.test(line) ? VISIBLE_SPEAKING_REPLACEMENT : line)
+    .map((line) => {
+      if (DIALOGUE_METADATA_LINE_PATTERN.test(line)) return VISIBLE_SPEAKING_REPLACEMENT
+      const contextMatch = line.match(KNOWN_DIALOGUE_CONTEXT_LINE_PATTERN)
+      if (!contextMatch) return line
+      const redactedValue = redactKnownDialogueFromContextValue(contextMatch[2] ?? '', knownDialogue)
+        .replace(/\s+/gu, ' ')
+        .trim()
+      return redactedValue ? `${contextMatch[1]}${redactedValue}` : VISIBLE_SPEAKING_REPLACEMENT
+    })
     .join('\n')
 }
 
@@ -93,7 +128,7 @@ export function sanitizeLtx23KjNoSubtitlesPrompt(
       (_match, verb: string) => `${verb} naturally with rhythmic lip movement`,
     )
 
-  const sanitized = redactKnownDialogue(redactDialogueMetadataLines(performanceOnly), knownDialogue)
+  const sanitized = redactKnownDialogue(redactDialogueMetadataLines(performanceOnly, knownDialogue), knownDialogue)
     .replace(ENGLISH_EXACT_TRANSCRIPT_PATTERN, '')
     .replace(
       CHINESE_LITERAL_SPEECH_PATTERN,
