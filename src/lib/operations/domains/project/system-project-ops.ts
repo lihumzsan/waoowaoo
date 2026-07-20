@@ -234,6 +234,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
             name: normalized.name.trim(),
             description: normalized.description?.trim() || null,
             userId: ctx.userId,
+            videoRatio: null,
             ...(platformDefaults && {
               analysisModel: platformDefaults.analysisModel,
               characterModel: platformDefaults.characterModel,
