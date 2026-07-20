@@ -2865,36 +2865,45 @@ function applyAudioTalkingHeadTextArtifactNegativeConditioning(graph: ComfyUiWor
 }
 
 function applyKjNoSubtitlesNegativeConditioning(graph: ComfyUiWorkflowGraph): void {
-  const promptRelayClipByNodeId = new Map<string, unknown>()
+  const promptRelayNode = graph['605']
+  const zeroOutNode = graph['420']
+  const ltxConditioningNode = graph['164']
+  const hasExpectedContract = Boolean(
+    promptRelayNode
+    && isRecord(promptRelayNode.inputs)
+    && normalizeUiDecorationNodeType(promptRelayNode.class_type) === 'promptrelayencode'
+    && isConnectionValue(promptRelayNode.inputs.clip)
+    && normalizeNodeId(promptRelayNode.inputs.clip[0]) === '416'
+    && Number(promptRelayNode.inputs.clip[1]) === 0
+    && zeroOutNode
+    && isRecord(zeroOutNode.inputs)
+    && isConditioningZeroOutNode(zeroOutNode)
+    && isConnectionValue(zeroOutNode.inputs.conditioning)
+    && normalizeNodeId(zeroOutNode.inputs.conditioning[0]) === '605'
+    && Number(zeroOutNode.inputs.conditioning[1]) === 1
+    && ltxConditioningNode
+    && isRecord(ltxConditioningNode.inputs)
+    && normalizeUiDecorationNodeType(ltxConditioningNode.class_type) === 'ltxvconditioning'
+    && isConnectionValue(ltxConditioningNode.inputs.positive)
+    && normalizeNodeId(ltxConditioningNode.inputs.positive[0]) === '605'
+    && Number(ltxConditioningNode.inputs.positive[1]) === 1
+    && isConnectionValue(ltxConditioningNode.inputs.negative)
+    && normalizeNodeId(ltxConditioningNode.inputs.negative[0]) === '420'
+    && Number(ltxConditioningNode.inputs.negative[1]) === 0
+  )
 
-  for (const [nodeId, node] of Object.entries(graph)) {
-    if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node) || isPromptRelaySmartEncodeNode(node)) continue
-    if (!isConnectionValue(node.inputs.clip)) continue
-    promptRelayClipByNodeId.set(normalizeNodeId(nodeId), cloneConnectionValue(node.inputs.clip))
-  }
-
-  let convertedNodeCount = 0
-  for (const node of Object.values(graph)) {
-    if (!isRecord(node.inputs) || !isConditioningZeroOutNode(node)) continue
-    const sourceNodeId = readConnectionNodeId(node.inputs.conditioning)
-    if (!sourceNodeId) continue
-    const clipConnection = promptRelayClipByNodeId.get(sourceNodeId)
-    if (!clipConnection) continue
-
-    node.class_type = 'CLIPTextEncode'
-    node.inputs = {
-      clip: cloneConnectionValue(clipConnection),
-      text: KJ_NO_SUBTITLES_NEGATIVE_PROMPT,
-    }
-    node._meta = {
-      ...(isRecord(node._meta) ? node._meta : {}),
-      title: 'KJ no-subtitles negative prompt',
-    }
-    convertedNodeCount += 1
-  }
-
-  if (promptRelayClipByNodeId.size === 0 || convertedNodeCount === 0) {
+  if (!hasExpectedContract || !promptRelayNode || !isRecord(promptRelayNode.inputs) || !zeroOutNode) {
     throw new Error('COMFYUI_LTX23_KJ_NO_SUBTITLE_CONDITIONING_INVALID')
+  }
+
+  zeroOutNode.class_type = 'CLIPTextEncode'
+  zeroOutNode.inputs = {
+    clip: cloneConnectionValue(promptRelayNode.inputs.clip),
+    text: KJ_NO_SUBTITLES_NEGATIVE_PROMPT,
+  }
+  zeroOutNode._meta = {
+    ...(isRecord(zeroOutNode._meta) ? zeroOutNode._meta : {}),
+    title: 'KJ no-subtitles negative prompt',
   }
 }
 

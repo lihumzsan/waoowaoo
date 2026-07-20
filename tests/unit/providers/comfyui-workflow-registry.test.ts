@@ -716,11 +716,19 @@ describe('comfyui workflow registry', () => {
       },
       '420': {
         class_type: 'ConditioningZeroOut',
-        inputs: { conditioning: ['999', 0] },
+        inputs: { conditioning: ['605', 1] },
       },
       '164': {
         class_type: 'LTXVConditioning',
-        inputs: { positive: ['605', 1], negative: ['420', 0], frame_rate: 25 },
+        inputs: { positive: ['605', 1], negative: ['701', 0], frame_rate: 25 },
+      },
+      '700': {
+        class_type: 'PromptRelayEncode',
+        inputs: { clip: ['416', 0] },
+      },
+      '701': {
+        class_type: 'ConditioningZeroOut',
+        inputs: { conditioning: ['700', 1] },
       },
     })
 

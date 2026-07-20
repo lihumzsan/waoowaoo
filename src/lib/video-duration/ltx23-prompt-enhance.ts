@@ -818,7 +818,20 @@ function buildLtx23DialogueConstraint(input: EnhanceLtx23VideoPromptInput): stri
     return buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
   }
   if (!Array.isArray(input.linkedVoiceLines) || input.linkedVoiceLines.length === 0) return ''
-  return 'The visible speaker performs natural speech with rhythmic lip and mouth movement, facial expression, gaze, gesture, and posture matched to the action timing.'
+  return 'The visible speaker performs natural speech with rhythmic lip movement and mouth movement, facial expression, gaze, gesture, and posture matched to the action timing.'
+}
+
+function collectKjKnownDialogue(input: EnhanceLtx23VideoPromptInput): string[] {
+  return [
+    input.panel.srtSegment,
+    ...(input.linkedVoiceLines ?? []).map((line) => line.content),
+  ]
+    .map((value) => readTrimmedString(value))
+    .filter(Boolean)
+}
+
+function sanitizeKjPrompt(value: string, input: EnhanceLtx23VideoPromptInput): string {
+  return sanitizeLtx23KjNoSubtitlesPrompt(value, collectKjKnownDialogue(input))
 }
 
 function appendDialogueConstraint(basePrompt: string, constraint: string, locale: Locale): string {
@@ -864,7 +877,7 @@ function appendLtx23SafetyConstraints(
   const visualConstraint = buildVisualContinuityConstraint(input, promptPolicy)
   const constrainedPrompt = appendDialogueConstraint(withDialogue, visualConstraint, 'en')
   return isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
-    ? sanitizeLtx23KjNoSubtitlesPrompt(constrainedPrompt)
+    ? sanitizeKjPrompt(constrainedPrompt, input)
     : constrainedPrompt
 }
 
@@ -980,7 +993,7 @@ function buildLtx23FallbackPrompt(
   if (isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) {
     const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
     const safeOriginalPrompt = sanitizeKjPromptRelayReservedSyntax(
-      sanitizeLtx23KjNoSubtitlesPrompt(originalPrompt),
+      sanitizeKjPrompt(originalPrompt, input),
     )
     const localSections = Array.from({ length: segmentCount }, (_, index) => {
       if (index === 0) {
@@ -1075,10 +1088,10 @@ export async function enhanceLtx23VideoPrompt(
       locale: input.locale,
       variables: {
         original_prompt: isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
-          ? sanitizeLtx23KjNoSubtitlesPrompt(originalPrompt)
+          ? sanitizeKjPrompt(originalPrompt, input)
           : originalPrompt,
         panel_context: isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
-          ? sanitizeLtx23KjNoSubtitlesPrompt(buildPanelContextText(input))
+          ? sanitizeKjPrompt(buildPanelContextText(input), input)
           : buildPanelContextText(input),
         character_context: buildCharacterContextText(characters),
         audio_context: buildAudioContextText(

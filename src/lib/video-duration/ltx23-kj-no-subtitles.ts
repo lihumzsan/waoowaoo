@@ -2,11 +2,41 @@ const CHINESE_LITERAL_SPEECH_PATTERN = /(说(?:道|着|出)?|开口(?:说(?:道|
 
 const ENGLISH_LITERAL_SPEECH_PATTERN = /\b(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?)(\s+(?:softly|quietly|calmly|aloud))?\s*[,：:]?\s*["“]([^"”\r\n]+)["”]/giu
 
+const ENGLISH_EMPTY_SPEECH_PATTERN = /\b(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?)(\s+(?:softly|quietly|calmly|aloud))?\s*[,：:]?\s*["“]\s*["”]/giu
+
+const ENGLISH_QUOTE_BEFORE_SPEAKER_PATTERN = /["“][^"”\r\n]+["”][,，]?\s+((?:the\s+)?[a-z][a-z' -]{0,40}\s+)?(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?)\b/giu
+
+const ENGLISH_UNQUOTED_MOUTHING_PATTERN = /\b(mouths|lip[-\s]?syncs?)(?:\s+the\s+words?)?\s+.+?(?=\s+(?:while|and)\b|[,，。.!?；;\r\n]|$)/giu
+
 const ENGLISH_EXACT_TRANSCRIPT_PATTERN = /\b(?:the\s+)?(?:spoken\s+dialogue|spoken\s+words?|exact\s+transcript)\s+must\s+[^.!?\r\n]*(?:["“][^"”\r\n]+["”])[^.!?\r\n]*[.!?]?/giu
 
 const CHINESE_TEXT_ARTIFACT_PROHIBITION_PATTERN = /(?:不要|不得|禁止|避免|切勿)[^。；;\r\n]*(?:字幕|标题|文字叠加|文本叠加|可读文字|可读文本|水印|中文字符|英文字符|对白文字|台词文字)[^。；;\r\n]*[。；;]?/gu
 
 const ENGLISH_TEXT_ARTIFACT_PROHIBITION_PATTERN = /\b(?:do\s+not|don't|never|avoid|without)\b[^.!?;\r\n]*(?:subtitles?|captions?|closed\s+captions?|burned-in\s+text|text\s+overlays?|readable\s+text|watermarks?|Chinese\s+characters?|English\s+letters?|dialogue\s+text|speech\s+text)[^.!?;\r\n]*[.!?;]?/giu
+
+const DIALOGUE_METADATA_LINE_PATTERN = /^\s*(?:subtitle\s*\/\s*dialogue\s+in\s+panel|dialogue\s+lines?)\s*:/iu
+
+const VISIBLE_SPEAKING_REPLACEMENT =
+  'Visible speaking action is present; describe only rhythmic lip and mouth movement, expression, gaze, gesture, posture, and timing.'
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
+function redactKnownDialogue(value: string, knownDialogue: readonly string[]): string {
+  return knownDialogue.reduce((result, dialogue) => {
+    const trimmed = dialogue.trim().replace(/\s+/gu, ' ')
+    if (!trimmed) return result
+    return result.replace(new RegExp(escapeRegExp(trimmed), 'giu'), '')
+  }, value)
+}
+
+function redactDialogueMetadataLines(value: string): string {
+  return value
+    .split(/\r?\n/u)
+    .map((line) => DIALOGUE_METADATA_LINE_PATTERN.test(line) ? VISIBLE_SPEAKING_REPLACEMENT : line)
+    .join('\n')
+}
 
 function normalizeSanitizedPrompt(value: string): string {
   return value
@@ -24,8 +54,23 @@ function normalizeSanitizedPrompt(value: string): string {
  * Keeps PromptRelay timing and visible acting directions while removing text
  * that can encourage KJ LTX2.3 to render dialogue or subtitle-like glyphs.
  */
-export function sanitizeLtx23KjNoSubtitlesPrompt(value: string): string {
-  const sanitized = value
+export function sanitizeLtx23KjNoSubtitlesPrompt(
+  value: string,
+  knownDialogue: readonly string[] = [],
+): string {
+  const performanceOnly = value
+    .replace(
+      ENGLISH_QUOTE_BEFORE_SPEAKER_PATTERN,
+      (_match, subject: string | undefined, verb: string) => (
+        `${subject ?? ''}${verb} naturally with rhythmic lip movement`
+      ),
+    )
+    .replace(
+      ENGLISH_UNQUOTED_MOUTHING_PATTERN,
+      (_match, verb: string) => `${verb} naturally with rhythmic lip movement`,
+    )
+
+  const sanitized = redactKnownDialogue(redactDialogueMetadataLines(performanceOnly), knownDialogue)
     .replace(ENGLISH_EXACT_TRANSCRIPT_PATTERN, '')
     .replace(
       CHINESE_LITERAL_SPEECH_PATTERN,
@@ -37,8 +82,15 @@ export function sanitizeLtx23KjNoSubtitlesPrompt(value: string): string {
         `${verb}${modifier ?? ''} naturally with rhythmic lip movement`
       ),
     )
+    .replace(
+      ENGLISH_EMPTY_SPEECH_PATTERN,
+      (_match, verb: string, modifier: string | undefined) => (
+        `${verb}${modifier ?? ''} naturally with rhythmic lip movement`
+      ),
+    )
     .replace(CHINESE_TEXT_ARTIFACT_PROHIBITION_PATTERN, '')
     .replace(ENGLISH_TEXT_ARTIFACT_PROHIBITION_PATTERN, '')
+    .replace(/["“]\s*["”]/gu, '')
 
   return normalizeSanitizedPrompt(sanitized)
 }

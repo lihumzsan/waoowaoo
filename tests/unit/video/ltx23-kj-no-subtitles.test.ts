@@ -52,6 +52,40 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     expect(result).not.toMatch(/spoken dialogue must match exactly/i)
   })
 
+  it('redacts unquoted dialogue metadata and known transcript fragments', () => {
+    const result = sanitizeLtx23KjNoSubtitlesPrompt([
+      'Subtitle/dialogue in panel: Hello Chen Ji',
+      'Dialogue lines: 1. Doctor: I need to ask you some questions',
+      'GLOBAL: The same doctor remains seated behind the desk.',
+      'LOCAL 1: The doctor faces forward and speaks calmly.',
+      'LOCAL 2: The doctor mouths Hello Chen Ji while raising one hand.',
+      'LOCAL 3: The doctor settles.',
+      'LENGTHS: 45, 105, 75',
+    ].join('\n'), [
+      'Hello Chen Ji',
+      'I need to ask you some questions',
+    ])
+
+    expect(result).toContain('GLOBAL:')
+    expect(result).toContain('LOCAL 3:')
+    expect(result).toContain('raising one hand')
+    expect(result).toMatch(/mouth|lip/i)
+    expect(result).not.toContain('Hello Chen Ji')
+    expect(result).not.toContain('I need to ask you some questions')
+    expect(result).not.toMatch(/Subtitle\/dialogue in panel|Dialogue lines:/i)
+  })
+
+  it('removes quote-before-speaker dialogue while preserving the speaker action', () => {
+    const result = sanitizeLtx23KjNoSubtitlesPrompt(
+      'LOCAL 1: “Do not look back,” the doctor whispers while pointing toward the door.',
+    )
+
+    expect(result).toContain('the doctor whispers')
+    expect(result).toMatch(/lip movement/i)
+    expect(result).toContain('pointing toward the door')
+    expect(result).not.toContain('Do not look back')
+  })
+
   it('removes positive text-artifact prohibition clauses without deleting adjacent action', () => {
     const result = sanitizeLtx23KjNoSubtitlesPrompt([
       'GLOBAL: The same young man remains beside the glowing table.',

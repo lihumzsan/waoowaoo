@@ -633,7 +633,11 @@ describe('ltx23 video prompt enhance', () => {
       projectId: 'project-1',
       modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
       originalPrompt: 'doctor faces forward and says "Hello Chen Ji" while raising one hand',
-      panel: { description: 'doctor faces forward and speaks', characters: 'Doctor' },
+      panel: {
+        description: 'doctor faces forward and speaks',
+        characters: 'Doctor',
+        srtSegment: 'Hello Chen Ji',
+      },
       linkedVoiceLines: [
         { id: 'line-1', speaker: 'Doctor', content: 'Hello Chen Ji' },
       ],
