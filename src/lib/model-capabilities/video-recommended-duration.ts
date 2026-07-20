@@ -1,6 +1,7 @@
 import type { CapabilityValue } from '@/lib/model-config-contract'
 import type { EffectiveVideoCapabilityDefinition } from '@/lib/model-capabilities/video-effective'
 import { isSeedance2BerniniWorkflowKey } from '@/lib/providers/comfyui/seedance2-bernini-workflow'
+import { isComfyUiLtx23KjPromptRelayWorkflow } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 interface RecommendedVideoDurationInput {
   modelKey: string
@@ -11,6 +12,11 @@ export function normalizeRecommendedVideoDuration(value: unknown): number | null
   const parsed = typeof value === 'string' && value.trim() ? Number(value) : value
   if (typeof parsed !== 'number' || !Number.isFinite(parsed) || parsed <= 0) return null
   return Number(parsed.toFixed(2))
+}
+
+export function supportsRecommendedVideoDuration(modelKey: string): boolean {
+  return isSeedance2BerniniWorkflowKey(modelKey)
+    || isComfyUiLtx23KjPromptRelayWorkflow(modelKey)
 }
 
 export function resolveBerniniCapabilityValidationDuration(
@@ -36,7 +42,7 @@ export function withRecommendedVideoDuration(
   input: RecommendedVideoDurationInput,
 ): EffectiveVideoCapabilityDefinition[] {
   const recommended = normalizeRecommendedVideoDuration(input.recommendedDuration)
-  if (recommended === null || !isSeedance2BerniniWorkflowKey(input.modelKey)) return definitions
+  if (recommended === null || !supportsRecommendedVideoDuration(input.modelKey)) return definitions
 
   return definitions.map((definition) => definition.field === 'duration'
     ? {
@@ -51,6 +57,6 @@ export function applyRecommendedVideoDurationSelection(
   input: RecommendedVideoDurationInput,
 ): Record<string, CapabilityValue> {
   const recommended = normalizeRecommendedVideoDuration(input.recommendedDuration)
-  if (recommended === null || !isSeedance2BerniniWorkflowKey(input.modelKey)) return selection
+  if (recommended === null || !supportsRecommendedVideoDuration(input.modelKey)) return selection
   return { ...selection, duration: recommended }
 }

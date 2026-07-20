@@ -658,6 +658,7 @@ describe('comfyui workflow registry', () => {
       fps: 25,
       durationSeconds: 12,
       targetFrameCount: 300,
+      motionStrength: 2,
     })
 
     const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelayEncode')
@@ -678,11 +679,29 @@ describe('comfyui workflow registry', () => {
     })
     expect(workflow['604']?.class_type).toBe('VHS_VideoCombine')
     expect(workflow['604']?.inputs.frame_rate).toBe(25)
+    expect(workflow['620']?.inputs['num_images.strength_1']).toBe(0.85)
 
     const classTypes = Object.values(workflow).map((node) => node.class_type)
     expect(classTypes).not.toContain('RH_CODEX_NODE')
     expect(classTypes).not.toContain('RegexExtract')
     expect(classTypes).not.toContain('PreviewAny')
+  })
+
+  it.each([
+    [undefined, 1],
+    [1, 1],
+    [2, 0.85],
+    [3, 0.7],
+    [99, 1],
+  ])('maps KJ motion strength %s to image-guide strength %s', (motionStrength, expectedGuideStrength) => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+      imageFilenames: ['source.png'],
+      targetFrameCount: 100,
+      ...(motionStrength === undefined ? {} : { motionStrength }),
+    })
+
+    expect(workflow['620']?.inputs['num_images.strength_1']).toBe(expectedGuideStrength)
   })
 
   it('normalizes KJ multi-shot LENGTHS to the requested frame count and falls back on invalid counts', () => {
@@ -699,6 +718,15 @@ describe('comfyui workflow registry', () => {
       targetFrameCount: 100,
     })
     expect(getPromptRelayNodes(invalid)[0]?.inputs.segment_lengths).toBe('34, 33, 33')
+
+    const codexStagesWithoutLengths = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 6,
+      targetFrameCount: 150,
+    })
+    expect(getPromptRelayNodes(codexStagesWithoutLengths)[0]?.inputs.segment_lengths).toBe('50, 50, 50')
   })
 
   it('keeps KJ LENGTHS when project safety constraints follow the structured prompt', () => {

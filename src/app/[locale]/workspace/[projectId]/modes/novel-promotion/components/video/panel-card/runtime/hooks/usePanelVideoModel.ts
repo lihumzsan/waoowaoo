@@ -12,9 +12,9 @@ import { retainEqualJsonState } from './video-state-sync'
 import {
   applyRecommendedVideoDurationSelection,
   normalizeRecommendedVideoDuration,
+  supportsRecommendedVideoDuration,
   withRecommendedVideoDuration,
 } from '@/lib/model-capabilities/video-recommended-duration'
-import { isSeedance2BerniniWorkflowKey } from '@/lib/providers/comfyui/seedance2-bernini-workflow'
 
 interface UsePanelVideoModelParams {
   defaultVideoModel: string
@@ -121,7 +121,7 @@ export function usePanelVideoModel({
 
   const recommendedDurationSeconds = normalizeRecommendedVideoDuration(recommendedDuration)
   const usesRecommendedDuration = recommendedDurationSeconds !== null
-    && isSeedance2BerniniWorkflowKey(selectedModel)
+    && supportsRecommendedVideoDuration(selectedModel)
   const capabilityDefinitions = useMemo(
     () => withRecommendedVideoDuration(
       resolveEffectiveVideoCapabilityDefinitions({

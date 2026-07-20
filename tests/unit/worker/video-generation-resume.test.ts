@@ -350,6 +350,59 @@ describe('worker utils video generation resume', () => {
     )
   })
 
+  it('proxies an exact KJ duration above presets only during worker capability validation', async () => {
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
+      runtimeSelections?: Record<string, unknown>
+    }) => {
+      expect(input.runtimeSelections).toEqual(expect.objectContaining({
+        duration: 20,
+        fps: 25,
+        generationMode: 'normal',
+        motionStrength: 1,
+        resolution: '720p',
+      }))
+      return {
+        duration: 20,
+        fps: 25,
+        generationMode: 'normal',
+        motionStrength: 1,
+        resolution: '720p',
+      }
+    })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/ltx23-kj-21s.mp4',
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      imageUrl: 'data:image/png;base64,QQ==',
+      allowCustomDuration: true,
+      options: {
+        prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+        duration: 21,
+        fps: 25,
+        generationMode: 'normal',
+        motionStrength: 1,
+        resolution: '720p',
+      },
+    })
+
+    expect(result).toEqual({ url: 'https://comfy.test/ltx23-kj-21s.mp4' })
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      'data:image/png;base64,QQ==',
+      expect.objectContaining({
+        duration: 21,
+        fps: 25,
+        motionStrength: 1,
+        resolution: '720p',
+      }),
+    )
+  })
+
   it('normalizes relative signed reference audio URLs before provider submission', async () => {
     generatorApiMock.generateVideo.mockResolvedValueOnce({
       success: true,

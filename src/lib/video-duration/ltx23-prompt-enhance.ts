@@ -6,9 +6,16 @@ import { safeParseJsonObject } from '@/lib/json-repair'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { prisma } from '@/lib/prisma'
 import type { PanelContinuityPacket } from '@/lib/novel-promotion/panel-continuity'
-import { getLtx23WorkflowProfile, type Ltx23PromptPolicy } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import {
+  getLtx23WorkflowProfile,
+  isComfyUiLtx23KjPromptRelayWorkflow,
+  normalizeLtx23KjMotionStrength,
+  resolveLtx23KjMotionStrengthLabel,
+  type Ltx23PromptPolicy,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import type { ResolvedAudioDrivenVideoTiming } from '@/lib/video-duration/audio-binding'
 import { parseProfileData } from '@/types/character-profile'
+import { splitPromptRelayLocalSegments } from '@/lib/providers/comfyui/workflow-registry'
 
 export interface Ltx23PromptEnhancementVoiceLine {
   id: string
@@ -41,6 +48,7 @@ export interface EnhanceLtx23VideoPromptInput {
   linkedVoiceLines?: Ltx23PromptEnhancementVoiceLine[] | null
   durationSeconds?: number | null
   fps?: number | null
+  motionStrength?: number | null
   audioTiming?: ResolvedAudioDrivenVideoTiming | null
   generationMode?: 'normal' | 'firstlastframe'
   artStyle?: string | null
@@ -483,6 +491,39 @@ function buildAudioContextText(
     : `${header}\nVoice lines:\n${lineSummary}`
 }
 
+function resolveKjPromptRelaySegmentCount(durationSeconds: number | null | undefined): number {
+  if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return 3
+  return durationSeconds <= 10 ? 3 : durationSeconds <= 16 ? 4 : 5
+}
+
+function buildKjPromptRelayTimingLines(input: EnhanceLtx23VideoPromptInput): string[] {
+  if (!isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) return []
+  if (typeof input.durationSeconds !== 'number' || !Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) return []
+  if (typeof input.fps !== 'number' || !Number.isFinite(input.fps) || input.fps <= 0) return []
+
+  const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
+  const totalFrames = Math.max(segmentCount, Math.round(input.durationSeconds * input.fps))
+  const baseLength = Math.floor(totalFrames / segmentCount)
+  let remainder = totalFrames - (baseLength * segmentCount)
+  let startFrame = 0
+  const timingLines = Array.from({ length: segmentCount }, (_, index) => {
+    const length = baseLength + (remainder > 0 ? 1 : 0)
+    remainder -= 1
+    const endFrame = startFrame + length
+    const startSeconds = startFrame / input.fps!
+    const endSeconds = endFrame / input.fps!
+    const line = `LOCAL ${index + 1} timing: frames ${startFrame}-${endFrame}, ${startSeconds.toFixed(2)}-${endSeconds.toFixed(2)} seconds.`
+    startFrame = endFrame
+    return line
+  })
+
+  return [
+    `Use exactly ${segmentCount} numbered LOCAL sections for this request.`,
+    'Write each LOCAL section only for its assigned interval:',
+    ...timingLines,
+  ]
+}
+
 function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string {
   const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
   const cameraPolicyLines = buildCameraPolicyLines(promptPolicy, input.originalPrompt)
@@ -498,6 +539,13 @@ function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string
         `Keep ${input.audioTiming.preRollSeconds.toFixed(2)} seconds for visual/emotional setup before speech and ${input.audioTiming.postRollSeconds.toFixed(2)} seconds for aftertaste after speech.`,
       ]
     : []
+  const motionStrengthLine = isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+    ? (() => {
+        const motionStrength = normalizeLtx23KjMotionStrength(input.motionStrength)
+        return `Motion strength: ${motionStrength} (${resolveLtx23KjMotionStrengthLabel(motionStrength)}). Keep every LOCAL stage consistent with this motion level.`
+      })()
+    : ''
+  const promptRelayTimingLines = buildKjPromptRelayTimingLines(input)
 
   const lines = [
     'Target model: ComfyUI LTX2.3 image-to-video.',
@@ -515,6 +563,8 @@ function buildGenerationContextText(input: EnhanceLtx23VideoPromptInput): string
     typeof input.fps === 'number' && Number.isFinite(input.fps) && input.fps > 0
       ? `Frame rate: ${Math.round(input.fps)} fps.`
       : '',
+    ...promptRelayTimingLines,
+    motionStrengthLine,
     ...timingLines,
   ].filter(Boolean)
 
@@ -576,10 +626,30 @@ function countNumberedLocalSections(prompt: string): number {
   return Array.from(prompt.matchAll(PROMPT_RELAY_NUMBERED_LOCAL_MARKER_PATTERN)).length
 }
 
-function hasRequiredPromptRelayStructure(prompt: string, policy: Ltx23PromptPolicy): boolean {
+function readNumberedLocalSectionNumbers(prompt: string): number[] {
+  return Array.from(prompt.matchAll(/\bLOCAL\s+(\d+)\s*[:\uFF1A]/gi))
+    .map((match) => Number(match[1]))
+}
+
+function hasRequiredPromptRelayStructure(
+  prompt: string,
+  policy: Ltx23PromptPolicy,
+  input: EnhanceLtx23VideoPromptInput,
+): boolean {
   if (!ltx23PromptPolicyRequiresStructuredOutput(policy)) return true
   if (!PROMPT_RELAY_GLOBAL_MARKER_PATTERN.test(prompt)) return false
   if (!PROMPT_RELAY_LOCAL_MARKER_PATTERN.test(prompt)) return false
+
+  if (isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) {
+    const expectedCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
+    const sectionNumbers = readNumberedLocalSectionNumbers(prompt)
+    const relaySegments = splitPromptRelayLocalSegments(prompt)
+    if (/\bLOCAL\s*[:\uFF1A]/i.test(prompt)) return false
+    if (/\bLENGTHS\s*[:\uFF1A]/i.test(prompt)) return false
+    return sectionNumbers.length === expectedCount
+      && sectionNumbers.every((value, index) => value === index + 1)
+      && relaySegments.length === expectedCount
+  }
 
   const minimumNumberedLocalSections = getMinimumNumberedLocalSectionCount(policy)
   if (minimumNumberedLocalSections === 0) return true
@@ -692,6 +762,12 @@ function appendDialogueConstraint(basePrompt: string, constraint: string, locale
   return `${trimmedBase}${separator}${trimmedConstraint}`
 }
 
+function sanitizeKjPromptRelayReservedSyntax(value: string): string {
+  return value
+    .replace(/\b(GLOBAL|LOCAL(?:\s+\d+)?|LENGTHS)\s*[:\uFF1A]/gi, '$1 -')
+    .replace(/\|/g, ',')
+}
+
 function stabilizeNormalSingleShotPrompt(basePrompt: string, input: EnhanceLtx23VideoPromptInput, policy: Ltx23PromptPolicy): string {
   if (input.generationMode === 'firstlastframe' || allowsCameraMovement(policy)) return basePrompt
   if (addsUnrequestedOrbitCameraMotion(input.originalPrompt, basePrompt)) return input.originalPrompt
@@ -709,7 +785,10 @@ function appendLtx23SafetyConstraints(
 ): string {
   const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
   const stabilizedPrompt = stabilizeNormalSingleShotPrompt(basePrompt, input, promptPolicy)
-  const withDialogue = appendDialogueConstraint(stabilizedPrompt, dialogueConstraint, input.locale)
+  const safeDialogueConstraint = isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+    ? sanitizeKjPromptRelayReservedSyntax(dialogueConstraint)
+    : dialogueConstraint
+  const withDialogue = appendDialogueConstraint(stabilizedPrompt, safeDialogueConstraint, input.locale)
   const visualConstraint = buildVisualContinuityConstraint(input, promptPolicy)
   return appendDialogueConstraint(withDialogue, visualConstraint, 'en')
 }
@@ -823,6 +902,39 @@ function buildLtx23FallbackPrompt(
   if (shouldUseSmartVbvrAudioPrompt(input)) {
     return buildSmartVbvrAudioPrompt(input)
   }
+  if (isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) {
+    const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
+    const safeOriginalPrompt = sanitizeKjPromptRelayReservedSyntax(originalPrompt)
+    const localSections = Array.from({ length: segmentCount }, (_, index) => {
+      if (index === 0) {
+        return `LOCAL 1: Begin the current-shot action continuously: ${safeOriginalPrompt}`
+      }
+      if (index === segmentCount - 1) {
+        return `LOCAL ${index + 1}: Settle the same continuous current-shot action without adding a new event.`
+      }
+      return `LOCAL ${index + 1}: Continue the same current-shot action smoothly through this interval.`
+    })
+    const structuredFallback = [
+      'GLOBAL: Preserve the exact source-image subjects, environment, lighting, identity, positions, and composition.',
+      ...localSections,
+    ].join('\n')
+    const finalizedFallback = appendLtx23SafetyConstraints(
+      structuredFallback,
+      dialogueConstraint,
+      input,
+    )
+    if (splitPromptRelayLocalSegments(finalizedFallback).length === segmentCount) {
+      return finalizedFallback
+    }
+
+    const minimalFallback = [
+      'GLOBAL: Preserve the exact source-image subjects, environment, lighting, identity, positions, and composition.',
+      ...Array.from({ length: segmentCount }, (_, index) => (
+        `LOCAL ${index + 1}: Continue the same current-shot action smoothly through this interval.`
+      )),
+    ].join('\n')
+    return appendLtx23SafetyConstraints(minimalFallback, dialogueConstraint, input)
+  }
   return appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input)
 }
 
@@ -916,7 +1028,7 @@ export async function enhanceLtx23VideoPrompt(
         textModel,
       }
     }
-    if (!hasRequiredPromptRelayStructure(enhancedPrompt, promptPolicy)) {
+    if (!hasRequiredPromptRelayStructure(enhancedPrompt, promptPolicy, input)) {
       return {
         prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
         enhanced: false,
@@ -939,6 +1051,13 @@ export async function enhanceLtx23VideoPrompt(
     }
 
     const finalPrompt = finalizeLtx23Prompt(enhancedPrompt, dialogueConstraint, input)
+    if (!hasRequiredPromptRelayStructure(finalPrompt, promptPolicy, input)) {
+      return {
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
+        enhanced: false,
+        textModel,
+      }
+    }
 
     return {
       prompt: finalPrompt,

@@ -10,8 +10,10 @@ import {
   expandLtx23WorkflowImageFilenames,
   getLtx23WorkflowProfile,
   isComfyUiLtx23GoonFirstLastFrameWorkflow,
+  isComfyUiLtx23KjPromptRelayWorkflow,
   normalizeLtx23GoonDurationSeconds,
   normalizeLtx23WorkflowKey,
+  resolveLtx23KjImageGuideStrength,
   resolveLtx23GoonFinalFrameIndex,
 } from './ltx23-workflow-profiles'
 import {
@@ -2605,7 +2607,7 @@ function stripPromptRelayFrameRange(value: string): string {
   return value.replace(/\s*\[\s*\d+\s*-\s*\d+\s*\]\s*$/g, '').trim()
 }
 
-function splitPromptRelayLocalSegments(prompt: string): string[] {
+export function splitPromptRelayLocalSegments(prompt: string): string[] {
   const localPrompt = derivePromptRelayInput(prompt, 'local_prompts')
   const segments = localPrompt
     .split('|')
@@ -2874,6 +2876,13 @@ function applyLtx23WorkflowProfileControls(
     resizeNode.inputs.scale_to_length = contract.fixedResizeLongestSide
     resizeNode.inputs.scale_to_side = 'longest'
     resizeNode.inputs.round_to_multiple = '8'
+  }
+
+  if (isComfyUiLtx23KjPromptRelayWorkflow(normalizedKey)) {
+    const imageGuideNode = graph['620']
+    if (imageGuideNode && isRecord(imageGuideNode.inputs)) {
+      imageGuideNode.inputs['num_images.strength_1'] = resolveLtx23KjImageGuideStrength(inject.motionStrength)
+    }
   }
 
   applyPromptRelayTimelineControls(graph, {

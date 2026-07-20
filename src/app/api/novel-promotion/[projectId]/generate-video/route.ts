@@ -424,15 +424,12 @@ function resolveAudioTargetDurationSeconds(input: {
 
 function resolveLtx23CapabilityDurationSeconds(route: Ltx23WorkflowRoutingResult): number {
   const durationSeconds = route.durationSeconds
-  const maxDurationSeconds = route.profile.maxDurationSeconds
-  if (maxDurationSeconds !== null && durationSeconds > maxDurationSeconds + 0.001) {
-    return durationSeconds
-  }
-
   const durationOptions = route.profile.durationOptions
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
     .sort((left, right) => left - right)
-  return durationOptions.find((value) => value + 0.001 >= durationSeconds) ?? durationSeconds
+  if (durationOptions.length === 0) return durationSeconds
+  return durationOptions.find((value) => value + 0.001 >= durationSeconds)
+    ?? durationOptions[durationOptions.length - 1]
 }
 
 function serializeLtx23WorkflowRouting(route: Ltx23WorkflowRoutingResult): Record<string, unknown> {

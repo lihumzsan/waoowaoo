@@ -442,7 +442,8 @@ function resolveCapabilityValidationDuration(modelId: string, requestedDuration:
     : []
   if (sortedOptions.length === 0) return requestedDuration
 
-  return sortedOptions.find((option) => option + 0.001 >= requestedDuration) ?? requestedDuration
+  return sortedOptions.find((option) => option + 0.001 >= requestedDuration)
+    ?? sortedOptions[sortedOptions.length - 1]
 }
 
 export async function resolveVideoSourceFromGeneration(

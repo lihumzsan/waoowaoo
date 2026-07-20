@@ -1234,8 +1234,23 @@
         "resolutionOptions": [
           "720p"
         ],
+        "motionStrengthOptions": [
+          1,
+          2,
+          3
+        ],
         "firstlastframe": false,
-        "supportGenerateAudio": false
+        "supportGenerateAudio": false,
+        "fieldI18n": {
+          "motionStrength": {
+            "labelKey": "capability.motionStrength",
+            "optionLabelKeys": {
+              "1": "capability.motionStrengthOption.1",
+              "2": "capability.motionStrengthOption.2",
+              "3": "capability.motionStrengthOption.3"
+            }
+          }
+        }
       }
     }
   },

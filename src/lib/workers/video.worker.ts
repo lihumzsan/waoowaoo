@@ -782,6 +782,9 @@ async function generateVideoForPanel(
           linkedVoiceLines,
           durationSeconds: typeof effectiveGenerationOptions.duration === 'number' ? effectiveGenerationOptions.duration : null,
           fps: typeof effectiveGenerationOptions.fps === 'number' ? effectiveGenerationOptions.fps : null,
+          motionStrength: typeof effectiveGenerationOptions.motionStrength === 'number'
+            ? effectiveGenerationOptions.motionStrength
+            : null,
           audioTiming: audioDrivenDuration,
           generationMode,
           artStyle: projectArtStyle,

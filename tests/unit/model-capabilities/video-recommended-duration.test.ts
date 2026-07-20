@@ -8,6 +8,7 @@ import {
 
 const definitions = [{ field: 'duration', options: [5, 10], fieldI18n: null }]
 const bernini = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
+const kjPromptRelay = 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p'
 
 describe('video recommended duration', () => {
   it('prepends a valid card duration and removes duplicates', () => {
@@ -20,6 +21,11 @@ describe('video recommended duration', () => {
       modelKey: bernini,
       recommendedDuration: 10,
     })[0].options).toEqual([10, 5])
+
+    expect(withRecommendedVideoDuration(definitions, {
+      modelKey: kjPromptRelay,
+      recommendedDuration: 9,
+    })[0].options).toEqual([9, 5, 10])
   })
 
   it.each([undefined, null, '', 0, -2, 'nope'])(
@@ -53,6 +59,10 @@ describe('video recommended duration', () => {
       { duration: 5, motionStrength: 2 },
       { modelKey: bernini, recommendedDuration: undefined },
     )).toEqual({ duration: 5, motionStrength: 2 })
+    expect(applyRecommendedVideoDurationSelection(
+      { duration: 4, motionStrength: 1 },
+      { modelKey: kjPromptRelay, recommendedDuration: 9 },
+    )).toEqual({ duration: 9, motionStrength: 1 })
   })
 
   it('maps exact Bernini seconds onto a catalog preset only for capability validation', () => {

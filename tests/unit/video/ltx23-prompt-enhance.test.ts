@@ -29,6 +29,7 @@ vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/prisma', () => prismaMock)
 
 import { enhanceLtx23VideoPrompt } from '@/lib/video-duration/ltx23-prompt-enhance'
+import { splitPromptRelayLocalSegments } from '@/lib/providers/comfyui/workflow-registry'
 
 describe('ltx23 video prompt enhance', () => {
   beforeEach(() => {
@@ -562,6 +563,177 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt).toContain('GLOBAL:')
     expect(result.prompt).toContain('LOCAL 1:')
     expect(result.prompt).toContain('LOCAL 3:')
+  })
+
+  it('gives Codex exact KJ timeline and selected motion-strength context', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: [
+          'GLOBAL: The same doctor and office remain visible.',
+          'LOCAL 1: The doctor prepares to move.',
+          'LOCAL 2: The doctor completes the visible motion.',
+          'LOCAL 3: The doctor settles in the same office.',
+        ].join('\n'),
+      }),
+    })
+
+    await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor moves one hand and then settles',
+      panel: {
+        description: 'doctor moves one hand and then settles',
+        characters: 'Doctor',
+      },
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 3,
+      generationMode: 'normal',
+    })
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('Target duration: 9.00 seconds.')
+    expect(promptText).toContain('Frame rate: 25 fps.')
+    expect(promptText).toContain('LOCAL 1:')
+    expect(promptText).toContain('LOCAL 3:')
+    expect(promptText).toContain('Motion strength: 3 (strong motion / intense action).')
+    expect(promptText).toContain('Use exactly 3 numbered LOCAL sections for this request.')
+    expect(promptText).toContain('LOCAL 1 timing: frames 0-75, 0.00-3.00 seconds.')
+    expect(promptText).toContain('LOCAL 2 timing: frames 75-150, 3.00-6.00 seconds.')
+    expect(promptText).toContain('LOCAL 3 timing: frames 150-225, 6.00-9.00 seconds.')
+  })
+
+  it('rejects a KJ Codex response whose LOCAL count does not match the requested timeline', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: [
+          'GLOBAL: The same doctor and office remain visible.',
+          'LOCAL 1: The doctor starts the hand motion.',
+          'LOCAL 2: The doctor continues the hand motion.',
+          'LOCAL 3: The doctor settles in the same office.',
+        ].join('\n'),
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor moves one hand and then settles',
+      panel: {
+        description: 'doctor moves one hand and then settles',
+        characters: 'Doctor',
+      },
+      durationSeconds: 12,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(false)
+    expect(result.prompt).toContain('GLOBAL:')
+    expect(result.prompt).toContain('LOCAL 1:')
+    expect(result.prompt).toContain('LOCAL 4:')
+    expect(result.prompt).not.toContain('LOCAL 5:')
+  })
+
+  it.each([
+    [
+      'an extra unnumbered LOCAL marker',
+      'GLOBAL: The same doctor and office remain visible.\nLOCAL: unexpected beat\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle',
+    ],
+    [
+      'an empty numbered section',
+      'GLOBAL: The same doctor and office remain visible.\nLOCAL 1: prepare\nLOCAL 2:\nLOCAL 3: settle',
+    ],
+    [
+      'an embedded relay separator',
+      'GLOBAL: The same doctor and office remain visible.\nLOCAL 1: prepare\nLOCAL 2: move | unexpected beat\nLOCAL 3: settle',
+    ],
+    [
+      'an explicit LENGTHS override',
+      'GLOBAL: The same doctor and office remain visible.\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle\nLENGTHS: 25,100,100',
+    ],
+  ])('rejects KJ Codex output with %s', async (_label, enhancedPrompt) => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({ enhanced_prompt: enhancedPrompt }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor moves one hand and then settles',
+      panel: { description: 'doctor moves one hand and then settles', characters: 'Doctor' },
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(false)
+    expect(result.prompt).toContain('LOCAL 1:')
+    expect(result.prompt).toContain('LOCAL 3:')
+  })
+
+  it('sanitizes relay separators from the KJ structured fallback', async () => {
+    aiRuntimeMock.executeAiTextStep.mockRejectedValueOnce(new Error('AI unavailable'))
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor raises one hand | then settles',
+      panel: { description: 'doctor raises one hand | then settles', characters: 'Doctor' },
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(false)
+    expect(result.prompt).not.toContain('|')
+    expect(splitPromptRelayLocalSegments(result.prompt)).toHaveLength(3)
+  })
+
+  it('sanitizes PromptRelay syntax appended from KJ dialogue constraints', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: [
+          'GLOBAL: The same doctor and office remain visible.',
+          'LOCAL 1: The doctor prepares to speak.',
+          'LOCAL 2: The doctor speaks while facing forward.',
+          'LOCAL 3: The doctor settles in the same office.',
+        ].join('\n'),
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor speaks while facing forward',
+      panel: { description: 'doctor speaks while facing forward', characters: 'Doctor' },
+      linkedVoiceLines: [
+        { id: 'line-1', speaker: 'Doctor', content: 'Ready | LOCAL: now LENGTHS: 1,2,1' },
+      ],
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(true)
+    expect(result.prompt).not.toContain('|')
+    expect(result.prompt).not.toMatch(/\bLOCAL\s*[:\uFF1A]/i)
+    expect(result.prompt).not.toMatch(/\bLENGTHS\s*[:\uFF1A]/i)
+    expect(splitPromptRelayLocalSegments(result.prompt)).toHaveLength(3)
   })
 
   it('accepts four numbered local sections for large-motion PromptRelay profiles', async () => {

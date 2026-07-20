@@ -1247,6 +1247,88 @@ describe('api contract - direct submit routes (behavior)', () => {
     }))
   })
 
+  it('single generate-video accepts an exact KJ recommended duration above the catalog presets', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 5,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'a glowing will reaches toward the bright point',
+      videoPromptEditedByUser: false,
+      description: 'a glowing will reaches toward the bright point',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'push in',
+      sceneType: 'action',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: { content: 'fantasy negotiation' },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    let capabilityInput: (CapabilityGenerationOptionsInput & { modelKey?: string }) | undefined
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (
+      input?: CapabilityGenerationOptionsInput & { modelKey?: string },
+    ): Promise<CapabilityGenerationOptions> => {
+      capabilityInput = input
+      return {
+        duration: 20,
+        fps: 25,
+        resolution: '720p',
+        generationMode: 'normal',
+        motionStrength: 1,
+      }
+    })
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+        storyboardId: 'storyboard-1',
+        panelIndex: 5,
+        generationOptions: {
+          duration: 21,
+          generationMode: 'normal',
+          fps: 25,
+          resolution: '720p',
+          motionStrength: 1,
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          voiceLineIds: [],
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    expect(capabilityInput?.runtimeSelections).toEqual(expect.objectContaining({
+      duration: 20,
+      fps: 25,
+      resolution: '720p',
+      generationMode: 'normal',
+      motionStrength: 1,
+    }))
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      generationOptions: expect.objectContaining({
+        duration: 21,
+        fps: 25,
+        resolution: '720p',
+        motionStrength: 1,
+      }),
+    }))
+  })
+
   it('single generate-video keeps slow locked camera prompts on current Smart VBVR', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',

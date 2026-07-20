@@ -20,6 +20,10 @@ export const COMFYUI_LTX23_WORKFLOW_KEYS = {
 } as const
 
 export const COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
+export const COMFYUI_LTX23_KJ_DEFAULT_MOTION_STRENGTH = 1
+export const COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS = [1, 2, 3] as const
+
+export type Ltx23KjMotionStrength = typeof COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS[number]
 
 export type Ltx23WorkflowCategory =
   | 'single_image_precise'
@@ -185,6 +189,36 @@ export function isComfyUiLtx23GoonFirstLastFrameWorkflow(
   rawWorkflowKey: string | null | undefined,
 ): boolean {
   return normalizeLtx23WorkflowKey(rawWorkflowKey) === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID
+}
+
+export function isComfyUiLtx23KjPromptRelayWorkflow(
+  rawWorkflowKey: string | null | undefined,
+): boolean {
+  return normalizeLtx23WorkflowKey(rawWorkflowKey) === COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj
+}
+
+export function normalizeLtx23KjMotionStrength(value: unknown): Ltx23KjMotionStrength {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return COMFYUI_LTX23_KJ_DEFAULT_MOTION_STRENGTH
+  }
+  const normalized = Math.round(value)
+  return COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS.includes(normalized as Ltx23KjMotionStrength)
+    ? normalized as Ltx23KjMotionStrength
+    : COMFYUI_LTX23_KJ_DEFAULT_MOTION_STRENGTH
+}
+
+export function resolveLtx23KjImageGuideStrength(value: unknown): number {
+  const motionStrength = normalizeLtx23KjMotionStrength(value)
+  if (motionStrength === 2) return 0.85
+  if (motionStrength === 3) return 0.7
+  return 1
+}
+
+export function resolveLtx23KjMotionStrengthLabel(value: unknown): string {
+  const motionStrength = normalizeLtx23KjMotionStrength(value)
+  if (motionStrength === 2) return 'normal motion'
+  if (motionStrength === 3) return 'strong motion / intense action'
+  return 'calm / subtle motion'
 }
 
 export function normalizeLtx23GoonDurationSeconds(raw: unknown): number {
