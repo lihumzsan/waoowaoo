@@ -17,9 +17,6 @@ const ENGLISH_TEXT_ARTIFACT_PROHIBITION_PATTERN = /\b(?:do\s+not|don't|never|avo
 const DIALOGUE_METADATA_LINE_PATTERN = /^\s*(?:subtitle\s*\/\s*dialogue\s+in\s+panel|dialogue\s+lines?)\s*:/iu
 const KNOWN_DIALOGUE_CONTEXT_LINE_PATTERN = /^(\s*(?:source\s+text|creator\s+prompt\s+intent)\s*:\s*)(.*)$/iu
 
-const VISIBLE_SPEAKING_REPLACEMENT =
-  'Visible speaking action is present; describe only rhythmic lip and mouth movement, expression, gaze, gesture, posture, and timing.'
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
@@ -85,13 +82,13 @@ function redactDialogueMetadataLines(value: string, knownDialogue: readonly stri
   return value
     .split(/\r?\n/u)
     .map((line) => {
-      if (DIALOGUE_METADATA_LINE_PATTERN.test(line)) return VISIBLE_SPEAKING_REPLACEMENT
+      if (DIALOGUE_METADATA_LINE_PATTERN.test(line)) return ''
       const contextMatch = line.match(KNOWN_DIALOGUE_CONTEXT_LINE_PATTERN)
       if (!contextMatch) return line
       const redactedValue = redactKnownDialogueFromContextValue(contextMatch[2] ?? '', knownDialogue)
         .replace(/\s+/gu, ' ')
         .trim()
-      return redactedValue ? `${contextMatch[1]}${redactedValue}` : VISIBLE_SPEAKING_REPLACEMENT
+      return redactedValue ? `${contextMatch[1]}${redactedValue}` : ''
     })
     .join('\n')
 }

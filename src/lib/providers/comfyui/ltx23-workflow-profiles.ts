@@ -20,10 +20,10 @@ export const COMFYUI_LTX23_WORKFLOW_KEYS = {
 } as const
 
 export const COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
-export const COMFYUI_LTX23_KJ_DEFAULT_MOTION_STRENGTH = 1
-export const COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS = [1, 2, 3] as const
+const COMFYUI_LTX23_KJ_DEFAULT_MOTION_STRENGTH = 1
+const COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS = [1, 2, 3] as const
 
-export type Ltx23KjMotionStrength = typeof COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS[number]
+type Ltx23KjMotionStrength = typeof COMFYUI_LTX23_KJ_MOTION_STRENGTH_OPTIONS[number]
 
 export type Ltx23WorkflowCategory =
   | 'single_image_precise'

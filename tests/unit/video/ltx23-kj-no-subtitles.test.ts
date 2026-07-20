@@ -78,6 +78,21 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     expect(result).not.toMatch(/Source text:\s*Hello|Creator prompt intent:.*Hello/i)
   })
 
+  it('does not invent speaking action from empty dialogue metadata', () => {
+    const result = sanitizeLtx23KjNoSubtitlesPrompt([
+      'Dialogue lines: none',
+      'Subtitle/dialogue in panel:',
+      'GLOBAL: The same hand remains above the glowing water surface.',
+      'LOCAL 1: The light bends slowly beneath the water.',
+    ].join('\n'))
+
+    expect(result).toBe([
+      'GLOBAL: The same hand remains above the glowing water surface.',
+      'LOCAL 1: The light bends slowly beneath the water.',
+    ].join('\n'))
+    expect(result).not.toMatch(/speaking action|lip|mouth/i)
+  })
+
   it('removes quote-before-speaker dialogue while preserving the speaker action', () => {
     const result = sanitizeLtx23KjNoSubtitlesPrompt(
       'LOCAL 1: “Do not look back,” the doctor whispers while pointing toward the door.',
