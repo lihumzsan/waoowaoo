@@ -86,6 +86,34 @@ describe('sanitizeLtx23KjNoSubtitlesPrompt', () => {
     expect(result).not.toContain('Do not look back')
   })
 
+  it.each([
+    ['short English dialogue', ['I']],
+    ['reserved relay marker dialogue', ['LOCAL']],
+    ['single Chinese character dialogue', ['光']],
+  ])('does not globally delete %s from unrelated positive content', (_label, knownDialogue) => {
+    const prompt = [
+      'GLOBAL: 柔和光线照亮 the visible subject and stable lighting.',
+      'LOCAL 1: The speaker keeps rhythmic lip movement.',
+      'LOCAL 2: The same action continues smoothly.',
+      'LOCAL 3: The speaker settles.',
+      'LENGTHS: 45, 105, 75',
+    ].join('\n')
+
+    expect(sanitizeLtx23KjNoSubtitlesPrompt(prompt, knownDialogue)).toBe(prompt)
+  })
+
+  it('redacts a short known line only when it follows a speaking verb', () => {
+    const result = sanitizeLtx23KjNoSubtitlesPrompt(
+      'LOCAL 1: The doctor says I while raising one hand.',
+      ['I'],
+    )
+
+    expect(result).toContain('LOCAL 1:')
+    expect(result).toContain('raising one hand')
+    expect(result).toMatch(/lip movement/i)
+    expect(result).not.toMatch(/\bsays I\b/i)
+  })
+
   it('removes positive text-artifact prohibition clauses without deleting adjacent action', () => {
     const result = sanitizeLtx23KjNoSubtitlesPrompt([
       'GLOBAL: The same young man remains beside the glowing table.',

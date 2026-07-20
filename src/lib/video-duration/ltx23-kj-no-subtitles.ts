@@ -27,7 +27,30 @@ function redactKnownDialogue(value: string, knownDialogue: readonly string[]): s
   return knownDialogue.reduce((result, dialogue) => {
     const trimmed = dialogue.trim().replace(/\s+/gu, ' ')
     if (!trimmed) return result
-    return result.replace(new RegExp(escapeRegExp(trimmed), 'giu'), '')
+    const literalPattern = trimmed
+      .split(/\s+/u)
+      .map((part) => escapeRegExp(part))
+      .join('\\s+')
+    const englishSpeechPattern = new RegExp(
+      `\\b(says?|speaks?|asks?|answers?|replies?|shouts?|whispers?|utters?|sings?|mouths)(\\s+(?:softly|quietly|calmly|aloud))?\\s*[,：:]?\\s*["“]?${literalPattern}["”]?`,
+      'giu',
+    )
+    const chineseSpeechPattern = new RegExp(
+      `(说(?:道|着|出)?|开口(?:说(?:道|着|出)?)?|问(?:道)?|回答(?:道)?|喊(?:道)?|低声(?:说(?:道)?)?|耳语|发言|念(?:道)?|唱(?:道)?)\\s*[：:,，]?\\s*[“「『"]?${literalPattern}[”」』"]?`,
+      'gu',
+    )
+
+    return result
+      .replace(
+        englishSpeechPattern,
+        (_match, verb: string, modifier: string | undefined) => (
+          `${verb}${modifier ?? ''} naturally with rhythmic lip movement`
+        ),
+      )
+      .replace(
+        chineseSpeechPattern,
+        (_match, verb: string) => `${verb}并自然呈现说话动作，嘴唇有节奏地开合`,
+      )
   }, value)
 }
 
