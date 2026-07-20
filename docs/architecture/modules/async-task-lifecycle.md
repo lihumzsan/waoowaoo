@@ -116,11 +116,13 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 5. `20260711030000` 会删除 `operationConfirmed`；因此 migration 与新应用必须作为同一维护窗口切换，禁止旧应用实例继续写入。
 6. `20260712233000` 会删除 Outbox、provider checkpoint、审批链和持久 JSON 中没有分流语义的固定标记；旧代码仍会写这些字段，新代码会 strict-reject 旧 JSON，因此必须在同一维护窗口先排空、迁移，再一次性切换全部应用与 worker。
 7. `20260715160000_unify_audio_design` 新增统一 `ProjectEditAudioDesign`，并把 BGM 生成资源切换到 `designSignature`；它不再尝试改造即将删除、且历史物理表名不一致的环境音表。`20260715190000_remove_ambient_sound` 删除两种历史环境音表名和 sound-effect 配置列，把唯一规划表切换为 `project_edit_bgm_designs`，并将不兼容的旧设计失效为 `pending`，强制经唯一 BGM planner 重新规划。应用本次迁移前必须排空旧 BGM/环境音规划、两类生成 Task 与 final render；本仓只创建 migration，未授权也未执行任何共享数据迁移。
+8. `creative_work` payload 从 nullable `single/batch/chapter_batch` 与服务端指定 Skill 切换为严格 `delegation.source=requests|chapters` 和 Worker 自主 Skill catalog；Creative Resource 媒体 payload 又把旧 `references` 切换为 `contextReferences + imageReferences`。两项都是 strict parser 不兼容变化：部署前必须排空旧版本 queued/processing 的 `creative_work` 与 Creative Resource 媒体 Task，再一次性切换应用和 worker；禁止双读旧 payload、默认空引用或从媒体类型猜旧字段。
 8. `20260717120000_add_creative_resource_spine` 只新增 Resource/Revision/Lineage/Binding 表与引用，不删除或改写既有专业领域表；本仓只创建并验证 migration 文件，没有授权执行任何共享或生产数据 migration。
 
 ## 历史回归
 
 - Creative Worker 最初把 Subagent 运行和完整结构化输出留在同步 Tool call：没有持久 Task 可供刷新/恢复，章节并行只能由主 Agent 保持连接，Activity 事件又形成第二套运行态；直接把完整结果转交 continuation 还会让批量长片上下文线性膨胀。当前 `creative_work` 进入穷尽 TaskDefinition，一个请求一个 Task，既有 OperationBatch/collecting Wait 聚合全部成员；Task.result 保存完整结果，created/terminal/continuation 由 registry 声明的 reference projection 收敛。尚未执行真实批量、刷新与终态组合场景，行为证据仍是明确盲区。
+- Subagent UI 初版只查询 queued/processing Task，因此 Task 一终态标签就消失，失败时计划 UI 又可能继续转圈；随后若从历史消息补回“已完成”会形成第二状态来源。当前 Session projector直接查询当前 scope 最近的 `creative_work` Task，并以 Task.status/result 唯一投影运行中和终态标签；UI 的 X 只是本地关闭披露，不改变 Task。计划状态仍由 `update_plan` 自己的持久事实解释，Subagent 失败不伪造计划完成。
 
 - Assistant 旧协议把 Task receipt 解释成当前 Run 的 suspension：一个 Operation 建一个 Wait、前台 Run 进入 `awaiting_task`，因此 Task 在跑时用户无法自然继续同一创作会话；为规避跨 Operation 聚合 race，后续又禁止模型同一步多调用，但真实模型仍会发出三次独立图片调用并让整个 Run 在批准前失败。当前每个模型步骤使用一个独立后台 OperationBatch Run/collecting Wait，成员 Task transaction 原子加入，step boundary seal，前台收到 receipt 后继续。Terminal Service 只处理 sealed `pending` Wait，seal 折叠早到终态，用户新 turn 不再取消后台 Run；continuation 遇到前台/Decision Run 时通过持久 Outbox `availableAt` 延期，不消耗 delivery failure 上限。已执行的真实 MySQL 场景反证重复图片与音频/视频混合成员、seal race、新前台 Run、并发 terminal 与单 continuation；typed defer 的 dispatcher 重投按用户要求留待后续验证。
 

@@ -5,13 +5,12 @@ import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeWorkInputFingerprint,
+  CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskPayloadSchema,
-  listCreativeWorkDelegationItems,
-  resolveCreativeWorkDelegationInput,
+  type CreativeWorkDelegationInput,
   type CreativeWorkDelegationItem,
   type CreativeWorkTaskRequest,
-  type ResolvedCreativeWorkDelegationInput,
 } from '@/lib/creative-worker'
 import { compileEpisodeChapterContexts } from '@/lib/edit-chapter'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -60,6 +59,8 @@ const EFFECTS_CREATIVE_TASK = {
   longRunning: true,
 } as const
 
+const CREATIVE_CHAPTER_CONTEXT_MAX_CHARS = 200_000
+
 function requireInvocationIdentity(input: {
   runId?: string | null
   toolCallId?: string | null
@@ -78,26 +79,25 @@ function resolveEpisodeId(input: string | undefined, contextEpisodeId: unknown):
 }
 
 async function resolveDelegationRequests(input: {
-  readonly operationInput: ResolvedCreativeWorkDelegationInput
+  readonly operationInput: CreativeWorkDelegationInput['delegation']
   readonly projectId: string
   readonly userId: string
   readonly contextEpisodeId: unknown
 }): Promise<CreativeWorkDelegationItem[]> {
   const operationInput = input.operationInput
-  if (operationInput.kind !== 'chapter_batch') {
-    return listCreativeWorkDelegationItems(operationInput)
+  if (operationInput.source === 'requests') {
+    return [...operationInput.requests]
   }
-  const chapterBatch = operationInput.chapterBatch
   const compiled = await compileEpisodeChapterContexts({
     projectId: input.projectId,
     userId: input.userId,
-    episodeId: resolveEpisodeId(chapterBatch.episodeId ?? undefined, input.contextEpisodeId),
-    chapterIds: chapterBatch.chapters.map((chapter) => chapter.chapterId),
-    referencedAssets: chapterBatch.referencedAssets,
-    maxCharsPerChapter: chapterBatch.maxCharsPerChapter,
+    episodeId: resolveEpisodeId(undefined, input.contextEpisodeId),
+    chapterIds: operationInput.chapters.map((chapter) => chapter.chapterId),
+    referencedAssets: operationInput.referencedAssets,
+    maxCharsPerChapter: CREATIVE_CHAPTER_CONTEXT_MAX_CHARS,
   })
   return compiled.map((result, index) => {
-    const requestedChapter = chapterBatch.chapters[index]
+    const requestedChapter = operationInput.chapters[index]
     if (!requestedChapter || requestedChapter.chapterId !== result.context.chapter.chapterId) {
       throw new Error(`CREATIVE_WORK_CHAPTER_CONTEXT_ORDER_MISMATCH:${String(index)}`)
     }
@@ -105,11 +105,11 @@ async function resolveDelegationRequests(input: {
     const sourceEnd = result.context.source.sourceEnd
     return {
       requestKey: requestedChapter.requestKey,
-      outputKind: chapterBatch.outputKind,
-      goal: `${chapterBatch.goal}\nChapter ${String(result.context.chapter.chapterIndex + 1)}: ${result.context.chapter.title}`,
+      outputKind: operationInput.outputKind,
+      goal: `${operationInput.goal}\nChapter ${String(result.context.chapter.chapterIndex + 1)}: ${result.context.chapter.title}`,
       targetDurationSeconds: result.context.chapter.targetDurationSec,
       context: {
-        userRequest: chapterBatch.userRequest,
+        userRequest: operationInput.userRequest,
         sourceMaterials: [
           {
             label: `Chapter ${String(result.context.chapter.chapterIndex + 1)} context`,
@@ -133,7 +133,7 @@ async function resolveDelegationRequests(input: {
             },
           },
         ],
-        constraints: chapterBatch.constraints,
+        constraints: operationInput.constraints,
       },
     }
   })
@@ -286,7 +286,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
     ...createAssistantCreativeStyleOperations(),
     delegate_creative_work: defineOperation({
       id: 'delegate_creative_work',
-      summary: 'Delegate bounded professional creative reasoning requests to background Subagents. Every request becomes one independent Creative Task; the Worker can only discover and read registered Creative Skills, and its structured result is advice until a normal project Operation adopts or executes it. Use kind=single for one request, kind=batch for caller-supplied independent contexts, or kind=chapter_batch to compile persisted Chapter contexts server-side without copying every long context through the Primary Agent.',
+      summary: 'Delegate one or more bounded professional creative reasoning requests to background Subagents. Set delegation.source=requests with a one-or-more requests list for caller-supplied contexts, or delegation.source=chapters to compile persisted Chapter contexts server-side. Every request becomes one independent Creative Task; the Worker sees the complete registered Skill catalog, autonomously reads relevant Skills, and returns structured advice until a normal project Operation adopts or executes it.',
       intent: 'act',
       effects: EFFECTS_CREATIVE_TASK,
       assistantWriteAuthority: { kind: 'transactional_task_submission' },
@@ -298,9 +298,8 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           runId: context.context.runId,
           toolCallId: context.toolCallId,
         })
-        const delegation = resolveCreativeWorkDelegationInput(input)
         const delegatedRequests = await resolveDelegationRequests({
-          operationInput: delegation,
+          operationInput: input.delegation,
           projectId: context.projectId,
           userId: context.userId,
           contextEpisodeId: context.context.episodeId,
@@ -310,8 +309,8 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           projectId: context.projectId,
           userId: context.userId,
         })
-        const taskEpisodeId = delegation.kind === 'chapter_batch'
-          ? resolveEpisodeId(delegation.chapterBatch.episodeId ?? undefined, context.context.episodeId)
+        const taskEpisodeId = input.delegation.source === 'chapters'
+          ? resolveEpisodeId(undefined, context.context.episodeId)
           : context.context.episodeId ?? null
         const requestKeys = new Set<string>()
         for (const request of requests) {
@@ -343,6 +342,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
             }],
           }
           const payload = creativeWorkTaskPayloadSchema.parse({
+            protocol: CREATIVE_WORK_TASK_PROTOCOL,
             requestKey,
             request,
             modelKey,

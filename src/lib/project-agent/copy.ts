@@ -8,8 +8,8 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   delegate_creative_work: {
-    zh: '把一个或一批专业创作推理请求委派成后台 Creative Task。每个请求对应一个无状态 Subagent；长片可用 chapter_batch 在服务端为每章编译最小上下文，避免把整部剧本的全部上下文灌入主 Agent。Worker 会自行发现并读取相关 Skill，但不能调用业务 Operation、收费、持久化创作产物或改变项目状态。完成后按 taskId 读取完整结构化结果，再由主 Agent执行实际动作。',
-    en: 'Delegate one or many professional creative reasoning requests as background Creative Tasks. Every request becomes one stateless Subagent; chapter_batch compiles minimal per-Chapter contexts server-side so the Primary Agent does not absorb the entire long-work payload. The Worker discovers and reads relevant Skills, but cannot call business Operations, charge, persist creative outputs, or change project state. Read each full result by taskId, then let the Primary Agent execute real actions.',
+    zh: '把一个或多个专业创作请求委派成后台 Creative Task。delegation.source=requests 接收调用方准备好的上下文；delegation.source=chapters 由服务端为每章编译最小上下文。每个请求对应一个无状态 Subagent；Worker 会查看完整 Skill 目录并自主读取相关专业知识，但不能调用业务 Operation、收费、持久化产物或改变项目状态。完成后按 taskId 读取完整结构化结果，再由主 Agent执行真实动作。',
+    en: 'Delegate one or more professional creative requests as background Creative Tasks. delegation.source=requests accepts caller-prepared contexts; delegation.source=chapters compiles minimal per-Chapter contexts on the server. Every request becomes one stateless Subagent. The Worker sees the full Skill catalog and autonomously reads relevant professional knowledge, but cannot call business Operations, charge, persist outputs, or change project state. Read each full result by taskId, then let the Primary Agent execute real actions.',
   },
   save_edit_source: {
     zh: '把用户提供或上传的完整长剧本文本保存为不可变 SourceDocument，不调用 AI。返回的 normalizedText、id、version 和 checksum 是委派 edit_bible_bundle 时必须原样携带的领域来源事实。',
@@ -20,8 +20,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Adopt one completed edit_bible_bundle Creative Task as the formal Bible and let the sole splitter write Chapters. Pass the exact sourceDocumentId and taskId. The system revalidates source revision, content, and strict output, and starts no asset, Chapter Subagent, or video task automatically.',
   },
   adopt_style_bible: {
-    zh: '把已完成的最终视觉 Style Bible 专业创作结果采用为结构化文字 Resource。后续资产设计与视频生成必须引用返回的精确 resourceId、revisionId 和 fingerprint；候选方案不能直接采用，需先让 Subagent 收敛成 final 结果。',
-    en: 'Adopt a completed final visual Style Bible creative result as a structured text Resource. Subsequent asset and video design must reference the exact returned resourceId, revisionId, and fingerprint. Candidate sets cannot be adopted directly; first ask the Subagent to resolve one final result.',
+    zh: '把已完成的 Style Bible Task 中的 final 结果或用户选定的文字候选采用并绑定为当前项目的结构化 Style Bible Resource。必须传精确 taskId 和选择分支；后续资产与视频设计只引用返回的 resourceId、revisionId 和 fingerprint。',
+    en: 'Adopt and bind either the final result or the user-selected textual candidate from a completed Style Bible Task as the project’s current structured Style Bible Resource. Pass the exact taskId and selection branch; subsequent asset and video design must use the returned resourceId, revisionId, and fingerprint.',
+  },
+  confirm_script_resource: {
+    zh: '把一个已保存的 project.source_script 精确 revision 确认为当前项目或剧集剧本。该操作只更新 canonical Binding，不复制或重写剧本。',
+    en: 'Confirm an exact persisted project.source_script revision as the current project or episode screenplay. This updates only the canonical Binding and never copies or rewrites the script.',
   },
   update_project_config: {
     zh: '设置或清除项目最终输出画幅。这里只负责 videoRatio，例如 16:9 或 9:16；不要读取、选择或提交模型、provider、分辨率及其他执行配置。',
@@ -32,8 +36,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Maintain a concise plan for complex or multi-step work. Each call replaces the whole current plan; keep at most one item in_progress, update it when progress changes, and pass an empty plan to clear it. This is a visible notebook only: it executes no work, creates no Tasks, and controls no tool or project state.',
   },
   get_project_context: {
-    zh: '读取项目或剧集的具体内容，包括 Bible、专业产物、任务详情、资产和视频片段。需要真实内容来回答用户或规划新的自由创作时调用；不要从聊天记录或画布外观猜测。',
-    en: 'Read concrete project or episode content, including the Bible, professional outputs, task details, assets, and video segments. Use it when real content is needed to answer or plan freeform creation; never infer those facts from chat history or Canvas appearance.',
+    zh: '读取当前项目或剧集已经确认、采用和绑定的精简工作集，以及领域状态和任务摘要。它不负责浏览历史候选；资源库搜索用 list_resources，精确 revision 正文用 get_resource。不要从聊天记录或画布外观猜测当前事实。',
+    en: 'Read the compact working set currently confirmed, adopted, and bound to the project or episode, plus domain state and task summaries. It does not browse historical candidates; use list_resources for the library and get_resource for exact revision content. Never infer current facts from chat history or Canvas appearance.',
   },
   get_project_snapshot: {
     zh: '读取整个项目的结构化投影，用来了解已有专业产物和项目全貌。只有确实需要视频片段状态或输出媒体 identity 时，才传 detail=full。',
@@ -173,6 +177,10 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   adopt_style_bible: {
     zh: '采用视觉 Style Bible',
     en: 'Adopt visual Style Bible',
+  },
+  confirm_script_resource: {
+    zh: '确认剧本资源',
+    en: 'Confirm screenplay resource',
   },
   update_plan: {
     zh: '更新计划',

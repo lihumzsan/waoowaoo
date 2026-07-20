@@ -30,7 +30,10 @@ import {
   executeTaskProviderInvocation,
   markTaskProviderInvocationRetryable,
   type TaskProviderInvocation,
+  type TaskProviderInvocationRoute,
 } from '@/lib/task/provider-invocation'
+import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
+import type { AiResolvedSelection } from '@/lib/ai-registry/types'
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music'>
 
@@ -124,79 +127,106 @@ export async function executeMediaGeneration(
 ): Promise<GenerateResult> {
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
   _ulogInfo(`[ai-exec:${input.modality}] resolved model selection: ${selection.modelKey}`)
-  const adapter = resolveAiProviderAdapter(selection.provider)
-  const execute = async (): Promise<GenerateResult> => {
+  const buildRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {
+    const adapter = resolveAiProviderAdapter(routeSelection.provider)
     switch (input.modality) {
     case 'image': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
-        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(selection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
-        options: input.options,
-        context: `${input.modality}:${selection.modelKey}`,
-      }) as AiImageExecutionOptions | undefined
-      return await modalityAdapter.execute({
-        userId: input.userId,
-        selection,
-        prompt: input.prompt,
-        options,
-      })
+      return {
+        provider: routeSelection.provider,
+        modelKey: routeSelection.modelKey,
+        request: { ...input, modelKey: routeSelection.modelKey },
+        execute: async () => {
+          const descriptor = modalityAdapter.describe(routeSelection)
+          const options = normalizeAiOptions({
+            schema: descriptor.optionSchema,
+            options: input.options,
+            context: `${input.modality}:${routeSelection.modelKey}`,
+          }) as AiImageExecutionOptions | undefined
+          return await modalityAdapter.execute({
+            userId: input.userId,
+            selection: routeSelection,
+            prompt: input.prompt,
+            options,
+          })
+        },
+      }
     }
     case 'video': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
-        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(selection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
-        options: input.options,
-        context: `${input.modality}:${selection.modelKey}`,
-      }) as AiVideoExecutionOptions | undefined
-      return await modalityAdapter.execute({
-        userId: input.userId,
-        selection,
-        imageUrl: input.imageUrl,
-        options,
-      })
+      return {
+        provider: routeSelection.provider,
+        modelKey: routeSelection.modelKey,
+        request: { ...input, modelKey: routeSelection.modelKey },
+        execute: async () => {
+          const descriptor = modalityAdapter.describe(routeSelection)
+          const options = normalizeAiOptions({
+            schema: descriptor.optionSchema,
+            options: input.options,
+            context: `${input.modality}:${routeSelection.modelKey}`,
+          }) as AiVideoExecutionOptions | undefined
+          return await modalityAdapter.execute({
+            userId: input.userId,
+            selection: routeSelection,
+            imageUrl: input.imageUrl,
+            options,
+          })
+        },
+      }
     }
     case 'music': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
-        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
-      const descriptor = modalityAdapter.describe(selection)
-      const options = normalizeAiOptions({
-        schema: descriptor.optionSchema,
-        options: input.options,
-        context: `${input.modality}:${selection.modelKey}`,
-      }) as AiMusicExecutionOptions | undefined
-      return await modalityAdapter.execute({
-        userId: input.userId,
-        selection,
-        prompt: input.prompt,
-        options,
-      })
+      return {
+        provider: routeSelection.provider,
+        modelKey: routeSelection.modelKey,
+        request: { ...input, modelKey: routeSelection.modelKey },
+        execute: async () => {
+          const descriptor = modalityAdapter.describe(routeSelection)
+          const options = normalizeAiOptions({
+            schema: descriptor.optionSchema,
+            options: input.options,
+            context: `${input.modality}:${routeSelection.modelKey}`,
+          }) as AiMusicExecutionOptions | undefined
+          return await modalityAdapter.execute({
+            userId: input.userId,
+            selection: routeSelection,
+            prompt: input.prompt,
+            options,
+          })
+        },
+      }
     }
     }
   }
   const taskId = getLogContext().taskId
   let result: GenerateResult
   if (!taskId) {
-    result = await execute()
+    result = await buildRoute(selection).execute()
   } else {
     if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
+    const routeSet = resolveProviderRouteSet(input.modality, selection.modelKey)
+    const routes = routeSet.routes.map((route) => buildRoute({
+      provider: route.provider,
+      modelId: route.modelId,
+      modelKey: route.modelKey,
+      variantSubKind: 'official',
+    }))
     result = await executeTaskProviderInvocation({
       taskId,
       invocation,
       modality: input.modality,
-      provider: selection.provider,
-      modelKey: selection.modelKey,
-      request: input,
-      execute,
+      logicalCapabilityId: routeSet.logicalCapabilityId,
+      primaryModelKey: routeSet.primaryModelKey,
+      routes,
     })
   }
 

@@ -385,6 +385,9 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
   }
   if (!input.result) throw new Error(`CREATIVE_RESOURCE_TASK_RESULT_REQUIRED:${input.task.id}`)
   const mediaId = readRequiredString(input.result, 'mediaId', 'CREATIVE_RESOURCE_TASK_MEDIA_ID_REQUIRED')
+  const actualModelKey = input.task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
+    ? null
+    : readRequiredString(input.result, 'modelKey', 'CREATIVE_RESOURCE_TASK_MODEL_KEY_REQUIRED')
   const revision = await appendCreativeResourceRevisionInTransaction(tx, {
     resourceId: payload.resource.resourceId,
     userId: input.task.userId,
@@ -400,7 +403,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
       executionSegmentId: payload.resource.executionSegmentId,
       toolCallId: payload.resource.toolCallId,
       prompt: payload.resource.prompt,
-      modelKey: payload.resource.modelKey,
+      modelKey: actualModelKey,
       generationOptions: toCreativeResourceJsonValue(payload.resource.generationOptions),
     },
   })

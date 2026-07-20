@@ -1,5 +1,5 @@
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { generateImage as generateImageWithAiSdk, NoContentGeneratedError } from 'ai'
+import { APICallError, generateImage as generateImageWithAiSdk, NoContentGeneratedError } from 'ai'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
@@ -19,6 +19,7 @@ import {
   type OpenRouterImageOptions,
 } from './image-options'
 import { OPENROUTER_GPT_IMAGE_2_MODEL_ID } from './models'
+import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 
 const OPENROUTER_IMAGE_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -34,6 +35,22 @@ function resolveResponseMediaType(mediaTypeValue: string): string {
     return mediaType
   }
   throw new Error(`OPENROUTER_IMAGE_RESPONSE_MEDIA_TYPE_UNSUPPORTED: ${mediaType}`)
+}
+
+function isProviderAccountHardLimit(error: unknown): boolean {
+  if (!APICallError.isInstance(error) || error.statusCode !== 400 || !error.responseBody) return false
+  try {
+    const payload = JSON.parse(error.responseBody) as unknown
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+    const root = payload as Record<string, unknown>
+    const detail = root.error
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return false
+    const message = (detail as Record<string, unknown>).message
+    if (typeof message !== 'string') return false
+    return message.trim().toLowerCase() === 'billing hard limit has been reached.'
+  } catch {
+    return false
+  }
 }
 
 async function fetchBoundedOpenRouterImageResponse(
@@ -107,6 +124,13 @@ export async function requestOpenRouterImage(input: {
       ...(hasUsage ? { metadata: { openRouterUsage: result.usage } } : {}),
     }
   } catch (error) {
+    if (isProviderAccountHardLimit(error)) {
+      throw new ProviderPreAcceptRejectedError(
+        'provider_account_limit',
+        'OpenRouter upstream provider account reached its billing hard limit before accepting the image request',
+        { cause: error },
+      )
+    }
     if (NoContentGeneratedError.isInstance(error)) {
       throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE', { cause: error })
     }

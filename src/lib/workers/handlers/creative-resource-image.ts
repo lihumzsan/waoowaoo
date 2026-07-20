@@ -7,6 +7,7 @@ import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-i
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import type { TaskJobData } from '@/lib/task/types'
+import { readTaskProviderInvocationRouteSelection } from '@/lib/task/provider-invocation'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import {
   resolveImageSourceFromGeneration,
@@ -17,9 +18,15 @@ async function loadImageReferences(
   job: Job<TaskJobData>,
   input: CreativeResourceGenerationTaskPayload,
 ): Promise<string[]> {
-  if (input.resource.inputs.length === 0) return []
+  const inputByPosition = new Map(input.resource.inputs.map((reference) => [reference.position, reference]))
+  const imageInputs = input.resource.imageInputPositions.map((position) => {
+    const reference = inputByPosition.get(position)
+    if (!reference) throw new Error(`CREATIVE_RESOURCE_IMAGE_INPUT_POSITION_INVALID:${String(position)}`)
+    return reference
+  })
+  if (imageInputs.length === 0) return []
   const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: input.resource.inputs.map((reference) => reference.revisionId) } },
+    where: { id: { in: imageInputs.map((reference) => reference.revisionId) } },
     select: {
       id: true,
       resourceId: true,
@@ -29,7 +36,7 @@ async function loadImageReferences(
     },
   })
   const byId = new Map(revisions.map((revision) => [revision.id, revision]))
-  return await Promise.all(input.resource.inputs.map(async (reference) => {
+  return await Promise.all(imageInputs.map(async (reference) => {
     const revision = byId.get(reference.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
     if (
@@ -82,6 +89,13 @@ export async function handleCreativeResourceImageTask(job: Job<TaskJobData>) {
         : {}),
     },
   })
+  const providerRoute = await readTaskProviderInvocationRouteSelection({
+    taskId: job.data.taskId,
+    invocation: { key: 'media:image:primary' },
+  })
+  if (!providerRoute) {
+    throw new Error(`CREATIVE_RESOURCE_IMAGE_PROVIDER_ROUTE_MISSING:${job.data.taskId}`)
+  }
   await reportTaskProgress(job, 90, { stage: 'creative_resource_persist' })
   const storageKey = await uploadImageSourceToCos(source, 'creative-resource', payload.resource.resourceId, {
     taskId: job.data.taskId,
@@ -92,7 +106,7 @@ export async function handleCreativeResourceImageTask(job: Job<TaskJobData>) {
     mediaId: media.id,
     imageUrl: media.url,
     storageKey: media.storageKey,
-    modelKey: payload.resource.modelKey,
-    provider: payload.resource.modelKey.split('::')[0] || null,
+    modelKey: providerRoute.modelKey,
+    provider: providerRoute.provider,
   }
 }

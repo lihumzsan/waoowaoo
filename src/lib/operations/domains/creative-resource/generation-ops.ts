@@ -54,10 +54,15 @@ import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
-const commonReferenceSchema = z.array(creativeResourceInputRefSchema)
+const contextReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Exact immutable Resource revisions to use as ordered creative inputs. Obtain resourceId, revisionId, and fingerprint from list_resources or get_resource; pass null when no reference is needed.')
+  .describe('Exact immutable Resource revisions used as creative context and lineage only. Text, Style Bible, audio, video, and image Resources are allowed here; these references are never sent to an image input channel.')
+
+const imageReferenceSchema = z.array(creativeResourceInputRefSchema)
+  .max(8)
+  .optional()
+  .describe('Exact ready image Resource revisions to send through the provider image-input channel. Never put text, Style Bible, audio, or video Resources here.')
 
 const commonMediaGenerationShape = {
   episodeId: z.string().trim().min(1).optional(),
@@ -77,13 +82,13 @@ const commonMediaGenerationShape = {
         .describe('Exact failed Resource IDs to retry without regenerating successful candidates.'),
     }).strict(),
   ]).describe('Choose new generation or an explicit retry of failed Resources.'),
-  references: commonReferenceSchema,
+  contextReferences: contextReferenceSchema,
 } as const
 
 const createTextInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).optional()
-    .describe('Professional meaning of the text Resource. Pass null to use generic.text.'),
+    .describe('Professional meaning of the text Resource. Omit to use generic.text.'),
   name: z.string().trim().min(1).max(200).optional()
     .describe('Optional display name for the text Resource or candidate set.'),
   prompt: z.string().trim().min(1)
@@ -104,15 +109,16 @@ const createTextInputSchema = z.object({
         .describe('Two to six independently selectable completed text candidates.'),
     }).strict(),
   ]).describe('Choose one completed result or a selectable candidate set.'),
-  references: commonReferenceSchema,
+  contextReferences: contextReferenceSchema,
 }).strict()
 
 const createImageInputSchema = z.object({
   ...commonMediaGenerationShape,
+  imageReferences: imageReferenceSchema,
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image).optional()
-    .describe('Professional meaning of the image Resource. Pass null to use generic.image.'),
+    .describe('Professional meaning of the image Resource. Omit to use generic.image.'),
   aspectRatio: z.string().trim().min(1).optional()
-    .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
+    .describe('Requested output aspect ratio such as 9:16 or 16:9. Omit to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
     .describe('Optional resolution supported by the configured image generation capability, such as 1K or 2K.'),
   quality: z.string().trim().min(1).optional()
@@ -124,7 +130,7 @@ const createImageInputSchema = z.object({
 const createAudioInputSchema = z.object({
   ...commonMediaGenerationShape,
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio).optional()
-    .describe('Professional meaning of the audio Resource. Pass null to use generic.audio.'),
+    .describe('Professional meaning of the audio Resource. Omit to use generic.audio.'),
   durationSeconds: z.number().int().min(1).max(600)
     .describe('Requested audio duration in seconds.'),
   vocalMode: z.enum(['instrumental', 'vocal']).optional()
@@ -141,12 +147,13 @@ const createAudioInputSchema = z.object({
 
 const createVideoInputSchema = z.object({
   ...commonMediaGenerationShape,
+  imageReferences: imageReferenceSchema,
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video).optional()
-    .describe('Professional meaning of the video Resource. Pass null to use generic.video.'),
+    .describe('Professional meaning of the video Resource. Omit to use generic.video.'),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
     .describe('Exact duration for this one generated video segment. It must match a duration supported by the server-configured video model and cannot exceed the product ceiling of 15 seconds.'),
   aspectRatio: z.string().trim().min(1).optional()
-    .describe('Requested output aspect ratio such as 9:16 or 16:9. Pass null to use the project ratio.'),
+    .describe('Requested output aspect ratio such as 9:16 or 16:9. Omit to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
     .describe('Optional resolution supported by the configured video generation capability, such as 720p or 1080p.'),
   fps: z.number().int().min(1).max(240).optional()
@@ -202,20 +209,59 @@ function resolveEpisodeId(input: { episodeId?: string }, ctx: ProjectAgentOperat
 
 function normalizeInputReferences(
   references: readonly z.infer<typeof creativeResourceInputRefSchema>[] | undefined,
+  input: {
+    readonly defaultRole: string
+    readonly positionOffset: number
+  },
 ): CreativeResourceInputRef[] {
   return (references ?? []).map((reference, position) => ({
     resourceId: reference.resourceId,
     revisionId: reference.revisionId,
     fingerprint: reference.fingerprint,
-    role: reference.role ?? 'reference',
-    position,
+    role: reference.role ?? input.defaultRole,
+    position: input.positionOffset + position,
   }))
+}
+
+function normalizeMediaInputReferences(input: MediaGenerationInput): {
+  readonly inputs: CreativeResourceInputRef[]
+  readonly imageInputs: CreativeResourceInputRef[]
+  readonly imageInputPositions: number[]
+} {
+  const contextInputs = normalizeInputReferences(input.contextReferences, {
+    defaultRole: 'context',
+    positionOffset: 0,
+  })
+  const rawImageReferences = 'imageReferences' in input ? input.imageReferences : undefined
+  const imageInputs = normalizeInputReferences(rawImageReferences, {
+    defaultRole: 'reference',
+    positionOffset: contextInputs.length,
+  })
+  const seen = new Set<string>()
+  for (const reference of [...contextInputs, ...imageInputs]) {
+    const identity = `${reference.resourceId}:${reference.revisionId}`
+    if (seen.has(identity)) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_RESOURCE_INPUT_REFERENCE_DUPLICATE',
+        field: 'contextReferences',
+        resourceId: reference.resourceId,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    seen.add(identity)
+  }
+  return {
+    inputs: [...contextInputs, ...imageInputs],
+    imageInputs,
+    imageInputPositions: imageInputs.map((reference) => reference.position),
+  }
 }
 
 async function assertInputReferences(
   userId: string,
   references: readonly CreativeResourceInputRef[],
   requiredMediaType: CreativeResourceMediaType | null,
+  field: 'contextReferences' | 'imageReferences',
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await validateCreativeResourceInputReferencesInTransaction(tx, userId, references)
@@ -229,7 +275,7 @@ async function assertInputReferences(
       if (mediaTypeById.get(reference.resourceId) !== requiredMediaType) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
-          field: 'references',
+          field,
           resourceId: reference.resourceId,
           allowedValues: [requiredMediaType],
           agentRetryableAfterCorrection: true,
@@ -291,7 +337,10 @@ async function createTextResources(
     projectId: ctx.projectId,
     episodeId,
   })
-  const references = normalizeInputReferences(input.references)
+  const references = normalizeInputReferences(input.contextReferences, {
+    defaultRole: 'context',
+    positionOffset: 0,
+  })
   const candidates = input.content.kind === 'candidates'
     ? input.content.candidates
     : [{ name: input.name, text: input.content.text }]
@@ -526,33 +575,36 @@ async function planMediaGeneration(
 ): Promise<OperationPlan> {
   const episodeId = resolveEpisodeId(input, ctx)
   const schemaId = requireSchemaForMedia(input.schemaId ?? config.schemaId, config.mediaType)
-  const references = normalizeInputReferences(input.references)
+  const normalizedReferences = normalizeMediaInputReferences(input)
+  const references = normalizedReferences.inputs
   await assertInputReferences(
     ctx.userId,
     references,
-    config.mediaType === 'image' || config.mediaType === 'video' ? 'image' : null,
+    null,
+    'contextReferences',
   )
+  await assertInputReferences(ctx.userId, normalizedReferences.imageInputs, 'image', 'imageReferences')
   const modelKey = await resolveGenerationModel({
     ctx,
     purpose: config.modelPurpose,
   })
   if (config.mediaType === 'video') {
-    if (references.length === 0 && !supportsTextToVideoModel(modelKey)) {
+    if (normalizedReferences.imageInputs.length === 0 && !supportsTextToVideoModel(modelKey)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED',
-        field: 'references',
+        field: 'imageReferences',
         modelKey,
         requiredCapability: 'textToVideo',
         agentRetryableAfterCorrection: true,
       })
     }
     const maxReferences = resolveBuiltinCapabilitiesByModelKey('video', modelKey)?.video?.maxReferenceImages ?? 1
-    if (references.length > maxReferences) {
+    if (normalizedReferences.imageInputs.length > maxReferences) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
-        field: 'references',
+        field: 'imageReferences',
         modelKey,
-        requestedValue: references.length,
+        requestedValue: normalizedReferences.imageInputs.length,
         allowedValues: [maxReferences],
         agentRetryableAfterCorrection: true,
       })
@@ -570,6 +622,7 @@ async function planMediaGeneration(
     modelKey,
     schemaId,
     references,
+    imageInputPositions: normalizedReferences.imageInputPositions,
     generationOptions,
     ...(config.mediaType === 'audio' ? {
       durationSeconds: (input as CreateAudioInput).durationSeconds,
@@ -679,6 +732,7 @@ async function planMediaGeneration(
       modelKey,
       inputHash,
       inputs: references,
+      imageInputPositions: normalizedReferences.imageInputPositions,
       generationOptions,
       // Approval revalidates the frozen plan in a later decision segment. The
       // stable toolCallId identifies the creative invocation across both
@@ -858,7 +912,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more independent text resources authored in this Agent turn. Use schemaId to express script, edit table, plan, or generic text semantics; no Workflow stage is required.',
+      summary: 'Persist one or more independent text resources authored in this Agent turn. Use schemaId to express script, edit table, plan, or generic text semantics; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,
@@ -884,7 +938,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_image: defineOperation({
       id: 'create_image',
-      summary: 'Generate independent image resources directly from a prompt, with optional exact Resource revisions as references. No script, bible, character, scene, or Workflow stage is required.',
+      summary: 'Generate independent image resources directly from a complete prompt. Put Style Bible, screenplay, or other non-image lineage in contextReferences; only actual ready images belong in imageReferences and are sent to the provider image-input channel.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -902,7 +956,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate an independent audio resource from a prompt, optionally recording exact video or other Resource revisions as creative lineage. No episode BGM plan or Workflow stage is required.',
+      summary: 'Generate an independent audio resource from a prompt, optionally recording exact video or other Resource revisions in contextReferences as creative lineage. Context references are not sent through an image input channel.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -920,7 +974,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_video: defineOperation({
       id: 'create_video',
-      summary: 'Generate independent video resources directly from a prompt, with optional exact image Resource revisions. Zero-reference text-to-video is allowed only when the configured video capability supports it.',
+      summary: 'Generate independent video resources directly from a complete prompt. Put screenplay, Style Bible, and other non-image lineage in contextReferences; put only actual ready image inputs in imageReferences. Zero-image text-to-video requires server-configured support.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {

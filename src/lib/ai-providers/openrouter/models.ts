@@ -178,6 +178,11 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'openrouter',
     modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
+    providerRoute: {
+      logicalCapabilityId: 'image.gpt-image-2',
+      priority: 0,
+      failoverPolicy: 'pre_accept_only',
+    },
     capabilities: {
       image: {
         resolutionOptions: [...OPENROUTER_GPT_IMAGE_2_RESOLUTION_OPTIONS],

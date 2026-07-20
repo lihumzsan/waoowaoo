@@ -51,12 +51,6 @@ export interface CreativeSkillDiscovery {
   readonly entryUri: CreativeSkillUri
 }
 
-export interface DiscoverCreativeSkillsInput {
-  readonly locale: CreativeSkillLocale
-  readonly query: string
-  readonly tags?: readonly string[]
-}
-
 export interface ReadCreativeSkillResourceInput {
   readonly locale: CreativeSkillLocale
   readonly uri: string

@@ -180,7 +180,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     return {
       prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
       request: { kind: 'new', count: 2 },
-      references: resourceReferences(request, 'image').slice(0, 1),
+      imageReferences: resourceReferences(request, 'image').slice(0, 1),
     }
   }
   if (toolName === 'create_audio' && instruction.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) {
@@ -188,7 +188,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       prompt: 'Compose restrained atmospheric music matching the referenced videos.',
       durationSeconds: 120,
       request: { kind: 'new', count: 1 },
-      references: resourceReferences(request, 'video').slice(0, 3),
+      contextReferences: resourceReferences(request, 'video').slice(0, 3),
     }
   }
   if (toolName === 'adopt_resource' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) {

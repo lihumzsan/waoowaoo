@@ -7,7 +7,7 @@ import {
  * parts are deliberately excluded so history cannot become a second status
  * source after the foreground Operation has submitted its Tasks.
  */
-export function resolveWorkspaceAssistantActiveSubagents(params: {
+export function resolveWorkspaceAssistantSubagents(params: {
   sessionSubagents: readonly ProjectAgentSubagentView[]
 }): ProjectAgentSubagentView[] {
   return [...params.sessionSubagents]

@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
+import { bindCreativeResourceRevisionInTransaction } from '@/lib/creative-resource/binding-service'
 import {
   appendCreativeResourceRevisionInTransaction,
+  CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
   reserveDomainCreativeResourceInTransaction,
   resolveProjectCreativeResourceScope,
@@ -14,13 +16,26 @@ import {
 } from '@/lib/creative-worker'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 const adoptStyleBibleInputSchema = z.object({
   taskId: z.string().trim().min(1)
-    .describe('Exact completed creative_work Task whose strict final style_bible result should become a persistent Resource.'),
+    .describe('Exact completed creative_work Task whose strict style_bible result contains the final design or candidate being adopted.'),
   name: z.string().trim().min(1).max(300)
     .describe('User-facing Resource name in the current conversation language.'),
+  selection: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('final'),
+    }).strict(),
+    z.object({
+      kind: z.literal('candidate'),
+      styleKey: z.enum(['style_a', 'style_b', 'style_c'])
+        .describe('Exact candidate key returned by the completed style_bible Task.'),
+    }).strict(),
+  ]).describe('Adopt the Task final result, or one exact text-first candidate from the same persisted Task result.'),
+  expectedVersion: z.number().int().min(0).nullable().optional()
+    .describe('Pass null for the first adoption; pass the current canonical style binding version when replacing an adopted Style Bible.'),
 }).strict()
 
 const adoptStyleBibleOutputSchema = z.object({
@@ -29,6 +44,22 @@ const adoptStyleBibleOutputSchema = z.object({
   revisionId: z.string().trim().min(1),
   fingerprint: z.string().trim().min(1),
   schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE),
+  binding: z.object({
+    bindingId: z.string().trim().min(1),
+    scope: z.object({
+      kind: z.enum(['user', 'project', 'episode']),
+      id: z.string().trim().min(1),
+      userId: z.string().trim().min(1),
+      projectId: z.string().trim().min(1).nullable(),
+      episodeId: z.string().trim().min(1).nullable(),
+    }).strict(),
+    role: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.role),
+    slotKey: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.slotKey),
+    resourceId: z.string().trim().min(1),
+    revisionId: z.string().trim().min(1),
+    version: z.number().int().min(0),
+    source: z.string().trim().min(1),
+  }).strict(),
 }).strict()
 
 function toCreativeJson(value: unknown): CreativeResourceJsonValue {
@@ -65,7 +96,7 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
   return {
     adopt_style_bible: defineOperation({
       id: 'adopt_style_bible',
-      summary: 'Adopt one completed final style_bible Creative Task as the persistent structured Style Bible Resource for subsequent asset and video design. Candidate results cannot be adopted; resolve the choice through a new final style_bible task first.',
+      summary: 'Adopt either the final result or one exact text-first candidate from a completed style_bible Creative Task as the canonical structured Style Bible Resource. This selection creates one immutable final revision and updates its reserved Binding in the same transaction.',
       intent: 'act',
       effects: {
         writes: true,
@@ -133,25 +164,58 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
           })
         }
         const output = result.creativeWorkResult.output
-        if (output.design.mode !== 'final') {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'CREATIVE_STYLE_BIBLE_FINAL_RESULT_REQUIRED',
-            field: 'taskId',
-            requestedValue: output.design.mode,
-            allowedValues: ['final'],
-            agentRetryableAfterCorrection: true,
-          })
-        }
+        const selection = input.selection
+        const selectedStyleBible = selection.kind === 'final'
+          ? (() => {
+              if (output.design.mode !== 'final') {
+                throw new ApiError('INVALID_PARAMS', {
+                  code: 'CREATIVE_STYLE_BIBLE_FINAL_RESULT_REQUIRED',
+                  field: 'selection.kind',
+                  requestedValue: output.design.mode,
+                  allowedValues: ['candidate'],
+                  agentRetryableAfterCorrection: true,
+                })
+              }
+              return output.design.styleBible
+            })()
+          : (() => {
+              if (output.design.mode !== 'candidates') {
+                throw new ApiError('INVALID_PARAMS', {
+                  code: 'CREATIVE_STYLE_BIBLE_CANDIDATE_RESULT_REQUIRED',
+                  field: 'selection.kind',
+                  requestedValue: output.design.mode,
+                  allowedValues: ['final'],
+                  agentRetryableAfterCorrection: true,
+                })
+              }
+              const selected = output.design.options.stylePreviews.find(
+                (candidate) => candidate.styleKey === selection.styleKey,
+              )
+              if (!selected) {
+                throw new ApiError('INVALID_PARAMS', {
+                  code: 'CREATIVE_STYLE_BIBLE_CANDIDATE_NOT_FOUND',
+                  field: 'selection.styleKey',
+                  requestedValue: selection.styleKey,
+                  allowedValues: output.design.options.stylePreviews.map((candidate) => candidate.styleKey),
+                  agentRetryableAfterCorrection: true,
+                })
+              }
+              return selected.styleBible
+            })()
+        const scope = resolveProjectCreativeResourceScope({
+          userId: context.userId,
+          projectId: context.projectId,
+          episodeId: task.episodeId,
+        })
+        const selectedSourceId = selection.kind === 'final'
+          ? `${task.id}:final`
+          : `${task.id}:${selection.styleKey}`
         const reserved = await reserveDomainCreativeResourceInTransaction(transaction, {
-          scope: resolveProjectCreativeResourceScope({
-            userId: context.userId,
-            projectId: context.projectId,
-            episodeId: task.episodeId,
-          }),
+          scope,
           mediaType: 'text',
           schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
           sourceType: 'CreativeWorkStyleBible',
-          sourceId: task.id,
+          sourceId: selectedSourceId,
           name: input.name,
         })
         const revision = await appendCreativeResourceRevisionInTransaction(transaction, {
@@ -161,12 +225,15 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
           schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
           content: {
             kind: 'structured',
-            data: toCreativeJson(output.design.styleBible),
+            data: toCreativeJson(selectedStyleBible),
           },
           inputs: resourceInputsFromTask(payload),
           provenance: {
             operationId: 'adopt_style_bible',
-            inputHash: payload.inputFingerprint,
+            inputHash: stableArgsHash({
+              taskInputFingerprint: payload.inputFingerprint,
+              selection,
+            }),
             taskId: task.id,
             operationExecutionId: context.executionAuthorization?.operationExecutionId ?? null,
             executionSegmentId: context.executionFence?.concurrentExecutionSegmentId ?? null,
@@ -175,15 +242,25 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
             modelKey: payload.modelKey,
             generationOptions: toCreativeJson({
               outputKind: payload.request.outputKind,
+              selection,
               assumptions: output.assumptions,
               warnings: output.warnings,
             }),
           },
         })
+        const binding = await bindCreativeResourceRevisionInTransaction(transaction, {
+          scope,
+          ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
+          resourceId: reserved.resourceId,
+          revisionId: revision.revisionId,
+          source: 'style_adoption',
+          expectedVersion: input.expectedVersion ?? null,
+        })
         return adoptStyleBibleOutputSchema.parse({
           success: true,
           ...revision,
           schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+          binding,
         })
       },
     }),

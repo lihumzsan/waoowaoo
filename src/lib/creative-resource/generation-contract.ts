@@ -39,10 +39,37 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
       role: z.string().trim().min(1),
       position: z.number().int().min(0),
     }).strict()),
+    imageInputPositions: z.array(z.number().int().min(0)).max(8)
+      .superRefine((positions, context) => {
+        if (new Set(positions).size !== positions.length) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'imageInputPositions must contain unique Resource input positions.',
+          })
+        }
+      }),
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
-  }).strict(),
+  }).strict().superRefine((resource, context) => {
+    const inputPositions = new Set(resource.inputs.map((input) => input.position))
+    if (inputPositions.size !== resource.inputs.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['inputs'],
+        message: 'Resource input positions must be unique.',
+      })
+    }
+    for (const position of resource.imageInputPositions) {
+      if (!inputPositions.has(position)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['imageInputPositions'],
+          message: `imageInputPositions contains unknown Resource input position ${String(position)}.`,
+        })
+      }
+    }
+  }),
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),

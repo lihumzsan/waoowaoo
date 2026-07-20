@@ -20,7 +20,6 @@ export function buildAssistantProjectContextSnapshot(
     editScripts: context.episodeDetail?.editScripts ?? [],
     editFirstWorkflow: context.editFirstWorkflow,
     config: {
-      analysisModel: context.policy.analysisModel || null,
       videoRatio: context.policy.videoRatio,
     },
   }

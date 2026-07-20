@@ -1,7 +1,10 @@
 import {
-  discoverCreativeSkills,
+  CREATIVE_SKILLS,
+  getCreativeSkillDefinition,
   readCreativeSkillResource,
+  type CreativeSkillDiscovery,
   type CreativeSkillId,
+  type CreativeSkillLocale,
   type CreativeSkillResource,
 } from '@/lib/creative-skills'
 import { CreativeWorkerError } from './errors'
@@ -10,7 +13,7 @@ import type {
   CreativeSkillReadTraceEntry,
 } from './types'
 
-export interface RequiredCreativeSkill {
+export interface PreloadedCreativeSkill {
   id: CreativeSkillId
   uri: string
   version: string
@@ -74,64 +77,49 @@ async function recordRead(
 
 export async function readCreativeWorkerSkillResource(input: {
   context: CreativeWorkerRunContext
-  uri: string
+  skillId: CreativeSkillId
   source: CreativeSkillReadTraceEntry['source']
 }): Promise<CreativeSkillResource> {
   assertReadBudget(input.context)
+  const definition = getCreativeSkillDefinition(input.skillId)
   const resource = await readCreativeSkillResource({
     locale: input.context.locale,
-    uri: input.uri,
+    uri: definition.entryUri,
   })
   assertResourceBudget(input.context, resource)
   await recordRead(input.context, resource, input.source)
   return resource
 }
 
-export function discoverCreativeWorkerSkills(input: {
-  context: CreativeWorkerRunContext
-  query: string
-  tags: readonly string[]
-}) {
-  if (input.context.counters.discoveryCalls >= input.context.budgets.maxDiscoveryCalls) {
-    throw new CreativeWorkerError('CREATIVE_WORK_DISCOVERY_BUDGET_EXCEEDED', {
-      maxDiscoveryCalls: input.context.budgets.maxDiscoveryCalls,
-    })
-  }
-  input.context.counters.discoveryCalls += 1
-  return discoverCreativeSkills({
-    locale: input.context.locale,
-    query: input.query,
-    tags: input.tags,
-  })
+export function listCreativeWorkerSkillCatalog(
+  locale: CreativeSkillLocale,
+): readonly CreativeSkillDiscovery[] {
+  return CREATIVE_SKILLS.map((definition) => ({
+    id: definition.id,
+    version: definition.version,
+    title: definition.title[locale],
+    summary: definition.summary[locale],
+    tags: definition.tags,
+    entryUri: definition.entryUri,
+  }))
 }
 
-export async function loadRequiredCreativeSkills(input: {
+export async function loadPreloadedCreativeSkills(input: {
   context: CreativeWorkerRunContext
   skillIds: readonly CreativeSkillId[]
   signal: AbortSignal
-}): Promise<readonly RequiredCreativeSkill[]> {
-  const requiredSkills: RequiredCreativeSkill[] = []
+}): Promise<readonly PreloadedCreativeSkill[]> {
+  const preloadedSkills: PreloadedCreativeSkill[] = []
   for (const skillId of input.skillIds) {
     if (input.signal.aborted) {
       throw new CreativeWorkerError('CREATIVE_WORK_ABORTED')
     }
-    const exactMatches = discoverCreativeSkills({
-      locale: input.context.locale,
-      query: skillId,
-    }).filter((candidate) => candidate.id === skillId)
-    if (exactMatches.length !== 1) {
-      throw new CreativeWorkerError('CREATIVE_WORK_REQUIRED_SKILL_NOT_FOUND', {
-        skillId,
-        matches: exactMatches.length,
-      })
-    }
-    const definition = exactMatches[0]
     const resource = await readCreativeWorkerSkillResource({
       context: input.context,
-      uri: definition.entryUri,
-      source: 'required',
+      skillId,
+      source: 'preloaded',
     })
-    requiredSkills.push({
+    preloadedSkills.push({
       id: resource.skillId,
       uri: resource.uri,
       version: resource.version,
@@ -139,5 +127,5 @@ export async function loadRequiredCreativeSkills(input: {
       content: resource.content,
     })
   }
-  return requiredSkills
+  return preloadedSkills
 }

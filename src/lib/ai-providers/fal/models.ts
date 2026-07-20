@@ -61,6 +61,11 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
     modelType: 'image',
     provider: 'fal',
     modelId: FAL_GPT_IMAGE_2_MODEL_ID,
+    providerRoute: {
+      logicalCapabilityId: 'image.gpt-image-2',
+      priority: 1,
+      failoverPolicy: 'pre_accept_only',
+    },
     capabilities: { image: { resolutionOptions: [...FAL_IMAGE_RESOLUTIONS], qualityOptions: [...FAL_GPT_IMAGE_2_QUALITY_OPTIONS] } },
   },
   {

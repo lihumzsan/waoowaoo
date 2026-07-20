@@ -257,7 +257,6 @@ export interface ProjectAssistantContextSnapshot {
   editScripts?: ProjectContextEditScriptSnapshot[]
   editFirstWorkflow: EditFirstWorkflowView
   config: {
-    analysisModel?: string | null
     videoRatio: string | null
   }
 }

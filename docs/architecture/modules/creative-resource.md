@@ -25,6 +25,10 @@
 - **CR-12 — Resource 不裁决创作顺序。** Resource 存在、缺失、旧 Revision 或 Lineage 仅是可读事实。Operation 是否可调用由 registry channel、显式输入 schema、owner/scope、provider capability、计费批准和破坏性确认裁决；Workflow step、Canvas 位置和“上游是否推荐完成”不得成为硬门。
 - **CR-13 — Resource Tool 参数只表达产品语义。** `schemaId` 必须从按 mediaType 穷尽分组的生产 Resource registry 生成 enum；通用语义用对应 `generic.*`，不得允许模型发明新 identity。文本结果以 `single|candidates` 分支表达，异步媒体以 `new|retry` 分支表达，retry 只接受失败 Resource identity。Agent-facing 图片/视频/音乐字段使用跨 provider 产品名，且不得包含 `modelKey`、`*Model` 或 provider 参数；实际模型由服务端正式配置唯一解析。`generationOptions` 只是在批准计划与 Revision provenance 中冻结的内部执行快照，不是公开 Tool 参数。服务端解析出的 modelKey 对应 capability registry 是允许字段和值的唯一裁判，不支持必须 typed-fail，禁止跨模型默认或 provider 参数透传。
 - **CR-14 — pending 卡片显示冻结提交事实。** 异步 Resource Operation 必须在提交 Task 的同一事务预留 pending Resource，并写入可 replay 的 Resource broadcast；Resource View 从该 Resource 当前唯一 active Task 的冻结 payload 投影 prompt、model、options 与精确 inputs。它只负责让卡片和原始提示词立即可见，不得把 pending 当成成功 Revision，也不得由客户端从工具文案补造。ready/failed/canceled 仍只由 Task Terminal writer 结算。
+- **CR-15 — 剧本与风格采用使用保留 Binding。** 当前确认剧本只由 `confirm_script_resource` 写入 `scope=episode + role=confirmed_screenplay + slotKey=primary`；当前正式风格只由 `adopt_style_bible` 写入 `scope=episode + role=adopted_style_bible + slotKey=primary`。两者都绑定精确不可变 Revision，不能从最近文字 Resource、历史消息、Canvas 位置或旧专业表猜测。通用 `adopt_resource` 必须拒绝这两个保留角色，避免第二 writer。确认与采用不复制 Resource，也不新建同内容剧本。
+- **CR-16 — 语义上下文与媒体引用分离。** `contextReferences` 只表达会进入 lineage 和专业推理上下文的精确 Resource Revision，可以是文字、图片、音频或视频；`imageReferences` 只表达允许送入图片/视频 provider 的真实图片 Revision。Task payload、报价和 Revision provenance 同时冻结两组引用；provider adapter 只能收到规范化后的 `imageReferences`。不得把 Style Bible、剧本或其他文字 Resource 当作图片 URL 发送，也不得为了兼容旧 `references` 猜测媒体语义。
+- **CR-17 — 读取工具各自只有一种职责。** `get_project_context` 返回当前项目/剧集的紧凑工作集，包含保留 Binding 指向的确认剧本、正式 Style Bible 及必要 fingerprint/version；`list_resources` 用一次有界查询浏览当前剧集、当前项目和用户级通用资产中的候选、历史与可复用资源，按持久 `createdAt,id` 稳定排序并在全局 limit 内返回，同一 Resource identity 只出现一次；`get_resource` 只按 `resourceId + revisionId` 返回一个精确不可变 Revision 的完整内容。三者共同消费 Resource/Binding View service，不得各自推断“当前剧本”或“当前风格”。
+- **CR-18 — Revision 记录实际执行路由。** Agent 和业务 Operation 不选择 provider/model，但每个成功媒体 Revision 的 provenance 必须保存本次 Task invocation 最终实际使用的 `modelKey`。当 Provider Gateway 在同一等价 route set 内进行受控 pre-accept 路由切换时，materializer 只能读取 durable invocation route checkpoint，不能继续记录初始配置、当前配置或模型事后文字。
 
 ## 状态所有权
 
@@ -38,6 +42,8 @@
 | 异步候选 pending | Operation 的 Task 提交事务（预留 Resource + Task + broadcast） | Resource View、Canvas |
 | 异步候选 ready/failed/canceled | `commitTaskTerminal` | Agent continuation、Resource View |
 | finalized Style Bible revision | `adopt_style_bible` transactional Operation | Asset/video Worker input、Chapter Context、Canvas |
+| 当前确认剧本 Binding | `confirm_script_resource` transactional Operation | Project Context、Primary、Creative Worker inputs |
+| 当前正式风格 Binding | `adopt_style_bible` transactional Operation | Project Context、资产/视频 Worker、Chapter Context |
 | ResourceCard 最终 View | `view-service.ts` 从上述持久事实纯投影 | API、React Query、Canvas renderer |
 
 ## 权威入口
@@ -50,6 +56,8 @@
 - ResourceCard 查询投影：`src/lib/creative-resource/view-service.ts` 与 `src/app/api/projects/[projectId]/resources/route.ts`。
 - Agent 通用生成与读/采用工具：`src/lib/operations/domains/creative-resource/**`；仍通过全局 Operation registry/invocation。
 - Style Bible 专业采用：`src/lib/operations/domains/assistant/creative-style-ops.ts`；它是 `project.style_bible` 的唯一 writer，并复用 Resource persistence，不建立领域旁路。
+- Resource-native 剧本确认与保留角色约束：`src/lib/operations/domains/creative-resource/resource-ops.ts`、`src/lib/creative-resource/contracts.ts`；通用采用入口不能写保留角色。
+- 当前工作集与精确 Revision 查询：`src/lib/creative-resource/view-service.ts`；`get_project_context`、`list_resources`、`get_resource` 只投影该唯一服务的不同 View。
 - Canvas Resource 投影和 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；专业 renderer 仍由 Canvas registry 选择。
 - 数据表：`prisma/schema.prisma` 的 `CreativeResource*`；`20260717120000_add_creative_resource_spine` 只创建 additive schema，本任务不执行共享数据 migration。
 
@@ -70,6 +78,9 @@
 - 仅删除 Workflow 而不先让 Operation 自足会把“轮到此步骤时上游必然存在”的隐含假设暴露为错误执行。当前所有开放 Operation 仍经 registry schema/prerequisite、owner/scope、provider capability 和 plan/commit fail closed；缺少必要输入不会静默跳过或伪造产物。
 - 把专业领域全部改成通用 JSON 会丢失关系查询、类型安全和既有卡片；保留两套独立资产系统又会产生双 writer。当前专业 table 与 Resource 脊柱拥有不同事实：前者保存当前领域结构，后者保存不可变跨领域交付、provenance、Lineage 与 Binding；Task terminal 是二者异步交接的同一事务边界。
 - Binding service 曾只验证 Resource 属于同一用户，允许把 project A/episode A 的 Resource 写入 project B Binding；CR-09 文档和同用户正常 Golden 没有覆盖跨项目同用户攻击。当前 Binding 先验证 target project/episode owner，再只允许用户级 Resource 显式采用、同 project 或同 episode Resource；跨项目和跨 episode 原地 NOT_FOUND。跨项目同用户负向组合仍需在真实 Resource Golden 中持续保留。
+- 自由剧本确认曾继续调用只认识 `ProjectEditBible` 的旧专业确认 Operation；模型明明持有刚生成的剧本文本，仍因没有旧领域实体而失败，随后又从历史消息或 Task 猜稿并创建第二份不同剧本。当前确认对象改为精确 Resource Revision，并由保留 Binding 独占“当前确认剧本”；项目上下文直接投影该事实，确认操作不复制正文。旧专业确认入口继续只服务其专业实体，不再被自由 Resource 路径冒充。
+- Style Bible 是文字 Resource，早期通用媒体输入却只有一组 `references`，业务层把 Style Bible revision 当作图片引用送进图片 provider，三张资产在外部请求前一起失败。当前契约把语义上下文与真实图片引用拆开，lineage 同时保留两者，provider 只接收图片；旧 payload 不兼容，部署前必须排空旧版本 queued/processing Creative Resource 媒体 Task，禁止双读 fallback。
+- OpenRouter GPT Image 2 曾在上游账户硬限额时直接失败，即使系统还声明了等价的 FAL GPT Image 2 能力；若业务层或 Agent 自行改 provider，会产生第二执行入口、第二报价和重复 Resource。当前只允许 Provider Gateway 在同一声明式等价 route set 内、确认首路由未受理且没有 external id 时切换，并把最终路由写入同一 invocation checkpoint；Resource materializer 据此记录真实 modelKey。同一路由已受理、结果不确定或异步 external id 已存在时绝不切换。
 
 ## 修改检查表
 
@@ -79,3 +90,6 @@
 4. 候选失败重试是否只提交失败 resourceId，成功候选与 provider invocation 不重复？
 5. Canvas 是否优先专业 renderer，fallback 是否只依赖 mediaType，edge 是否只来自 Lineage？
 6. 是否错误地用 Workflow、Canvas 位置、旧 head 或 stale 诊断阻止 Agent 调用？
+7. 当前剧本/风格是否只来自保留 Binding，确认/采用是否没有复制 Resource 或第二 writer？
+8. `contextReferences` 与 `imageReferences` 是否在 Task、provider 输入、lineage 和 provenance 中保持各自语义？
+9. 成功 Revision 是否记录 durable invocation 的实际 provider route，而不是初始或当前配置？

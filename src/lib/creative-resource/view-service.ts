@@ -12,37 +12,49 @@ import type {
   CreativeResourceScopeRef,
   CreativeResourceStatus,
   CreativeResourceView,
+  CreativeResourceWorkingBindingView,
+  CreativeResourceWorkingSetView,
 } from './contracts'
-import { isCreativeResourceMediaType, isCreativeResourceScopeKind, isCreativeResourceStatus } from './contracts'
+import {
+  CREATIVE_RESOURCE_CANONICAL_BINDINGS,
+  isCreativeResourceMediaType,
+  isCreativeResourceScopeKind,
+  isCreativeResourceStatus,
+} from './contracts'
 import { parseCreativeResourceGenerationTaskPayload, toCreativeResourceJsonValue } from './generation-contract'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
-import { getCreativeResourceSchema } from './schema-registry'
+import { CREATIVE_RESOURCE_SCHEMA, getCreativeResourceSchema } from './schema-registry'
 
-type CreativeResourceReadClient = Pick<Prisma.TransactionClient, 'creativeResource' | 'task'> | typeof prisma
+type CreativeResourceReadClient = Pick<
+  Prisma.TransactionClient,
+  'creativeResource' | 'creativeResourceRevision' | 'creativeResourceBinding' | 'task'
+> | typeof prisma
+
+const revisionRelationsInclude = {
+  media: {
+    select: {
+      id: true,
+      publicId: true,
+      mimeType: true,
+      width: true,
+      height: true,
+      durationMs: true,
+    },
+  },
+  outputLineage: {
+    orderBy: [{ position: 'asc' as const }, { role: 'asc' as const }],
+    include: {
+      inputRevision: {
+        select: { id: true, resourceId: true, fingerprint: true },
+      },
+    },
+  },
+} satisfies Prisma.CreativeResourceRevisionInclude
 
 const resourceInclude = {
   headRevision: {
-    include: {
-      media: {
-        select: {
-          id: true,
-          publicId: true,
-          mimeType: true,
-          width: true,
-          height: true,
-          durationMs: true,
-        },
-      },
-      outputLineage: {
-        orderBy: [{ position: 'asc' as const }, { role: 'asc' as const }],
-        include: {
-          inputRevision: {
-            select: { id: true, resourceId: true, fingerprint: true },
-          },
-        },
-      },
-    },
+    include: revisionRelationsInclude,
   },
   bindings: {
     orderBy: [{ role: 'asc' as const }, { slotKey: 'asc' as const }],
@@ -239,15 +251,28 @@ export async function listProjectCreativeResourceCards(input: {
   readonly schemaId?: string | null
   readonly status?: CreativeResourceStatus | null
   readonly limit?: number
+  readonly includeParentScopes?: boolean
   readonly client?: CreativeResourceReadClient
 }): Promise<CreativeResourceCardView[]> {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 200))
   const client = input.client ?? prisma
+  const scopeFilters: Prisma.CreativeResourceWhereInput[] = [{
+    projectId: input.projectId,
+    ...(input.episodeId === undefined ? {} : { episodeId: input.episodeId }),
+  }]
+  if (input.includeParentScopes) {
+    if (input.episodeId) scopeFilters.push({ projectId: input.projectId, episodeId: null })
+    scopeFilters.push({
+      scopeKind: 'user',
+      scopeId: input.userId,
+      projectId: null,
+      episodeId: null,
+    })
+  }
   const rows = await client.creativeResource.findMany({
     where: {
-      projectId: input.projectId,
       userId: input.userId,
-      ...(input.episodeId === undefined ? {} : { episodeId: input.episodeId }),
+      OR: scopeFilters,
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.schemaId?.trim() ? { schemaId: input.schemaId.trim() } : {}),
       ...(input.status ? { status: input.status } : {}),
@@ -284,10 +309,207 @@ export async function getProjectCreativeResourceCard(input: {
 }): Promise<CreativeResourceCardView | null> {
   const client = input.client ?? prisma
   const row = await client.creativeResource.findFirst({
-    where: { id: input.resourceId, projectId: input.projectId, userId: input.userId },
+    where: {
+      id: input.resourceId,
+      userId: input.userId,
+      OR: [
+        { projectId: input.projectId },
+        { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+      ],
+    },
     include: resourceInclude,
   })
   if (!row) return null
   const pending = await loadPendingGenerations(client, [row.id])
   return projectCreativeResourceCardView(row, pending.get(row.id) ?? null)
+}
+
+export async function getProjectCreativeResourceRevisionView(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly resourceId: string
+  readonly revisionId?: string | null
+  readonly client?: CreativeResourceReadClient
+}): Promise<CreativeResourceRevisionView | null> {
+  const client = input.client ?? prisma
+  if (!input.revisionId?.trim()) {
+    const card = await getProjectCreativeResourceCard(input)
+    return card?.resource.headRevision ?? null
+  }
+  const row = await client.creativeResourceRevision.findFirst({
+    where: {
+      id: input.revisionId.trim(),
+      resourceId: input.resourceId,
+      resource: {
+        userId: input.userId,
+        OR: [
+          { projectId: input.projectId },
+          { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+        ],
+      },
+    },
+    include: revisionRelationsInclude,
+  })
+  return row ? revisionView(row) : null
+}
+
+function bindingScopeFromRow(row: {
+  readonly scopeKind: string
+  readonly scopeId: string
+  readonly userId: string
+  readonly projectId: string | null
+  readonly episodeId: string | null
+}): CreativeResourceScopeRef {
+  if (!isCreativeResourceScopeKind(row.scopeKind)) {
+    throw new Error(`CREATIVE_RESOURCE_BINDING_SCOPE_KIND_INVALID:${row.scopeKind}`)
+  }
+  return {
+    kind: row.scopeKind,
+    id: row.scopeId,
+    userId: row.userId,
+    projectId: row.projectId,
+    episodeId: row.episodeId,
+  }
+}
+
+function workingBindingView(row: {
+  readonly id: string
+  readonly userId: string
+  readonly projectId: string | null
+  readonly episodeId: string | null
+  readonly scopeKind: string
+  readonly scopeId: string
+  readonly role: string
+  readonly slotKey: string
+  readonly source: string
+  readonly version: number
+  readonly resourceId: string
+  readonly revisionId: string
+  readonly resource: {
+    readonly name: string
+    readonly mediaType: string
+    readonly schemaId: string
+  }
+  readonly revision: {
+    readonly resourceId: string
+    readonly revision: number
+    readonly fingerprint: string
+  }
+}): CreativeResourceWorkingBindingView {
+  if (row.revision.resourceId !== row.resourceId) {
+    throw new Error(`CREATIVE_RESOURCE_BINDING_REVISION_RESOURCE_MISMATCH:${row.id}`)
+  }
+  return {
+    bindingId: row.id,
+    scope: bindingScopeFromRow(row),
+    role: row.role,
+    slotKey: row.slotKey,
+    version: row.version,
+    source: row.source,
+    resourceId: row.resourceId,
+    revisionId: row.revisionId,
+    revision: row.revision.revision,
+    fingerprint: row.revision.fingerprint,
+    schemaId: row.resource.schemaId,
+    mediaType: requireMediaType(row.resource.mediaType),
+    name: row.resource.name,
+  }
+}
+
+function canonicalBinding(
+  bindings: readonly CreativeResourceWorkingBindingView[],
+  target: { readonly role: string; readonly slotKey: string },
+  expectedSchemaId: string,
+): CreativeResourceWorkingBindingView | null {
+  const binding = bindings.find((candidate) => (
+    candidate.role === target.role && candidate.slotKey === target.slotKey
+  )) ?? null
+  if (binding && binding.schemaId !== expectedSchemaId) {
+    throw new Error(`CREATIVE_RESOURCE_CANONICAL_BINDING_SCHEMA_INVALID:${target.role}:${binding.schemaId}`)
+  }
+  return binding
+}
+
+export async function readProjectCreativeResourceWorkingSet(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string | null
+  readonly client?: CreativeResourceReadClient
+}): Promise<CreativeResourceWorkingSetView> {
+  const client = input.client ?? prisma
+  const scopeWhere: Prisma.CreativeResourceBindingWhereInput[] = input.episodeId
+    ? [
+        { scopeKind: 'episode', scopeId: input.episodeId },
+        { scopeKind: 'project', scopeId: input.projectId },
+      ]
+    : [{ scopeKind: 'project', scopeId: input.projectId }]
+  const resourceScopeWhere: Prisma.CreativeResourceWhereInput[] = input.episodeId
+    ? [{ episodeId: input.episodeId }, { episodeId: null }]
+    : [{ episodeId: null }]
+  const [rows, resourceCounts] = await Promise.all([
+    client.creativeResourceBinding.findMany({
+      where: {
+        userId: input.userId,
+        projectId: input.projectId,
+        OR: scopeWhere,
+      },
+      select: {
+        id: true,
+        userId: true,
+        projectId: true,
+        episodeId: true,
+        scopeKind: true,
+        scopeId: true,
+        role: true,
+        slotKey: true,
+        source: true,
+        version: true,
+        resourceId: true,
+        revisionId: true,
+        resource: { select: { name: true, mediaType: true, schemaId: true } },
+        revision: { select: { resourceId: true, revision: true, fingerprint: true } },
+      },
+      orderBy: [{ scopeKind: 'asc' }, { role: 'asc' }, { slotKey: 'asc' }],
+    }),
+    client.creativeResource.groupBy({
+      by: ['schemaId'],
+      where: {
+        userId: input.userId,
+        projectId: input.projectId,
+        OR: resourceScopeWhere,
+      },
+      _count: { _all: true },
+      orderBy: { schemaId: 'asc' },
+    }),
+  ])
+  const bindings = rows
+    .map(workingBindingView)
+    .sort((left, right) => {
+      const leftPriority = left.scope.kind === 'episode' ? 0 : 1
+      const rightPriority = right.scope.kind === 'episode' ? 0 : 1
+      return leftPriority - rightPriority
+        || left.role.localeCompare(right.role)
+        || left.slotKey.localeCompare(right.slotKey)
+    })
+  const bySchema = resourceCounts.map((entry) => ({
+    schemaId: entry.schemaId,
+    count: entry._count._all,
+  }))
+  return {
+    confirmedScreenplay: canonicalBinding(
+      bindings,
+      CREATIVE_RESOURCE_CANONICAL_BINDINGS.confirmedScreenplay,
+      CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
+    ),
+    adoptedStyleBible: canonicalBinding(
+      bindings,
+      CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
+      CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+    ),
+    bindings,
+    availableResources: {
+      total: bySchema.reduce((sum, entry) => sum + entry.count, 0),
+      bySchema,
+    },
+  }
 }

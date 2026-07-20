@@ -6,7 +6,7 @@ import type { CreativeWorkerEvent } from '@/lib/creative-worker/types'
 
 const skillReadTraceSchema = z.object({
   ordinal: z.number().int().positive(),
-  source: z.enum(['required', 'tool']),
+  source: z.enum(['preloaded', 'tool']),
   skillId: z.enum(CREATIVE_SKILL_IDS),
   version: z.string().trim().min(1),
   uri: z.string().trim().min(1),
@@ -19,12 +19,6 @@ const creativeWorkerEventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('started'),
     outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
     goal: z.string().trim().min(1),
-  }).strict(),
-  z.object({
-    kind: z.literal('skills_discovered'),
-    query: z.string().trim().min(1),
-    tags: z.array(z.string()),
-    skillIds: z.array(z.enum(CREATIVE_SKILL_IDS)),
   }).strict(),
   z.object({
     kind: z.literal('skill_read'),
@@ -74,8 +68,19 @@ export interface ProjectAgentSubagentView {
   outputKind: Extract<CreativeWorkerEvent, { kind: 'started' }>['outputKind']
   goal: string
   status: ProjectAgentSubagentStatus
+  summary: string | null
+  errorCode: string | null
+  finishedAt: string | null
   events: ProjectAgentSubagentEventPartData[]
   skillReads: Array<Extract<CreativeWorkerEvent, { kind: 'skill_read' }>['trace']>
+}
+
+export interface ProjectAgentSubagentTaskFact {
+  taskId: string
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
+  summary: string | null
+  errorCode: string | null
+  finishedAt: string | null
 }
 
 export function parseProjectAgentSubagentEventPartData(
@@ -102,7 +107,9 @@ function assertSameEvent(
 
 export function resolveProjectAgentSubagentViews(
   rawEvents: readonly ProjectAgentSubagentEventPartData[],
+  taskFacts: readonly ProjectAgentSubagentTaskFact[],
 ): ProjectAgentSubagentView[] {
+  const taskFactsById = new Map(taskFacts.map((fact) => [fact.taskId, fact]))
   const grouped = new Map<string, Map<number, ProjectAgentSubagentEventPartData>>()
   for (const event of rawEvents) {
     const events = grouped.get(event.subagentId) ?? new Map<number, ProjectAgentSubagentEventPartData>()
@@ -136,6 +143,18 @@ export function resolveProjectAgentSubagentViews(
     if (terminalStatuses.length > 1) {
       throw new Error(`PROJECT_AGENT_SUBAGENT_TERMINAL_EVENT_CONFLICT:${subagentId}`)
     }
+    const taskFact = taskFactsById.get(first.taskId)
+    if (!taskFact) throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_FACT_MISSING:${first.taskId}`)
+    const status: ProjectAgentSubagentStatus = taskFact.status === 'completed'
+      ? 'completed'
+      : taskFact.status === 'failed'
+        ? 'failed'
+        : taskFact.status === 'canceled'
+          ? 'cancelled'
+          : 'running'
+    if (terminalStatuses[0] && terminalStatuses[0] !== status) {
+      throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_STATUS_CONFLICT:${subagentId}`)
+    }
     const startEvent = first.event
     const skillReads = events.flatMap((event) => (
       event.event.kind === 'skill_read' ? [event.event.trace] : []
@@ -147,17 +166,14 @@ export function resolveProjectAgentSubagentViews(
       toolCallId: first.toolCallId,
       outputKind: startEvent.outputKind,
       goal: startEvent.goal,
-      status: terminalStatuses[0] ?? 'running',
+      status,
+      summary: taskFact.summary,
+      errorCode: taskFact.errorCode,
+      finishedAt: taskFact.finishedAt,
       events,
       skillReads,
     }
   }).sort((left, right) => (
     left.events[0]?.occurredAt.localeCompare(right.events[0]?.occurredAt ?? '') ?? 0
   ))
-}
-
-export function resolveActiveProjectAgentSubagents(
-  events: readonly ProjectAgentSubagentEventPartData[],
-): ProjectAgentSubagentView[] {
-  return resolveProjectAgentSubagentViews(events).filter((subagent) => subagent.status === 'running')
 }

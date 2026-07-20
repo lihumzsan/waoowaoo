@@ -97,6 +97,7 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
             modelKey: `test-${spec.mediaType}-model`,
             inputHash: `${index + 1}`.repeat(64),
             inputs: [],
+            imageInputPositions: [],
             generationOptions: {},
             executionSegmentId: null,
             toolCallId: `assistant-operation-batch-tool-call-${index + 1}`,

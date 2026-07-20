@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { CreativeSkillId } from '@/lib/creative-skills'
 import { rawEditBibleBundleSchema } from '@/lib/edit-bible/schemas'
 import {
   editScriptStyleBibleSchema,
@@ -75,6 +74,14 @@ const assetPromptSetOutputSchema = z.object({
   warnings: textList(64, 2_000),
 }).strict()
 
+const styleBibleCandidateOptionsSchema = editStylePreviewOptionsSchema.refine(
+  (value) => value.stylePreviews.length === 3,
+  {
+    path: ['stylePreviews'],
+    message: 'CREATIVE_STYLE_BIBLE_CANDIDATE_COUNT_INVALID',
+  },
+)
+
 const styleBibleOutputSchema = z.object({
   kind: z.literal('style_bible'),
   design: z.discriminatedUnion('mode', [
@@ -84,7 +91,7 @@ const styleBibleOutputSchema = z.object({
     }).strict(),
     z.object({
       mode: z.literal('candidates'),
-      options: editStylePreviewOptionsSchema,
+      options: styleBibleCandidateOptionsSchema,
     }).strict(),
   ]).describe('Return one finalized Style Bible, or a validated candidate set when the user needs comparison.'),
   assumptions: textList(64, 2_000),
@@ -180,49 +187,40 @@ export type CreativeWorkOutput = {
 
 export interface CreativeWorkOutputDefinition {
   kind: CreativeWorkOutputKind
-  requiredSkillIds: readonly CreativeSkillId[]
   schema: z.ZodObject
 }
 
 export const creativeWorkOutputRegistry = {
   screenplay_draft: {
     kind: 'screenplay_draft',
-    requiredSkillIds: ['creative-core', 'story-development'],
     schema: creativeWorkOutputSchemas.screenplay_draft,
   },
   edit_bible_bundle: {
     kind: 'edit_bible_bundle',
-    requiredSkillIds: ['creative-core', 'story-development', 'continuity-memory'],
     schema: creativeWorkOutputSchemas.edit_bible_bundle,
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
-    requiredSkillIds: ['creative-core', 'continuity-memory'],
     schema: creativeWorkOutputSchemas.continuity_analysis,
   },
   style_bible: {
     kind: 'style_bible',
-    requiredSkillIds: ['creative-core', 'style-development'],
     schema: creativeWorkOutputSchemas.style_bible,
   },
   asset_prompt_set: {
     kind: 'asset_prompt_set',
-    requiredSkillIds: ['creative-core', 'asset-development'],
     schema: creativeWorkOutputSchemas.asset_prompt_set,
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
-    requiredSkillIds: ['creative-core', 'director-core', 'video-direction'],
     schema: creativeWorkOutputSchemas.video_prompt_set,
   },
   music_direction: {
     kind: 'music_direction',
-    requiredSkillIds: ['creative-core', 'music-direction'],
     schema: creativeWorkOutputSchemas.music_direction,
   },
   creative_review: {
     kind: 'creative_review',
-    requiredSkillIds: ['creative-core', 'quality-review'],
     schema: creativeWorkOutputSchemas.creative_review,
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>

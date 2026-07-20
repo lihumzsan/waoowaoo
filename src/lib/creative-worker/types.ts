@@ -89,7 +89,6 @@ export type CreativeWorkRequest = z.infer<typeof creativeWorkRequestSchema>
 
 export interface CreativeWorkerBudgets {
   maxTurns: number
-  maxDiscoveryCalls: number
   maxReadCalls: number
   maxSkillContentChars: number
   maxSingleSkillResourceChars: number
@@ -101,7 +100,7 @@ export type CreativeWorkerBudgetOverrides = Partial<CreativeWorkerBudgets>
 
 export interface CreativeSkillReadTraceEntry {
   ordinal: number
-  source: 'required' | 'tool'
+  source: 'preloaded' | 'tool'
   skillId: CreativeSkillId
   version: string
   uri: string
@@ -110,7 +109,6 @@ export interface CreativeSkillReadTraceEntry {
 }
 
 export interface CreativeWorkerMetrics {
-  discoveryCalls: number
   readCalls: number
   skillContentChars: number
 }
@@ -120,12 +118,6 @@ export type CreativeWorkerEvent =
     kind: 'started'
     outputKind: CreativeWorkOutputKind
     goal: string
-  }
-  | {
-    kind: 'skills_discovered'
-    query: string
-    tags: readonly string[]
-    skillIds: readonly CreativeSkillId[]
   }
   | {
     kind: 'skill_read'
@@ -169,7 +161,6 @@ export interface CreativeWorkerRunContext {
   locale: CreativeSkillLocale
   budgets: CreativeWorkerBudgets
   counters: {
-    discoveryCalls: number
     readCalls: number
     skillContentChars: number
   }

@@ -761,7 +761,7 @@ describe('Golden local model provider', () => {
     if (decision.kind !== 'tool_call') return
     expect(JSON.parse(decision.argumentsJson)).toMatchObject({
       request: { kind: 'new', count: 2 },
-      references: [{
+      imageReferences: [{
         resourceId: 'image-resource-1',
         revisionId: 'image-revision-1',
         fingerprint: 'f'.repeat(64),

@@ -43,9 +43,17 @@
     "stepProgress": "Step {current} / {total}"
   },
   "subagents": {
-    "tabsLabel": "运行中的 Subagent",
+    "tabsLabel": "Subagent",
     "primary": "Primary",
     "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
+    "close": "关闭 {title}",
+    "result": "创作结果",
+    "status": {
+      "running": "进行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
     "outputKinds": {
       "screenplayDraft": "剧本创作",
       "editBibleBundle": "制作 Bible",
@@ -58,7 +66,6 @@
     },
     "events": {
       "started": "已接收委派目标",
-      "skillsDiscovered": "发现 {count} 个相关 Skill",
       "skillRead": "读取 {skill}",
       "composing": "正在整理结构化结果",
       "completed": "已完成",

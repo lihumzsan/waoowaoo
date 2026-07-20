@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { vi } from 'vitest'
 
 import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
@@ -47,16 +47,19 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(async (): Promise<unknown> => null),
   },
   task: {
-    findMany: vi.fn(async () => [
-      {
-        id: 'task-1',
-        operationId: 'generate_edit_script_assets',
-        type: 'image_location',
-        targetType: 'LocationImage',
-        targetId: 'location-image-1',
-        status: 'processing',
-      },
-    ]),
+    findMany: vi.fn(async (args?: unknown) => {
+      void args
+      return [
+        {
+          id: 'task-1',
+          operationId: 'generate_edit_script_assets',
+          type: 'image_location',
+          targetType: 'LocationImage',
+          targetId: 'location-image-1',
+          status: 'processing',
+        },
+      ]
+    }),
   },
   projectAgentRun: {
     findMany: vi.fn(async () => [{

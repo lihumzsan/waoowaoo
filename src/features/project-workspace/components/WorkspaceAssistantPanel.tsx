@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
@@ -30,6 +30,7 @@ import {
   WorkspaceAssistantSubagentTabs,
   WorkspaceAssistantSubagentView,
   WorkspaceAssistantSubagentSummary,
+  WorkspaceAssistantSubagentRecords,
 } from './workspace-assistant/WorkspaceAssistantSubagents'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -120,13 +121,21 @@ export default function WorkspaceAssistantPanel({
   const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
+  const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(() => new Set())
+  const visibleSubagents = useMemo(() => assistantRuntime.subagents.filter(
+    (subagent) => !dismissedSubagentIds.has(subagent.subagentId),
+  ), [assistantRuntime.subagents, dismissedSubagentIds])
 
   useEffect(() => {
-    const activeSubagents = assistantRuntime.activeSubagents
     if (!selectedSubagentId) return
-    if (activeSubagents.some((item) => item.subagentId === selectedSubagentId)) return
+    if (visibleSubagents.some((item) => item.subagentId === selectedSubagentId)) return
     setSelectedSubagentId(null)
-  }, [assistantRuntime.activeSubagents, selectedSubagentId])
+  }, [selectedSubagentId, visibleSubagents])
+
+  const dismissSubagent = (subagentId: string): void => {
+    setDismissedSubagentIds((current) => new Set([...current, subagentId]))
+    if (selectedSubagentId === subagentId) setSelectedSubagentId(null)
+  }
 
   useWorkspaceAssistantMessageDispatch({
     autoStartDraft,
@@ -236,18 +245,19 @@ export default function WorkspaceAssistantPanel({
             <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantSettings />
               <WorkspaceAssistantSubagentTabs
-                subagents={assistantRuntime.activeSubagents}
+                subagents={visibleSubagents}
                 selectedSubagentId={selectedSubagentId}
                 onSelect={setSelectedSubagentId}
+                onDismiss={dismissSubagent}
               />
               <ThreadPrimitive.Viewport
                 autoScroll
-                className={`flex-1 overflow-y-auto px-5 pb-4 ${assistantRuntime.activeSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
+                className={`flex-1 overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 {selectedSubagentId ? (
                   <WorkspaceAssistantSubagentView
-                    subagent={assistantRuntime.activeSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
+                    subagent={visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
                   />
                 ) : (
                   <div>
@@ -273,7 +283,11 @@ export default function WorkspaceAssistantPanel({
                         />
                       ) : null}
                       <WorkspaceAssistantSubagentSummary
-                        subagents={assistantRuntime.activeSubagents}
+                        subagents={visibleSubagents}
+                        onSelect={setSelectedSubagentId}
+                      />
+                      <WorkspaceAssistantSubagentRecords
+                        subagents={visibleSubagents}
                         onSelect={setSelectedSubagentId}
                       />
                       {serverPendingApproval ? (

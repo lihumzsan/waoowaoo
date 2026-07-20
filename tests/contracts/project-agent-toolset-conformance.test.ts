@@ -7,10 +7,14 @@ import {
   readCreativeSkillResource,
 } from '@/lib/creative-skills'
 import {
+  CREATIVE_WORK_TASK_PROTOCOL,
   CREATIVE_WORK_OUTPUT_KINDS,
   creativeWorkOutputRegistry,
+  creativeWorkTaskPayloadSchema,
+  creativeWorkTaskResultSchema,
 } from '@/lib/creative-worker'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
+import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-access'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
@@ -124,6 +128,14 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('content')
     expect(Object.keys(registry.create_image.toolInputSchema.properties)).toContain('request')
     expect(Object.keys(registry.create_audio.toolInputSchema.properties)).toContain('request')
+    for (const operationId of operationIds) {
+      expect(Object.keys(registry[operationId].toolInputSchema.properties)).toContain('contextReferences')
+      expect(Object.keys(registry[operationId].toolInputSchema.properties)).not.toContain('references')
+    }
+    expect(Object.keys(registry.create_image.toolInputSchema.properties)).toContain('imageReferences')
+    expect(Object.keys(registry.create_video.toolInputSchema.properties)).toContain('imageReferences')
+    expect(Object.keys(registry.create_text.toolInputSchema.properties)).not.toContain('imageReferences')
+    expect(Object.keys(registry.create_audio.toolInputSchema.properties)).not.toContain('imageReferences')
     expect(Object.keys(registry.create_video.toolInputSchema.properties)).toEqual(expect.arrayContaining([
       'request',
       'durationSeconds',
@@ -161,6 +173,11 @@ describe('project agent toolset conformance', () => {
       modelKey: 'provider::model',
       request: { kind: 'new', count: 1 },
     }).success).toBe(false)
+    expect(registry.create_image.inputSchema.safeParse({
+      prompt: 'Legacy ambiguous reference input.',
+      request: { kind: 'new', count: 1 },
+      references: [],
+    }).success).toBe(false)
   })
 
   it('publishes exact retry, segment, and task branches without Agent model configuration', () => {
@@ -186,6 +203,32 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.generate_episode_bgm_score.toolInputSchema.properties)).not.toContain('musicModel')
   })
 
+  it('uses dedicated exact-revision operations for canonical screenplay and Style Bible bindings', () => {
+    const registry = createProjectAgentOperationRegistry()
+
+    expect(registry.confirm_script_resource.channels.tool).toBe(true)
+    expect(Object.keys(registry.confirm_script_resource.toolInputSchema.properties)).toEqual([
+      'resourceId', 'revisionId', 'expectedVersion',
+    ])
+    expect(registry.confirm_script_resource.inputSchema.safeParse({
+      resourceId: 'resource:screenplay',
+      revisionId: 'revision:screenplay',
+      expectedVersion: null,
+    }).success).toBe(true)
+
+    expect(registry.adopt_style_bible.inputSchema.safeParse({
+      taskId: 'task:style',
+      name: 'Final style',
+      selection: { kind: 'candidate', styleKey: 'style_b' },
+      expectedVersion: null,
+    }).success).toBe(true)
+    expect(registry.adopt_style_bible.inputSchema.safeParse({
+      taskId: 'task:style',
+      name: 'Final style',
+      selection: { kind: 'candidate', styleKey: 'style_unknown' },
+    }).success).toBe(false)
+  })
+
   it('exposes one background Creative Worker delegation contract without domain write authority', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.delegate_creative_work
@@ -205,25 +248,54 @@ describe('project agent toolset conformance', () => {
       externalSideEffects: true,
       longRunning: true,
     })
-    expect(Object.keys(operation.toolInputSchema.properties)).toEqual([
-      'kind', 'request', 'requests', 'chapterBatch',
-    ])
+    expect(Object.keys(operation.toolInputSchema.properties)).toEqual(['delegation'])
+    const delegationSchema = readRecord(operation.toolInputSchema.properties.delegation)
+    const sourceBranches = (Array.isArray(delegationSchema.oneOf) ? delegationSchema.oneOf : [])
+      .map((branch) => readRecord(readRecord(readRecord(branch).properties).source).const)
+    expect(sourceBranches).toEqual(['requests', 'chapters'])
     expect(operation.inputSchema.safeParse({
-      kind: 'single',
-      request: {
-        requestKey: 'short-video-1',
-        outputKind: 'video_prompt_set',
-        goal: 'Design the complete requested video.',
-        targetDurationSeconds: 60,
-        context: {
-          userRequest: 'A lantern wakes in an abandoned shrine.',
-          sourceMaterials: [],
-          constraints: ['Preserve the same lantern identity throughout.'],
-        },
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'short-video-1',
+          outputKind: 'video_prompt_set',
+          goal: 'Design the complete requested video.',
+          targetDurationSeconds: 60,
+          context: {
+            userRequest: 'A lantern wakes in an abandoned shrine.',
+            sourceMaterials: [],
+            constraints: ['Preserve the same lantern identity throughout.'],
+          },
+        }],
       },
-      requests: null,
-      chapterBatch: null,
     }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      delegation: { source: 'requests', requests: [] },
+    }).success).toBe(false)
+    expect(operation.inputSchema.safeParse({
+      delegation: {
+        source: 'chapters',
+        chapters: [{ chapterId: 'chapter-1', requestKey: 'chapter-1-video' }],
+        outputKind: 'video_prompt_set',
+        goal: 'Design this Chapter as executable video generations.',
+        userRequest: 'Produce the complete long-form story.',
+        constraints: ['Preserve continuity with adjacent Chapters.'],
+        referencedAssets: [],
+      },
+    }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'legacy-null-branches',
+          outputKind: 'creative_review',
+          goal: 'Review the supplied result.',
+          context: { userRequest: '', sourceMaterials: [], constraints: [] },
+        }],
+        request: null,
+        chapterBatch: null,
+      },
+    }).success).toBe(false)
   })
 
   it('keeps every Creative Skill flat, localized, registry-addressed, and Worker-readable', async () => {
@@ -250,24 +322,18 @@ describe('project agent toolset conformance', () => {
     }
   })
 
-  it('gives the Creative Worker only Skill discovery/read tools and exhaustive required Skill bundles', () => {
-    expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual([
-      'discover_skills', 'read_skill',
+  it('gives the Creative Worker the complete Skill catalog and one autonomous read tool', () => {
+    expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual(['read_skill'])
+    expect(listCreativeWorkerSkillCatalog('zh').map((skill) => skill.id)).toEqual([
+      ...CREATIVE_SKILL_IDS,
     ])
+    expect(listCreativeWorkerSkillCatalog('en').every((skill) => (
+      skill.title.length > 0 && skill.summary.length > 0 && skill.entryUri.startsWith('skill://')
+    ))).toBe(true)
     expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
-    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => [
-      kind,
-      definition.requiredSkillIds,
-    ]))).toEqual({
-      screenplay_draft: ['creative-core', 'story-development'],
-      edit_bible_bundle: ['creative-core', 'story-development', 'continuity-memory'],
-      continuity_analysis: ['creative-core', 'continuity-memory'],
-      style_bible: ['creative-core', 'style-development'],
-      asset_prompt_set: ['creative-core', 'asset-development'],
-      video_prompt_set: ['creative-core', 'director-core', 'video-direction'],
-      music_direction: ['creative-core', 'music-direction'],
-      creative_review: ['creative-core', 'quality-review'],
-    })
+    expect(Object.values(creativeWorkOutputRegistry).every((definition) => (
+      !('requiredSkillIds' in definition)
+    ))).toBe(true)
 
     const videoOutput = {
       kind: 'video_prompt_set',
@@ -314,6 +380,109 @@ describe('project agent toolset conformance', () => {
       ...videoOutput,
       segments: undefined,
       shots: videoOutput.segments,
+    }).success).toBe(false)
+  })
+
+  it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
+    const lifecycleProjection = {
+      requestKey: 'review-1',
+      outputKind: 'creative_review' as const,
+      goal: 'Review the supplied result.',
+      events: [{
+        sequence: 1,
+        occurredAt: '2026-07-20T00:00:00.000Z',
+        event: {
+          kind: 'started' as const,
+          outputKind: 'creative_review' as const,
+          goal: 'Review the supplied result.',
+        },
+      }],
+    }
+    const payload = {
+      protocol: CREATIVE_WORK_TASK_PROTOCOL,
+      requestKey: 'review-1',
+      request: {
+        outputKind: 'creative_review' as const,
+        goal: 'Review the supplied result.',
+        context: { userRequest: '', sourceMaterials: [], constraints: [] },
+        productionContext: { video: null },
+      },
+      modelKey: 'test:model',
+      inputFingerprint: 'fingerprint',
+      origin: { runId: 'run-1', toolCallId: 'tool-1' },
+      lifecycleProjection,
+      ui: { progressGroupId: 'operation:delegate_creative_work:request-1' },
+      meta: {
+        locale: 'zh',
+        flowId: 'creative-work',
+        flowStageIndex: 1,
+        flowStageTotal: 1,
+        trace: { requestId: 'request-1' },
+      },
+    }
+    expect(creativeWorkTaskPayloadSchema.safeParse(payload).success).toBe(true)
+    expect(creativeWorkTaskPayloadSchema.safeParse({
+      ...payload,
+      protocol: undefined,
+    }).success).toBe(false)
+
+    const result = {
+      requestKey: 'review-1',
+      outputKind: 'creative_review' as const,
+      summary: 'The result is coherent.',
+      continuationProjection: {
+        requestKey: 'review-1',
+        outputKind: 'creative_review' as const,
+        summary: 'The result is coherent.',
+      },
+      lifecycleProjection,
+      creativeWorkResult: {
+        outputKind: 'creative_review' as const,
+        output: {
+          kind: 'creative_review' as const,
+          verdict: 'pass' as const,
+          summary: 'The result is coherent.',
+          findings: [],
+          preservedStrengths: [],
+          assumptions: [],
+        },
+        skillTrace: [{
+          ordinal: 1,
+          source: 'tool' as const,
+          skillId: 'quality-review' as const,
+          version: '1',
+          uri: 'skill://quality-review/SKILL.md',
+          checksum: 'checksum',
+          contentChars: 100,
+        }],
+        metrics: { readCalls: 1, skillContentChars: 100 },
+        budgets: {
+          maxTurns: 8,
+          maxReadCalls: 8,
+          maxSkillContentChars: 100_000,
+          maxSingleSkillResourceChars: 50_000,
+          maxInputChars: 1_000_000,
+          maxOutputChars: 100_000,
+        },
+      },
+    }
+    expect(creativeWorkTaskResultSchema.safeParse(result).success).toBe(true)
+    expect(creativeWorkTaskResultSchema.safeParse({
+      ...result,
+      continuationProjection: {
+        ...result.continuationProjection,
+        summary: 'Contradictory summary.',
+      },
+    }).success).toBe(false)
+    expect(creativeWorkTaskResultSchema.safeParse({
+      ...result,
+      creativeWorkResult: {
+        ...result.creativeWorkResult,
+        skillTrace: [{
+          ...result.creativeWorkResult.skillTrace[0],
+          skillId: 'invented-skill',
+        }],
+      },
     }).success).toBe(false)
   })
 

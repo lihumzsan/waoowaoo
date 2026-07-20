@@ -20,9 +20,15 @@ async function loadVideoImageReferences(
   job: Job<TaskJobData>,
   input: CreativeResourceGenerationTaskPayload,
 ) {
-  if (input.resource.inputs.length === 0) return []
+  const inputByPosition = new Map(input.resource.inputs.map((reference) => [reference.position, reference]))
+  const imageInputs = input.resource.imageInputPositions.map((position) => {
+    const reference = inputByPosition.get(position)
+    if (!reference) throw new Error(`CREATIVE_RESOURCE_VIDEO_IMAGE_INPUT_POSITION_INVALID:${String(position)}`)
+    return reference
+  })
+  if (imageInputs.length === 0) return []
   const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: input.resource.inputs.map((reference) => reference.revisionId) } },
+    where: { id: { in: imageInputs.map((reference) => reference.revisionId) } },
     select: {
       id: true,
       resourceId: true,
@@ -32,7 +38,7 @@ async function loadVideoImageReferences(
     },
   })
   const byId = new Map(revisions.map((revision) => [revision.id, revision]))
-  return await Promise.all(input.resource.inputs.map(async (reference, index) => {
+  return await Promise.all(imageInputs.map(async (reference, index) => {
     const revision = byId.get(reference.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
     if (

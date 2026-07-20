@@ -4,12 +4,14 @@ import {
   executeTaskProviderInvocation,
   markTaskProviderInvocationRetryable,
   markTaskProviderInvocationRetryableByExternalId,
+  readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
 import { withLogContext } from '@/lib/logging/context'
 import { FetchStatusError } from '@/lib/retry'
 import { TASK_TYPE } from '@/lib/task/types'
 import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
 import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
+import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import { resetBillingState } from '../../helpers/db-reset'
 import {
   createQueuedTask,
@@ -42,10 +44,14 @@ function invoke(
     taskId,
     invocation: { key: invocationKey },
     modality: 'music',
-    provider: 'google',
-    modelKey: 'google::lyria-3-pro-preview',
-    request: { prompt: 'durable provider invocation' },
-    execute,
+    logicalCapabilityId: 'music:google::lyria-3-pro-preview',
+    primaryModelKey: 'google::lyria-3-pro-preview',
+    routes: [{
+      provider: 'google',
+      modelKey: 'google::lyria-3-pro-preview',
+      request: { prompt: 'durable provider invocation' },
+      execute,
+    }],
   }))
 }
 
@@ -144,10 +150,14 @@ describe('provider invocation at-most-once DB integration', () => {
       taskId: 'provider-candidate-task',
       invocation: { key },
       modality: 'image',
-      provider: 'fal',
-      modelKey: 'fal::image-model',
-      request: { prompt: 'same candidate prompt' },
-      execute,
+      logicalCapabilityId: 'image:fal::image-model',
+      primaryModelKey: 'fal::image-model',
+      routes: [{
+        provider: 'fal',
+        modelKey: 'fal::image-model',
+        request: { prompt: 'same candidate prompt' },
+        execute,
+      }],
     }))
 
     await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
@@ -158,6 +168,125 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(prisma.taskExecutionCheckpoint.count({
       where: { taskId: 'provider-candidate-task' },
     })).resolves.toBe(2)
+  })
+
+  it('advances one logical invocation to the next declared route only after typed pre-accept rejection', async () => {
+    await seedTask('provider-route-failover-task')
+    const primary = vi.fn(async () => {
+      throw new ProviderPreAcceptRejectedError('provider_account_limit', 'primary account hard limit')
+    })
+    const secondary = vi.fn(async () => ({
+      success: true,
+      async: true,
+      externalId: 'FAL:IMAGE:openai/gpt-image-2:secondary-request',
+    }))
+
+    const result = await withLogContext({ taskId: 'provider-route-failover-task', taskAttempt: 1 }, async () => (
+      await executeTaskProviderInvocation({
+        taskId: 'provider-route-failover-task',
+        invocation: { key: 'media:image:primary' },
+        modality: 'image',
+        logicalCapabilityId: 'image.gpt-image-2',
+        primaryModelKey: 'openrouter::openai/gpt-image-2',
+        routes: [
+          {
+            provider: 'openrouter',
+            modelKey: 'openrouter::openai/gpt-image-2',
+            request: { prompt: 'same prompt', aspectRatio: '1:1' },
+            execute: primary,
+          },
+          {
+            provider: 'fal',
+            modelKey: 'fal::gpt-image-2',
+            request: { prompt: 'same prompt', aspectRatio: '1:1' },
+            execute: secondary,
+          },
+        ],
+      })
+    ))
+
+    expect(primary).toHaveBeenCalledTimes(1)
+    expect(secondary).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({
+      success: true,
+      externalId: 'FAL:IMAGE:openai/gpt-image-2:secondary-request',
+      metadata: {
+        providerRoute: {
+          logicalCapabilityId: 'image.gpt-image-2',
+          routeIndex: 1,
+          provider: 'fal',
+          modelKey: 'fal::gpt-image-2',
+        },
+      },
+    })
+    const checkpoint = await prisma.taskExecutionCheckpoint.findFirstOrThrow({
+      where: { taskId: 'provider-route-failover-task' },
+      select: { state: true, output: true },
+    })
+    expect(checkpoint.state).toBe('submitted')
+    expect(checkpoint.output).toMatchObject({
+      protocol: 'media_routes_v1',
+      logicalCapabilityId: 'image.gpt-image-2',
+      routeAttempts: [
+        { routeIndex: 0, provider: 'openrouter', state: 'pre_accept_rejected' },
+        {
+          routeIndex: 1,
+          provider: 'fal',
+          state: 'submitted',
+          externalId: 'FAL:IMAGE:openai/gpt-image-2:secondary-request',
+        },
+      ],
+    })
+    await expect(readTaskProviderInvocationRouteSelection({
+      taskId: 'provider-route-failover-task',
+      invocation: { key: 'media:image:primary' },
+    })).resolves.toEqual({
+      provider: 'fal',
+      modelKey: 'fal::gpt-image-2',
+      logicalCapabilityId: 'image.gpt-image-2',
+    })
+  })
+
+  it('does not advance a route set when the primary submission outcome is ambiguous', async () => {
+    await seedTask('provider-route-ambiguous-task')
+    const primary = vi.fn(async () => {
+      throw new TypeError('connection closed after request write')
+    })
+    const secondary = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
+
+    await expect(withLogContext({ taskId: 'provider-route-ambiguous-task', taskAttempt: 1 }, async () => (
+      await executeTaskProviderInvocation({
+        taskId: 'provider-route-ambiguous-task',
+        invocation: { key: 'media:image:primary' },
+        modality: 'image',
+        logicalCapabilityId: 'image.gpt-image-2',
+        primaryModelKey: 'openrouter::openai/gpt-image-2',
+        routes: [
+          {
+            provider: 'openrouter',
+            modelKey: 'openrouter::openai/gpt-image-2',
+            request: { prompt: 'same prompt' },
+            execute: primary,
+          },
+          {
+            provider: 'fal',
+            modelKey: 'fal::gpt-image-2',
+            request: { prompt: 'same prompt' },
+            execute: secondary,
+          },
+        ],
+      })
+    ))).rejects.toMatchObject({ code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN' })
+    expect(primary).toHaveBeenCalledTimes(1)
+    expect(secondary).not.toHaveBeenCalled()
+    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
+      where: { taskId: 'provider-route-ambiguous-task' },
+      select: { state: true },
+    })).resolves.toEqual({ state: 'outcome_unknown' })
+    await expect(readTaskProviderInvocationRouteSelection({
+      taskId: 'provider-route-ambiguous-task',
+      invocation: { key: 'media:image:primary' },
+    })).resolves.toBeNull()
   })
 
   it('serializes a concurrent first claim so only one caller can invoke the provider', async () => {

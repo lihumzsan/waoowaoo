@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills'
+import {
+  CREATIVE_SKILL_IDS,
+  CREATIVE_SKILL_REGISTRY,
+} from '@/lib/creative-skills'
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
@@ -22,8 +25,8 @@ const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
 
 const creativeSkillTraceEntrySchema = z.object({
   ordinal: z.number().int().positive(),
-  source: z.enum(['required', 'tool']),
-  skillId: z.string().trim().min(1),
+  source: z.enum(['preloaded', 'tool']),
+  skillId: z.enum(CREATIVE_SKILL_IDS),
   version: z.string().trim().min(1),
   uri: z.string().trim().min(1),
   checksum: z.string().trim().min(1),
@@ -35,13 +38,11 @@ export const creativeWorkerResultSchema = z.object({
   output: creativeWorkOutputSchema,
   skillTrace: z.array(creativeSkillTraceEntrySchema),
   metrics: z.object({
-    discoveryCalls: z.number().int().nonnegative(),
     readCalls: z.number().int().nonnegative(),
     skillContentChars: z.number().int().nonnegative(),
   }).strict(),
   budgets: z.object({
     maxTurns: z.number().int().positive(),
-    maxDiscoveryCalls: z.number().int().positive(),
     maxReadCalls: z.number().int().positive(),
     maxSkillContentChars: z.number().int().positive(),
     maxSingleSkillResourceChars: z.number().int().positive(),
@@ -63,8 +64,8 @@ export const creativeWorkDelegationItemSchema = creativeWorkDelegationRequestSch
 }).strict()
 
 export const creativeWorkChapterBatchInputSchema = z.object({
-  episodeId: z.string().trim().min(1).nullable()
-    .describe('Exact episode ID, or null to use the episode currently open in the workspace.'),
+  source: z.literal('chapters')
+    .describe('Compile the persisted Chapter identities below into independent Creative Worker requests.'),
   chapters: z.array(z.object({
     chapterId: z.string().trim().min(1)
       .describe('Exact persisted Chapter identity.'),
@@ -86,20 +87,24 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
     .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including the required project.style_bible Resource and any image assets.'),
-  maxCharsPerChapter: z.number().int().min(4_000).max(200_000)
-    .describe('Fail-closed serialized character budget for one compiled Chapter context.'),
 }).strict()
 
+const creativeWorkRequestBatchInputSchema = z.object({
+  source: z.literal('requests')
+    .describe('Delegate one or more caller-supplied, self-contained Creative Worker requests.'),
+  requests: z.array(creativeWorkDelegationItemSchema).min(1).max(64)
+    .describe('One request is one Subagent Task. Multiple independent requests run through the existing Task batch and collecting Wait.'),
+}).strict()
+
+const creativeWorkDelegationSourceSchema = z.discriminatedUnion('source', [
+  creativeWorkRequestBatchInputSchema,
+  creativeWorkChapterBatchInputSchema,
+])
+
 export const creativeWorkDelegationInputSchema = z.object({
-  kind: z.enum(['single', 'batch', 'chapter_batch'])
-    .describe('single delegates request; batch delegates requests; chapter_batch compiles persisted Chapters from chapterBatch.'),
-  request: creativeWorkDelegationItemSchema.nullable()
-    .describe('The only request when kind=single; otherwise null.'),
-  requests: z.array(creativeWorkDelegationItemSchema).min(1).max(64).nullable()
-    .describe('Independent caller-supplied requests when kind=batch; otherwise null.'),
-  chapterBatch: creativeWorkChapterBatchInputSchema.nullable()
-    .describe('Server-side Chapter Context Compiler request when kind=chapter_batch; otherwise null.'),
-}).strict().describe('Exactly one payload matching kind must be non-null. Mismatched or extra payloads fail explicitly.')
+  delegation: creativeWorkDelegationSourceSchema
+    .describe('Choose exactly one input source. No inactive branch or null placeholder is accepted.'),
+}).strict()
 
 const creativeWorkTaskProgressEventSchema = z.object({
   sequence: z.number().int().positive(),
@@ -109,12 +114,6 @@ const creativeWorkTaskProgressEventSchema = z.object({
       kind: z.literal('started'),
       outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
       goal: z.string().trim().min(1),
-    }).strict(),
-    z.object({
-      kind: z.literal('skills_discovered'),
-      query: z.string().trim().min(1),
-      tags: z.array(z.string()),
-      skillIds: z.array(z.string().trim().min(1)),
     }).strict(),
     z.object({
       kind: z.literal('skill_read'),
@@ -130,7 +129,10 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v2' as const
+
 export const creativeWorkTaskPayloadSchema = z.object({
+  protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
   requestKey: z.string().trim().min(1).max(200),
   request: creativeWorkRequestSchema,
   modelKey: z.string().trim().min(1).max(500),
@@ -140,7 +142,18 @@ export const creativeWorkTaskPayloadSchema = z.object({
     toolCallId: z.string().trim().min(1),
   }).strict(),
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
-}).passthrough()
+  stage: z.string().trim().min(1).optional(),
+  stageLabel: z.string().trim().min(1).optional(),
+  displayMode: z.string().trim().min(1).optional(),
+  message: z.string().trim().min(1).optional(),
+  flowId: z.string().trim().min(1).optional(),
+  flowStageTitle: z.string().trim().min(1).optional(),
+  flowStageIndex: z.number().int().positive().optional(),
+  flowStageTotal: z.number().int().positive().optional(),
+  runId: z.string().trim().min(1).optional(),
+  ui: z.record(z.string(), z.unknown()).optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
+}).strict()
 
 const creativeWorkContinuationProjectionSchema = z.object({
   requestKey: z.string().trim().min(1).max(200),
@@ -155,46 +168,45 @@ export const creativeWorkTaskResultSchema = z.object({
   continuationProjection: creativeWorkContinuationProjectionSchema,
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
   creativeWorkResult: creativeWorkerResultSchema,
-}).strict()
+}).strict().superRefine((result, context) => {
+  const mismatches: Array<{ readonly path: readonly PropertyKey[]; readonly code: string }> = []
+  if (result.continuationProjection.requestKey !== result.requestKey) {
+    mismatches.push({
+      path: ['continuationProjection', 'requestKey'],
+      code: 'CREATIVE_WORK_RESULT_REQUEST_KEY_MISMATCH',
+    })
+  }
+  if (result.lifecycleProjection.requestKey !== result.requestKey) {
+    mismatches.push({
+      path: ['lifecycleProjection', 'requestKey'],
+      code: 'CREATIVE_WORK_RESULT_LIFECYCLE_REQUEST_KEY_MISMATCH',
+    })
+  }
+  if (
+    result.continuationProjection.outputKind !== result.outputKind
+    || result.lifecycleProjection.outputKind !== result.outputKind
+    || result.creativeWorkResult.outputKind !== result.outputKind
+  ) {
+    mismatches.push({ path: ['outputKind'], code: 'CREATIVE_WORK_RESULT_OUTPUT_KIND_MISMATCH' })
+  }
+  if (result.continuationProjection.summary !== result.summary) {
+    mismatches.push({
+      path: ['continuationProjection', 'summary'],
+      code: 'CREATIVE_WORK_RESULT_SUMMARY_MISMATCH',
+    })
+  }
+  for (const mismatch of mismatches) {
+    context.addIssue({ code: 'custom', path: [...mismatch.path], message: mismatch.code })
+  }
+})
 
 export type CreativeWorkDelegationInput = z.infer<typeof creativeWorkDelegationInputSchema>
 export type CreativeWorkChapterBatchInput = z.infer<typeof creativeWorkChapterBatchInputSchema>
-export type ResolvedCreativeWorkDelegationInput =
-  | { readonly kind: 'single'; readonly request: CreativeWorkDelegationItem }
-  | { readonly kind: 'batch'; readonly requests: readonly CreativeWorkDelegationItem[] }
-  | { readonly kind: 'chapter_batch'; readonly chapterBatch: CreativeWorkChapterBatchInput }
 export type CreativeWorkDelegationItem = z.infer<typeof creativeWorkDelegationItemSchema>
 export type CreativeWorkTaskRequest = z.infer<typeof creativeWorkRequestSchema>
 export type CreativeWorkTaskLifecycleProjection = z.infer<typeof creativeWorkTaskLifecycleProjectionSchema>
 export type CreativeWorkTaskPayload = z.infer<typeof creativeWorkTaskPayloadSchema>
 export type CreativeWorkTaskResult = z.infer<typeof creativeWorkTaskResultSchema>
-
-export function resolveCreativeWorkDelegationInput(
-  input: CreativeWorkDelegationInput,
-): ResolvedCreativeWorkDelegationInput {
-  if (input.kind === 'single') {
-    if (!input.request || input.requests !== null || input.chapterBatch !== null) {
-      throw new Error('CREATIVE_WORK_SINGLE_PAYLOAD_INVALID')
-    }
-    return { kind: 'single', request: input.request }
-  }
-  if (input.kind === 'batch') {
-    if (input.request !== null || !input.requests || input.chapterBatch !== null) {
-      throw new Error('CREATIVE_WORK_BATCH_PAYLOAD_INVALID')
-    }
-    return { kind: 'batch', requests: input.requests }
-  }
-  if (input.request !== null || input.requests !== null || !input.chapterBatch) {
-    throw new Error('CREATIVE_WORK_CHAPTER_BATCH_PAYLOAD_INVALID')
-  }
-  return { kind: 'chapter_batch', chapterBatch: input.chapterBatch }
-}
-
-export function listCreativeWorkDelegationItems(
-  input: Exclude<ResolvedCreativeWorkDelegationInput, { readonly kind: 'chapter_batch' }>,
-): CreativeWorkDelegationItem[] {
-  return input.kind === 'single' ? [input.request] : [...input.requests]
-}
 
 export function buildCreativeWorkInputFingerprint(input: {
   request: CreativeWorkTaskRequest & { readonly requestKey: string }

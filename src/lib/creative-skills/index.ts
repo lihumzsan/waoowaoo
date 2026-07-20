@@ -3,7 +3,6 @@ export {
   CREATIVE_SKILLS,
   getCreativeSkillDefinition,
 } from './registry'
-export { discoverCreativeSkills } from './discovery'
 export { readCreativeSkillResource } from './loader'
 export {
   assertCreativeSkillLocale,
@@ -22,7 +21,6 @@ export type {
   CreativeSkillLocale,
   CreativeSkillResource,
   CreativeSkillUri,
-  DiscoverCreativeSkillsInput,
   LocalizedCreativeSkillList,
   LocalizedCreativeSkillText,
   ReadCreativeSkillResourceInput,

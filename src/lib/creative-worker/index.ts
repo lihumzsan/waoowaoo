@@ -24,14 +24,13 @@ export {
 } from './context-compiler'
 export {
   buildCreativeWorkInputFingerprint,
+  CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkChapterBatchInputSchema,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskLifecycleProjectionSchema,
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
   creativeWorkerResultSchema,
-  listCreativeWorkDelegationItems,
-  resolveCreativeWorkDelegationInput,
   summarizeCreativeWorkOutput,
 } from './task-contract'
 export {
@@ -68,7 +67,6 @@ export type {
   CreativeWorkDelegationInput,
   CreativeWorkDelegationItem,
   CreativeWorkChapterBatchInput,
-  ResolvedCreativeWorkDelegationInput,
   CreativeWorkTaskRequest,
   CreativeWorkTaskLifecycleProjection,
   CreativeWorkTaskPayload,

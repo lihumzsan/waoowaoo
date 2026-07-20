@@ -18,6 +18,10 @@ import type { Prisma } from '@prisma/client'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import {
+  readProjectCreativeResourceWorkingSet,
+  type CreativeResourceWorkingSetView,
+} from '@/lib/creative-resource'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type {
   ProjectAgentOperationOutcome,
@@ -432,6 +436,7 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 function buildProjectStateVersion(params: {
   videoRatio: string | null
   phase: ProjectPhaseSnapshot
+  creativeWorkingSet: CreativeResourceWorkingSetView
 }): string {
   const workflow = params.phase.editFirstWorkflow
   return [
@@ -444,6 +449,9 @@ function buildProjectStateVersion(params: {
     String(params.phase.planning.chapterCount),
     String(params.phase.progress.plannedVideoSegmentCount),
     String(params.phase.progress.completedVideoSegmentCount),
+    params.creativeWorkingSet.confirmedScreenplay?.fingerprint ?? 'none',
+    params.creativeWorkingSet.adoptedStyleBible?.fingerprint ?? 'none',
+    ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
   ].map(formatRuntimeStateValue).join(':')
 }
 
@@ -452,6 +460,7 @@ function buildProjectStateInputItem(params: {
   episodeId: string | null
   videoRatio: string | null
   phase: ProjectPhaseSnapshot
+  creativeWorkingSet: CreativeResourceWorkingSetView
 }): AgentInputItem {
   const workflow = params.phase.editFirstWorkflow
   const lines = [
@@ -459,6 +468,7 @@ function buildProjectStateInputItem(params: {
     `version=${buildProjectStateVersion({
       videoRatio: params.videoRatio,
       phase: params.phase,
+      creativeWorkingSet: params.creativeWorkingSet,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
@@ -472,6 +482,10 @@ function buildProjectStateInputItem(params: {
     `planning.chapterCount=${String(params.phase.planning.chapterCount)}`,
     `progress.plannedVideoSegmentCount=${String(params.phase.progress.plannedVideoSegmentCount)}`,
     `progress.completedVideoSegmentCount=${String(params.phase.progress.completedVideoSegmentCount)}`,
+    `creativeWorkingSet.confirmedScreenplay=${JSON.stringify(params.creativeWorkingSet.confirmedScreenplay)}`,
+    `creativeWorkingSet.adoptedStyleBible=${JSON.stringify(params.creativeWorkingSet.adoptedStyleBible)}`,
+    `creativeWorkingSet.bindings=${JSON.stringify(params.creativeWorkingSet.bindings)}`,
+    `creativeWorkingSet.availableResources=${JSON.stringify(params.creativeWorkingSet.availableResources)}`,
     '[/project_state_snapshot]',
   ]
   return {
@@ -771,7 +785,7 @@ export async function createProjectAgentChatResponse(input: {
         }
       : {}),
   }
-  const [resolvedPhase, projectConfigSnapshot] = await Promise.all([
+  const [resolvedPhase, projectConfigSnapshot, creativeWorkingSet] = await Promise.all([
     resolveProjectPhase({
       projectId: input.projectId,
       userId: input.userId,
@@ -780,6 +794,11 @@ export async function createProjectAgentChatResponse(input: {
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: { videoRatio: true },
+    }),
+    readProjectCreativeResourceWorkingSet({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: context.episodeId || null,
     }),
   ])
   if (!projectConfigSnapshot) throw new Error(`PROJECT_AGENT_PROJECT_NOT_FOUND:${input.projectId}`)
@@ -905,6 +924,7 @@ export async function createProjectAgentChatResponse(input: {
     episodeId: context.episodeId || null,
     videoRatio: projectConfigSnapshot.videoRatio,
     phase,
+    creativeWorkingSet,
   })
   const currentPlan = control.kind === 'approval'
     ? null

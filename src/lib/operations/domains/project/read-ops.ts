@@ -12,6 +12,7 @@ import type {
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { readProjectCreativeResourceWorkingSet } from '@/lib/creative-resource/view-service'
 
 const taskTargetSchema = z.object({
   targetType: z.string().min(1),
@@ -73,7 +74,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or user-intent tool input, such as full bible text, historical operation results, failure details, active task details, assets, or video segments. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters.',
+      summary: 'Read the compact current project working set: exact confirmed screenplay and adopted Style Bible bindings, project configuration, active work, and professional domain state. Use list_resources to browse candidates/history and get_resource to read one exact full revision; never infer current adoption from latest resources, history, Canvas, or chat.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
@@ -83,19 +84,37 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const projectContext = await assembleProjectContext({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId: ctx.context.episodeId || null,
-          selectedScopeRef: normalizeString(input.selectedScopeRef) || ctx.context.selectedScopeRef || null,
-          selectedAssetId: normalizeString(input.selectedAssetId) || ctx.context.selectedAssetId || null,
-        })
+        const episodeId = ctx.context.episodeId || null
+        const [projectContext, creativeWorkingSet] = await Promise.all([
+          assembleProjectContext({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+            selectedScopeRef: normalizeString(input.selectedScopeRef) || ctx.context.selectedScopeRef || null,
+            selectedAssetId: normalizeString(input.selectedAssetId) || ctx.context.selectedAssetId || null,
+          }),
+          readProjectCreativeResourceWorkingSet({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+          }),
+        ])
+        const agentPolicy = {
+          projectId: projectContext.policy.projectId,
+          episodeId: projectContext.policy.episodeId,
+          videoRatio: projectContext.policy.videoRatio,
+          overrides: projectContext.policy.overrides,
+        }
+        const agentProjectContext = {
+          ...projectContext,
+          policy: agentPolicy,
+        }
         const snapshot = buildAssistantProjectContextSnapshot(projectContext)
         writeOperationDataPart<ProjectContextPartData>(ctx.writer, 'data-project-context', {
           context: snapshot,
         })
-        if (input.detail === 'full') return projectContext
-        return snapshot
+        if (input.detail === 'full') return { ...agentProjectContext, creativeWorkingSet }
+        return { ...snapshot, creativeWorkingSet }
       },
     }),
     get_task_status: defineOperation({

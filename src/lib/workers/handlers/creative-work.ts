@@ -21,11 +21,8 @@ import { assertTaskActive } from '@/lib/workers/utils'
 
 function appendProgressEvent(
   lifecycle: CreativeWorkTaskLifecycleProjection,
-  event: Extract<CreativeWorkerEvent, { kind: 'skills_discovered' | 'skill_read' }>,
+  event: Extract<CreativeWorkerEvent, { kind: 'skill_read' }>,
 ): CreativeWorkTaskLifecycleProjection {
-  const normalizedEvent = event.kind === 'skills_discovered'
-    ? { ...event, tags: [...event.tags], skillIds: [...event.skillIds] }
-    : event
   return {
     ...lifecycle,
     events: [
@@ -33,7 +30,7 @@ function appendProgressEvent(
       {
         sequence: lifecycle.events.length + 1,
         occurredAt: new Date().toISOString(),
-        event: normalizedEvent,
+        event,
       },
     ],
   }
@@ -79,7 +76,7 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
       signal: abortController.signal,
       request: payload.request,
       onEvent: async (event) => {
-        if (event.kind !== 'skills_discovered' && event.kind !== 'skill_read') return
+        if (event.kind !== 'skill_read') return
         lifecycle = appendProgressEvent(lifecycle, event)
         const progress = Math.min(85, 20 + lifecycle.events.length * 5)
         await reportTaskProgress(job, progress, {

@@ -7,6 +7,21 @@ export type CreativeResourceScopeKind = typeof CREATIVE_RESOURCE_SCOPE_KINDS[num
 export const CREATIVE_RESOURCE_STATUSES = ['pending', 'ready', 'failed', 'canceled'] as const
 export type CreativeResourceStatus = typeof CREATIVE_RESOURCE_STATUSES[number]
 
+export const CREATIVE_RESOURCE_CANONICAL_BINDINGS = {
+  confirmedScreenplay: {
+    role: 'confirmed_screenplay',
+    slotKey: 'primary',
+  },
+  adoptedStyleBible: {
+    role: 'adopted_style_bible',
+    slotKey: 'primary',
+  },
+} as const
+
+export type CreativeResourceCanonicalBinding = typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS[
+  keyof typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS
+]
+
 export type CreativeResourceJsonValue =
   | string
   | number
@@ -131,6 +146,35 @@ export interface CreativeResourceCandidateView {
   readonly candidateSetId: string
   readonly resources: readonly CreativeResourceView[]
   readonly selectedRevisionId: string | null
+}
+
+export interface CreativeResourceWorkingBindingView {
+  readonly bindingId: string
+  readonly scope: CreativeResourceScopeRef
+  readonly role: string
+  readonly slotKey: string
+  readonly version: number
+  readonly source: string
+  readonly resourceId: string
+  readonly revisionId: string
+  readonly revision: number
+  readonly fingerprint: string
+  readonly schemaId: string
+  readonly mediaType: CreativeResourceMediaType
+  readonly name: string
+}
+
+export interface CreativeResourceWorkingSetView {
+  readonly confirmedScreenplay: CreativeResourceWorkingBindingView | null
+  readonly adoptedStyleBible: CreativeResourceWorkingBindingView | null
+  readonly bindings: readonly CreativeResourceWorkingBindingView[]
+  readonly availableResources: {
+    readonly total: number
+    readonly bySchema: ReadonlyArray<{
+      readonly schemaId: string
+      readonly count: number
+    }>
+  }
 }
 
 export interface CreativeResourceCardView {

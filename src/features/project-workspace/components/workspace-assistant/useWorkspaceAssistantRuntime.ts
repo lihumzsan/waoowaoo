@@ -46,7 +46,7 @@ import {
   type WorkspaceAssistantRunStatus,
 } from './workspace-assistant-runtime-state'
 import type { ProjectAgentSubagentView } from '@/lib/project-agent/subagent-events'
-import { resolveWorkspaceAssistantActiveSubagents } from './workspace-assistant-subagents'
+import { resolveWorkspaceAssistantSubagents } from './workspace-assistant-subagents'
 import {
   buildWorkspaceAssistantControlError,
   WorkspaceAssistantControlTransport,
@@ -102,7 +102,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageLoading: boolean
   pendingOperationId: string | null
   activeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
-  activeSubagents: ProjectAgentSubagentView[]
+  subagents: ProjectAgentSubagentView[]
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
@@ -546,9 +546,9 @@ export function useWorkspaceAssistantRuntime({
     controlRunActive: controlPending,
     serverRunActive,
   })
-  const activeSubagents = useMemo(() => resolveWorkspaceAssistantActiveSubagents({
-    sessionSubagents: sessionState?.activeSubagents ?? [],
-  }), [sessionState?.activeSubagents])
+  const subagents = useMemo(() => resolveWorkspaceAssistantSubagents({
+    sessionSubagents: sessionState?.subagents ?? [],
+  }), [sessionState?.subagents])
 
   useEffect(() => {
     if (!replyActivity || !replyActivity.requestSettled) return
@@ -574,7 +574,7 @@ export function useWorkspaceAssistantRuntime({
     storageLoading: assistantThread.isLoading,
     pendingOperationId,
     activeFocusRequest,
-    activeSubagents,
+    subagents,
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,

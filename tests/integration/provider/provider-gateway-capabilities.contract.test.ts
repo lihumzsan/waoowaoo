@@ -28,6 +28,7 @@ import { afterEach } from 'vitest'
 import { generateText, streamText } from 'ai'
 import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-catalog'
 import {
+  OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
   OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
   OPENROUTER_GPT_5_6_SOL_MODEL_ID,
@@ -43,6 +44,7 @@ import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 import { listApiConfigCatalogModels } from '@/lib/ai-registry/api-config-catalog'
 import { resolveRegisteredLlmProtocol } from '@/lib/ai-registry/llm-protocol'
+import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 
 const ORIGINAL_REASONING_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
@@ -100,6 +102,36 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       options: { aspectRatio: '1:1', quality: 'auto' },
       context: 'fal-gpt-image-2',
     })).toThrow('AI_OPTION_INVALID:fal-gpt-image-2:quality:unsupported_value=auto')
+  })
+
+  it('derives only the declared GPT Image 2 provider routes from the production catalog', () => {
+    expect(resolveProviderRouteSet('image', `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`)).toEqual({
+      logicalCapabilityId: 'image.gpt-image-2',
+      primaryModelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
+      failoverPolicy: 'pre_accept_only',
+      routes: [
+        {
+          provider: 'openrouter',
+          modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
+          modelKey: `openrouter::${OPENROUTER_GPT_IMAGE_2_MODEL_ID}`,
+          priority: 0,
+        },
+        {
+          provider: 'fal',
+          modelId: FAL_GPT_IMAGE_2_MODEL_ID,
+          modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
+          priority: 1,
+        },
+      ],
+    })
+    expect(resolveProviderRouteSet('image', `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`).routes).toEqual([
+      {
+        provider: 'fal',
+        modelId: FAL_GPT_IMAGE_2_MODEL_ID,
+        modelKey: `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`,
+        priority: 1,
+      },
+    ])
   })
 
   it('registers one explicit transport protocol for every configured LLM model', () => {

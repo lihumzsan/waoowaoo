@@ -7,6 +7,7 @@ import {
 } from '@/lib/ai-providers/openrouter/models'
 import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
+import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 
 const PNG_1X1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 const PNG_1X1_DATA_URL = `data:image/png;base64,${PNG_1X1_BASE64}`
@@ -143,6 +144,34 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'generate once',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({ statusCode: 503 })
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('types an upstream billing hard limit as a proven pre-accept rejection', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 400,
+        body: {
+          error: {
+            message: 'Billing hard limit has been reached.',
+            code: 400,
+            metadata: { provider_name: 'OpenAI' },
+          },
+        },
+      },
+    })
+
+    await expect(requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'route only after explicit rejection',
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+    })).rejects.toBeInstanceOf(ProviderPreAcceptRejectedError)
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })

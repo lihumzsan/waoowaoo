@@ -30,7 +30,11 @@ import {
 } from '@/lib/project-workflow/edit-first-view'
 import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 import { TASK_STATUS, TASK_TYPE, type TaskStatus } from '@/lib/task/types'
-import { creativeWorkTaskPayloadSchema } from '@/lib/creative-worker'
+import {
+  CREATIVE_WORK_TASK_PROTOCOL,
+  creativeWorkTaskPayloadSchema,
+  creativeWorkTaskResultSchema,
+} from '@/lib/creative-worker'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { readProjectAgentSessionEventWatermark } from './session-event'
@@ -40,7 +44,7 @@ import {
 } from './plan'
 import {
   parseProjectAgentSubagentEventPartData,
-  resolveActiveProjectAgentSubagents,
+  resolveProjectAgentSubagentViews,
   type ProjectAgentSubagentView,
 } from './subagent-events'
 
@@ -98,7 +102,7 @@ export interface ProjectAgentSessionState {
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
-  activeSubagents: ProjectAgentSubagentView[]
+  subagents: ProjectAgentSubagentView[]
   plan: ProjectAgentPlanSnapshot | null
   editFirstWorkflow: EditFirstWorkflowView
 }
@@ -398,7 +402,7 @@ async function listActiveTasksForWaits(params: {
   }))
 }
 
-async function listActiveCreativeSubagents(params: {
+async function listCreativeSubagents(params: {
   projectId: string
   userId: string
   episodeId?: string | null
@@ -409,10 +413,27 @@ async function listActiveCreativeSubagents(params: {
       userId: params.userId,
       episodeId: params.episodeId ?? null,
       type: TASK_TYPE.CREATIVE_WORK,
-      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+      payload: { path: '$.protocol', equals: CREATIVE_WORK_TASK_PROTOCOL },
+      status: {
+        in: [
+          TASK_STATUS.QUEUED,
+          TASK_STATUS.PROCESSING,
+          TASK_STATUS.COMPLETED,
+          TASK_STATUS.FAILED,
+          TASK_STATUS.CANCELED,
+        ],
+      },
     },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { id: true, payload: true },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 24,
+    select: {
+      id: true,
+      status: true,
+      payload: true,
+      result: true,
+      errorCode: true,
+      finishedAt: true,
+    },
   })
   const events = tasks.flatMap((task) => {
     const payload = creativeWorkTaskPayloadSchema.parse(task.payload)
@@ -428,7 +449,27 @@ async function listActiveCreativeSubagents(params: {
       })
     ))
   })
-  return resolveActiveProjectAgentSubagents(events)
+  return resolveProjectAgentSubagentViews(events, tasks.map((task) => {
+    const result = creativeWorkTaskResultSchema.safeParse(task.result)
+    const status = task.status
+    if (
+      status !== TASK_STATUS.QUEUED
+      && status !== TASK_STATUS.PROCESSING
+      && status !== TASK_STATUS.COMPLETED
+      && status !== TASK_STATUS.FAILED
+      && status !== TASK_STATUS.CANCELED
+    ) throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_STATUS_INVALID:${task.id}:${status}`)
+    if (status === TASK_STATUS.COMPLETED && !result.success) {
+      throw new Error(`PROJECT_AGENT_SUBAGENT_COMPLETED_RESULT_INVALID:${task.id}`)
+    }
+    return {
+      taskId: task.id,
+      status,
+      summary: result.success ? result.data.summary : null,
+      errorCode: task.errorCode,
+      finishedAt: task.finishedAt?.toISOString() ?? null,
+    }
+  }))
 }
 
 async function buildProjectAgentSessionState(
@@ -504,7 +545,7 @@ async function buildProjectAgentSessionState(
     activity: currentActivity,
     openFacts,
   })
-  const [pendingInteraction, activeTasks, activeSubagents] = await Promise.all([
+  const [pendingInteraction, activeTasks, subagents] = await Promise.all([
     buildPendingInteraction({
       scope,
       workflow,
@@ -515,7 +556,7 @@ async function buildProjectAgentSessionState(
       userId: input.userId,
       waits,
     }),
-    listActiveCreativeSubagents({
+    listCreativeSubagents({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
@@ -536,7 +577,7 @@ async function buildProjectAgentSessionState(
     pendingInteraction,
     activeWaits: waits,
     activeTasks,
-    activeSubagents,
+    subagents,
     plan,
     editFirstWorkflow: workflow,
   }
