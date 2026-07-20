@@ -727,6 +727,16 @@ describe('comfyui workflow registry', () => {
       targetFrameCount: 150,
     })
     expect(getPromptRelayNodes(codexStagesWithoutLengths)[0]?.inputs.segment_lengths).toBe('50, 50, 50')
+
+    const modelTimedStages = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.multiShotPromptRelayKj, {
+      prompt: 'GLOBAL: office\nLOCAL 1: prepare\nLOCAL 2: move\nLOCAL 3: settle\nLENGTHS: 45, 105, 75',
+      imageFilenames: ['source.png'],
+      fps: 25,
+      durationSeconds: 9,
+      targetFrameCount: 225,
+    })
+    const modelTimedRelay = getPromptRelayNodes(modelTimedStages)[0]
+    expect(modelTimedRelay?.inputs.segment_lengths).toBe('45, 105, 75')
   })
 
   it('keeps KJ LENGTHS when project safety constraints follow the structured prompt', () => {

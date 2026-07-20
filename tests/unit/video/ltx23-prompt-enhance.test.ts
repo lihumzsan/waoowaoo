@@ -565,7 +565,7 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt).toContain('LOCAL 3:')
   })
 
-  it('gives Codex exact KJ timeline and selected motion-strength context', async () => {
+  it('uses GPT-5.5 and accepts its content-aware non-equal KJ frame plan', async () => {
     aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
       text: JSON.stringify({
         enhanced_prompt: [
@@ -574,10 +574,11 @@ describe('ltx23 video prompt enhance', () => {
           'LOCAL 2: The doctor completes the visible motion.',
           'LOCAL 3: The doctor settles in the same office.',
         ].join('\n'),
+        segment_frames: [45, 105, 75],
       }),
     })
 
-    await enhanceLtx23VideoPrompt({
+    const result = await enhanceLtx23VideoPrompt({
       userId: 'user-1',
       locale: 'en',
       projectId: 'project-1',
@@ -593,16 +594,64 @@ describe('ltx23 video prompt enhance', () => {
       generationMode: 'normal',
     })
 
-    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    const request = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]
+    const promptText = request?.messages?.[0]?.content as string
+    expect(request?.model).toBe('codex::gpt-5.5')
     expect(promptText).toContain('Target duration: 9.00 seconds.')
     expect(promptText).toContain('Frame rate: 25 fps.')
     expect(promptText).toContain('LOCAL 1:')
     expect(promptText).toContain('LOCAL 3:')
     expect(promptText).toContain('Motion strength: 3 (strong motion / intense action).')
     expect(promptText).toContain('Use exactly 3 numbered LOCAL sections for this request.')
-    expect(promptText).toContain('LOCAL 1 timing: frames 0-75, 0.00-3.00 seconds.')
-    expect(promptText).toContain('LOCAL 2 timing: frames 75-150, 3.00-6.00 seconds.')
-    expect(promptText).toContain('LOCAL 3 timing: frames 150-225, 6.00-9.00 seconds.')
+    expect(promptText).toContain('Total frame budget: 225 frames.')
+    expect(promptText).toContain('segment_frames')
+    expect(promptText).toContain('When frame allocation is requested, the returned JSON object must also include segment_frames')
+    expect(promptText).toMatch(/analyze the concrete action beats/i)
+    expect(promptText).not.toContain('[45, 105, 75]')
+    expect(promptText).not.toContain('LOCAL 1 timing: frames 0-75')
+    expect(result.enhanced).toBe(true)
+    expect(result.textModel).toBe('codex::gpt-5.5')
+    expect(result.prompt).toContain('LENGTHS: 45, 105, 75')
+  })
+
+  it.each([
+    ['equal allocation', [75, 75, 75]],
+    ['wrong segment count', [100, 125]],
+    ['non-integer frames', [45.5, 104.5, 75]],
+    ['wrong total', [45, 100, 75]],
+  ])('rejects a KJ Codex %s', async (_label, segmentFrames) => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: [
+          'GLOBAL: The same doctor and office remain visible.',
+          'LOCAL 1: The doctor prepares to move.',
+          'LOCAL 2: The doctor completes the visible motion.',
+          'LOCAL 3: The doctor settles in the same office.',
+        ].join('\n'),
+        segment_frames: segmentFrames,
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor moves one hand and then settles',
+      panel: { description: 'doctor moves one hand and then settles', characters: 'Doctor' },
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(false)
+    const fallbackFrames = result.prompt.match(/LENGTHS:\s*([\d,\s]+)/)?.[1]
+      ?.split(',')
+      .map((value) => Number(value.trim())) ?? []
+    expect(fallbackFrames).toHaveLength(3)
+    expect(fallbackFrames.reduce((sum, value) => sum + value, 0)).toBe(225)
+    expect(new Set(fallbackFrames).size).toBeGreaterThan(1)
   })
 
   it('rejects a KJ Codex response whose LOCAL count does not match the requested timeline', async () => {
@@ -614,6 +663,7 @@ describe('ltx23 video prompt enhance', () => {
           'LOCAL 2: The doctor continues the hand motion.',
           'LOCAL 3: The doctor settles in the same office.',
         ].join('\n'),
+        segment_frames: [50, 100, 100, 50],
       }),
     })
 
@@ -659,7 +709,7 @@ describe('ltx23 video prompt enhance', () => {
     ],
   ])('rejects KJ Codex output with %s', async (_label, enhancedPrompt) => {
     aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
-      text: JSON.stringify({ enhanced_prompt: enhancedPrompt }),
+      text: JSON.stringify({ enhanced_prompt: enhancedPrompt, segment_frames: [45, 105, 75] }),
     })
 
     const result = await enhanceLtx23VideoPrompt({
@@ -710,6 +760,7 @@ describe('ltx23 video prompt enhance', () => {
           'LOCAL 2: The doctor speaks while facing forward.',
           'LOCAL 3: The doctor settles in the same office.',
         ].join('\n'),
+        segment_frames: [45, 105, 75],
       }),
     })
 
@@ -732,7 +783,8 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.enhanced).toBe(true)
     expect(result.prompt).not.toContain('|')
     expect(result.prompt).not.toMatch(/\bLOCAL\s*[:\uFF1A]/i)
-    expect(result.prompt).not.toMatch(/\bLENGTHS\s*[:\uFF1A]/i)
+    expect(result.prompt.match(/\bLENGTHS\s*[:\uFF1A]/gi)).toHaveLength(1)
+    expect(result.prompt).toContain('LENGTHS: 45, 105, 75')
     expect(splitPromptRelayLocalSegments(result.prompt)).toHaveLength(3)
   })
 

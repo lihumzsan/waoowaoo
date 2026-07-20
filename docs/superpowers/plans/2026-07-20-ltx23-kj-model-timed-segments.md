@@ -54,7 +54,7 @@
 
 **Interfaces:**
 - Consumes: canonical KJ `LENGTHS:` metadata.
-- Produces: exact unequal `segment_lengths` and matching `timeline_data` in the resolved workflow.
+- Produces: exact unequal `segment_lengths` in the resolved workflow, plus matching `timeline_data` only when the selected workflow node exposes that input.
 
 - [ ] Add a graph test for a 225-frame prompt with `LENGTHS: 45,105,75`.
 - [ ] Run the focused registry suite and confirm the existing locked adapter propagates the values exactly.

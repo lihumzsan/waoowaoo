@@ -16,6 +16,7 @@ import {
 import type { ResolvedAudioDrivenVideoTiming } from '@/lib/video-duration/audio-binding'
 import { parseProfileData } from '@/types/character-profile'
 import { splitPromptRelayLocalSegments } from '@/lib/providers/comfyui/workflow-registry'
+import { CODEX_DEFAULT_MODEL_KEY } from '@/lib/providers/codex/constants'
 
 export interface Ltx23PromptEnhancementVoiceLine {
   id: string
@@ -225,7 +226,13 @@ function buildCameraPolicyLines(policy: Ltx23PromptPolicy, originalPrompt: strin
   }
 }
 
-async function resolveLtx23PromptTextModel(userId: string, projectId: string): Promise<string | null> {
+async function resolveLtx23PromptTextModel(
+  userId: string,
+  projectId: string,
+  modelKey: string,
+): Promise<string | null> {
+  if (isComfyUiLtx23KjPromptRelayWorkflow(modelKey)) return CODEX_DEFAULT_MODEL_KEY
+
   const projectConfig = await getProjectModelConfig(projectId, userId)
   if (projectConfig.analysisModel && getProviderKey(projectConfig.analysisModel) !== 'bailian') {
     return projectConfig.analysisModel
@@ -496,31 +503,73 @@ function resolveKjPromptRelaySegmentCount(durationSeconds: number | null | undef
   return durationSeconds <= 10 ? 3 : durationSeconds <= 16 ? 4 : 5
 }
 
+function resolveKjPromptRelayTotalFrames(input: EnhanceLtx23VideoPromptInput): number | null {
+  if (!isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) return null
+  if (typeof input.durationSeconds !== 'number' || !Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) return null
+  if (typeof input.fps !== 'number' || !Number.isFinite(input.fps) || input.fps <= 0) return null
+  return Math.max(
+    resolveKjPromptRelaySegmentCount(input.durationSeconds),
+    Math.round(input.durationSeconds * input.fps),
+  )
+}
+
+function readKjPromptRelaySegmentFrames(
+  parsed: Record<string, unknown>,
+  input: EnhanceLtx23VideoPromptInput,
+): number[] | null {
+  const raw = parsed.segment_frames
+  if (!Array.isArray(raw)) return null
+  if (!raw.every((value): value is number => Number.isSafeInteger(value) && Number(value) > 0)) return null
+
+  const expectedCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
+  const totalFrames = resolveKjPromptRelayTotalFrames(input)
+  if (totalFrames === null || raw.length !== expectedCount) return null
+  if (raw.reduce((sum, value) => sum + value, 0) !== totalFrames) return null
+  if (new Set(raw).size <= 1) return null
+  return [...raw]
+}
+
+function buildKjFallbackSegmentFrames(input: EnhanceLtx23VideoPromptInput): number[] {
+  const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
+  const totalFrames = resolveKjPromptRelayTotalFrames(input) ?? segmentCount
+  const weights = segmentCount === 3
+    ? [2, 5, 3]
+    : segmentCount === 4
+      ? [2, 4, 5, 3]
+      : [2, 3, 5, 4, 2]
+  const remainingFrames = Math.max(0, totalFrames - segmentCount)
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  const exactExtras = weights.map((weight) => (remainingFrames * weight) / totalWeight)
+  const frames = exactExtras.map((value) => 1 + Math.floor(value))
+  const unassigned = totalFrames - frames.reduce((sum, value) => sum + value, 0)
+  const addOrder = exactExtras
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+  for (let index = 0; index < unassigned; index += 1) {
+    frames[addOrder[index % addOrder.length].index] += 1
+  }
+  return frames
+}
+
+function appendKjPromptRelayLengths(prompt: string, frames: readonly number[]): string {
+  return `${prompt.trim()}\nLENGTHS: ${frames.join(', ')}`
+}
+
 function buildKjPromptRelayTimingLines(input: EnhanceLtx23VideoPromptInput): string[] {
   if (!isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) return []
   if (typeof input.durationSeconds !== 'number' || !Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) return []
   if (typeof input.fps !== 'number' || !Number.isFinite(input.fps) || input.fps <= 0) return []
 
   const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
-  const totalFrames = Math.max(segmentCount, Math.round(input.durationSeconds * input.fps))
-  const baseLength = Math.floor(totalFrames / segmentCount)
-  let remainder = totalFrames - (baseLength * segmentCount)
-  let startFrame = 0
-  const timingLines = Array.from({ length: segmentCount }, (_, index) => {
-    const length = baseLength + (remainder > 0 ? 1 : 0)
-    remainder -= 1
-    const endFrame = startFrame + length
-    const startSeconds = startFrame / input.fps!
-    const endSeconds = endFrame / input.fps!
-    const line = `LOCAL ${index + 1} timing: frames ${startFrame}-${endFrame}, ${startSeconds.toFixed(2)}-${endSeconds.toFixed(2)} seconds.`
-    startFrame = endFrame
-    return line
-  })
+  const totalFrames = resolveKjPromptRelayTotalFrames(input)
+  if (totalFrames === null) return []
 
   return [
     `Use exactly ${segmentCount} numbered LOCAL sections for this request.`,
-    'Write each LOCAL section only for its assigned interval:',
-    ...timingLines,
+    `Total frame budget: ${totalFrames} frames.`,
+    'Analyze the concrete action beats and their natural timing before assigning frames. Give preparation, main motion, and settling only the time each beat actually needs; do not divide the timeline evenly.',
+    `Return a JSON field named segment_frames with exactly ${segmentCount} positive integer frame counts. They must sum to ${totalFrames}, must not all be equal, and their order must match LOCAL 1 through LOCAL ${segmentCount}.`,
+    `Think in seconds at ${Math.round(input.fps)} fps, then convert the chosen durations to exact frame counts. Do not put LENGTHS: inside enhanced_prompt; the application will add validated timing metadata.`,
   ]
 }
 
@@ -924,7 +973,7 @@ function buildLtx23FallbackPrompt(
       input,
     )
     if (splitPromptRelayLocalSegments(finalizedFallback).length === segmentCount) {
-      return finalizedFallback
+      return appendKjPromptRelayLengths(finalizedFallback, buildKjFallbackSegmentFrames(input))
     }
 
     const minimalFallback = [
@@ -933,7 +982,10 @@ function buildLtx23FallbackPrompt(
         `LOCAL ${index + 1}: Continue the same current-shot action smoothly through this interval.`
       )),
     ].join('\n')
-    return appendLtx23SafetyConstraints(minimalFallback, dialogueConstraint, input)
+    return appendKjPromptRelayLengths(
+      appendLtx23SafetyConstraints(minimalFallback, dialogueConstraint, input),
+      buildKjFallbackSegmentFrames(input),
+    )
   }
   return appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input)
 }
@@ -978,7 +1030,7 @@ export async function enhanceLtx23VideoPrompt(
     }
   }
 
-  const textModel = await resolveLtx23PromptTextModel(input.userId, input.projectId)
+  const textModel = await resolveLtx23PromptTextModel(input.userId, input.projectId, input.modelKey)
   if (!textModel) {
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
@@ -1021,6 +1073,9 @@ export async function enhanceLtx23VideoPrompt(
     const enhancedPrompt = readEnhancedPromptField(parsed)
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
+    const kjSegmentFrames = isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+      ? readKjPromptRelaySegmentFrames(parsed, input)
+      : null
     if (!enhancedPrompt) {
       return {
         prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
@@ -1058,9 +1113,18 @@ export async function enhanceLtx23VideoPrompt(
         textModel,
       }
     }
+    if (isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey) && !kjSegmentFrames) {
+      return {
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
+        enhanced: false,
+        textModel,
+      }
+    }
 
     return {
-      prompt: finalPrompt,
+      prompt: kjSegmentFrames
+        ? appendKjPromptRelayLengths(finalPrompt, kjSegmentFrames)
+        : finalPrompt,
       enhanced: finalPrompt !== originalPrompt,
       textModel,
     }

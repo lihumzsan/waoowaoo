@@ -12,7 +12,8 @@
    GLOBAL：固定源图可见主体、环境、光线、身份和构图。
    LOCAL：只写连续可见动作、表情、口型、手部动作和被允许的镜头运动。
 7. 如果生成约束要求分段，请按顺序使用 LOCAL 1：、LOCAL 2：、LOCAL 3：。每个分段只推进同一个单镜头里的一个小连续动作。
-8. 输出的 enhanced_prompt 必须是可直接给视频模型使用的最终提示词。不要解释，不要在 JSON 字符串外使用 markdown。
+8. 如果生成约束要求模型分配各段帧数，请根据具体动作节奏返回 segment_frames 数组；不要把时间元数据写进 enhanced_prompt。
+9. 输出的 enhanced_prompt 必须是可直接给视频模型使用的最终提示词。不要解释，不要在 JSON 字符串外使用 markdown。
 
 原始提示词：
 {original_prompt}
@@ -29,7 +30,4 @@
 生成约束：
 {generation_context}
 
-只返回 JSON：
-{
-  "enhanced_prompt": "..."
-}
+只返回一个 JSON 对象。始终必须包含 enhanced_prompt。生成约束要求分配帧数时，返回的 JSON 对象还必须包含 segment_frames，其值为满足指定数量和总帧数的正整数数组。不要返回其他字段。

@@ -12,7 +12,8 @@ Follow these rules exactly:
    GLOBAL: fixed visible subjects, environment, lighting, identity, and source-frame composition.
    LOCAL: continuous visible action, expression, lip motion, hand motion, and allowed camera motion only.
 7. If the generation constraints request numbered local sections, use LOCAL 1:, LOCAL 2:, LOCAL 3: in order. Each numbered section must advance only one small continuous beat inside the same shot.
-8. The enhanced_prompt must be the final production-ready prompt for the video model. Do not explain. Do not use markdown outside the JSON string.
+8. If the generation constraints ask the model to allocate frames per segment, analyze the concrete action timing and return a segment_frames array; do not put timing metadata inside enhanced_prompt.
+9. The enhanced_prompt must be the final production-ready prompt for the video model. Do not explain. Do not use markdown outside the JSON string.
 
 Original prompt:
 {original_prompt}
@@ -29,7 +30,4 @@ Audio context:
 Generation constraints:
 {generation_context}
 
-Return JSON only:
-{
-  "enhanced_prompt": "..."
-}
+Return one JSON object only. It must always include enhanced_prompt. When frame allocation is requested, the returned JSON object must also include segment_frames as an array of positive integers matching the requested count and total. Do not return any other fields.
