@@ -34,7 +34,7 @@ The sanitizer must not alter PromptRelay section markers, segment order, `LENGTH
 
 ### Negative conditioning guard
 
-The stored KJ graph currently sends PromptRelay positive conditioning through `ConditioningZeroOut` to create its negative branch. During KJ workflow resolution, the application will inject one locked `CLIPTextEncode` node using the workflow's existing DualCLIP output and a KJ-specific negative prompt. `LTXVConditioning.negative` will be rewired to this node.
+The stored KJ graph currently sends PromptRelay positive conditioning through `ConditioningZeroOut` to create its negative branch. During KJ workflow resolution, the application will follow the repository's existing Smart VBVR pattern: convert that `ConditioningZeroOut` node in place into a locked `CLIPTextEncode`, reuse the PromptRelay node's existing DualCLIP connection, and fill it with a KJ-specific negative prompt. The existing connection from this node to `LTXVConditioning.negative` remains unchanged.
 
 The negative prompt will focus on text artifacts:
 
@@ -44,7 +44,7 @@ The negative prompt will focus on text artifacts:
 - bottom-center or white subtitle lines;
 - signage, logos, watermarks, blurry or distorted text, and artifacts around text.
 
-The original zeroed-negative node may remain unused in the graph. The application-owned node and prompt are not exposed as user-editable controls.
+The converted application-owned node and prompt are not exposed as user-editable controls.
 
 ## Data flow
 
@@ -53,14 +53,14 @@ The original zeroed-negative node may remain unused in the graph. The applicatio
 3. The KJ-only positive sanitizer removes literal speech text while retaining visual speaking action.
 4. Existing validation checks PromptRelay structure, segment count, integer frame counts, total frame budget, continuity, and camera safety.
 5. The application appends canonical `LENGTHS` values.
-6. KJ workflow resolution injects the locked negative `CLIPTextEncode` conditioning and preserves the PromptRelay positive conditioning.
+6. KJ workflow resolution converts the zeroed negative branch to locked `CLIPTextEncode` conditioning and preserves the PromptRelay positive conditioning.
 7. ComfyUI receives a 720p KJ graph with both positive and negative subtitle suppression.
 
 ## Failure handling
 
 - Missing or invalid `segment_frames`: use the existing deterministic non-equal fallback, after KJ dialogue-text sanitization.
 - GPT failure or malformed JSON: sanitize the fallback prompt before appending `LENGTHS`.
-- Missing expected KJ CLIP or conditioning nodes: fail workflow preflight with a specific KJ negative-conditioning configuration error instead of silently running with zero negative conditioning.
+- Missing the expected KJ PromptRelay CLIP source or zeroed-negative node: fail workflow resolution with a specific KJ negative-conditioning configuration error instead of silently running with zero negative conditioning.
 - Sanitization removes all useful action text from a LOCAL section: replace only that section's content with a neutral visible-speaking motion while preserving its section marker and frame allocation.
 
 ## Testing
