@@ -127,7 +127,7 @@ export function WorkspaceAssistantPlanCard({
       ref={popoverRef}
       id="workspace-assistant-plan-status"
       role="tooltip"
-      className="fixed z-[100] overflow-y-auto rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.96] px-5 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)] backdrop-blur-xl"
+      className="fixed z-[100] overflow-y-auto rounded-[22px] border border-[var(--glass-stroke-base)] bg-white px-5 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)]"
       style={{
         bottom: `${String(position.bottom)}px`,
         left: `${String(position.left)}px`,
@@ -166,7 +166,7 @@ export function WorkspaceAssistantPlanCard({
         aria-describedby={open ? 'workspace-assistant-plan-status' : undefined}
         aria-expanded={open}
         aria-label={`${t('plan.title')} · ${t('plan.stepProgress', { current: currentIndex + 1, total })}`}
-        className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.88] px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-text-secondary)]/20"
+        className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-text-secondary)]/20"
         onMouseEnter={showPopover}
         onMouseLeave={hidePopoverSoon}
         onFocus={showPopover}
