@@ -71,14 +71,15 @@ describe('project agent toolset conformance', () => {
     expect(toolset.operationIds).not.toContain('update_user_preference')
     expect(toolset.operationIds).not.toContain('list_user_models')
     expect(toolset.operationIds).not.toContain('get_project_config')
-    expect(toolset.operationIds).not.toContain('update_project_config')
+    expect(toolset.operationIds).toContain('update_project_config')
     expect(registry.get_user_api_config.channels).toEqual({ tool: false, api: true })
     expect(registry.put_user_api_config.channels).toEqual({ tool: false, api: true })
     expect(registry.get_user_preference.channels).toEqual({ tool: false, api: true })
     expect(registry.update_user_preference.channels).toEqual({ tool: false, api: true })
     expect(registry.list_user_models.channels).toEqual({ tool: false, api: true })
     expect(registry.get_project_config.channels).toEqual({ tool: false, api: true })
-    expect(registry.update_project_config.channels).toEqual({ tool: false, api: true })
+    expect(registry.update_project_config.channels).toEqual({ tool: true, api: true })
+    expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toEqual(['videoRatio'])
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
@@ -212,11 +213,12 @@ describe('project agent toolset conformance', () => {
       request: {
         requestKey: 'short-video-1',
         outputKind: 'video_prompt_set',
-        goal: 'Design one 10-second vertical video prompt.',
+        goal: 'Design the complete requested video.',
+        targetDurationSeconds: 60,
         context: {
           userRequest: 'A lantern wakes in an abandoned shrine.',
           sourceMaterials: [],
-          constraints: ['9:16', '10 seconds'],
+          constraints: ['Preserve the same lantern identity throughout.'],
         },
       },
       requests: null,
@@ -270,6 +272,8 @@ describe('project agent toolset conformance', () => {
     const videoOutput = {
       kind: 'video_prompt_set',
       overview: 'Two independently generated clips.',
+      aspectRatio: '16:9',
+      targetDurationSeconds: 10,
       globalDirection: {
         narrativeIntent: 'Reveal the shrine awakening.',
         visualContinuity: 'Keep lantern position and fog direction stable.',
