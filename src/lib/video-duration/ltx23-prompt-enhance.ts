@@ -17,6 +17,7 @@ import type { ResolvedAudioDrivenVideoTiming } from '@/lib/video-duration/audio-
 import { parseProfileData } from '@/types/character-profile'
 import { splitPromptRelayLocalSegments } from '@/lib/providers/comfyui/workflow-registry'
 import { CODEX_DEFAULT_MODEL_KEY } from '@/lib/providers/codex/constants'
+import { sanitizeLtx23KjNoSubtitlesPrompt } from '@/lib/video-duration/ltx23-kj-no-subtitles'
 
 export interface Ltx23PromptEnhancementVoiceLine {
   id: string
@@ -448,6 +449,7 @@ function buildAudioContextText(
   voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
   durationSeconds?: number | null,
   audioTiming?: ResolvedAudioDrivenVideoTiming | null,
+  visualOnlyNoLiteralDialogue = false,
 ): string {
   const safeDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
@@ -465,7 +467,11 @@ function buildAudioContextText(
       const referenceAudio = readTrimmedString(line.audioUrl)
       const parts = [
         `${index + 1}. ${readTrimmedString(line.speaker) || 'Unknown speaker'}`,
-        referenceAudio ? 'reference audio clip' : truncateText(line.content, 120),
+        referenceAudio
+          ? 'reference audio clip'
+          : visualOnlyNoLiteralDialogue
+            ? 'spoken line present; literal words intentionally omitted'
+            : truncateText(line.content, 120),
       ].filter(Boolean)
       const durationText = typeof line.audioDuration === 'number' && Number.isFinite(line.audioDuration) && line.audioDuration > 0
         ? ` (${(line.audioDuration / 1000).toFixed(2)}s)`
@@ -478,7 +484,7 @@ function buildAudioContextText(
     ? [
         `Audio duration: ${audioTiming.audioDurationSeconds.toFixed(2)} seconds.`,
         `Context-aware target video duration: ${audioTiming.targetDurationSeconds.toFixed(2)} seconds.`,
-        `Timing plan: [0.00-${audioTiming.dialogueStartSeconds.toFixed(2)}] pre-roll emotional setup, [${audioTiming.dialogueStartSeconds.toFixed(2)}-${audioTiming.dialogueEndSeconds.toFixed(2)}] exact dialogue/lip motion, [${audioTiming.dialogueEndSeconds.toFixed(2)}-${audioTiming.targetDurationSeconds.toFixed(2)}] post-dialogue emotional hold.`,
+        `Timing plan: [0.00-${audioTiming.dialogueStartSeconds.toFixed(2)}] pre-roll emotional setup, [${audioTiming.dialogueStartSeconds.toFixed(2)}-${audioTiming.dialogueEndSeconds.toFixed(2)}] ${visualOnlyNoLiteralDialogue ? 'visible speaking/lip motion' : 'exact dialogue/lip motion'}, [${audioTiming.dialogueEndSeconds.toFixed(2)}-${audioTiming.targetDurationSeconds.toFixed(2)}] post-dialogue emotional hold.`,
         `Pre-roll: ${audioTiming.preRollSeconds.toFixed(2)} seconds. Post-roll: ${audioTiming.postRollSeconds.toFixed(2)} seconds.`,
         audioTiming.capped && audioTiming.maxDurationSeconds !== null
           ? `The current workflow maximum is ${audioTiming.maxDurationSeconds.toFixed(2)} seconds; do not exceed it.`
@@ -492,7 +498,14 @@ function buildAudioContextText(
       ? `Linked audio count: ${voiceLines.length}\nContext-aware target video duration: ${safeDuration.toFixed(2)} seconds.`
     : `Linked audio count: ${voiceLines.length}`
 
-  const strictDialogueContext = buildStrictDialogueContextText(locale, voiceLines)
+  const strictDialogueContext = visualOnlyNoLiteralDialogue
+    ? [
+        'KJ visual-only dialogue rules:',
+        '1. Do not include literal dialogue, quoted speech, transcript words, subtitles, captions, or readable speech text in enhanced_prompt.',
+        '2. Preserve only visible lip and mouth movement, facial performance, gaze, gesture, posture, and their natural timing.',
+        '3. Text-artifact prevention is handled by negative conditioning; do not put subtitle or watermark prohibition terms into the positive enhanced_prompt.',
+      ].join('\n')
+    : buildStrictDialogueContextText(locale, voiceLines)
   return strictDialogueContext
     ? `${header}\nVoice lines:\n${lineSummary}\n\n${strictDialogueContext}`
     : `${header}\nVoice lines:\n${lineSummary}`
@@ -570,6 +583,8 @@ function buildKjPromptRelayTimingLines(input: EnhanceLtx23VideoPromptInput): str
     'Analyze the concrete action beats and their natural timing before assigning frames. Give preparation, main motion, and settling only the time each beat actually needs; do not divide the timeline evenly.',
     `Return a JSON field named segment_frames with exactly ${segmentCount} positive integer frame counts. They must sum to ${totalFrames}, must not all be equal, and their order must match LOCAL 1 through LOCAL ${segmentCount}.`,
     `Think in seconds at ${Math.round(input.fps)} fps, then convert the chosen durations to exact frame counts. Do not put LENGTHS: inside enhanced_prompt; the application will add validated timing metadata.`,
+    'Visual-only dialogue rule: do not copy literal dialogue, quoted speech, transcript words, subtitles, captions, or readable speech text into enhanced_prompt. Describe only visible lip and mouth movement, expression, gaze, gesture, posture, and their timing.',
+    'Text-artifact prevention is handled by negative conditioning. Do not put subtitle, caption, text-overlay, or watermark prohibition terms into the positive enhanced_prompt.',
   ]
 }
 
@@ -798,6 +813,14 @@ function buildVerbatimDialogueConstraint(
   return `The spoken dialogue must follow these exact lines in order: ${orderedLines} Match mouth movement, pauses, and timing to each line. Do not paraphrase, merge, translate, or replace them.`
 }
 
+function buildLtx23DialogueConstraint(input: EnhanceLtx23VideoPromptInput): string {
+  if (!isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) {
+    return buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+  }
+  if (!Array.isArray(input.linkedVoiceLines) || input.linkedVoiceLines.length === 0) return ''
+  return 'The visible speaker performs natural speech with rhythmic lip and mouth movement, facial expression, gaze, gesture, and posture matched to the action timing.'
+}
+
 function appendDialogueConstraint(basePrompt: string, constraint: string, locale: Locale): string {
   const trimmedBase = readTrimmedString(basePrompt)
   const trimmedConstraint = readTrimmedString(constraint)
@@ -839,7 +862,10 @@ function appendLtx23SafetyConstraints(
     : dialogueConstraint
   const withDialogue = appendDialogueConstraint(stabilizedPrompt, safeDialogueConstraint, input.locale)
   const visualConstraint = buildVisualContinuityConstraint(input, promptPolicy)
-  return appendDialogueConstraint(withDialogue, visualConstraint, 'en')
+  const constrainedPrompt = appendDialogueConstraint(withDialogue, visualConstraint, 'en')
+  return isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+    ? sanitizeLtx23KjNoSubtitlesPrompt(constrainedPrompt)
+    : constrainedPrompt
 }
 
 function isSmartVbvrWorkflowModel(modelKey: string | null | undefined): boolean {
@@ -953,7 +979,9 @@ function buildLtx23FallbackPrompt(
   }
   if (isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)) {
     const segmentCount = resolveKjPromptRelaySegmentCount(input.durationSeconds)
-    const safeOriginalPrompt = sanitizeKjPromptRelayReservedSyntax(originalPrompt)
+    const safeOriginalPrompt = sanitizeKjPromptRelayReservedSyntax(
+      sanitizeLtx23KjNoSubtitlesPrompt(originalPrompt),
+    )
     const localSections = Array.from({ length: segmentCount }, (_, index) => {
       if (index === 0) {
         return `LOCAL 1: Begin the current-shot action continuously: ${safeOriginalPrompt}`
@@ -1022,7 +1050,7 @@ export async function enhanceLtx23VideoPrompt(
   }
 
   if (input.userEdited) {
-    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+    const dialogueConstraint = buildLtx23DialogueConstraint(input)
     return {
       prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,
@@ -1032,7 +1060,7 @@ export async function enhanceLtx23VideoPrompt(
 
   const textModel = await resolveLtx23PromptTextModel(input.userId, input.projectId, input.modelKey)
   if (!textModel) {
-    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+    const dialogueConstraint = buildLtx23DialogueConstraint(input)
     return {
       prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,
@@ -1046,10 +1074,20 @@ export async function enhanceLtx23VideoPrompt(
       promptId: PROMPT_IDS.LTX23_VIDEO_PROMPT_ENHANCE,
       locale: input.locale,
       variables: {
-        original_prompt: originalPrompt,
-        panel_context: buildPanelContextText(input),
+        original_prompt: isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+          ? sanitizeLtx23KjNoSubtitlesPrompt(originalPrompt)
+          : originalPrompt,
+        panel_context: isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
+          ? sanitizeLtx23KjNoSubtitlesPrompt(buildPanelContextText(input))
+          : buildPanelContextText(input),
         character_context: buildCharacterContextText(characters),
-        audio_context: buildAudioContextText(input.locale, input.linkedVoiceLines, input.durationSeconds, input.audioTiming),
+        audio_context: buildAudioContextText(
+          input.locale,
+          input.linkedVoiceLines,
+          input.durationSeconds,
+          input.audioTiming,
+          isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey),
+        ),
         generation_context: buildGenerationContextText(input),
       },
     })
@@ -1071,7 +1109,7 @@ export async function enhanceLtx23VideoPrompt(
 
     const parsed = safeParseJsonObject(completion.text)
     const enhancedPrompt = readEnhancedPromptField(parsed)
-    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+    const dialogueConstraint = buildLtx23DialogueConstraint(input)
     const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
     const kjSegmentFrames = isComfyUiLtx23KjPromptRelayWorkflow(input.modelKey)
       ? readKjPromptRelaySegmentFrames(parsed, input)
@@ -1129,7 +1167,7 @@ export async function enhanceLtx23VideoPrompt(
       textModel,
     }
   } catch {
-    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
+    const dialogueConstraint = buildLtx23DialogueConstraint(input)
     return {
       prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,

@@ -614,6 +614,84 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt).toContain('LENGTHS: 45, 105, 75')
   })
 
+  it('keeps literal dialogue and subtitle prohibitions out of an enhanced KJ visual prompt', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: [
+          'GLOBAL: The same doctor and office remain visible.',
+          'LOCAL 1: The doctor faces forward and says "Hello Chen Ji".',
+          'LOCAL 2: The doctor continues speaking while raising one hand. Do not add subtitles, captions, readable text, or watermarks.',
+          'LOCAL 3: The doctor closes his mouth and settles.',
+        ].join('\n'),
+        segment_frames: [45, 105, 75],
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor faces forward and says "Hello Chen Ji" while raising one hand',
+      panel: { description: 'doctor faces forward and speaks', characters: 'Doctor' },
+      linkedVoiceLines: [
+        { id: 'line-1', speaker: 'Doctor', content: 'Hello Chen Ji' },
+      ],
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+    })
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toMatch(/do not include literal dialogue|do not copy literal dialogue/i)
+    expect(promptText).toMatch(/visible lip|mouth movement/i)
+    expect(promptText).toMatch(/negative conditioning/i)
+    expect(promptText).not.toContain('Hello Chen Ji')
+    expect(result.enhanced).toBe(true)
+    expect(result.prompt).toContain('LENGTHS: 45, 105, 75')
+    expect(result.prompt).toMatch(/lip movement/i)
+    expect(result.prompt).toContain('raising one hand')
+    expect(result.prompt).not.toContain('Hello Chen Ji')
+    expect(result.prompt).not.toMatch(/subtitles?|captions?|readable text|watermarks?/i)
+    expect(result.prompt).not.toMatch(/spoken dialogue must match exactly/i)
+  })
+
+  it.each([
+    ['AI fallback', false],
+    ['user-edited fallback', true],
+  ])('sanitizes literal dialogue from the KJ %s path', async (_label, userEdited) => {
+    if (!userEdited) {
+      aiRuntimeMock.executeAiTextStep.mockRejectedValueOnce(new Error('AI unavailable'))
+    }
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-multishot-precise-promptrelay-kj-720p',
+      originalPrompt: 'doctor says "Hello Chen Ji" while raising one hand. Do not add subtitles or captions.',
+      panel: { description: 'doctor faces forward and speaks', characters: 'Doctor' },
+      linkedVoiceLines: [
+        { id: 'line-1', speaker: 'Doctor', content: 'Hello Chen Ji' },
+      ],
+      durationSeconds: 9,
+      fps: 25,
+      motionStrength: 2,
+      generationMode: 'normal',
+      userEdited,
+    })
+
+    expect(result.enhanced).toBe(false)
+    expect(result.prompt).toContain('GLOBAL:')
+    expect(result.prompt).toContain('LOCAL 3:')
+    expect(result.prompt).toMatch(/lip movement/i)
+    expect(result.prompt).toContain('raising one hand')
+    expect(result.prompt).not.toContain('Hello Chen Ji')
+    expect(result.prompt).not.toMatch(/subtitles?|captions?/i)
+    expect(result.prompt.match(/LENGTHS:/g)).toHaveLength(1)
+  })
+
   it.each([
     ['equal allocation', [75, 75, 75]],
     ['wrong segment count', [100, 125]],
