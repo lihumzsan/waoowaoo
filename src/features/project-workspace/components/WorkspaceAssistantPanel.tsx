@@ -29,8 +29,6 @@ import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssis
 import {
   WorkspaceAssistantSubagentTabs,
   WorkspaceAssistantSubagentView,
-  WorkspaceAssistantSubagentSummary,
-  WorkspaceAssistantSubagentRecords,
 } from './workspace-assistant/WorkspaceAssistantSubagents'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -263,7 +261,13 @@ export default function WorkspaceAssistantPanel({
                   <div>
                     <div className="space-y-3">
                       <ThreadPrimitive.Messages>
-                        {() => <WorkspaceAssistantThreadMessage messagePartComponents={partComponents} />}
+                        {() => (
+                          <WorkspaceAssistantThreadMessage
+                            messagePartComponents={partComponents}
+                            subagents={visibleSubagents}
+                            onSelectSubagent={setSelectedSubagentId}
+                          />
+                        )}
                       </ThreadPrimitive.Messages>
                       {showAssistantReplyLoading ? <WorkspaceAssistantPendingTurnPlaceholder /> : null}
                       {assistantRuntime.sessionStateError ? (
@@ -282,14 +286,6 @@ export default function WorkspaceAssistantPanel({
                           taskCount={activeExternalTasks.length}
                         />
                       ) : null}
-                      <WorkspaceAssistantSubagentSummary
-                        subagents={visibleSubagents}
-                        onSelect={setSelectedSubagentId}
-                      />
-                      <WorkspaceAssistantSubagentRecords
-                        subagents={visibleSubagents}
-                        onSelect={setSelectedSubagentId}
-                      />
                       {serverPendingApproval ? (
                         <ConfirmationActionCard
                           operationId={serverPendingApproval.operationId}

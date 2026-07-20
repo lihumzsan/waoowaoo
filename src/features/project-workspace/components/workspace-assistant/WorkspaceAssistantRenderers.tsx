@@ -44,6 +44,7 @@ import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
+import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -770,9 +771,7 @@ function WorkspaceAssistantUserTextAttachments() {
   return <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
 }
 
-export function WorkspaceAssistantThreadMessage(props: {
-  messagePartComponents: MessagePartComponents
-}) {
+export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: MessagePartComponents; subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']; onSelectSubagent: (subagentId: string) => void }) {
   return (
     <>
       <MessagePrimitive.If user>
@@ -790,6 +789,7 @@ export function WorkspaceAssistantThreadMessage(props: {
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
             <MessagePrimitive.Parts components={props.messagePartComponents} />
+            <WorkspaceAssistantSubagentRecordsForMessage subagents={props.subagents} onSelect={props.onSelectSubagent} />
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>

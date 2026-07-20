@@ -1,5 +1,6 @@
 'use client'
 
+import { useMessage } from '@assistant-ui/react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { getCreativeSkillDefinition } from '@/lib/creative-skills/registry'
@@ -65,6 +66,19 @@ function StatusGlyph({ status }: { status: ProjectAgentSubagentStatus }) {
     )
   }
   return <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+}
+
+function readRunIdsFromMessageParts(parts: readonly unknown[]): ReadonlySet<string> {
+  const runIds = new Set<string>()
+  for (const part of parts) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) continue
+    const record = part as { type?: unknown; data?: unknown }
+    if (record.type !== 'data-agent-run' || !record.data || typeof record.data !== 'object' || Array.isArray(record.data)) continue
+    const data = record.data as { runId?: unknown }
+    if (typeof data.runId !== 'string' || !data.runId.trim()) continue
+    runIds.add(data.runId.trim())
+  }
+  return runIds
 }
 
 function tabClassName(active: boolean): string {
@@ -180,40 +194,15 @@ export function WorkspaceAssistantSubagentView(props: { subagent: ProjectAgentSu
   )
 }
 
-export function WorkspaceAssistantSubagentSummary(props: {
-  subagents: readonly ProjectAgentSubagentView[]
-  onSelect: (subagentId: string) => void
-}) {
-  const t = useTranslations('assistantAgent')
-  const running = props.subagents.filter((subagent) => subagent.status === 'running')
-  if (running.length === 0) return null
-  const skillCount = running.reduce((total, subagent) => total + subagent.skillReads.length, 0)
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        const first = running[0]
-        if (first) props.onSelect(first.subagentId)
-      }}
-      className="flex w-full items-center gap-2 rounded-xl border border-[var(--glass-stroke-base)] bg-white/88 px-3 py-2 text-left text-sm leading-5 text-[var(--glass-text-secondary)] shadow-[0_2px_8px_rgba(15,23,42,0.025)] transition-colors hover:bg-white"
-    >
-      <AppIcon name="usersRound" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate">{t('subagents.runningSummary', { count: running.length, skills: skillCount })}</span>
-      <AppIcon name="chevronUp" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
-    </button>
-  )
-}
-
 export function WorkspaceAssistantSubagentRecords(props: {
   subagents: readonly ProjectAgentSubagentView[]
   onSelect: (subagentId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
-  const terminal = props.subagents.filter((subagent) => subagent.status !== 'running')
-  if (terminal.length === 0) return null
+  if (props.subagents.length === 0) return null
   return (
     <div className="space-y-2">
-      {terminal.map((subagent) => (
+      {props.subagents.map((subagent) => (
         <button
           key={subagent.subagentId}
           type="button"
@@ -228,5 +217,20 @@ export function WorkspaceAssistantSubagentRecords(props: {
         </button>
       ))}
     </div>
+  )
+}
+
+export function WorkspaceAssistantSubagentRecordsForMessage(props: {
+  subagents: readonly ProjectAgentSubagentView[]
+  onSelect: (subagentId: string) => void
+}) {
+  const parts = useMessage((state) => state.content)
+  const messageRunIds = readRunIdsFromMessageParts(parts)
+  const anchoredSubagents = props.subagents.filter((subagent) => messageRunIds.has(subagent.runId))
+  return (
+    <WorkspaceAssistantSubagentRecords
+      subagents={anchoredSubagents}
+      onSelect={props.onSelect}
+    />
   )
 }
