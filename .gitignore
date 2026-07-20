@@ -97,6 +97,7 @@ tmp-check-*.jpg
 AGENTS.md
 agent/
 .superpowers/
+.worktrees/
 
 # internal docs (not for public)
 docs/*
