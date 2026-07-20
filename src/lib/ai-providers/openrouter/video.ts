@@ -1,8 +1,11 @@
 import { HTTPClient, OpenRouter } from '@openrouter/sdk'
 import type { VideoGenerationRequest } from '@openrouter/sdk/models'
+import { ResponseValidationError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { AppError } from '@/lib/errors/app-error'
+import { FetchStatusError } from '@/lib/retry'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
@@ -28,6 +31,7 @@ export type OpenRouterVideoPollResult = {
 }
 
 const OPENROUTER_VIDEO_REQUEST_TIMEOUT_MS = 60_000
+const OPENROUTER_VIDEO_ERROR_FIELD_LIMIT = 1_000
 const OPENROUTER_SEEDANCE_2_DURATIONS = new Set([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 const OPENROUTER_SEEDANCE_2_RESOLUTIONS = new Set(['480p', '720p', '1080p'])
 const OPENROUTER_SEEDANCE_2_FAST_RESOLUTIONS = new Set(['480p', '720p'])
@@ -227,6 +231,103 @@ function createOpenRouterVideoClient(input: { baseUrl: string; apiKey: string })
   })
 }
 
+type OpenRouterVideoSubmitRejection = {
+  readonly code: number | null
+  readonly errorType: string | null
+  readonly message: string
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readLimitedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized ? normalized.slice(0, OPENROUTER_VIDEO_ERROR_FIELD_LIMIT) : null
+}
+
+function readProviderHttpCode(value: unknown): number | null {
+  const code = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d{3}$/.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : NaN
+  return Number.isInteger(code) && code >= 400 && code <= 599 ? code : null
+}
+
+function readRawRequestId(value: unknown): string | null {
+  const record = asUnknownRecord(value)
+  return readLimitedString(record?.id)
+}
+
+function readRawAcceptedRequestId(value: unknown): string | null {
+  const record = asUnknownRecord(value)
+  const requestId = readRawRequestId(record)
+  const pollingUrl = readLimitedString(record?.polling_url)
+  const status = readLimitedString(record?.status)
+  return requestId
+    && pollingUrl
+    && status
+    && ['pending', 'in_progress', 'completed', 'failed', 'cancelled', 'expired'].includes(status)
+    ? requestId
+    : null
+}
+
+function readRawSubmitRejection(value: unknown): OpenRouterVideoSubmitRejection | null {
+  const record = asUnknownRecord(value)
+  if (!record || readRawRequestId(record)) return null
+  if (typeof record.error === 'string') {
+    const message = readLimitedString(record.error)
+    return message ? { code: null, errorType: null, message } : null
+  }
+
+  const error = asUnknownRecord(record.error)
+  if (!error) return null
+  const message = readLimitedString(error.message)
+  if (!message) return null
+  const metadata = asUnknownRecord(error.metadata)
+  return {
+    code: readProviderHttpCode(error.code) ?? readProviderHttpCode(error.status),
+    errorType: readLimitedString(metadata?.error_type) ?? readLimitedString(error.error_type),
+    message,
+  }
+}
+
+function formatSubmitRejection(rejection: OpenRouterVideoSubmitRejection): string {
+  const identity = [
+    rejection.code === null ? null : `code=${String(rejection.code)}`,
+    rejection.errorType ? `type=${rejection.errorType}` : null,
+  ].filter((value): value is string => value !== null).join(', ')
+  return identity
+    ? `OpenRouter video submission rejected (${identity}): ${rejection.message}`
+    : `OpenRouter video submission rejected: ${rejection.message}`
+}
+
+function normalizeOpenRouterVideoSubmitValidationError(error: ResponseValidationError): string {
+  const acceptedRequestId = readRawAcceptedRequestId(error.rawValue)
+  if (acceptedRequestId) return acceptedRequestId
+
+  const rejection = readRawSubmitRejection(error.rawValue)
+  if (!rejection) {
+    throw new Error('OPENROUTER_VIDEO_SUBMIT_RESPONSE_INVALID_WITHOUT_ACCEPTANCE_ID_OR_ERROR', {
+      cause: error,
+    })
+  }
+
+  const message = formatSubmitRejection(rejection)
+  if (rejection.code !== null) {
+    throw new FetchStatusError(rejection.code, message)
+  }
+  throw new AppError('PROVIDER_SUBMISSION_REJECTED', message, {
+    provider: 'openrouter',
+    details: rejection.errorType ? { providerErrorType: rejection.errorType } : null,
+    cause: error,
+  })
+}
+
 export async function submitOpenRouterVideoTask(input: {
   baseUrl: string
   apiKey: string
@@ -236,11 +337,17 @@ export async function submitOpenRouterVideoTask(input: {
     throw new Error('请配置 OpenRouter API Key')
   }
 
-  const response = await createOpenRouterVideoClient(input).videoGeneration.generate(
-    { videoGenerationRequest: input.payload },
-    { retries: { strategy: 'none' }, cache: 'no-store' },
-  )
-  const requestId = response.id.trim()
+  let requestId: string
+  try {
+    const response = await createOpenRouterVideoClient(input).videoGeneration.generate(
+      { videoGenerationRequest: input.payload },
+      { retries: { strategy: 'none' }, cache: 'no-store' },
+    )
+    requestId = response.id.trim()
+  } catch (error) {
+    if (!(error instanceof ResponseValidationError)) throw error
+    requestId = normalizeOpenRouterVideoSubmitValidationError(error)
+  }
   if (!requestId) throw new Error('OPENROUTER_VIDEO_SUBMIT_ID_MISSING')
   return requestId
 }
