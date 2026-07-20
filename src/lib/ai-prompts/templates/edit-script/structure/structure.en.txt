@@ -24,8 +24,10 @@ You are the core edit planner. Organize the chapter's story facts into rhythmic 
 - generationSegments cover every shot once in shotNumber order and contain consecutive shotRefs only.
 - Total duration per segment must not exceed {{generation_segment_max_duration_seconds}} seconds.
 - continuity states only the action, performance, space, emotion, or sound continuity required inside the segment.
-- soundCues is an optional Segment-level native-audio timeline. Use it only when sound should lead its visual source, continue across a shot boundary, or reveal a character through offscreen dialogue before the character is shown; use an empty array when it is not useful.
-- soundCues use relative seconds within the Segment and must stay inside the Segment duration. sourceShotRef must point to a shot in the same Segment; a dialogue cue must point to the shot that owns the exact verbatim dialogue. Do not rewrite dialogue, synchronousSound, or BGM inside soundCues.
+- After forming every Segment, actively choose its sound relationship: (1) only sound synchronized to the current image; (2) sound leads its visual source; (3) sound carries across a Shot boundary; (4) offscreen dialogue reveals a character before the image does; or (5) no special sound relationship. This judgment is required, but soundCues remains optional.
+- For choices (1) and (5), use shot-level synchronousSound and return an empty soundCues array. Add Segment-level soundCues only for choices (2), (3), or (4) when they have clear narrative value; never add them merely to fill the field.
+- soundCues.kind is exactly ambience, effect, or dialogue. startSec/endSec are relative seconds within the Segment and must stay inside its duration.
+- sourceShotRef identifies the sound's visual or dialogue source: when there is one, it must point to a shot in the same Segment; ambience/effect without one visual source may use null; a dialogue cue must point to the shot that owns the exact verbatim dialogue. Do not rewrite dialogue, synchronousSound, or BGM inside soundCues.
 - Do not output segmentId; the server creates the stable identity.
 - Do not output visibility, role, key-object lists, lighting, placement, spatial blocking, or generation prompts.
 - Return strict JSON only.
@@ -92,7 +94,15 @@ Visual style:
     {
       "shotRefs": ["shot-001", "shot-002"],
       "continuity": "shared action, performance, space, emotion, or sound continuity",
-      "soundCues": []
+      "soundCues": [
+        {
+          "kind": "dialogue",
+          "description": "The character is heard offscreen before being shown; the exact line remains only in the source shot dialogue",
+          "startSec": 0,
+          "endSec": 3,
+          "sourceShotRef": "shot-002"
+        }
+      ]
     }
   ]
 }
@@ -103,4 +113,4 @@ Visual style:
 - Dialogue is verbatim and never invented.
 - Character items contain only characterName and performance.
 - No visibility, role, keyObjects, lighting, camera placement, blocking, composition, or prompt field.
-- Segments are continuous, complete, and within duration; soundCues are used only for a clear lead, carry, or offscreen-reveal need, with valid ranges and sourceShotRef values.
+- Segments are continuous, complete, and within duration; every Segment has an explicit judgment among synchronized, leading, carrying, offscreen-reveal, or no-special sound relationships; soundCues appear only when narratively useful, with valid kind, range, and sourceShotRef values.

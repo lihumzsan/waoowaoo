@@ -15,8 +15,8 @@ function buildSoundCueTimeline(input: {
   readonly segment: EditGenerationSegment
   readonly shots: readonly EditScriptShot[]
   readonly voiceContext: EditScriptDialogueVoiceContext
-}): string {
-  if (input.segment.soundCues.length === 0) return 'AUDIO TIMELINE\nNo optional cross-shot sound cues.'
+}): string | null {
+  if (input.segment.soundCues.length === 0) return null
 
   const shotById = new Map(input.shots.map((shot) => [shot.shotId, shot]))
   const shotStartById = new Map<string, number>()
@@ -95,6 +95,11 @@ export function buildVideoSegmentPrompt(input: {
       line('Synchronized sound', shot.synchronousSound),
     ].join('\n')
   })
+  const soundCueTimeline = buildSoundCueTimeline({
+    segment: input.segment,
+    shots: input.shots,
+    voiceContext: input.voiceContext,
+  })
 
   return [
     'Generate one continuous, full-frame video segment. Do not create a collage, grid, split screen, contact sheet, captions, or text overlays.',
@@ -102,8 +107,8 @@ export function buildVideoSegmentPrompt(input: {
     'Use every supplied image only as an approved character or location reference. Preserve identity, wardrobe, and environment design while following the timeline below.',
     `REFERENCE MANIFEST\n${referenceLines.join('\n')}`,
     `CONTINUITY ACROSS THIS SEGMENT\n${input.segment.continuity}`,
-    buildSoundCueTimeline({ segment: input.segment, shots: input.shots, voiceContext: input.voiceContext }),
+    soundCueTimeline,
     shotBlocks.join('\n\n'),
-    'AUDIO CONTRACT\nGenerate native audio for this one continuous video segment. Include shot-local synchronized sounds and use the optional audio timeline when present; a cue may begin before its visual source is revealed or continue across a shot boundary. Include written dialogue with the specified intrinsic voices, do not replace dialogue with narration, do not duplicate one sound event in multiple fields, and do not generate BGM or a separate audio track.',
-  ].join('\n\n')
+    'AUDIO CONTRACT\nGenerate native audio for this one continuous video segment. Include shot-local synchronized sounds. When an AUDIO TIMELINE is present, treat each listed lead, cross-shot carry, or offscreen reveal as selected directing intent: preserve its exact time range and visual source instead of resynchronizing it to the source image. Include written dialogue with the specified intrinsic voices, do not replace dialogue with narration, do not duplicate or retrigger one sound event across fields or Shots, and do not generate BGM or a separate audio track.',
+  ].filter((section): section is string => section !== null).join('\n\n')
 }

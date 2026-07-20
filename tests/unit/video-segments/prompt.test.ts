@@ -8,7 +8,8 @@ import type {
 import type { EditScriptDialogueVoiceContext } from '@/lib/edit-script/voice-profiles'
 
 // Test governance: Logic test for the deterministic prompt compiler. The oracle is the
-// emitted AUDIO TIMELINE; it rejects dropping a Segment cue or duplicating dialogue text.
+// conditionally emitted AUDIO TIMELINE; it rejects dropping a selected Segment cue,
+// duplicating dialogue text, or leaking an unused cue section into a sync-only prompt.
 describe('video Segment prompt audio timeline', () => {
   it('compiles an optional sound lead into the Segment prompt without duplicating dialogue', () => {
     const shots: readonly EditScriptShot[] = [
@@ -81,5 +82,16 @@ describe('video Segment prompt audio timeline', () => {
     expect(prompt).toContain('0s-3s | dialogue cue | leads before the visual source of Shot 2 is revealed')
     expect(prompt).toContain('use the exact dialogue and intrinsic voice listed in Shot 2')
     expect(prompt.match(/Are you really leaving\?/g)).toHaveLength(1)
+
+    const syncOnlyPrompt = buildVideoSegmentPrompt({
+      visualStyle: 'Naturalistic cinematic cafe drama.',
+      segment: { ...segment, soundCues: [] },
+      execution,
+      shots,
+      references: [],
+      voiceContext,
+    })
+    expect(syncOnlyPrompt).not.toContain('AUDIO TIMELINE\n')
+    expect(syncOnlyPrompt).toContain('Synchronized sound: Cup placed on the table.')
   })
 })
