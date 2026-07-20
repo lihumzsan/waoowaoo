@@ -343,12 +343,10 @@ export default function WorkspaceAssistantPanel({
                     />
                   </div>
                 ) : null}
-                {assistantRuntime.sessionState?.plan ? (
-                  <div className="mb-2">
+                <div className="relative">
+                  {assistantRuntime.sessionState?.plan ? (
                     <WorkspaceAssistantPlanCard plan={assistantRuntime.sessionState.plan} />
-                  </div>
-                ) : null}
-                <div>
+                  ) : null}
                   <WorkspaceAssistantComposer
                     value={composer.text}
                     error={composerError}

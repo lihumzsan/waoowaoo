@@ -26,10 +26,18 @@ function PlanStatusIcon({ item }: { item: ProjectAgentPlanItem }) {
   }
   if (item.status === 'in_progress') {
     return (
-      <span className="inline-flex h-4 w-4 shrink-0 rounded-full border-2 border-[var(--glass-tone-info-fg)]" />
+      <span
+        className="inline-flex h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current/20 border-t-current text-[var(--glass-text-secondary)]"
+        aria-hidden="true"
+      />
     )
   }
-  return <span className="inline-flex h-4 w-4 shrink-0 rounded-full border border-[var(--glass-stroke-strong)]" />
+  return (
+    <span
+      className="inline-flex h-4 w-4 shrink-0 rounded-full border border-current text-[var(--glass-text-secondary)]"
+      aria-hidden="true"
+    />
+  )
 }
 
 function resolveCurrentPlanIndex(plan: ProjectAgentPlanSnapshot): number {
@@ -46,6 +54,7 @@ export function WorkspaceAssistantPlanCard({
   plan: ProjectAgentPlanSnapshot
 }) {
   const t = useTranslations('assistantAgent')
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -62,20 +71,22 @@ export function WorkspaceAssistantPlanCard({
   }, [])
 
   const updatePosition = useCallback(() => {
+    const container = containerRef.current
     const trigger = triggerRef.current
-    if (!trigger) return
-    const rect = trigger.getBoundingClientRect()
+    if (!container || !trigger) return
+    const containerRect = container.getBoundingClientRect()
+    const triggerRect = trigger.getBoundingClientRect()
     const viewportPadding = 12
-    const width = Math.min(420, window.innerWidth - viewportPadding * 2)
-    const centeredLeft = rect.left + rect.width / 2 - width / 2
+    const width = Math.min(containerRect.width, window.innerWidth - viewportPadding * 2)
+    const centeredLeft = containerRect.left + containerRect.width / 2 - width / 2
     const left = Math.min(
       Math.max(viewportPadding, centeredLeft),
       window.innerWidth - width - viewportPadding,
     )
     setPosition({
-      bottom: window.innerHeight - rect.top + 12,
+      bottom: window.innerHeight - triggerRect.top + 12,
       left,
-      maxHeight: Math.max(120, rect.top - 24),
+      maxHeight: Math.max(120, triggerRect.top - 24),
       width,
     })
   }, [])
@@ -135,7 +146,7 @@ export function WorkspaceAssistantPlanCard({
             <span className="mt-0.5">
               <PlanStatusIcon item={item} />
             </span>
-            <span className={item.status === 'completed' ? 'text-[var(--glass-text-tertiary)] line-through' : ''}>
+            <span className={`min-w-0 flex-1 break-words ${item.status === 'completed' ? 'text-[var(--glass-text-tertiary)] line-through' : ''}`}>
               {item.step}
             </span>
           </li>
@@ -145,14 +156,17 @@ export function WorkspaceAssistantPlanCard({
   ) : null
 
   return (
-    <div className="flex justify-center py-1.5">
+    <div
+      ref={containerRef}
+      className="pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-2"
+    >
       <button
         ref={triggerRef}
         type="button"
         aria-describedby={open ? 'workspace-assistant-plan-status' : undefined}
         aria-expanded={open}
         aria-label={`${t('plan.title')} · ${t('plan.stepProgress', { current: currentIndex + 1, total })}`}
-        className="inline-flex max-w-[70%] items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.88] px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-tone-info-fg)]/20"
+        className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/[0.88] px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-text-secondary)]/20"
         onMouseEnter={showPopover}
         onMouseLeave={hidePopoverSoon}
         onFocus={showPopover}
@@ -170,7 +184,7 @@ export function WorkspaceAssistantPlanCard({
         }}
       >
         <PlanStatusIcon item={currentItem} />
-        <span className="truncate">{t('plan.stepProgress', { current: currentIndex + 1, total })}</span>
+        <span className="min-w-0 truncate">{t('plan.stepProgress', { current: currentIndex + 1, total })}</span>
       </button>
       {typeof document !== 'undefined' ? createPortal(popover, document.body) : null}
     </div>
