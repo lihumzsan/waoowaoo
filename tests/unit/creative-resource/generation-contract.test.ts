@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCreativeResourceGenerationTaskPayload } from '@/lib/creative-resource/generation-contract'
+import { buildCreativeResourceRetryTaskPayload } from '@/lib/creative-resource/generation-retry'
 
 function imagePayload() {
   return {
@@ -81,5 +82,60 @@ describe('creative resource generation task contract', () => {
         imageInputPositions: [3],
       },
     })).toThrow()
+  })
+
+  it('changes only execution identity when rebuilding an exact failed Resource retry', () => {
+    const frozenPayload = parseCreativeResourceGenerationTaskPayload({
+      resource: {
+        resourceId: 'resource:video-1',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        prompt: 'The original cinematic segment prompt.',
+        modelKey: 'fal::video-model',
+        inputHash: 'frozen-input-hash',
+        inputs: [{
+          resourceId: 'resource:image-1',
+          revisionId: 'revision:image-1',
+          fingerprint: 'a'.repeat(64),
+          role: 'reference',
+          position: 0,
+        }],
+        imageInputPositions: [0],
+        generationOptions: {
+          duration: 15,
+          aspectRatio: '16:9',
+          resolution: '720p',
+          generateAudio: true,
+        },
+        executionSegmentId: 'segment-original',
+        toolCallId: 'call-original',
+      },
+      videoModel: 'fal::video-model',
+      prompt: 'The original cinematic segment prompt.',
+      count: 1,
+      generationOptions: {
+        duration: 15,
+        aspectRatio: '16:9',
+        resolution: '720p',
+        generateAudio: true,
+      },
+    })
+
+    const retryPayload = buildCreativeResourceRetryTaskPayload({
+      frozenPayload,
+      toolCallId: 'call-retry',
+    })
+
+    expect(retryPayload).toEqual({
+      ...frozenPayload,
+      resource: {
+        ...frozenPayload.resource,
+        executionSegmentId: null,
+        toolCallId: 'call-retry',
+      },
+    })
+    expect(retryPayload.resource.prompt).not.toContain('Retry the')
+    expect(retryPayload.resource.inputs).toEqual(frozenPayload.resource.inputs)
+    expect(retryPayload.generationOptions).toEqual(frozenPayload.generationOptions)
   })
 })

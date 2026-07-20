@@ -121,6 +121,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 ## 历史回归
 
+- `merge_videos` 曾在 Task 提交前连续失败：Operation 已在同一事务准备 pending Resource 与 Task，但 Resource broadcast 把包含全部输入 Revision identity 的长 invocationId 原样拼进 Outbox `VARCHAR(191)` idempotencyKey，数据库长度校验回滚整笔事务；模型把输出名称缩短也不可能改变根因。当前唯一 Resource broadcast writer 先对 `invocationId + projectId` 做 SHA-256，再写固定长度 Outbox identity，重放语义不变且不再受调用参数长度影响。纯 identity 规格反证超长合并输入恢复旧故障；真实多段 FFmpeg 合并仍由适用组合场景验证。
 - Creative Worker 最初把 Subagent 运行和完整结构化输出留在同步 Tool call：没有持久 Task 可供刷新/恢复，章节并行只能由主 Agent 保持连接，Activity 事件又形成第二套运行态；直接把完整结果转交 continuation 还会让批量长片上下文线性膨胀。当前 `creative_work` 进入穷尽 TaskDefinition，一个请求一个 Task，既有 OperationBatch/collecting Wait 聚合全部成员；Task.result 保存完整结果，created/terminal/continuation 由 registry 声明的 reference projection 收敛。尚未执行真实批量、刷新与终态组合场景，行为证据仍是明确盲区。
 - Subagent UI 初版只查询 queued/processing Task，因此 Task 一终态标签就消失，失败时计划 UI 又可能继续转圈；随后若从历史消息补回“已完成”会形成第二状态来源。当前 Session projector直接查询当前 scope 最近的 `creative_work` Task，并以 Task.status/result 唯一投影运行中和终态标签；UI 的 X 只是本地关闭披露，不改变 Task。计划状态仍由 `update_plan` 自己的持久事实解释，Subagent 失败不伪造计划完成。
 

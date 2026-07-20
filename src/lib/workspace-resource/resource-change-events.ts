@@ -26,6 +26,18 @@ function workspaceResourceAggregateId(projectId: string, userId: string): string
     .digest('hex')
 }
 
+export function buildWorkspaceResourceBroadcastIdempotencyKey(params: {
+  invocationId: string
+  projectId: string
+}): string {
+  const identity = createHash('sha256')
+    .update(params.invocationId)
+    .update('\0')
+    .update(params.projectId)
+    .digest('hex')
+  return `workspace-resource:${identity}`
+}
+
 export function extractWorkspaceResourceChangeEventSpecs(params: {
   affectedResources: readonly WorkspaceResourceRef[]
 }): Array<{
@@ -52,7 +64,10 @@ export async function createWorkspaceResourceBroadcastsInTransaction(params: {
   const specs = extractWorkspaceResourceChangeEventSpecs(params)
   for (const spec of specs) {
     await createOutboxCommandInTransaction(params.tx, {
-      idempotencyKey: `workspace-resource:${params.invocationId}:${spec.projectId}`,
+      idempotencyKey: buildWorkspaceResourceBroadcastIdempotencyKey({
+        invocationId: params.invocationId,
+        projectId: spec.projectId,
+      }),
       aggregateType: WORKSPACE_RESOURCE_AGGREGATE_TYPE,
       aggregateId: workspaceResourceAggregateId(spec.projectId, params.userId),
       payload: {

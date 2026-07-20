@@ -109,60 +109,73 @@ describe('project agent toolset conformance', () => {
 
   it('publishes one explicit Resource generation contract from the production registry', () => {
     const registry = createProjectAgentOperationRegistry()
-    const operationIds = ['create_text', 'create_image', 'create_audio', 'create_video'] as const
-    const mediaTypes = ['text', 'image', 'audio', 'video'] as const
+    const textProperties = registry.create_text.toolInputSchema.properties
+    expect(readRecord(textProperties.schemaId).enum).toEqual([
+      ...CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text,
+      null,
+    ])
+    expect(Object.keys(textProperties)).not.toContain('generationOptions')
+    expect(Object.keys(textProperties)).not.toContain('modelKey')
 
-    for (const [index, operationId] of operationIds.entries()) {
-      const operation = registry[operationId]
-      const properties = operation.toolInputSchema.properties
-      const schemaId = readRecord(properties.schemaId)
-      expect(schemaId.enum).toEqual([
-        ...CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaTypes[index] ?? 'text'],
-        null,
-      ])
-      expect(Object.keys(properties)).not.toContain('generationOptions')
-      expect(Object.keys(properties)).not.toContain('retryResourceIds')
-      expect(Object.keys(properties)).not.toContain('modelKey')
+    for (const [operationId, mediaType] of [
+      ['create_image', 'image'],
+      ['create_audio', 'audio'],
+      ['create_video', 'video'],
+    ] as const) {
+      const properties = registry[operationId].toolInputSchema.properties
+      expect(Object.keys(properties)).toEqual(['request'])
+      const requestSchema = readRecord(properties.request)
+      const branches = Array.isArray(requestSchema.oneOf) ? requestSchema.oneOf.map(readRecord) : []
+      const newBranch = branches.find((branch) => (
+        readRecord(readRecord(branch.properties).kind).const === 'new'
+      ))
+      const retryBranch = branches.find((branch) => (
+        readRecord(readRecord(branch.properties).kind).const === 'retry'
+      ))
+      expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
+        enum: [...CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType], null],
+      })
+      expect(Object.keys(readRecord(readRecord(retryBranch).properties))).toEqual(['kind', 'resourceIds'])
+      expect(Object.keys(readRecord(readRecord(newBranch).properties))).not.toEqual(expect.arrayContaining([
+        'generationOptions', 'retryResourceIds', 'modelKey',
+      ]))
     }
 
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('content')
     expect(Object.keys(registry.create_image.toolInputSchema.properties)).toContain('request')
     expect(Object.keys(registry.create_audio.toolInputSchema.properties)).toContain('request')
-    for (const operationId of operationIds) {
-      expect(Object.keys(registry[operationId].toolInputSchema.properties)).toContain('contextReferences')
-      expect(Object.keys(registry[operationId].toolInputSchema.properties)).not.toContain('references')
-    }
-    expect(Object.keys(registry.create_image.toolInputSchema.properties)).toContain('imageReferences')
-    expect(Object.keys(registry.create_video.toolInputSchema.properties)).toContain('imageReferences')
+    expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('contextReferences')
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).not.toContain('imageReferences')
-    expect(Object.keys(registry.create_audio.toolInputSchema.properties)).not.toContain('imageReferences')
-    expect(Object.keys(registry.create_video.toolInputSchema.properties)).toEqual(expect.arrayContaining([
-      'request',
-      'durationSeconds',
-      'aspectRatio',
-      'resolution',
-      'fps',
-      'generateAudio',
-    ]))
 
     expect(registry.create_text.inputSchema.safeParse({
       prompt: 'Write one line.',
       content: { kind: 'single', text: 'One line.' },
     }).success).toBe(true)
     expect(registry.create_image.inputSchema.safeParse({
-      prompt: 'A paper lantern in fog.',
-      request: { kind: 'new', count: 2 },
+      request: { kind: 'new', count: 2, prompt: 'A paper lantern in fog.' },
     }).success).toBe(true)
     expect(registry.create_audio.inputSchema.safeParse({
-      prompt: 'Sparse ritual drums.',
-      request: { kind: 'new', count: 1 },
-      durationSeconds: 15,
+      request: { kind: 'new', count: 1, prompt: 'Sparse ritual drums.', durationSeconds: 15 },
     }).success).toBe(true)
     expect(registry.create_video.inputSchema.safeParse({
-      prompt: 'A slow push toward a moonlit shrine.',
-      request: { kind: 'new', count: 1 },
-      durationSeconds: 15,
+      request: {
+        kind: 'new',
+        count: 1,
+        prompt: 'A slow push toward a moonlit shrine.',
+        durationSeconds: 15,
+      },
     }).success).toBe(true)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: { kind: 'retry', resourceIds: ['failed-video-resource'] },
+    }).success).toBe(true)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: {
+        kind: 'retry',
+        resourceIds: ['failed-video-resource'],
+        prompt: 'This must never replace the frozen video prompt.',
+        imageReferences: [],
+      },
+    }).success).toBe(false)
     expect(registry.create_video.inputSchema.safeParse({
       prompt: 'Old provider-shaped input.',
       count: 1,
@@ -171,11 +184,10 @@ describe('project agent toolset conformance', () => {
     expect(registry.create_video.inputSchema.safeParse({
       prompt: 'Agent-selected model input.',
       modelKey: 'provider::model',
-      request: { kind: 'new', count: 1 },
+      request: { kind: 'new', count: 1, prompt: 'Nested prompt.', durationSeconds: 15 },
     }).success).toBe(false)
     expect(registry.create_image.inputSchema.safeParse({
-      prompt: 'Legacy ambiguous reference input.',
-      request: { kind: 'new', count: 1 },
+      request: { kind: 'new', count: 1, prompt: 'Legacy ambiguous reference input.' },
       references: [],
     }).success).toBe(false)
   })

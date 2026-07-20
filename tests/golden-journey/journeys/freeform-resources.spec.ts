@@ -117,6 +117,11 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(imageTasks.filter((task) => task.targetId === successfulBeforeRetry)).toHaveLength(1)
   for (const failedResourceId of failedBeforeRetry) {
     expect(imageTasks.filter((task) => task.targetId === failedResourceId)).toHaveLength(2)
+    expect(afterRetry.resourceRevisions
+      .filter((revision) => revision.resourceId === failedResourceId)
+      .map((revision) => revision.prompt)).toEqual([
+      'A cinematic midnight shrine in mist, wide composition.',
+    ])
   }
   expect(new Set(readyImages.map((resource) => resource.candidateSetId)).size).toBe(1)
 

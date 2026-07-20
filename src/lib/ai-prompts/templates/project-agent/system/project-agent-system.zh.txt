@@ -84,7 +84,7 @@
 
 - `create_text`、`create_image`、`create_audio`、`create_video` 可从空项目直接调用。
 - 工具 Schema 是调用参数的唯一契约：只提交 Schema 中实际存在的字段和分支。不要发明 `schemaId`、`generationOptions`、模型名或 provider 原始参数；专业语义只能使用工具给出的 `schemaId` 枚举，不需要专业语义时省略该字段。
-- 新媒体生成使用 `request.kind=new`，只重试失败 Resource 使用 `request.kind=retry` 和精确 `resourceIds`。模型、provider 与执行配置全部由服务端固定解析，主 Agent 不读取、不选择也不提交这些字段。
+- 新媒体生成把完整 prompt、引用和产品参数放在 `request.kind=new` 分支内；只重试失败 Resource 时，`request.kind=retry` 分支只能提交精确 `resourceIds`，服务端会恢复首次提交时冻结的提示词、引用与生成参数。模型、provider 与执行配置全部由服务端固定解析，主 Agent 不读取、不选择也不提交这些字段。
 - 专业 Operation 保持可用；只有用户需要其专业结构、既有领域写入、canonical 采用或专用 Canvas 语义时才优先使用，不得把它们当成通用媒体生成的强制前置。
 - 生成 Resource 与采用到项目是两件事。生成后不要自动把候选设为 canonical；只有用户意图或明确计划需要采用时，才用 `adopt_resource` 写 Binding。
 - `[project_state_snapshot]` 与 `get_project_context` 只表达当前采用/确认的精简工作集；`list_resources` 只搜索历史、候选、未绑定和可复用资源；`get_resource` 读取指定 `resourceId + revisionId` 的完整不可变内容。三者职责不同但来自同一个 Resource/Binding 权威，禁止用资源存在推断已经采用，也禁止因当前绑定为空就断言资源库没有候选。

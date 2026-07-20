@@ -142,7 +142,6 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
     return {
-      prompt: 'A cinematic midnight shrine in mist, wide composition.',
       request: {
         kind: 'retry',
         resourceIds: failedResourceIds(request),
@@ -151,8 +150,11 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'create_image' && instruction.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) {
     return {
-      prompt: 'A cinematic midnight shrine in mist, wide composition.',
-      request: { kind: 'new', count: 3 },
+      request: {
+        kind: 'new',
+        count: 3,
+        prompt: 'A cinematic midnight shrine in mist, wide composition.',
+      },
     }
   }
   if (toolName === 'list_resources') {
@@ -171,24 +173,34 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) {
     return {
-      prompt: 'A slow cinematic push through a moonlit empty gallery.',
-      durationSeconds: 15,
-      request: { kind: 'new', count: 1 },
+      request: {
+        kind: 'new',
+        count: 1,
+        prompt: 'A slow cinematic push through a moonlit empty gallery.',
+        durationSeconds: 15,
+      },
     }
   }
   if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) {
     return {
-      prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
-      request: { kind: 'new', count: 2 },
-      imageReferences: resourceReferences(request, 'image').slice(0, 1),
+      request: {
+        kind: 'new',
+        count: 2,
+        prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
+        imageReferences: resourceReferences(request, 'image').slice(0, 1),
+        durationSeconds: 15,
+      },
     }
   }
   if (toolName === 'create_audio' && instruction.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) {
     return {
-      prompt: 'Compose restrained atmospheric music matching the referenced videos.',
-      durationSeconds: 120,
-      request: { kind: 'new', count: 1 },
-      contextReferences: resourceReferences(request, 'video').slice(0, 3),
+      request: {
+        kind: 'new',
+        count: 1,
+        prompt: 'Compose restrained atmospheric music matching the referenced videos.',
+        durationSeconds: 120,
+        contextReferences: resourceReferences(request, 'video').slice(0, 3),
+      },
     }
   }
   if (toolName === 'adopt_resource' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) {
@@ -607,6 +619,7 @@ function generateEditScriptPromptContract(prompt: string): string | null {
     generationSegments: [{
       shotRefs: ['shot-001', 'shot-002', 'shot-003'],
       continuity: '三个镜头共享祭坛空间、旅人的连续行动与逐步增强的循环压迫感。',
+      soundCues: [],
     }],
   })
 }
@@ -827,9 +840,12 @@ export function decideGoldenModelResponse(input: {
         toolCallId: `golden_call_${input.requestOrdinal}_create_image_${String(index + 1)}`,
         toolName: 'create_image',
         argumentsJson: JSON.stringify({
-          prompt,
-          schemaId: null,
-          request: { kind: 'new', count: 1 },
+          request: {
+            kind: 'new',
+            count: 1,
+            prompt,
+            schemaId: null,
+          },
         }),
       })),
     }

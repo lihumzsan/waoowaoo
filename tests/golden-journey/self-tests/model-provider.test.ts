@@ -245,6 +245,7 @@ describe('Golden local model provider', () => {
         segmentId: 'segment-real-1',
         shotIds: ['shot-real-1', 'shot-real-2'],
         continuity: '共享祭坛空间与连续动作。',
+        soundCues: [],
       }],
     })
     const productionPromptInput = buildShotExecutionPlanPromptStructure({
@@ -649,8 +650,11 @@ describe('Golden local model provider', () => {
       kind: 'tool_call',
       toolName: 'create_image',
       argumentsJson: JSON.stringify({
-        prompt: 'A cinematic midnight shrine in mist, wide composition.',
-        request: { kind: 'new', count: 3 },
+        request: {
+          kind: 'new',
+          count: 3,
+          prompt: 'A cinematic midnight shrine in mist, wide composition.',
+        },
       }),
     })
   })
@@ -728,7 +732,6 @@ describe('Golden local model provider', () => {
       kind: 'tool_call',
       toolName: 'create_image',
       argumentsJson: JSON.stringify({
-        prompt: 'A cinematic midnight shrine in mist, wide composition.',
         request: { kind: 'retry', resourceIds: ['failed-resource-1'] },
       }),
     })
@@ -760,12 +763,15 @@ describe('Golden local model provider', () => {
     expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_video' })
     if (decision.kind !== 'tool_call') return
     expect(JSON.parse(decision.argumentsJson)).toMatchObject({
-      request: { kind: 'new', count: 2 },
-      imageReferences: [{
-        resourceId: 'image-resource-1',
-        revisionId: 'image-revision-1',
-        fingerprint: 'f'.repeat(64),
-      }],
+      request: {
+        kind: 'new',
+        count: 2,
+        imageReferences: [{
+          resourceId: 'image-resource-1',
+          revisionId: 'image-revision-1',
+          fingerprint: 'f'.repeat(64),
+        }],
+      },
     })
   })
 
