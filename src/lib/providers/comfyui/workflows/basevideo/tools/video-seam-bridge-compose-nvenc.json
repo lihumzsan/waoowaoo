@@ -16,12 +16,5 @@
   "15": { "class_type": "ImageFromBatch", "inputs": { "image": ["6", 0], "batch_index": 1, "length": ["12", 1] }, "_meta": { "title": "Retained After Images" } },
   "16": { "class_type": "VHS_MergeImages", "inputs": { "images_A": ["13", 0], "images_B": ["14", 0], "merge_strategy": "match A", "scale_method": "nearest-exact", "crop": "disabled" }, "_meta": { "title": "Append Bridge Interior" } },
   "17": { "class_type": "VHS_MergeImages", "inputs": { "images_A": ["16", 0], "images_B": ["15", 0], "merge_strategy": "match A", "scale_method": "nearest-exact", "crop": "disabled" }, "_meta": { "title": "Append Retained After" } },
-  "18": { "class_type": "ComfyMathExpression", "inputs": { "expression": "a / b", "values.a": ["10", 0], "values.b": ["4", 2] }, "_meta": { "title": "Before Audio Duration" } },
-  "19": { "class_type": "ComfyMathExpression", "inputs": { "expression": "a / b", "values.a": 1, "values.b": ["6", 2] }, "_meta": { "title": "After Audio Start" } },
-  "20": { "class_type": "ComfyMathExpression", "inputs": { "expression": "a / b", "values.a": ["12", 0], "values.b": ["6", 2] }, "_meta": { "title": "After Audio Duration" } },
-  "21": { "class_type": "TrimAudioDuration", "inputs": { "audio": ["4", 1], "start_index": 0, "duration": ["18", 0] }, "_meta": { "title": "Retained Before Audio" } },
-  "22": { "class_type": "TrimAudioDuration", "inputs": { "audio": ["6", 1], "start_index": ["19", 0], "duration": ["20", 0] }, "_meta": { "title": "Retained After Audio" } },
-  "23": { "class_type": "AudioConcat", "inputs": { "audio1": ["21", 0], "audio2": ["5", 1], "direction": "after" }, "_meta": { "title": "Before And Bridge Audio" } },
-  "24": { "class_type": "AudioConcat", "inputs": { "audio1": ["23", 0], "audio2": ["22", 0], "direction": "after" }, "_meta": { "title": "Append After Audio" } },
-  "25": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["17", 0], "frame_rate": ["4", 2], "loop_count": 0, "filename_prefix": "video-seam-bridge", "format": "video/nvenc_h264-mp4", "pix_fmt": "yuv420p", "bitrate": 10, "megabit": true, "save_metadata": false, "pingpong": false, "save_output": true, "audio": ["24", 0] }, "_meta": { "title": "Endpoint Locked NVENC Output" } }
+  "25": { "class_type": "VHS_VideoCombine", "inputs": { "images": ["17", 0], "frame_rate": ["4", 2], "loop_count": 0, "filename_prefix": "video-seam-bridge", "format": "video/nvenc_h264-mp4", "pix_fmt": "yuv420p", "bitrate": 10, "megabit": true, "save_metadata": false, "pingpong": false, "save_output": true }, "_meta": { "title": "Endpoint Locked Silent Output" } }
 }

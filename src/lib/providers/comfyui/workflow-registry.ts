@@ -1748,7 +1748,6 @@ function validateVideoSeamBridgeComposeWorkflowContract(
     { nodeId: '10', classType: 'ComfyMathExpression', inputField: 'values.b' },
     { nodeId: '12', classType: 'ComfyMathExpression', inputField: 'values.b' },
     { nodeId: '15', classType: 'ImageFromBatch', inputField: 'batch_index' },
-    { nodeId: '19', classType: 'ComfyMathExpression', inputField: 'values.a' },
   ] as const
   for (const { nodeId, classType, inputField } of expectedNodes) {
     const node = graph[nodeId]
@@ -1789,12 +1788,14 @@ function applyVideoSeamTrimInjection(
   const video1RetainedFrames = graph[isBridgeCompose ? '10' : '7']
   const video2RetainedFrames = graph[isBridgeCompose ? '12' : '8']
   const video2Images = graph[isBridgeCompose ? '15' : '10']
-  const video2AudioStart = graph[isBridgeCompose ? '19' : '13']
 
   video1RetainedFrames.inputs['values.b'] = trimEndFrames
   video2RetainedFrames.inputs['values.b'] = trimStartFrames
   video2Images.inputs.batch_index = trimStartFrames
-  video2AudioStart.inputs['values.a'] = trimStartFrames
+  if (!isBridgeCompose) {
+    const video2AudioStart = graph['13']
+    video2AudioStart.inputs['values.a'] = trimStartFrames
+  }
 }
 
 function validateVideoSeamEndpointWorkflowContract(

@@ -199,9 +199,24 @@ describe('comfyui workflow registry', () => {
     expect(workflow['10']?.inputs['values.b']).toBe(5)
     expect(workflow['12']?.inputs['values.b']).toBe(3)
     expect(workflow['15']?.inputs.batch_index).toBe(3)
-    expect(workflow['19']?.inputs['values.a']).toBe(3)
     expect(workflow['13']?.inputs.batch_index).toBe(0)
     expect(workflow['14']?.inputs.batch_index).toBe(1)
+  })
+
+  it('produces an endpoint-locked bridge video without any source or generated audio track', () => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'bridge.mp4', 'second.mp4'],
+      videoTrimFrames: [0, 1],
+    })
+
+    expect(workflow['25']?.inputs.audio).toBeUndefined()
+    expect(workflow['18']).toBeUndefined()
+    expect(workflow['19']).toBeUndefined()
+    expect(workflow['20']).toBeUndefined()
+    expect(workflow['21']).toBeUndefined()
+    expect(workflow['22']).toBeUndefined()
+    expect(workflow['23']).toBeUndefined()
+    expect(workflow['24']).toBeUndefined()
   })
 
   it.each([
