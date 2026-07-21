@@ -38,6 +38,8 @@ export async function assembleProjectProjectionLite(params: {
         id: true,
         name: true,
         videoRatio: true,
+        videoRatioConfirmedAt: true,
+        videoRatioConfirmationVersion: true,
       },
     }),
     episodeId
@@ -61,6 +63,8 @@ export async function assembleProjectProjectionLite(params: {
       projectId: params.projectId,
       episodeId,
       videoRatio: projectModelConfig.videoRatio ?? project.videoRatio,
+      videoRatioConfirmedAt: project.videoRatioConfirmedAt?.toISOString() ?? null,
+      videoRatioConfirmationVersion: project.videoRatioConfirmationVersion,
       analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },

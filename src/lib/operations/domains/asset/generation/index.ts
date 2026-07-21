@@ -9,8 +9,9 @@ import {
   planCharacterImageGenerationOperation,
   planLocationImageGenerationOperation,
 } from './generate'
+import { createAssetDeleteOperations } from '../delete'
 
-export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft {
+export function createAssetOperations(): ProjectAgentOperationRegistryDraft {
   const withMutationBatchBase = taskSubmitOperationOutputSchemaBase
     .extend({
       mutationBatchId: z.string().min(1),
@@ -21,6 +22,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
     refineTaskSubmitOperationOutputSchema(withMutationBatchBase.extend(shape).passthrough())
 
   return {
+    ...createAssetDeleteOperations(),
     generate_character_image: defineOperation({
       id: 'generate_character_image',
       summary: 'Generate character appearance images for a project character.',

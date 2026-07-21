@@ -4,7 +4,6 @@ import { getSignedUrl } from '@/lib/storage'
 import type { ProjectAgentLocale } from './locale'
 import type {
   ProjectAgentChoiceCardDefinition,
-  ProjectAgentChoiceCardOption,
 } from './types'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 export {
@@ -40,14 +39,6 @@ export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | n
   return ratio ?? null
 }
 
-function buildAspectRatioOptions(isEnglish: boolean): ProjectAgentChoiceCardOption[] {
-  return EDIT_FIRST_ASPECT_RATIOS.map((ratio) => ({
-    value: ratio,
-    label: ratio,
-    description: isEnglish ? 'Project video aspect ratio' : '项目视频画面比例',
-  }))
-}
-
 export async function buildStyleAndRatioChoiceCard(params: {
   projectId: string
   userId: string
@@ -64,6 +55,8 @@ export async function buildStyleAndRatioChoiceCard(params: {
       select: {
         id: true,
         videoRatio: true,
+        videoRatioConfirmedAt: true,
+        videoRatioConfirmationVersion: true,
       },
     }),
     prisma.projectEditBible.findFirst({
@@ -105,7 +98,9 @@ export async function buildStyleAndRatioChoiceCard(params: {
   if (!project) {
     throw new Error('EDIT_FIRST_CHOICE_PROJECT_NOT_FOUND')
   }
-  const selectedAspectRatio = EDIT_FIRST_ASPECT_RATIOS.find((ratio) => ratio === project.videoRatio)
+  const selectedAspectRatio = project.videoRatioConfirmedAt && project.videoRatioConfirmationVersion > 0
+    ? EDIT_FIRST_ASPECT_RATIOS.find((ratio) => ratio === project.videoRatio)
+    : undefined
   if (!selectedAspectRatio) {
     throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: set project videoRatio before style choice')
   }
@@ -305,17 +300,9 @@ export async function buildBibleReviewChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     description: isEnglish
-      ? 'Review the story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this production plan can drive chapter production.'
-      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份制作规划将作为各章节制作的基线。',
-    groups: [
-      {
-        key: 'aspectRatio',
-        label: isEnglish ? 'Aspect Ratio' : '画面比例',
-        required: true,
-        presentation: 'aspect_ratio',
-        options: buildAspectRatioOptions(isEnglish),
-      },
-    ],
+      ? 'Review the story understanding, chapter split, durable facts, and emotional curve. Confirm only when this production plan can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份制作规划将作为各章节制作的基线。',
+    groups: [],
     submitLabel: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     submit: {
       kind: 'submit_tool_output',

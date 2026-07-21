@@ -878,20 +878,11 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         if (choiceDecision?.choiceType !== 'style' || choiceDecision.decision !== 'select') {
           throw new Error('EDIT_STYLE_PREVIEW_CHOICE_DECISION_REQUIRED')
         }
-        const project = await transaction.project.findFirst({
-          where: { id: ctx.projectId, userId: ctx.userId },
-          select: { videoRatio: true },
-        })
-        const aspectRatio = editScriptVideoRatioSchema.safeParse(project?.videoRatio)
-        if (!aspectRatio.success) {
-          throw new Error('EDIT_STYLE_PREVIEW_PROJECT_VIDEO_RATIO_REQUIRED')
-        }
         const confirmed = await confirmProjectEditStylePreview({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
           stylePreviewId: choiceDecision.stylePreviewId,
-          aspectRatio: aspectRatio.data,
           client: transaction,
         })
         return confirmEditStylePreviewOutputSchema.parse({

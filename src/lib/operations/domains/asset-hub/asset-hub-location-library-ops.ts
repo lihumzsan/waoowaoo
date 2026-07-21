@@ -230,38 +230,5 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       },
     }),
 
-    asset_hub_delete_location: defineOperation({
-      id: 'asset_hub_delete_location',
-      summary: 'Delete a global location.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'global_assets',
-        billable: false,
-        destructive: true,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      confirmation: {
-        required: true,
-        summary: '将删除该场景记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
-      },
-      inputSchema: z.object({
-        locationId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      executeInTransaction: async (ctx, input, transaction) => {
-        await requireOwnedAssetTarget({
-          access: { scope: 'global', userId: ctx.userId },
-          kind: 'location',
-          assetId: input.locationId,
-        }, transaction)
-
-        await transaction.globalLocation.delete({ where: { id: input.locationId } })
-        return { success: true }
-      },
-    }),
   }
 }

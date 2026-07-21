@@ -23,6 +23,7 @@ import {
   attachPersistedPlanIdentity,
   persistOperationPlanSnapshot,
 } from './operation-plan-snapshot'
+import { enforceProjectVideoRatioConfirmation } from './project-video-ratio-policy'
 
 export type OperationPlanKind = 'task_submission'
 
@@ -360,7 +361,8 @@ export async function planOperation<Input>(params: {
       message: `operation plan unavailable: ${params.operation.id}`,
     })
   }
-  return await params.operation.plan(params.ctx, params.input)
+  const plan = await params.operation.plan(params.ctx, params.input)
+  return await enforceProjectVideoRatioConfirmation(plan)
 }
 
 export async function planProjectAgentOperationFromApi(params: {

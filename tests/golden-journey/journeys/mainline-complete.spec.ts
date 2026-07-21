@@ -577,7 +577,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
     username: `golden-complete-${String(Date.now())}`,
     password: 'golden-complete-password',
   })
-  const scope = await launchGoldenStoryFromHome(page, '恐怖故事')
+  const scope = await launchGoldenStoryFromHome(page, '恐怖故事，最终画幅使用 16:9')
   const visitedBoundaries: GoldenMainlineBoundary[] = []
   const visitedPositions: string[] = []
   const reloadedProcessingPositions = new Set<string>()

@@ -57,18 +57,8 @@ describe('edit-first assistant choice cards', () => {
       replyMode: 'whole_card',
       variant: 'confirm_or_reply',
       title: '确认制作规划',
-      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份制作规划将作为各章节制作的基线。',
-      groups: [{
-        key: 'aspectRatio',
-        label: '画面比例',
-        required: true,
-        presentation: 'aspect_ratio',
-        options: [
-          { value: '9:16', label: '9:16', description: '项目视频画面比例' },
-          { value: '16:9', label: '16:9', description: '项目视频画面比例' },
-          { value: '21:9', label: '21:9', description: '项目视频画面比例' },
-        ],
-      }],
+      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份制作规划将作为各章节制作的基线。',
+      groups: [],
       submitLabel: '确认制作规划',
       submit: {
         kind: 'submit_tool_output',
@@ -149,6 +139,8 @@ describe('edit-first assistant choice cards', () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       id: 'project-1',
       videoRatio: '16:9',
+      videoRatioConfirmedAt: new Date('2026-01-01T00:00:00Z'),
+      videoRatioConfirmationVersion: 1,
     })
     prismaState.bibleFindFirst.mockResolvedValueOnce({
       id: 'bible-1',
@@ -228,6 +220,8 @@ describe('edit-first assistant choice cards', () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       id: 'project-1',
       videoRatio: '16:9',
+      videoRatioConfirmedAt: new Date('2026-01-01T00:00:00Z'),
+      videoRatioConfirmationVersion: 1,
     })
     prismaState.bibleFindFirst.mockResolvedValueOnce({
       id: 'bible-1',

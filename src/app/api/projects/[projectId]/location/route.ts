@@ -23,11 +23,11 @@ export const DELETE = apiHandler(async (
 
   await executeProjectAgentOperationFromApi({
     request,
-    operationId: 'delete_location',
+    operationId: 'delete_asset',
     projectId,
     userId: authResult.session.user.id,
     input: {
-      locationId,
+      target: { kind: 'location', assetId: locationId },
     },
     source: 'project-ui',
   })

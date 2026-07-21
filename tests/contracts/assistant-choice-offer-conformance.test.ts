@@ -60,7 +60,7 @@ describe('assistant choice offer conformance', () => {
     const operations = createProjectAgentOperationRegistry()
     const decisions = [
       { choiceType: 'script_review', decision: 'approve' },
-      { choiceType: 'bible_review', decision: 'approve', aspectRatio: '16:9' },
+      { choiceType: 'bible_review', decision: 'approve' },
       { choiceType: 'style', decision: 'select', stylePreviewId: 'style-1' },
       { choiceType: 'asset_review', decision: 'approve' },
     ] as const
@@ -68,7 +68,7 @@ describe('assistant choice offer conformance', () => {
 
     expect(commands).toEqual([
       { operationId: 'approve_script', input: {} },
-      { operationId: 'confirm_bible', input: { aspectRatio: '16:9' } },
+      { operationId: 'confirm_bible', input: {} },
       { operationId: 'confirm_edit_style_preview', input: {} },
       { operationId: 'approve_edit_script_assets', input: {} },
     ])

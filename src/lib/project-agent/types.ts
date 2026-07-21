@@ -33,6 +33,8 @@ export interface ProjectAgentContext {
   runFence?: ProjectAgentRunFence | null
   /** Immutable identity of the current model/tool execution segment. */
   executionSegmentId?: string | null
+  /** Exact visible text from the user message that started this user-turn segment. */
+  userTurnText?: string | null
   choiceDecision?: EditFirstChoiceDecision | null
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
@@ -258,6 +260,8 @@ export interface ProjectAssistantContextSnapshot {
   editFirstWorkflow: EditFirstWorkflowView
   config: {
     videoRatio: string | null
+    videoRatioConfirmedAt: string | null
+    videoRatioConfirmationVersion: number
   }
 }
 

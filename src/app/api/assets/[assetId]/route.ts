@@ -62,8 +62,8 @@ type DeleteAssetBody = {
   projectId?: string
 }
 
-function isDeletableKind(value: AssetKind | undefined): value is Extract<AssetKind, 'location' | 'prop'> {
-  return value === 'location' || value === 'prop'
+function isDeletableKind(value: AssetKind | undefined): value is Extract<AssetKind, 'character' | 'location' | 'prop'> {
+  return value === 'character' || value === 'location' || value === 'prop'
 }
 
 export const DELETE = apiHandler(async (
@@ -82,10 +82,14 @@ export const DELETE = apiHandler(async (
     if (isErrorResponse(authResult)) return authResult
     const result = await executeProjectAgentOperationFromApi({
       request,
-      operationId: 'api_assets_remove',
+      operationId: 'delete_asset',
       projectId: body.projectId,
       userId: authResult.session.user.id,
-      input: { assetId, ...body },
+      input: {
+        target: { kind: body.kind, assetId },
+        scope: body.scope,
+        projectId: body.projectId,
+      },
       source: 'project-ui',
     })
     return NextResponse.json(result)
@@ -95,10 +99,13 @@ export const DELETE = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
   const result = await executeProjectAgentOperationFromApi({
     request,
-    operationId: 'api_assets_remove',
+    operationId: 'delete_asset',
     projectId: 'global-asset-hub',
     userId: authResult.session.user.id,
-    input: { assetId, ...body },
+    input: {
+      target: { kind: body.kind, assetId },
+      scope: body.scope,
+    },
     source: 'project-ui',
   })
   return NextResponse.json(result)

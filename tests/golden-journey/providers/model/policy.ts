@@ -51,7 +51,8 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   approve_script: {},
   generate_bible_from_script: {},
   request_edit_bible_review_choice: {},
-  confirm_bible: { aspectRatio: '16:9' },
+  update_project_config: { videoRatio: '16:9' },
+  confirm_bible: {},
   generate_edit_style_previews: { styleDirection: null },
   generate_edit_style_preview_images: {},
   request_edit_style_choice: {},
@@ -762,6 +763,13 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
   }
   const mainlinePosition = readMainlinePosition(request)
   if (mainlinePosition === 'final_render:completed') return null
+  if (
+    available.has('update_project_config')
+    && !alreadyCalled.has('update_project_config')
+    && shouldPersistConfirmedGoldenVideoRatio(request)
+  ) {
+    return 'update_project_config'
+  }
   if (mainlinePosition === 'video_segments:ready') {
     if (!messageText(request).includes(GOLDEN_REMAINING_VIDEO_REQUEST)) return null
     if (available.has('generate_video_segments') && !alreadyCalled.has('generate_video_segments')) {
@@ -779,6 +787,18 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
   return WRITE_TOOL_PRIORITY.find((toolName) => (
     available.has(toolName) && !alreadyCalled.has(toolName)
   )) ?? null
+}
+
+function shouldPersistConfirmedGoldenVideoRatio(request: GoldenChatCompletionRequest): boolean {
+  if (!messageText(request).includes('config.videoRatioConfirmed=false')) return false
+  for (let index = request.messages.length - 1; index >= 0; index -= 1) {
+    const message = request.messages[index]
+    if (message?.role !== 'user') continue
+    const text = messageContentText(message)
+    if (text.includes('[task_update]')) return false
+    return /(?:^|\D)16\s*:\s*9(?:\D|$)/.test(text)
+  }
+  return false
 }
 
 function readMainlinePosition(request: GoldenChatCompletionRequest): string | null {

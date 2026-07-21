@@ -17,7 +17,11 @@ export async function commitAssetImageOperation(params: {
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
   const transaction = requireOperationExecutionTransaction(params.ctx)
   const metadata = readProjectAssetImagePlanMetadata(params.plan)
-  if (params.operationId === 'generate_character_image' || params.operationId === 'generate_location_image') {
+  if (
+    params.operationId === 'generate_character_image'
+    || params.operationId === 'generate_location_image'
+    || params.operationId === 'regenerate_asset'
+  ) {
     await ensureAssetGenerateCommitReady(
       {
         request: params.ctx.request,
@@ -79,7 +83,7 @@ export async function commitAssetImageOperation(params: {
     ...result,
     assetId: metadata.assetId,
     characterId: metadata.assetKind === 'character' ? metadata.assetId : '',
-    locationId: metadata.assetKind === 'location' ? metadata.assetId : '',
+    locationId: metadata.assetKind === 'location' || metadata.assetKind === 'prop' ? metadata.assetId : '',
     appearanceId: metadata.appearanceId,
     taskType: task.taskType,
     targetType: metadata.mutationTargetType,

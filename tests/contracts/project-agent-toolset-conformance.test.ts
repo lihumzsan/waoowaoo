@@ -84,6 +84,8 @@ describe('project agent toolset conformance', () => {
     expect(registry.get_project_config.channels).toEqual({ tool: false, api: true })
     expect(registry.update_project_config.channels).toEqual({ tool: true, api: true })
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toEqual(['videoRatio'])
+    expect(registry.update_project_config.toolInputSchema.properties.videoRatio).toMatchObject({ type: 'string' })
+    expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: null }).success).toBe(true)
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
@@ -105,6 +107,52 @@ describe('project agent toolset conformance', () => {
         .map((operation) => operation.id)
         .sort(),
     )
+  })
+
+  it('exposes one top-level delete tool and one identity-preserving regenerate tool for assets', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const toolset = resolveProjectAgentToolset({ registry })
+
+    expect(toolset.operationIds).toEqual(expect.arrayContaining(['delete_asset', 'regenerate_asset']))
+    for (const removedOperationId of [
+      'delete_character',
+      'delete_location',
+      'api_assets_remove',
+      'asset_hub_delete_character',
+      'asset_hub_delete_location',
+      'regenerate_group',
+      'regenerate_single_image',
+    ]) {
+      expect(registry).not.toHaveProperty(removedOperationId)
+    }
+
+    expect(registry.delete_asset).toMatchObject({
+      channels: { tool: true, api: true },
+      effects: { destructive: true, billable: false },
+      confirmation: { kind: 'destructive', required: true },
+    })
+    expect(Object.keys(registry.delete_asset.toolInputSchema.properties)).toEqual(['target'])
+    expect(registry.delete_asset.inputSchema.safeParse({
+      target: { kind: 'character', assetId: 'character-1' },
+    }).success).toBe(true)
+    expect(registry.delete_asset.inputSchema.safeParse({
+      target: { kind: 'location', assetId: 'location-1' },
+      scope: 'global',
+    }).success).toBe(true)
+
+    expect(registry.regenerate_asset).toMatchObject({
+      channels: { tool: true, api: true },
+      effects: { overwrite: true, billable: true },
+      confirmation: { kind: 'billable_media', required: true },
+    })
+    expect(registry.regenerate_asset.inputSchema.safeParse({
+      target: { kind: 'character', assetId: 'character-1', appearanceId: 'appearance-1' },
+      imageIndex: 0,
+    }).success).toBe(true)
+    expect(registry.regenerate_asset.inputSchema.safeParse({
+      target: { kind: 'prop', assetId: 'prop-1' },
+      count: 3,
+    }).success).toBe(true)
   })
 
   it('publishes one explicit Resource generation contract from the production registry', () => {

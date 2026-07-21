@@ -583,14 +583,24 @@ async function resolveFrozenGenerationOptions(input: {
       ? (input.publicInput as CreateVideoNewRequest).aspectRatio?.trim()
       : undefined
   const projectAspectRatio = projectConfig.videoRatio?.trim() || null
-  const resolvedAspectRatio = requestedAspectRatio || projectAspectRatio
-  if ((input.config.mediaType === 'image' || input.config.mediaType === 'video') && !resolvedAspectRatio) {
+  const isFramedMedia = input.config.mediaType === 'image' || input.config.mediaType === 'video'
+  if (isFramedMedia && !projectAspectRatio) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      code: 'PROJECT_VIDEO_RATIO_CONFIRMATION_REQUIRED',
       field: 'aspectRatio',
       agentRetryableAfterCorrection: true,
     })
   }
+  if (isFramedMedia && requestedAspectRatio && requestedAspectRatio !== projectAspectRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_MISMATCH',
+      field: 'aspectRatio',
+      requestedAspectRatio,
+      projectAspectRatio,
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const resolvedAspectRatio = projectAspectRatio
   if (input.config.mediaType === 'image') {
     const publicInput = input.publicInput as CreateImageNewRequest
     frozen.aspectRatio = resolvedAspectRatio as string

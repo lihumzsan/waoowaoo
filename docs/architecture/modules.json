@@ -446,6 +446,7 @@
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
         "prisma/migrations/20260718120000_add_project_assistant_plan_snapshot/migration.sql",
         "prisma/migrations/20260720123000_make_project_video_ratio_nullable/migration.sql",
+        "prisma/migrations/20260722120000_add_project_video_ratio_confirmation/migration.sql",
         "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
       ],
       "testPaths": [
@@ -610,6 +611,7 @@
         "src/lib/edit-script/normalize.ts",
         "src/lib/edit-script/shot-execution-plan-prompt.ts",
         "src/lib/edit-bible/schemas.ts",
+        "src/lib/constants.ts",
         "standards/prompt-canary",
         "scripts/guards/prompt-i18n-guard.mjs",
         "scripts/guards/prompt-semantic-regression.mjs",
@@ -709,6 +711,10 @@
         "src/app/api/projects/[projectId]/route.ts",
         "src/lib/assets/services/read-assets.ts",
         "src/lib/operations/api-only/assets-api-ops.ts",
+        "src/lib/operations/domains/asset",
+        "src/lib/operations/domains/media/media-ops.ts",
+        "src/lib/operations/domains/gui/gui-ops.ts",
+        "src/lib/operations/domains/asset-hub",
         "src/lib/operations/domains/project/project-data-ops.ts",
         "src/components/shared/assets/GlobalAssetPicker.tsx",
         "src/app/api/assets",

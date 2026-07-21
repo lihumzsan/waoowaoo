@@ -5,6 +5,8 @@ export interface ProjectPolicySnapshot {
   projectId: string
   episodeId?: string | null
   videoRatio: string | null
+  videoRatioConfirmedAt: string | null
+  videoRatioConfirmationVersion: number
   analysisModel?: string | null
   overrides: Record<string, unknown>
 }

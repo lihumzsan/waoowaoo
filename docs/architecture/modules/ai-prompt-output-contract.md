@@ -26,6 +26,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - **AP-12 — Worker 按 output 与目录选择 Skill，Primary 只描述创作目标。** Worker 初始上下文必须包含生产 Skill registry 的完整紧凑 catalog，`creative-core` 固定预载，唯一知识工具是 `read_skill`。Primary 的委派输入、Operation schema、output adapter 和服务端映射都不得携带 `requiredSkillIds`、推荐 Skill id 或固定专业角色；Worker 必须根据请求中的 `outputKind`、catalog 标题、摘要、标签和适用范围读取专业 Skill。Catalog 摘要与 Skill 正文可以声明某类 output 所需的同轮知识组合；当前 `video_prompt_set` 明确要求读取 `director-core`、`video-direction` 与 `quality-review`，但这仍是 Worker 消费的专业说明，不是服务端第二份映射、多个 Subagent 或多个输出。主 Agent Prompt 只需说明“专业创作应委派”，不能复制 catalog、Skill 正文或选择算法。
 - **AP-13 — 项目事实、候选浏览与精确内容分层。** 主 Agent 每轮初始项目快照和 `get_project_context` 只提供确认剧本、正式 Style Bible 等保留 Binding 的紧凑工作集；`list_resources` 用于浏览候选/历史；完整内容只能由 `get_resource(resourceId, revisionId)` 取得。Prompt 必须要求生成后通过 Resource-native confirm/adopt 建立正式事实，不能让模型凭对话记忆、最近 Resource 或旧专业实体猜当前版本。媒体工具把语义 lineage 写入 `contextReferences`，只有真实图片进入 `imageReferences`。
 - **AP-14 — 风格交互按用户意图分支。** 用户已明确风格时，Primary 直接委派 finalized Style Bible 并采用，不再询问或强制预览；风格缺失或模糊时，先委派三个严格文字候选并让用户选择，预览图是用户可选的收费步骤，不能在选择前自动提交；用户明确“你决定”时，Primary 可自行选择并采用一个文字候选。该规则只指导 Agent 交互，最终 Style Bible 事实仍只由 adopt Operation 和保留 Binding 写入。
+- **AP-15 — 角色资产板版式由执行后缀唯一约束。** 专业 Skill 负责角色设计知识，不拥有 provider 最终版式。所有角色图片执行路径必须复用 `CHARACTER_PROMPT_SUFFIX`：固定单张 16:9 资产板，严格只有一张完整全身主图和一张同身份大脸近景；禁止三视图、动作/语境样本、额外人物和第三个视图。不得在 Skill、Route、Worker 或调用方追加第二份版式约束。
 
 ## 权威入口
 
@@ -63,6 +64,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - 镜头执行计划的 structured-stream projector 曾把所有并行 Task snapshot 合成一个 entry，并用首个 `taskId/targetId` 代表全部章节；并行执行时只有一个 Canvas 节点能维持 stream → formal Query 的精确交接。当前 projector 与核心剪辑流统一按 `taskId + targetId` 分组，每个章节形成独立 node patch、terminal handoff 和 disclosure；流内容仍不获得领域写权。对应纯逻辑场景覆盖两个并行镜头计划不会串流，但用户已要求停止后续测试，最终 Golden 组合仍需复验。
 - BGM 与环境音曾各自拥有结构化规划 Prompt、parser、Task 和资源侧计划字段，同一声音时间线由两条状态机分别解释；后续 AudioDesign 虽统一文本规划，仍输出两类生成事实。当前 `BGM_DESIGN_PLAN` 是唯一声音规划协议，输入仅含锁定剧本与渲染 clip 的 identity/duration 元数据；Prompt 明确禁止观看视频帧、分析原生音轨、最终视频或最终混音，并只输出 scorePresence、唯一整片 scoreCue 与 score/master automation。
 - 一分钟创作简报曾生成 1757 字源剧本并被全局规划估成 275 秒；首次纠正只强化源剧本 Prompt，又用“每个 Beat 通常 15-45 秒”的通用区间估时。真实复发中，源剧本已压缩为单场、4 个 Beat、509 字，但全局规划仍按固定区间估成 115 秒，证明旧防线没有覆盖“紧凑剧本 + 多 Beat”的真实组合。当前防线让源剧本按用户时长控制全部正文规模，同时要求 Beat 时长只从对白、动作、反应、停顿和转场的实际表演时间派生；Beat 数量不得成为扩大片长的第二解释源。尚未用真实模型重复生成该案例，模型服从性仍是未验证盲区。
+- 角色资产执行后缀曾固定“左全身 + 右上标准三视图 + 右下三个动作/语境样本”，导致一次生成出现多张重复人物，且回归断言只锁住旧 Prompt 字符串，没有反证资产可用性。当前后缀收敛为严格两个视图：一张完整全身与一张同身份大脸近景；Skill 保持专业设计职责，不追加版式。真实外部模型对“严格两个视图”的服从性仍需媒体抽样复验。
 
 ## 修改检查表
 

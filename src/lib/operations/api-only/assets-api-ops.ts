@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, removeAsset, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
+import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
 import {
   commitProjectAssetRenderUpload,
@@ -253,33 +253,6 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           kind: input.kind,
           assetId: input.assetId,
           body,
-          access: input.scope === 'project'
-            ? { scope: 'project', userId: ctx.userId, projectId }
-            : { scope: 'global', userId: ctx.userId },
-        }, transaction)
-      },
-    }),
-
-    api_assets_remove: defineOperation({
-      id: 'api_assets_remove',
-      summary: 'API-only: Remove a location/prop asset (global or project scope).',
-      intent: 'act',
-      effects: {
-        ...EFFECTS_WRITE,
-        destructive: true,
-      },
-      inputSchema: z.object({
-        assetId: z.string().min(1),
-        scope: scopeSchema,
-        kind: z.enum(['location', 'prop']),
-        projectId: z.string().optional(),
-      }),
-      outputSchema: z.unknown(),
-      executeInTransaction: async (ctx, input, transaction) => {
-        const projectId = requireProjectId(input.scope, input.projectId)
-        return await removeAsset({
-          kind: input.kind,
-          assetId: input.assetId,
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },

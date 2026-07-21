@@ -372,6 +372,8 @@ export interface ProjectWorkflowData {
   videoModel: string | null
   musicModel: string | null
   videoRatio: string | null
+  videoRatioConfirmedAt: Date | null
+  videoRatioConfirmationVersion: number
   capabilityOverrides?: CapabilitySelections | string | null
   videoResolution?: string | null
   imageResolution?: string | null

@@ -53,19 +53,12 @@ const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
 })
 const confirmBibleOperationInputSchema = confirmEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
-  aspectRatio: z.enum(['9:16', '16:9', '21:9']),
 })
 
 const confirmBibleToolInputSchema: ProjectAgentToolInputSchema = {
   type: 'object',
-  properties: {
-    aspectRatio: {
-      type: 'string',
-      enum: ['9:16', '16:9', '21:9'],
-      description: 'The exact aspect ratio selected by the user in the Bible review choice.',
-    },
-  },
-  required: ['aspectRatio'],
+  properties: {},
+  required: [],
   additionalProperties: false,
 }
 
@@ -597,7 +590,6 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
-          videoRatio: input.aspectRatio,
           client: transaction,
         })
         return editBibleMutationOutputSchema.parse({ editBible })

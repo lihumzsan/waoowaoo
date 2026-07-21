@@ -435,12 +435,14 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 
 function buildProjectStateVersion(params: {
   videoRatio: string | null
+  videoRatioConfirmationVersion: number
   phase: ProjectPhaseSnapshot
   creativeWorkingSet: CreativeResourceWorkingSetView
 }): string {
   const workflow = params.phase.editFirstWorkflow
   return [
     params.videoRatio ?? 'none',
+    String(params.videoRatioConfirmationVersion),
     params.phase.phase,
     workflow.step,
     workflow.status.kind,
@@ -459,6 +461,8 @@ function buildProjectStateInputItem(params: {
   projectId: string
   episodeId: string | null
   videoRatio: string | null
+  videoRatioConfirmedAt: Date | null
+  videoRatioConfirmationVersion: number
   phase: ProjectPhaseSnapshot
   creativeWorkingSet: CreativeResourceWorkingSetView
 }): AgentInputItem {
@@ -467,12 +471,15 @@ function buildProjectStateInputItem(params: {
     '[project_state_snapshot]',
     `version=${buildProjectStateVersion({
       videoRatio: params.videoRatio,
+      videoRatioConfirmationVersion: params.videoRatioConfirmationVersion,
       phase: params.phase,
       creativeWorkingSet: params.creativeWorkingSet,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
+    `config.videoRatioConfirmed=${String(Boolean(params.videoRatio && params.videoRatioConfirmedAt && params.videoRatioConfirmationVersion > 0))}`,
+    `config.videoRatioConfirmationVersion=${String(params.videoRatioConfirmationVersion)}`,
     `phase=${formatRuntimeStateValue(params.phase.phase)}`,
     `mainlineStep=${formatRuntimeStateValue(workflow.step)}`,
     `mainlineStatus=${workflow.status.kind}`,
@@ -778,6 +785,10 @@ export async function createProjectAgentChatResponse(input: {
     runId: input.run.id,
     runFence,
     executionSegmentId: executionSegment.id,
+    userTurnText: control.kind === 'user_turn'
+      && normalizedMessages[normalizedMessages.length - 1]?.role === 'user'
+      ? readTextFromParts(normalizedMessages[normalizedMessages.length - 1]?.parts ?? []) || null
+      : null,
     choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
     ...(issuedApprovalGrants.length > 0
       ? {
@@ -793,7 +804,11 @@ export async function createProjectAgentChatResponse(input: {
     }),
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      select: { videoRatio: true },
+      select: {
+        videoRatio: true,
+        videoRatioConfirmedAt: true,
+        videoRatioConfirmationVersion: true,
+      },
     }),
     readProjectCreativeResourceWorkingSet({
       projectId: input.projectId,
@@ -924,6 +939,8 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     episodeId: context.episodeId || null,
     videoRatio: projectConfigSnapshot.videoRatio,
+    videoRatioConfirmedAt: projectConfigSnapshot.videoRatioConfirmedAt,
+    videoRatioConfirmationVersion: projectConfigSnapshot.videoRatioConfirmationVersion,
     phase,
     creativeWorkingSet,
   })

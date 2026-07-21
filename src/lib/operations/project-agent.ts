@@ -28,7 +28,7 @@ import { createUserModelsOperations } from './domains/config/user-models-ops'
 import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createAuthOperations } from './domains/auth/auth-ops'
-import { createAssetImageOperations } from './domains/asset/generation'
+import { createAssetOperations } from './domains/asset/generation'
 import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
@@ -256,7 +256,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createAssetImageOperations(), {
+    ...withOperationPack(createAssetOperations(), {
       groupPath: ['asset'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,

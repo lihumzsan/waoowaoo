@@ -21,6 +21,8 @@ export function buildAssistantProjectContextSnapshot(
     editFirstWorkflow: context.editFirstWorkflow,
     config: {
       videoRatio: context.policy.videoRatio,
+      videoRatioConfirmedAt: context.policy.videoRatioConfirmedAt,
+      videoRatioConfirmationVersion: context.policy.videoRatioConfirmationVersion,
     },
   }
 }

@@ -76,10 +76,13 @@ export const DELETE = apiHandler(async (
 
     const result = await executeProjectAgentOperationFromApi({
       request,
-      operationId: 'asset_hub_delete_location',
+      operationId: 'delete_asset',
       projectId: 'global-asset-hub',
       userId: session.user.id,
-      input: { locationId },
+      input: {
+        target: { kind: 'location', assetId: locationId },
+        scope: 'global',
+      },
       source: 'asset-hub',
     })
 

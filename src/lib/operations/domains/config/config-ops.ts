@@ -17,6 +17,7 @@ import {
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -52,6 +53,45 @@ const updateProjectConfigInputSchema = z.object({
     .describe('Project output aspect ratio, for example 16:9 or 9:16, or null when the project has not decided one yet.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
 }).strict()
+
+function normalizeProjectVideoRatio(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string') {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_INVALID',
+      field: 'videoRatio',
+    })
+  }
+  const normalized = value.trim()
+  if (!Object.prototype.hasOwnProperty.call(ASPECT_RATIO_CONFIGS, normalized)) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_INVALID',
+      field: 'videoRatio',
+      allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  return normalized
+}
+
+function assertAssistantRatioWriteComesFromUserTurn(ctx: {
+  source: string
+  context: { executionSegmentId?: string | null; userTurnText?: string | null }
+}, videoRatio: string): void {
+  if (ctx.source !== 'assistant-panel') return
+  const userTurnText = ctx.context.userTurnText?.normalize('NFKC') ?? ''
+  const compactRatio = videoRatio.replace(/\s+/g, '')
+  const userMentionedRatio = userTurnText
+    .replace(/\s+/g, '')
+    .split(/([^0-9:])/)
+    .includes(compactRatio)
+  if (ctx.context.executionSegmentId?.startsWith('user-turn:') && userMentionedRatio) return
+  throw new ApiError('FORBIDDEN', {
+    code: 'PROJECT_VIDEO_RATIO_USER_CONFIRMATION_REQUIRED',
+    field: 'videoRatio',
+    agentRetryableAfterCorrection: false,
+  })
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -306,7 +346,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
     update_project_config: defineOperation({
       id: 'update_project_config',
-      summary: 'Set or clear the project output aspect ratio. The Agent-facing tool exposes only videoRatio; model and provider configuration remains API-only.',
+      summary: 'Persist a user-confirmed project output aspect ratio. The Agent may call this only from the user turn whose visible text explicitly contains that exact ratio; API callers may also clear it.',
       intent: 'act',
       channels: { tool: true, api: true },
       effects: {
@@ -324,10 +364,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         type: 'object',
         properties: {
           videoRatio: {
-            anyOf: [
-              { type: 'string', minLength: 1, description: 'Exact project output aspect ratio such as 16:9 or 9:16.' },
-              { type: 'null' },
-            ],
+            type: 'string',
+            minLength: 1,
+            description: 'Exact project output aspect ratio explicitly present in the current user message, such as 16:9 or 9:16.',
           },
         },
         required: ['videoRatio'],
@@ -381,6 +420,15 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             const cleanedOverrides = sanitizeCapabilityOverrides(overrides, modelContextMap)
             validateCapabilityOverrides(cleanedOverrides, modelContextMap)
             updateData.capabilityOverrides = serializeCapabilitySelections(cleanedOverrides)
+            continue
+          }
+
+          if (field === 'videoRatio') {
+            const videoRatio = normalizeProjectVideoRatio(body.videoRatio)
+            if (videoRatio) assertAssistantRatioWriteComesFromUserTurn(ctx, videoRatio)
+            updateData.videoRatio = videoRatio
+            updateData.videoRatioConfirmedAt = videoRatio ? new Date() : null
+            updateData.videoRatioConfirmationVersion = { increment: 1 }
             continue
           }
 

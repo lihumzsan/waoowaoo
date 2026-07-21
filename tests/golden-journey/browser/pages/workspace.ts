@@ -237,7 +237,6 @@ export async function submitGoldenBoundary(page: Page, boundary: GoldenMainlineB
     return
   }
   if (boundary === 'bible_review') {
-    await page.getByRole('button', { name: /16:9/ }).filter({ visible: true }).last().click()
     await page.getByRole('button', { name: '确认制作规划', exact: true }).filter({ visible: true }).last().click()
     return
   }

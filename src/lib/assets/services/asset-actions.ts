@@ -121,7 +121,7 @@ type AssetCreateInput = {
 }
 
 type AssetRemoveInput = {
-  kind: Extract<AssetKind, 'location' | 'prop'>
+  kind: Extract<AssetKind, 'character' | 'location' | 'prop'>
   assetId: string
   access: AssetWriteAccess
 }
@@ -1291,8 +1291,16 @@ export async function createAsset(input: AssetCreateInput, transaction: Prisma.T
 }
 
 export async function removeAsset(input: AssetRemoveInput, transaction: Prisma.TransactionClient) {
-  requireLocationBackedKind(input.kind)
   await requireOwnedAssetTarget(input, transaction)
+  if (input.kind === 'character') {
+    if (input.access.scope === 'global') {
+      await transaction.globalCharacter.delete({ where: { id: input.assetId } })
+      return { success: true }
+    }
+    await transaction.projectCharacter.delete({ where: { id: input.assetId } })
+    return { success: true }
+  }
+  requireLocationBackedKind(input.kind)
   if (input.access.scope === 'global') {
     await deleteGlobalLocationBackedAsset(input.assetId, transaction)
     return { success: true }

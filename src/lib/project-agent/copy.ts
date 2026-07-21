@@ -28,8 +28,16 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Confirm an exact persisted project.source_script revision as the current project or episode screenplay. This updates only the canonical Binding and never copies or rewrites the script.',
   },
   update_project_config: {
-    zh: '设置或清除项目最终输出画幅。这里只负责 videoRatio，例如 16:9 或 9:16；不要读取、选择或提交模型、provider、分辨率及其他执行配置。',
-    en: 'Set or clear the project final-output aspect ratio. This tool owns only videoRatio, such as 16:9 or 9:16. Never read, select, or submit a model, provider, resolution, or other execution configuration.',
+    zh: '写入用户在当前文字消息中明确包含并确认的最终输出画幅，生成新的确认版本。不得把 Agent 自己的推荐当作确认。这里只负责 videoRatio，不读取或提交模型、provider、分辨率及其他执行配置。',
+    en: 'Persist the final-output aspect ratio explicitly present and confirmed in the current user text, producing a new confirmation version. Never treat the Agent\'s own recommendation as confirmation. This tool owns only videoRatio, not model, provider, resolution, or other execution configuration.',
+  },
+  delete_asset: {
+    zh: '删除一个精确的现有角色、场景或道具资产。必须使用真实 assetId；该操作需要破坏性确认，只删除资产记录及其变体关系，不负责物理清理共享媒体对象。',
+    en: 'Delete one exact existing character, location, or prop asset by real assetId. This requires destructive confirmation and removes only the asset record and variant relationships, not shared media objects.',
+  },
+  regenerate_asset: {
+    zh: '在一个精确的现有角色、场景或道具资产 identity 下重新生成图片。资产不满意时使用本工具，不要新建替代资产；可用 imageIndex 只重生成一张，省略时重生成该资产组。',
+    en: 'Regenerate images under one exact existing character, location, or prop asset identity. Use this when an asset is unsatisfactory instead of creating a replacement asset. Set imageIndex for one image or omit it for the asset group.',
   },
   update_plan: {
     zh: '为复杂或多阶段工作维护一份简短计划。每次调用完整替换当前计划，最多一个步骤处于 in_progress，进展变化后及时更新；传空 plan 可清除。它只是可见便签，不执行工作、不创建 Task，也不控制工具或项目状态。',
@@ -304,8 +312,8 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   ai_modify_location: { zh: '修改场景', en: 'Modify location' },
   ai_modify_appearance: { zh: '修改角色外观', en: 'Modify character appearance' },
   ai_modify_prop: { zh: '修改道具', en: 'Modify prop' },
-  regenerate_group: { zh: '重新生成资产组', en: 'Regenerate asset group' },
-  regenerate_single_image: { zh: '重新生成图片', en: 'Regenerate image' },
+  delete_asset: { zh: '删除资产', en: 'Delete asset' },
+  regenerate_asset: { zh: '重新生成资产', en: 'Regenerate asset' },
   generate_character_image: { zh: '生成角色图片', en: 'Generate character image' },
   generate_location_image: { zh: '生成场景图片', en: 'Generate location image' },
 } satisfies Record<string, ProjectAgentOperationTitleCopy>

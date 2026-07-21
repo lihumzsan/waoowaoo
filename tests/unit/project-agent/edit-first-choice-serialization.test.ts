@@ -46,7 +46,7 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
-  it('serializes bible approval with the selected aspect ratio without selecting the next operation', () => {
+  it('serializes bible approval without owning project aspect-ratio confirmation', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
@@ -54,15 +54,12 @@ describe('buildEditFirstChoiceResult', () => {
       output: {
         ok: true,
         decision: 'approve',
-        selections: {
-          aspectRatio: '16:9',
-        },
       },
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
     expect(parsed.decision).toBe('approve')
-    expect(parsed.aspectRatio).toBe('16:9')
+    expect(parsed.aspectRatio).toBeUndefined()
     expect(parsed.nextOperationId).toBeUndefined()
   })
 

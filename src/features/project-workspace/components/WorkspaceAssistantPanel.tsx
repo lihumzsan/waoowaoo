@@ -341,7 +341,10 @@ export default function WorkspaceAssistantPanel({
                 ) : null}
                 <div className="relative">
                   {assistantRuntime.sessionState?.plan ? (
-                    <WorkspaceAssistantPlanCard plan={assistantRuntime.sessionState.plan} />
+                    <WorkspaceAssistantPlanCard
+                      plan={assistantRuntime.sessionState.plan}
+                      isRunActive={assistantRuntime.sessionState.currentRun?.status === 'running'}
+                    />
                   ) : null}
                   <WorkspaceAssistantComposer
                     value={composer.text}

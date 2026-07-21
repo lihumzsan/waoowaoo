@@ -93,7 +93,6 @@ interface ConfirmEditStylePreviewInput {
   readonly episodeId: string
   readonly userId: string
   readonly stylePreviewId: string
-  readonly aspectRatio: '9:16' | '16:9' | '21:9'
 }
 
 interface GenerateEditShotExecutionPlanInput {
@@ -1146,7 +1145,6 @@ export async function confirmProjectEditStylePreview(
     }
 
     const selectedStyleBible = parseRequiredStyleBibleJson(selectedPreview.styleBibleJson)
-    const selectedAspectRatio = normalizeStylePreviewAspectRatio(input.aspectRatio)
     await tx.projectEditStylePreview.updateMany({
       where: {
         editBibleId: editBible.id,
@@ -1169,13 +1167,6 @@ export async function confirmProjectEditStylePreview(
         styleBibleJson: styleBibleToJsonValue(selectedStyleBible),
       },
     })
-    await tx.project.update({
-      where: { id: project.id },
-      data: {
-        videoRatio: selectedAspectRatio,
-      },
-    })
-
     const next = await tx.projectEditStylePreview.findUnique({
       where: { id: selectedPreview.id },
     })
@@ -1567,6 +1558,8 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       select: {
         id: true,
         videoRatio: true,
+        videoRatioConfirmedAt: true,
+        videoRatioConfirmationVersion: true,
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
@@ -1587,19 +1580,23 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     if (!completed) throw new Error(`EDIT_SCRIPT_COMPLETED_RESOURCE_MISSING:${completedOwnedByThisTask.id}`)
     return await mapPersistedEditScript(completed)
   }
-  const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
-  if (!effectiveVideoRatio) {
+  const effectiveVideoRatio = project.videoRatio
+  if (
+    !effectiveVideoRatio
+    || !project.videoRatioConfirmedAt
+    || project.videoRatioConfirmationVersion < 1
+  ) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      code: 'PROJECT_VIDEO_RATIO_CONFIRMATION_REQUIRED',
       field: 'videoRatio',
     })
   }
   if (input.videoRatio && input.videoRatio !== project.videoRatio) {
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        videoRatio: input.videoRatio,
-      },
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_MISMATCH',
+      field: 'videoRatio',
+      requestedVideoRatio: input.videoRatio,
+      projectVideoRatio: project.videoRatio,
     })
   }
   const model = resolveTextModel(config)

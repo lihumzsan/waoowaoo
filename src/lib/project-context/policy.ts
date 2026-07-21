@@ -15,6 +15,8 @@ export function resolveProjectContextPolicy(params: {
     videoRatio: commandPolicy?.videoRatio !== undefined
       ? commandPolicy.videoRatio
       : (projectPolicy?.videoRatio ?? null),
+    videoRatioConfirmedAt: projectPolicy?.videoRatioConfirmedAt ?? null,
+    videoRatioConfirmationVersion: projectPolicy?.videoRatioConfirmationVersion ?? 0,
     analysisModel:
       commandPolicy?.analysisModel !== undefined
         ? commandPolicy.analysisModel

@@ -358,7 +358,9 @@ model Project {
   imageModel         String?
   videoModel         String?
   musicModel         String?
-  videoRatio         String?
+  videoRatio                      String?
+  videoRatioConfirmedAt           DateTime?
+  videoRatioConfirmationVersion   Int                    @default(0)
   globalAssetText    String?
   characterModel     String?
   locationModel      String?

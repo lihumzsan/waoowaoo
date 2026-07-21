@@ -1,5 +1,4 @@
 import type { AgentInputItem } from '@openai/agents'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import {
   getEditFirstChoiceDefinition,
   type EditFirstChoiceType,
@@ -26,7 +25,7 @@ export type EditFirstChoiceDecision =
   | { choiceType: 'script_intake'; decision: 'submit'; normalizedBrief: string }
   | { choiceType: 'script_review'; decision: 'approve' }
   | { choiceType: 'script_review'; decision: 'revise'; revisionNotes: string }
-  | { choiceType: 'bible_review'; decision: 'approve'; aspectRatio: EditScriptVideoRatio }
+  | { choiceType: 'bible_review'; decision: 'approve' }
   | { choiceType: 'bible_review'; decision: 'revise'; revisionNotes: string }
   | { choiceType: 'asset_review'; decision: 'approve' }
   | { choiceType: 'asset_review'; decision: 'revise'; revisionNotes: string }
@@ -43,19 +42,6 @@ function readString(value: unknown): string | null {
 
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readAspectRatio(value: unknown): EditScriptVideoRatio | null {
-  if (value === '9:16' || value === '16:9' || value === '21:9') return value
-  return null
-}
-
-function readChoiceAspectRatio(output: UnknownRecord): EditScriptVideoRatio | null {
-  const direct = readAspectRatio(output.aspectRatio)
-  if (direct) return direct
-  const selections = output.selections
-  if (!isRecord(selections)) return null
-  return readAspectRatio(selections.aspectRatio)
 }
 
 function buildChoiceInputItems(params: {
@@ -113,9 +99,7 @@ export function parseBibleReviewChoiceDecision(
     return { choiceType: 'bible_review', decision: 'revise', revisionNotes }
   }
   if (decision === 'approve') {
-    const aspectRatio = readChoiceAspectRatio(params.output)
-    if (!aspectRatio) return null
-    return { choiceType: 'bible_review', decision: 'approve', aspectRatio }
+    return { choiceType: 'bible_review', decision: 'approve' }
   }
   return null
 }

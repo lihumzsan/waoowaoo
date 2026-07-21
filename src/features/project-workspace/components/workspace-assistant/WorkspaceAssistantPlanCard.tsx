@@ -16,7 +16,13 @@ interface PlanPopoverPosition {
   readonly width: number
 }
 
-function PlanStatusIcon({ item }: { item: ProjectAgentPlanItem }) {
+function PlanStatusIcon({
+  item,
+  isRunActive,
+}: {
+  item: ProjectAgentPlanItem
+  isRunActive: boolean
+}) {
   if (item.status === 'completed') {
     return (
       <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white">
@@ -27,7 +33,11 @@ function PlanStatusIcon({ item }: { item: ProjectAgentPlanItem }) {
   if (item.status === 'in_progress') {
     return (
       <span
-        className="inline-flex h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current/20 border-t-current text-[var(--glass-text-secondary)]"
+        className={`inline-flex h-4 w-4 shrink-0 rounded-full border-2 text-[var(--glass-text-secondary)] ${
+          isRunActive
+            ? 'animate-spin border-current/20 border-t-current'
+            : 'border-current/45'
+        }`}
         aria-hidden="true"
       />
     )
@@ -50,8 +60,10 @@ function resolveCurrentPlanIndex(plan: ProjectAgentPlanSnapshot): number {
 
 export function WorkspaceAssistantPlanCard({
   plan,
+  isRunActive,
 }: {
   plan: ProjectAgentPlanSnapshot
+  isRunActive: boolean
 }) {
   const t = useTranslations('assistantAgent')
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -144,7 +156,7 @@ export function WorkspaceAssistantPlanCard({
             className="flex items-start gap-3 text-sm leading-5 text-[var(--glass-text-secondary)]"
           >
             <span className="mt-0.5">
-              <PlanStatusIcon item={item} />
+              <PlanStatusIcon item={item} isRunActive={isRunActive} />
             </span>
             <span className={`min-w-0 flex-1 break-words ${item.status === 'completed' ? 'text-[var(--glass-text-tertiary)] line-through' : ''}`}>
               {item.step}
@@ -183,7 +195,7 @@ export function WorkspaceAssistantPlanCard({
           }
         }}
       >
-        <PlanStatusIcon item={currentItem} />
+        <PlanStatusIcon item={currentItem} isRunActive={isRunActive} />
         <span className="min-w-0 truncate">{t('plan.stepProgress', { current: currentIndex + 1, total })}</span>
       </button>
       {typeof document !== 'undefined' ? createPortal(popover, document.body) : null}

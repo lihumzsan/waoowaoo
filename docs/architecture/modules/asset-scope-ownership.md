@@ -19,13 +19,15 @@
 - **ASO-07 — 制作规划资产来源显式。** Edit-first 主流程中，`confirmEpisodeEditBible` 的确认事务通过 `ensureEditBibleAssets` 物化本次制作规划声明的 ProjectCharacter/ProjectLocation 及其首个 variant；后续 `generate_edit_script_assets` 只为这些既有 identity 规划并提交图片/空间档案任务，不得等核心剪辑表生成后再创建一套同义资产。核心剪辑 requirement 只绑定真实资产 identity，不是第二资产写入入口。
 - **ASO-08 — 领域关系不拥有共享媒体回收权。** asset select、confirm、revert、cleanup、delete 与 project delete 只更新或删除自己的领域关系；storageKey、MediaObject 或签名 URL 不是独占所有权证明，同一对象可能被 copy/reuse 后由多个关系引用。领域操作不得直接删除已有对象或把任意 key 送入私有 GC/Outbox；物理回收只能由独立 media lifecycle owner 从生产 relation registry 穷尽证明零引用后执行。本次上传新建、尚未提交为任何关系的唯一临时 key 只允许在所属事务失败时原地补偿，不构成 GC 入口。
 - **ASO-09 — 媒体读取也必须证明活跃 owner relation。** `/m/:publicId`、本地 `/api/files/:key`、对象存储签名 route 与后台 Task 的存储读取必须先通过同一媒体访问策略，从生产 MediaObject relation 或精确 legacy relation 证明权威 user 拥有引用；publicId、storageKey、签名 URL、Task payload 和文件存在性都不是公开授权。foreign 与 missing 统一返回 NOT_FOUND，响应只允许 private/no-store，签名 TTL 有固定上限。浏览器必须直接携带 session 读取受保护 route，内部相对重定向不得从服务端 Host 推导第二 origin；后台 Task 以任务的持久 `userId` 通过该策略后直接读取存储，不得为此恢复内部 HTTP token 或伪造浏览器 session。
+- **ASO-10 — 顶层资产删除与重生成各有一个入口。** 角色、场景和道具的顶层删除只允许 `delete_asset → removeAsset`，Project/Asset Hub/API 不得保留按 kind 分裂的 delete Operation；appearance/image 等 variant 删除仍按精确 parent/variant identity 独立处理。已有资产不满意时只允许 `regenerate_asset` 在原 assetId 与既有 variant 下提交图片 Task，禁止创建同义替代资产。重生成计划必须冻结当前图片版本 watermark：同一版本重复提交保持幂等，新的完成版本必须可再次重生成，不能被首次生成任务的 dedupe key 吞掉。重生成可增加同一 parent 下显式候选槽，但不得改变顶层 canonical identity。
 
 ## 权威入口
 
 | 事实或动作 | 唯一权威入口 | 持久化依据 |
 | --- | --- | --- |
 | owner、scope、kind、parent/variant 解析 | `src/lib/assets/services/asset-scope-ownership.ts` | 全局资产 `userId`；项目 `userId`；资产 `projectId`；variant parent foreign key |
-| 资产 mutation 与删除 | `src/lib/assets/services/asset-actions.ts` | 上述 resolver 返回的完整 scoped target |
+| 资产 mutation 与删除 | `delete_asset` Operation → `src/lib/assets/services/asset-actions.ts::removeAsset` | 上述 resolver 返回的完整 scoped target；顶层角色/场景/道具共用一个入口 |
+| 已有资产重生成 | `regenerate_asset` Operation → asset generation planner/commit | 原 assetId、精确 appearance/image variant 与新的 Task；不创建顶层资产 |
 | location-backed 资产操作 | `src/lib/assets/services/location-backed-assets.ts`，仅由 scoped asset actions 调用 | 已验证的 project/global asset identity |
 | upload/render 写入 | `src/lib/assets/services/project-upload-render.ts` | `prepareTransaction` 在事务外完成 target ownership 预检、图片上传与空间分析；短事务以 target identity + prepare `updatedAt` 单条 CAS 取得版本写权并一次提交业务关系、输出与资源 Outbox；失败只按 prepare identity 补偿本次新临时 key，事务结果不明时先以 owner + target identity + key 查询精确关系，关系已存在则拒绝删除 |
 | API 与 Operation 入口 | unified asset routes、`src/lib/operations/api-only/assets-api-ops.ts` | Route 鉴权 + service 返回的 scoped authority |
@@ -54,6 +56,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 写入侧 owner resolver 已存在时，媒体读取 route 仍把 `publicId` 和 storage key 当作 bearer capability：任意登录用户可枚举 `/m`，本地文件 route 甚至无需会话，对象存储签名也未证明关系 owner。旧 Asset Journey 只验证 mutation/copy，没有攻击读取链。当前三个入口收敛到 relation-based read policy，本地文件额外用 realpath 拒绝 symlink 越界；legacy 字段只作为迁移期精确引用适配，尚未物化为 MediaObject relation 的全部历史组合是需由 Golden 继续复验的盲区。
 - 媒体 route 收紧为浏览器 session 后，真实 Golden 又发现 video/image worker 仍把本地 key 转成 `/api/files` 再通过 HTTP 回读；worker 没有也不应拥有浏览器 Cookie，因此合法参考图被 401 拒绝、视频阶段永久停留在 processing。当前后台读取复用同一 owner relation policy，再直接读取对象存储并执行输入大小上限；旧内部 token、公开文件 route 和 session 冒充均未恢复。项目资产改图查询同时以 `projectId + userId` 约束裸子实体，防止合法 Task payload 被替换成其他 scope 的 ID。
 - 同一主流程随后暴露三条浏览器兼容断点：风格预览写入 storage 后未登记 MediaObject，受保护文件 route 无法证明 legacy relation；`/m` 图片交给 Next 服务端优化器后丢失浏览器 session；本地签名 route 按服务端 Host 把相对路径扩成 `localhost`，与用户访问的 `127.0.0.1` 形成跨源并被 CSP 正确拒绝。当前预览完成前先登记 MediaObject、受保护图片禁用服务端优化、内部 Location 保持相对同源；主 Golden 已证明最终视频与浏览器网络错误分离，但 Canvas stream→Query 展示交接仍有独立既有失败，不能据此宣称整条 Journey 全部通过。
+- 顶层资产删除曾同时存在 Project character/location、Asset Hub character/location 和 generic location/prop 五个 Operation，部分路径直接调用 Prisma delete，Agent 又只有按图片组/单图分裂的旧重生成工具。用户无法从统一资产 identity 表达“删除后重做”或“原地重生成”，调用方也可能用 create 新增同义资产。当前五条顶层 delete 收敛为 `delete_asset` 并统一经过 scoped `removeAsset`；两个旧重生成 Operation 收敛为 `regenerate_asset`，复用既有 generation planner、mutation batch 和 asset identity。variant 删除不属于顶层资产入口，仍保留其精确 parent/variant 契约。
 
 ## 修改检查表
 

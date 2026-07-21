@@ -90,7 +90,7 @@ function defineEditFirstChoice(
 
 export type EditFirstChoiceAtomicConfirmationCommand =
   | { readonly operationId: 'approve_script'; readonly input: Record<string, never> }
-  | { readonly operationId: 'confirm_bible'; readonly input: { readonly aspectRatio: '9:16' | '16:9' | '21:9' } }
+  | { readonly operationId: 'confirm_bible'; readonly input: Record<string, never> }
   | { readonly operationId: 'confirm_edit_style_preview'; readonly input: Record<string, never> }
   | { readonly operationId: 'approve_edit_script_assets'; readonly input: Record<string, never> }
 
@@ -154,7 +154,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
       }
       return decision.decision === 'approve'
-        ? { decision: 'approve', aspectRatio: decision.aspectRatio }
+        ? { decision: 'approve' }
         : { decision: 'revise', revisionNotes: decision.revisionNotes }
     },
     resolveAtomicConfirmationCommand: (decision) => {
@@ -162,7 +162,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
       }
       return decision.decision === 'approve'
-        ? { operationId: 'confirm_bible', input: { aspectRatio: decision.aspectRatio } }
+        ? { operationId: 'confirm_bible', input: {} }
         : null
     },
     resolveReviewedResource: async (params) => await resolveBibleReviewChoiceResource(params),

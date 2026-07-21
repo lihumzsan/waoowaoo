@@ -291,7 +291,12 @@ export async function resolveStyleChoiceResource(
   const [project, editBible] = await Promise.all([
     params.tx.project.findFirst({
       where: { id: params.projectId, userId: params.userId },
-      select: { id: true, videoRatio: true },
+      select: {
+        id: true,
+        videoRatio: true,
+        videoRatioConfirmedAt: true,
+        videoRatioConfirmationVersion: true,
+      },
     }),
     params.tx.projectEditBible.findFirst({
       where: {

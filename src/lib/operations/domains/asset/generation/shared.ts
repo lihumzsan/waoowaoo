@@ -19,7 +19,7 @@ export function assertNoLegacyArtStyle(input: Record<string, unknown>) {
   })
 }
 
-export type ProjectAssetImageKind = 'character' | 'location'
+export type ProjectAssetImageKind = 'character' | 'location' | 'prop'
 
 type ProjectAssetImagePlanMetadata = {
   assetId: string
@@ -42,7 +42,7 @@ export function readProjectAssetImagePlanMetadata(plan: OperationPlan): ProjectA
   const mutationTargetId = normalizeString(metadata.mutationTargetId)
   if (
     !assetId
-    || (assetKind !== 'character' && assetKind !== 'location')
+    || (assetKind !== 'character' && assetKind !== 'location' && assetKind !== 'prop')
     || (mutationTargetType !== 'ProjectCharacter' && mutationTargetType !== 'ProjectLocation')
     || !mutationTargetId
   ) {

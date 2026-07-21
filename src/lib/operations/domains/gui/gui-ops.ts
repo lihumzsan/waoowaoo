@@ -215,38 +215,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        return { success: true, character: updated }
 	      },
 	    }),
-	    delete_character: defineOperation({
-	      id: 'delete_character',
-      summary: 'Delete a project character and cascade appearances.',
-	      intent: 'act',
-	      effects: {
-	        ...EFFECTS_WRITE_DESTRUCTIVE,
-        workspaceResourceImpact: 'project_assets',
-	      },
-	      confirmation: {
-	        required: true,
-	        summary: '将删除角色及其形象数据。系统会在获得明确批准后执行同一份已审核请求。',
-	      },
-	      inputSchema: z.object({
-	        characterId: z.string().min(1),
-	      }),
-      outputSchema: z.object({ success: z.boolean() }),
-      executeInTransaction: async (ctx, input, transaction) => {
-        const character = await transaction.projectCharacter.findFirst({
-          where: {
-            id: input.characterId,
-            projectId: ctx.projectId,
-          },
-          select: { id: true },
-        })
-        if (!character) throw new ApiError('NOT_FOUND')
-
-	        await transaction.projectCharacter.delete({
-	          where: { id: input.characterId },
-	        })
-	        return { success: true }
-	      },
-	    }),
 	    create_character_appearance: defineOperation({
 	      id: 'create_character_appearance',
 	      summary: 'Add a new character appearance record.',
@@ -580,31 +548,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         }
 
 	        throw new ApiError('INVALID_PARAMS')
-	      },
-	    }),
-	    delete_location: defineOperation({
-	      id: 'delete_location',
-	      summary: 'Delete a project location (cascades images).',
-	      intent: 'act',
-	      effects: { ...EFFECTS_WRITE_DESTRUCTIVE, workspaceResourceImpact: 'project_assets' },
-	      confirmation: {
-	        required: true,
-	        summary: '将删除场景及其图片记录。系统会在获得明确批准后执行同一份已审核请求。',
-	      },
-			      inputSchema: z.object({
-			        locationId: z.string().min(1),
-		      }),
-      outputSchema: z.object({ success: z.boolean() }),
-      executeInTransaction: async (ctx, input, transaction) => {
-        const location = await transaction.projectLocation.findFirst({
-          where: { id: input.locationId, projectId: ctx.projectId },
-          select: { id: true },
-        })
-        if (!location) throw new ApiError('NOT_FOUND')
-	        await transaction.projectLocation.delete({
-	          where: { id: input.locationId },
-	        })
-	        return { success: true }
 	      },
 	    }),
 	    confirm_location_selection: defineOperation({
