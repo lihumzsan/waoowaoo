@@ -8,6 +8,10 @@ import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { useRouter } from '@/i18n/navigation'
+import {
+  VIDEO_SEAM_BRIDGE_DURATIONS,
+  type VideoSeamBridgeDurationSeconds,
+} from '@/lib/video-tools/seam-bridge'
 import FreeVoiceToolCard from './FreeVoiceToolCard'
 import EnvironmentSoundToolCard from './EnvironmentSoundToolCard'
 import VideoSeamDiagnostics from './VideoSeamDiagnostics'
@@ -50,7 +54,7 @@ export default function VideoToolsPage() {
   const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
   const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
   const [seamMode, setSeamMode] = useState<'direct' | 'ai_bridge'>('direct')
-  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<4 | 6 | 8>(4)
+  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<VideoSeamBridgeDurationSeconds>(4)
   const [bridgePrompt, setBridgePrompt] = useState('')
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})
@@ -386,12 +390,12 @@ export default function VideoToolsPage() {
                       {t('bridge.duration')}
                       <select
                         value={bridgeDurationSeconds}
-                        onChange={(event) => setBridgeDurationSeconds(Number(event.target.value) as 4 | 6 | 8)}
+                        onChange={(event) => setBridgeDurationSeconds(Number(event.target.value) as VideoSeamBridgeDurationSeconds)}
                         className="mt-1 block rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-base)] px-3 py-2 text-sm text-[var(--glass-text-primary)]"
                       >
-                        <option value={4}>4 s</option>
-                        <option value={6}>6 s</option>
-                        <option value={8}>8 s</option>
+                        {VIDEO_SEAM_BRIDGE_DURATIONS.map((durationSeconds) => (
+                          <option key={durationSeconds} value={durationSeconds}>{durationSeconds} s</option>
+                        ))}
                       </select>
                       <span className="mt-1 block font-normal leading-5 text-[var(--glass-text-tertiary)]">
                         {t('bridge.durationHelp')}

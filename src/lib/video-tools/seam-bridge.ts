@@ -1,4 +1,4 @@
-export const VIDEO_SEAM_BRIDGE_DURATIONS = [4, 6, 8] as const
+export const VIDEO_SEAM_BRIDGE_DURATIONS = [1, 2, 3, 4, 5, 6] as const
 
 export type VideoSeamBridgeDurationSeconds = typeof VIDEO_SEAM_BRIDGE_DURATIONS[number]
 
