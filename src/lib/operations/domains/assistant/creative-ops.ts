@@ -21,9 +21,6 @@ import {
   writeOperationDataPart,
   type ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
-import {
-  resolveProjectAgentAssistantModelKey,
-} from '@/lib/project-agent/model'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
@@ -320,7 +317,11 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           requestKeys.add(request.requestKey)
         }
 
-        const modelKey = await resolveProjectAgentAssistantModelKey(context.userId)
+        const modelKey = await resolveSystemModelKey({
+          userId: context.userId,
+          projectId: context.projectId,
+          purpose: 'analysis',
+        })
         const batchKey = createTaskBatchKey('creative_work')
         const locale = resolveOperationLocale(context.context)
         const submitted = await submitOperationTaskBatch(requests.map((item) => {

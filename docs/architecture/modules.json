@@ -536,6 +536,7 @@
         "src/lib/ai-providers",
         "src/lib/ai-exec",
         "src/lib/ai-registry",
+        "src/lib/model-access",
         "src/lib/platform-models",
         "standards/capabilities",
         "standards/pricing",

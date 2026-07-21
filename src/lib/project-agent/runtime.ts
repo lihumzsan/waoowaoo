@@ -813,7 +813,8 @@ export async function createProjectAgentChatResponse(input: {
   })
   const resolved = await resolveProjectAgentLanguageModel({
     userId: input.userId,
-    assistantModelKey,
+    modelKey: assistantModelKey,
+    reasoningPurpose: 'assistant',
     openRouterSessionId,
   })
   let runLockReleased = false

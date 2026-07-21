@@ -6,7 +6,10 @@ import { getUserModelConfig } from '@/lib/config-service'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { resolveLlmRuntimeModel } from '@/lib/ai-exec/llm-runtime'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
-import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
+import {
+  resolveReasoningEffort,
+  type ReasoningEffortPurpose,
+} from '@/lib/ai-exec/reasoning-effort'
 
 export const DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY = PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
 
@@ -39,18 +42,21 @@ export async function resolveProjectAgentAssistantModelKey(userId: string): Prom
 
 export async function resolveProjectAgentLanguageModel(input: {
   userId: string
-  assistantModelKey: string
+  modelKey: string
+  reasoningPurpose: ReasoningEffortPurpose
+  projectId?: string
   openRouterSessionId?: string
 }): Promise<{
   languageModel: LanguageModel
 }> {
-  const selection = await resolveLlmRuntimeModel(input.userId, input.assistantModelKey)
+  const selection = await resolveLlmRuntimeModel(input.userId, input.modelKey)
   const providerConfig = await getProviderConfig(input.userId, selection.provider)
   const providerKey = getProviderKey(selection.provider)
   const reasoningEffort = await resolveReasoningEffort({
     userId: input.userId,
     modelKey: selection.modelKey,
-    purpose: 'assistant',
+    purpose: input.reasoningPurpose,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
   })
   return {
     languageModel: createAiLanguageModel({

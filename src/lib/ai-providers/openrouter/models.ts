@@ -18,6 +18,7 @@ export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0-fast'
 export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'
 export const OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID = 'anthropic/claude-sonnet-4.6'
+export const OPENROUTER_CLAUDE_SONNET_5_MODEL_ID = 'anthropic/claude-sonnet-5'
 export const OPENROUTER_GPT_5_5_MODEL_ID = 'openai/gpt-5.5'
 export const OPENROUTER_GPT_5_6_LUNA_MODEL_ID = 'openai/gpt-5.6-luna'
 export const OPENROUTER_GPT_5_6_TERRA_MODEL_ID = 'openai/gpt-5.6-terra'
@@ -119,6 +120,12 @@ export const OPENROUTER_BUILTIN_PRICING_CATALOG_ENTRIES = [
   {
     apiType: 'text',
     provider: 'openrouter',
+    modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+    pricing: openrouterTokenPricing(2, 10),
+  },
+  {
+    apiType: 'text',
+    provider: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4.5',
     pricing: openrouterTokenPricing(3, 15),
   },
@@ -196,6 +203,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'openrouter', modelId: 'google/gemini-3.1-flash-lite-preview', capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'] } } },
   { modelType: 'llm', provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4.5', capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4', capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
   { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GPT_5_5_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
@@ -246,6 +254,7 @@ export const OPENROUTER_API_CONFIG_CATALOG_MODELS = [
   { modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm', provider: 'openrouter' },
   { modelId: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite', type: 'llm', provider: 'openrouter' },
   { modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, name: 'Claude Sonnet 4.6', type: 'llm', provider: 'openrouter' },
+  { modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, name: 'Claude Sonnet 5', type: 'llm', provider: 'openrouter' },
   { modelId: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', type: 'llm', provider: 'openrouter' },
   { modelId: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', type: 'llm', provider: 'openrouter' },
   { modelId: OPENROUTER_GPT_5_5_MODEL_ID, name: 'GPT-5.5', type: 'llm', provider: 'openrouter' },
@@ -261,6 +270,7 @@ export const OPENROUTER_PLATFORM_MODEL_PRESETS = [
   { provider: 'openrouter', modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
   { provider: 'openrouter', modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm' },
   { provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, name: 'Claude Sonnet 4.6', type: 'llm' },
+  { provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, name: 'Claude Sonnet 5', type: 'llm' },
   { provider: 'openrouter', modelId: OPENROUTER_GPT_5_5_MODEL_ID, name: 'GPT-5.5', type: 'llm' },
   { provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID, name: 'GPT-5.6 Luna', type: 'llm' },
   { provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID, name: 'GPT-5.6 Terra', type: 'llm' },

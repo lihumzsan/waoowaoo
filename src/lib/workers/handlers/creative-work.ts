@@ -47,7 +47,9 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
 
   const resolved = await resolveProjectAgentLanguageModel({
     userId: job.data.userId,
-    assistantModelKey: payload.modelKey,
+    modelKey: payload.modelKey,
+    reasoningPurpose: 'analysis',
+    projectId: job.data.projectId,
     openRouterSessionId: buildAiExecutionSessionId({
       kind: 'project-agent',
       userId: job.data.userId,
