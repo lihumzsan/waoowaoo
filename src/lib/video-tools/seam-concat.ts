@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
+import { parseVideoSeamBridgeOptions, type VideoSeamBridgeOptions } from './seam-bridge'
 import { isValidVideoTrimFrames } from './trim-frames'
 
 export { isValidVideoTrimFrames, VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES } from './trim-frames'
@@ -21,13 +22,17 @@ type UploadMetadata = {
   size: number
 }
 
-type SeamConcatSubmission = {
+export type VideoSeamMode = 'direct' | 'ai_bridge'
+
+export type SeamConcatSubmission = {
   input1Key: string
   input1Name: string
   input1TrimEndFrames: number
   input2Key: string
   input2Name: string
   input2TrimStartFrames: number
+  mode: VideoSeamMode
+  bridge?: VideoSeamBridgeOptions
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,6 +116,12 @@ export function parseVideoSeamConcatSubmission(userId: string, value: unknown): 
     throw new Error('VIDEO_TOOL_INPUT_NOT_OWNED')
   }
 
+  const mode = value.mode === undefined ? 'direct' : value.mode
+  if (mode !== 'direct' && mode !== 'ai_bridge') {
+    throw new Error('VIDEO_SEAM_MODE_INVALID')
+  }
+  const bridge = mode === 'ai_bridge' ? parseVideoSeamBridgeOptions(value.bridge) : undefined
+
   return {
     input1Key,
     input1Name,
@@ -118,5 +129,7 @@ export function parseVideoSeamConcatSubmission(userId: string, value: unknown): 
     input2Key,
     input2Name,
     input2TrimStartFrames,
+    mode,
+    ...(bridge ? { bridge } : {}),
   }
 }

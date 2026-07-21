@@ -11,6 +11,12 @@ type FirstLastFrameRequest = {
   customPrompt?: string
 }
 
+export type VideoContinuityRelay = {
+  mode: 'previous_output_end_frame'
+  sourceVideoTaskId: string
+  sourceFrameMediaId: string
+}
+
 export type GenerateVideoRequestParams = {
   storyboardId: string
   panelIndex: number
@@ -19,6 +25,7 @@ export type GenerateVideoRequestParams = {
   generationOptions?: VideoGenerationOptions
   videoDurationBinding?: VideoDurationBinding
   firstLastFrame?: FirstLastFrameRequest
+  continuityRelay?: VideoContinuityRelay
   customPrompt?: string
 }
 
@@ -26,6 +33,7 @@ export type GenerateVideoRequestBody = {
   storyboardId: string
   panelIndex: number
   firstLastFrame?: FirstLastFrameRequest
+  continuityRelay?: VideoContinuityRelay
   videoModel: string
   generationOptions?: VideoGenerationOptions
   videoDurationBinding?: VideoDurationBinding
@@ -50,6 +58,9 @@ export function buildGenerateVideoRequestBody(params: GenerateVideoRequestParams
       ...params.firstLastFrame,
       flModel: normalizeVideoModelKey(params.firstLastFrame.flModel),
     }
+  }
+  if (params.continuityRelay) {
+    requestBody.continuityRelay = params.continuityRelay
   }
   if (params.generationOptions && typeof params.generationOptions === 'object') {
     requestBody.generationOptions = params.generationOptions

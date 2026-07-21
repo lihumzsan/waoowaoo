@@ -48,6 +48,7 @@ describe('video seam concat validation', () => {
       input2Key: 'video-tools/user-1/inputs/two.mp4',
       input2Name: 'two.mp4',
       input2TrimStartFrames: 1,
+      mode: 'direct',
     })
   })
 
@@ -64,6 +65,18 @@ describe('video seam concat validation', () => {
         trimStartFrames: 3,
       },
     })).toMatchObject({ input1TrimEndFrames: 12, input2TrimStartFrames: 3 })
+  })
+
+  it('parses an AI bridge request with a supported duration', () => {
+    expect(parseVideoSeamConcatSubmission('user-1', {
+      input1: { key: 'video-tools/user-1/inputs/one.mp4', name: 'one.mp4' },
+      input2: { key: 'video-tools/user-1/inputs/two.mp4', name: 'two.mp4' },
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4, prompt: '  The camera continues forward naturally.  ' },
+    })).toMatchObject({
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4, prompt: 'The camera continues forward naturally.' },
+    })
   })
 
   it('rejects invalid input trim frame values', () => {
