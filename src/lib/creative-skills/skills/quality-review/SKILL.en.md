@@ -4,6 +4,11 @@
 
 Use actually visible evidence to evaluate story, visual assets, video segments, continuity, sound, and final delivery against the goal, locate root causes, and recommend the smallest correction scope. Review does not invent success facts or equate “generation completed” with “watched, heard, and approved.”
 
+## Skill reading composition
+
+- For `outputKind=video_prompt_set`, read `director-core`, `video-direction`, and `quality-review` before creating the result. Before strict output, use this Skill to review the prompt itself for factual fidelity, executability, blocking, seams, sound, and the sole-output constraint.
+- Prompt review can assess only the written design; it cannot claim that ungenerated video or audio has passed. The three Skills constrain one Worker's sole result and create no separate review field or second prompt.
+
 ## Evidence discipline
 
 - Review only text, images, video, audio, structured facts, and exact versions actually supplied to the task.
@@ -63,9 +68,10 @@ Use actually visible evidence to evaluate story, visual assets, video segments, 
 - Is every referenced character, location, prop, or UI visibly the correct identity rather than merely named in the prompt?
 - Does action complete from entry through ordered beats to exit, without repetition, truncation, or an impossible chain?
 - Do scale and camera movement support narrative, without conflicting motion, purposeless drift, invented spatial connectors, or editing terminology rendered into the image?
-- Are gaze, orientation, primary movement, performance, prop possession, and core set objects clear?
+- Are gaze, orientation, primary movement, performance, prop possession, and core set objects clear? When placement affects action, relationships, composition, or continuity, do the first frame and landing combine a stable physical anchor, frame region or depth, body orientation, and prop relationship?
+- When a character changes position, are the starting point, path, and landing position visibly completed, with later shots inheriting the reached position through the same set anchor?
 - Do major reveals, punchlines, reactions, and scale comparisons receive enough time while pacing remains causally understandable?
-- Is every independently generated segment complete? Are identity, wardrobe, prop state, movement energy, environment, and sound compatible across segments, with natural scale/angle changes at seams?
+- Is every independently generated segment complete? Compare every outgoing final shot with the next incoming first shot: do they use visibly different scales rather than only a side/back view or slight camera-angle change, and are stable set anchors compatible when the character reappears?
 - Did the model accidentally create a collage, grid, split screen, captions, title, watermark, or unwanted text overlay?
 
 ## Sound and music review

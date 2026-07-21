@@ -64,16 +64,16 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'director-core': defineSkill({
     id: 'director-core',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '导演与制作时间线核心', en: 'Director and Production Timeline Core' },
     summary: {
-      zh: '把剧情事实组织成镜头、生成分段、表演、景别、运镜与同期声的统一导演方法。',
-      en: 'Unified directing methods for shots, generation segments, performance, shot scale, camera motion, and sync sound.',
+      zh: '把剧情事实组织成镜头、分段、场面调度与音画时间线；`outputKind=video_prompt_set` 时必须与 `video-direction`、`quality-review` 一起读取。',
+      en: 'Direct shots, segments, blocking, and audiovisual timelines; for `outputKind=video_prompt_set`, this Skill must be read with `video-direction` and `quality-review`.',
     },
     tags: ['director', 'editing', 'timeline', 'shot', 'camera'],
     keywords: {
-      zh: ['导演', '剪辑', '制作时间线', '镜头', '分镜', '景别', '运镜', '表演', '分段', '同期声'],
-      en: ['director', 'editing', 'production timeline', 'shot', 'camera', 'performance', 'segmentation', 'sync sound'],
+      zh: ['导演', '剪辑', '制作时间线', '镜头', '分镜', '景别', '运镜', '场面调度', '站位', '表演', '分段', '同期声'],
+      en: ['director', 'editing', 'production timeline', 'shot', 'camera', 'blocking', 'staging', 'performance', 'segmentation', 'sync sound'],
     },
   }),
   'style-development': defineSkill({
@@ -106,16 +106,16 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.2.0',
+    version: '1.3.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
-      zh: '把视频参考、导演设计、条件式转场、对白和原生同步声内化为唯一最终提示词。',
-      en: 'Internalize video references, directing, motivated transitions, dialogue, and native synchronized sound into one final prompt.',
+      zh: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
+      en: 'Core Skill for `outputKind=video_prompt_set`; it must be read with `director-core` and `quality-review`, then internalize applicable knowledge into the sole final prompt.',
     },
     tags: ['video', 'director', 'prompt', 'continuity', 'audio'],
     keywords: {
-      zh: ['视频', '导演', '提示词', '镜头', '参考图', '动作', '连续性', '长视频', '对白', '声音'],
-      en: ['video', 'director', 'prompt', 'shot', 'reference image', 'action', 'continuity', 'long video', 'dialogue', 'audio'],
+      zh: ['视频', '导演', '提示词', '镜头', '参考图', '动作', '场面调度', '站位', '接缝', '连续性', '长视频', '对白', '声音'],
+      en: ['video', 'director', 'prompt', 'shot', 'reference image', 'action', 'blocking', 'staging', 'seam', 'continuity', 'long video', 'dialogue', 'audio'],
     },
   }),
   'music-direction': defineSkill({
@@ -134,16 +134,16 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'quality-review': defineSkill({
     id: 'quality-review',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '创作质量审查', en: 'Creative Quality Review' },
     summary: {
-      zh: '对故事、视觉、视频、连续性和声音进行基于证据的检查与最小范围返工。',
-      en: 'Evidence-based review and minimum-scope correction for story, visuals, video, continuity, and audio.',
+      zh: '基于证据审查创作质量；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',
+      en: 'Evidence-based review; for `outputKind=video_prompt_set`, it must be read with `director-core` and `video-direction` for pre-output self-review.',
     },
     tags: ['quality', 'review', 'continuity', 'validation', 'retry'],
     keywords: {
-      zh: ['质量', '审查', '检查', '验收', '连续性', '返工', '修正', '重试', '成片'],
-      en: ['quality', 'review', 'check', 'validation', 'continuity', 'rework', 'correction', 'retry', 'final'],
+      zh: ['质量', '审查', '检查', '验收', '站位', '接缝', '连续性', '返工', '修正', '重试', '成片'],
+      en: ['quality', 'review', 'check', 'validation', 'blocking', 'seam', 'continuity', 'rework', 'correction', 'retry', 'final'],
     },
   }),
 }

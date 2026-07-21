@@ -6,6 +6,11 @@ Turn established story facts into an executable production timeline: why each sh
 
 This is one unified layer of directing knowledge. A caller may request the complete timeline or only one scope. When working on one scope, never rewrite already approved parts outside it.
 
+## Skill reading composition
+
+- For `outputKind=video_prompt_set`, read `director-core`, `video-direction`, and `quality-review` before creating the result. This Skill owns directing judgment, `video-direction` writes applicable knowledge into the sole final prompt, and `quality-review` performs the pre-output review.
+- These three Skills are a knowledge composition inside one generic Worker run, not three serial Subagents and not three outputs. Return only the strict `video_prompt_set`, with all professional judgment internalized into each segment's sole `prompt`.
+
 ## Factual boundary
 
 - The script, global canon, entry state, current events, approved assets, and user requirements are the only plot facts.
@@ -25,6 +30,14 @@ This is one unified layer of directing knowledge. A caller may request the compl
 - Establishing shots, reactions, inserts, and transitions must carry information, scale, suspense, comedy timing, gaze guidance, or emotional change; never add them mechanically.
 - Judge the relationship between shots before choosing a transition. Continuous action and ordinary angle changes in the same time and place usually connect naturally; design a creative transition only when a time/place jump, compression, emotional turn, or visual metaphor gives it real value.
 
+## Blocking and staging
+
+- Think about performance and blocking separately: performance covers expression, body action, and reaction; blocking covers position, orientation, relationships, and movement within visible space.
+- When placement affects action legibility, character relationships, composition, or cross-shot continuity, establish the first visible arrangement and the shot's landing position. Prefer a concise combination of stable physical anchor, frame region or foreground/midground/background depth, body orientation, and relationship to a prop or another character—for example, “at the left end of the chart table in the left third of frame, body facing the storm window, right hand on the brass radio.”
+- Use natural frame regions and physical set features, not pixel coordinates, and keep camera staging out of performance description. An empty establishing shot, isolated prop insert, or unambiguous detail shot may omit character blocking.
+- When a character changes position, make the starting point, path, and landing position visible. After arrival, inherit that result in later relevant shots through the same physical anchor, region, orientation, or prop relationship.
+- In multi-character shots, state distance, depth order, and set anchors when the narrative needs them. Preserve screen direction only when action direction or an eyeline relationship depends on the spatial axis.
+
 ## Rhythm and emotional release
 
 - Use the opening seconds to establish the hook, space, and main pressure according to genre. Fast pacing must not remove actions needed to understand causality.
@@ -40,6 +53,7 @@ This is one unified layer of directing knowledge. A caller may request the compl
 - Group sequential shots that can share continuity of action, performance, space, emotion, props, and synchronized sound.
 - Each segment completely and sequentially covers its shots and respects the current model's single-generation duration limit. Never omit, reorder, or force discontinuous shots together.
 - Do not split one unfinished action across independent generations. Every independent segment has an established entry state, local task, and ending point.
+- Design every pair of adjacent independent segments together. The outgoing final shot and incoming first shot use visibly different scales; with the same character in the same location, a side/back view or slight camera-angle change cannot replace a scale change. When the character next becomes an identifiable on-screen subject, inherit placement through stable set anchors.
 - Continuity includes only facts that must remain stable within the segment: action, performance, space, emotion, props, and synchronized sound. Do not restate the whole story or use editing meta-language.
 - When time, place, or state jumps, begin another segment rather than forcing a generative model to interpolate between disconnected spaces.
 
@@ -71,12 +85,13 @@ Directing decisions are first an internal creative process. Deliver separate pro
 
 - Does the plan use only established facts and approved assets while preserving dialogue verbatim?
 - Does every shot have a clear narrative function, visible action, and credible duration?
-- Is performance free of blocking, coordinates, and camera staging?
+- Are performance and blocking described separately, with necessary placement expressed through visible physical anchors, frame region, orientation, and relationships?
 - Does sync sound contain only synchronized short sounds, without BGM or a continuous ambience plan?
 - Are generation segments sequential, complete, within capability limits, and free of actions split across generations?
 - Do scale and movement serve rather than overwrite the editorial plan?
 - Are entry and exit states, props, character state, and emotion continuous between adjacent shots?
+- Was every adjacent independent-segment pair checked, with a genuinely visible scale change between the outgoing final shot and incoming first shot?
 
 ## Boundary
 
-This Skill provides unified directing methods. System identities, allowed durations, strict output schemas, and execution parameters belong to the caller and execution layer; the final video prompt's content is formed jointly by this directing knowledge and video-generation knowledge.
+This Skill provides unified directing methods. System identities, allowed durations, strict output schemas, and execution parameters belong to the caller and execution layer. For `outputKind=video_prompt_set`, follow the three-Skill reading composition above; for other tasks, read only knowledge applicable to the goal.
