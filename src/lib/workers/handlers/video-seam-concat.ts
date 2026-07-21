@@ -29,7 +29,7 @@ type SeamConcatPayload = {
   bridge?: VideoSeamBridgeOptions
 }
 
-const DEFAULT_AI_BRIDGE_PROMPT = 'Continuous natural camera motion and subject movement between the exact first and last frame. Preserve subject identity, setting, lighting, lens, and direction of motion. No cut, no dissolve, no fade, no overlay.'
+const DEFAULT_AI_BRIDGE_PROMPT = 'Create one continuous cinematic transition between the exact first and last frame. Begin visible motion immediately from the first generated frame and maintain perceptible camera, subject, and environment motion through every intermediate frame. When the endpoint compositions differ, continuously evolve framing, subjects, and setting toward the final frame instead of holding either reference image. Prioritize the exact endpoints. No cut, no dissolve, no fade, no overlay, no freeze frame, no static hold.'
 
 function readTrimFrames(value: unknown, defaultValue: number): number {
   const trimFrames = value === undefined ? defaultValue : value

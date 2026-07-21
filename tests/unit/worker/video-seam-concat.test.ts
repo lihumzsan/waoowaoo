@@ -203,6 +203,21 @@ describe('video seam concat worker handler', () => {
     expect(runWorkflowMock).not.toHaveBeenCalled()
   })
 
+  it('uses an immediate continuous-transition prompt when bridge motion is omitted', async () => {
+    await handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))
+
+    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining('Begin visible motion immediately from the first generated frame'),
+    }))
+    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.not.stringContaining('Preserve subject identity, setting, lighting'),
+    }))
+  })
+
   it.each([
     {
       name: 'missing content length',
