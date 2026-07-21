@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { useRouter } from '@/i18n/navigation'
 import {
+  DEFAULT_VIDEO_SEAM_BRIDGE_DURATION,
   VIDEO_SEAM_BRIDGE_DURATIONS,
   type VideoSeamBridgeDurationSeconds,
 } from '@/lib/video-tools/seam-bridge'
@@ -54,7 +55,7 @@ export default function VideoToolsPage() {
   const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
   const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
   const [seamMode, setSeamMode] = useState<'direct' | 'ai_bridge'>('direct')
-  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<VideoSeamBridgeDurationSeconds>(4)
+  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<VideoSeamBridgeDurationSeconds>(DEFAULT_VIDEO_SEAM_BRIDGE_DURATION)
   const [bridgePrompt, setBridgePrompt] = useState('')
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})

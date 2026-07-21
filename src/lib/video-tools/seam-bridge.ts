@@ -1,5 +1,7 @@
 export const VIDEO_SEAM_BRIDGE_DURATIONS = [1, 2, 3, 4, 5, 6] as const
 
+export const DEFAULT_VIDEO_SEAM_BRIDGE_DURATION = 1
+
 export type VideoSeamBridgeDurationSeconds = typeof VIDEO_SEAM_BRIDGE_DURATIONS[number]
 
 export type VideoSeamBridgeOptions = {
