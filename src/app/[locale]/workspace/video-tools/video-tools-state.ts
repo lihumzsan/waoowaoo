@@ -39,7 +39,9 @@ function readString(value: unknown): string | null {
 }
 
 function isActiveTask(task: VideoToolTask | null | undefined): boolean {
-  return task?.status === 'queued' || task?.status === 'processing'
+  return task?.status === 'queued'
+    || task?.status === 'processing'
+    || (task?.status === 'completed' && !readString(task.result?.videoUrl))
 }
 
 export function canSubmitVideoSeamConcat(
@@ -64,6 +66,9 @@ export function resolveVideoToolTaskView(task: VideoToolTask | null): VideoToolT
   const videoUrl = readString(task.result?.videoUrl)
   const videoKey = readString(task.result?.videoKey)
   if (task.status === 'completed') {
+    if (!videoUrl) {
+      return { phase: 'persisting', active: true, videoUrl: null, videoKey: null, errorMessage: null }
+    }
     return { phase: 'completed', active: false, videoUrl, videoKey, errorMessage: null }
   }
   if (task.status === 'failed' || task.status === 'canceled') {
