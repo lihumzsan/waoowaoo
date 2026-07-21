@@ -44,7 +44,10 @@
   },
   "reasoning": {
     "running": "思考中",
-    "completed": "思考过程"
+    "completed": "思考过程",
+    "completedWithoutDetails": "思考完成",
+    "preparing": "正在分析请求并准备回复…",
+    "unavailable": "这次运行已完成，但模型没有提供可展示的思考文本。"
   },
   "subagents": {
     "tabsLabel": "Subagent",

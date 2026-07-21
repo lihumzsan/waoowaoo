@@ -1,3 +1,4 @@
+import type { UIMessage } from 'ai'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
@@ -38,11 +39,19 @@ export function shouldShowWorkspaceAssistantReplyLoading(params: {
   replyInFlight: boolean
   awaitingUserInput: boolean
   awaitingExternalTask: boolean
+  hasAssistantRunPresentation: boolean
 }): boolean {
   return !params.storageLoading
     && params.replyInFlight
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
+    && !params.hasAssistantRunPresentation
+}
+
+export function hasWorkspaceAssistantRunPresentation(messages: readonly UIMessage[]): boolean {
+  const latestMessage = messages[messages.length - 1]
+  if (!latestMessage || latestMessage.role !== 'assistant') return false
+  return latestMessage.parts.some((part) => part.type === 'data-agent-run')
 }
 
 export function shouldShowWorkspaceAssistantRunFailureNotice(params: {

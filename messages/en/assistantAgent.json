@@ -44,7 +44,10 @@
   },
   "reasoning": {
     "running": "Thinking",
-    "completed": "Reasoning"
+    "completed": "Reasoning",
+    "completedWithoutDetails": "Thinking complete",
+    "preparing": "Analyzing the request and preparing a response…",
+    "unavailable": "This run completed, but the model did not provide displayable reasoning text."
   },
   "subagents": {
     "tabsLabel": "Subagents",

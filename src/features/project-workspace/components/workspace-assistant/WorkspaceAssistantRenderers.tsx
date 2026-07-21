@@ -38,14 +38,13 @@ import {
   type ChoiceCardCustomOptions,
   type ChoiceCardSelections,
 } from './choice-card-actions'
-import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
-import { WorkspaceAssistantReasoningGroup, WorkspaceAssistantReasoningPart } from './WorkspaceAssistantReasoning'
+import { WorkspaceAssistantPendingReasoningStatus, WorkspaceAssistantReasoningGroup, WorkspaceAssistantReasoningPart, WorkspaceAssistantRunReasoningStatus } from './WorkspaceAssistantReasoning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -728,7 +727,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
     data: {
       by_name: {
-        'agent-run': HiddenRuntimeContextDataCard,
+        'agent-run': WorkspaceAssistantRunReasoningStatus,
         'agent-operation-start': HiddenRuntimeContextDataCard,
         'agent-subagent-event': HiddenRuntimeContextDataCard,
         'agent-operation-plan-preview': OperationPlanPreviewDataCard,
@@ -811,7 +810,7 @@ export function WorkspaceAssistantPendingTurnPlaceholder() {
   return (
     <div className="space-y-1">
       <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-        <WorkspaceAssistantThinkingIndicator status="streaming" />
+        <WorkspaceAssistantPendingReasoningStatus />
       </div>
     </div>
   )

@@ -46,6 +46,7 @@ import {
   resolveWorkspaceAssistantAwaitingExternalTask,
   resolveWorkspaceAssistantAwaitingUserInput,
   resolveWorkspaceAssistantRunFailureDetail,
+  hasWorkspaceAssistantRunPresentation,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldShowWorkspaceAssistantReplyLoading,
   shouldShowWorkspaceAssistantRunFailureNotice,
@@ -206,6 +207,7 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     awaitingUserInput,
     awaitingExternalTask,
+    hasAssistantRunPresentation: hasWorkspaceAssistantRunPresentation(assistantRuntime.messages),
   })
   const showRunFailureNotice = shouldShowWorkspaceAssistantRunFailureNotice({
     storageLoading: assistantRuntime.storageLoading,

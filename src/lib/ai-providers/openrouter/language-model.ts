@@ -104,7 +104,7 @@ export function createOpenRouterLanguageModel(input: AiProviderLanguageModelCont
   const model = openRouter.chat(input.selection.modelId, {
     usage: { include: true },
     ...(input.reasoning
-      ? { extraBody: { reasoning: { effort: input.reasoningEffort } } }
+      ? { extraBody: { reasoning: { effort: input.reasoningEffort, summary: 'auto' } } }
       : {}),
   })
   return model
