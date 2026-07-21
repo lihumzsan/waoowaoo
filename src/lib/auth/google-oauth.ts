@@ -1,3 +1,6 @@
+import GoogleProvider from 'next-auth/providers/google'
+import type { DeploymentFeatures } from '@/lib/deployment/features'
+
 export interface GoogleOAuthConfig {
   clientId: string
   clientSecret: string
@@ -20,6 +23,17 @@ export function readGoogleOAuthConfig(): GoogleOAuthConfig {
     clientId: readTrimmedEnv('GOOGLE_CLIENT_ID'),
     clientSecret: readTrimmedEnv('GOOGLE_CLIENT_SECRET'),
   }
+}
+
+export function createGoogleOAuthProvider(
+  features: Pick<DeploymentFeatures, 'showGoogleOAuth'>,
+): ReturnType<typeof GoogleProvider> | null {
+  if (!features.showGoogleOAuth) return null
+
+  return GoogleProvider({
+    ...readGoogleOAuthConfig(),
+    allowDangerousEmailAccountLinking: false,
+  })
 }
 
 export function readVerifiedGoogleProfileEmail(profile: unknown): string | null {

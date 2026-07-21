@@ -1,14 +1,17 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { logAuthAction } from './logging/semantic'
 import { prisma } from './prisma'
 import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
-import { readGoogleOAuthConfig, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
-import { isCloudDeployment } from '@/lib/deployment/config'
+import { createGoogleOAuthProvider, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
+import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
+import { getDeploymentFeatures } from '@/lib/deployment/features'
 
-const secureCookieRequired = (isCloudDeployment() && process.env.NODE_ENV === 'production')
+const deploymentConfig = getDeploymentConfig()
+const deploymentFeatures = getDeploymentFeatures(deploymentConfig)
+const googleOAuthProvider = createGoogleOAuthProvider(deploymentFeatures)
+const secureCookieRequired = (isCloudDeployment(deploymentConfig) && process.env.NODE_ENV === 'production')
   || (process.env.NEXTAUTH_URL || '').startsWith('https://')
 
 export const authOptions: NextAuthOptions = {
@@ -54,10 +57,7 @@ export const authOptions: NextAuthOptions = {
         }
       }
     }),
-    GoogleProvider({
-      ...readGoogleOAuthConfig(),
-      allowDangerousEmailAccountLinking: false,
-    }),
+    ...(googleOAuthProvider ? [googleOAuthProvider] : []),
   ],
   session: {
     strategy: "jwt"
