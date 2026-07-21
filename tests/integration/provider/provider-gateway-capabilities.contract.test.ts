@@ -537,7 +537,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       })).rejects.toThrow('CAPABILITY_VALUE_NOT_ALLOWED')
     })
 
-    it('preserves max and requests a displayable summary in OpenRouter text and vision bodies', async () => {
+    it('preserves max in OpenRouter text and vision request bodies', async () => {
       fetchMock.mockImplementation(async () => (
         chatCompletionResponse(OPENROUTER_GPT_5_6_LUNA_MODEL_ID, 'ok')
       ))
@@ -564,7 +564,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       })
       await generateText({ model: textModel, prompt: 'hello', maxRetries: 0 })
       const textBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      expect(textBody.reasoning).toEqual({ effort: 'max', summary: 'auto' })
+      expect(textBody.reasoning).toEqual({ effort: 'max' })
 
       const visionModel = createAiLanguageModel({
         providerKey: 'openrouter',
@@ -587,10 +587,10 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         maxRetries: 0,
       })
       const visionBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      expect(visionBody.reasoning).toEqual({ effort: 'max', summary: 'auto' })
+      expect(visionBody.reasoning).toEqual({ effort: 'max' })
     })
 
-    it('injects max and requests a displayable summary for the internal Assistant model', async () => {
+    it('injects max into the internal Assistant language-model request', async () => {
       fetchMock.mockResolvedValueOnce(chatCompletionResponse(OPENROUTER_GPT_5_6_SOL_MODEL_ID, 'ok'))
       const model = createAiLanguageModel({
         providerKey: 'openrouter',
@@ -613,7 +613,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       await generateText({ model, prompt: 'hello', maxRetries: 0 })
 
       const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      expect(body.reasoning).toEqual({ effort: 'max', summary: 'auto' })
+      expect(body.reasoning).toEqual({ effort: 'max' })
     })
   })
 

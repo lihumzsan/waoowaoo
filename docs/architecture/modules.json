@@ -414,7 +414,6 @@
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSettings.tsx",
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSettings.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
-        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantReasoning.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantActiveRunCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPlanCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
@@ -466,7 +465,6 @@
         "tests/unit/project-agent/script-intake.test.ts",
         "tests/unit/project-agent/session-state-active.test.ts",
         "tests/unit/project-agent/session-state-watermark.test.ts",
-        "tests/unit/project-agent/subagent-events.test.ts",
         "tests/unit/sse/server-session.test.ts",
         "tests/unit/sse/protocol.test.ts",
         "tests/contracts/assistant-choice-offer-conformance.test.ts",
@@ -524,8 +522,7 @@
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts"
       ],
       "testPaths": [
-        "tests/contracts/project-agent-toolset-conformance.test.ts",
-        "tests/unit/project-agent/subagent-events.test.ts"
+        "tests/contracts/project-agent-toolset-conformance.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/prompt-semantic-regression.mjs"

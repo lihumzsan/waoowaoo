@@ -38,13 +38,13 @@ import {
   type ChoiceCardCustomOptions,
   type ChoiceCardSelections,
 } from './choice-card-actions'
+import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
-import { WorkspaceAssistantPendingReasoningStatus, WorkspaceAssistantReasoningGroup, WorkspaceAssistantReasoningPart, WorkspaceAssistantRunReasoningStatus } from './WorkspaceAssistantReasoning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -113,9 +113,11 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
 export function HiddenApprovalRequestDataCard() {
   return null
 }
+
 export function HiddenRuntimeContextDataCard() {
   return null
 }
+
 function toPositiveBillingQuantity(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0
   return value
@@ -722,12 +724,11 @@ export function useWorkspaceAssistantMessagePartComponents({
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
-    Reasoning: WorkspaceAssistantReasoningPart,
-    ReasoningGroup: WorkspaceAssistantReasoningGroup,
+    Reasoning: HiddenRuntimeContextDataCard,
     tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
     data: {
       by_name: {
-        'agent-run': WorkspaceAssistantRunReasoningStatus,
+        'agent-run': HiddenRuntimeContextDataCard,
         'agent-operation-start': HiddenRuntimeContextDataCard,
         'agent-subagent-event': HiddenRuntimeContextDataCard,
         'agent-operation-plan-preview': OperationPlanPreviewDataCard,
@@ -810,7 +811,7 @@ export function WorkspaceAssistantPendingTurnPlaceholder() {
   return (
     <div className="space-y-1">
       <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-        <WorkspaceAssistantPendingReasoningStatus />
+        <WorkspaceAssistantThinkingIndicator status="streaming" />
       </div>
     </div>
   )

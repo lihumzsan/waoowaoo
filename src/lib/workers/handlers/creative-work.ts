@@ -1,7 +1,6 @@
 import type { Job } from 'bullmq'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
-import { getLogContext } from '@/lib/logging/context'
 import {
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
@@ -20,73 +19,10 @@ import { reportTaskProgress } from '@/lib/workers/shared'
 import { getWorkerExternalTimeoutMs } from '@/lib/workers/runtime-config'
 import { assertTaskActive } from '@/lib/workers/utils'
 
-type PersistedCreativeWorkerEvent = Extract<CreativeWorkerEvent, {
-  kind: 'skill_read' | 'reasoning' | 'tool_called' | 'tool_completed' | 'tool_failed'
-}>
-
-function isPersistedCreativeWorkerEvent(
-  event: CreativeWorkerEvent,
-): event is PersistedCreativeWorkerEvent {
-  return event.kind === 'skill_read'
-    || event.kind === 'reasoning'
-    || event.kind === 'tool_called'
-    || event.kind === 'tool_completed'
-    || event.kind === 'tool_failed'
-}
-
-function withAttemptIdentity(
-  event: PersistedCreativeWorkerEvent,
-  attempt: number,
-): PersistedCreativeWorkerEvent {
-  if (event.kind === 'reasoning') {
-    return { ...event, reasoningId: `${String(attempt)}:${event.reasoningId}` }
-  }
-  if (
-    event.kind === 'tool_called'
-    || event.kind === 'tool_completed'
-    || event.kind === 'tool_failed'
-  ) return { ...event, toolCallId: `${String(attempt)}:${event.toolCallId}` }
-  return event
-}
-
-function applyProgressEvent(
+function appendProgressEvent(
   lifecycle: CreativeWorkTaskLifecycleProjection,
-  rawEvent: PersistedCreativeWorkerEvent,
-  attempt: number,
+  event: Extract<CreativeWorkerEvent, { kind: 'skill_read' }>,
 ): CreativeWorkTaskLifecycleProjection {
-  const event = withAttemptIdentity(rawEvent, attempt)
-  if (event.kind === 'reasoning') {
-    const existingIndex = lifecycle.events.findIndex((entry) => (
-      entry.event.kind === 'reasoning'
-      && entry.event.reasoningId === event.reasoningId
-    ))
-    if (existingIndex >= 0) {
-      return {
-        ...lifecycle,
-        events: lifecycle.events.map((entry, index) => (
-          index === existingIndex ? { ...entry, event } : entry
-        )),
-      }
-    }
-  }
-  if (event.kind === 'tool_completed' || event.kind === 'tool_failed') {
-    const existingIndex = lifecycle.events.findIndex((entry) => (
-      entry.event.kind === 'tool_called'
-      && entry.event.toolCallId === event.toolCallId
-    ))
-    if (existingIndex < 0) {
-      throw new Error(`CREATIVE_WORK_TOOL_CALL_PROJECTION_MISSING:${event.toolCallId}`)
-    }
-    return {
-      ...lifecycle,
-      events: lifecycle.events.map((entry, index) => (
-        index === existingIndex ? { ...entry, event } : entry
-      )),
-    }
-  }
-  if (lifecycle.events.length >= 64) {
-    throw new Error('CREATIVE_WORK_LIFECYCLE_PROJECTION_EXHAUSTED')
-  }
   return {
     ...lifecycle,
     events: [
@@ -124,10 +60,6 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
   })
 
   let lifecycle = payload.lifecycleProjection
-  const attempt = getLogContext().taskAttempt
-  if (!Number.isInteger(attempt) || (attempt ?? 0) < 1) {
-    throw new Error(`CREATIVE_WORK_TASK_ATTEMPT_REQUIRED:${job.data.taskId}`)
-  }
   const abortController = new AbortController()
   const timeoutMs = getWorkerExternalTimeoutMs()
   let timedOut = false
@@ -144,9 +76,8 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
       signal: abortController.signal,
       request: payload.request,
       onEvent: async (event) => {
-        if (!isPersistedCreativeWorkerEvent(event)) return
-        if (event.kind === 'skill_read' && event.trace.source === 'tool') return
-        lifecycle = applyProgressEvent(lifecycle, event, attempt!)
+        if (event.kind !== 'skill_read') return
+        lifecycle = appendProgressEvent(lifecycle, event)
         const progress = Math.min(85, 20 + lifecycle.events.length * 5)
         await reportTaskProgress(job, progress, {
           stage: 'creative_work_reasoning',

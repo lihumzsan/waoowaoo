@@ -1,4 +1,3 @@
-import type { ChatStatus } from 'ai'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
@@ -37,13 +36,11 @@ export function resolveWorkspaceAssistantExternalTaskOperationId(
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
   replyInFlight: boolean
-  chatStatus: ChatStatus
   awaitingUserInput: boolean
   awaitingExternalTask: boolean
 }): boolean {
   return !params.storageLoading
     && params.replyInFlight
-    && params.chatStatus === 'submitted'
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
 }

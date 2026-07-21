@@ -204,7 +204,6 @@ export default function WorkspaceAssistantPanel({
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
     replyInFlight: assistantRuntime.replyInFlight,
-    chatStatus: assistantRuntime.status,
     awaitingUserInput,
     awaitingExternalTask,
   })

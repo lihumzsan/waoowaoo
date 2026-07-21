@@ -6,7 +6,6 @@ import {
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
-import { CREATIVE_WORKER_ERROR_CODES } from './errors'
 import { creativeWorkOutputSchemas, type CreativeWorkOutput } from './output-registry'
 import {
   creativeWorkDelegationRequestSchema,
@@ -32,37 +31,6 @@ const creativeSkillTraceEntrySchema = z.object({
   uri: z.string().trim().min(1),
   checksum: z.string().trim().min(1),
   contentChars: z.number().int().nonnegative(),
-}).strict()
-
-const creativeWorkerReasoningEventSchema = z.object({
-  kind: z.literal('reasoning'),
-  reasoningId: z.string().trim().min(1).max(500),
-  text: z.string().max(8_000),
-  status: z.enum(['running', 'completed']),
-  truncated: z.boolean(),
-}).strict()
-
-const creativeWorkerToolCalledEventSchema = z.object({
-  kind: z.literal('tool_called'),
-  toolCallId: z.string().trim().min(1).max(500),
-  toolName: z.literal('read_skill'),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
-}).strict()
-
-const creativeWorkerToolCompletedEventSchema = z.object({
-  kind: z.literal('tool_completed'),
-  toolCallId: z.string().trim().min(1).max(500),
-  toolName: z.literal('read_skill'),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
-  trace: creativeSkillTraceEntrySchema,
-}).strict()
-
-const creativeWorkerToolFailedEventSchema = z.object({
-  kind: z.literal('tool_failed'),
-  toolCallId: z.string().trim().min(1).max(500),
-  toolName: z.literal('read_skill'),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
-  code: z.enum(CREATIVE_WORKER_ERROR_CODES),
 }).strict()
 
 export const creativeWorkerResultSchema = z.object({
@@ -138,26 +106,20 @@ export const creativeWorkDelegationInputSchema = z.object({
     .describe('Choose exactly one input source. No inactive branch or null placeholder is accepted.'),
 }).strict()
 
-export const creativeWorkTaskEventSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('started'),
-    outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
-    goal: z.string().trim().min(1),
-  }).strict(),
-  z.object({
-    kind: z.literal('skill_read'),
-    trace: creativeSkillTraceEntrySchema,
-  }).strict(),
-  creativeWorkerReasoningEventSchema,
-  creativeWorkerToolCalledEventSchema,
-  creativeWorkerToolCompletedEventSchema,
-  creativeWorkerToolFailedEventSchema,
-])
-
 const creativeWorkTaskProgressEventSchema = z.object({
   sequence: z.number().int().positive(),
   occurredAt: z.string().datetime(),
-  event: creativeWorkTaskEventSchema,
+  event: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('started'),
+      outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
+      goal: z.string().trim().min(1),
+    }).strict(),
+    z.object({
+      kind: z.literal('skill_read'),
+      trace: creativeSkillTraceEntrySchema,
+    }).strict(),
+  ]),
 }).strict()
 
 export const creativeWorkTaskLifecycleProjectionSchema = z.object({
@@ -242,7 +204,6 @@ export type CreativeWorkDelegationInput = z.infer<typeof creativeWorkDelegationI
 export type CreativeWorkChapterBatchInput = z.infer<typeof creativeWorkChapterBatchInputSchema>
 export type CreativeWorkDelegationItem = z.infer<typeof creativeWorkDelegationItemSchema>
 export type CreativeWorkTaskRequest = z.infer<typeof creativeWorkRequestSchema>
-export type CreativeWorkTaskEvent = z.infer<typeof creativeWorkTaskEventSchema>
 export type CreativeWorkTaskLifecycleProjection = z.infer<typeof creativeWorkTaskLifecycleProjectionSchema>
 export type CreativeWorkTaskPayload = z.infer<typeof creativeWorkTaskPayloadSchema>
 export type CreativeWorkTaskResult = z.infer<typeof creativeWorkTaskResultSchema>
