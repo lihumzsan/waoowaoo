@@ -64,6 +64,9 @@ export function resolveVideoToolTaskView(task: VideoToolTask | null): VideoToolT
   const videoUrl = readString(task.result?.videoUrl)
   const videoKey = readString(task.result?.videoKey)
   if (task.status === 'completed') {
+    if (!videoUrl) {
+      return { phase: 'persisting', active: true, videoUrl: null, videoKey: null, errorMessage: null }
+    }
     return { phase: 'completed', active: false, videoUrl, videoKey, errorMessage: null }
   }
   if (task.status === 'failed' || task.status === 'canceled') {

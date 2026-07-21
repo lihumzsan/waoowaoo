@@ -48,6 +48,8 @@ describe('video tools state', () => {
       status: 'failed',
       error: { message: 'ComfyUI failed' },
     }))).toMatchObject({ phase: 'failed', active: false, errorMessage: 'ComfyUI failed' })
+    expect(resolveVideoToolTaskView(task({ status: 'completed', result: null })))
+      .toMatchObject({ phase: 'persisting', active: true, videoUrl: null })
     expect(resolveVideoToolTaskView(task({
       status: 'completed',
       result: { videoKey: 'output.mp4', videoUrl: '/api/storage/sign?key=output' },
