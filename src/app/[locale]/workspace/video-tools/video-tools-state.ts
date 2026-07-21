@@ -39,7 +39,9 @@ function readString(value: unknown): string | null {
 }
 
 function isActiveTask(task: VideoToolTask | null | undefined): boolean {
-  return task?.status === 'queued' || task?.status === 'processing'
+  return task?.status === 'queued'
+    || task?.status === 'processing'
+    || (task?.status === 'completed' && !readString(task.result?.videoUrl))
 }
 
 export function canSubmitVideoSeamConcat(
