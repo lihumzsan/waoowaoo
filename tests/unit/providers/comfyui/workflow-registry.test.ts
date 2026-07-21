@@ -98,6 +98,7 @@ describe('comfyui workflow registry prompt injection', () => {
   })
 
   it.each([
+    { durationSeconds: 1, finalFrameIndex: 24 },
     { durationSeconds: 4, finalFrameIndex: 96 },
     { durationSeconds: 8, finalFrameIndex: 192 },
     { durationSeconds: 12, finalFrameIndex: 288 },

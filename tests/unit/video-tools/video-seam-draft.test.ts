@@ -78,6 +78,17 @@ describe('video seam draft storage', () => {
     expect(localStorage.getItem).toHaveBeenLastCalledWith(buildVideoSeamDraftStorageKey('user-2'))
   })
 
+  it('hydrates a stored draft with a five-second AI bridge', () => {
+    installStorage([[buildVideoSeamDraftStorageKey('user-1'), JSON.stringify({
+      version: 1,
+      userId: 'user-1',
+      ...draft,
+      bridgeDurationSeconds: 5,
+    })]])
+
+    expect(readVideoSeamDraft('user-1')).toMatchObject({ bridgeDurationSeconds: 5 })
+  })
+
   it.each([
     ['malformed JSON', '{bad json'],
     ['wrong version', JSON.stringify({ version: 2, userId: 'user-1', ...draft })],
@@ -85,7 +96,7 @@ describe('video seam draft storage', () => {
     ['invalid upload metadata', JSON.stringify({ version: 1, userId: 'user-1', ...draft, input1: { ...input1, size: -1 } })],
     ['invalid trim', JSON.stringify({ version: 1, userId: 'user-1', ...draft, input2TrimStartFrames: 0.5 })],
     ['invalid seam mode', JSON.stringify({ version: 1, userId: 'user-1', ...draft, seamMode: 'crossfade' })],
-    ['invalid bridge duration', JSON.stringify({ version: 1, userId: 'user-1', ...draft, bridgeDurationSeconds: 5 })],
+    ['invalid bridge duration', JSON.stringify({ version: 1, userId: 'user-1', ...draft, bridgeDurationSeconds: 7 })],
     ['blank task id', JSON.stringify({ version: 1, userId: 'user-1', ...draft, taskId: ' ' })],
   ])('rejects %s without hydrating partial state', (_case, stored) => {
     installStorage([[buildVideoSeamDraftStorageKey('user-1'), stored]])

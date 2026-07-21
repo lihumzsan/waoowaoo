@@ -13,7 +13,11 @@ import {
   isOwnedVideoToolInputKey,
   isValidVideoTrimFrames,
 } from '@/lib/video-tools/seam-concat'
-import { parseVideoSeamBridgeOptions, type VideoSeamBridgeOptions } from '@/lib/video-tools/seam-bridge'
+import {
+  DEFAULT_VIDEO_SEAM_BRIDGE_MOTION_PROMPT,
+  parseVideoSeamBridgeOptions,
+  type VideoSeamBridgeOptions,
+} from '@/lib/video-tools/seam-bridge'
 import {
   composeVideoSeamOutput,
   createVideoSeamWorkspace,
@@ -43,8 +47,6 @@ type RemoteVideoOutput = {
   mimeType: string
   contentLength?: number
 }
-
-const DEFAULT_AI_BRIDGE_PROMPT = 'Create one continuous cinematic transition that evolves across all four supplied anchors. Follow the visible progression from the first source-motion anchor through both retained endpoints and into the final source-motion anchor. Begin motion immediately, maintain perceptible camera, subject, and environment evolution throughout, and preserve the exact supplied anchor compositions at their assigned moments. No cut, no dissolve, no fade, no overlay, no freeze frame, no static hold.'
 
 function readTrimFrames(value: unknown, defaultValue: number): number {
   const trimFrames = value === undefined ? defaultValue : value
@@ -318,7 +320,7 @@ async function buildAiBridgeResult({
     })
     const generated = await runComfyUiVideoSeamMotionBridgeWorkflow({
       baseUrl,
-      prompt: payload.bridge.prompt || DEFAULT_AI_BRIDGE_PROMPT,
+      prompt: payload.bridge.prompt || DEFAULT_VIDEO_SEAM_BRIDGE_MOTION_PROMPT,
       anchorImageUrls: anchors,
       generatedAnchorIndices: plan.generatedAnchors,
       width: plan.generationCanvas.width,

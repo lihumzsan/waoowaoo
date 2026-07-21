@@ -137,7 +137,7 @@ describe('first/last-frame prompt entry', () => {
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
     )
 
-    for (const duration of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
+    for (const duration of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
       expect(resolveFirstLastFrameDurationSelection('duration', String(duration), { fps: 24 })).toEqual({
         binding: {
           mode: 'manual',

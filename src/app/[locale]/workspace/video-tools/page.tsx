@@ -10,7 +10,9 @@ import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { useRouter } from '@/i18n/navigation'
 import {
   DEFAULT_VIDEO_SEAM_BRIDGE_DURATION,
+  DEFAULT_VIDEO_SEAM_BRIDGE_MOTION_PROMPT,
   VIDEO_SEAM_BRIDGE_DURATIONS,
+  resolveVideoSeamBridgeMotionPrompt,
   type VideoSeamBridgeDurationSeconds,
 } from '@/lib/video-tools/seam-bridge'
 import FreeVoiceToolCard from './FreeVoiceToolCard'
@@ -56,7 +58,7 @@ export default function VideoToolsPage() {
   const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
   const [seamMode, setSeamMode] = useState<'direct' | 'ai_bridge'>('direct')
   const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<VideoSeamBridgeDurationSeconds>(DEFAULT_VIDEO_SEAM_BRIDGE_DURATION)
-  const [bridgePrompt, setBridgePrompt] = useState('')
+  const [bridgePrompt, setBridgePrompt] = useState(DEFAULT_VIDEO_SEAM_BRIDGE_MOTION_PROMPT)
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})
   const [currentTask, setCurrentTask] = useState<VideoToolTask | null>(null)
@@ -256,7 +258,7 @@ export default function VideoToolsPage() {
             ...(seamMode === 'ai_bridge' ? {
               bridge: {
                 durationSeconds: bridgeDurationSeconds,
-                ...(bridgePrompt.trim() ? { prompt: bridgePrompt.trim() } : {}),
+                prompt: resolveVideoSeamBridgeMotionPrompt(bridgePrompt),
               },
             } : {}),
           }),

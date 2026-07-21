@@ -68,7 +68,7 @@ describe('video tools page', () => {
     const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
 
     expect(source).toContain("useState<'direct' | 'ai_bridge'>('direct')")
-    expect(source).toContain('useState<4 | 6 | 8>(4)')
+    expect(source).toContain('useState<VideoSeamBridgeDurationSeconds>(DEFAULT_VIDEO_SEAM_BRIDGE_DURATION)')
     expect(source).toContain('resolveVideoSeamDiagnostics(currentTask?.result || null)')
     expect(source).toContain('<VideoSeamDiagnostics diagnostics={diagnostics}')
   })

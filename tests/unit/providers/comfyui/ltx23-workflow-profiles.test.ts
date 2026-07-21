@@ -69,13 +69,13 @@ describe('ltx23 workflow profiles', () => {
       imageSlotPolicy: 'first_last',
       maxDurationSeconds: 15,
       defaultDurationSeconds: 10,
-      durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      durationOptions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
       fps: 24,
       selectableInPanel: true,
     })
   })
 
-  it.each([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])(
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])(
     'accepts %s seconds for Goon first-last-frame normalization',
     (duration) => {
       expect(normalizeLtx23GoonDurationSeconds(duration)).toBe(duration)
@@ -83,7 +83,7 @@ describe('ltx23 workflow profiles', () => {
   )
 
   it.each([
-    [3, 10],
+    [0, 10],
     [15.5, 10],
     [16, 10],
     ['8', 10],
@@ -93,6 +93,7 @@ describe('ltx23 workflow profiles', () => {
   })
 
   it.each([
+    [1, 25],
     [4, 97],
     [8, 193],
     [10, 241],

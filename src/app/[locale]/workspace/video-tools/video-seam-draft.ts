@@ -1,4 +1,8 @@
 import { isValidVideoTrimFrames } from '@/lib/video-tools/trim-frames'
+import {
+  isVideoSeamBridgeDuration,
+  type VideoSeamBridgeDurationSeconds,
+} from '@/lib/video-tools/seam-bridge'
 import type { UploadedVideo, VideoToolTask } from './video-tools-state'
 
 export type VideoSeamDraft = {
@@ -7,7 +11,7 @@ export type VideoSeamDraft = {
   input1TrimEndFrames: number | ''
   input2TrimStartFrames: number | ''
   seamMode: 'direct' | 'ai_bridge'
-  bridgeDurationSeconds: 4 | 6 | 8
+  bridgeDurationSeconds: VideoSeamBridgeDurationSeconds
   bridgePrompt: string
   taskId: string | null
 }
@@ -86,9 +90,7 @@ export function readVideoSeamDraft(userId: string): VideoSeamDraft | null {
     if (!isStoredTrimFrames(value.input1TrimEndFrames)
       || !isStoredTrimFrames(value.input2TrimStartFrames)
       || (value.seamMode !== 'direct' && value.seamMode !== 'ai_bridge')
-      || (value.bridgeDurationSeconds !== 4
-        && value.bridgeDurationSeconds !== 6
-        && value.bridgeDurationSeconds !== 8)
+      || !isVideoSeamBridgeDuration(value.bridgeDurationSeconds)
       || typeof value.bridgePrompt !== 'string'
       || (value.taskId !== null && !taskId)) return null
 

@@ -12,6 +12,7 @@ import {
   type VideoSeamBridgePlan,
   type VideoSeamGenerationCanvas,
 } from '@/lib/video-tools/seam-bridge-plan'
+import { isVideoSeamBridgeDuration } from '@/lib/video-tools/seam-bridge'
 import { probeVideoSeamFile, verifyVideoSeamOutput } from '@/lib/video/video-seam-media'
 
 const MINIMUM_ANCHOR_SSIM = 0.99
@@ -193,7 +194,7 @@ function validateTaskResult(parsed: unknown): ValidatedTaskResult {
   const generationCanvas = readGenerationCanvas(result.bridge.generationCanvas)
   const audioPolicy = readAudioPolicy(result.bridge.audioPolicy)
   const duration = result.bridge.requestedDurationSeconds
-  if ((duration !== 4 && duration !== 6 && duration !== 8)
+  if (!isVideoSeamBridgeDuration(duration)
     || !isPositiveInteger(result.bridge.handleFrames)
     || !isPositiveInteger(result.bridge.generatedFrameCount)
     || !isPositiveInteger(result.bridge.centralFrameCount)
