@@ -6,6 +6,15 @@
     "title": "Seamless Video Concatenation",
     "description": "Upload two videos in order, choose the tail and head trim counts, and join both streams at the frame rate of Video 1."
   },
+  "bridge": {
+    "label": "Transition method",
+    "direct": "Direct join",
+    "ai": "Natural AI bridge",
+    "description": "Extracts the actual retained endpoint frames, generates only the motion between them with LTX 2.3, then locks the final output back to the original endpoints. This is not a fade or overlay.",
+    "duration": "Bridge duration",
+    "prompt": "Motion instruction (optional)",
+    "promptPlaceholder": "For example: the camera continues a slow push-in while the subject turns naturally"
+  },
   "workflowNote": "Output is fixed to NVENC H.264 MP4, yuv420p, and 10 Mbit/s. No workflow tuning is required.",
   "input1": {
     "title": "Video 1",

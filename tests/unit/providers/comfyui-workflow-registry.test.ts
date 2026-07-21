@@ -34,6 +34,8 @@ describe('comfyui workflow registry', () => {
   const BERNINI_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v'
   const BERNINI_AUDIO_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
   const VIDEO_SEAM_CONCAT_WORKFLOW_KEY = 'basevideo/tools/video-seam-concat-nvenc'
+  const VIDEO_SEAM_ENDPOINT_WORKFLOW_KEY = 'basevideo/tools/video-seam-endpoint'
+  const VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_KEY = 'basevideo/tools/video-seam-bridge-compose-nvenc'
 
   it('injects both video files and exact frame trims into the fixed seam-concat workflow', () => {
     expect(getComfyUiWorkflowVideoInputCount(VIDEO_SEAM_CONCAT_WORKFLOW_KEY)).toBe(2)
@@ -161,6 +163,45 @@ describe('comfyui workflow registry', () => {
         megabit: true,
       },
     })
+  })
+
+  it('extracts the retained end or retained start frame without decoding outside the requested cut', () => {
+    expect(getComfyUiWorkflowVideoInputCount(VIDEO_SEAM_ENDPOINT_WORKFLOW_KEY)).toBe(1)
+
+    const endFrame = resolveComfyUiWorkflow(VIDEO_SEAM_ENDPOINT_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4'],
+      videoEndpoint: { position: 'end', trimFrames: 5 },
+    })
+    expect(endFrame['1']?.inputs.file).toBe('first.mp4')
+    expect(endFrame['4']?.inputs.expression).toBe('(a - b - 1) / (a > b)')
+    expect(endFrame['4']?.inputs['values.b']).toBe(5)
+    expect(endFrame['5']?.inputs.batch_index).toEqual(['4', 1])
+
+    const startFrame = resolveComfyUiWorkflow(VIDEO_SEAM_ENDPOINT_WORKFLOW_KEY, {
+      videoFilenames: ['second.mp4'],
+      videoEndpoint: { position: 'start', trimFrames: 3 },
+    })
+    expect(startFrame['1']?.inputs.file).toBe('second.mp4')
+    expect(startFrame['4']?.inputs.expression).toBe('a * 0 + b')
+    expect(startFrame['4']?.inputs['values.b']).toBe(3)
+    expect(startFrame['5']?.inputs.batch_index).toEqual(['4', 1])
+  })
+
+  it('keeps source endpoints and only uses the generated bridge interior frames', () => {
+    const workflow = resolveComfyUiWorkflow(VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_KEY, {
+      videoFilenames: ['first.mp4', 'bridge.mp4', 'second.mp4'],
+      videoTrimFrames: [5, 3],
+    })
+
+    expect(workflow['1']?.inputs.file).toBe('first.mp4')
+    expect(workflow['2']?.inputs.file).toBe('bridge.mp4')
+    expect(workflow['3']?.inputs.file).toBe('second.mp4')
+    expect(workflow['10']?.inputs['values.b']).toBe(5)
+    expect(workflow['12']?.inputs['values.b']).toBe(3)
+    expect(workflow['15']?.inputs.batch_index).toBe(3)
+    expect(workflow['19']?.inputs['values.a']).toBe(3)
+    expect(workflow['13']?.inputs.batch_index).toBe(0)
+    expect(workflow['14']?.inputs.batch_index).toBe(1)
   })
 
   it.each([

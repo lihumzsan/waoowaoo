@@ -6,6 +6,15 @@
     "title": "视频无缝拼接",
     "description": "依次上传两个视频，设置 Video 1 尾部和 Video 2 头部需要去掉的帧数，再按 Video 1 的帧率无缝拼接画面和声音。"
   },
+  "bridge": {
+    "label": "转接方式",
+    "direct": "直接拼接",
+    "ai": "自然 AI 桥接",
+    "description": "先提取裁剪后真正保留的首尾帧，用 LTX 2.3 只生成两帧之间的连续运动，最终输出再锁回原视频端点；不是淡化，也不是遮挡。",
+    "duration": "桥接时长",
+    "prompt": "运动说明（可选）",
+    "promptPlaceholder": "例如：镜头继续缓慢推进，人物自然转身"
+  },
   "workflowNote": "输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s，无需调整工作流参数。",
   "input1": {
     "title": "Video 1",

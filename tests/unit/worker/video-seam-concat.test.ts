@@ -3,12 +3,20 @@ import type { Job } from 'bullmq'
 import type { TaskJobData } from '@/lib/task/types'
 import { handleVideoSeamConcatTask } from '@/lib/workers/handlers/video-seam-concat'
 import { getProviderConfig } from '@/lib/api-config'
-import { runComfyUiVideoSeamConcatWorkflow } from '@/lib/providers/comfyui/client'
+import {
+  runComfyUiVideoSeamBridgeComposeWorkflow,
+  runComfyUiVideoSeamConcatWorkflow,
+  runComfyUiVideoSeamEndpointWorkflow,
+  runComfyUiVideoWorkflow,
+} from '@/lib/providers/comfyui/client'
 import { getSignedObjectUrl, getSignedUrl, uploadObjectStream } from '@/lib/storage'
 
 vi.mock('@/lib/api-config', () => ({ getProviderConfig: vi.fn() }))
 vi.mock('@/lib/providers/comfyui/client', () => ({
+  runComfyUiVideoSeamBridgeComposeWorkflow: vi.fn(),
   runComfyUiVideoSeamConcatWorkflow: vi.fn(),
+  runComfyUiVideoSeamEndpointWorkflow: vi.fn(),
+  runComfyUiVideoWorkflow: vi.fn(),
 }))
 vi.mock('@/lib/storage', () => ({
   getSignedObjectUrl: vi.fn(),
@@ -19,6 +27,9 @@ vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => u
 
 const getProviderConfigMock = vi.mocked(getProviderConfig)
 const runWorkflowMock = vi.mocked(runComfyUiVideoSeamConcatWorkflow)
+const runEndpointWorkflowMock = vi.mocked(runComfyUiVideoSeamEndpointWorkflow)
+const runVideoWorkflowMock = vi.mocked(runComfyUiVideoWorkflow)
+const runBridgeComposeWorkflowMock = vi.mocked(runComfyUiVideoSeamBridgeComposeWorkflow)
 const getSignedObjectUrlMock = vi.mocked(getSignedObjectUrl)
 const getSignedUrlMock = vi.mocked(getSignedUrl)
 const uploadObjectStreamMock = vi.mocked(uploadObjectStream)
@@ -91,6 +102,17 @@ describe('video seam concat worker handler', () => {
       mimeType: 'video/mp4',
       contentLength: 3,
     })
+    runEndpointWorkflowMock.mockResolvedValue({ imageBase64: 'AQID', mimeType: 'image/png' })
+    runVideoWorkflowMock.mockResolvedValue({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
+      mimeType: 'video/mp4',
+      contentLength: 3,
+    })
+    runBridgeComposeWorkflowMock.mockResolvedValue({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
+      mimeType: 'video/mp4',
+      contentLength: 3,
+    })
     persistedBytes.length = 0
     responseBodyCancelCount = 0
     stubOutputResponse({ 'Content-Length': '3', 'Content-Type': 'video/mp4' })
@@ -140,6 +162,45 @@ describe('video seam concat worker handler', () => {
       input2Name: 'two.mp4',
       input2TrimStartFrames: 3,
     }))
+  })
+
+  it('builds an endpoint-locked LTX bridge instead of inserting a hard cut', async () => {
+    await handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 6, prompt: 'camera continues a slow push-in' },
+    }))
+
+    expect(runEndpointWorkflowMock).toHaveBeenNthCalledWith(1, {
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrl: 'https://storage.test/one.mp4',
+      position: 'end',
+      trimFrames: 0,
+    })
+    expect(runEndpointWorkflowMock).toHaveBeenNthCalledWith(2, {
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrl: 'https://storage.test/two.mp4',
+      position: 'start',
+      trimFrames: 1,
+    })
+    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      firstFrameImageUrl: 'data:image/png;base64,AQID',
+      lastFrameImageUrl: 'data:image/png;base64,AQID',
+      durationSeconds: 6,
+      fps: 24,
+      prompt: 'camera continues a slow push-in',
+    }))
+    expect(runBridgeComposeWorkflowMock).toHaveBeenCalledWith({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrls: [
+        'https://storage.test/one.mp4',
+        'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
+        'https://storage.test/two.mp4',
+      ],
+      trimEndFrames: 0,
+      trimStartFrames: 1,
+    })
+    expect(runWorkflowMock).not.toHaveBeenCalled()
   })
 
   it.each([

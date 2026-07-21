@@ -6,6 +6,7 @@ import {
   collectMediaRefsFromOutputs,
   resolveComfyUiPromptQueuePhase,
   runComfyUiImageWorkflow,
+  runComfyUiVideoSeamEndpointWorkflow,
   runComfyUiVideoSeamConcatWorkflow,
   runComfyUiVideoWorkflow,
   runComfyUiWorkflow,
@@ -1177,6 +1178,63 @@ describe('comfyui client media refs', () => {
       trimStartFrames,
     })).rejects.toThrow(error)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('extracts the exact retained endpoint frame for bridge generation', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url === 'https://assets.test/first.mp4') {
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+      if (url.endsWith('/upload/image')) {
+        return new Response(JSON.stringify({ name: 'source-video.mp4' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'endpoint-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/history/endpoint-1')) {
+        return new Response(JSON.stringify({
+          'endpoint-1': {
+            outputs: {
+              '6': { images: [{ filename: 'endpoint.png', subfolder: '', type: 'output' }] },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/view?filename=endpoint.png')) {
+        return new Response(new Uint8Array([4, 5, 6]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      }
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoSeamEndpointWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      videoUrl: 'https://assets.test/first.mp4',
+      position: 'end',
+      trimFrames: 5,
+    })
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    await expect(resultPromise).resolves.toEqual({
+      imageBase64: Buffer.from([4, 5, 6]).toString('base64'),
+      mimeType: 'image/png',
+    })
   })
 
   it('dumps resolved ComfyUI video prompts to stdout when prompt dump is enabled', async () => {

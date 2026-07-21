@@ -1,0 +1,43 @@
+{
+  "1": {
+    "class_type": "LoadVideo",
+    "inputs": { "file": "source-video.mp4" },
+    "_meta": { "title": "Load Source Video" }
+  },
+  "2": {
+    "class_type": "GetVideoComponents",
+    "inputs": { "video": ["1", 0] },
+    "_meta": { "title": "Video Components" }
+  },
+  "3": {
+    "class_type": "GetImageSize",
+    "inputs": { "image": ["2", 0] },
+    "_meta": { "title": "Frame Count" }
+  },
+  "4": {
+    "class_type": "ComfyMathExpression",
+    "inputs": {
+      "expression": "(a - b - 1) / (a > b)",
+      "values.a": ["3", 2],
+      "values.b": 0
+    },
+    "_meta": { "title": "Retained Endpoint Index" }
+  },
+  "5": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": ["2", 0],
+      "batch_index": ["4", 1],
+      "length": 1
+    },
+    "_meta": { "title": "Exact Retained Endpoint Frame" }
+  },
+  "6": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["5", 0],
+      "filename_prefix": "video-seam-endpoint"
+    },
+    "_meta": { "title": "Save Endpoint Frame" }
+  }
+}

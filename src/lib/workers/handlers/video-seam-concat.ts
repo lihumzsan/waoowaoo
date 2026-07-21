@@ -1,6 +1,12 @@
 import type { Job } from 'bullmq'
 import { getProviderConfig } from '@/lib/api-config'
-import { runComfyUiVideoSeamConcatWorkflow } from '@/lib/providers/comfyui/client'
+import {
+  runComfyUiVideoSeamBridgeComposeWorkflow,
+  runComfyUiVideoSeamConcatWorkflow,
+  runComfyUiVideoSeamEndpointWorkflow,
+  runComfyUiVideoWorkflow,
+} from '@/lib/providers/comfyui/client'
+import { COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { getSignedObjectUrl, getSignedUrl, uploadObjectStream } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import {
@@ -9,6 +15,7 @@ import {
   isOwnedVideoToolInputKey,
   isValidVideoTrimFrames,
 } from '@/lib/video-tools/seam-concat'
+import { parseVideoSeamBridgeOptions, type VideoSeamBridgeOptions } from '@/lib/video-tools/seam-bridge'
 import { reportTaskProgress } from '../shared'
 
 type SeamConcatPayload = {
@@ -18,7 +25,11 @@ type SeamConcatPayload = {
   input2Key: string
   input2Name: string
   input2TrimStartFrames: number
+  mode: 'direct' | 'ai_bridge'
+  bridge?: VideoSeamBridgeOptions
 }
+
+const DEFAULT_AI_BRIDGE_PROMPT = 'Continuous natural camera motion and subject movement between the exact first and last frame. Preserve subject identity, setting, lighting, lens, and direction of motion. No cut, no dissolve, no fade, no overlay.'
 
 function readTrimFrames(value: unknown, defaultValue: number): number {
   const trimFrames = value === undefined ? defaultValue : value
@@ -36,6 +47,11 @@ function readPayload(job: Job<TaskJobData>): SeamConcatPayload {
   const input2Key = typeof payload?.input2Key === 'string' ? payload.input2Key.trim() : ''
   const input2Name = typeof payload?.input2Name === 'string' ? payload.input2Name.trim() : ''
   const input2TrimStartFrames = readTrimFrames(payload?.input2TrimStartFrames, 1)
+  const mode = payload?.mode === undefined ? 'direct' : payload.mode
+  if (mode !== 'direct' && mode !== 'ai_bridge') {
+    throw new Error('VIDEO_SEAM_CONCAT_PAYLOAD_INVALID')
+  }
+  const bridge = mode === 'ai_bridge' ? parseVideoSeamBridgeOptions(payload?.bridge) : undefined
 
   if (!input1Key || !input1Name || !input2Key || !input2Name) {
     throw new Error('VIDEO_SEAM_CONCAT_PAYLOAD_INVALID')
@@ -54,7 +70,14 @@ function readPayload(job: Job<TaskJobData>): SeamConcatPayload {
     input2Key,
     input2Name,
     input2TrimStartFrames,
+    mode,
+    ...(bridge ? { bridge } : {}),
   }
+}
+
+function asImageDataUrl(imageBase64: string, mimeType: string): string {
+  const safeMimeType = mimeType.startsWith('image/') ? mimeType : 'image/png'
+  return `data:${safeMimeType};base64,${imageBase64}`
 }
 
 function resolveOutputContentLength(response: Response, expectedLength: number | undefined): number {
@@ -96,13 +119,15 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
     stage: 'comfyui_processing',
     stageLabel: 'videoTools.status.processing',
   })
-  const output = await runComfyUiVideoSeamConcatWorkflow({
-    baseUrl,
-    workflowKey: VIDEO_SEAM_CONCAT_WORKFLOW_KEY,
-    videoUrls: [input1Url, input2Url],
-    trimEndFrames: payload.input1TrimEndFrames,
-    trimStartFrames: payload.input2TrimStartFrames,
-  })
+  const output = payload.mode === 'ai_bridge'
+    ? await buildAiBridgeOutput({ baseUrl, input1Url, input2Url, payload })
+    : await runComfyUiVideoSeamConcatWorkflow({
+      baseUrl,
+      workflowKey: VIDEO_SEAM_CONCAT_WORKFLOW_KEY,
+      videoUrls: [input1Url, input2Url],
+      trimEndFrames: payload.input1TrimEndFrames,
+      trimStartFrames: payload.input2TrimStartFrames,
+    })
 
   await reportTaskProgress(job, 90, {
     stage: 'persist_output',
@@ -149,4 +174,50 @@ export async function handleVideoSeamConcatTask(job: Job<TaskJobData>) {
     input2Name: payload.input2Name,
     input2TrimStartFrames: payload.input2TrimStartFrames,
   }
+}
+
+async function buildAiBridgeOutput({
+  baseUrl,
+  input1Url,
+  input2Url,
+  payload,
+}: {
+  baseUrl: string
+  input1Url: string
+  input2Url: string
+  payload: SeamConcatPayload
+}) {
+  if (!payload.bridge) throw new Error('VIDEO_SEAM_BRIDGE_REQUIRED')
+
+  const [beforeEndpoint, afterEndpoint] = await Promise.all([
+    runComfyUiVideoSeamEndpointWorkflow({
+      baseUrl,
+      videoUrl: input1Url,
+      position: 'end',
+      trimFrames: payload.input1TrimEndFrames,
+    }),
+    runComfyUiVideoSeamEndpointWorkflow({
+      baseUrl,
+      videoUrl: input2Url,
+      position: 'start',
+      trimFrames: payload.input2TrimStartFrames,
+    }),
+  ])
+
+  const bridge = await runComfyUiVideoWorkflow({
+    baseUrl,
+    workflowKey: COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID,
+    prompt: payload.bridge.prompt || DEFAULT_AI_BRIDGE_PROMPT,
+    firstFrameImageUrl: asImageDataUrl(beforeEndpoint.imageBase64, beforeEndpoint.mimeType),
+    lastFrameImageUrl: asImageDataUrl(afterEndpoint.imageBase64, afterEndpoint.mimeType),
+    durationSeconds: payload.bridge.durationSeconds,
+    fps: 24,
+  })
+
+  return await runComfyUiVideoSeamBridgeComposeWorkflow({
+    baseUrl,
+    videoUrls: [input1Url, bridge.videoUrl, input2Url],
+    trimEndFrames: payload.input1TrimEndFrames,
+    trimStartFrames: payload.input2TrimStartFrames,
+  })
 }

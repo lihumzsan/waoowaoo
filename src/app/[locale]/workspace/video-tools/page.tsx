@@ -33,6 +33,9 @@ export default function VideoToolsPage() {
   const [input2, setInput2] = useState<UploadedVideo | null>(null)
   const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
   const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
+  const [seamMode, setSeamMode] = useState<'direct' | 'ai_bridge'>('direct')
+  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<4 | 6 | 8>(6)
+  const [bridgePrompt, setBridgePrompt] = useState('')
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})
   const [currentTask, setCurrentTask] = useState<VideoToolTask | null>(null)
@@ -127,6 +130,13 @@ export default function VideoToolsPage() {
             name: input2.name,
             trimStartFrames: input2TrimStartFrames,
           },
+          mode: seamMode,
+          ...(seamMode === 'ai_bridge' ? {
+            bridge: {
+              durationSeconds: bridgeDurationSeconds,
+              ...(bridgePrompt.trim() ? { prompt: bridgePrompt.trim() } : {}),
+            },
+          } : {}),
         }),
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
@@ -237,6 +247,47 @@ export default function VideoToolsPage() {
                   onTrimFramesChange={setInput2TrimStartFrames}
                 />
               </div>
+
+              <fieldset className="mt-5 rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-4">
+                <legend className="px-1 text-sm font-semibold text-[var(--glass-text-primary)]">{t('bridge.label')}</legend>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <label className={`cursor-pointer rounded-xl border px-4 py-3 text-sm ${seamMode === 'direct' ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-tone-info-bg)]' : 'border-[var(--glass-stroke-base)]'}`}>
+                    <input className="sr-only" type="radio" name="seamMode" checked={seamMode === 'direct'} onChange={() => setSeamMode('direct')} />
+                    <span className="font-semibold text-[var(--glass-text-primary)]">{t('bridge.direct')}</span>
+                  </label>
+                  <label className={`cursor-pointer rounded-xl border px-4 py-3 text-sm ${seamMode === 'ai_bridge' ? 'border-[var(--glass-tone-info-fg)] bg-[var(--glass-tone-info-bg)]' : 'border-[var(--glass-stroke-base)]'}`}>
+                    <input className="sr-only" type="radio" name="seamMode" checked={seamMode === 'ai_bridge'} onChange={() => setSeamMode('ai_bridge')} />
+                    <span className="font-semibold text-[var(--glass-text-primary)]">{t('bridge.ai')}</span>
+                  </label>
+                </div>
+                {seamMode === 'ai_bridge' ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs leading-5 text-[var(--glass-text-secondary)]">{t('bridge.description')}</p>
+                    <label className="block text-xs font-medium text-[var(--glass-text-secondary)]">
+                      {t('bridge.duration')}
+                      <select
+                        value={bridgeDurationSeconds}
+                        onChange={(event) => setBridgeDurationSeconds(Number(event.target.value) as 4 | 6 | 8)}
+                        className="mt-1 block rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-base)] px-3 py-2 text-sm text-[var(--glass-text-primary)]"
+                      >
+                        <option value={4}>4 s</option>
+                        <option value={6}>6 s</option>
+                        <option value={8}>8 s</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-medium text-[var(--glass-text-secondary)]">
+                      {t('bridge.prompt')}
+                      <textarea
+                        value={bridgePrompt}
+                        onChange={(event) => setBridgePrompt(event.target.value)}
+                        placeholder={t('bridge.promptPlaceholder')}
+                        rows={2}
+                        className="mt-1 block w-full resize-y rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-base)] px-3 py-2 text-sm text-[var(--glass-text-primary)] placeholder:text-[var(--glass-text-tertiary)]"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </fieldset>
 
               <div className="my-6 flex flex-col items-center rounded-3xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-5 py-5 text-center">
                 <p className="mb-4 text-xs leading-5 text-[var(--glass-text-tertiary)]">{t('workflowNote')}</p>
