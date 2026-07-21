@@ -99,6 +99,7 @@ export function WorkspaceAssistantRunReasoningStatus({
   const hasPublicReasoning = useMessage((state) => (
     state.content.some((part) => part.type === 'reasoning')
   ))
+  const messageRunning = useMessage((state) => state.status?.type === 'running')
   const isLatestRunPart = useMessage((state) => {
     const latestRunPart = [...state.content].reverse().find((part) => (
       part.type === 'data'
@@ -115,6 +116,7 @@ export function WorkspaceAssistantRunReasoningStatus({
 
   if (hasPublicReasoning || !isLatestRunPart) return null
   if (data.status !== 'running' && data.status !== 'completed') return null
+  if (data.status === 'running' && !messageRunning) return null
   const running = data.status === 'running'
 
   return (
