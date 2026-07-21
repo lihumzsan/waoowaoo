@@ -43,6 +43,7 @@
     ".next-golden/95a18a0e83af4be7/types/**/*.ts",
     ".next-golden/975f3d4afc894364/types/**/*.ts",
     ".next-golden/9ed7cf498ac44a59/types/**/*.ts",
+    ".next-golden/aeb5f22fb8e04bb9/types/**/*.ts",
     ".next-golden/aefbd2776b76465a/types/**/*.ts",
     ".next-golden/b187bd39f6444b94/types/**/*.ts",
     ".next-golden/bbf47781c2fe405e/types/**/*.ts",
@@ -53,7 +54,7 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-golden/aeb5f22fb8e04bb9/types/**/*.ts"
+    ".next-golden/1ac8d68a1e4a4c41/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
