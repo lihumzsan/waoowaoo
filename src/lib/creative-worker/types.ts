@@ -124,6 +124,33 @@ export type CreativeWorkerEvent =
     trace: CreativeSkillReadTraceEntry
   }
   | {
+    kind: 'reasoning'
+    reasoningId: string
+    text: string
+    status: 'running' | 'completed'
+    truncated: boolean
+  }
+  | {
+    kind: 'tool_called'
+    toolCallId: string
+    toolName: 'read_skill'
+    skillId: CreativeSkillId
+  }
+  | {
+    kind: 'tool_completed'
+    toolCallId: string
+    toolName: 'read_skill'
+    skillId: CreativeSkillId
+    trace: CreativeSkillReadTraceEntry
+  }
+  | {
+    kind: 'tool_failed'
+    toolCallId: string
+    toolName: 'read_skill'
+    skillId: CreativeSkillId
+    code: import('./errors').CreativeWorkerErrorCode
+  }
+  | {
     kind: 'completed'
     outputKind: CreativeWorkOutputKind
   }
@@ -165,6 +192,11 @@ export interface CreativeWorkerRunContext {
     skillContentChars: number
   }
   skillTrace: CreativeSkillReadTraceEntry[]
+  activeToolCall: {
+    toolCallId: string
+    toolName: 'read_skill'
+    skillId: CreativeSkillId
+  } | null
   onEvent?: CreativeWorkerEventListener
 }
 

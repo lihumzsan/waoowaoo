@@ -45,6 +45,7 @@ import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-a
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
+import { WorkspaceAssistantReasoningGroup, WorkspaceAssistantReasoningPart } from './WorkspaceAssistantReasoning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -113,11 +114,9 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
 export function HiddenApprovalRequestDataCard() {
   return null
 }
-
 export function HiddenRuntimeContextDataCard() {
   return null
 }
-
 function toPositiveBillingQuantity(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0
   return value
@@ -724,7 +723,8 @@ export function useWorkspaceAssistantMessagePartComponents({
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
     Text: MarkdownTextPart,
-    Reasoning: HiddenRuntimeContextDataCard,
+    Reasoning: WorkspaceAssistantReasoningPart,
+    ReasoningGroup: WorkspaceAssistantReasoningGroup,
     tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
     data: {
       by_name: {
