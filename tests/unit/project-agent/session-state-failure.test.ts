@@ -6,6 +6,7 @@ import {
   getProjectAgentSessionState,
   interruptionsMock,
   it,
+  mockSessionTaskRows,
   prismaMock,
   runsMock,
   vi,
@@ -17,7 +18,7 @@ import {
 describe('project agent session-state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.task.findMany.mockResolvedValue([
+    mockSessionTaskRows([
       {
         id: 'task-1',
         operationId: 'generate_edit_script_assets',

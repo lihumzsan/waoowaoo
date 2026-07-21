@@ -20,7 +20,10 @@ import type {
 import type { AiLlmExecutionResult, AiLlmMessage } from '@/lib/ai-registry/types'
 import type { ModelMessage } from 'ai'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
-import { resolveRegisteredLlmProtocol } from '@/lib/ai-registry/llm-protocol'
+import {
+  resolveRegisteredLlmProtocol,
+  resolveRegisteredPublicReasoningMode,
+} from '@/lib/ai-registry/llm-protocol'
 import type { VideoTokenPricingContract } from '@/lib/ai-providers/shared/video-token-pricing'
 
 const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
@@ -81,6 +84,7 @@ export function createRegisteredLanguageModel(input: AiProviderLanguageModelRequ
   const context: AiProviderLanguageModelContext = {
     ...input,
     protocol: resolveRegisteredLlmProtocol(input.selection.modelKey),
+    publicReasoningMode: resolveRegisteredPublicReasoningMode(input.selection.modelKey),
   }
   return languageModelProvider.create(context)
 }

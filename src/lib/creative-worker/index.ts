@@ -34,6 +34,11 @@ export {
   summarizeCreativeWorkOutput,
 } from './task-contract'
 export {
+  CREATIVE_WORK_REASONING_MAX_CHARS,
+  creativeSkillReadTraceEntrySchema,
+  creativeWorkTraceEventSchema,
+} from './trace-contract'
+export {
   creativeWorkRequestSchema,
   defaultCreativeWorkerBudgets,
 } from './types'
@@ -68,7 +73,9 @@ export type {
   CreativeWorkDelegationItem,
   CreativeWorkChapterBatchInput,
   CreativeWorkTaskRequest,
+  CreativeWorkTaskEvent,
   CreativeWorkTaskLifecycleProjection,
   CreativeWorkTaskPayload,
   CreativeWorkTaskResult,
 } from './task-contract'
+export type { CreativeWorkTraceEvent } from './trace-contract'

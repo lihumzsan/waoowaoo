@@ -42,12 +42,27 @@
     "title": "执行计划",
     "stepProgress": "Step {current} / {total}"
   },
+  "reasoning": {
+    "running": "思考中",
+    "completed": "思考过程",
+    "completedWithoutDetails": "思考完成",
+    "preparing": "正在分析请求并准备回复…",
+    "unavailable": "这次运行已完成，但模型没有提供可展示的思考摘要。"
+  },
   "subagents": {
+    "label": "Subagent",
     "tabsLabel": "Subagent",
     "primary": "Primary",
     "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
     "close": "关闭 {title}",
     "result": "创作结果",
+    "fullResult": "完整结构化结果",
+    "fullResultLoading": "正在读取完整结果…",
+    "fullResultError": "无法读取完整结果。",
+    "execution": {
+      "running": "思考与工具调用",
+      "completed": "思考与工具调用记录"
+    },
     "status": {
       "running": "进行中",
       "completed": "已完成",
@@ -67,10 +82,17 @@
     "events": {
       "started": "已接收委派目标",
       "skillRead": "读取 {skill}",
-      "composing": "正在整理结构化结果",
-      "completed": "已完成",
-      "failed": "执行失败",
-      "cancelled": "已取消"
+      "reasoningRunning": "正在推理",
+      "reasoningCompleted": "完成一轮推理",
+      "reasoningTruncated": "这段可展示推理已达到记录上限。",
+      "toolCalled": "调用 read_skill：{skill}",
+      "toolCompleted": "read_skill 完成：{skill}",
+      "toolFailed": "read_skill 失败：{skill}",
+      "toolName": "工具",
+      "toolResult": "结果",
+      "toolUri": "资源",
+      "skillReadResult": "版本 {version} · 已读取 {chars} 字符",
+      "composing": "正在整理结构化结果"
     }
   },
   "attachments": {

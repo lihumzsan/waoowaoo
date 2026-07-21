@@ -43,7 +43,10 @@ import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { normalizeAiOptions } from '@/lib/ai-exec/normalize'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 import { listApiConfigCatalogModels } from '@/lib/ai-registry/api-config-catalog'
-import { resolveRegisteredLlmProtocol } from '@/lib/ai-registry/llm-protocol'
+import {
+  resolveRegisteredLlmProtocol,
+  resolveRegisteredPublicReasoningMode,
+} from '@/lib/ai-registry/llm-protocol'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 
 const ORIGINAL_REASONING_ENV = {
@@ -147,6 +150,16 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       expect(expected).toBeTruthy()
       expect(resolveRegisteredLlmProtocol(`${model.provider}::${model.modelId}`)).toBe(expected)
     }
+  })
+
+  it('derives public reasoning behavior from the production model registry', () => {
+    expect(resolveRegisteredPublicReasoningMode(
+      `openrouter::${OPENROUTER_GPT_5_6_TERRA_MODEL_ID}`,
+    )).toBe('summary_auto')
+    expect(resolveRegisteredPublicReasoningMode('openrouter::anthropic/claude-sonnet-4.5'))
+      .toBe('native')
+    expect(resolveRegisteredPublicReasoningMode('google::gemini-3.5-flash'))
+      .toBe('native')
   })
 
   describe('provider-owned AI SDK wire options remain exact', () => {
@@ -564,7 +577,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       })
       await generateText({ model: textModel, prompt: 'hello', maxRetries: 0 })
       const textBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      expect(textBody.reasoning).toEqual({ effort: 'max' })
+      expect(textBody.reasoning).toEqual({ effort: 'max', summary: 'auto' })
 
       const visionModel = createAiLanguageModel({
         providerKey: 'openrouter',
@@ -587,7 +600,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         maxRetries: 0,
       })
       const visionBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      expect(visionBody.reasoning).toEqual({ effort: 'max' })
+      expect(visionBody.reasoning).toEqual({ effort: 'max', summary: 'auto' })
     })
 
     it('injects max into the internal Assistant language-model request', async () => {
@@ -613,7 +626,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       await generateText({ model, prompt: 'hello', maxRetries: 0 })
 
       const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
-      expect(body.reasoning).toEqual({ effort: 'max' })
+      expect(body.reasoning).toEqual({ effort: 'max', summary: 'auto' })
     })
   })
 

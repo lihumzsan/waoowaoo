@@ -12,6 +12,7 @@ import {
   type AgentInputItem,
   type FunctionToolResult,
   type RunToolApprovalItem,
+  type RunStreamEvent,
   type Tool,
 } from '@openai/agents'
 import type { Prisma } from '@prisma/client'
@@ -53,6 +54,7 @@ import {
   resolveProjectAgentLanguageModel,
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
+import { createAgentsPublicReasoningNormalizer } from '@/lib/ai-exec/agents-public-reasoning'
 import { readProjectAgentPlan, type ProjectAgentPlanSnapshot } from './plan'
 import {
   type ProjectAgentWaitFollowUp,
@@ -98,6 +100,7 @@ import {
 } from './stop-conditions'
 import {
   createDataChunk,
+  createProjectAgentSideChannel,
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
@@ -1143,8 +1146,7 @@ export async function createProjectAgentChatResponse(input: {
     }
   }
   const stopController = createProjectAgentStopController()
-  const sideChannelChunks: ProjectAgentUiChunk[] = []
-  const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
+  const sideChannel = createProjectAgentSideChannel()
   const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
     createProjectAgentOperationTool({
       request: input.request,
@@ -1160,7 +1162,10 @@ export async function createProjectAgentChatResponse(input: {
       operationBatch,
       writer: {
         write: (chunk) => {
-          sideChannelChunks.push(chunk as unknown as ProjectAgentUiChunk)
+          sideChannel.write({
+            kind: 'chunk',
+            chunk: chunk as unknown as ProjectAgentUiChunk,
+          })
         },
         merge: () => {
           throw new Error('PROJECT_AGENT_TOOL_WRITER_MERGE_UNSUPPORTED')
@@ -1273,6 +1278,60 @@ export async function createProjectAgentChatResponse(input: {
       toolExecution: { maxFunctionToolConcurrency: 1 },
       signal: runAbortController.signal,
     })
+    const publicReasoning = createAgentsPublicReasoningNormalizer()
+    const writePublicReasoning = (
+      event: ReturnType<typeof publicReasoning.accept>[number],
+    ): void => {
+      if (event.kind === 'start') {
+        sideChannel.write({
+          kind: 'public_reasoning',
+          phase: 'start',
+          reasoningId: event.reasoningId,
+          chunk: {
+            type: 'reasoning-start',
+            id: event.reasoningId,
+          } as ProjectAgentUiChunk,
+        })
+        return
+      }
+      if (event.kind === 'delta') {
+        sideChannel.write({
+          kind: 'public_reasoning',
+          phase: 'delta',
+          reasoningId: event.reasoningId,
+          chunk: {
+            type: 'reasoning-delta',
+            id: event.reasoningId,
+            delta: event.delta,
+          } as ProjectAgentUiChunk,
+        })
+        return
+      }
+      sideChannel.write({
+        kind: 'public_reasoning',
+        phase: 'end',
+        reasoningId: event.reasoningId,
+        completedText: event.text,
+        chunk: {
+          type: 'reasoning-end',
+          id: event.reasoningId,
+        } as ProjectAgentUiChunk,
+      })
+    }
+    const observedRunSource = (async function* (): AsyncGenerator<RunStreamEvent> {
+      try {
+        for await (const event of result) {
+          for (const reasoningEvent of publicReasoning.accept(event)) {
+            writePublicReasoning(reasoningEvent)
+          }
+          yield event
+        }
+      } finally {
+        for (const reasoningEvent of publicReasoning.finish()) {
+          writePublicReasoning(reasoningEvent)
+        }
+      }
+    })()
     let runStatusFinalized = false
     let taskFollowUpSettlement: ProjectAgentContinuationTerminalOutcome | null = null
     let taskFollowUpSettlementCommittedInline = false
@@ -1376,10 +1435,10 @@ export async function createProjectAgentChatResponse(input: {
       }))
     }
     const stream = createProjectAgentUiMessageStream({
-      source: result,
+      source: observedRunSource,
       initialChunks,
       resolveToolName: (toolCallId) => operationIdByToolCallId.get(toolCallId) ?? null,
-      drainChunks: drainSideChannelChunks,
+      sideChannel,
       onChunk: recordAssistantChunk,
       beforeFinish: async () => {
         const chunks: ProjectAgentUiChunk[] = []

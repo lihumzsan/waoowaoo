@@ -1,8 +1,5 @@
 import { z } from 'zod'
-import {
-  CREATIVE_SKILL_IDS,
-  CREATIVE_SKILL_REGISTRY,
-} from '@/lib/creative-skills'
+import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills'
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
@@ -11,6 +8,10 @@ import {
   creativeWorkDelegationRequestSchema,
   creativeWorkRequestSchema,
 } from './types'
+import {
+  creativeSkillReadTraceEntrySchema,
+  creativeWorkTraceEventSchema,
+} from './trace-contract'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay_draft,
@@ -23,20 +24,10 @@ const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.creative_review,
 ])
 
-const creativeSkillTraceEntrySchema = z.object({
-  ordinal: z.number().int().positive(),
-  source: z.enum(['preloaded', 'tool']),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
-  version: z.string().trim().min(1),
-  uri: z.string().trim().min(1),
-  checksum: z.string().trim().min(1),
-  contentChars: z.number().int().nonnegative(),
-}).strict()
-
 export const creativeWorkerResultSchema = z.object({
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
   output: creativeWorkOutputSchema,
-  skillTrace: z.array(creativeSkillTraceEntrySchema),
+  skillTrace: z.array(creativeSkillReadTraceEntrySchema),
   metrics: z.object({
     readCalls: z.number().int().nonnegative(),
     skillContentChars: z.number().int().nonnegative(),
@@ -109,17 +100,7 @@ export const creativeWorkDelegationInputSchema = z.object({
 const creativeWorkTaskProgressEventSchema = z.object({
   sequence: z.number().int().positive(),
   occurredAt: z.string().datetime(),
-  event: z.discriminatedUnion('kind', [
-    z.object({
-      kind: z.literal('started'),
-      outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
-      goal: z.string().trim().min(1),
-    }).strict(),
-    z.object({
-      kind: z.literal('skill_read'),
-      trace: creativeSkillTraceEntrySchema,
-    }).strict(),
-  ]),
+  event: creativeWorkTraceEventSchema,
 }).strict()
 
 export const creativeWorkTaskLifecycleProjectionSchema = z.object({
@@ -204,6 +185,7 @@ export type CreativeWorkDelegationInput = z.infer<typeof creativeWorkDelegationI
 export type CreativeWorkChapterBatchInput = z.infer<typeof creativeWorkChapterBatchInputSchema>
 export type CreativeWorkDelegationItem = z.infer<typeof creativeWorkDelegationItemSchema>
 export type CreativeWorkTaskRequest = z.infer<typeof creativeWorkRequestSchema>
+export type CreativeWorkTaskEvent = z.infer<typeof creativeWorkTraceEventSchema>
 export type CreativeWorkTaskLifecycleProjection = z.infer<typeof creativeWorkTaskLifecycleProjectionSchema>
 export type CreativeWorkTaskPayload = z.infer<typeof creativeWorkTaskPayloadSchema>
 export type CreativeWorkTaskResult = z.infer<typeof creativeWorkTaskResultSchema>

@@ -5,6 +5,11 @@ import {
   CREATIVE_WORK_OUTPUT_KINDS,
   DEFAULT_CREATIVE_WORKER_BUDGETS,
 } from './constants'
+import type {
+  CreativeSkillReadTraceEntry,
+  CreativeWorkTraceEvent,
+} from './trace-contract'
+export type { CreativeSkillReadTraceEntry } from './trace-contract'
 
 export type CreativeWorkOutputKind = (typeof CREATIVE_WORK_OUTPUT_KINDS)[number]
 
@@ -98,30 +103,16 @@ export interface CreativeWorkerBudgets {
 
 export type CreativeWorkerBudgetOverrides = Partial<CreativeWorkerBudgets>
 
-export interface CreativeSkillReadTraceEntry {
-  ordinal: number
-  source: 'preloaded' | 'tool'
-  skillId: CreativeSkillId
-  version: string
-  uri: string
-  checksum: string
-  contentChars: number
-}
-
 export interface CreativeWorkerMetrics {
   readCalls: number
   skillContentChars: number
 }
 
-export type CreativeWorkerEvent =
+export type CreativeWorkerEvent = CreativeWorkTraceEvent
   | {
-    kind: 'started'
-    outputKind: CreativeWorkOutputKind
-    goal: string
-  }
-  | {
-    kind: 'skill_read'
-    trace: CreativeSkillReadTraceEntry
+    kind: 'reasoning_delta'
+    reasoningId: string
+    delta: string
   }
   | {
     kind: 'completed'
@@ -165,6 +156,11 @@ export interface CreativeWorkerRunContext {
     skillContentChars: number
   }
   skillTrace: CreativeSkillReadTraceEntry[]
+  activeToolCall: {
+    toolCallId: string
+    toolName: 'read_skill'
+    skillId: CreativeSkillId
+  } | null
   onEvent?: CreativeWorkerEventListener
 }
 

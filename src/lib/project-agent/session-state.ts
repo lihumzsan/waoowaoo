@@ -435,9 +435,19 @@ async function listCreativeSubagents(params: {
       finishedAt: true,
     },
   })
-  const events = tasks.flatMap((task) => {
+  const parsedTasks = tasks.map((task) => {
     const payload = creativeWorkTaskPayloadSchema.parse(task.payload)
-    return payload.lifecycleProjection.events.map((progressEvent) => (
+    const result = creativeWorkTaskResultSchema.safeParse(task.result)
+    if (task.status === TASK_STATUS.COMPLETED && !result.success) {
+      throw new Error(`PROJECT_AGENT_SUBAGENT_COMPLETED_RESULT_INVALID:${task.id}`)
+    }
+    return { task, payload, result }
+  })
+  const events = parsedTasks.flatMap(({ task, payload, result }) => {
+    const lifecycle = result.success
+      ? result.data.lifecycleProjection
+      : payload.lifecycleProjection
+    return lifecycle.events.map((progressEvent) => (
       parseProjectAgentSubagentEventPartData({
         subagentId: task.id,
         taskId: task.id,
@@ -449,8 +459,7 @@ async function listCreativeSubagents(params: {
       })
     ))
   })
-  return resolveProjectAgentSubagentViews(events, tasks.map((task) => {
-    const result = creativeWorkTaskResultSchema.safeParse(task.result)
+  return resolveProjectAgentSubagentViews(events, parsedTasks.map(({ task, result }) => {
     const status = task.status
     if (
       status !== TASK_STATUS.QUEUED
@@ -459,9 +468,6 @@ async function listCreativeSubagents(params: {
       && status !== TASK_STATUS.FAILED
       && status !== TASK_STATUS.CANCELED
     ) throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_STATUS_INVALID:${task.id}:${status}`)
-    if (status === TASK_STATUS.COMPLETED && !result.success) {
-      throw new Error(`PROJECT_AGENT_SUBAGENT_COMPLETED_RESULT_INVALID:${task.id}`)
-    }
     return {
       taskId: task.id,
       status,

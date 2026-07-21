@@ -61,6 +61,7 @@ export function createAiSdkConnectionTester(defaults: {
       executionMode: 'sync',
       reasoning: false,
       reasoningEffort: DEFAULT_REASONING_EFFORT,
+      publicReasoningMode: 'none',
     })
   }
 

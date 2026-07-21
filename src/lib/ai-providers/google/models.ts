@@ -11,10 +11,10 @@ export const GOOGLE_PLATFORM_MODEL_PRESETS = [
 ] as const satisfies ReadonlyArray<PlatformModelPreset>
 
 export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
-  { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-pro-preview', capabilities: { llm: { protocol: 'google-generative-ai', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'google', modelId: 'gemini-3-pro-preview', capabilities: { llm: { protocol: 'google-generative-ai', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', capabilities: { llm: { protocol: 'google-generative-ai', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, capabilities: { llm: { protocol: 'google-generative-ai', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-pro-preview', capabilities: { llm: { protocol: 'google-generative-ai', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'google', modelId: 'gemini-3-pro-preview', capabilities: { llm: { protocol: 'google-generative-ai', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'google', modelId: 'gemini-3.1-flash-lite-preview', capabilities: { llm: { protocol: 'google-generative-ai', publicReasoningMode: 'native', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
+  { modelType: 'llm', provider: 'google', modelId: GOOGLE_GEMINI_3_5_FLASH_MODEL_ID, capabilities: { llm: { protocol: 'google-generative-ai', publicReasoningMode: 'native', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3-pro-image-preview', capabilities: { image: { resolutionOptions: ['1K', '2K', '4K'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3-pro-image-preview-batch', capabilities: { image: { resolutionOptions: ['1K', '2K', '4K'] } } },
   { modelType: 'image', provider: 'google', modelId: 'gemini-3.1-flash-image-preview', capabilities: { image: { resolutionOptions: ['0.5K', '1K', '2K', '4K'] } } },

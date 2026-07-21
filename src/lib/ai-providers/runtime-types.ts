@@ -3,6 +3,7 @@ import type {
   AiLlmExecutionResult,
   AiLlmMessage,
   AiLlmProtocol,
+  AiPublicReasoningMode,
   AiResolvedSelection,
   AiVariantDescriptor,
   AiLlmProviderConfig,
@@ -35,6 +36,7 @@ export type AiProviderLanguageModelContext = {
   }
   providerConfig: AiLlmProviderConfig
   protocol: AiLlmProtocol
+  publicReasoningMode: AiPublicReasoningMode
   executionMode: 'sync' | 'stream' | 'vision' | 'agent'
   reasoning: boolean
   reasoningEffort: ReasoningEffort
@@ -42,7 +44,10 @@ export type AiProviderLanguageModelContext = {
   openRouterSessionId?: string
 }
 
-export type AiProviderLanguageModelRequestContext = Omit<AiProviderLanguageModelContext, 'protocol'>
+export type AiProviderLanguageModelRequestContext = Omit<
+  AiProviderLanguageModelContext,
+  'protocol' | 'publicReasoningMode'
+>
 export type AiProviderLanguageModelValidationContext = Pick<
   AiProviderLanguageModelContext,
   'executionMode'

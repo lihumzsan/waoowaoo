@@ -42,12 +42,27 @@
     "title": "Plan",
     "stepProgress": "Step {current} / {total}"
   },
+  "reasoning": {
+    "running": "Thinking",
+    "completed": "Reasoning",
+    "completedWithoutDetails": "Thinking complete",
+    "preparing": "Analyzing the request and preparing a response…",
+    "unavailable": "This run completed, but the model did not provide a displayable reasoning summary."
+  },
   "subagents": {
+    "label": "Subagent",
     "tabsLabel": "Subagents",
     "primary": "Primary",
     "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
     "close": "Close {title}",
     "result": "Creative result",
+    "fullResult": "Complete structured result",
+    "fullResultLoading": "Loading the complete result…",
+    "fullResultError": "The complete result could not be loaded.",
+    "execution": {
+      "running": "Reasoning and tool calls",
+      "completed": "Reasoning and tool call history"
+    },
     "status": {
       "running": "Running",
       "completed": "Completed",
@@ -67,10 +82,17 @@
     "events": {
       "started": "Delegation received",
       "skillRead": "Read {skill}",
-      "composing": "Preparing the structured result",
-      "completed": "Completed",
-      "failed": "Failed",
-      "cancelled": "Cancelled"
+      "reasoningRunning": "Reasoning",
+      "reasoningCompleted": "Reasoning step completed",
+      "reasoningTruncated": "This visible reasoning segment reached the recording limit.",
+      "toolCalled": "Calling read_skill: {skill}",
+      "toolCompleted": "read_skill completed: {skill}",
+      "toolFailed": "read_skill failed: {skill}",
+      "toolName": "Tool",
+      "toolResult": "Result",
+      "toolUri": "Resource",
+      "skillReadResult": "Version {version} · {chars} characters read",
+      "composing": "Preparing the structured result"
     }
   },
   "attachments": {

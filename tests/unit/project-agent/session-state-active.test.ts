@@ -6,6 +6,7 @@ import {
   getProjectAgentSessionState,
   interruptionsMock,
   it,
+  mockSessionTaskRows,
   prismaMock,
   runsMock,
   vi,
@@ -18,24 +19,14 @@ import { TASK_TYPE } from '@/lib/task/types'
 describe('project agent session-state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.task.findMany.mockImplementation(async (args?: unknown) => (
-      args
-      && typeof args === 'object'
-      && 'where' in args
-      && args.where
-      && typeof args.where === 'object'
-      && 'type' in args.where
-      && args.where.type === TASK_TYPE.CREATIVE_WORK
-        ? []
-        : [{
-            id: 'task-1',
-            operationId: 'generate_edit_script_assets',
-            type: 'image_location',
-            targetType: 'LocationImage',
-            targetId: 'location-image-1',
-            status: 'processing',
-          }]
-    ))
+    mockSessionTaskRows([{
+      id: 'task-1',
+      operationId: 'generate_edit_script_assets',
+      type: 'image_location',
+      targetType: 'LocationImage',
+      targetId: 'location-image-1',
+      status: 'processing',
+    }])
     workflowMock.resolveEditFirstWorkflowView.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {

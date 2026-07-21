@@ -3,6 +3,61 @@ import { createAiSdkUiMessageStream } from '@openai/agents-extensions/ai-sdk-ui'
 
 export type ProjectAgentUiChunk = UIMessageChunk
 
+export type ProjectAgentSideChannelEntry =
+  | { kind: 'chunk'; chunk: ProjectAgentUiChunk }
+  | {
+      kind: 'public_reasoning'
+      chunk: ProjectAgentUiChunk
+      phase: 'start' | 'delta' | 'end'
+      reasoningId: string
+      completedText?: string
+    }
+
+export type ProjectAgentSideChannel = {
+  write: (entry: ProjectAgentSideChannelEntry) => void
+  drain: () => ProjectAgentSideChannelEntry[]
+  version: () => number
+  waitForChange: (observedVersion: number) => Promise<number>
+}
+
+function createDeferredVersion() {
+  let resolvePromise: ((version: number) => void) | null = null
+  const promise = new Promise<number>((resolve) => {
+    resolvePromise = resolve
+  })
+  return {
+    promise,
+    resolve(version: number) {
+      resolvePromise?.(version)
+    },
+  }
+}
+
+export function createProjectAgentSideChannel(): ProjectAgentSideChannel {
+  const entries: ProjectAgentSideChannelEntry[] = []
+  let currentVersion = 0
+  let deferred = createDeferredVersion()
+  return {
+    write(entry) {
+      entries.push(entry)
+      currentVersion += 1
+      deferred.resolve(currentVersion)
+      deferred = createDeferredVersion()
+    },
+    drain() {
+      return entries.splice(0, entries.length)
+    },
+    version() {
+      return currentVersion
+    },
+    waitForChange(observedVersion) {
+      return currentVersion > observedVersion
+        ? Promise.resolve(currentVersion)
+        : deferred.promise
+    },
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -17,6 +72,24 @@ function readChunkString(chunk: ProjectAgentUiChunk, key: string): string | null
 function isFinishChunk(chunk: ProjectAgentUiChunk): boolean {
   const candidate = chunk as { type?: unknown }
   return candidate.type === 'finish'
+}
+
+function isStartChunk(chunk: ProjectAgentUiChunk): boolean {
+  return readChunkString(chunk, 'type') === 'start'
+}
+
+function readReasoningChunk(chunk: ProjectAgentUiChunk): {
+  type: 'reasoning-start' | 'reasoning-delta' | 'reasoning-end'
+  delta: string | null
+} | null {
+  const type = readChunkString(chunk, 'type')
+  if (type !== 'reasoning-start' && type !== 'reasoning-delta' && type !== 'reasoning-end') {
+    return null
+  }
+  if (!isRecord(chunk)) return null
+  const record = chunk as unknown as Record<string, unknown>
+  const delta = typeof record.delta === 'string' ? record.delta : null
+  return { type, delta }
 }
 
 function isToolInputChunk(chunk: ProjectAgentUiChunk): boolean {
@@ -134,7 +207,7 @@ export function createProjectAgentUiMessageStream(params: {
   source: Parameters<typeof createAiSdkUiMessageStream>[0]
   initialChunks: ProjectAgentUiChunk[]
   resolveToolName: (toolCallId: string) => string | null
-  drainChunks?: () => ProjectAgentUiChunk[]
+  sideChannel: ProjectAgentSideChannel
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onChunk?: (chunk: ProjectAgentUiChunk) => void
   onError?: (error: unknown) => Promise<void>
@@ -158,6 +231,16 @@ export function createProjectAgentUiMessageStream(params: {
       convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
+      const completedLiveReasoning: Array<{ reasoningId: string; text: string }> = []
+      let suppressedReasoning: { reasoningId: string; expected: string; actual: string } | null = null
+      const readSuppressedReasoning = (): {
+        reasoningId: string
+        expected: string
+        actual: string
+      } | null => suppressedReasoning
+      let messageStarted = false
+      let initialChunksEmitted = false
+      const bufferedSideEntries: ProjectAgentSideChannelEntry[] = []
       const assertNoTextProtocolLeak = createTextProtocolGuard()
       const emitChunk = (chunk: ProjectAgentUiChunk) => {
         params.onChunk?.(chunk)
@@ -188,31 +271,119 @@ export function createProjectAgentUiMessageStream(params: {
         }
         emitChunk(chunk)
       }
-      try {
-        for (const chunk of params.initialChunks) {
-          enqueueChunk(chunk)
+      const enqueueInitialChunks = () => {
+        if (initialChunksEmitted) return
+        initialChunksEmitted = true
+        for (const chunk of params.initialChunks) enqueueChunk(chunk)
+      }
+      const enqueueSideEntry = (entry: ProjectAgentSideChannelEntry) => {
+        if (entry.kind === 'public_reasoning' && entry.phase === 'end') {
+          completedLiveReasoning.push({
+            reasoningId: entry.reasoningId,
+            text: entry.completedText ?? '',
+          })
         }
-
-        while (true) {
-          for (const chunk of params.drainChunks?.() ?? []) {
+        enqueueChunk(entry.chunk)
+      }
+      const flushBufferedSideEntries = () => {
+        if (!messageStarted) return
+        for (const entry of bufferedSideEntries.splice(0, bufferedSideEntries.length)) {
+          enqueueSideEntry(entry)
+        }
+      }
+      const drainSideChannel = () => {
+        const entries = params.sideChannel.drain()
+        if (!messageStarted) {
+          bufferedSideEntries.push(...entries)
+          return
+        }
+        for (const entry of entries) enqueueSideEntry(entry)
+      }
+      const enqueueConvertedChunk = (chunk: ProjectAgentUiChunk) => {
+        if (isStartChunk(chunk)) {
+          enqueueChunk(chunk)
+          messageStarted = true
+          enqueueInitialChunks()
+          flushBufferedSideEntries()
+          return
+        }
+        const reasoning = readReasoningChunk(chunk)
+        if (!reasoning) {
+          enqueueChunk(chunk)
+          return
+        }
+        if (reasoning.type === 'reasoning-start') {
+          const live = completedLiveReasoning.shift()
+          if (!live) {
             enqueueChunk(chunk)
+            return
           }
+          suppressedReasoning = {
+            reasoningId: live.reasoningId,
+            expected: live.text,
+            actual: '',
+          }
+          return
+        }
+        if (!suppressedReasoning) {
+          enqueueChunk(chunk)
+          return
+        }
+        if (reasoning.type === 'reasoning-delta') {
+          suppressedReasoning.actual += reasoning.delta ?? ''
+          return
+        }
+        if (suppressedReasoning.actual !== suppressedReasoning.expected) {
+          throw new Error(`PROJECT_AGENT_REASONING_STREAM_MISMATCH:${suppressedReasoning.reasoningId}`)
+        }
+        suppressedReasoning = null
+      }
+      try {
+        let observedSideChannelVersion = params.sideChannel.version()
+        let pendingConvertedOutcome = reader.read()
+          .then((read) => ({ kind: 'converted' as const, read }))
+        let pendingSideOutcome = params.sideChannel.waitForChange(observedSideChannelVersion)
+          .then((version) => ({ kind: 'side' as const, version }))
+        while (true) {
           if (cancelled) break
-          const read = await reader.read()
+          const outcome = await Promise.race([pendingConvertedOutcome, pendingSideOutcome])
+          if (outcome.kind === 'side') {
+            observedSideChannelVersion = outcome.version
+            drainSideChannel()
+            pendingSideOutcome = params.sideChannel.waitForChange(observedSideChannelVersion)
+              .then((version) => ({ kind: 'side' as const, version }))
+            continue
+          }
+          const { read } = outcome
           if (read.done) break
+          pendingConvertedOutcome = reader.read()
+            .then((nextRead) => ({ kind: 'converted' as const, read: nextRead }))
+          // The source observer may have published live reasoning while this
+          // converter read was pending. Give those canonical deltas priority
+          // before reconciling the converter's terminal aggregate block.
+          observedSideChannelVersion = params.sideChannel.version()
+          drainSideChannel()
           if (isFinishChunk(read.value)) {
             finishChunk = read.value
             continue
           }
-          enqueueChunk(read.value)
-          for (const chunk of params.drainChunks?.() ?? []) {
-            enqueueChunk(chunk)
-          }
+          enqueueConvertedChunk(read.value)
+          observedSideChannelVersion = params.sideChannel.version()
+          drainSideChannel()
+          pendingSideOutcome = params.sideChannel.waitForChange(observedSideChannelVersion)
+            .then((version) => ({ kind: 'side' as const, version }))
         }
         if (cancelled) return
 
-        for (const chunk of params.drainChunks?.() ?? []) {
-          enqueueChunk(chunk)
+        drainSideChannel()
+        if (!messageStarted) {
+          enqueueInitialChunks()
+          messageStarted = true
+        }
+        flushBufferedSideEntries()
+        const incompleteReasoning = readSuppressedReasoning()
+        if (incompleteReasoning) {
+          throw new Error(`PROJECT_AGENT_REASONING_STREAM_INCOMPLETE:${incompleteReasoning.reasoningId}`)
         }
         const trailingChunks = await params.beforeFinish()
         for (const chunk of trailingChunks) {

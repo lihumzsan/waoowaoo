@@ -12,6 +12,8 @@ export type AiLlmProtocol =
   | 'openrouter-chat'
   | 'google-generative-ai'
 
+export type AiPublicReasoningMode = 'none' | 'native' | 'summary_auto'
+
 export type AiOptionValidationResult =
   | { ok: true }
   | { ok: false; reason: string }
@@ -228,6 +230,7 @@ export type CapabilityFieldI18nMap = Record<string, CapabilityFieldI18n>
 
 export interface LLMCapabilities {
   protocol: AiLlmProtocol
+  publicReasoningMode?: AiPublicReasoningMode
   reasoningEffortOptions?: ReasoningEffort[]
   fieldI18n?: CapabilityFieldI18nMap
 }
@@ -280,6 +283,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
   'protocol',
+  'publicReasoningMode',
   'reasoningEffortOptions',
   'fieldI18n',
 ])
@@ -478,6 +482,21 @@ function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unkno
   ]
   if (!allowedProtocols.includes(protocol as AiLlmProtocol)) {
     issues.push(makeAllowedIssue('capabilities.llm.protocol', protocol, allowedProtocols))
+  }
+  const publicReasoningModes: readonly AiPublicReasoningMode[] = [
+    'none',
+    'native',
+    'summary_auto',
+  ]
+  if (
+    raw.publicReasoningMode !== undefined
+    && !publicReasoningModes.includes(raw.publicReasoningMode as AiPublicReasoningMode)
+  ) {
+    issues.push(makeAllowedIssue(
+      'capabilities.llm.publicReasoningMode',
+      raw.publicReasoningMode,
+      publicReasoningModes,
+    ))
   }
   const options = raw.reasoningEffortOptions
   const normalizedOptions = isReasoningEffortArray(options) ? options : undefined

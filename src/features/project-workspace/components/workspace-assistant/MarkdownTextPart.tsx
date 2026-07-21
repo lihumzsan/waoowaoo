@@ -84,7 +84,7 @@ const markdownComponents: Components = {
   ),
 }
 
-function MarkdownTextPartImpl({ text }: TextMessagePartProps) {
+function MarkdownTextPartImpl({ text }: Pick<TextMessagePartProps, 'text'>) {
   if (!text) return null
 
   return (

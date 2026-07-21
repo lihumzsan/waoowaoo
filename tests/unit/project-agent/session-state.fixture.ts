@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 
 import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const workflow = createEditFirstWorkflowView({
   step: 'planned_assets',
@@ -34,6 +35,15 @@ type MockRun = {
   errorMessage?: string | null
 }
 
+type MockSessionTaskRow = {
+  id: string
+  operationId: string
+  type: string
+  targetType: string
+  targetId: string
+  status: string
+}
+
 const prismaMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(async () => [
     { kind: 'WAIT', id: 'wait-1', runId: 'run-1' },
@@ -48,7 +58,15 @@ const prismaMock = vi.hoisted(() => ({
   },
   task: {
     findMany: vi.fn(async (args?: unknown) => {
-      void args
+      if (
+        args
+        && typeof args === 'object'
+        && 'where' in args
+        && args.where
+        && typeof args.where === 'object'
+        && 'type' in args.where
+        && args.where.type === TASK_TYPE.CREATIVE_WORK
+      ) return []
       return [
         {
           id: 'task-1',
@@ -71,6 +89,20 @@ const prismaMock = vi.hoisted(() => ({
     }]),
   },
 }))
+
+function mockSessionTaskRows(rows: readonly MockSessionTaskRow[]): void {
+  prismaMock.task.findMany.mockImplementation(async (args?: unknown) => (
+    args
+    && typeof args === 'object'
+    && 'where' in args
+    && args.where
+    && typeof args.where === 'object'
+    && 'type' in args.where
+    && args.where.type === TASK_TYPE.CREATIVE_WORK
+      ? []
+      : [...rows]
+  ))
+}
 
 const workflowMock = vi.hoisted(() => ({
   resolveEditFirstWorkflowView: vi.fn(async () => workflow),
@@ -205,6 +237,7 @@ export {
   getProjectAgentSessionState,
   getProjectAssistantThreadWatermarkedSnapshot,
   interruptionsMock,
+  mockSessionTaskRows,
   prismaMock,
   runsMock,
   waitsMock,

@@ -204,6 +204,7 @@ export default function WorkspaceAssistantPanel({
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
     replyInFlight: assistantRuntime.replyInFlight,
+    chatStatus: assistantRuntime.status,
     awaitingUserInput,
     awaitingExternalTask,
   })
@@ -255,6 +256,7 @@ export default function WorkspaceAssistantPanel({
               >
                 {selectedSubagentId ? (
                   <WorkspaceAssistantSubagentView
+                    projectId={projectId}
                     subagent={visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
                   />
                 ) : (

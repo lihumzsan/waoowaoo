@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type { ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
+  TASK_EVENT_TYPE,
   TASK_SSE_EVENT_TYPE,
   TASK_TYPE,
   WORKSPACE_SSE_EVENT_TYPE,
@@ -15,6 +16,11 @@ import {
   maxProjectAgentSessionEventWatermark,
   parseProjectAgentSessionEventWatermark,
 } from '@/lib/project-agent/session-watermark'
+import {
+  reduceWorkspaceAssistantSubagentReasoningStream,
+  removeWorkspaceAssistantSubagentReasoningStreams,
+  type WorkspaceAssistantSubagentReasoningStream,
+} from './workspace-assistant-subagent-stream'
 
 interface WorkspaceAssistantSessionStateResponse {
   sessionState: ProjectAgentSessionState
@@ -81,6 +87,9 @@ export function useWorkspaceAssistantSessionSync({
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [sessionEventWatermark, setSessionEventWatermark] = useState('0')
+  const [subagentReasoningStreams, setSubagentReasoningStreams] = useState<
+    ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+  >(() => new Map())
 
   const refreshSessionState = useCallback(async (
     minimumEventWatermark = latestEventWatermarkRef.current,
@@ -155,6 +164,7 @@ export function useWorkspaceAssistantSessionSync({
     setSessionState(null)
     setSessionStateError(null)
     setSessionEventWatermark('0')
+    setSubagentReasoningStreams(new Map())
     void refreshSessionState()
     return () => {
       scopeGenerationRef.current += 1
@@ -163,12 +173,36 @@ export function useWorkspaceAssistantSessionSync({
 
   useEffect(() => subscribeTaskEvents((event) => {
     if (
+      event.type === TASK_SSE_EVENT_TYPE.STREAM
+      && event.projectId === projectId
+      && event.taskType === TASK_TYPE.CREATIVE_WORK
+      && (event.episodeId ?? undefined) === (episodeId ?? undefined)
+    ) {
+      setSubagentReasoningStreams((current) => {
+        const reduction = reduceWorkspaceAssistantSubagentReasoningStream(current, event)
+        if (reduction.kind === 'gap') void refreshSessionState()
+        return reduction.streams
+      })
+      return
+    }
+    if (
       event.type === TASK_SSE_EVENT_TYPE.LIFECYCLE
       && event.projectId === projectId
       && event.taskType === TASK_TYPE.CREATIVE_WORK
       && (event.episodeId ?? undefined) === (episodeId ?? undefined)
     ) {
-      void refreshSessionState()
+      const lifecycleType = isRecord(event.payload) && typeof event.payload.lifecycleType === 'string'
+        ? event.payload.lifecycleType
+        : null
+      const terminal = lifecycleType === TASK_EVENT_TYPE.COMPLETED
+        || lifecycleType === TASK_EVENT_TYPE.FAILED
+        || lifecycleType === TASK_EVENT_TYPE.CANCELED
+      void refreshSessionState().then((refreshed) => {
+        if (!terminal || !refreshed) return
+        setSubagentReasoningStreams((current) => (
+          removeWorkspaceAssistantSubagentReasoningStreams(current, event.taskId)
+        ))
+      })
       return
     }
     if (event.type !== WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) return
@@ -187,6 +221,7 @@ export function useWorkspaceAssistantSessionSync({
     sessionState,
     sessionStateError,
     sessionEventWatermark,
+    subagentReasoningStreams,
     refreshSessionState,
   }
 }

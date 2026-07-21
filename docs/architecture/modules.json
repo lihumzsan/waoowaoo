@@ -378,7 +378,8 @@
       "document": "docs/architecture/modules/assistant-run-lifecycle.md",
       "title": "Assistant Run 生命周期",
       "sourcePaths": [
-        "src/lib/project-agent",
+      "src/lib/project-agent",
+      "src/lib/ai-exec/agents-public-reasoning.ts",
         "src/lib/project-context/policy.ts",
         "src/lib/project-context/assembler.ts",
         "src/lib/project-context/types.ts",
@@ -450,7 +451,9 @@
         "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
       ],
       "testPaths": [
-        "tests/unit/project-agent/tool-approval-policy.test.ts",
+      "tests/unit/project-agent/tool-approval-policy.test.ts",
+      "tests/unit/project-agent/agents-ui-stream.test.ts",
+      "tests/unit/project-agent/workspace-assistant-subagent-stream.test.ts",
         "tests/integration/task/project-agent-continuation-settlement.integration.test.ts",
         "tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts",
         "tests/integration/task/project-agent-session-broadcast.integration.test.ts",
@@ -504,7 +507,8 @@
       "title": "Creative Skill 与无状态 Worker",
       "sourcePaths": [
         "src/lib/creative-skills",
-        "src/lib/creative-worker",
+      "src/lib/creative-worker",
+      "src/lib/ai-exec/agents-public-reasoning.ts",
         "src/lib/operations/domains/assistant/creative-ops.ts",
         "src/lib/operations/domains/assistant/creative-bible-ops.ts",
         "src/lib/operations/domains/assistant/creative-style-ops.ts",
@@ -523,7 +527,9 @@
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts"
       ],
       "testPaths": [
-        "tests/contracts/project-agent-toolset-conformance.test.ts"
+      "tests/contracts/project-agent-toolset-conformance.test.ts",
+      "tests/unit/ai-exec/agents-public-reasoning.test.ts",
+      "tests/unit/project-agent/workspace-assistant-subagent-stream.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/prompt-semantic-regression.mjs"
@@ -569,7 +575,8 @@
         "tests/integration/provider/provider-gateway-capabilities.contract.test.ts",
         "tests/integration/provider/provider-gateway-connections.contract.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
-        "tests/unit/ai-exec/llm-result-projector.test.ts",
+      "tests/unit/ai-exec/llm-result-projector.test.ts",
+      "tests/unit/ai-exec/agents-public-reasoning.test.ts",
         "tests/unit/ai-exec/structured-json.test.ts",
         "src/lib/media/outbound-image.test.ts",
         "tests/unit/provider/llm-stream-finalization.test.ts",

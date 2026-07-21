@@ -183,6 +183,7 @@ export function useWorkspaceAssistantRuntime({
     sessionStateError,
     sessionEventWatermark,
     refreshSessionState,
+    subagentReasoningStreams,
   } = useWorkspaceAssistantSessionSync({
     projectId,
     episodeId,
@@ -546,9 +547,7 @@ export function useWorkspaceAssistantRuntime({
     controlRunActive: controlPending,
     serverRunActive,
   })
-  const subagents = useMemo(() => resolveWorkspaceAssistantSubagents({
-    sessionSubagents: sessionState?.subagents ?? [],
-  }), [sessionState?.subagents])
+  const subagents = useMemo(() => resolveWorkspaceAssistantSubagents({ sessionSubagents: sessionState?.subagents ?? [], reasoningStreams: subagentReasoningStreams }), [sessionState?.subagents, subagentReasoningStreams])
 
   useEffect(() => {
     if (!replyActivity || !replyActivity.requestSettled) return

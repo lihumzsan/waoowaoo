@@ -1,42 +1,8 @@
 import { z } from 'zod'
-import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills/types'
-import { CREATIVE_WORK_OUTPUT_KINDS } from '@/lib/creative-worker/constants'
-import { CREATIVE_WORKER_ERROR_CODES } from '@/lib/creative-worker/errors'
-import type { CreativeWorkerEvent } from '@/lib/creative-worker/types'
-
-const skillReadTraceSchema = z.object({
-  ordinal: z.number().int().positive(),
-  source: z.enum(['preloaded', 'tool']),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
-  version: z.string().trim().min(1),
-  uri: z.string().trim().min(1),
-  checksum: z.string().trim().min(1),
-  contentChars: z.number().int().nonnegative(),
-}).strict()
-
-const creativeWorkerEventSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('started'),
-    outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
-    goal: z.string().trim().min(1),
-  }).strict(),
-  z.object({
-    kind: z.literal('skill_read'),
-    trace: skillReadTraceSchema,
-  }).strict(),
-  z.object({
-    kind: z.literal('completed'),
-    outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
-  }).strict(),
-  z.object({
-    kind: z.literal('failed'),
-    code: z.enum(CREATIVE_WORKER_ERROR_CODES),
-  }).strict(),
-  z.object({
-    kind: z.literal('cancelled'),
-    code: z.literal('CREATIVE_WORK_ABORTED'),
-  }).strict(),
-])
+import {
+  creativeWorkTraceEventSchema,
+  type CreativeWorkTraceEvent,
+} from '@/lib/creative-worker'
 
 const projectAgentSubagentEventPartDataSchema = z.object({
   subagentId: z.string().trim().min(1),
@@ -45,7 +11,7 @@ const projectAgentSubagentEventPartDataSchema = z.object({
   toolCallId: z.string().trim().min(1),
   sequence: z.number().int().positive(),
   occurredAt: z.string().datetime(),
-  event: creativeWorkerEventSchema,
+  event: creativeWorkTraceEventSchema,
 }).strict()
 
 export interface ProjectAgentSubagentEventPartData {
@@ -55,7 +21,7 @@ export interface ProjectAgentSubagentEventPartData {
   toolCallId: string
   sequence: number
   occurredAt: string
-  event: CreativeWorkerEvent
+  event: CreativeWorkTraceEvent
 }
 
 export type ProjectAgentSubagentStatus = 'running' | 'completed' | 'failed' | 'cancelled'
@@ -65,14 +31,14 @@ export interface ProjectAgentSubagentView {
   taskId: string
   runId: string
   toolCallId: string
-  outputKind: Extract<CreativeWorkerEvent, { kind: 'started' }>['outputKind']
+  outputKind: Extract<CreativeWorkTraceEvent, { kind: 'started' }>['outputKind']
   goal: string
   status: ProjectAgentSubagentStatus
   summary: string | null
   errorCode: string | null
   finishedAt: string | null
   events: ProjectAgentSubagentEventPartData[]
-  skillReads: Array<Extract<CreativeWorkerEvent, { kind: 'skill_read' }>['trace']>
+  skillReads: Array<Extract<CreativeWorkTraceEvent, { kind: 'skill_read' }>['trace']>
 }
 
 export interface ProjectAgentSubagentTaskFact {
@@ -87,13 +53,6 @@ export function parseProjectAgentSubagentEventPartData(
   input: unknown,
 ): ProjectAgentSubagentEventPartData {
   return projectAgentSubagentEventPartDataSchema.parse(input) as ProjectAgentSubagentEventPartData
-}
-
-function resolveTerminalStatus(event: CreativeWorkerEvent): ProjectAgentSubagentStatus | null {
-  if (event.kind === 'completed') return 'completed'
-  if (event.kind === 'failed') return 'failed'
-  if (event.kind === 'cancelled') return 'cancelled'
-  return null
 }
 
 function assertSameEvent(
@@ -136,13 +95,6 @@ export function resolveProjectAgentSubagentViews(
         throw new Error(`PROJECT_AGENT_SUBAGENT_EVENT_IDENTITY_MISMATCH:${subagentId}:${String(event.sequence)}`)
       }
     }
-    const terminalStatuses = events.flatMap((event) => {
-      const status = resolveTerminalStatus(event.event)
-      return status ? [status] : []
-    })
-    if (terminalStatuses.length > 1) {
-      throw new Error(`PROJECT_AGENT_SUBAGENT_TERMINAL_EVENT_CONFLICT:${subagentId}`)
-    }
     const taskFact = taskFactsById.get(first.taskId)
     if (!taskFact) throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_FACT_MISSING:${first.taskId}`)
     const status: ProjectAgentSubagentStatus = taskFact.status === 'completed'
@@ -152,12 +104,11 @@ export function resolveProjectAgentSubagentViews(
         : taskFact.status === 'canceled'
           ? 'cancelled'
           : 'running'
-    if (terminalStatuses[0] && terminalStatuses[0] !== status) {
-      throw new Error(`PROJECT_AGENT_SUBAGENT_TASK_STATUS_CONFLICT:${subagentId}`)
-    }
     const startEvent = first.event
     const skillReads = events.flatMap((event) => (
-      event.event.kind === 'skill_read' ? [event.event.trace] : []
+      event.event.kind === 'skill_read' || event.event.kind === 'tool_completed'
+        ? [event.event.trace]
+        : []
     ))
     return {
       subagentId,

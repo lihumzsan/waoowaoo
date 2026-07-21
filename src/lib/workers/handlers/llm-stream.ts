@@ -10,7 +10,16 @@ import {
   type WorkerLLMStreamContext,
 } from './llm-stream-publisher'
 
-export type WorkerInternalLLMStreamCallbacks = InternalLLMStreamCallbacks & {
+type WorkerLLMStreamInputChunk = Omit<
+  Parameters<NonNullable<InternalLLMStreamCallbacks['onChunk']>>[0],
+  'seq'
+>
+
+export type WorkerInternalLLMStreamCallbacks = Omit<
+  InternalLLMStreamCallbacks,
+  'onChunk' | 'flush'
+> & {
+  onChunk?: (chunk: WorkerLLMStreamInputChunk) => void
   flush: () => Promise<void>
 }
 
@@ -30,6 +39,7 @@ export function createWorkerLLMStreamCallbacks(
   job: Job<TaskJobData>,
   streamContext: WorkerLLMStreamContext,
   activeController?: WorkerLLMActiveController,
+  options?: { readonly maxChunkChars?: number },
 ): WorkerInternalLLMStreamCallbacks {
   const activeProbeIntervalMs = 600
   let publishQueue: Promise<void> = Promise.resolve()
@@ -102,7 +112,12 @@ export function createWorkerLLMStreamCallbacks(
       })
   }
 
-  const streamPublisher = createWorkerLLMStreamPublisher({ job, context: streamContext, enqueue })
+  const streamPublisher = createWorkerLLMStreamPublisher({
+    job,
+    context: streamContext,
+    enqueue,
+    ...(options?.maxChunkChars ? { maxChunkChars: options.maxChunkChars } : {}),
+  })
 
   return {
     onStage: ({ stage, provider, step }) => {
