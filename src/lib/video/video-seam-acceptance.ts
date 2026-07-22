@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { mapFfmpegExecutableError, resolveFfmpegExecutable } from '@/lib/media/ffmpeg-runtime'
 import {
   buildVideoSeamBridgePlan,
   VIDEO_SEAM_FPS_RELATIVE_TOLERANCE,
@@ -256,10 +257,7 @@ async function readTaskResult(resultPath: string): Promise<ValidatedTaskResult> 
 }
 
 function mapChildProcessError(error: unknown, failureCode: string): Error {
-  if (isRecord(error) && error.code === 'ENOENT') {
-    return new Error('VIDEO_SEAM_FFMPEG_UNAVAILABLE')
-  }
-  return new Error(failureCode)
+  return mapFfmpegExecutableError(error, 'VIDEO_SEAM_FFMPEG_UNAVAILABLE') || new Error(failureCode)
 }
 
 async function runChildProcess(
@@ -290,7 +288,7 @@ async function extractFrame(params: {
     const size = `${params.outputSize.width}:${params.outputSize.height}`
     filters.push(`scale=${size}:force_original_aspect_ratio=increase:flags=lanczos`, `crop=${size}`)
   }
-  await runChildProcess(process.env.FFMPEG_PATH || 'ffmpeg', [
+  await runChildProcess(resolveFfmpegExecutable('ffmpeg'), [
     '-v', 'error', '-y', '-i', params.inputPath,
     '-vf', filters.join(','), '-frames:v', '1', '-fps_mode', 'passthrough', params.outputPath,
   ], 'VIDEO_SEAM_ACCEPTANCE_FRAME_EXTRACT_FAILED')
@@ -304,7 +302,7 @@ async function extractFrame(params: {
 }
 
 async function compareFrames(expectedPath: string, outputPath: string): Promise<number> {
-  const result = await runChildProcess(process.env.FFMPEG_PATH || 'ffmpeg', [
+  const result = await runChildProcess(resolveFfmpegExecutable('ffmpeg'), [
     '-v', 'error', '-i', expectedPath, '-i', outputPath,
     '-filter_complex', '[0:v][1:v]ssim=stats_file=-', '-f', 'null', '-',
   ], 'VIDEO_SEAM_ACCEPTANCE_SSIM_FAILED')
@@ -324,7 +322,7 @@ async function compareAdjacentOutputFrames(params: {
     `[later]trim=start_frame=${params.firstFrame + 1}:end_frame=${params.finalFrame + 1},setpts=PTS-STARTPTS[b]`,
     '[a][b]ssim=stats_file=-',
   ].join(';')
-  const result = await runChildProcess(process.env.FFMPEG_PATH || 'ffmpeg', [
+  const result = await runChildProcess(resolveFfmpegExecutable('ffmpeg'), [
     '-v', 'error', '-i', params.outputPath, '-filter_complex', filter, '-f', 'null', '-',
   ], 'VIDEO_SEAM_ACCEPTANCE_SSIM_FAILED')
   const scores = parseFfmpegSsimStats(`${result.stdout}\n${result.stderr}`)
@@ -397,7 +395,7 @@ async function verifyOutputAudio(params: {
   }
 
   const oneFrame = 1 / params.plan.outputFps
-  const result = await runChildProcess(process.env.FFMPEG_PATH || 'ffmpeg', [
+  const result = await runChildProcess(resolveFfmpegExecutable('ffmpeg'), [
     '-v', 'info', '-hide_banner', '-nostats', '-i', params.outputPath,
     '-map', '0:a:0', '-af', `silencedetect=noise=-50dB:d=${oneFrame.toFixed(9)}`,
     '-f', 'null', '-',

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { resolveFfmpegExecutable } from '@/lib/media/ffmpeg-runtime'
 import { toFetchableUrl } from '@/lib/storage'
 
 const execFileAsync = promisify(execFile)
@@ -83,7 +84,7 @@ export async function renderStaticCameraMotionVideo(options: StaticCameraMotionR
   try {
     await fs.writeFile(inputPath, await downloadSourceImage(options.imageSource))
 
-    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
+    const ffmpegPath = resolveFfmpegExecutable('ffmpeg')
     const videoFilter = buildSlowPushInFilter({ width, height, frameCount, fps })
     const args = [
       '-y',

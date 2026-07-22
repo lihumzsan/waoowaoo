@@ -7,6 +7,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
+import { mapFfmpegExecutableError, resolveFfmpegExecutable } from '@/lib/media/ffmpeg-runtime'
 import { toFetchableUrl } from '@/lib/storage'
 import {
   VIDEO_SEAM_FPS_RELATIVE_TOLERANCE,
@@ -45,12 +46,6 @@ type VideoSeamProbeDetails = {
 
 function mediaProbeError(): Error {
   return new Error('VIDEO_SEAM_MEDIA_PROBE_FAILED')
-}
-
-function ffmpegUnavailable(error: unknown): Error | null {
-  return (error as NodeJS.ErrnoException).code === 'ENOENT'
-    ? new Error('VIDEO_SEAM_FFMPEG_UNAVAILABLE')
-    : null
 }
 
 function isAudioComposeFailure(error: unknown): boolean {
@@ -114,11 +109,11 @@ function displayRotationFilter(rotation: VideoSeamDisplayRotationDegrees): strin
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
-  const executable = process.env.FFMPEG_PATH || 'ffmpeg'
+  const executable = resolveFfmpegExecutable('ffmpeg')
   try {
     await execFileAsync(executable, args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8 })
   } catch (error) {
-    throw ffmpegUnavailable(error) || error
+    throw mapFfmpegExecutableError(error, 'VIDEO_SEAM_FFMPEG_UNAVAILABLE') || error
   }
 }
 
@@ -274,7 +269,7 @@ export function parseVideoSeamProbeJson(raw: string): SeamProbeResult {
 }
 
 async function readVideoSeamProbeJson(filePath: string): Promise<string> {
-  const executable = process.env.FFPROBE_PATH || 'ffprobe'
+  const executable = resolveFfmpegExecutable('ffprobe')
   const args = [
     '-v', 'error', '-count_frames',
     '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,nb_read_frames,duration:stream_side_data=rotation:format=duration',
@@ -284,7 +279,7 @@ async function readVideoSeamProbeJson(filePath: string): Promise<string> {
     const { stdout } = await execFileAsync(executable, args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8 })
     return stdout
   } catch (error) {
-    throw ffmpegUnavailable(error) || mediaProbeError()
+    throw mapFfmpegExecutableError(error, 'VIDEO_SEAM_FFMPEG_UNAVAILABLE') || mediaProbeError()
   }
 }
 
@@ -401,7 +396,7 @@ export function buildVideoSeamComposeCommand(params: {
     ...(plan.audioPolicy === 'silent' ? [] : ['-c:a', 'aac', '-b:a', '192k']),
     '-movflags', '+faststart', params.outputPath,
   ]
-  return { executable: process.env.FFMPEG_PATH || 'ffmpeg', args }
+  return { executable: resolveFfmpegExecutable('ffmpeg'), args }
 }
 
 export async function composeVideoSeamOutput(
@@ -411,7 +406,7 @@ export async function composeVideoSeamOutput(
   try {
     await execFileAsync(command.executable, command.args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8 })
   } catch (error) {
-    const unavailable = ffmpegUnavailable(error)
+    const unavailable = mapFfmpegExecutableError(error, 'VIDEO_SEAM_FFMPEG_UNAVAILABLE')
     if (unavailable) throw unavailable
     if (params.plan.audioPolicy !== 'silent' && isAudioComposeFailure(error)) {
       throw new Error('VIDEO_SEAM_AUDIO_COMPOSE_FAILED', { cause: error })

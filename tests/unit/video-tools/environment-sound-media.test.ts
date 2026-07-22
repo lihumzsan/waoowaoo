@@ -1,9 +1,13 @@
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import {
   buildEnvironmentSoundAcrossfadeFilter,
   parseSceneChangeTimes,
   parseVoiceActivity,
+  probeEnvironmentSoundMedia,
   selectEnvironmentSoundFrameTimes,
   summarizeEnvironmentSoundVoiceActivity,
 } from '@/lib/video-tools/environment-sound-media'
@@ -96,6 +100,21 @@ describe('environment sound media analysis', () => {
     expect(mediaModule.parseEnvironmentSoundMaxVolume).toBeTypeOf('function')
     expect(mediaModule.parseEnvironmentSoundMaxVolume!('[Parsed_volumedetect] max_volume: -inf dB'))
       .toBe(Number.NEGATIVE_INFINITY)
+  })
+
+  it('reports a stable error when FFprobe is unavailable', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-environment-sound-test-'))
+    const originalFfprobePath = process.env.FFPROBE_PATH
+    try {
+      process.env.FFPROBE_PATH = path.join(directory, 'missing-ffprobe')
+
+      await expect(probeEnvironmentSoundMedia(path.join(directory, 'input.mp4')))
+        .rejects.toThrow('ENVIRONMENT_SOUND_FFMPEG_UNAVAILABLE')
+    } finally {
+      if (originalFfprobePath === undefined) delete process.env.FFPROBE_PATH
+      else process.env.FFPROBE_PATH = originalFfprobePath
+      await fs.rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('builds an acrossfade chain that preserves transition order', () => {

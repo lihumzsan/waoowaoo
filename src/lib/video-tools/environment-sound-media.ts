@@ -6,6 +6,11 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { promisify } from 'node:util'
+import {
+  mapFfmpegExecutableError,
+  resolveFfmpegExecutable,
+  type FfmpegExecutable,
+} from '@/lib/media/ffmpeg-runtime'
 
 const execFileAsync = promisify(execFile)
 const MAX_ANALYSIS_FRAMES = 12
@@ -70,6 +75,22 @@ export function buildEnvironmentSoundCommandOptions(timeoutMs: number) {
     maxBuffer: MAX_COMMAND_BUFFER,
     timeout: timeoutMs,
     killSignal: 'SIGKILL' as const,
+  }
+}
+
+async function runEnvironmentSoundCommand(
+  executable: FfmpegExecutable,
+  args: string[],
+  timeoutMs: number,
+) {
+  try {
+    return await execFileAsync(
+      resolveFfmpegExecutable(executable),
+      args,
+      buildEnvironmentSoundCommandOptions(timeoutMs),
+    )
+  } catch (error) {
+    throw mapFfmpegExecutableError(error, 'ENVIRONMENT_SOUND_FFMPEG_UNAVAILABLE') || error
   }
 }
 
@@ -212,13 +233,12 @@ export async function downloadEnvironmentSoundSource(sourceUrl: string, outputPa
 }
 
 export async function probeEnvironmentSoundMedia(filePath: string): Promise<EnvironmentSoundMediaProbe> {
-  const ffprobePath = process.env.FFPROBE_PATH || 'ffprobe'
-  const { stdout } = await execFileAsync(ffprobePath, [
+  const { stdout } = await runEnvironmentSoundCommand('ffprobe', [
     '-v', 'error',
     '-show_entries', 'format=duration:stream=codec_type',
     '-of', 'json',
     filePath,
-  ], buildEnvironmentSoundCommandOptions(PROBE_TIMEOUT_MS))
+  ], PROBE_TIMEOUT_MS)
   const parsed = JSON.parse(stdout) as {
     format?: { duration?: unknown }
     streams?: Array<{ codec_type?: unknown }>
@@ -230,15 +250,14 @@ export async function probeEnvironmentSoundMedia(filePath: string): Promise<Envi
 }
 
 export async function detectEnvironmentSoundSceneChanges(filePath: string): Promise<number[]> {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
-  const { stderr } = await execFileAsync(ffmpegPath, [
+  const { stderr } = await runEnvironmentSoundCommand('ffmpeg', [
     '-hide_banner',
     '-i', filePath,
     '-vf', "select='gt(scene,0.32)',showinfo",
     '-an',
     '-f', 'null',
     '-',
-  ], buildEnvironmentSoundCommandOptions(ANALYSIS_TIMEOUT_MS))
+  ], ANALYSIS_TIMEOUT_MS)
   return parseSceneChangeTimes(stderr)
 }
 
@@ -246,14 +265,13 @@ export async function detectEnvironmentSoundVoiceActivity(
   filePath: string,
   durationSeconds: number,
 ): Promise<EnvironmentSoundActivityRange[]> {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
-  const { stderr } = await execFileAsync(ffmpegPath, [
+  const { stderr } = await runEnvironmentSoundCommand('ffmpeg', [
     '-hide_banner',
     '-i', filePath,
     '-af', 'silencedetect=noise=-40dB:d=0.25',
     '-f', 'null',
     '-',
-  ], buildEnvironmentSoundCommandOptions(ANALYSIS_TIMEOUT_MS))
+  ], ANALYSIS_TIMEOUT_MS)
   return parseVoiceActivity(stderr, durationSeconds)
 }
 
@@ -262,14 +280,13 @@ export const detectEnvironmentSoundAudioActivity = detectEnvironmentSoundVoiceAc
 export async function measureEnvironmentSoundAudioLevel(
   filePath: string,
 ): Promise<EnvironmentSoundAudioLevel> {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
-  const { stderr } = await execFileAsync(ffmpegPath, [
+  const { stderr } = await runEnvironmentSoundCommand('ffmpeg', [
     '-hide_banner',
     '-i', filePath,
     '-af', 'volumedetect',
     '-f', 'null',
     '-',
-  ], buildEnvironmentSoundCommandOptions(ANALYSIS_TIMEOUT_MS))
+  ], ANALYSIS_TIMEOUT_MS)
   return { maxVolumeDb: parseEnvironmentSoundMaxVolume(stderr) }
 }
 
@@ -279,7 +296,6 @@ export async function extractEnvironmentSoundFrames(
   durationSeconds: number,
   sceneChangeTimes: number[],
 ): Promise<EnvironmentSoundFrame[]> {
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
   const times = selectEnvironmentSoundFrameTimes(durationSeconds, sceneChangeTimes)
   const frames: EnvironmentSoundFrame[] = []
   await fs.mkdir(outputDir, { recursive: true })
@@ -287,7 +303,7 @@ export async function extractEnvironmentSoundFrames(
   for (let index = 0; index < times.length; index += 1) {
     const timestampSeconds = times[index]!
     const outputPath = path.join(outputDir, `frame-${String(index + 1).padStart(2, '0')}.jpg`)
-    await execFileAsync(ffmpegPath, [
+    await runEnvironmentSoundCommand('ffmpeg', [
       '-y',
       '-ss', timestampSeconds.toFixed(3),
       '-i', filePath,
@@ -295,7 +311,7 @@ export async function extractEnvironmentSoundFrames(
       '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease',
       '-q:v', '3',
       outputPath,
-    ], buildEnvironmentSoundCommandOptions(FRAME_TIMEOUT_MS))
+    ], FRAME_TIMEOUT_MS)
     frames.push({ timestampSeconds, filePath: outputPath })
   }
   return frames
@@ -311,7 +327,6 @@ export async function composeEnvironmentSoundMp3(params: {
     throw new Error('ENVIRONMENT_SOUND_COMPOSE_INPUT_INVALID')
   }
   const duration = readPositiveDuration(params.durationSeconds, 'ENVIRONMENT_SOUND_COMPOSE_DURATION_INVALID')
-  const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
   const args = ['-y']
   for (const inputPath of params.inputPaths) args.push('-i', inputPath)
 
@@ -327,5 +342,5 @@ export async function composeEnvironmentSoundMp3(params: {
     '-ac', '2',
     params.outputPath,
   )
-  await execFileAsync(ffmpegPath, args, buildEnvironmentSoundCommandOptions(COMPOSE_TIMEOUT_MS))
+  await runEnvironmentSoundCommand('ffmpeg', args, COMPOSE_TIMEOUT_MS)
 }
