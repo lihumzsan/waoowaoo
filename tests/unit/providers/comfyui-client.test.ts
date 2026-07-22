@@ -1135,9 +1135,59 @@ describe('comfyui client media refs', () => {
     })
   })
 
-  it('rejects a server limited to two image slots before prompt submission', async () => {
-    let promptSubmissionCount = 0
-    let uploadIndex = 0
+  it.each([
+    {
+      name: 'missing object info response',
+      status: 404,
+      objectInfo: null,
+    },
+    {
+      name: 'null object info response',
+      status: 200,
+      objectInfo: null,
+    },
+    {
+      name: 'missing num_images max',
+      status: 200,
+      objectInfo: {
+        LTXVImgToVideoInplaceKJ: {
+          input: {
+            required: {
+              num_images: ['INT', { default: 2, min: 1 }],
+            },
+          },
+        },
+      },
+    },
+    {
+      name: 'nonnumeric num_images max',
+      status: 200,
+      objectInfo: {
+        LTXVImgToVideoInplaceKJ: {
+          input: {
+            required: {
+              num_images: ['INT', { default: 2, min: 1, max: '4' }],
+            },
+          },
+        },
+      },
+    },
+    {
+      name: 'num_images max of two',
+      status: 200,
+      objectInfo: {
+        LTXVImgToVideoInplaceKJ: {
+          input: {
+            required: {
+              num_images: ['INT', { default: 2, min: 1, max: 2 }],
+            },
+          },
+        },
+      },
+    },
+  ])('rejects $name before any upload or prompt submission', async ({ status, objectInfo }) => {
+    let uploadCallCount = 0
+    let promptCallCount = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string'
         ? input
@@ -1146,28 +1196,20 @@ describe('comfyui client media refs', () => {
           : input.toString()
 
       if (url.endsWith('/object_info/LTXVImgToVideoInplaceKJ')) {
-        return new Response(JSON.stringify({
-          LTXVImgToVideoInplaceKJ: {
-            input: {
-              required: {
-                num_images: ['INT', { default: 2, min: 1, max: 2 }],
-              },
-            },
-          },
-        }), {
-          status: 200,
+        return new Response(JSON.stringify(objectInfo), {
+          status,
           headers: { 'Content-Type': 'application/json' },
         })
       }
       if (url.endsWith('/upload/image')) {
-        uploadIndex += 1
-        return new Response(JSON.stringify({ name: `anchor-${uploadIndex}.png` }), {
+        uploadCallCount += 1
+        return new Response(JSON.stringify({ name: `anchor-${uploadCallCount}.png` }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       }
       if (url.endsWith('/prompt')) {
-        promptSubmissionCount += 1
+        promptCallCount += 1
         return new Response(JSON.stringify({ prompt_id: 'must-not-submit' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -1191,7 +1233,8 @@ describe('comfyui client media refs', () => {
       fps: 24,
       durationSeconds: 4,
     })).rejects.toThrow('VIDEO_SEAM_FOUR_ANCHOR_UNSUPPORTED')
-    expect(promptSubmissionCount).toBe(0)
+    expect(uploadCallCount).toBe(0)
+    expect(promptCallCount).toBe(0)
   })
 
   it('uploads two videos in order and submits the seam-concat graph', async () => {
