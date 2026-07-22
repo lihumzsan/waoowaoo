@@ -3,10 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
-import {
-  deleteMediaObjectIfUnreferenced,
-  MediaOrphanCleanupError,
-} from '@/lib/media/unreferenced-cleanup'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
@@ -86,10 +83,8 @@ export const PATCH = apiHandler(async (
 
 async function collectProjectCOSKeys(projectId: string): Promise<{
   keys: string[]
-  coverMedia: Array<{ id: string; storageKey: string }>
 }> {
   const keys: string[] = []
-  const coverMediaById = new Map<string, { id: string; storageKey: string }>()
 
   const novelPromotion = await prisma.novelPromotionProject.findUnique({
     where: { projectId },
@@ -105,9 +100,6 @@ async function collectProjectCOSKeys(projectId: string): Promise<{
       },
       episodes: {
         include: {
-          coverImageMedia: {
-            select: { id: true, storageKey: true },
-          },
           storyboards: {
             include: { panels: true },
           },
@@ -116,7 +108,7 @@ async function collectProjectCOSKeys(projectId: string): Promise<{
     },
   })
 
-  if (!novelPromotion) return { keys, coverMedia: [] }
+  if (!novelPromotion) return { keys }
 
   for (const character of novelPromotion.characters) {
     for (const appearance of character.appearances) {
@@ -140,9 +132,6 @@ async function collectProjectCOSKeys(projectId: string): Promise<{
   }
 
   for (const episode of novelPromotion.episodes) {
-    if (episode.coverImageMedia) {
-      coverMediaById.set(episode.coverImageMedia.id, episode.coverImageMedia)
-    }
     const audioKey = await resolveStorageKeyFromMediaValue(episode.audioUrl)
     if (audioKey) keys.push(audioKey)
 
@@ -175,9 +164,9 @@ async function collectProjectCOSKeys(projectId: string): Promise<{
   }
 
   _ulogInfo(
-    `[Project ${projectId}] collected ${keys.length} COS object keys and ${coverMediaById.size} Episode covers for deletion`,
+    `[Project ${projectId}] collected ${keys.length} COS object keys for deletion`,
   )
-  return { keys, coverMedia: [...coverMediaById.values()] }
+  return { keys }
 }
 
 // DELETE - remove project data and related COS objects.
@@ -204,7 +193,7 @@ export const DELETE = apiHandler(async (
   }
 
   _ulogInfo(`[DELETE] deleting project ${project.name} (${projectId})`)
-  const { keys: cosKeys, coverMedia } = await collectProjectCOSKeys(projectId)
+  const { keys: cosKeys } = await collectProjectCOSKeys(projectId)
 
   let cosResult = { success: 0, failed: 0 }
   if (cosKeys.length > 0) {
@@ -212,21 +201,51 @@ export const DELETE = apiHandler(async (
     cosResult = await deleteObjects(cosKeys)
   }
 
-  await prisma.project.delete({
-    where: { id: projectId },
-  })
+  const coverMedia = await prisma.$transaction(async (tx) => {
+    const episodes = await tx.novelPromotionEpisode.findMany({
+      where: { novelPromotionProject: { projectId } },
+      select: {
+        id: true,
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
+    })
+    const coversById = new Map<string, {
+      id: string
+      episodeId: string
+      storageKey?: string
+    }>()
+    for (const episode of episodes) {
+      if (!episode.coverImageMediaId || coversById.has(episode.coverImageMediaId)) continue
+      coversById.set(episode.coverImageMediaId, {
+        id: episode.coverImageMediaId,
+        episodeId: episode.id,
+        storageKey: episode.coverImageMedia?.storageKey,
+      })
+    }
+
+    await tx.project.delete({
+      where: { id: projectId },
+    })
+    return [...coversById.values()]
+  }, { isolationLevel: 'Serializable' })
 
   for (const media of coverMedia) {
     try {
       const cleanupResult = await deleteMediaObjectIfUnreferenced(media.id)
       if (cleanupResult === 'deleted') cosResult.success += 1
     } catch (error) {
-      if (!(error instanceof MediaOrphanCleanupError)) throw error
       cosResult.failed += 1
-      _ulogError('Episode cover storage cleanup failed after project deletion', {
+      const cleanupStorageKey = error && typeof error === 'object' && 'storageKey' in error
+        && typeof error.storageKey === 'string'
+        ? error.storageKey
+        : media.storageKey
+      _ulogError('Episode cover cleanup failed after project deletion', {
         projectId,
+        episodeId: media.episodeId,
         mediaId: media.id,
-        storageKey: error.storageKey || media.storageKey,
+        storageKey: cleanupStorageKey,
+        error: error instanceof Error ? error.message : String(error),
       })
     }
   }

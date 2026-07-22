@@ -15,6 +15,8 @@ const findUniqueProjectMock = vi.hoisted(() => vi.fn())
 const findManyTaskMock = vi.hoisted(() => vi.fn())
 const findManyMediaObjectMock = vi.hoisted(() => vi.fn())
 const deleteMediaObjectIfUnreferencedMock = vi.hoisted(() => vi.fn())
+const transactionMock = vi.hoisted(() => vi.fn())
+const logErrorMock = vi.hoisted(() => vi.fn())
 const attachMediaFieldsToProjectMock = vi.hoisted(() => vi.fn(async (value) => value))
 const attachMediaFieldsToEpisodeMock = vi.hoisted(() => vi.fn(async (value: Record<string, unknown>) => ({
   ...value,
@@ -47,6 +49,7 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: transactionMock,
     novelPromotionEpisode: {
       findUnique: findUniqueMock,
       findFirst: findFirstMock,
@@ -64,6 +67,11 @@ vi.mock('@/lib/prisma', () => ({
       findMany: findManyMediaObjectMock,
     },
   },
+}))
+
+vi.mock('@/lib/logging/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/logging/core')>(),
+  logError: logErrorMock,
 }))
 
 vi.mock('@/lib/media/attach', () => ({
@@ -103,6 +111,16 @@ describe('api contract - novel promotion episode profiles', () => {
     ])
     findManyMediaObjectMock.mockResolvedValue([])
     deleteMediaObjectIfUnreferencedMock.mockResolvedValue('deleted')
+    transactionMock.mockImplementation(async (callback) => await callback({
+      novelPromotionEpisode: {
+        findFirst: findFirstMock,
+        delete: deleteEpisodeMock,
+      },
+      novelPromotionProject: {
+        findUnique: findUniqueProjectMock,
+        update: updateProjectMock,
+      },
+    }))
   })
 
   it('keeps the default full profile compatible and adds artifactReadiness', async () => {
@@ -474,15 +492,26 @@ describe('api contract - novel promotion episode profiles', () => {
         id: 'episode-project-b',
         novelPromotionProject: { projectId: 'project-a' },
       },
-      select: { id: true, coverImageMediaId: true },
+      select: {
+        id: true,
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
+    })
+    expect(transactionMock).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
     })
   })
 
-  it('cleans the former cover by media id only after deleting its scoped Episode', async () => {
+  it('captures the current cover and maintains lastEpisodeId in the delete transaction before cleanup', async () => {
     const events: string[] = []
-    findFirstMock.mockResolvedValueOnce({
+    findFirstMock.mockImplementationOnce(async () => {
+      events.push('current-cover-read')
+      return {
       id: 'episode-1',
       coverImageMediaId: 'media-cover-1',
+        coverImageMedia: { storageKey: 'episode-cover/current.png' },
+      }
     })
     deleteEpisodeMock.mockImplementationOnce(async () => {
       events.push('episode-deleted')
@@ -492,7 +521,32 @@ describe('api contract - novel promotion episode profiles', () => {
       events.push('cover-cleaned')
       return 'deleted'
     })
-    findUniqueProjectMock.mockResolvedValueOnce(null)
+    findUniqueProjectMock.mockResolvedValueOnce({
+      id: 'novel-project-1',
+      lastEpisodeId: 'episode-1',
+    })
+    findFirstMock.mockImplementationOnce(async () => {
+      events.push('replacement-episode-read')
+      return { id: 'episode-2' }
+    })
+    updateProjectMock.mockImplementationOnce(async () => {
+      events.push('last-episode-updated')
+      return { id: 'novel-project-1' }
+    })
+    transactionMock.mockImplementationOnce(async (callback) => {
+      const result = await callback({
+        novelPromotionEpisode: {
+          findFirst: findFirstMock,
+          delete: deleteEpisodeMock,
+        },
+        novelPromotionProject: {
+          findUnique: findUniqueProjectMock,
+          update: updateProjectMock,
+        },
+      })
+      events.push('delete-transaction-committed')
+      return result
+    })
 
     const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
     const req = buildMockRequest({
@@ -510,9 +564,58 @@ describe('api contract - novel promotion episode profiles', () => {
         id: 'episode-1',
         novelPromotionProject: { projectId: 'project-1' },
       },
-      select: { id: true, coverImageMediaId: true },
+      select: {
+        id: true,
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
     })
     expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
-    expect(events).toEqual(['episode-deleted', 'cover-cleaned'])
+    expect(transactionMock).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    })
+    expect(events).toEqual([
+      'current-cover-read',
+      'episode-deleted',
+      'replacement-episode-read',
+      'last-episode-updated',
+      'delete-transaction-committed',
+      'cover-cleaned',
+    ])
+  })
+
+  it('returns success and reports a structured failure when cover cleanup fails after deletion', async () => {
+    findFirstMock.mockResolvedValueOnce({
+      id: 'episode-1',
+      coverImageMediaId: 'media-cover-1',
+      coverImageMedia: { storageKey: 'episode-cover/current.png' },
+    })
+    findUniqueProjectMock.mockResolvedValueOnce(null)
+    deleteMediaObjectIfUnreferencedMock.mockRejectedValueOnce(new Error('database unavailable'))
+
+    const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/episodes/episode-1',
+      method: 'DELETE',
+    })
+
+    const res = await route.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1', episodeId: 'episode-1' }),
+    } as RouteContext)
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      success: true,
+      coverMediaCleanupFailed: 1,
+    })
+    expect(logErrorMock).toHaveBeenCalledWith(
+      'Episode cover cleanup failed after Episode deletion',
+      expect.objectContaining({
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        mediaId: 'media-cover-1',
+        storageKey: 'episode-cover/current.png',
+      }),
+    )
   })
 })

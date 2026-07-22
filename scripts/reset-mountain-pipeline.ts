@@ -83,6 +83,7 @@ async function main(): Promise<void> {
     countsBeforeReset: plan.counts,
     deletedCounts: result.deletedCounts,
     mediaObjects: result.mediaObjects,
+    coverMediaObjects: result.coverMediaObjects,
     storageDeletion,
     preservedEpisodes: plan.preserved.episodes.map((episode) => ({
       id: episode.id,

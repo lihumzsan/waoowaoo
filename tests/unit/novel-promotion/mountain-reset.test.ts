@@ -10,6 +10,12 @@ import {
   type MountainResetPlan,
 } from '@/lib/novel-promotion/mountain-reset'
 
+const deleteMediaObjectIfUnreferencedMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/media/unreferenced-cleanup', () => ({
+  deleteMediaObjectIfUnreferenced: deleteMediaObjectIfUnreferencedMock,
+}))
+
 function makePlan(overrides: Partial<MountainResetPlan> = {}): MountainResetPlan {
   return {
     projectId: 'project-1',
@@ -72,7 +78,9 @@ function makePlan(overrides: Partial<MountainResetPlan> = {}): MountainResetPlan
       locationIds: ['location-1'],
       graphRunIds: [],
       mediaObjectIds: ['media-1', 'media-2'],
+      guardedCoverMediaObjectIds: [],
     },
+    guardedCoverMedia: [],
     storageKeys: ['images/a.png', 'videos/b.mp4'],
     ...overrides,
   }
@@ -170,7 +178,7 @@ describe('mountain reset planning helpers', () => {
     expect(defaultExtractStorageKey('/not-a-storage-route/c.png')).toBeNull()
   })
 
-  it('collects Episode cover media ids and storage keys in the reset plan', async () => {
+  it('keeps cover media ids and storage keys out of destructive bulk reset sets', async () => {
     const findNovelProject = vi.fn(async () => ({
       id: 'novel-project-1',
       projectId: 'project-1',
@@ -202,8 +210,8 @@ describe('mountain reset planning helpers', () => {
         name: 'Episode 1',
         novelText: 'source',
         description: null,
-        audioUrl: null,
-        audioMediaId: null,
+        audioUrl: 'episode-cover/episode-1.png',
+        audioMediaId: 'media-cover-1',
         coverImageMediaId: 'media-cover-1',
         srtContent: null,
         speakerVoices: null,
@@ -249,11 +257,22 @@ describe('mountain reset planning helpers', () => {
       where: { id: { in: ['media-cover-1'] } },
       select: { id: true, storageKey: true },
     })
-    expect(plan.ids.mediaObjectIds).toEqual(['media-cover-1'])
-    expect(plan.storageKeys).toContain('episode-cover/episode-1.png')
+    expect(plan.ids.mediaObjectIds).toEqual([])
+    expect(plan.ids.guardedCoverMediaObjectIds).toEqual(['media-cover-1'])
+    expect(plan.guardedCoverMedia).toEqual([{
+      id: 'media-cover-1',
+      storageKey: 'episode-cover/episode-1.png',
+    }])
+    expect(plan.storageKeys).not.toContain('episode-cover/episode-1.png')
   })
 
-  it('clears Episode cover pointers before deleting reset media rows', async () => {
+  it('clears Episode cover pointers before guarded cleanup and preserves a shared cover', async () => {
+    deleteMediaObjectIfUnreferencedMock.mockReset()
+    const events: string[] = []
+    deleteMediaObjectIfUnreferencedMock.mockImplementation(async () => {
+      events.push('guarded-cover-checked')
+      return 'referenced'
+    })
     const deleteModel = () => ({ deleteMany: vi.fn(async () => ({ count: 0 })) })
     const tx = {
       graphArtifact: deleteModel(),
@@ -284,24 +303,104 @@ describe('mountain reset planning helpers', () => {
     }
     const deleteMediaRows = vi.fn(async () => ({ count: 1 }))
     const db = {
-      $transaction: vi.fn(async (callback) => await callback(tx)),
+      $transaction: vi.fn(async (callback) => {
+        const result = await callback(tx)
+        events.push('reset-transaction-committed')
+        return result
+      }),
       mediaObject: { deleteMany: deleteMediaRows },
     }
     const plan = makePlan({
       ids: {
         ...makePlan().ids,
-        mediaObjectIds: ['media-cover-1'],
+        mediaObjectIds: [],
+        guardedCoverMediaObjectIds: ['media-cover-1'],
       },
+      guardedCoverMedia: [{
+        id: 'media-cover-1',
+        storageKey: 'episode-cover/episode-1.png',
+      }],
     })
 
-    await executeMountainReset(db as never, plan)
+    const result = await executeMountainReset(db as never, plan)
 
     expect(tx.novelPromotionEpisode.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['episode-1'] } },
       data: expect.objectContaining({ coverImageMediaId: null }),
     })
-    expect(tx.novelPromotionEpisode.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
-      deleteMediaRows.mock.invocationCallOrder[0]!,
-    )
+    expect(deleteMediaRows).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
+    expect(events).toEqual(['reset-transaction-committed', 'guarded-cover-checked'])
+    expect(result.coverMediaObjects).toMatchObject({
+      attempted: 1,
+      deleted: 0,
+      referenced: 1,
+      missing: 0,
+      failed: 0,
+      skipped: 0,
+    })
+  })
+
+  it('preserves guarded cover rows and storage when storage deletion is disabled', async () => {
+    deleteMediaObjectIfUnreferencedMock.mockReset()
+    const deleteModel = () => ({ deleteMany: vi.fn(async () => ({ count: 0 })) })
+    const tx = {
+      graphArtifact: deleteModel(),
+      graphCheckpoint: deleteModel(),
+      graphStepAttempt: deleteModel(),
+      graphStep: deleteModel(),
+      graphEvent: deleteModel(),
+      graphRun: deleteModel(),
+      taskEvent: deleteModel(),
+      task: deleteModel(),
+      videoEditorProject: deleteModel(),
+      novelPromotionVoiceLine: deleteModel(),
+      supplementaryPanel: deleteModel(),
+      novelPromotionPanel: deleteModel(),
+      novelPromotionShot: deleteModel(),
+      novelPromotionStoryboard: deleteModel(),
+      novelPromotionClip: deleteModel(),
+      characterAppearance: deleteModel(),
+      novelPromotionCharacter: deleteModel(),
+      novelPromotionLocation: {
+        ...deleteModel(),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+      locationImage: deleteModel(),
+      novelPromotionEpisode: {
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+    }
+    const deleteMediaRows = vi.fn(async () => ({ count: 0 }))
+    const db = {
+      $transaction: vi.fn(async (callback) => await callback(tx)),
+      mediaObject: { deleteMany: deleteMediaRows },
+    }
+    const plan = makePlan({
+      deleteStorage: false,
+      ids: {
+        ...makePlan().ids,
+        mediaObjectIds: [],
+        guardedCoverMediaObjectIds: ['media-cover-1'],
+      },
+      guardedCoverMedia: [{
+        id: 'media-cover-1',
+        storageKey: 'episode-cover/episode-1.png',
+      }],
+      storageKeys: [],
+    })
+
+    const result = await executeMountainReset(db as never, plan)
+
+    expect(deleteMediaRows).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(result.coverMediaObjects).toMatchObject({
+      attempted: 1,
+      deleted: 0,
+      referenced: 0,
+      missing: 0,
+      failed: 0,
+      skipped: 1,
+    })
   })
 })

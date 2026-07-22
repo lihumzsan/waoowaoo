@@ -8,11 +8,11 @@ import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-imag
 import { auditEpisodeCoverImage } from '@/lib/novel-promotion/episode-cover/audit'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
-import type { TaskJobData } from '@/lib/task/types'
+import { TaskTerminatedError } from '@/lib/task/errors'
+import { TASK_STATUS, type TaskJobData } from '@/lib/task/types'
 import { deleteObject } from '@/lib/storage'
 import { reportTaskProgress } from '../shared'
 import {
-  assertTaskActive,
   getProjectModels,
   resolveImageSourceFromGeneration,
   uploadImageSourceToCosWithMetadata,
@@ -159,15 +159,28 @@ export async function handleEpisodeCoverImageTask(job: Job<TaskJobData>) {
     try {
       const uploaded = await uploadImageSourceToCosWithMetadata(audited.buffer, 'episode-cover', episode.id)
       uploadedKey = uploaded.key
-      candidateMedia = await ensureMediaObjectFromStorageKey(uploaded.key, audited.metadata)
+      const candidate = await ensureMediaObjectFromStorageKey(uploaded.key, audited.metadata)
+      candidateMedia = candidate
 
       await reportTaskProgress(job, 94, { stage: 'persist_episode_cover' })
-      await assertTaskActive(job, 'persist_episode_cover')
-      await prisma.novelPromotionEpisode.update({
-        where: { id: episode.id },
-        data: { coverImageMediaId: candidateMedia.id },
-      })
-      return candidateMedia
+      await prisma.$transaction(async (tx) => {
+        const activeTask = await tx.task.findFirst({
+          where: {
+            id: job.data.taskId,
+            projectId: job.data.projectId,
+            status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+          },
+          select: { id: true },
+        })
+        if (!activeTask) {
+          throw new TaskTerminatedError(job.data.taskId)
+        }
+        await tx.novelPromotionEpisode.update({
+          where: { id: episode.id },
+          data: { coverImageMediaId: candidate.id },
+        })
+      }, { isolationLevel: 'Serializable' })
+      return candidate
     } catch (taskError) {
       try {
         if (candidateMedia) {

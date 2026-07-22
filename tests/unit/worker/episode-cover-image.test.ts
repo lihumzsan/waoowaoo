@@ -4,12 +4,14 @@ import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
 import type { TaskJobData } from '@/lib/task/types'
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   novelPromotionEpisode: {
     findFirst: vi.fn(),
     update: vi.fn(),
   },
   task: {
     findUnique: vi.fn(async () => null),
+    findFirst: vi.fn(),
   },
 }))
 
@@ -198,6 +200,15 @@ describe('worker episode cover image behavior', () => {
     })
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode())
     prismaMock.novelPromotionEpisode.update.mockResolvedValue({ id: 'episode-1' })
+    prismaMock.task.findFirst.mockResolvedValue({ id: 'task-cover-1' })
+    prismaMock.$transaction.mockImplementation(async (callback) => await callback({
+      novelPromotionEpisode: {
+        update: prismaMock.novelPromotionEpisode.update,
+      },
+      task: {
+        findFirst: prismaMock.task.findFirst,
+      },
+    }))
     utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValue({
       key: 'images/episode-cover/episode-1.png',
       metadata: {
@@ -410,6 +421,63 @@ describe('worker episode cover image behavior', () => {
     expect(cleanupMock.deleteMediaObjectIfUnreferenced).toHaveBeenCalledWith('media-old-cover')
   })
 
+  it('serializes active-task validation and pointer publication in one transaction', async () => {
+    const events: string[] = []
+    prismaMock.task.findFirst.mockImplementationOnce(async () => {
+      events.push('active-task-read')
+      return { id: 'task-cover-1' }
+    })
+    prismaMock.novelPromotionEpisode.update.mockImplementationOnce(async () => {
+      events.push('pointer-published')
+      return { id: 'episode-1' }
+    })
+    prismaMock.$transaction.mockImplementationOnce(async (callback) => {
+      const result = await callback({
+        novelPromotionEpisode: {
+          update: prismaMock.novelPromotionEpisode.update,
+        },
+        task: {
+          findFirst: prismaMock.task.findFirst,
+        },
+      })
+      events.push('publish-transaction-committed')
+      return result
+    })
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await handleEpisodeCoverImageTask(buildJob())
+
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    })
+    expect(prismaMock.task.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'task-cover-1',
+        projectId: 'project-1',
+        status: { in: ['queued', 'processing'] },
+      },
+      select: { id: true },
+    })
+    expect(events).toEqual([
+      'active-task-read',
+      'pointer-published',
+      'publish-transaction-committed',
+    ])
+  })
+
+  it('compensates the candidate when reset committed before pointer publication', async () => {
+    prismaMock.task.findFirst.mockResolvedValueOnce(null)
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toMatchObject({
+      name: 'TaskTerminatedError',
+      taskId: 'task-cover-1',
+    })
+
+    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+    expect(cleanupMock.deleteMediaObjectIfUnreferenced).toHaveBeenCalledWith('media-cover-1')
+  })
+
   it('does not create media, change the pointer, or run compensation when upload fails', async () => {
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
     utilsMock.uploadImageSourceToCosWithMetadata.mockRejectedValue(new Error('upload failed'))
@@ -444,6 +512,27 @@ describe('worker episode cover image behavior', () => {
 
     expect(cleanupMock.deleteMediaObjectIfUnreferenced).toHaveBeenCalledWith('media-cover-1')
     expect(storageMock.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it('keeps the original publish error when candidate compensation also fails', async () => {
+    const pointerFailure = new Error('pointer update failed')
+    prismaMock.novelPromotionEpisode.update.mockRejectedValueOnce(pointerFailure)
+    cleanupMock.deleteMediaObjectIfUnreferenced.mockRejectedValueOnce(new Error('candidate cleanup failed'))
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toBe(pointerFailure)
+
+    expect(loggerMock.warn).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'worker.episode-cover.cleanup_candidate_failed',
+      projectId: 'project-1',
+      taskId: 'task-cover-1',
+      details: expect.objectContaining({
+        episodeId: 'episode-1',
+        mediaId: 'media-cover-1',
+        storageKey: 'images/episode-cover/episode-1.png',
+        cleanupError: 'candidate cleanup failed',
+      }),
+    }))
   })
 
   it('publishes successfully when the superseded cover cleanup fails and emits a structured warning', async () => {
