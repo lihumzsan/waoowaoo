@@ -91,6 +91,85 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['275']?.inputs?.['num_images.index_2']).toBe(finalFrameIndex)
   })
 
+  it('injects four ordered seam anchors into both Goon stages', () => {
+    const graph = resolveComfyUiWorkflow(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      {
+        prompt: 'continuous motion',
+        imageFilenames: ['a-pre.png', 'a-end.png', 'b-start.png', 'b-post.png'],
+        width: 1280,
+        height: 736,
+        fps: 29.97,
+        durationSeconds: 4,
+        videoSeamMotionAnchors: { frameIndices: [0, 7, 113, 120] },
+      },
+    )
+
+    expect(graph['149']?.inputs.image).toBe('a-pre.png')
+    expect(graph['300']?.inputs.image).toBe('a-end.png')
+    expect(graph['303']?.inputs.image).toBe('b-start.png')
+    expect(graph['269']?.inputs.image).toBe('b-post.png')
+    for (const nodeId of ['265', '275']) {
+      expect(graph[nodeId]?.inputs).toMatchObject({
+        num_images: '4',
+        'num_images.strength_1': 1,
+        'num_images.strength_2': 1,
+        'num_images.strength_3': 1,
+        'num_images.strength_4': 1,
+        'num_images.image_1': ['152', 0],
+        'num_images.image_2': ['302', 0],
+        'num_images.image_3': ['305', 0],
+        'num_images.image_4': ['271', 0],
+        'num_images.index_1': 0,
+        'num_images.index_2': 7,
+        'num_images.index_3': 113,
+        'num_images.index_4': 120,
+      })
+    }
+    expect(graph['233']?.inputs.value).toBe(29.97)
+    expect(graph['237']?.inputs.value).toBe(1280)
+    expect(graph['238']?.inputs.value).toBe(736)
+  })
+
+  it('keeps ordinary two-frame Goon callers on 24 FPS', () => {
+    const graph = resolveComfyUiWorkflow(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      { imageFilenames: ['first.png', 'last.png'], durationSeconds: 4, fps: 30 },
+    )
+    expect(graph['265']?.inputs.num_images).toBe('2')
+    expect(graph['275']?.inputs.num_images).toBe('2')
+    expect(graph['233']?.inputs.value).toBe(24)
+    expect(graph['300']).toBeUndefined()
+    expect(graph['303']).toBeUndefined()
+  })
+
+  it.each([
+    {
+      name: 'requires four nonblank filenames',
+      imageFilenames: ['a-pre.png', 'a-end.png', 'b-start.png'],
+      frameIndices: [0, 6, 90, 96],
+    },
+    {
+      name: 'requires ordered indices ending at the generated final frame',
+      imageFilenames: ['a-pre.png', 'a-end.png', 'b-start.png', 'b-post.png'],
+      frameIndices: [0, 6, 90, 95],
+    },
+  ])('$name for four-anchor Goon injection', ({ imageFilenames, frameIndices }) => {
+    expect(() => resolveComfyUiWorkflow(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      {
+        imageFilenames,
+        width: 1280,
+        height: 736,
+        fps: 24,
+        durationSeconds: 4,
+        videoSeamMotionAnchors: {
+          frameIndices: frameIndices as [number, number, number, number],
+        },
+      },
+    )).toThrow('COMFYUI_VIDEO_SEAM_FOUR_ANCHOR_CONTRACT_INVALID')
+  })
+
   it('injects prompt into connected PrimitiveStringMultiline value nodes', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot

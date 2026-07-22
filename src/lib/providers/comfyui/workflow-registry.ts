@@ -96,6 +96,9 @@ export type ComfyUiWorkflowInject = {
   durationSeconds?: number
   targetFrameCount?: number
   motionStrength?: number
+  videoSeamMotionAnchors?: {
+    frameIndices: [number, number, number, number]
+  }
 }
 
 export type ComfyUiWorkflowLlmApiInject = {
@@ -3091,11 +3094,86 @@ function applyGoonFirstLastFrameWorkflowControls(
     positivePromptNode.inputs.text = prompt
   }
 
-  const imageFilenames = Array.isArray(inject.imageFilenames)
-    ? inject.imageFilenames.filter(
-        (filename): filename is string => typeof filename === 'string' && filename.trim().length > 0,
+  const rawImageFilenames = Array.isArray(inject.imageFilenames) ? inject.imageFilenames : []
+  const imageFilenames = rawImageFilenames.filter(
+    (filename): filename is string => typeof filename === 'string' && filename.trim().length > 0,
+  )
+  const seamMotionAnchors = inject.videoSeamMotionAnchors
+  if (seamMotionAnchors) {
+    const frameIndices = seamMotionAnchors.frameIndices
+    const fps = typeof inject.fps === 'number' && Number.isFinite(inject.fps) && inject.fps > 0
+      ? inject.fps
+      : null
+    const width = clampDimension(inject.width)
+    const height = clampDimension(inject.height)
+    const durationSeconds = normalizeLtx23GoonDurationSeconds(inject.durationSeconds)
+    const generatedFinalFrameIndex = fps === null
+      ? null
+      : 8 * Math.round((durationSeconds * fps) / 8)
+    const validFilenames = rawImageFilenames.length === 4
+      && rawImageFilenames.every(
+        (filename) => typeof filename === 'string' && filename.trim().length > 0,
       )
-    : []
+    const validFrameIndices = Array.isArray(frameIndices)
+      && frameIndices.length === 4
+      && frameIndices.every((value) => Number.isInteger(value) && value >= 0)
+      && frameIndices.every((value, index) => index === 0 || value > frameIndices[index - 1])
+      && frameIndices[3] === generatedFinalFrameIndex
+
+    if (!validFilenames || !validFrameIndices || width === null || height === null || fps === null) {
+      throw new Error('COMFYUI_VIDEO_SEAM_FOUR_ANCHOR_CONTRACT_INVALID')
+    }
+
+    const longerEdge = Math.max(width, height)
+    graph['300'] = { class_type: 'LoadImage', inputs: { image: imageFilenames[1] } }
+    graph['301'] = {
+      class_type: 'ResizeImagesByLongerEdge',
+      inputs: { images: ['300', 0], longer_edge: longerEdge },
+    }
+    graph['302'] = {
+      class_type: 'LTXVPreprocess',
+      inputs: { image: ['301', 0], img_compression: 18 },
+    }
+    graph['303'] = { class_type: 'LoadImage', inputs: { image: imageFilenames[2] } }
+    graph['304'] = {
+      class_type: 'ResizeImagesByLongerEdge',
+      inputs: { images: ['303', 0], longer_edge: longerEdge },
+    }
+    graph['305'] = {
+      class_type: 'LTXVPreprocess',
+      inputs: { image: ['304', 0], img_compression: 18 },
+    }
+
+    const firstResizeNode = graph['151']
+    const lastResizeNode = graph['272']
+    if (firstResizeNode && isRecord(firstResizeNode.inputs)) {
+      firstResizeNode.inputs.longer_edge = longerEdge
+    }
+    if (lastResizeNode && isRecord(lastResizeNode.inputs)) {
+      lastResizeNode.inputs.longer_edge = longerEdge
+    }
+
+    for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
+      const conditioningNode = graph[nodeId]
+      if (!conditioningNode || !isRecord(conditioningNode.inputs)) continue
+      for (const inputName of Object.keys(conditioningNode.inputs)) {
+        if (/^num_images\.(?:strength|image|index)_\d+$/.test(inputName)) {
+          delete conditioningNode.inputs[inputName]
+        }
+      }
+      conditioningNode.inputs.num_images = '4'
+      for (let index = 0; index < 4; index += 1) {
+        const slot = index + 1
+        conditioningNode.inputs[`num_images.strength_${slot}`] = 1
+        conditioningNode.inputs[`num_images.image_${slot}`] = [
+          ['152', '302', '305', '271'][index],
+          0,
+        ]
+        conditioningNode.inputs[`num_images.index_${slot}`] = frameIndices[index]
+      }
+    }
+    setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, fps)
+  }
   const firstImage = imageFilenames[0]
   const lastImage = imageFilenames[imageFilenames.length - 1] ?? firstImage
   const firstImageNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.firstImage]
@@ -3114,13 +3192,17 @@ function applyGoonFirstLastFrameWorkflowControls(
 
   const durationSeconds = normalizeLtx23GoonDurationSeconds(inject.durationSeconds)
   setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration, durationSeconds)
-  setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
+  if (!seamMotionAnchors) {
+    setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
+  }
 
   const finalPixelFrameIndex = resolveLtx23GoonFinalFrameIndex(durationSeconds)
-  for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
-    const conditioningNode = graph[nodeId]
-    if (conditioningNode && isRecord(conditioningNode.inputs)) {
-      conditioningNode.inputs['num_images.index_2'] = finalPixelFrameIndex
+  if (!seamMotionAnchors) {
+    for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
+      const conditioningNode = graph[nodeId]
+      if (conditioningNode && isRecord(conditioningNode.inputs)) {
+        conditioningNode.inputs['num_images.index_2'] = finalPixelFrameIndex
+      }
     }
   }
 
@@ -3416,7 +3498,9 @@ export function resolveComfyUiWorkflow(
     applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   }
   applyDimensionHeuristics(graph, inject.width, inject.height)
-  const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
+  const imageFilenames = isGoonFirstLastFrameWorkflow && inject.videoSeamMotionAnchors
+    ? inject.imageFilenames
+    : expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
   validateVideoSeamWorkflowContract(graph, workflowKey)

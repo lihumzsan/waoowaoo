@@ -15,6 +15,7 @@ import {
   type ComfyUiWorkflowGraph,
   type ComfyUiWorkflowLlmApiInject,
 } from './workflow-registry'
+import { COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID } from './ltx23-workflow-profiles'
 import { COMFYUI_NEUTRAL_REFERENCE_IMAGE } from './neutral-reference'
 
 function normalizeComfyBaseUrl(raw: string): string {
@@ -860,6 +861,26 @@ async function fetchComfyUiObjectInfo(base: string, classType: string): Promise<
   }
 }
 
+function readComfyUiNumericInputMax(
+  payload: unknown,
+  classType: string,
+  field: string,
+): number | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const classInfo = (payload as Record<string, unknown>)[classType]
+  if (!classInfo || typeof classInfo !== 'object' || Array.isArray(classInfo)) return null
+  const input = (classInfo as Record<string, unknown>).input
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  const required = (input as Record<string, unknown>).required
+  if (!required || typeof required !== 'object' || Array.isArray(required)) return null
+  const inputDefinition = (required as Record<string, unknown>)[field]
+  if (!Array.isArray(inputDefinition)) return null
+  const options = inputDefinition[1]
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return null
+  const max = (options as Record<string, unknown>).max
+  return typeof max === 'number' && Number.isFinite(max) ? max : null
+}
+
 async function normalizeWorkflowModelInputsForServer(
   base: string,
   workflow: ComfyUiWorkflowGraph,
@@ -1202,6 +1223,62 @@ export async function runComfyUiVideoWorkflow(params: {
 export const COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID = 'basevideo/tools/video-seam-concat-nvenc'
 export const COMFYUI_VIDEO_SEAM_ENDPOINT_WORKFLOW_ID = 'basevideo/tools/video-seam-endpoint'
 export const COMFYUI_VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_ID = 'basevideo/tools/video-seam-bridge-compose-nvenc'
+
+export async function runComfyUiVideoSeamMotionBridgeWorkflow(params: {
+  baseUrl: string
+  prompt: string
+  anchorImageUrls: [string, string, string, string]
+  generatedAnchorIndices: [number, number, number, number]
+  width: number
+  height: number
+  fps: number
+  durationSeconds: number
+}): Promise<{ videoUrl: string; mimeType: string; contentLength?: number }> {
+  const base = normalizeComfyBaseUrl(params.baseUrl)
+  const conditioningClassType = 'LTXVImgToVideoInplaceKJ'
+  const objectInfo = await fetchComfyUiObjectInfo(base, conditioningClassType)
+  const maxImages = readComfyUiNumericInputMax(objectInfo, conditioningClassType, 'num_images')
+  if (maxImages === null || maxImages < 4) {
+    throw new Error('VIDEO_SEAM_FOUR_ANCHOR_UNSUPPORTED')
+  }
+
+  const imageFilenames = await uploadComfyUiImages(base, params.anchorImageUrls)
+  const workflow = resolveComfyUiWorkflow(
+    COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID,
+    {
+      prompt: params.prompt,
+      imageFilenames,
+      width: params.width,
+      height: params.height,
+      fps: params.fps,
+      durationSeconds: params.durationSeconds,
+      videoSeamMotionAnchors: { frameIndices: params.generatedAnchorIndices },
+    },
+  )
+
+  for (const nodeId of ['265', '275']) {
+    const inputs = workflow[nodeId]?.inputs
+    const hasExpectedAnchors = inputs?.num_images === '4'
+      && params.generatedAnchorIndices.every(
+        (frameIndex, index) => inputs[`num_images.index_${index + 1}`] === frameIndex,
+      )
+    if (!hasExpectedAnchors) {
+      throw new Error('COMFYUI_VIDEO_SEAM_FOUR_ANCHOR_CONTRACT_INVALID')
+    }
+  }
+
+  const output = await runComfyUiWorkflow({
+    baseUrl: base,
+    workflow,
+    expect: 'video',
+    returnViewUrl: true,
+  })
+  return {
+    videoUrl: output.viewUrl,
+    mimeType: output.mimeType,
+    ...(output.contentLength === undefined ? {} : { contentLength: output.contentLength }),
+  }
+}
 
 export async function runComfyUiVideoSeamEndpointWorkflow(params: {
   baseUrl: string

@@ -6,6 +6,7 @@ import {
   collectMediaRefsFromOutputs,
   resolveComfyUiPromptQueuePhase,
   runComfyUiImageWorkflow,
+  runComfyUiVideoSeamMotionBridgeWorkflow,
   runComfyUiVideoSeamEndpointWorkflow,
   runComfyUiVideoSeamConcatWorkflow,
   runComfyUiVideoWorkflow,
@@ -1012,6 +1013,185 @@ describe('comfyui client media refs', () => {
 
     expect(result.mimeType).toBe('video/mp4')
     expect((submittedWorkflow as Record<string, { inputs: Record<string, unknown> }>)['2']?.inputs.vae_name).toBe('ltx\\LTX23_audio_vae_bf16.safetensors')
+  })
+
+  it('preflights and submits four ordered motion anchors through the specialized Goon runner', async () => {
+    vi.useFakeTimers()
+    const uploadedNames = ['a-pre.png', 'a-end.png', 'b-start.png', 'b-post.png']
+    const uploadedAnchorBytes: number[] = []
+    let uploadIndex = 0
+    let submittedWorkflow: Record<string, { class_type: string; inputs: Record<string, unknown> }> | null = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/object_info/LTXVImgToVideoInplaceKJ')) {
+        return new Response(JSON.stringify({
+          LTXVImgToVideoInplaceKJ: {
+            input: {
+              required: {
+                num_images: ['INT', { default: 2, min: 1, max: 4 }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/object_info/')) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/upload/image')) {
+        const image = (init?.body as FormData).get('image')
+        const bytes = image instanceof Blob
+          ? new Uint8Array(await image.arrayBuffer())
+          : new Uint8Array()
+        uploadedAnchorBytes.push(bytes[0] ?? -1)
+        const name = uploadedNames[uploadIndex]
+        uploadIndex += 1
+        return new Response(JSON.stringify({ name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/prompt')) {
+        submittedWorkflow = JSON.parse(String(init?.body || '{}')).prompt
+        return new Response(JSON.stringify({ prompt_id: 'prompt-four-anchor' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/history/prompt-four-anchor')) {
+        return new Response(JSON.stringify({
+          'prompt-four-anchor': {
+            outputs: {
+              '75': {
+                video_url: '/view?filename=four-anchor.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('/view?filename=four-anchor.mp4')) {
+        return new Response(new Uint8Array([9, 8, 7]), {
+          status: 200,
+          headers: { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
+        })
+      }
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiVideoSeamMotionBridgeWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      prompt: 'continuous motion',
+      anchorImageUrls: [
+        `data:image/png;base64,${Buffer.from([1]).toString('base64')}`,
+        `data:image/png;base64,${Buffer.from([2]).toString('base64')}`,
+        `data:image/png;base64,${Buffer.from([3]).toString('base64')}`,
+        `data:image/png;base64,${Buffer.from([4]).toString('base64')}`,
+      ],
+      generatedAnchorIndices: [0, 6, 90, 96],
+      width: 1280,
+      height: 736,
+      fps: 24,
+      durationSeconds: 4,
+    })
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    const result = await resultPromise
+
+    expect(uploadedAnchorBytes).toEqual([1, 2, 3, 4])
+    expect(uploadIndex).toBe(4)
+    expect(submittedWorkflow).not.toBeNull()
+    const resolvedWorkflow = submittedWorkflow as unknown as Record<
+      string,
+      { class_type: string; inputs: Record<string, unknown> }
+    >
+    for (const nodeId of ['265', '275']) {
+      expect(resolvedWorkflow[nodeId]?.inputs).toMatchObject({
+        num_images: '4',
+        'num_images.index_1': 0,
+        'num_images.index_2': 6,
+        'num_images.index_3': 90,
+        'num_images.index_4': 96,
+      })
+    }
+    expect(resolvedWorkflow['233']?.inputs.value).toBe(24)
+    expect(result).toEqual({
+      videoUrl: 'http://127.0.0.1:8188/view?filename=four-anchor.mp4&subfolder=&type=output',
+      mimeType: 'video/mp4',
+      contentLength: 3,
+    })
+  })
+
+  it('rejects a server limited to two image slots before prompt submission', async () => {
+    let promptSubmissionCount = 0
+    let uploadIndex = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/object_info/LTXVImgToVideoInplaceKJ')) {
+        return new Response(JSON.stringify({
+          LTXVImgToVideoInplaceKJ: {
+            input: {
+              required: {
+                num_images: ['INT', { default: 2, min: 1, max: 2 }],
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/upload/image')) {
+        uploadIndex += 1
+        return new Response(JSON.stringify({ name: `anchor-${uploadIndex}.png` }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.endsWith('/prompt')) {
+        promptSubmissionCount += 1
+        return new Response(JSON.stringify({ prompt_id: 'must-not-submit' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    await expect(runComfyUiVideoSeamMotionBridgeWorkflow({
+      baseUrl: 'http://127.0.0.1:8188',
+      prompt: 'continuous motion',
+      anchorImageUrls: [
+        'data:image/png;base64,AQ==',
+        'data:image/png;base64,Ag==',
+        'data:image/png;base64,Aw==',
+        'data:image/png;base64,BA==',
+      ],
+      generatedAnchorIndices: [0, 6, 90, 96],
+      width: 1280,
+      height: 736,
+      fps: 24,
+      durationSeconds: 4,
+    })).rejects.toThrow('VIDEO_SEAM_FOUR_ANCHOR_UNSUPPORTED')
+    expect(promptSubmissionCount).toBe(0)
   })
 
   it('uploads two videos in order and submits the seam-concat graph', async () => {
