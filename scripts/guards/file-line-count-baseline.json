@@ -1,17 +1,14 @@
 {
   "src/app/[locale]/profile/components/api-config-tab/DefaultModelCards.tsx": 559,
   "src/app/[locale]/profile/components/api-config/provider-card/hooks/useProviderCardState.ts": 477,
-  "src/components/ui/CapsuleNav.tsx": 679,
+  "src/components/ui/CapsuleNav.tsx": 513,
   "src/components/ui/config-modals/ConfigEditModal.tsx": 575,
   "src/components/ui/icons/custom.tsx": 733,
   "src/components/ui/model-dropdown-innovative.tsx": 588,
   "src/components/ui/model-dropdown-variants.tsx": 543,
-  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 781,
+  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 754,
   "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 587,
-  "src/lib/query/hooks/useAssets.ts": 442,
-  "src/lib/query/hooks/useTaskTargetStateMap.ts": 461,
-  "src/lib/query/mutations/asset-hub-character-mutations.ts": 403,
-  "src/lib/query/mutations/asset-hub-location-mutations.ts": 357,
-  "src/lib/query/mutations/character-base-mutations.ts": 380,
-  "src/lib/query/mutations/location-image-mutations.ts": 341
+  "src/lib/query/mutations/asset-hub-character-mutations.ts": 350,
+  "src/lib/query/mutations/asset-hub-location-mutations.ts": 310,
+  "src/lib/query/mutations/character-base-mutations.ts": 329
 }

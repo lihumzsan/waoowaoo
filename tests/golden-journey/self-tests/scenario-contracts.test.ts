@@ -5,10 +5,9 @@ import {
 } from '../contracts/scenarios'
 
 describe('Golden Journey scenario contracts', () => {
-  it('keeps one recommended mainline, focused freeform journeys, and the minimal security boundaries', () => {
+  it('keeps independent free-composition journeys and the minimal security boundaries', () => {
     expect(() => validateGoldenScenarioContracts()).not.toThrow()
     expect(GOLDEN_SCENARIO_CONTRACTS.map((scenario) => scenario.id)).toEqual([
-      'GJ-MAIN-STORY-TO-FINAL-DELIVERABLE',
       'GJ-FREEFORM-RESOURCE-CREATION',
       'GJ-PARALLEL-OPERATION-BATCH',
       'GJ-FREEFORM-ZERO-VIDEO',
@@ -17,6 +16,11 @@ describe('Golden Journey scenario contracts', () => {
       'GJ-PROJECT-CROSS-USER-ISOLATION',
       'GJ-ASSET-HUB-CROSS-PROJECT-DENIAL',
     ])
+    expect(GOLDEN_SCENARIO_CONTRACTS[0]).toMatchObject({
+      startState: 'empty_project',
+      expectedTerminal: 'independent_resources_and_explicit_optional_projections_ready',
+      requiresWorkers: true,
+    })
   })
 
   it('fails when a scenario identity is duplicated', () => {

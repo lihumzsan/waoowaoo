@@ -24,7 +24,7 @@ export async function createGoldenGlobalCharacterThroughUi(page: Page, input: {
       candidate.request().method() === 'POST'
       && new URL(candidate.url()).pathname === '/api/asset-hub/characters'
     )),
-    page.getByRole('button', { name: '仅添加人物到资产库', exact: true }).click(),
+    page.getByRole('button', { name: '添加', exact: true }).click(),
   ])
   if (response.status() !== 201 && response.status() !== 200) {
     throw new Error(`GOLDEN_GLOBAL_CHARACTER_CREATE_HTTP_${String(response.status())}`)
@@ -56,7 +56,7 @@ export async function createGoldenProjectCharacterThroughUi(page: Page, input: {
       candidate.request().method() === 'POST'
       && new URL(candidate.url()).pathname === `/api/projects/${input.projectId}/character`
     )),
-    page.getByRole('button', { name: '仅添加角色', exact: true }).click(),
+    page.getByRole('button', { name: '添加', exact: true }).click(),
   ])
   if (response.status() !== 201 && response.status() !== 200) {
     throw new Error(`GOLDEN_PROJECT_CHARACTER_CREATE_HTTP_${String(response.status())}`)

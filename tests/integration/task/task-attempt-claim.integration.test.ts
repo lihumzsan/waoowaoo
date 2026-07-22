@@ -24,9 +24,9 @@ describe('task attempt ownership MySQL integration', () => {
       id: 'attempt-owner-task',
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.MUSIC_GENERATE,
-      targetType: 'Project',
-      targetId: project.id,
+      type: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+      targetType: 'CreativeResource',
+      targetId: 'audio-resource-attempt-owner',
     })
 
     const firstClaims = await Promise.all(Array.from({ length: 8 }, async () =>

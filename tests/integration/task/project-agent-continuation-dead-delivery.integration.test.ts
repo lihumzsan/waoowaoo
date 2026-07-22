@@ -34,9 +34,9 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
     id: 'task-1',
     userId: user.id,
     projectId: project.id,
-    type: TASK_TYPE.VIDEO_SEGMENT,
-    targetType: 'ProjectVideoSegment',
-    targetId: 'dead-delivery-video-segment-1',
+    type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+    targetType: 'CreativeResource',
+    targetId: 'dead-delivery-video-resource-1',
     payload: {},
   })
   await prisma.task.update({
@@ -73,7 +73,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
       scopeRef,
       type: 'waiting_task',
       status: 'completed',
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       completedAt: new Date(),
     },
   })
@@ -86,7 +86,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
       userId: user.id,
       assistantId: 'workspace-command',
       scopeRef,
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',
       status,

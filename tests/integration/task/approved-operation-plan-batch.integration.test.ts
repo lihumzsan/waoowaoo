@@ -16,42 +16,39 @@ import { z } from 'zod'
 import { enqueuePersistedTask } from '@/lib/task/enqueue'
 import { observeTaskJob } from '@/lib/task/reconcile'
 import { removeTaskJob } from '@/lib/task/queues'
-import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
-import { appendProjectAgentEvents } from '@/lib/project-agent/event'
-import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+    taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
     apiType: 'image',
     model: 'fal::gpt-image-2',
     quantity: 1,
     unit: 'image',
     maxFrozenCost: 1,
-    action: `style-preview-${id}`,
+    action: `resource-image-${id}`,
   }
 }
 async function seedExecution(balance: number) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
   const episode = await prisma.projectEpisode.create({
-    data: { projectId: project.id, episodeNumber: 1, name: 'Approved preview episode' },
+    data: { projectId: project.id, episodeNumber: 1, name: 'Approved Resource episode' },
   })
   await seedBalance(user.id, balance)
   const plan: OperationPlan = {
     kind: 'task_submission',
-    operationId: 'generate_edit_style_previews',
+    operationId: 'create_image',
     projectId: project.id,
     userId: user.id,
-    tasks: ['preview-1', 'preview-2'].map((id) => ({ id: `plan-${id}`,
-      taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-      target: { targetType: 'ProjectEditStylePreview', targetId: id },
-      payload: { stylePreviewId: id, imageModel: 'fal::gpt-image-2' },
+    tasks: ['image-1', 'image-2'].map((id) => ({ id: `plan-${id}`,
+      taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      target: { targetType: 'CreativeResource', targetId: id },
+      payload: { resourceId: id, imageModel: 'fal::gpt-image-2' },
       billingInfo: billingInfo(id),
       locale: 'en',
       episodeId: episode.id,
-      dedupeKey: `style-preview:${id}`,
+      dedupeKey: `resource-image:${id}`,
       priority: 0,
     })),
   }
@@ -141,7 +138,7 @@ describe('approved operation plan Task batch integration', () => {
           operationSource: 'assistant-panel',
         }),
     )
-    expect([...results.keys()].sort()).toEqual(['plan-preview-1', 'plan-preview-2'])
+    expect([...results.keys()].sort()).toEqual(['plan-image-1', 'plan-image-2'])
     const [grant, execution, tasks, freezes, commands] = await Promise.all([
       prisma.approvalGrant.findUnique({
         where: { id: seeded.issued.approvalGrantId },
@@ -163,7 +160,7 @@ describe('approved operation plan Task batch integration', () => {
     expect(grant?.consumedAt).toBeInstanceOf(Date)
     expect(execution?.status).toBe('committing')
     expect(tasks).toHaveLength(2)
-    expect(tasks.map((task) => task.operationPlanTaskId)).toEqual(['plan-preview-1', 'plan-preview-2'])
+    expect(tasks.map((task) => task.operationPlanTaskId)).toEqual(['plan-image-1', 'plan-image-2'])
     expect(tasks.every((task) => task.approvalGrantId === seeded.issued.approvalGrantId)).toBe(true)
     expect(tasks.every((task) => (task.billingInfo as { status?: string }).status === 'frozen')).toBe(true)
     expect(freezes).toHaveLength(2)
@@ -178,7 +175,7 @@ describe('approved operation plan Task batch integration', () => {
     const project = await createTestProject(user.id)
     const plan: OperationPlan = {
       kind: 'task_submission',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       projectId: project.id,
       userId: user.id,
       tasks: [],
@@ -255,12 +252,12 @@ describe('approved operation plan Task batch integration', () => {
       })
     }
     const owned = await persistEmptyPlan({
-      operationId: 'generate_episode_bgm_score',
+      operationId: 'create_audio',
       projectId: project.id,
       userId: user.id,
     })
     const unauthorized = await persistEmptyPlan({
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       projectId: otherProject.id,
       userId: otherUser.id,
     })

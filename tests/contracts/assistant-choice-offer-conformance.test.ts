@@ -1,196 +1,227 @@
 import { describe, expect, it } from 'vitest'
-import {
-  buildProjectAgentChoiceOffer,
-  expectedReviewedResourceKind,
-  fingerprintProjectAgentChoiceResource,
-  parseProjectAgentChoiceOffer,
-} from '@/lib/project-agent/choice-offer'
-import {
-  EDIT_FIRST_CHOICE_REGISTRY,
-  EDIT_FIRST_CHOICE_TOOL_IDS,
-  EDIT_FIRST_CHOICE_TYPES,
-  resolveEditFirstChoiceAtomicConfirmationCommand,
-} from '@/lib/project-agent/edit-first-choice-tools'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import type { ProjectAgentChoiceCardDefinition } from '@/lib/project-agent/types'
+import {
+  assertProjectAgentChoiceCommitmentsMatchCard,
+  buildProjectAgentChoiceOffer,
+  fingerprintProjectAgentChoiceSubject,
+  parseProjectAgentChoiceDecision,
+  parseProjectAgentChoiceOffer,
+  projectAgentChoiceCardAuthoringSchema,
+  type ProjectAgentChoiceCardDefinition,
+  type ProjectAgentChoiceCommitment,
+} from '@/lib/project-agent/choice-offer'
+import { resolveProjectAgentChoiceCommitment } from '@/lib/project-agent/choice-result'
 
-function card(choiceType: (typeof EDIT_FIRST_CHOICE_TYPES)[number]): ProjectAgentChoiceCardDefinition {
+const REMOVED_FIXED_CHOICE_OPERATIONS = [
+  'request_script_intake_choice',
+  'request_edit_script_review_choice',
+  'request_edit_bible_review_choice',
+  'request_edit_style_choice',
+  'request_edit_asset_review_choice',
+] as const
+
+function selectCard(): ProjectAgentChoiceCardDefinition {
   return {
-    cardId: `card:${choiceType}`,
-    toolCallId: `tool:${choiceType}`,
-    choiceType,
-    replyMode: choiceType === 'script_intake' ? 'per_group' : 'whole_card',
-    title: 'Choice',
-    groups: [],
-    submitLabel: 'Continue',
-    submit: { kind: 'submit_tool_output', decision: choiceType === 'style' ? 'select' : 'approve' },
+    cardId: 'server-card-1',
+    toolCallId: 'tool-call-1',
+    mode: 'select_or_text',
+    replyMode: 'whole_card',
+    title: 'Choose the current visual direction',
+    description: 'This decision only adopts the selected Style Bible.',
+    groups: [{
+      key: 'style',
+      label: 'Style',
+      required: true,
+      presentation: 'options',
+      allowCustomText: false,
+      options: [
+        { value: 'style_a', label: 'Graphic noir', description: null, imageUrl: null, meta: null },
+        { value: 'style_b', label: 'Soft collage', description: null, imageUrl: null, meta: null },
+      ],
+    }],
+    submitLabel: 'Use this style',
+    replyLabel: 'Describe another direction',
+    replyPlaceholder: 'Tell me what should change',
+    replySubmitLabel: 'Send direction',
   }
 }
 
+function styleCommitments(): ProjectAgentChoiceCommitment[] {
+  return [{
+    when: { kind: 'option', groupKey: 'style', optionValue: 'style_b' },
+    operationId: 'adopt_style_bible',
+    input: {
+      resourceId: 'resource-b',
+      revisionId: 'revision-b',
+      fingerprint: 'fingerprint-b',
+      expectedVersion: null,
+    },
+  }]
+}
+
 describe('assistant choice offer conformance', () => {
-  it('registers every choice identity and required capability in one exhaustive definition', () => {
-    expect(Object.keys(EDIT_FIRST_CHOICE_REGISTRY)).toEqual(EDIT_FIRST_CHOICE_TYPES)
-    expect(EDIT_FIRST_CHOICE_TYPES.map((choiceType) => {
-      const definition = EDIT_FIRST_CHOICE_REGISTRY[choiceType]
-      return {
-        choiceType: definition.choiceType,
-        toolId: definition.toolId,
-        exportedToolId: EDIT_FIRST_CHOICE_TOOL_IDS[choiceType],
-        resourceKind: definition.reviewedResourceKind,
-        offerBuilder: definition.offerBuilder.kind,
-        parseDecision: typeof definition.parseDecision,
-        atomicConfirmation: typeof definition.resolveAtomicConfirmationCommand,
-        resolveResource: typeof definition.resolveReviewedResource,
-      }
-    })).toEqual([
-      expect.objectContaining({ choiceType: 'script_intake', toolId: 'request_script_intake_choice', exportedToolId: 'request_script_intake_choice', resourceKind: 'script_intake_prompt', offerBuilder: 'persisted_payload' }),
-      expect.objectContaining({ choiceType: 'script_review', toolId: 'request_edit_script_review_choice', exportedToolId: 'request_edit_script_review_choice', resourceKind: 'script_review_document', offerBuilder: 'runtime' }),
-      expect.objectContaining({ choiceType: 'bible_review', toolId: 'request_edit_bible_review_choice', exportedToolId: 'request_edit_bible_review_choice', resourceKind: 'bible_review_plan', offerBuilder: 'runtime' }),
-      expect.objectContaining({ choiceType: 'style', toolId: 'request_edit_style_choice', exportedToolId: 'request_edit_style_choice', resourceKind: 'style_preview_set', offerBuilder: 'runtime' }),
-      expect.objectContaining({ choiceType: 'asset_review', toolId: 'request_edit_asset_review_choice', exportedToolId: 'request_edit_asset_review_choice', resourceKind: 'asset_review_set', offerBuilder: 'runtime' }),
+  it('exposes one generic tool-owned Choice lifecycle and removes every fixed workflow Choice', () => {
+    const operations = createProjectAgentOperationRegistry()
+    const suspending = Object.values(operations).filter(
+      (operation) => operation.agentFlow?.suspendsFor === 'choice',
+    )
+
+    expect(suspending.map((operation) => operation.id)).toEqual(['request_choice'])
+    expect(operations.request_choice).toMatchObject({
+      channels: { tool: true, api: false },
+      prerequisites: { episodeId: 'optional' },
+      intent: 'query',
+      effects: { writes: false },
+      confirmation: { kind: 'none', required: false },
+      agentFlow: { suspendsFor: 'choice' },
+    })
+    expect(operations.request_choice?.execute).toBeTypeOf('function')
+    expect(Object.keys(operations.request_choice?.toolInputSchema.properties ?? {})).toEqual([
+      'subject',
+      'card',
+      'commitments',
     ])
-    for (const definition of Object.values(EDIT_FIRST_CHOICE_REGISTRY)) {
-      expect(definition.parseDecision).toBeTypeOf('function')
-      expect(definition.resolveAtomicConfirmationCommand).toBeTypeOf('function')
-      expect(definition.resolveReviewedResource).toBeTypeOf('function')
+    const modelSurface = JSON.stringify(operations.request_choice?.toolInputSchema)
+    expect(modelSurface).not.toContain('choiceType')
+    expect(modelSurface).not.toContain('cardId')
+    expect(modelSurface).not.toContain('toolCallId')
+    for (const operationId of REMOVED_FIXED_CHOICE_OPERATIONS) {
+      expect(operations[operationId], operationId).toBeUndefined()
     }
   })
 
-  it('maps every deterministic confirmation to one non-billable transactional Operation', () => {
-    const operations = createProjectAgentOperationRegistry()
-    const decisions = [
-      { choiceType: 'script_review', decision: 'approve' },
-      { choiceType: 'bible_review', decision: 'approve' },
-      { choiceType: 'style', decision: 'select', stylePreviewId: 'style-1' },
-      { choiceType: 'asset_review', decision: 'approve' },
-    ] as const
-    const commands = decisions.map((decision) => resolveEditFirstChoiceAtomicConfirmationCommand(decision))
+  it('lets the model author all visible content but rejects model-authored server identity', () => {
+    const authored = {
+      mode: 'confirm_or_text',
+      replyMode: 'whole_card',
+      title: 'Confirm the screenplay',
+      description: 'Confirm only this screenplay revision.',
+      groups: [],
+      submitLabel: 'Confirm screenplay',
+      replyLabel: 'Request changes',
+      replyPlaceholder: 'Describe screenplay changes',
+      replySubmitLabel: 'Send changes',
+    }
+    expect(projectAgentChoiceCardAuthoringSchema.safeParse(authored).success).toBe(true)
+    expect(projectAgentChoiceCardAuthoringSchema.safeParse({
+      ...authored,
+      cardId: 'model-must-not-control-this',
+    }).success).toBe(false)
+  })
 
-    expect(commands).toEqual([
-      { operationId: 'approve_script', input: {} },
-      { operationId: 'confirm_bible', input: {} },
-      { operationId: 'confirm_edit_style_preview', input: {} },
-      { operationId: 'approve_edit_script_assets', input: {} },
-    ])
-    for (const command of commands) {
-      if (!command) throw new Error('EXPECTED_ATOMIC_CONFIRMATION_COMMAND')
-      const operation = operations[command.operationId]
-      expect(operation, command.operationId).toMatchObject({
-        channels: { tool: true },
+  it('persists generic card, subject, commitment, run, interruption, and tool identities without choiceType', () => {
+    const card = selectCard()
+    const commitments = styleCommitments()
+    const subject = {
+      kind: 'none' as const,
+      fingerprint: fingerprintProjectAgentChoiceSubject('none', { card, commitments }),
+    }
+    const offer = buildProjectAgentChoiceOffer({
+      runId: 'run-1',
+      interruptionId: 'interruption-1',
+      card,
+      subject,
+      commitments,
+    })
+    const parsed = parseProjectAgentChoiceOffer(offer)
+
+    expect(parsed).toMatchObject({
+      card: {
+        runId: 'run-1',
+        interruptionId: 'interruption-1',
+        cardId: card.cardId,
+        toolCallId: card.toolCallId,
+        title: card.title,
+      },
+      subject,
+      commitments,
+    })
+    expect(JSON.stringify(parsed)).not.toContain('choiceType')
+  })
+
+  it('resolves at most the commitment attached to the current answer', () => {
+    const card = selectCard()
+    const commitments = styleCommitments()
+    const offer = buildProjectAgentChoiceOffer({
+      runId: 'run-1',
+      interruptionId: 'interruption-1',
+      card,
+      subject: {
+        kind: 'none',
+        fingerprint: fingerprintProjectAgentChoiceSubject('none', { card, commitments }),
+      },
+      commitments,
+    })
+    const selected = parseProjectAgentChoiceDecision({
+      offer,
+      response: {
+        kind: 'select',
+        selections: [{ groupKey: 'style', kind: 'option', value: 'style_b' }],
+      },
+    })
+    const freeText = parseProjectAgentChoiceDecision({
+      offer,
+      response: { kind: 'text', text: 'Make it more geometric.' },
+    })
+
+    expect(resolveProjectAgentChoiceCommitment({ offer, decision: selected })).toEqual(commitments[0])
+    expect(resolveProjectAgentChoiceCommitment({ offer, decision: freeText })).toBeNull()
+  })
+
+  it('rejects commitments that are ambiguous or do not correspond to an offered current action', () => {
+    const card = selectCard()
+    const commitments = styleCommitments()
+    expect(() => assertProjectAgentChoiceCommitmentsMatchCard({
+      card,
+      commitments: [
+        ...commitments,
+        { ...commitments[0]!, operationId: 'another_operation' },
+      ],
+    })).toThrow('PROJECT_AGENT_CHOICE_COMMITMENT_DUPLICATE')
+    expect(() => assertProjectAgentChoiceCommitmentsMatchCard({
+      card,
+      commitments: [{
+        ...commitments[0]!,
+        when: { kind: 'option', groupKey: 'style', optionValue: 'not-offered' },
+      }],
+    })).toThrow('PROJECT_AGENT_CHOICE_COMMITMENT_OPTION_NOT_OFFERED')
+  })
+
+  it('limits Choice commitments to explicitly eligible transactional domain operations', () => {
+    const operations = createProjectAgentOperationRegistry()
+    const eligible = Object.values(operations).filter(
+      (operation) => operation.choiceCommit?.enabled === true,
+    )
+    expect(eligible.length).toBeGreaterThan(0)
+    expect(eligible.map((operation) => operation.id)).toContain('update_project_config')
+    for (const operation of eligible) {
+      expect(operation).toMatchObject({
         intent: 'act',
-        confirmation: { kind: 'none', required: false },
+        channels: { tool: true },
         effects: {
           writes: true,
           billable: false,
-          longRunning: false,
+          destructive: false,
+          bulk: false,
           externalSideEffects: false,
+          longRunning: false,
         },
-      })
-      expect(operation?.executeInTransaction, command.operationId).toBeTypeOf('function')
-      expect(operation?.inputSchema.safeParse(command.input).success, command.operationId).toBe(true)
-    }
-  })
-
-  it('keeps non-confirmation Choice decisions out of the atomic confirmation executor', () => {
-    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
-      choiceType: 'script_intake',
-      decision: 'submit',
-      normalizedBrief: 'brief',
-    })).toBeNull()
-    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
-      choiceType: 'script_review',
-      decision: 'revise',
-      revisionNotes: 'revise script',
-    })).toBeNull()
-    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
-      choiceType: 'bible_review',
-      decision: 'revise',
-      revisionNotes: 'revise plan',
-    })).toBeNull()
-    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
-      choiceType: 'asset_review',
-      decision: 'revise',
-      revisionNotes: 'revise assets',
-    })).toBeNull()
-  })
-
-  it('binds every registered choice type to one explicit reviewed-resource kind', () => {
-    expect(EDIT_FIRST_CHOICE_TYPES.map((choiceType) => [
-      choiceType,
-      expectedReviewedResourceKind(choiceType),
-    ])).toEqual([
-      ['script_intake', 'script_intake_prompt'],
-      ['script_review', 'script_review_document'],
-      ['bible_review', 'bible_review_plan'],
-      ['style', 'style_preview_set'],
-      ['asset_review', 'asset_review_set'],
-    ])
-  })
-
-  it('gives every Choice a tool-only lifecycle contract instead of treating it as a generic read', () => {
-    const operations = createProjectAgentOperationRegistry()
-    for (const choiceType of EDIT_FIRST_CHOICE_TYPES) {
-      const operation = operations[EDIT_FIRST_CHOICE_REGISTRY[choiceType].toolId]
-      expect(operation, choiceType).toMatchObject({
-        channels: { tool: true, api: false },
-        effects: { writes: false },
         confirmation: { kind: 'none', required: false },
-        agentFlow: { suspendsFor: 'choice' },
       })
-      expect(operation?.execute, choiceType).toBeTypeOf('function')
-      expect(operation?.executeInTransaction, choiceType).toBeUndefined()
+      expect(operation.effects.overwrite).toBeTypeOf('boolean')
+      expect(operation.agentFlow?.suspendsFor).toBeFalsy()
+      expect(operation.executeInTransaction, operation.id).toBeTypeOf('function')
     }
   })
 
-  it.each(EDIT_FIRST_CHOICE_TYPES)('requires persisted run, interruption, card, and tool identity for %s', (choiceType) => {
-    const definition = card(choiceType)
-    const offer = buildProjectAgentChoiceOffer({
-      runId: 'run-1',
-      interruptionId: 'interruption-1',
-      card: definition,
-      reviewedResource: fingerprintProjectAgentChoiceResource({
-        kind: expectedReviewedResourceKind(choiceType),
-        snapshot: { version: 1 },
-      }),
+  it('fingerprints canonical subject content independent of object key order', () => {
+    const left = fingerprintProjectAgentChoiceSubject('task_result', {
+      version: 2,
+      content: { b: 2, a: 1 },
     })
-
-    expect(parseProjectAgentChoiceOffer(offer).card).toMatchObject({
-      runId: 'run-1',
-      interruptionId: 'interruption-1',
-      cardId: definition.cardId,
-      toolCallId: definition.toolCallId,
-      choiceType,
-    })
-  })
-
-  it('rejects a card without a persisted interruption identity', () => {
-    const offer = buildProjectAgentChoiceOffer({
-      runId: 'run-1',
-      interruptionId: 'interruption-1',
-      card: card('script_review'),
-      reviewedResource: fingerprintProjectAgentChoiceResource({
-        kind: 'script_review_document',
-        snapshot: { version: 1 },
-      }),
-    })
-    const invalid = {
-      ...offer,
-      card: {
-        ...offer.card,
-        interruptionId: null,
-      },
-    }
-    expect(() => parseProjectAgentChoiceOffer(invalid)).toThrow('PROJECT_AGENT_CHOICE_OFFER_INVALID')
-  })
-
-  it('fingerprints canonical resource content independent of object key order', () => {
-    const left = fingerprintProjectAgentChoiceResource({
-      kind: 'bible_review_plan',
-      snapshot: { version: 2, content: { b: 2, a: 1 } },
-    })
-    const right = fingerprintProjectAgentChoiceResource({
-      kind: 'bible_review_plan',
-      snapshot: { content: { a: 1, b: 2 }, version: 2 },
+    const right = fingerprintProjectAgentChoiceSubject('task_result', {
+      content: { a: 1, b: 2 },
+      version: 2,
     })
     expect(left).toEqual(right)
   })

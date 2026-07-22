@@ -16,7 +16,7 @@ const blocks: readonly EditSourceBlock[] = [{
 }]
 
 describe('edit bible source-anchor normalization', () => {
-  it('converts raw beat anchors into source ranges before downstream chapter splitting', () => {
+  it('converts raw beat anchors into source ranges for exact optional continuity context', () => {
     const beatSheet = normalizeRawBeatSheet({
       sourceText,
       blocks,

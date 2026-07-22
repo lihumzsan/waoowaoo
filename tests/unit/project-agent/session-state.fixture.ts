@@ -1,12 +1,5 @@
 import { vi } from 'vitest'
-
-import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import { TASK_TYPE } from '@/lib/task/types'
-
-const workflow = createEditFirstWorkflowView({
-  step: 'planned_assets',
-  status: { kind: 'ready', reason: null },
-})
 
 type MockInterruption = {
   id: string
@@ -56,6 +49,9 @@ const prismaMock = vi.hoisted(() => ({
   projectAssistantThread: {
     findUnique: vi.fn(async (): Promise<unknown> => null),
   },
+  projectAgentPlan: {
+    findUnique: vi.fn(async (): Promise<unknown> => null),
+  },
   task: {
     findMany: vi.fn(async (args?: unknown) => {
       if (
@@ -67,16 +63,14 @@ const prismaMock = vi.hoisted(() => ({
         && 'type' in args.where
         && args.where.type === TASK_TYPE.CREATIVE_WORK
       ) return []
-      return [
-        {
-          id: 'task-1',
-          operationId: 'generate_edit_script_assets',
-          type: 'image_location',
-          targetType: 'LocationImage',
-          targetId: 'location-image-1',
-          status: 'processing',
-        },
-      ]
+      return [{
+        id: 'task-1',
+        operationId: 'create_image',
+        type: 'creative_resource_image',
+        targetType: 'CreativeResource',
+        targetId: 'image-1',
+        status: 'processing',
+      }]
     }),
   },
   projectAgentRun: {
@@ -104,26 +98,20 @@ function mockSessionTaskRows(rows: readonly MockSessionTaskRow[]): void {
   ))
 }
 
-const workflowMock = vi.hoisted(() => ({
-  resolveEditFirstWorkflowView: vi.fn(async () => workflow),
-}))
-
 const runsMock = vi.hoisted(() => ({
   cancelStaleRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
-  listRecentProjectAgentRunsForScope: vi.fn(async (): Promise<MockRun[]> => [
-    {
-      id: 'run-1',
-      projectId: 'project-1',
-      userId: 'user-1',
-      assistantId: 'workspace-command',
-      scopeRef: 'episode:episode-1',
-      episodeId: 'episode-1',
-      requestId: 'request-1',
-      status: 'awaiting_task',
-      controlKind: 'approval_response',
-      stopReason: 'awaiting_task',
-    },
-  ]),
+  listRecentProjectAgentRunsForScope: vi.fn(async (): Promise<MockRun[]> => [{
+    id: 'run-1',
+    projectId: 'project-1',
+    userId: 'user-1',
+    assistantId: 'workspace-command',
+    scopeRef: 'episode:episode-1',
+    episodeId: 'episode-1',
+    requestId: 'request-1',
+    status: 'awaiting_task',
+    controlKind: 'approval_response',
+    stopReason: 'awaiting_task',
+  }]),
 }))
 
 const interruptionsMock = vi.hoisted(() => ({
@@ -133,39 +121,27 @@ const interruptionsMock = vi.hoisted(() => ({
     activityId: 'activity-approval-1',
     type: 'approval',
     status: 'pending',
-    operationId: 'generate_edit_script_assets',
+    operationId: 'create_image',
     approvalId: 'approval-1',
     toolCallId: 'tool-1',
     payload: {},
   })),
-  getLatestProjectAgentInterruptionForRun: vi.fn(async (): Promise<MockInterruption | null> => ({
-    id: 'interruption-1',
-    runId: 'run-1',
-    activityId: 'activity-approval-1',
-    type: 'approval',
-    status: 'pending',
-    operationId: 'generate_edit_script_assets',
-    approvalId: 'approval-1',
-    toolCallId: 'tool-1',
-    payload: {},
-  })),
+  getLatestProjectAgentInterruptionForRun: vi.fn(async (): Promise<MockInterruption | null> => null),
 }))
 
 const waitsMock = vi.hoisted(() => ({
-  listProjectAgentSessionWaits: vi.fn(async () => [
-    {
-      runId: 'run-1',
-      waitId: 'wait-1',
-      operationId: 'generate_edit_script_assets',
-      taskIds: ['task-1'],
-      failedTaskIds: [],
-      status: 'pending',
-      followUpMode: 'resume_agent',
-      terminalStatus: null,
-      total: 1,
-      claimId: null,
-    },
-  ]),
+  listProjectAgentSessionWaits: vi.fn(async () => [{
+    runId: 'run-1',
+    waitId: 'wait-1',
+    operationId: 'create_image',
+    taskIds: ['task-1'],
+    failedTaskIds: [],
+    status: 'pending',
+    followUpMode: 'resume_agent',
+    terminalStatus: null,
+    total: 1,
+    claimId: null,
+  }]),
 }))
 
 const eventMock = vi.hoisted(() => ({
@@ -174,64 +150,27 @@ const eventMock = vi.hoisted(() => ({
     runId: 'run-1',
     type: 'waiting_task',
     status: 'waiting',
-    operationId: 'generate_edit_script_assets',
+    operationId: 'create_image',
     sourceOperationId: null,
     toolCallId: null,
-    choiceType: null,
-  })),
-}))
-
-const choiceCardMock = vi.hoisted(() => ({
-  buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
-    cardId: 'edit-first-bible-review',
-    runId: null,
-    interruptionId: null,
-    toolCallId: 'tool-choice-1',
-    choiceType: 'bible_review',
-    replyMode: 'whole_card',
-    title: '确认制作规划',
-    groups: [],
-    submitLabel: '确认',
-    submit: { kind: 'submit_tool_output', decision: 'approve' },
   })),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-
-vi.mock('@/lib/project-workflow/edit-first', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/lib/project-workflow/edit-first')>(),
-  ...workflowMock,
-}))
-
 vi.mock('@/lib/project-agent/runs', () => runsMock)
-
 vi.mock('@/lib/project-agent/interruptions', () => interruptionsMock)
-
 vi.mock('@/lib/project-agent/waits', () => waitsMock)
-
-vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/project-agent/choice-card')>()
-  return {
-    ...actual,
-    buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
-  }
-})
-
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
-const [sessionState, threadSnapshot, choiceTools] = await Promise.all([
+const [sessionState, threadSnapshot] = await Promise.all([
   import('@/lib/project-agent/session-state'),
   import('@/lib/project-agent/thread-snapshot'),
-  import('@/lib/project-agent/edit-first-choice-tools'),
 ])
 const { getProjectAgentSessionSnapshot, getProjectAgentSessionState } = sessionState
 const { getProjectAssistantThreadWatermarkedSnapshot } = threadSnapshot
-const { EDIT_FIRST_CHOICE_TOOL_IDS } = choiceTools
 
 export { beforeEach, describe, expect, it, vi } from 'vitest'
 export {
-  choiceCardMock,
-  EDIT_FIRST_CHOICE_TOOL_IDS,
   eventMock,
   getProjectAgentSessionSnapshot,
   getProjectAgentSessionState,
@@ -241,7 +180,5 @@ export {
   prismaMock,
   runsMock,
   waitsMock,
-  workflow,
-  workflowMock,
 }
 export type { MockInterruption, MockRun }

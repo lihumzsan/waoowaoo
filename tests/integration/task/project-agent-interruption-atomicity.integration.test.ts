@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
 import { NextRequest } from 'next/server'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
@@ -17,8 +16,10 @@ import {
   consumeProjectAgentChoiceInterruption,
   readRetryableConsumedProjectAgentChoiceInterruption,
 } from '@/lib/project-agent/interruptions'
-import { resolveStyleChoiceResource } from '@/lib/project-agent/choice-offer'
-import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
+import { resolveProjectAgentChoiceSubject } from '@/lib/project-agent/choice-offer'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
+import { CREATIVE_WORK_TASK_PROTOCOL } from '@/lib/creative-worker'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const TEST_PREFIX = 'interruption-atomicity:'
 
@@ -43,113 +44,170 @@ async function settleApprovalHandoff(
   })
 }
 
-async function seedStyleChoice(params: { imageKey: string | null }) {
+function styleTaskPayload(runId: string, toolCallId: string) {
+  return {
+    protocol: CREATIVE_WORK_TASK_PROTOCOL,
+    requestKey: `${TEST_PREFIX}style-request`,
+    request: {
+      outputKind: 'style_bible',
+      goal: 'Create a visual direction.',
+      context: {
+        userRequest: 'Create a restrained visual direction.',
+        sourceMaterials: [],
+        constraints: [],
+      },
+      productionContext: { video: null },
+    },
+    modelKey: 'golden:creative-model',
+    inputFingerprint: 'a'.repeat(64),
+    origin: { runId, toolCallId },
+    lifecycleProjection: {
+      requestKey: `${TEST_PREFIX}style-request`,
+      outputKind: 'style_bible',
+      goal: 'Create a visual direction.',
+      events: [],
+    },
+  }
+}
+
+async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
-  await prisma.project.update({
-    where: { id: project.id },
-    data: { videoRatio: '16:9' },
-  })
   const episode = await prisma.projectEpisode.create({
     data: {
       projectId: project.id,
       episodeNumber: 1,
-      name: 'Atomic style confirmation',
+      name: 'Atomic generic Choice',
     },
   })
-  const source = await prisma.projectEpisodeSourceDocument.create({
-    data: {
-      episodeId: episode.id,
-      normalizedText: '阿杰走进密室。',
-      checksum: 'a'.repeat(64),
-      sourceKind: 'paste',
-      version: 1,
-    },
-  })
-  const bible = await prisma.projectEditBible.create({
-    data: {
-      episodeId: episode.id,
-      sourceDocumentId: source.id,
-      status: 'confirmed',
-    },
-  })
-  const styleBible = buildZenStyleBibleFixture()
-  const preview = await prisma.projectEditStylePreview.create({
-    data: {
-      projectId: project.id,
-      episodeId: episode.id,
-      editBibleId: bible.id,
-      styleKey: 'style_a',
-      aspectRatio: '16:9',
-      title: '暗黑写实风格',
-      summary: '冷灰绿调与手持镜头。',
-      styleBibleJson: styleBible as unknown as Prisma.InputJsonValue,
-      imagePrompt: 'dark realistic room',
-      imageKey: params.imageKey,
-      status: 'completed',
-    },
-  })
+  const runId = `${TEST_PREFIX}choice-run:${episode.id}`
+  const toolCallId = `${TEST_PREFIX}choice-tool:${episode.id}`
   const { run } = await createProjectAgentUserTurnRun({
-    runId: `${TEST_PREFIX}style-run:${preview.id}`,
-    requestId: `${TEST_PREFIX}style-request:${preview.id}`,
+    runId,
+    requestId: `${TEST_PREFIX}choice-request:${episode.id}`,
     projectId: project.id,
     userId: user.id,
     episodeId: episode.id,
     assistantId: 'workspace-command',
     message: {
-      id: `${TEST_PREFIX}style-user-message:${preview.id}`,
+      id: `${TEST_PREFIX}choice-user-message:${episode.id}`,
       role: 'user',
-      parts: [{ type: 'text', text: '生成恐怖短片' }],
+      parts: [{ type: 'text', text: '选择当前视觉方向' }],
     },
   })
+  const task = await prisma.task.create({
+    data: {
+      userId: user.id,
+      projectId: project.id,
+      episodeId: episode.id,
+      type: TASK_TYPE.CREATIVE_WORK,
+      targetType: 'CreativeWork',
+      targetId: `${TEST_PREFIX}style-work:${episode.id}`,
+      status: 'completed',
+      operationId: 'creative_work',
+      payload: styleTaskPayload(run.id, toolCallId),
+      result: {},
+      finishedAt: new Date(),
+    },
+  })
+  const resource = await prisma.creativeResource.create({
+    data: {
+      userId: user.id,
+      projectId: project.id,
+      episodeId: episode.id,
+      scopeKind: 'episode',
+      scopeId: episode.id,
+      mediaType: 'text',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      name: 'Restrained visual direction',
+      status: 'ready',
+      originKey: `${TEST_PREFIX}style-resource:${episode.id}`,
+      sourceType: 'CreativeWorkStyleBible',
+      sourceId: `${task.id}:restrained`,
+      candidateSetId: task.id,
+      candidateIndex: 0,
+    },
+  })
+  const revision = await prisma.creativeResourceRevision.create({
+    data: {
+      resourceId: resource.id,
+      revision: 1,
+      fingerprint: 'f'.repeat(64),
+      contentJson: {
+        styleSummary: 'Restrained monochrome realism',
+        visualStyle: 'Quiet, observational, low-saturation realism.',
+      },
+      sourceType: 'CreativeWorkStyleBible',
+      sourceId: task.id,
+      sourceRevision: 'restrained',
+      modelKey: 'golden:creative-model',
+      operationId: 'creative_work',
+      inputHash: 'a'.repeat(64),
+      taskId: task.id,
+      executionSegmentId: `segment:${episode.id}`,
+      toolCallId,
+    },
+  })
+  await prisma.creativeResource.update({
+    where: { id: resource.id },
+    data: { headRevisionId: revision.id },
+  })
+
   const currentRun = await prisma.projectAgentRun.findUniqueOrThrow({
     where: { id: run.id },
     select: { id: true, runVersion: true, eventSeq: true },
   })
   const runFence = createProjectAgentRunFence(currentRun)
-  const toolCallId = `${TEST_PREFIX}style-tool:${preview.id}`
   const card = {
-    cardId: `${TEST_PREFIX}style-card:${preview.id}`,
+    cardId: `${TEST_PREFIX}choice-card:${episode.id}`,
     toolCallId,
-    choiceType: 'style' as const,
-    replyMode: 'whole_card' as const,
-    title: '选择视觉风格',
+    mode: 'select' as const,
+    replyMode: 'none' as const,
+    title: '选择当前视觉方向',
+    description: '这个选择只采用当前 Style Bible。',
     groups: [{
-      key: 'stylePreviewId',
-      label: '视觉风格',
+      key: 'style',
+      label: '视觉方向',
       required: true,
-      presentation: 'image' as const,
-      options: [{ value: preview.id, label: preview.title }],
+      presentation: 'options' as const,
+      options: [{ value: revision.id, label: '克制写实' }],
     }],
-    submitLabel: '确认并继续',
-    submit: { kind: 'submit_tool_output' as const, decision: 'select' as const },
+    submitLabel: '采用这个方向',
   }
-  const reviewedResource = await prisma.$transaction(async (tx) => await resolveStyleChoiceResource({
+  const commitments = [{
+    when: { kind: 'option' as const, groupKey: 'style', optionValue: revision.id },
+    operationId: 'adopt_style_bible',
+    input: {
+      resourceId: resource.id,
+      revisionId: revision.id,
+      fingerprint: params.validCommitment ? revision.fingerprint : '0'.repeat(64),
+      expectedVersion: null,
+    },
+  }]
+  const subject = await prisma.$transaction(async (tx) => await resolveProjectAgentChoiceSubject({
     tx,
     projectId: project.id,
     userId: user.id,
-    episodeId: episode.id,
-    card: {
-      ...card,
-      runId: run.id,
-      interruptionId: 'pending',
+    request: {
+      kind: 'resource_revisions',
+      revisions: [{ resourceId: resource.id, revisionId: revision.id }],
     },
+    card,
+    commitments,
   }))
-  const executionFence = {
-    runFence,
-    signal: new AbortController().signal,
-  }
+  const executionFence = { runFence, signal: new AbortController().signal }
   const prepared = await prepareProjectAgentChoiceExecutionHandoff({
     executionFence,
-    executionSegmentId: `${TEST_PREFIX}style-segment:${preview.id}`,
+    executionSegmentId: `${TEST_PREFIX}choice-segment:${episode.id}`,
     projectId: project.id,
     userId: user.id,
     episodeId: episode.id,
     assistantId: 'workspace-command',
-    operationId: 'request_edit_style_choice',
+    operationId: 'request_choice',
     toolCallId,
     card,
-    reviewedResource,
+    subject,
+    commitments,
   })
   const suspension = await settleProjectAgentPreparedChoiceHandoff({
     executionFence,
@@ -159,13 +217,13 @@ async function seedStyleChoice(params: { imageKey: string | null }) {
     episodeId: episode.id,
     assistantId: 'workspace-command',
     message: {
-      id: `${TEST_PREFIX}style-assistant-message:${preview.id}`,
+      id: `${TEST_PREFIX}choice-assistant-message:${episode.id}`,
       role: 'assistant',
-      parts: [{ type: 'text', text: '请选择视觉风格。' }],
+      parts: [{ type: 'text', text: '请选择当前视觉方向。' }],
     },
   })
   if (suspension.kind !== 'choice') throw new Error('EXPECTED_CHOICE_SUSPENSION')
-  return { user, project, episode, preview, run, card: suspension.card, interruptionId: suspension.interruptionId }
+  return { user, project, episode, resource, revision, run, card: suspension.card, interruptionId: suspension.interruptionId }
 }
 
 describe('Project Agent interruption atomic replacement DB integration', () => {
@@ -204,7 +262,7 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
-      operationId: 'generate_edit_style_previews',
+      operationId: 'create_image',
       approvalId: `${TEST_PREFIX}approval-first`,
       toolCallId: `${TEST_PREFIX}tool-first`,
       runState: '{"checkpoint":"first"}',
@@ -238,7 +296,7 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
-      operationId: 'generate_edit_style_previews',
+      operationId: 'create_image',
       approvalId: `${TEST_PREFIX}approval-replacement`,
       toolCallId: `${TEST_PREFIX}tool-replacement`,
       runState: '{"checkpoint":"replacement"}',
@@ -266,8 +324,8 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       .toBe(eventCountBefore + 2)
   })
 
-  it('atomically consumes a style Choice and commits its mapped confirmation Operation once', async () => {
-    const seeded = await seedStyleChoice({ imageKey: 'tests/style-preview.png' })
+  it('atomically consumes a generic Choice and commits its one mapped current Operation once', async () => {
+    const seeded = await seedGenericStyleChoice({ validCommitment: true })
     const request = new NextRequest(`http://localhost/api/projects/${seeded.project.id}/assistant/chat`)
     const consumeInput = {
       request,
@@ -279,18 +337,24 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       interruptionId: seeded.interruptionId,
       cardId: seeded.card.cardId,
       toolCallId: seeded.card.toolCallId,
-      response: { stylePreviewId: seeded.preview.id },
-      latestUserText: '确认这个视觉风格',
+      response: {
+        kind: 'select',
+        selections: [{ groupKey: 'style', kind: 'option', value: seeded.revision.id }],
+      } as const,
       operationSignal: new AbortController().signal,
       locale: 'zh',
     }
 
     const consumed = await consumeProjectAgentChoiceInterruption(consumeInput)
-    expect(consumed?.appliedOperationId).toBe('confirm_edit_style_preview')
-    await expect(prisma.projectEditStylePreview.findUniqueOrThrow({
-      where: { id: seeded.preview.id },
-      select: { status: true },
-    })).resolves.toEqual({ status: 'confirmed' })
+    expect(consumed?.appliedOperationId).toBe('adopt_style_bible')
+    await expect(prisma.creativeResourceBinding.findFirstOrThrow({
+      where: {
+        projectId: seeded.project.id,
+        role: 'adopted_style_bible',
+        slotKey: 'primary',
+      },
+      select: { resourceId: true, revisionId: true },
+    })).resolves.toEqual({ resourceId: seeded.resource.id, revisionId: seeded.revision.id })
     await expect(prisma.projectAgentInterruption.findUniqueOrThrow({
       where: { id: seeded.interruptionId },
       select: { status: true },
@@ -298,41 +362,24 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     expect(await prisma.projectAgentActivity.findMany({
       where: {
         runId: seeded.run.id,
-        operationId: 'confirm_edit_style_preview',
-        sourceOperationId: 'request_edit_style_choice',
+        operationId: 'adopt_style_bible',
+        sourceOperationId: 'request_choice',
       },
-      select: { status: true, choiceType: true },
-    })).toEqual([{ status: 'completed', choiceType: 'style' }])
-    await expect(prisma.projectAgentRun.findUniqueOrThrow({
-      where: { id: seeded.run.id },
-      select: { status: true, controlKind: true },
-    })).resolves.toEqual({ status: 'running', controlKind: 'user_turn' })
-    await expect(prisma.projectAgentEvent.findFirst({
-      where: {
-        runId: seeded.run.id,
-        kind: 'run.execution_started',
-        idempotencyKey: `run-execution-started:decision:${seeded.interruptionId}`,
-      },
-      select: { payload: true },
-    })).resolves.toMatchObject({
-      payload: expect.objectContaining({
-        controlKind: 'choice_response',
-        executionSegmentId: `decision:${seeded.interruptionId}`,
-      }),
-    })
+      select: { status: true },
+    })).toEqual([{ status: 'completed' }])
     await expect(consumeProjectAgentChoiceInterruption(consumeInput)).resolves.toBeNull()
     await expect(readRetryableConsumedProjectAgentChoiceInterruption(consumeInput)).resolves.toMatchObject({
       id: seeded.interruptionId,
       status: 'consumed',
-      appliedOperationId: 'confirm_edit_style_preview',
+      appliedOperationId: 'adopt_style_bible',
     })
     expect(await prisma.projectAgentActivity.count({
-      where: { runId: seeded.run.id, operationId: 'confirm_edit_style_preview' },
+      where: { runId: seeded.run.id, operationId: 'adopt_style_bible' },
     })).toBe(1)
   })
 
-  it('rolls back Choice consumption, confirmation state, Activity and execution segment when the Operation fails', async () => {
-    const seeded = await seedStyleChoice({ imageKey: null })
+  it('rolls back the Choice, Activity, and execution segment when its frozen commitment fails', async () => {
+    const seeded = await seedGenericStyleChoice({ validCommitment: false })
     const request = new NextRequest(`http://localhost/api/projects/${seeded.project.id}/assistant/chat`)
 
     await expect(consumeProjectAgentChoiceInterruption({
@@ -345,22 +392,23 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       interruptionId: seeded.interruptionId,
       cardId: seeded.card.cardId,
       toolCallId: seeded.card.toolCallId,
-      response: { stylePreviewId: seeded.preview.id },
-      latestUserText: '确认这个视觉风格',
+      response: {
+        kind: 'select',
+        selections: [{ groupKey: 'style', kind: 'option', value: seeded.revision.id }],
+      },
       operationSignal: new AbortController().signal,
       locale: 'zh',
-    })).rejects.toThrow('Selected edit style preview image is missing')
+    })).rejects.toThrow()
 
-    await expect(prisma.projectEditStylePreview.findUniqueOrThrow({
-      where: { id: seeded.preview.id },
-      select: { status: true },
-    })).resolves.toEqual({ status: 'completed' })
+    await expect(prisma.creativeResourceBinding.findFirst({
+      where: { projectId: seeded.project.id, role: 'adopted_style_bible' },
+    })).resolves.toBeNull()
     await expect(prisma.projectAgentInterruption.findUniqueOrThrow({
       where: { id: seeded.interruptionId },
       select: { status: true },
     })).resolves.toEqual({ status: 'pending' })
     expect(await prisma.projectAgentActivity.count({
-      where: { runId: seeded.run.id, operationId: 'confirm_edit_style_preview' },
+      where: { runId: seeded.run.id, operationId: 'adopt_style_bible' },
     })).toBe(0)
     expect(await prisma.projectAgentEvent.count({
       where: {

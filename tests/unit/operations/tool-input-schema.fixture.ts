@@ -1,7 +1,3 @@
-import { describe, expect, it } from 'vitest'
-
-import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-
 function collectBooleanEnums(value: unknown, out: unknown[][]) {
   if (!value || typeof value !== 'object') return
   if (Array.isArray(value)) {

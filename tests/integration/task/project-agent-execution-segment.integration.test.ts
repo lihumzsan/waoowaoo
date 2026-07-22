@@ -98,7 +98,7 @@ describe('Project Agent execution segment DB integration', () => {
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
-      operationId: 'generate_edit_style_previews',
+      operationId: 'create_image',
       approvalId: `${PREFIX}approval`,
       toolCallId: `${PREFIX}tool`,
       runState: '{"checkpoint":"approval"}',

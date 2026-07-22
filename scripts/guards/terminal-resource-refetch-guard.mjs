@@ -60,9 +60,6 @@ export function inspectTerminalResourceRefetchContract(input) {
   if (input.canvas.includes('useTaskTargetTerminalInvalidation')) {
     violations.push('Canvas must not restore the competing target-state terminal resource observer')
   }
-  for (const forbidden of ['useEffect', 'pendingRegenerationBaselines', 'shouldResolveManualKey', '90_000']) {
-    if (input.assetGenerationActivity.includes(forbidden)) violations.push(`asset generation restores heuristic lifecycle state: ${forbidden}`)
-  }
   if (input.mutationBatch.includes('hasMutationBatchModel')) {
     violations.push('MutationBatch must fail closed when its required persistence model is unavailable')
   }
@@ -126,7 +123,6 @@ function runCli() {
     outboxWorker: read('src/lib/workers/outbox.worker.ts'),
     sseProtocol: read('src/lib/sse/protocol.ts'),
     canvas: read('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx'),
-    assetGenerationActivity: read('src/features/project-workspace/components/assets/hooks/useAssetGenerationActivity.ts'),
     mutationBatch: read('src/lib/mutation-batch/service.ts'),
     checkpoint: read('src/lib/task/execution-checkpoint.ts'),
     sseSync: read('src/lib/query/workspace-sse-event-sync.ts'),

@@ -30,12 +30,10 @@ export async function resetAssetHubState() {
 }
 
 export async function resetProjectWorkflowState() {
-  await prisma.projectVideoSegment.deleteMany()
   await prisma.characterAppearance.deleteMany()
   await prisma.locationImage.deleteMany()
   await prisma.projectCharacter.deleteMany()
   await prisma.projectLocation.deleteMany()
-  await prisma.projectEpisodeFinalOutput.deleteMany()
   await prisma.projectEpisode.deleteMany()
 }
 

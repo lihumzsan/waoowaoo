@@ -4,88 +4,65 @@
 
 ## 设计理念
 
-测试的目标不是增加数量，而是用最少的独立证据反证会伤害用户结果或架构不变量的错误实现。证据只分为 Fast、Critical 和 Journey 三层；Harness 是 Journey 的隔离运行环境，不是第四类产品测试。
-
-产品行为的最高证据是一条从空项目到最终视频的真实 Playwright 主 Journey。浏览器难以经济、确定性注入的事务、并发、崩溃、重试和协议故障由 Critical 补充；纯函数与生产 registry 契约由 Fast 补充。禁止按 workflow 阶段复制产品、克隆 checkpoint 或维护第二条下游主线。
+测试用最少的独立证据反证会伤害用户结果或架构不变量的错误实现。证据分为 Logic、Registry Conformance、Critical Infrastructure 与 Golden Journey；Harness 只是隔离运行环境。固定创作阶段已经删除，因此测试不能再通过复刻 screenplay → Bible → Chapter → asset → video 的顺序制造第二条 Workflow。
 
 ## 不变量
 
-- **TG-01 — 独立 oracle。** 期望结果来自用户目标、模块不变量、生产 registry 或已确认历史事实，不得从当前实现、mock 返回值、源码字符串、文件名或调用次数反推。
-- **TG-02 — 测试准入。** 修改生产代码不自动要求新增测试。新证据只能是主 Journey、必要安全 Journey、Critical Infrastructure、非平凡 Logic、Registry Conformance 或 Harness fail-closed 自测。
-- **TG-03 — 真实主链。** Journey 不得 mock 被测系统自己的 UI、route、service、状态机、数据库、队列、worker、Outbox、SSE 或 projector。只替代付费或不可控外部模型与媒体系统。
-- **TG-04 — 一条专业主线，一组聚焦自由语义反证。** `GJ-MAIN-STORY-TO-FINAL-DELIVERABLE` 是唯一完整制作主 Journey，从空项目生成至少两个章节、多个专业资产和最终视频。`freeform-resources.spec.ts` 中的聚焦场景只反证主线无法经济覆盖的架构语义：空项目直接生成、跨媒体显式引用、多候选部分失败精确重试、Binding/Lineage、同一步 OperationBatch 以及前台回复取消。这些场景不得克隆专业阶段、形成第二套 Workflow runner，或用内部 callback 替代真实浏览器入口。
-- **TG-05 — 权威事实断言。** 主 Journey 同时断言浏览器无异常和只读持久事实：章节、逐章脚本、逐章镜头执行计划、多个资产需求、最终输出与持久 identity 无重复。只看到按钮、文案或最终页面不算完成。
-- **TG-06 — 最小安全边界。** 未登录、跨用户项目、跨项目资产三个所有权边界保留为独立 Journey，因为创作主线无法自然反证它们；普通 CRUD、i18n、部署展示等不得各建一条浏览器产品线。
-- **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、晚到、重复、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam，不再通过阶段克隆驱动浏览器变体。
-- **TG-08 — Fast 只保留真实规格。** Logic 只允许有非平凡边界的纯函数、parser、resolver、reducer、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，不维护第二份实例清单。
-- **TG-09 — Harness fail-closed。** 每次 Journey 运行必须拥有独立 runtime identity，并隔离 MySQL/Redis scope、端口、Next `distDir`、上传目录与报告目录；这些生成目录必须同时被 Git 与源码 lint 排除，使 `test:journey → verify:push` 的 canonical 顺序只验证源码且结果稳定。场景未挂载、依赖不可用、浏览器异常、外部付费调用或只读 Oracle 可写必须显式失败。
-- **TG-10 — Harness 不是产品旁路。** Harness 只启动隔离环境、协议兼容外部替身、网络限制、只读 Oracle 和报告器；不得提供生产 Workflow 克隆、阶段跳转、强制工具或写入业务事实的捷径。
-- **TG-11 — 纠正性反证。** 修复测试必须证明同一断言在 pre-fix 代码或真实受控语义故障下失败；把错误常量传入断言、mock X 再断言 X 不构成反证。
-- **TG-12 — 权威 Journey 同步。** 主 Journey 或安全 Journey 所覆盖的流程、入口、生命周期、终态或禁止副作用改变时，必须同步 scenario、真实驱动与 Oracle，并实际运行 `npm run test:journey`；未执行只能报告未验证。
-- **TG-13 — 执行时机独立。** 本模块定义证据和 canonical command；CI 可显式调用这些命令，Git hooks 不得隐式挂载完整测试。
-- **TG-14 — 架构影响逐文件路由。** 修改前用明确路径运行 `architecture:impact`，修改后用 `architecture:impact --changed` 逐文件复核。router 不决定测试适用性或任务所有权。
-- **TG-15 — 过程材料不持久化。** 临时历史矩阵与治理分析不进入仓库；长期有效的根因、防线和盲区只压缩进所属模块。
+- **TG-01 — 独立 oracle。** 期望来自用户目标、模块不变量、生产 registry 或已确认历史事实，不从当前实现、mock 返回、源码字符串、文件名或测试数量反推。
+- **TG-02 — 测试准入。** 新测试只能属于真实 Golden、安全 Journey、Critical Infrastructure、非平凡 Logic、Registry Conformance 或 Harness fail-closed 自测。
+- **TG-03 — Golden 走生产链。** 不 mock 自己的 UI、route、service、数据库、queue、worker、Outbox、SSE、projector 或状态机；只在付费/不可控外部模型和媒体协议边界使用替身。
+- **TG-04 — 自由组合是最高产品证据。** Golden 只给 Primary 自然语言目标，允许 Skill、Subagent、Operation 和 Resource 自由组合。它不能指定工具顺序、注入阶段、写业务事实或使用旧 mainline driver。
+- **TG-05 — 权威事实断言。** Oracle 读取 Project/Run/Task/Operation、CreativeResource/Revision/Lineage/Binding，以及可选的 screenplay source projection、Bible adoption 和 Chapter projection。不得查询已删除的 style preview/edit script/shot/video segment/BGM/final output 表，也不得用卡片文案代替领域事实。
+- **TG-06 — 关键目标必须有组合反证。** 适用 Golden 应覆盖通用模型作者 Choice、Choice 只提交当前决定、剧本 Revision 无确认门、Style Bible 默认无预览、多 Chapter 由 Primary 自主选择、`>180s` 不触发服务端分支、Bible/continuity/Chapter 独立。
+- **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、late/replay、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam。
+- **TG-08 — Logic 与 Conformance 有边界。** Logic 只验证非平凡纯函数、parser、resolver、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，禁止维护第二份 Task/Operation/Canvas/Resource 清单。
+- **TG-09 — Harness fail closed。** runtime identity、MySQL/Redis scope、端口、Next dist、上传和报告目录必须隔离；required case 缺失、skip/todo、浏览器异常、依赖不可用、付费调用或 Oracle 写入都显式失败。
+- **TG-10 — 纠正性证据必须 fail-before。** 同一断言必须能在 pre-fix 或受控真实故障下失败；mock X 再断言 X、检查文件存在或调用次数不算行为证明。
+- **TG-11 — Journey 同步。** Golden 覆盖的入口、生命周期、终态或禁止副作用变化时，同一变更必须更新 scenario、driver、Oracle 并执行 canonical command；不能执行只能报告未验证。
+- **TG-12 — 过程材料不持久化。** 临时历史矩阵和执行记录不进入仓库；长期有效结论压缩进模块历史回归。
 
 ## 权威入口
 
-- Fast：`npm run test:fast`，聚合 `test:logic` 与 `test:conformance`。
-- Critical：`npm run test:critical`，聚合 provider、Task、billing 与 billing concurrency 的真实基础设施场景。
-- Journey：`npm run test:journey`，先运行 Harness 自测与隔离检查，再运行一条多章节专业主线、聚焦自由语义场景和三个安全边界。
-- 主 Journey：`tests/golden-journey/journeys/mainline-complete.spec.ts`。
-- 自由组合 Journey：`tests/golden-journey/journeys/freeform-resources.spec.ts`。
-- 安全边界：`auth-project-permission.spec.ts` 与 `asset-hub-ownership.spec.ts`。
-- Scenario identity：`tests/golden-journey/contracts/scenarios.ts`。
-- 只读持久 Oracle：`tests/golden-journey/oracle/**`。
-- 隔离环境、网络、外部协议替身和 Playwright 报告：`tests/golden-journey/runtime/**`、`providers/**`、`browser/**`。
-- Critical：`tests/integration/provider/**`、`tests/integration/task/**`、`tests/integration/billing/**`、`tests/concurrency/billing/**`。
-- Logic 与 Conformance：`tests/unit/**`、`tests/contracts/**`。
-- Required suite 的 discovery/skip 核对：`scripts/test-verification/run-required-suite.mjs` 与 `verify-vitest-report.mjs`。
+- Logic：`npm run test:logic`。
+- Conformance：`npm run test:conformance`。
+- Critical：`npm run test:critical` 及其 provider/task/billing 子集。
+- Golden：`npm run test:journey`。
+- 自由组合与取消：`tests/golden-journey/journeys/freeform-resources.spec.ts`。
+- 安全边界：`auth-project-permission.spec.ts`、`asset-hub-ownership.spec.ts`。
+- Scenario registry：`tests/golden-journey/contracts/scenarios.ts`。
+- 只读 Oracle：`tests/golden-journey/oracle/**`。
+- Harness：`tests/golden-journey/runtime/**`、`providers/**`、`browser/**`。
 
-## 明确删除的旧证据
+## 验证
 
-- Workflow Lab 的生产 UI、API、领域克隆与测试 checkpoint；
-- stage probe、checkpoint staircase、Matrix、Discovery、downstream continuation 与浏览器故障变体；
-- API-only long-form runner、mocked route/component/service/worker 和“mock X 后断言 X”；
-- route catalog、requirements matrix、synthetic history registry、覆盖率与 mutation 数量目标；
-- `unit / integration / system / regression / contracts` 每层机械补齐的目录制度；
-- 自定义历史报告数据库；每次 Playwright 运行只写自己隔离目录内的 JSON、HTML、trace、截图和失败视频。
+### Golden 观察面
 
-## 验证与失败语义
+自由组合 Journey 从空项目通过真实 Composer 发出目标，由外部模型替身按可见 Resource/Task 事实返回普通生产 Tool calls。Oracle 必须证明：
 
-主 Journey setup 后只走生产写入路径。它使用稳定产品 selector，不使用 Browser Use、视觉模型或 AI 元素选择作为可重复证据。固定 sleep 只能形成可观察窗口，不能证明成功；成功必须收口到浏览器结果和只读持久事实。
+1. 每个创作结论是 `creative_work` 终态物化的 Resource Revision；
+2. 媒体只消费精确输入 revisions，并产生 Lineage；
+3. 部分失败只重试失败 Resource，成功 Resource 不重复提交；
+4. 通用 Choice 的 subject/option/commit 只属于当前决定；
+5. 不采用 Chapter 的长内容不会被服务端自动拆分；采用 Chapter 时来自 `chapter_plan` Resource 且每单元局部约束有效；
+6. Style Bible 未显式要求预览时不会创建 image Task；
+7. 刷新和 SSE replay 后 Resource、Task、Binding 与 Lineage identity 不变；
+8. 旧固定表、TaskType、Workflow 卡片和自动下游副作用为零。
 
-外部模型替身生成最小但不平凡的数据：至少两个可独立锚定的故事块，派生两个章节与多个资产。核心 processing 阶段刷新后必须恢复或前进；Style Bible、先完成全部章节计划再生成资产的持久时序、逐章镜头计划和媒体生成必须观察其 canonical Canvas identity。最终只允许一个 durable final output。
-
-自由组合 Journey 不按 Workflow 位置驱动工具；它只给模型自然语言目标，并由协议替身按可见 Resource/Task 事实选择生产 Tool。场景必须覆盖一次多候选部分失败、仅失败资源重试、成功资源零重复提交、图片 Revision 作为视频精确输入、视频 Revision 作为音频输入、候选 Binding 与刷新恢复，以及空项目直接文字转视频。Oracle 读取真实 Operation/Task/CreativeResource/Revision/Lineage/Binding；不得由测试 route 直接写这些事实。
-
-前台回复取消场景使用真实 Composer 方块按钮与可控慢速外部模型流，再以只读 Oracle 断言 Run 为 `cancelled/stream_cancelled`、无 Task/Wait/Handoff，并立即发送新回合验证锁已释放。它证明产品取消语义，不以内部 `onCancel/onSettled` 调用次数或顺序代替用户可见结果。
-
-声音阶段的 Fast 证据以生产 strict BgmDesign schema、生产 registry 和确定性 DSP/QC 函数为 oracle，反证旧环境音字段回流、固定时长枚举、候选不足和 BGM 时间线缺口；Critical 证据用真实数据库 owner fence 反证晚到规划覆盖；主 Journey 从真实 route/Task/worker/DB 链路断言每集只有一个 BgmDesign、恰有两个 BGM 候选、选择结果绑定设计签名，旧环境音 Task/Operation/Canvas 节点为零，且最终只产生一个 durable output。外部模型和媒体仍只在协议边界由 Harness 替代。
-
-基础设施不可用、场景 skip/todo、浏览器崩溃或 paid provider 泄漏都属于失败，不得以“未发现产品错误”宣称通过。
+外部基础设施不可用、场景未挂载或浏览器崩溃都属于未通过，不能用“未发现产品错误”替代。
 
 ## 历史回归
 
-- 主 Journey 曾用固定 `chunkSize=1/delayMs=10` 让镜头计划 Task 暂停在 processing，以观察活动 Task 对应的 Canvas 节点和刷新恢复；响应较短或机器较快时，Task 会在浏览器断言前成功，测试把“完成太快”误报成节点缺失。当前外部模型替身提供只拦截 text response 的显式可观察 gate：Agent 的 Tool 调用可继续提交真实 Task，Journey 从只读 Oracle 看到至少两个 active target 并验证同 identity 刷新恢复后才释放响应；Harness 自测同时证明 gate 已实际拦截请求，禁止再用延迟长短承担这个 Oracle。
-
-- Golden 已使用独立 `.next-golden/<runtime>` 与 `artifacts/golden-journey/runs/<runtime>` 防止运行间竞争，但 ESLint 只排除了 `.next` 与 `.next-verify`；完整 Journey 通过后再运行 `verify:push` 会把数十万行 Turbopack 编译产物和 Playwright trace 当源码，先耗尽默认 heap，扩大 heap 后再报告生成代码错误。当前全局 lint ignore 与 Git ignore 共同排除这两类 Golden 运行产物，不放宽任何源码规则；防线是 canonical 顺序下 `test:journey` 后实际运行 `verify:push`。
-
-- 旧体系拥有大量 mock、分阶段和变体测试，却经常在更早阶段失败或从未运行到目标阶段；文件存在与场景名称被误当成覆盖，真实多章节组合仍漏测。
-- Workflow Lab 克隆的是历史状态，不是用户从空项目走出的真实因果链。克隆需要重写 run、Approval、Task target、领域 identity 与未来事实，形成第二套状态解释和长期维护源，因此已整体删除。
-- 旧 Golden 主要证明终态 stage，没有在多章节 processing + reload 中观察每个 Task target 对应的 Canvas node，导致逐章计划缺节点、半成品被正式 Query 解析等问题未被发现。当前主 Journey 直接要求至少两个运行 target、稳定节点和刷新恢复。
-- Canvas terminal handoff 首版 Golden 只分别看见 streaming 端点、正式终态端点，并记录整个 node shell 是否曾移除；内部 presentation 先清空、disclosure 先折叠以及旧 succeeded 资源接管新 Task 都不会让 shell count 变成零，因此场景错误通过。当前主 Journey 的同一连续 observer 同时记录 stream Task identity、presentation、disclosure 与正式资源 owner identity，任一中间空窗或非同 Task 接管都直接失败。
-- Style Bible 集合在 `985d1524e` 改为“已有可用候选即 succeeded”，Logic/Conformance 已同步，主 Journey 却仍要求选择前为 pending，导致完整主链在风格选择处产生假失败并永远到不了后续 Canvas/SSE 阶段。改正 phase 后又暴露旧 driver 用固定 500ms 代替选择持久化确认：下一轮 reload 会中断仍在上传的 choice POST，服务端收到截断 JSON，测试再原地循环到超时。当前 Journey 对齐生产集合 View 的 succeeded 语义，并在一次点击后以权威 Workflow 离开 `needs_style_choice` 作为提交 Oracle，随后才验证同 node identity 与 reload；不再用 phase 不变或 timer 猜测完成。
-- 旧 Journey 与本地开发进程共享 `.next`，多个 Next/Turbopack 进程会互相覆盖 manifest，出现源码页面存在但运行时报 `PageNotFoundError`。当前 Harness 用 runtime identity 隔离 `NEXT_DIST_DIR`、上传和报告目录。
-- Golden 环境曾共享 Compose identity、固定端口和全局 teardown。当前每次运行拥有独立 scope 和 loopback endpoint，停止一个 scope 不得影响另一个。
-- 声音阶段过去有 BGM 与环境音两个规划 Task，测试只分别证明各自能完成；统一 AudioDesign 后的测试又把“两种生成都存在”当作成功，无法反证产品只保留 BGM。当前 Fast/Critical/主 Journey 分别锁定 BGM-only 结构契约、并发 owner 和真实组合链：旧环境字段、缺少任一 BGM 候选、旧 owner 晚到写入、资源设计签名不一致或恢复旧环境音入口都会失败；这三层证据不通过 mock 内部 route/service/DB 来制造成功。
+- 旧 Golden 以 `mainline-complete.spec.ts` 编排固定多章节阶段，既成为第二 Workflow，又要求已删除表继续存在。当前删除主线 driver，唯一专业产品证据改为自然语言驱动的自由 Resource 组合。
+- 旧 Oracle 查询 style preview、edit script、shot execution、video segment、BGM、music score 和 final output 表；生产删表后 Golden 会在进入行为前直接 SQL 失败。当前 Oracle 只读取 Resource spine 与仍存在的可选投影。
+- 旧测试用 stream 延迟和固定 sleep 观察 processing 卡片，机器速度变化会制造假失败。当前成功由持久 Task/Resource 终态和只读 Oracle 裁决，时间只限定等待上界。
+- 旧阶段测试数量很多，但真实组合经常在更早阶段失败，文件存在被误当作覆盖。当前 required suite 必须真实执行且无 failed/skipped/todo；未运行范围明确列为盲区。
+- Golden 生成目录曾被 lint 当成源码，导致 `test:journey → verify:push` 顺序不稳定。当前 runtime identity 隔离 `.next-golden` 与 artifacts，并由 Git/lint 排除；过期本地缓存不能作为源码类型错误。
 
 ## 修改检查表
 
-1. 已有主 Journey、Critical、Logic 或 Conformance 是否已反证本次风险？
-2. 新证据属于哪一个唯一准入类别，权威 Oracle 是什么？
-3. 是否把内部层 mock 掉后仍声称证明真实产品？
+1. 已有 Golden、Critical、Logic 或 Conformance 是否已反证本次风险？
+2. 新证据属于哪一类，独立 Oracle 是什么？
+3. 是否 mock 了被测系统自己的关键层？
 4. 是否能在 pre-fix 或受控真实故障下失败？
-5. 是否改变主 Journey/安全 Journey 的入口、生命周期、终态或禁止副作用？
-6. 删除旧测试前，仍有效的观察是否已迁入主 Journey或 Critical？
-7. 实际命令是否无 failed/skipped/todo，未验证盲区是否明确？
-8. Harness 的数据库、Redis、端口、Next 输出、上传和 artifacts 是否全部按运行隔离？
+5. 是否同步了受影响 Golden scenario、driver 与 Oracle？
+6. 实际命令是否无 failed/skipped/todo，未验证盲区是否明确？

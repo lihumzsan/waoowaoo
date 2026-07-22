@@ -8,12 +8,12 @@ import {
 describe('task progress group', () => {
   it('builds a stable operation progress group only when operation metadata is complete', () => {
     expect(buildTaskProgressGroupId({
-      operationId: 'generate_video_segments',
+      operationId: 'generate_creative_resources',
       operationRequestId: 'request-1',
-    })).toBe('operation:generate_video_segments:request-1')
+    })).toBe('operation:generate_creative_resources:request-1')
 
     expect(buildTaskProgressGroupId({
-      operationId: 'generate_video_segments',
+      operationId: 'generate_creative_resources',
       operationRequestId: '',
     })).toBeNull()
     expect(buildTaskProgressGroupId({
@@ -29,16 +29,16 @@ describe('task progress group', () => {
         intent: 'generate',
         hasOutputAtStart: false,
       },
-    }, 'operation:generate_video_segments:request-1')
+    }, 'operation:generate_creative_resources:request-1')
 
     expect(payload).toEqual({
       prompt: 'shot image',
       ui: {
         intent: 'generate',
         hasOutputAtStart: false,
-        progressGroupId: 'operation:generate_video_segments:request-1',
+        progressGroupId: 'operation:generate_creative_resources:request-1',
       },
     })
-    expect(readTaskPayloadProgressGroupId(payload)).toBe('operation:generate_video_segments:request-1')
+    expect(readTaskPayloadProgressGroupId(payload)).toBe('operation:generate_creative_resources:request-1')
   })
 })

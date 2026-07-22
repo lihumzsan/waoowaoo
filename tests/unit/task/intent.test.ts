@@ -3,21 +3,16 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { resolveTaskIntent } from '@/lib/task/intent'
 
 describe('resolveTaskIntent', () => {
-  it('maps generate task types', () => {
-    expect(resolveTaskIntent(TASK_TYPE.IMAGE_CHARACTER)).toBe('generate')
-    expect(resolveTaskIntent(TASK_TYPE.IMAGE_LOCATION)).toBe('generate')
-    expect(resolveTaskIntent(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)).toBe('generate')
-    expect(resolveTaskIntent(TASK_TYPE.VIDEO_SEGMENT)).toBe('generate')
+  it('maps every CreativeResource generation task', () => {
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_RESOURCE_IMAGE)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_RESOURCE_AUDIO)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_RESOURCE_VOICE)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toBe('generate')
   })
 
-  it('maps regenerate and modify task types', () => {
-    expect(resolveTaskIntent(TASK_TYPE.REGENERATE_GROUP)).toBe('regenerate')
-    expect(resolveTaskIntent(TASK_TYPE.MODIFY_ASSET_IMAGE)).toBe('modify')
-  })
-
-  it('does not expose removed character profile confirmation task types', () => {
-    expect(Object.values(TASK_TYPE)).not.toContain('character_profile_confirm')
-    expect(Object.values(TASK_TYPE)).not.toContain('character_profile_batch_confirm')
+  it('maps Creative Work and deterministic video merge by their actual intent', () => {
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_WORK)).toBe('analyze')
+    expect(resolveTaskIntent(TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE)).toBe('process')
   })
 
   it('falls back to process for unknown types', () => {

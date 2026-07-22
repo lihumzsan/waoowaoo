@@ -56,7 +56,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `tests/integration/provider/fal-music-capability.contract.test.ts` 从生产 registry 验证 Lyria 连续 `120–180` 秒能力、范围外请求在 HTTP 前失败，以及 `duration_seconds` 与 `negative_prompt` 的真实 FAL wire contract。
 - `tests/integration/provider/fal-voice-capability.contract.test.ts` 从生产 registry 验证 Voice Design 多语言枚举、未知/采样 option 在 HTTP 前失败，以及 FAL 只收到 `text/prompt/language`。
 - `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 与 `message-content.contract.test.ts` 验证生产 registry capability、connection 和消息协议。
-- `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level streaming 协议；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、成功兄弟重放、失败 invocation/external job 仅由更高 attempt 重取，以及 `outcome_unknown` 与永久拒绝零重提。
+- `tests/golden-journey/self-tests/model-provider.test.ts` 验证隔离模型替身与生产协议边界一致并 fail closed；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、成功兄弟重放、失败 invocation/external job 仅由更高 attempt 重取，以及 `outcome_unknown` 与永久拒绝零重提。
 - `tests/unit/task/async-poll-external-id.test.ts` 只验证纯 external identity 解析。
 - `tests/unit/ai-exec/structured-json.test.ts` 验证结构化输出只接受纯 JSON 或单一完整外层 fence，并拒绝说明文字、未知/不完整/多重 fence 与 JSON 内容修复。
 - `tests/unit/ai-exec/llm-result-projector.test.ts` 验证 AI SDK usage/cache/cost/reasoning/safety 到 versioned 项目结果的唯一投影及旧 ChatCompletion shape 拒绝；`tests/unit/provider/llm-stream-finalization.test.ts` 反证 delta/final 分叉、漏发 suffix 与二次 completion 猜测。

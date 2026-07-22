@@ -18,6 +18,7 @@ import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-acce
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
+import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 
 function readRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -83,9 +84,14 @@ describe('project agent toolset conformance', () => {
     expect(registry.list_user_models.channels).toEqual({ tool: false, api: true })
     expect(registry.get_project_config.channels).toEqual({ tool: false, api: true })
     expect(registry.update_project_config.channels).toEqual({ tool: true, api: true })
+    expect(registry.update_project_config.choiceCommit).toEqual({ enabled: true })
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toEqual(['videoRatio'])
-    expect(registry.update_project_config.toolInputSchema.properties.videoRatio).toMatchObject({ type: 'string' })
-    expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: null }).success).toBe(true)
+    expect(registry.update_project_config.toolInputSchema.properties.videoRatio).toMatchObject({
+      type: 'string',
+      enum: Object.keys(ASPECT_RATIO_CONFIGS),
+    })
+    expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: '16:9' }).success).toBe(true)
+    expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: null }).success).toBe(false)
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
@@ -107,62 +113,6 @@ describe('project agent toolset conformance', () => {
         .map((operation) => operation.id)
         .sort(),
     )
-  })
-
-  it('exposes one top-level delete tool and one identity-preserving regenerate tool for assets', () => {
-    const registry = createProjectAgentOperationRegistry()
-    const toolset = resolveProjectAgentToolset({ registry })
-
-    expect(toolset.operationIds).toEqual(expect.arrayContaining([
-      'delete_asset',
-      'regenerate_asset',
-      'generate_voice',
-      'bind_voice',
-    ]))
-    for (const removedOperationId of [
-      'delete_character',
-      'delete_location',
-      'api_assets_remove',
-      'asset_hub_delete_character',
-      'asset_hub_delete_location',
-      'regenerate_group',
-      'regenerate_single_image',
-      'delete_voice',
-      'regenerate_voice',
-    ]) {
-      expect(registry).not.toHaveProperty(removedOperationId)
-    }
-
-    expect(registry.delete_asset).toMatchObject({
-      channels: { tool: true, api: true },
-      effects: { destructive: true, billable: false },
-      confirmation: { kind: 'destructive', required: true },
-    })
-    expect(Object.keys(registry.delete_asset.toolInputSchema.properties)).toEqual(['target'])
-    expect(registry.delete_asset.inputSchema.safeParse({
-      target: { kind: 'character', assetId: 'character-1' },
-    }).success).toBe(true)
-    expect(registry.delete_asset.inputSchema.safeParse({
-      target: { kind: 'location', assetId: 'location-1' },
-      scope: 'global',
-    }).success).toBe(true)
-    expect(registry.delete_asset.inputSchema.safeParse({
-      target: { kind: 'voice', assetId: 'voice-resource-1' },
-    }).success).toBe(true)
-
-    expect(registry.regenerate_asset).toMatchObject({
-      channels: { tool: true, api: true },
-      effects: { overwrite: true, billable: true },
-      confirmation: { kind: 'billable_media', required: true },
-    })
-    expect(registry.regenerate_asset.inputSchema.safeParse({
-      target: { kind: 'character', assetId: 'character-1', appearanceId: 'appearance-1' },
-      imageIndex: 0,
-    }).success).toBe(true)
-    expect(registry.regenerate_asset.inputSchema.safeParse({
-      target: { kind: 'prop', assetId: 'prop-1' },
-      count: 3,
-    }).success).toBe(true)
   })
 
   it('exposes voice generation and binding without model or provider knobs', () => {
@@ -224,9 +174,25 @@ describe('project agent toolset conformance', () => {
   it('publishes one explicit Resource generation contract from the production registry', () => {
     const registry = createProjectAgentOperationRegistry()
     const textProperties = registry.create_text.toolInputSchema.properties
-    expect(readRecord(textProperties.schemaId).enum).toEqual([
-      ...CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text,
-      null,
+    expect(Object.keys(textProperties)).not.toContain('schemaId')
+    expect(registry.create_text.resourceContract).toEqual({
+      kind: 'resource',
+      acceptsReferences: true,
+      outputMediaTypes: ['text'],
+      outputSchemaIds: ['generic.text'],
+      supportsCandidates: true,
+    })
+    expect(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).toEqual([
+      'generic.text',
+      'project.source_script',
+      'project.edit_bible',
+      'project.chapter_plan',
+      'project.continuity_analysis',
+      'project.style_bible',
+      'project.asset_prompt_set',
+      'project.video_prompt_set',
+      'project.music_direction',
+      'project.creative_review',
     ])
     expect(Object.keys(textProperties)).not.toContain('generationOptions')
     expect(Object.keys(textProperties)).not.toContain('modelKey')
@@ -270,11 +236,15 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(videoNewProperties)).not.toContain('imageReferences')
     expect(Object.keys(videoNewProperties)).not.toContain('voiceReferenceKeys')
 
-
     expect(registry.create_text.inputSchema.safeParse({
       prompt: 'Write one line.',
       content: { kind: 'single', text: 'One line.' },
     }).success).toBe(true)
+    expect(registry.create_text.inputSchema.safeParse({
+      schemaId: 'project.source_script',
+      prompt: 'Write a screenplay.',
+      content: { kind: 'single', text: 'INT. ROOM - DAY' },
+    }).success).toBe(false)
     expect(registry.create_image.inputSchema.safeParse({
       request: { kind: 'new', count: 2, prompt: 'A paper lantern in fog.' },
     }).success).toBe(true)
@@ -316,17 +286,12 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
   })
 
-  it('publishes exact retry, segment, and task branches without Agent model configuration', () => {
+  it('publishes exact retry and task branches without Agent model configuration', () => {
     const registry = createProjectAgentOperationRegistry()
     const requestSchema = readRecord(registry.create_video.toolInputSchema.properties.request)
     const requestKinds = (Array.isArray(requestSchema.oneOf) ? requestSchema.oneOf : [])
       .map((branch) => readRecord(readRecord(readRecord(branch).properties).kind).const)
     expect(requestKinds).toEqual(['new', 'retry'])
-
-    const scopeSchema = readRecord(registry.generate_video_segments.toolInputSchema.properties.scope)
-    const scopeKinds = (Array.isArray(scopeSchema.oneOf) ? scopeSchema.oneOf : [])
-      .map((branch) => readRecord(readRecord(readRecord(branch).properties).kind).const)
-    expect(scopeKinds).toEqual(['pending', 'segment'])
 
     expect(Object.keys(registry.list_tasks.toolInputSchema.properties)).toEqual(expect.arrayContaining([
       'targetType', 'targetId', 'status', 'type', 'limit',
@@ -334,34 +299,38 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.get_task.toolInputSchema.properties)).toEqual([
       'taskId', 'includeEvents', 'eventsLimit',
     ])
-    expect(Object.keys(registry.generate_project_music.toolInputSchema.properties)).not.toContain('musicModel')
-    expect(Object.keys(registry.plan_episode_bgm_design.toolInputSchema.properties)).not.toContain('musicModel')
-    expect(Object.keys(registry.generate_episode_bgm_score.toolInputSchema.properties)).not.toContain('musicModel')
   })
 
-  it('uses dedicated exact-revision operations for canonical screenplay and Style Bible bindings', () => {
+  it('uses exact immutable revisions for canonical Bible and Style Bible adoption', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.confirm_script_resource.channels.tool).toBe(true)
-    expect(Object.keys(registry.confirm_script_resource.toolInputSchema.properties)).toEqual([
-      'resourceId', 'revisionId', 'expectedVersion',
+    expect(registry.adopt_bible.channels.tool).toBe(true)
+    expect(Object.keys(registry.adopt_bible.toolInputSchema.properties)).toEqual([
+      'screenplay', 'bible', 'expectedVersion',
     ])
-    expect(registry.confirm_script_resource.inputSchema.safeParse({
-      resourceId: 'resource:screenplay',
-      revisionId: 'revision:screenplay',
+    expect(registry.adopt_bible.inputSchema.safeParse({
+      screenplay: {
+        resourceId: 'resource:screenplay',
+        revisionId: 'revision:screenplay',
+        fingerprint: 'fingerprint:screenplay',
+      },
+      bible: {
+        resourceId: 'resource:bible',
+        revisionId: 'revision:bible',
+        fingerprint: 'fingerprint:bible',
+      },
       expectedVersion: null,
     }).success).toBe(true)
 
     expect(registry.adopt_style_bible.inputSchema.safeParse({
-      taskId: 'task:style',
-      name: 'Final style',
-      selection: { kind: 'candidate', styleKey: 'style_b' },
+      resourceId: 'resource:style',
+      revisionId: 'revision:style',
+      fingerprint: 'fingerprint:style',
       expectedVersion: null,
     }).success).toBe(true)
     expect(registry.adopt_style_bible.inputSchema.safeParse({
-      taskId: 'task:style',
-      name: 'Final style',
-      selection: { kind: 'candidate', styleKey: 'style_unknown' },
+      resourceId: 'resource:style',
+      revisionId: 'revision:style',
     }).success).toBe(false)
   })
 
@@ -525,7 +494,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v3')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v4')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,
@@ -569,7 +538,7 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
     expect(creativeWorkTaskPayloadSchema.safeParse({
       ...payload,
-      protocol: 'creative_work_v2',
+      protocol: 'creative_work_v3',
     }).success).toBe(false)
 
     const result = {

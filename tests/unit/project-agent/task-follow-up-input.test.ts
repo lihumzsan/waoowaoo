@@ -9,7 +9,7 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     waitId: 'wait-1',
     followUpKey: 'follow-up-key-1',
     followUpMode: 'resume_agent',
-    operationId: 'generate_edit_shot_execution_plan',
+    operationId: 'create_image',
     taskIds: ['task-1'],
     failedTaskIds: [],
     canceledTaskIds: [],
@@ -48,7 +48,7 @@ describe('project agent task follow-up input', () => {
     const content = readContent(buildTaskFollowUpInputItem(followUp()))
 
     expect(content).toContain('[task_update]')
-    expect(content).toContain('operation=generate_edit_shot_execution_plan')
+    expect(content).toContain('operation=create_image')
     expect(content).toContain('status=completed')
     expect(content).toContain('total=1 succeeded=1 failed=0')
     expect(content).toContain('completedTasks=')
@@ -65,9 +65,9 @@ describe('project agent task follow-up input', () => {
       failedTaskIds: ['task-failed-1'],
       failedTasks: [{
         taskId: 'task-failed-1',
-        taskType: 'video_segment',
-        targetType: 'ProjectVideoSegment',
-        targetId: 'group-1',
+        taskType: 'creative_resource_video',
+        targetType: 'CreativeResource',
+        targetId: 'resource-failed-1',
         status: 'failed',
         errorCode: 'INTERNAL_ERROR',
         errorMessage: 'output video may be related to copyright restrictions',

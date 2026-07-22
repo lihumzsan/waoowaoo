@@ -9,23 +9,21 @@ function choiceReceipt(): ProjectAgentChoiceSuspensionReceipt {
   return {
     kind: 'choice',
     runId: 'run-1',
-    operationId: 'request_future_choice',
+    operationId: 'request_choice',
     activityId: 'activity-1',
     interruptionId: 'interruption-1',
     cardId: 'card-1',
     toolCallId: 'tool-1',
-    choiceType: 'script_intake',
     card: {
       cardId: 'card-1',
       runId: 'run-1',
       interruptionId: 'interruption-1',
       toolCallId: 'tool-1',
-      choiceType: 'script_intake',
-      replyMode: 'per_group',
+      mode: 'confirm',
+      replyMode: 'none',
       title: 'Choose',
       groups: [],
       submitLabel: 'Continue',
-      submit: { kind: 'submit_tool_output', decision: 'approve' },
     },
   }
 }
@@ -54,7 +52,7 @@ describe('Project Agent suspension receipts', () => {
     expect(isSameProjectAgentSuspensionReceipt(choiceReceipt(), {
       kind: 'approval',
       runId: 'run-1',
-      operationId: 'request_future_choice',
+      operationId: 'request_choice',
       activityId: 'activity-1',
       interruptionId: 'interruption-1',
       approvalId: 'approval-1',

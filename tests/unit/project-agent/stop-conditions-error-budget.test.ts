@@ -1,5 +1,4 @@
 import {
-  EDIT_FIRST_CHOICE_TOOL_IDS,
   PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION,
   PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN,
   createProjectAgentStopController,
@@ -15,30 +14,30 @@ import {
 describe('project agent business stop signals', () => {
   it('[WaitApproval] -> keeps a business confirmation stop signal', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([waitApprovalOutput('generate_edit_script')])
+    const stopPart = controller.evaluateStep([waitApprovalOutput('create_image')])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
       stepCount: 1,
-      operationIds: ['generate_edit_script'],
+      operationIds: ['create_image'],
     })
   })
 
   it('[WaitChoice] -> stops so the agent waits for the user choice', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([waitChoiceOutput(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)])
+    const stopPart = controller.evaluateStep([waitChoiceOutput('request_choice')])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
       stepCount: 1,
-      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review],
+      operationIds: ['request_choice'],
     })
   })
 
   it('[first tool error] -> returns the error to the model instead of stopping', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('delegate_creative_work', 'OPERATION_EXECUTION_FAILED'),
     ])
     expect(stopPart).toBeNull()
   })
@@ -46,16 +45,16 @@ describe('project agent business stop signals', () => {
   it('[repeated same-operation errors] -> stops once the per-operation budget is exhausted', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
-      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('delegate_creative_work', 'OPERATION_EXECUTION_FAILED'),
     ])).toBeNull()
 
     const stopPart = controller.evaluateStep([
-      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('delegate_creative_work', 'OPERATION_EXECUTION_FAILED'),
     ])
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 2,
-      operationIds: ['generate_edit_script'],
+      operationIds: ['delegate_creative_work'],
       codes: ['OPERATION_EXECUTION_FAILED'],
     })
     expect(PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION).toBe(2)
@@ -104,12 +103,12 @@ describe('project agent business stop signals', () => {
   it('[fatal error code] -> stops immediately without retry budget', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      toolErrorOutput('generate_edit_script', 'OPERATION_NOT_ALLOWED'),
+      toolErrorOutput('delegate_creative_work', 'OPERATION_NOT_ALLOWED'),
     ])
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 1,
-      operationIds: ['generate_edit_script'],
+      operationIds: ['delegate_creative_work'],
       codes: ['OPERATION_NOT_ALLOWED'],
     })
   })
@@ -117,12 +116,12 @@ describe('project agent business stop signals', () => {
   it('[operation plan changed] -> cancels the approved attempt without retrying the stale Grant', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      toolErrorOutput('generate_video_segments', 'OPERATION_PLAN_CHANGED'),
+      toolErrorOutput('create_video', 'OPERATION_PLAN_CHANGED'),
     ])
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 1,
-      operationIds: ['generate_video_segments'],
+      operationIds: ['create_video'],
       codes: ['OPERATION_PLAN_CHANGED'],
     })
   })
@@ -130,10 +129,10 @@ describe('project agent business stop signals', () => {
   it('[error after recovery] -> SubmittedTasks remains non-blocking', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
-      toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
+      toolErrorOutput('delegate_creative_work', 'OPERATION_EXECUTION_FAILED'),
     ])).toBeNull()
     const stopPart = controller.evaluateStep([
-      submittedTasksOutput('generate_edit_shot_execution_plan', ['task-9']),
+      submittedTasksOutput('delegate_creative_work', ['task-9']),
     ])
     expect(stopPart).toBeNull()
   })

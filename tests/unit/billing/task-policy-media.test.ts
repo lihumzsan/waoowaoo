@@ -10,14 +10,14 @@ import {
 describe('billing/task-policy', () => {
 
   it('fails uncatalogued music models instead of falling back to product credits', () => {
-    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::unknown-music',
       durationSeconds: 30,
     })).toThrow(/BILLING_UNKNOWN_MODEL/)
   })
 
   it('honors candidateCount/count for image tasks', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_IMAGE, {
       candidateCount: 4,
       imageModel: 'fal::gpt-image-2',
       generationOptions: {
@@ -38,7 +38,7 @@ describe('billing/task-policy', () => {
   })
 
   it('does not use top-level image sizing fields as billing metadata', () => {
-    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.IMAGE_CHARACTER, {
+    expect(() => buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_IMAGE, {
       candidateCount: 1,
       imageModel: 'fal::gpt-image-2',
       resolution: '1K',
@@ -48,7 +48,7 @@ describe('billing/task-policy', () => {
   })
 
   it('builds video billing info from the explicit video model', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_SEGMENT, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_VIDEO, {
       videoModel: 'openrouter::bytedance/seedance-2.0-fast',
       duration: 8,
     }))
@@ -58,7 +58,7 @@ describe('billing/task-policy', () => {
   })
 
   it('uses explicit music model from payload', () => {
-    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 30,
     }))

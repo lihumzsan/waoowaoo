@@ -11,8 +11,6 @@ import {
   runsMock,
   vi,
   waitsMock,
-  workflow,
-  workflowMock,
 } from './session-state.fixture'
 
 describe('project agent session-state', () => {
@@ -21,14 +19,13 @@ describe('project agent session-state', () => {
     mockSessionTaskRows([
       {
         id: 'task-1',
-        operationId: 'generate_edit_script_assets',
-        type: 'image_location',
-        targetType: 'LocationImage',
-        targetId: 'location-image-1',
+        operationId: 'create_image',
+        type: 'creative_resource_image',
+        targetType: 'CreativeResource',
+        targetId: 'resource-image-1',
         status: 'processing',
       },
     ])
-    workflowMock.resolveEditFirstWorkflowView.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
         id: 'run-1',
@@ -48,7 +45,7 @@ describe('project agent session-state', () => {
       {
         runId: 'run-1',
         waitId: 'wait-1',
-        operationId: 'generate_edit_script_assets',
+        operationId: 'create_image',
         taskIds: ['task-1'],
         failedTaskIds: [],
         status: 'pending',
@@ -63,10 +60,9 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       type: 'waiting_task',
       status: 'waiting',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       sourceOperationId: null,
       toolCallId: null,
-      choiceType: null,
     })
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValue({
       id: 'interruption-1',
@@ -74,7 +70,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       approvalId: 'approval-1',
       toolCallId: 'tool-1',
       payload: {},
@@ -85,7 +81,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       approvalId: 'approval-1',
       toolCallId: 'tool-1',
       payload: {},
@@ -124,10 +120,9 @@ describe('project agent session-state', () => {
       runId: 'run-active-1',
       type: 'operation',
       status: 'running',
-      operationId: 'generate_edit_shot_execution_plan',
+      operationId: 'create_video',
       sourceOperationId: null,
       toolCallId: 'tool-active-1',
-      choiceType: null,
     })
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'interruption-active-1',
@@ -135,7 +130,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-active-1',
       type: 'approval',
       status: 'consumed',
-      operationId: 'generate_edit_shot_execution_plan',
+      operationId: 'create_video',
       approvalId: 'approval-active-1',
       toolCallId: 'tool-active-1',
       payload: {},
@@ -159,7 +154,7 @@ describe('project agent session-state', () => {
     expect(state.currentActivity).toEqual(expect.objectContaining({
       runId: 'run-active-1',
       type: 'operation',
-      operationId: 'generate_edit_shot_execution_plan',
+      operationId: 'create_video',
     }))
   })
 })

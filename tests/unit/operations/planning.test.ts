@@ -14,7 +14,10 @@ const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
 const originalBillingMode = process.env.BILLING_MODE
 
 function mediaBillingInfo(params: {
-  taskType: typeof TASK_TYPE.IMAGE_CHARACTER | typeof TASK_TYPE.VIDEO_SEGMENT | typeof TASK_TYPE.MUSIC_GENERATE
+  taskType:
+    | typeof TASK_TYPE.CREATIVE_RESOURCE_IMAGE
+    | typeof TASK_TYPE.CREATIVE_RESOURCE_VIDEO
+    | typeof TASK_TYPE.CREATIVE_RESOURCE_AUDIO
   apiType: 'image' | 'video' | 'music'
   model: string
   maxFrozenCost: number
@@ -38,13 +41,13 @@ function textBillingInfo(): TaskBillingInfo {
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+    taskType: TASK_TYPE.CREATIVE_WORK,
     apiType: 'text',
     model: 'text-model',
     quantity: 1000,
     unit: 'token',
     maxFrozenCost: 99,
-    action: TASK_TYPE.EDIT_BIBLE_GENERATE,
+    action: TASK_TYPE.CREATIVE_WORK,
     status: 'quoted',
   }
 }
@@ -52,17 +55,17 @@ function textBillingInfo(): TaskBillingInfo {
 function buildPlan(): OperationPlan {
   return {
     kind: 'task_submission',
-    operationId: 'generate_video_segments',
+    operationId: 'create_video',
     projectId: 'project-1',
     userId: 'user-1',
     tasks: [
       {
         id: 'image-task',
-        taskType: TASK_TYPE.IMAGE_CHARACTER,
-        target: { targetType: 'CharacterAppearance', targetId: 'appearance-1' },
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        target: { targetType: 'CreativeResource', targetId: 'image-resource-1' },
         payload: { model: 'payload-should-not-drive-quote' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.IMAGE_CHARACTER,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
           apiType: 'image',
           model: 'planned-image-model',
           maxFrozenCost: 3.5,
@@ -73,11 +76,11 @@ function buildPlan(): OperationPlan {
       },
       {
         id: 'video-task',
-        taskType: TASK_TYPE.VIDEO_SEGMENT,
-        target: { targetType: 'ProjectVideoSegment', targetId: 'segment-2' },
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+        target: { targetType: 'CreativeResource', targetId: 'video-resource-1' },
         payload: { model: 'different-payload-model' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.VIDEO_SEGMENT,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
           apiType: 'video',
           model: 'planned-video-model',
           maxFrozenCost: 6.25,
@@ -88,22 +91,22 @@ function buildPlan(): OperationPlan {
       },
       {
         id: 'text-task',
-        taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        target: { targetType: 'ProjectEpisode', targetId: 'episode-1' },
+        taskType: TASK_TYPE.CREATIVE_WORK,
+        target: { targetType: 'CreativeWork', targetId: 'creative-work-1' },
         payload: { model: 'expensive-text-payload' },
         billingInfo: textBillingInfo(),
         locale: 'zh',
         episodeId: 'episode-1',
       },
       {
-        id: 'music-task',
-        taskType: TASK_TYPE.MUSIC_GENERATE,
-        target: { targetType: 'Project', targetId: 'project-1' },
-        payload: { model: 'payload-music-model' },
+        id: 'audio-task',
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+        target: { targetType: 'CreativeResource', targetId: 'audio-resource-1' },
+        payload: { model: 'payload-audio-model' },
         billingInfo: mediaBillingInfo({
-          taskType: TASK_TYPE.MUSIC_GENERATE,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
           apiType: 'music',
-          model: 'planned-music-model',
+          model: 'planned-audio-model',
           maxFrozenCost: 2.5,
           unit: 'call',
         }),
@@ -142,24 +145,8 @@ describe('operation planning billing quote', () => {
     expect(quote.items.map((item) => item.model)).toEqual([
       'planned-image-model',
       'planned-video-model',
-      'planned-music-model',
+      'planned-audio-model',
     ])
-  })
-
-  /**
-   * Authority: TL-01 registry-declared Task resource scope at the plan boundary.
-   * Rejects: quoting an immutable approval plan that can never produce a valid episode-scoped Task.
-   * Production entry: quoteOperationPlan using the production TaskDefinition registry and resource resolver.
-   * Oracle: quote creation fails before any snapshot or approval can be persisted.
-   * Command: npx vitest run tests/unit/operations/planning.test.ts
-   */
-  it('rejects an approval plan whose Task omits registry-required resource scope', async () => {
-    const plan = buildPlan()
-    plan.tasks[1] = { ...plan.tasks[1]!, episodeId: null }
-
-    await expect(quoteOperationPlan(plan)).rejects.toThrow(
-      'WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:video_segments',
-    )
   })
 
   it('hides credit amounts in self-hosted plan views while preserving task count', async () => {
@@ -177,12 +164,12 @@ describe('operation planning billing quote', () => {
   it('merges every member quote for one approval group without reusing a member snapshot identity', async () => {
     const music = {
       ...await toOperationPlanView(buildPlan()),
-      operationId: 'generate_episode_bgm_score' as const,
+      operationId: 'create_audio' as const,
       planSnapshotId: 'music-snapshot',
     }
     const video = {
       ...await toOperationPlanView(buildPlan()),
-      operationId: 'generate_video_segments' as const,
+      operationId: 'create_video' as const,
       planSnapshotId: 'video-snapshot',
       tasks: music.tasks.map((task) => ({ ...task, id: `video:${task.id}` })),
       quote: {
@@ -192,12 +179,12 @@ describe('operation planning billing quote', () => {
     }
 
     const approval = mergeOperationPlanViewsForApproval(
-      'generate_episode_bgm_score',
+      'create_audio',
       [music, video],
     )
 
     expect(approval).toMatchObject({
-      operationId: 'generate_episode_bgm_score',
+      operationId: 'create_audio',
       taskCount: 8,
       quote: {
         taskCount: 8,
@@ -222,7 +209,7 @@ describe('operation planning billing quote', () => {
   it('rejects a tool-only operation before API planning performs business work', async () => {
     await expect(planProjectAgentOperationFromApi({
       request: new NextRequest('http://localhost/api/operations/plan'),
-      operationId: 'confirm_edit_style_preview',
+      operationId: 'adopt_style_bible',
       projectId: 'project-1',
       userId: 'user-1',
       input: {},

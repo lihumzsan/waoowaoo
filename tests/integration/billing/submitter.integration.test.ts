@@ -7,15 +7,12 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 
-async function createEditScriptTaskScope(userId: string, episodeNumber: number) {
+async function createResourceTaskScope(userId: string, episodeNumber: number) {
   const project = await createTestProject(userId)
   const episode = await prisma.projectEpisode.create({
     data: { projectId: project.id, episodeNumber, name: `Billing episode ${episodeNumber}` },
   })
-  const chapter = await prisma.projectEditChapter.create({
-    data: { episodeId: episode.id, chapterIndex: 0 },
-  })
-  return { project, episode, chapter }
+  return { project, episode, resourceId: `resource-${String(episodeNumber)}` }
 }
 
 describe('billing/submitter integration', () => {
@@ -27,7 +24,7 @@ describe('billing/submitter integration', () => {
 
   it('builds billing info server-side for billable task submission', async () => {
     const user = await createTestUser()
-    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 1)
+    const { project, episode, resourceId } = await createResourceTaskScope(user.id, 1)
     await seedBalance(user.id, 10)
 
     const result = await submitTask({
@@ -35,14 +32,14 @@ describe('billing/submitter integration', () => {
       locale: 'en',
       projectId: project.id,
       episodeId: episode.id,
-      type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-      targetType: 'ProjectEditChapter',
-      targetId: chapter.id,
-      payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
+      type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      targetType: 'CreativeResource',
+      targetId: resourceId,
+      payload: { imageModel: 'fal::gpt-image-2', count: 1 },
     })
 
     expect(result.success).toBe(true)
-    expect(result.taskType).toBe(TASK_TYPE.EDIT_SCRIPT_GENERATE)
+    expect(result.taskType).toBe(TASK_TYPE.CREATIVE_RESOURCE_IMAGE)
     const task = await prisma.task.findUnique({ where: { id: result.taskId } })
     expect(task).toBeTruthy()
     const billing = task?.billingInfo as { billable?: boolean; source?: string } | null
@@ -56,12 +53,12 @@ describe('billing/submitter integration', () => {
 
   it('marks task as failed when balance is insufficient', async () => {
     const user = await createTestUser()
-    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 2)
+    const { project, episode, resourceId } = await createResourceTaskScope(user.id, 2)
     await seedBalance(user.id, 0)
 
-    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {
-      analysisModel: 'openrouter::openai/gpt-5.5',
-      episodeId: episode.id,
+    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_IMAGE, {
+      imageModel: 'fal::gpt-image-2',
+      count: 1,
     })
     expect(billingInfo?.billable).toBe(true)
 
@@ -71,10 +68,10 @@ describe('billing/submitter integration', () => {
         locale: 'en',
         projectId: project.id,
         episodeId: episode.id,
-        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-        targetType: 'ProjectEditChapter',
-        targetId: chapter.id,
-        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        targetType: 'CreativeResource',
+        targetId: resourceId,
+        payload: { imageModel: 'fal::gpt-image-2', count: 1 },
         billingInfo,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
@@ -82,7 +79,7 @@ describe('billing/submitter integration', () => {
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -99,9 +96,9 @@ describe('billing/submitter integration', () => {
       userId: user.id,
       locale: 'en',
       projectId: 'project-c',
-      type: TASK_TYPE.IMAGE_CHARACTER,
-      targetType: 'CharacterAppearance',
-      targetId: 'appearance-c',
+      type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      targetType: 'CreativeResource',
+      targetId: 'resource-c',
       payload: {},
     })
 
@@ -122,9 +119,9 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-d',
-        type: TASK_TYPE.IMAGE_CHARACTER,
-        targetType: 'CharacterAppearance',
-        targetId: 'appearance-d',
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        targetType: 'CreativeResource',
+        targetId: 'resource-d',
         payload: {},
       }),
     ).rejects.toMatchObject({ code: 'INVALID_PARAMS' } satisfies Pick<ApiError, 'code'>)
@@ -132,7 +129,7 @@ describe('billing/submitter integration', () => {
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.IMAGE_CHARACTER,
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -142,7 +139,7 @@ describe('billing/submitter integration', () => {
 
   it('rolls back Task, billing freeze, event, and Outbox when the submission transaction fails', async () => {
     const user = await createTestUser()
-    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 3)
+    const { project, episode, resourceId } = await createResourceTaskScope(user.id, 3)
     await seedBalance(user.id, 10)
     const eventCountBefore = await prisma.taskEvent.count()
     const outboxCountBefore = await prisma.outboxCommand.count()
@@ -153,10 +150,10 @@ describe('billing/submitter integration', () => {
         locale: 'en',
         projectId: project.id,
         episodeId: episode.id,
-        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-        targetType: 'ProjectEditChapter',
-        targetId: chapter.id,
-        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        targetType: 'CreativeResource',
+        targetId: resourceId,
+        payload: { imageModel: 'fal::gpt-image-2', count: 1 },
         onTaskCreatedInTransaction: async () => {
           throw new Error('target ownership failed')
         },
@@ -166,7 +163,7 @@ describe('billing/submitter integration', () => {
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       },
       orderBy: { createdAt: 'desc' },
     })

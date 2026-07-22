@@ -32,7 +32,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
@@ -53,7 +53,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
@@ -91,7 +91,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
@@ -132,13 +132,13 @@ describe('billing/service integration', () => {
     const info: Extract<TaskBillingInfo, { billable: true }> = {
       billable: true,
       source: 'task',
-      taskType: TASK_TYPE.MUSIC_GENERATE,
+      taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
       apiType: 'music',
       model: 'google::lyria-3-pro-preview',
       quantity: 0,
       unit: 'call',
       maxFrozenCost: 0,
-      action: TASK_TYPE.MUSIC_GENERATE,
+      action: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
       status: 'quoted',
     }
 
@@ -162,7 +162,7 @@ describe('billing/service integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+    const info = buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_AUDIO, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!

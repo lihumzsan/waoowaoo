@@ -11,22 +11,18 @@ Worker 启动时收到完整但紧凑的 Creative Skill 目录，并按目标自
 ## 不变量
 
 - **CS-01 — Skill registry 是唯一身份入口。** Skill id、版本、语言文件、标题、摘要、标签、关键词与 `skill://` URI 只由 `CREATIVE_SKILL_REGISTRY` 声明。发现、URI 解析与读取必须经过该 registry，禁止从 Operation 名、目录遍历、模型猜测或任意文件路径推断 Skill。
-- **CS-02 — V1 Skill 保持单层且职责分离。** 每个已注册 Skill 只有同目录下的 `SKILL.zh.md` 与 `SKILL.en.md`；V1 不建立 `references/`、角色目录或递归知识树。`visual-development` 已一次性拆分并删除：`style-development` 独占全局视觉语言、媒介、色彩、光线、材质、构图、`visualStyle`、`assetImageStyle`、风格候选和预览；`asset-development` 独占角色、场景、道具、参考图、候选与修改。纯独立图片资产可以没有 Style Bible；任何视频制作必须先得到并采用 finalized Style Bible，后续资产与视频设计只能消费其精确 Resource revision，不能反向改写。中英文 Skill 必须表达同一业务规则集合。
+- **CS-02 — V1 Skill 保持单层且职责分离。** 每个已注册 Skill 只有同目录下的 `SKILL.zh.md` 与 `SKILL.en.md`；V1 不建立 `references/`、固定专业角色或递归知识树。`style-development` 独占全局视觉语言和 Style Bible，`asset-development` 独占角色、场景、道具与媒体 Prompt。是否需要 Style Bible、Bible、Chapter、连续性分析或资产由 Primary 依据当前目标与事实判断；提供这些输入时 Worker 只能消费精确 Revision，不能反向改写。中英文 Skill 必须表达同一业务规则集合。
 - **CS-03 — Worker 无状态且隔离。** Creative Worker 每次 Task attempt 内独立创建，不能访问 Prisma、项目读取、Operation registry、Task、Resource、Approval、Choice、计费或任意业务工具。它只预载 `creative-core`，唯一可见工具是 `read_skill({skillId})`；输入来源材料一律视为数据而非系统指令。Task handler 可以传入完整紧凑目录、记录只读 Skill trace 并保存结果，但不能把 Worker 变成业务 Agent。每个 attempt 受统一 Worker 外部运行时上限约束；超时必须中止模型 signal 并以 typed `CREATIVE_WORK_TIMEOUT` 失败，不能依赖永久 heartbeat 保持 processing。用户取消会先由 Task 终态 CAS 立即移出运行态；当前 provider 调用不保证跨进程即时停止，仍只允许终态 fence 拒绝晚到写入。
 - **CS-03A — Worker 模型服从 analysis 角色配置。** `delegate_creative_work` 必须在创建 Task 前通过唯一系统模型 resolver 以 `purpose=analysis` 解析模型，并把精确 `modelKey` 同时冻结进 Task payload 与输入指纹；Worker 只消费该冻结值，并通过同一 `analysis` reasoning-effort owner 解析强度。Primary 的 Assistant 模型、Agent 输入、output kind、Task retry 和 Worker 均无权重新选模。解析失败必须在 Task 创建前原地失败；配置晚到变化不得覆盖 queued/processing/retry 的既有 Task。
 - **CS-04 — Worker 按目录自主读取任务所需知识组合。** `CREATIVE_SKILL_REGISTRY` 在 Worker 初始上下文中穷尽提供每个 Skill 的 id、标题、摘要、标签和适用范围；Primary、output kind adapter 和服务端均不得注入 `requiredSkillIds` 或预选专业角色。Worker 根据当前请求中的 `outputKind`、目标和目录说明，自主选择并真实调用 `read_skill`；专业 Skill 可以在目录摘要与正文中声明某类 output 所需的同轮伴随 Skill，Worker 必须遵守该知识组合。当前 `video_prompt_set` 由目录明确要求同轮读取 `director-core`、`video-direction` 与 `quality-review`，三者不形成串行 Subagent 或平行结果。服务端仍只验证至少一个非 `creative-core` 的真实读取发生，不维护第二份 output-kind→Skill 映射或选择门禁；专业质量由 Skill 目录说明、Worker 推理、Skill trace 和 strict output 共同承担。
 - **CS-05 — 主 Agent 委派入口与生命周期唯一。** `delegate_creative_work` 是主 Agent 获取专业创作推理的唯一 Operation；它接受单个请求或批量请求，并通过既有 Task submitter 为每个逻辑请求创建一个 `creative_work` Task。一个 Subagent 恒等于一个 Task，`Task.id` 是唯一 Subagent identity，`Task.status` 是唯一生命周期事实。禁止恢复同步 Tool 内运行 Worker、`ProjectAgentActivity.id` 充当 Subagent identity、`subagent.progressed` 事件 writer 或第二套 Subagent 状态机。
-- **CS-06 — 输出契约穷尽。** Worker output kind 与 strict schema 只由 `creativeWorkOutputRegistry` 声明。当前集合为 `screenplay_draft`、`edit_bible_bundle`、`continuity_analysis`、`style_bible`、`asset_prompt_set`、`video_prompt_set`、`music_direction` 与 `creative_review`；不存在 `story_analysis`。`style_bible` 必须显式选择单个 finalized Style Bible 或经完整候选校验的 candidate set；final 结果只能经 `adopt_style_bible` 写成 `project.style_bible` Resource。`asset_prompt_set` 必须把不含风格的 `stableDescription`、最终 `generationPrompt` 与可选 style source 分开。纯图片资产可无 Style Bible，视频设计必须携带唯一、owned、ready 且 fingerprint 一致的 Style Bible revision。未知、缺失、错 kind 或超预算输出必须原地失败，禁止降级成自由文本或猜字段。
+- **CS-06 — 输出契约穷尽。** Worker output kind 与 strict schema 只由 `creativeWorkOutputRegistry` 声明。当前集合为 `screenplay_draft`、`edit_bible_bundle`、`continuity_analysis`、`style_bible`、`asset_prompt_set`、`video_prompt_set`、`music_direction` 与 `creative_review`。成功 `screenplay_draft` 必须物化为文字 Resource Revision，该 Revision 就是剧本；不存在确认副本。`style_bible` 可返回 finalized 或任意 2–12 个完整文字候选，只有显式 `adopt_style_bible` 才写 `project.style_bible` Binding，默认不生成预览图。未知、缺失、错 kind 或超预算输出必须原地失败。
 - **CS-06A — 导演知识内化进唯一视频 Prompt。** `video_prompt_set` 的 strict 结果只表达执行真正消费的 `kind` 与 `segments`；每个 segment 只含稳定 `key`、允许的整数 `durationSeconds`、唯一创意指令 `prompt` 和待映射的 `referenceKeys`。`referenceKeys` 是图片与声音共用的唯一 source-material 标签序列，Primary 把标签解析为精确 Revision 后交给 `create_video.mediaReferences`；图片和声音在模型 Prompt 中分别独立编号为 `@ImageN` 与 `@AudioN`，禁止新增 `voiceReferenceKeys`。Primary 只允许传整部/本章总时长，严禁预先指定段数或逐段时长；服务端从固定视频能力注入允许时长、最小/最大时长与项目画幅。Worker 按目录说明同轮读取 `director-core`、`video-direction` 与 `quality-review`，先完成导演判断，再把当前段适用的镜头、表演、动作、连续性、逐字对白、绑定音色、同步声音与条件式转场全部内化进 `prompt`，并在 strict 输出前自检。绑定音色只定义声音身份，试听文字不得成为对白。运行时只验证 key 唯一、时长属于能力枚举且总和准确；画幅是输入与执行上下文，原生音频由视频执行层默认开启，二者都不由 Subagent 回传。章节剪辑链若需要声音先行或跨 Shot 延续，仍由同一个 Segment Prompt 以可选声音时间线表达，不新增第二音频 writer。禁止恢复 `globalDirection`、`directorTimeline`、`finalPrompt`、`audioIntent` 或其他无人消费的平行过程字段，也不得把导演与模型表达拆成隐藏串行 Task。
 - **CS-07 — Task 是唯一持久容器，Worker 不获得写权。** 完整 strict 结果与 Skill trace 只保存于 `Task.result`；Task payload 中只保存请求、冻结模型、输入指纹、来源身份和有界 lifecycle projection。公开 reasoning 以 block snapshot（最多 64,000 字符并显式 `truncated`）和 `read_skill` tool lifecycle 更新同一 projection；token delta 不逐条写 DB，而复用 Task stream做瞬时展示。Task created/progress/terminal Event 与 Assistant continuation 只能使用 TaskDefinition 声明的 reference projection，禁止复制长剧本、Bible、章节上下文、Skill 正文、加密 CoT 或完整 Worker JSON 进入 SSE、Session、Wait 或模型续跑上下文。主 Agent 通过正式 `get_task(taskId)` 读取完整结果；用户选择 Subagent 详情时由同 scope 鉴权 reader 按 taskId 读取同一 `Task.result`，两者都不形成第二 writer。
 - **CS-08 — 批量只复用既有聚合协议。** `delegate_creative_work` 只有一个 `delegation` 联合：`source=requests` 一次提交一个或多个调用方已备齐上下文的请求，`source=chapters` 由服务端 Context Compiler 直接把每个持久 Chapter 的最小上下文写入对应 Task。一个请求或 Chapter 对应一个 Task。成员只通过现有 `OperationBatch + collecting Wait` 聚合，全部终态后只由现有 Outbox continuation 恢复主 Agent 一次。禁止 nullable 空分支、另建 Subagent Batch 表、每 Task 一个 Wait、首个 Task 完成即恢复、前台阻塞或按结果顺序串行。
-- **CS-09 — Subagent UI 只投影 Task。** SessionState 只从当前 scope 最近且声明 canonical `creative_work_v3` protocol 的 `creative_work` Task、`Task.status` 与其 lifecycle projection 构造运行中和终态标签、公开推理、Skill/工具详情与结果摘要，并把运行中的 Creative Task 从普通 `activeTasks` 投影排除；同一 Task 不能同时显示为通用运行卡与 Subagent。每个 Subagent 在所属 Primary 对话轮中内联一个运行时展开、终态折叠的执行记录；顶部标签仍可在同一正文区域打开完整详情与 strict 结果。完成、失败或取消后的标签和正文记录保留，关闭只改本地披露。刷新读取 durable snapshot，实时 reasoning 只作为带 identity/seq 的 Task stream overlay；历史 message、Tool 卡、文案和 DOM 不得反向推断状态。
-- **CS-10 — Bible、Chapter 与最小上下文边界明确。** `edit_bible_bundle` 是全局连续性记忆的专业推理结果。`save_edit_source` 是非 AI Source 保存入口；`adopt_edit_bible_bundle` 是该 Worker 结果进入正式 Bible 的唯一采用入口，必须验证 completed Creative Task、精确 SourceDocument provenance、版本、checksum 与完整 normalizedText，并在同一事务内绑定 Task owner、持久化 Bible 和调用唯一 `splitEditBibleIntoChapterPlans` 写 Chapter。Bible Task 完成只恢复主 Agent，由主 Agent显式采用并决定是否继续，不允许代码自动串行唤起下游。`compileCreativeChapterContext` 是纯派生、fail-closed 的 Context Compiler，只从正式 source/Bible/Chapter、必需的 finalized `project.style_bible` 精确 revision 与显式 asset revision 为一个 Chapter 构造有界最小输入，不写事实、不创建 Task、不决定执行顺序；缺失、重复、非 structured 或 fingerprint 变化的 production Style Bible 必须原地失败。
-- **CS-11 — 迁移知识，不删除执行能力。** Operation registry、Task/Wait、Approval、Choice、Resource identity、Canvas 卡片、计费、Run fence、严格 schema/parser/normalizer、provider adapter 与确定性 builder 全部保留。只有创意判断从旧固定领域 Prompt 迁到 Skill + Worker；同一种创作判断迁移后旧 Prompt writer 必须删除，不能让 Worker 结果再经过另一个 LLM 重写。尚未迁移的调用链必须明确记录为残余双轨，不能用 adapter 名义合理化永久并存。
-
-当前阶段仍未迁移的固定专业 LLM 调用包括：旧 `project-agent-script-intake` 问诊、`outline-script` 剧本生成/修订、`ingest_script/generate_bible_from_script` 的四段 Bible 生成、风格候选文本生成、Chapter 结构与 shot execution 生成、角色/场景资产候选与修改描述生成、BGM design。它们继续服务既有专业卡片，但不属于新 Main Agent 推荐路径；在各 kind 获得严格 adopt adapter 的同一阶段，必须一次性把对应旧创意 writer 改为 Skill + Creative Task 并删除旧 Prompt 调用。存在这份清单时只能称本阶段实现完成，不能宣称全仓创意 Prompt 已统一或架构完成。
-
-本阶段不改写既有 Task identity 或 payload/result 必填字段；`creative_work_v3` 的 lifecycle event 联合只增加公开 reasoning snapshot 与 `read_skill` tool lifecycle 两类可选事件。旧终态 Task 继续由同一个 canonical schema 读取并展示其当时真实存在的 Skill/结果轨迹，新 Task 由同一 writer 追加新事件；不存在 v3/v4 双 parser、默认补值或历史数据回填。发布时仍必须让 Web 与 Worker 一次性切换，避免旧 reader 与新 writer 并行。
+- **CS-09 — Subagent UI 只投影 Task。** SessionState 只从当前 scope 且声明 canonical `creative_work_v4` protocol 的 `creative_work` Task、`Task.status` 与 lifecycle projection 构造运行中和终态 View；同一 Task 不能同时显示为普通运行卡与 Subagent。刷新读取 durable snapshot，实时 reasoning 只作为带 identity/seq 的 overlay；历史 message、Tool 卡、文案和 DOM 不得反向推断状态。不兼容 protocol 一次性切换，不提供 v3/v4 双 parser。
+- **CS-10 — Bible、Chapter 与连续性是独立能力。** `edit_bible_bundle`、`continuity_analysis` 与 Chapter 计划分别是可独立请求、独立采用、独立版本化的事实；采用 Bible 不创建 Chapter，创建 Chapter 不自动委派 Worker，任何 Task 终态都只恢复 Primary。`compileCreativeChapterContext` 只在 Primary 显式以 Chapters 并行委派时，为一个 Chapter 从精确剧本/Bible/Chapter/Style/asset revisions 纯派生最小上下文；它不写事实、不创建 Task、不决定顺序。系统不持久化 WorkerGroup。
+- **CS-11 — 创意判断只有 Skill + Creative Worker。** Operation registry、Task/Wait、Approval、通用 Choice、Resource、Canvas、计费、Run fence、provider adapter 与确定性执行 builder 保留；旧 script intake、剧本/Bible/风格/Chapter/shot/资产/BGM 专业 LLM writer 与固定卡片必须删除。同一种判断不得同时保留旧 Prompt writer，Worker 结果也不得再经过另一个 LLM 重写。
 
 ## 权威入口
 
@@ -34,24 +30,24 @@ Worker 启动时收到完整但紧凑的 Creative Skill 目录，并按目标自
 - 单层 Skill 内容：`src/lib/creative-skills/skills/*/SKILL.zh.md` 与 `SKILL.en.md`；风格与资产分别由 `style-development`、`asset-development` 独占。
 - Worker 输出与运行边界：`src/lib/creative-worker/output-registry.ts`、`runtime.ts`、`tools.ts`、`skill-access.ts`。
 - 委派、Task payload/result 与幂等输入：`src/lib/operations/domains/assistant/creative-ops.ts`、`src/lib/creative-worker/task-contract.ts`；模型角色唯一解析：`src/lib/model-access/system-model-resolver.ts`、`src/lib/ai-exec/reasoning-effort.ts`。
-- finalized Style Bible 采用与唯一 Resource writer：`src/lib/operations/domains/assistant/creative-style-ops.ts`；它只读取 completed `creative_work` Task，可采用 final 或一个精确文字候选，并在同一事务追加不可变 `project.style_bible` revision 和 reserved Binding。
+- Style Bible 终态物化与采用：`src/lib/creative-resource/creative-work-materialization.ts` 为 final 或每个文字候选追加不可变 `project.style_bible` Revision；`src/lib/operations/domains/assistant/creative-style-ops.ts` 只验证 completed Task provenance 并更新精确 adopted Binding。
 - Task 执行：`src/lib/workers/handlers/creative-work.ts`；它调用无状态 `runCreativeWorker`，不能写领域事实。
 - Task reference projection：`src/lib/task/definition.ts`、`src/lib/task/result-projection.ts`；完整结果只在 `Task.result`。
 - 批量聚合与恢复：`src/lib/project-agent/operation-batch.ts`、`src/lib/project-agent/waits.ts` 与既有 Task terminal continuation。
 - 运行展示最终 View：`src/lib/project-agent/session-state.ts`、`src/lib/project-agent/subagent-events.ts`；生产 UI 只消费该 View。
-- Chapter 唯一切分：`splitEditBibleIntoChapterPlans`；正式事实读取与 revision 校验：`src/lib/edit-chapter/creative-context-service.ts`；最小上下文纯派生：`src/lib/creative-worker/context-compiler.ts`。读取 service 不能改写 Chapter/Bible/Resource，纯 compiler 不能访问数据库。
+- Bible 与 Chapter 独立采用入口由各自 Operation/service 拥有；正式事实读取与 revision 校验在 `src/lib/edit-chapter/creative-context-service.ts`，最小上下文纯派生在 `src/lib/creative-worker/context-compiler.ts`。读取 service 不能改写 Chapter/Bible/Resource，纯 compiler 不能访问数据库。
 - 主 Agent 运行规则：`src/lib/ai-prompts/templates/project-agent/system/**`；它只声明何时规划和委派，不复制 Skill 正文。
 
 ## 生命周期
 
 1. 主 Agent 从正式项目 View/Resource 读取目标所需事实；复杂任务可先用 `update_plan` 记录非权威计划。
-2. 主 Agent 调用 `delegate_creative_work`：`delegation.source=requests` 传入一个或多个调用方已备齐的独立上下文；长片使用 `delegation.source=chapters`，只传 Chapter identity、稳定 requestKey、目标、约束与显式 Resource revisions，由服务端 Context Compiler 直接为每个 Task 构造最小上下文。
+2. 主 Agent 调用 `delegate_creative_work`：`delegation.source=requests` 传入一个或多个独立上下文；只有已经存在多个 Chapter 且独立工作单元适合并行时，才可选 `delegation.source=chapters`，由 Context Compiler 为每个 Task 构造最小上下文。这是批量输入助手，不是时长分支或工作流。
 3. Operation 从正式 `analysis` 角色配置解析并冻结模型与 Skill 版本指纹，再经统一 Task submitter 为每个请求创建一个 `creative_work` Task；所有成员加入当前模型步骤的唯一 OperationBatch/collecting Wait，前台只收到 durable receipt，不被阻塞。
 4. text worker claim 某个 Task attempt，Task handler 启动一次无状态 Worker。Worker 自动读取 `creative-core`，看到完整紧凑 Skill 目录后自行读取相关专业 Skill；Skill trace 以小型 lifecycle projection 更新同一 Task。
 5. Worker 返回 strict output；handler 校验 output kind、结构、预算与真实 Skill trace，把完整结果写入 `Task.result`，终态事件和 continuation 只携带 reference projection。
 6. 全部批量成员终态后，collecting Wait 只恢复主 Agent 一次。主 Agent 按 taskId 读取所需完整结果，再通过既有 Operation 唯一入口采用 Bible、建立/修改 Resource、生成媒体或继续规划。
 
-主 Agent 按总时长选择配方：不超过 15 秒可单次生成；15–180 秒使用确认剧本 → finalized Style Bible → 重复身份所需资产 → 一个整片 `video_prompt_set` → 并行片段与合成；只有大于 180 秒才建立正式 Source/全局 Bible、使用唯一 splitter 与 `delegation.source=chapters`。Bible、Style Bible、Chapter 或 Subagent Task 任一步都不自动调用下一步；依赖来自主 Agent 的显式 plan 与精确输入引用，而不是隐藏工作流。
+Primary 对每个目标评估独立工作单元、共享 canon、跨单元状态、上下文大小、并行恢复价值和用户意图。总时长大于 180 秒只是应认真评估全局连续性与 Chapter 的强信号，绝不是代码分支；短作品也可因多条并行叙事需要连续性，长作品也可在单一连续上下文中完成。Bible、Style Bible、Chapter、连续性分析或任一 Subagent Task 都不自动调用下一步。
 
 取消、超 turn、超读取预算、Skill URI 非法、输出不合约或 provider 失败只影响当前 Task attempt，并继续服从 Task retry/terminal 规则。Worker 自己没有 retry、Wait 或补偿权。失败不会写领域事实；是否重新委派由主 Agent 在 continuation 或后续用户 turn 中显式决定。
 
@@ -60,7 +56,7 @@ Worker 启动时收到完整但紧凑的 Creative Skill 目录，并按目标自
 - `scripts/guards/prompt-semantic-regression.mjs` 应同时验证主 Agent 运行闭环、双语 Skill 关键语义、条件式转场与完整提示词示例、`style-development`/`asset-development` 分离以及旧 `visual-development` 身份删除。
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation registry 证明唯一委派 Operation 进入完整 toolset，并验证 strict `delegation.source=requests|chapters` schema。
 - TaskDefinition conformance、OperationBatch/Wait Critical 场景和 Assistant Session/Task SSE 场景是 Task 生命周期与聚合语义的适用证据；本次用户要求暂不执行行为测试，因此真实批量 Subagent、刷新、失败和单次恢复仍为未验证范围。
-- TypeScript、ESLint 与 architecture guards 只能验证类型和结构；它们不能证明真实外部模型一定选择正确 Skill、按长片配方规划或产出高质量导演结果。
+- TypeScript、ESLint 与 architecture guards 只能验证类型和结构；它们不能证明真实外部模型一定选择正确 Skill、做出合适的连续性/Chapter 判断或产出高质量导演结果。
 
 ## 历史回归
 
@@ -68,7 +64,8 @@ Worker 启动时收到完整但紧凑的 Creative Skill 目录，并按目标自
 - 初版 Creative Worker 把 Subagent 作为同一 Tool call 内同步 Activity，`ProjectAgentActivity.id`、`subagent.progressed` 和 response data part 共同解释运行态；它不能后台存活、不能批量聚合，也会把长输出直接带回模型上下文。当前一次性删除该解释权：Task.id/status 是唯一身份与状态，OperationBatch/Wait 是唯一聚合恢复，Task.result 保存完整输出，Session/continuation 只收 reference projection。
 - 视觉专业知识最初合并为 `visual-development`，同时包含全局风格裁决与角色/场景/道具生成，导致资产修改可能反向改写 Style Bible。当前删除旧 identity，并分别由 `style-development` 与 `asset-development` 独占职责；资产可独立工作，但提供确认风格时只能消费该事实。
 - 后续为自由创作补充图片与视频方法时，详细专业知识全部常驻主 Prompt，使简单请求也支付整份上下文成本，并让主 Agent 同时承担编排与专业创作。当前主 Prompt 只保留委派纪律，专业方法由 Worker 按需读取；Worker 没有项目写权，因此不会形成第二业务 Agent runtime。
-- 一分钟视频真实请求曾由 Primary 在委派前硬编码“6 段、每段 10 秒”，同时跳过剧本诊断、Style Bible 与重复身份资产；Worker 没有服务端能力上下文，只能服从该错误切分。旧 Prompt 又让“完整作品走最短通用路径”与长作品规则竞争，无法确定哪条优先。当前防线以 15/180 秒划分唯一 Playbook，Primary 只传总时长；服务端注入项目画幅与允许时长，Worker 独占分段并优先最大允许时长；任何视频 Worker 请求缺少精确 Style Bible 均 fail closed。真实外部模型是否稳定选择正确配方仍待用户手工复验。
+- 一分钟视频真实请求曾由 Primary 在委派前硬编码“6 段、每段 10 秒”；首次防线又以 15/180 秒三个区间写出唯一 Playbook，并把 Style Bible/Chapter 变成固定前置，仍然是换名后的串行架构。当前只保留媒体 provider 的真实单次时长能力约束；Primary 依据独立工作单元、共享 canon、上下文和恢复价值判断是否使用 Bible/Chapter/连续性分析。`>180s` 只是强提醒，不能触发代码分支或 WorkerGroup。
+- Skill + Subagent 路径上线后，旧 script intake、Bible generator、风格预览 Choice、Chapter/shot writer、资产 AI writer 与 BGM planner 仍以“专业主链”保留；Task 成功 Resource 与旧领域确认事实形成双轨。当前切换删除全部旧创意 LLM writer：Creative Worker 是专业判断唯一 owner，Operation 只负责确定性采用和执行，通用 Choice 只负责当前决定。
 - 首次试图约束视频导演质量时，`video_prompt_set` 同时输出 `globalDirection + directorTimeline + finalPrompt`；运行时只能证明时间线连续覆盖，却无法证明平行字段中的专业判断真的进入最终视频模型输入，Primary 还必须再次理解或总结这些过程字段，形成两个竞争的创意表达。真实成功样例只消费每段最终 Prompt，并已把入口/出口状态、可见动作、逐字对白、同步声音和接缝设计直接写入其中。当前删除所有平行过程字段，以唯一 `prompt` 作为创意指令权威；strict schema 只保留执行元数据，Skill 通过完整示例约束内化质量。真实外部模型能否长期稳定遵守仍需手工复验。
 - 条件式转场初版只要求描述前镜终点与后镜起点，没有显式拒绝叠化；真实视频模型即使没有收到“叠化”字样，也可能按生成先验自行使用交叉溶解、淡入或淡出。黑暗示例中的“降至全黑、逐渐揭示”还会放大这一倾向。当前防线要求每份多 Shot 最终提示词携带固定禁止句，把黑暗衔接限定为场景内真实变暗后清楚切换，并由双语 Skill guard 锁定；真实外部模型服从性仍需生成复验。
 - 同场景、同人物的相邻独立片段曾以近似宽幅构图衔接，人物却从画面边缘跳到中央。旧 Skill 只要求前段末镜头与后段首镜头具有“景别或角度差异”，Worker 以宽幅侧景到宽幅背景满足字面要求；旧语义 guard 也只证明泛化规则存在，不能反证同景别换角度和缺失站位锚点。当前防线删除该二选一表述：最终输出前逐对检查全部独立片段接缝，前后必须形成真实可见的不同景别，角度变化不能替代景别变化；需要站位的首尾画面以稳定实物锚点、画面区域或纵深、朝向和道具关系正向描述，并由双语成对示例与现有 Skill guard 锁定。`video_prompt_set` 仍只消费唯一 `prompt`，没有新增过程字段；真实外部视频模型对空间指令的服从度仍需生成复验。
@@ -85,6 +82,6 @@ Worker 启动时收到完整但紧凑的 Creative Skill 目录，并按目标自
 5. 批量是否只复用 OperationBatch/collecting Wait，并只恢复主 Agent 一次？
 6. 完整结果是否只在 Task.result，SSE/Session/continuation 是否只使用 reference projection？
 7. `video_prompt_set` 是否只保留执行所需字段，并把全部适用导演知识内化进唯一 `prompt`，没有平行过程字段或隐藏串行 Task？
-8. Bible 后是否仍由主 Agent 显式决定，Chapter 是否只由唯一 splitter 产生，Context Compiler 是否纯派生？
+8. Bible、Chapter 与 continuity 是否各自独立采用且无自动串行；Context Compiler 是否只在显式按 Chapter 委派时纯派生？
 9. 风格与资产是否分别归 `style-development` / `asset-development`，旧 `visual-development` 是否完全删除？
-10. 是否保留 Operation、Canvas、计费、Approval/Choice、严格 adapter 与 provider builder，且未新增第二业务写入口？
+10. 是否保留 Operation、Canvas、计费、Approval、通用 Choice、严格 adapter 与 provider builder，并删除旧创意 LLM writer？

@@ -17,7 +17,7 @@ function buildOperation(id: string) {
 
 function buildBillableOperation() {
   return makeTestOperation({
-    id: 'generate_video_segments',
+    id: 'create_video',
     intent: 'act',
     effects: EFFECTS_BILLABLE,
     confirmation: { kind: 'billable_media', required: true },
@@ -25,7 +25,7 @@ function buildBillableOperation() {
     outputSchema: z.object({ ok: z.boolean() }),
     plan: async () => ({
       kind: 'task_submission',
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       projectId: 'project-1',
       userId: 'user-1',
       tasks: [],

@@ -3,16 +3,21 @@ import { registerGoldenUser } from '../browser/pages/auth'
 import { launchGoldenStoryFromHome, type GoldenWorkspaceScope } from '../browser/pages/home'
 import {
   readGoldenPendingInteractionOperationId,
-  submitGoldenBoundary,
+  submitGoldenApproval,
 } from '../browser/pages/workspace'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import { failNextGoldenFalRequests, setGoldenStreamPacing } from '../providers/control'
 import {
   GOLDEN_FREEFORM_ADOPT_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_AUDIO_REQUEST,
+  GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_IMAGE_REQUEST,
   GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
+  GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
+  GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_TEXT_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
   GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
@@ -20,6 +25,7 @@ import {
   GOLDEN_STOP_REPLY_REQUEST,
 } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import { TASK_TYPE } from '@/lib/task/types'
 
 async function sendNaturalLanguage(page: import('@playwright/test').Page, text: string): Promise<void> {
@@ -39,11 +45,13 @@ async function approveOperation(
   scope: GoldenWorkspaceScope,
   operationId: string,
 ): Promise<void> {
-  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+  await expect.poll(async () => {
+    return await readGoldenPendingInteractionOperationId(page, scope)
+  }, {
     timeout: 60_000,
     message: `${operationId} must use the existing quote Approval boundary`,
   }).toBe(operationId)
-  await submitGoldenBoundary(page, 'approval')
+  await submitGoldenApproval(page)
 }
 
 async function waitForResources(
@@ -69,6 +77,26 @@ async function waitForAgentRunSettlement(scope: GoldenWorkspaceScope): Promise<v
     timeout: 60_000,
     message: 'the durable Task continuation must settle before the next user turn',
   }).toBe('completed')
+}
+
+async function waitForSchemaResource(
+  scope: GoldenWorkspaceScope,
+  schemaId: string,
+): Promise<Record<string, unknown>> {
+  let matching: Record<string, unknown> | undefined
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(scope)
+    matching = snapshot.resources.find((resource) => resource.schemaId === schemaId)
+    return {
+      status: matching?.status ?? null,
+      runStatus: snapshot.runs.at(-1)?.status ?? null,
+    }
+  }, {
+    timeout: 120_000,
+    message: `${schemaId} must be materialized as one ready Resource by the completed Creative Task`,
+  }).toEqual({ status: 'ready', runStatus: 'completed' })
+  if (!matching) throw new Error(`GOLDEN_SCHEMA_RESOURCE_MISSING:${schemaId}`)
+  return matching
 }
 
 test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses, adopts, and renders independent Resources', async ({
@@ -147,6 +175,145 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await approveOperation(page, scope, 'create_audio')
   const audioResources = await waitForResources(scope, 'audio', 1)
 
+  const imageTaskCountBeforeCreativeJudgment = (await readGoldenOracleSnapshot(scope)).tasks
+    .filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE).length
+
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_SCREENPLAY_REQUEST)
+  const screenplayResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT)
+  const afterScreenplay = await readGoldenOracleSnapshot(scope)
+  const screenplayRevision = afterScreenplay.resourceRevisions.find((revision) => (
+    revision.resourceId === screenplayResource.id
+  ))
+  const screenplayTask = afterScreenplay.tasks.find((task) => (
+    task.id === screenplayRevision?.taskId && task.type === TASK_TYPE.CREATIVE_WORK
+  ))
+  expect(screenplayTask).toMatchObject({ status: 'completed', operationId: 'delegate_creative_work' })
+  expect(screenplayRevision).toMatchObject({
+    resourceId: screenplayResource.id,
+    generationOptions: { outputKind: 'screenplay_draft', estimatedDurationSeconds: 240 },
+  })
+  expect(afterScreenplay.domain.sourceDocuments).toHaveLength(0)
+  expect(afterScreenplay.domain.bibles).toHaveLength(0)
+  expect(afterScreenplay.domain.chapters).toHaveLength(0)
+
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)
+  const styleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE)
+  const afterStyle = await readGoldenOracleSnapshot(scope)
+  const styleRevision = afterStyle.resourceRevisions.find((revision) => revision.resourceId === styleResource.id)
+  expect(styleRevision).toMatchObject({
+    resourceId: styleResource.id,
+    generationOptions: { outputKind: 'style_bible' },
+  })
+  expect(afterStyle.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE))
+    .toHaveLength(imageTaskCountBeforeCreativeJudgment)
+  expect(afterStyle.domain.chapters).toHaveLength(0)
+
+  const taskIdsBeforeChoice = afterStyle.tasks.map((task) => task.id)
+  const resourceIdsBeforeChoice = afterStyle.resources.map((resource) => resource.id)
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)
+  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+    timeout: 60_000,
+    message: 'the model-authored Choice must suspend only the current Style Bible decision',
+  }).toBe('request_choice')
+  const awaitingStyleChoice = await readGoldenOracleSnapshot(scope)
+  const activityIdsBeforeChoiceDecision = new Set(awaitingStyleChoice.activities.map((activity) => activity.id))
+  const pendingStyleChoice = awaitingStyleChoice.interruptions.find((interruption) => (
+    interruption.type === 'choice' && interruption.status === 'pending'
+  ))
+  const choiceOffer = asRecord(pendingStyleChoice?.payload)
+  const choiceCard = asRecord(choiceOffer?.card)
+  const choiceSubject = asRecord(choiceOffer?.subject)
+  const choiceCommitments = Array.isArray(choiceOffer?.commitments) ? choiceOffer.commitments : []
+  expect(choiceCard).toMatchObject({
+    mode: 'select',
+    title: '是否采用当前 Style Bible？',
+    description: '这里只决定当前视觉规则是否成为项目采用版本。',
+    submitLabel: '提交本次视觉风格选择',
+  })
+  expect(choiceSubject).toMatchObject({
+    kind: 'resource_revisions',
+    revisions: [{ resourceId: styleResource.id, revisionId: styleRevision?.id }],
+  })
+  expect(choiceCommitments).toEqual([expect.objectContaining({
+    when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
+    operationId: 'adopt_style_bible',
+  })])
+  await page.getByRole('button', { name: /\u91c7\u7528\u8fd9\u4efd Style Bible/ }).click()
+  await page.getByRole('button', { name: '提交本次视觉风格选择', exact: true }).click()
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(scope)
+    return snapshot.resourceBindings.filter((binding) => binding.role === 'adopted_style_bible').length
+  }, {
+    timeout: 60_000,
+    message: 'the selected Choice commitment must atomically adopt only the exact Style Bible revision',
+  }).toBe(1)
+  await waitForAgentRunSettlement(scope)
+  const afterStyleChoice = await readGoldenOracleSnapshot(scope)
+  expect(afterStyleChoice.resourceBindings.find((binding) => binding.role === 'adopted_style_bible')).toMatchObject({
+    slotKey: 'primary',
+    resourceId: styleResource.id,
+    revisionId: styleRevision?.id,
+  })
+  expect(afterStyleChoice.tasks.map((task) => task.id)).toEqual(taskIdsBeforeChoice)
+  expect(afterStyleChoice.resources.map((resource) => resource.id)).toEqual(resourceIdsBeforeChoice)
+  expect(afterStyleChoice.activities
+    .filter((activity) => !activityIdsBeforeChoiceDecision.has(activity.id))
+    .filter((activity) => activity.operationId !== 'list_resources')
+    .map((activity) => activity.operationId)).toEqual(['adopt_style_bible'])
+  expect(afterStyleChoice.domain.bibles).toHaveLength(0)
+  expect(afterStyleChoice.domain.chapters).toHaveLength(0)
+
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)
+  const chapterPlanResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN)
+  const afterChapterPlan = await readGoldenOracleSnapshot(scope)
+  const chapterPlanRevision = afterChapterPlan.resourceRevisions.find((revision) => (
+    revision.resourceId === chapterPlanResource.id
+  ))
+  expect(afterChapterPlan.tasks.find((task) => task.id === chapterPlanRevision?.taskId)).toMatchObject({
+    type: TASK_TYPE.CREATIVE_WORK,
+    status: 'completed',
+    operationId: 'delegate_creative_work',
+  })
+  expect(afterChapterPlan.resourceLineage.filter((lineage) => (
+    lineage.outputRevisionId === chapterPlanRevision?.id
+  ))).toEqual([expect.objectContaining({
+    inputRevisionId: screenplayRevision?.id,
+    role: 'source_material',
+  })])
+  expect(afterChapterPlan.domain.chapters).toHaveLength(0)
+
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(scope)
+    const failedAdoption = snapshot.activities.find((activity) => (
+      activity.operationId === 'adopt_chapters' && activity.status === 'failed'
+    ))
+    if (failedAdoption) {
+      throw new Error(`adopt_chapters failed: ${String(failedAdoption.errorMessage)}`)
+    }
+    return {
+      runStatus: snapshot.runs.at(-1)?.status ?? null,
+      chapters: snapshot.domain.chapters.map((chapter) => chapter.targetDurationSec),
+    }
+  }, {
+    timeout: 60_000,
+    message: 'Chapter projection must appear only after the explicit adopt_chapters operation',
+  }).toEqual({ runStatus: 'completed', chapters: [120, 120] })
+  const afterChapterAdoption = await readGoldenOracleSnapshot(scope)
+  expect(afterChapterAdoption.domain.sourceDocuments).toHaveLength(1)
+  expect(afterChapterAdoption.domain.sourceDocuments[0]).toMatchObject({
+    sourceResourceId: screenplayResource.id,
+    sourceRevisionId: screenplayRevision?.id,
+    sourceFingerprint: screenplayRevision?.fingerprint,
+  })
+  expect(afterChapterAdoption.domain.bibles).toHaveLength(0)
+  expect(afterChapterAdoption.domain.chapters).toEqual([
+    expect.objectContaining({ chapterIndex: 0, targetDurationSec: 120 }),
+    expect.objectContaining({ chapterIndex: 1, targetDurationSec: 120 }),
+  ])
+  expect(afterChapterAdoption.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE))
+    .toHaveLength(imageTaskCountBeforeCreativeJudgment)
+
   await page.reload({ waitUntil: 'domcontentloaded' })
   const finalSnapshot = await readGoldenOracleSnapshot(scope)
   const imageRevisionIds = new Set(finalSnapshot.resourceRevisions
@@ -170,7 +337,10 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     && typeof revision.operationId === 'string'
     && typeof revision.inputHash === 'string'
   ))).toBe(true)
-  expect(finalSnapshot.resourceBindings).toHaveLength(1)
+  expect(finalSnapshot.resourceBindings.map((binding) => binding.role).sort()).toEqual([
+    'adopted_style_bible',
+    'primary_image',
+  ])
 
   for (const resource of [...readyImages, ...textResources, ...videoResources, ...audioResources]) {
     if (typeof resource.id !== 'string') throw new Error('GOLDEN_RESOURCE_ID_MISSING')
@@ -204,9 +374,9 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   const snapshot = await readGoldenOracleSnapshot(scope)
   expect(snapshot.domain.sourceDocuments).toHaveLength(0)
   expect(snapshot.domain.bibles).toHaveLength(0)
-  expect(snapshot.domain.editScripts).toHaveLength(0)
+  expect(snapshot.domain.chapters).toHaveLength(0)
   expect(snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toHaveLength(1)
-  expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE)).toBe(false)
+  expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)
   browserObservations.assertClean()
 })
 
@@ -284,7 +454,7 @@ test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote a
   expect(beforeApproval.tasks).toHaveLength(0)
   expect(beforeApproval.approvalGrants).toHaveLength(0)
 
-  await submitGoldenBoundary(page, 'approval')
+  await submitGoldenApproval(page)
   const resources = await waitForResources(scope, 'image', 3)
   await expect.poll(async () => {
     const current = await readGoldenOracleSnapshot(scope)

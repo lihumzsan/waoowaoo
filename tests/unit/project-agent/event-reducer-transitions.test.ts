@@ -73,10 +73,9 @@ function createTxMock(): ProjectAgentReducerTxMock {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
         sourceOperationId: null,
         toolCallId: 'tool-1',
-        choiceType: null,
       })),
       create: vi.fn(async () => undefined),
       upsert: vi.fn(async () => undefined),
@@ -165,7 +164,7 @@ describe('project agent event reducer transitions', () => {
         runId: 'run-1',
         activityId: 'activity-terminal',
         type: 'operation',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
       },
     })).rejects.toThrow('PROJECT_AGENT_ACTIVITY_ID_CONFLICT activityId=activity-terminal runId=run-1')
 

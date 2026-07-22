@@ -6,7 +6,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 describe('task retry policy', () => {
   it('retries LLM output validation failures', () => {
     expect(shouldRetryTaskFailure({
-      taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+      taskType: TASK_TYPE.CREATIVE_WORK,
       failureClass: getErrorFailureClass('MODEL_OUTPUT_SCHEMA_INVALID'),
     })).toBe(true)
   })
@@ -25,14 +25,14 @@ describe('task retry policy', () => {
 
   it('does not retry output validation failures from non-LLM tasks', () => {
     expect(shouldRetryTaskFailure({
-      taskType: TASK_TYPE.IMAGE_CHARACTER,
+      taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       failureClass: ERROR_FAILURE_CLASS.OUTPUT_VALIDATION,
     })).toBe(false)
   })
 
   it('does not retry permanent LLM failures', () => {
     expect(shouldRetryTaskFailure({
-      taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+      taskType: TASK_TYPE.CREATIVE_WORK,
       failureClass: ERROR_FAILURE_CLASS.PERMANENT_PROVIDER,
     })).toBe(false)
   })

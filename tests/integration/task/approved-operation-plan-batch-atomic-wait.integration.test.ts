@@ -10,7 +10,6 @@ import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/plannin
 import { makeTestOperation, EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
 import { z } from 'zod'
 import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
-import { appendProjectAgentEvents } from '@/lib/project-agent/event'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
   bindProjectAgentOperationBatchWaitMemberInTransaction,
@@ -22,35 +21,35 @@ function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+    taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
     apiType: 'image',
     model: 'fal::gpt-image-2',
     quantity: 1,
     unit: 'image',
     maxFrozenCost: 1,
-    action: `style-preview-${id}`,
+    action: `resource-image-${id}`,
   }
 }
 async function seedExecution(balance: number) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
   const episode = await prisma.projectEpisode.create({
-    data: { projectId: project.id, episodeNumber: 1, name: 'Approved preview episode' },
+    data: { projectId: project.id, episodeNumber: 1, name: 'Approved Resource episode' },
   })
   await seedBalance(user.id, balance)
   const plan: OperationPlan = {
     kind: 'task_submission',
-    operationId: 'generate_edit_style_previews',
+    operationId: 'create_image',
     projectId: project.id,
     userId: user.id,
-    tasks: ['preview-1', 'preview-2'].map((id) => ({ id: `plan-${id}`,
-      taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-      target: { targetType: 'ProjectEditStylePreview', targetId: id },
-      payload: { stylePreviewId: id, imageModel: 'fal::gpt-image-2' },
+    tasks: ['image-1', 'image-2'].map((id) => ({ id: `plan-${id}`,
+      taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      target: { targetType: 'CreativeResource', targetId: id },
+      payload: { resourceId: id, imageModel: 'fal::gpt-image-2' },
       billingInfo: billingInfo(id),
       locale: 'en',
       episodeId: episode.id,
-      dedupeKey: `style-preview:${id}`,
+      dedupeKey: `resource-image:${id}`,
       priority: 0,
     })),
   }
@@ -240,7 +239,7 @@ describe('approved operation plan Task batch integration', () => {
   /**
    * Authority: immutable OperationPlan task dependencies and the single Assistant Wait binding.
    * Rejects: resubmitting an already-active Task or waiting only for newly billed Tasks, which can
-   * strand the workflow when the pre-existing Task finishes last.
+   * strand the durable Wait when the pre-existing Task finishes last.
    * Production entry: persistOperationPlanSnapshot -> invokeApprovedOperationPlan -> OperationBatch Wait binding.
    * Oracle: two new billed Tasks are created while one existing active dependency joins the same durable Wait.
    * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts
@@ -253,9 +252,9 @@ describe('approved operation plan Task batch integration', () => {
         userId: seeded.user.id,
         projectId: seeded.project.id,
         episodeId: seeded.episode.id,
-        type: TASK_TYPE.VIDEO_SEGMENT,
-        targetType: 'ProjectVideoSegment',
-        targetId: 'existing-video-segment-1',
+        type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+        targetType: 'CreativeResource',
+        targetId: 'existing-video-resource-1',
         status: 'processing',
         payload: {},
       },
@@ -264,7 +263,7 @@ describe('approved operation plan Task batch integration', () => {
       ...seeded.plan,
       taskDependencies: [{
         taskId: dependency.id,
-        taskType: TASK_TYPE.VIDEO_SEGMENT,
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
         target: {
           targetType: dependency.targetType,
           targetId: dependency.targetId,
@@ -292,7 +291,7 @@ describe('approved operation plan Task batch integration', () => {
       message: {
         id: 'approved-assistant-message-1',
         role: 'user',
-        parts: [{ type: 'text', text: 'generate previews' }],
+        parts: [{ type: 'text', text: 'generate images' }],
       },
     })
     const runFence = createProjectAgentRunFence(initialRun)

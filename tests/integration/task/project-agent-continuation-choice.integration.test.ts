@@ -9,7 +9,8 @@ import {
   prepareProjectAgentChoiceExecutionHandoff,
   settleProjectAgentPreparedChoiceHandoff,
 } from '@/lib/project-agent/execution-handoff'
-import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
+import { fingerprintProjectAgentChoiceSubject } from '@/lib/project-agent/choice-offer'
+import type { ProjectAgentChoiceCommitment } from '@/lib/project-agent/choice-offer'
 
 const RUN_ID = 'continuation-choice-run-1'
 const WAIT_ID = 'continuation-choice-wait-1'
@@ -53,7 +54,7 @@ async function seedClaimedContinuation() {
       episodeId: episode.id,
       type: 'waiting_task',
       status: 'completed',
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       completedAt: new Date(),
     },
   })
@@ -67,7 +68,7 @@ async function seedClaimedContinuation() {
       assistantId: 'workspace-command',
       scopeRef: `episode:${episode.id}`,
       episodeId: episode.id,
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',
       status: 'claimed',
@@ -149,7 +150,7 @@ describe('Project Agent continuation Choice DB integration', () => {
       }),
     ).toBeNull()
 
-    const toolCallId = `${COMMAND_ID}:script-review`
+    const toolCallId = `${COMMAND_ID}:current-choice`
     const executionFence = {
       runFence: operationFence,
       signal: new AbortController().signal,
@@ -159,6 +160,20 @@ describe('Project Agent continuation Choice DB integration', () => {
         claimOwner: CLAIM_ID,
       },
     }
+    const card = {
+      cardId: `${COMMAND_ID}:current-choice-card`,
+      toolCallId,
+      mode: 'confirm_or_text' as const,
+      replyMode: 'whole_card' as const,
+      title: '采用当前创作方向吗？',
+      description: '这个确认只作用于当前方向。',
+      groups: [],
+      submitLabel: '确认采用',
+      replyLabel: '修改当前方向',
+      replyPlaceholder: '描述希望修改的内容',
+      replySubmitLabel: '提交修改',
+    }
+    const commitments: ProjectAgentChoiceCommitment[] = []
     const prepared = await prepareProjectAgentChoiceExecutionHandoff({
       executionFence,
       executionSegmentId: `wait-continuation:${COMMAND_ID}`,
@@ -166,27 +181,14 @@ describe('Project Agent continuation Choice DB integration', () => {
       userId: user.id,
       episodeId: episode.id,
       assistantId: 'workspace-command',
-      operationId: 'request_script_intake_choice',
+      operationId: 'request_choice',
       toolCallId,
-      card: {
-        cardId: `${COMMAND_ID}:script-review-card`,
-        toolCallId,
-        choiceType: 'script_intake',
-        replyMode: 'per_group',
-        title: '补充创作方向',
-        description: '请选择创作方向。',
-        groups: [],
-        submitLabel: '继续',
-        submit: { kind: 'submit_tool_output', decision: 'approve' },
+      card,
+      subject: {
+        kind: 'none',
+        fingerprint: fingerprintProjectAgentChoiceSubject('none', { card, commitments }),
       },
-      reviewedResource: fingerprintProjectAgentChoiceResource({
-        kind: 'script_intake_prompt',
-        snapshot: {
-          cardId: `${COMMAND_ID}:script-review-card`,
-          choiceType: 'script_intake',
-          groups: [],
-        },
-      }),
+      commitments,
     })
     const suspension = await settleProjectAgentPreparedChoiceHandoff({
       executionFence,
@@ -198,7 +200,7 @@ describe('Project Agent continuation Choice DB integration', () => {
       message: {
         id: `workspace-assistant-task-follow-up:${WAIT_ID}:${COMMAND_ID}:choice`,
         role: 'assistant',
-        parts: [{ type: 'text', text: '请确认剧本。' }],
+        parts: [{ type: 'text', text: '请确认当前创作方向。' }],
       },
       continuation: {
         waitId: WAIT_ID,
@@ -241,7 +243,7 @@ describe('Project Agent continuation Choice DB integration', () => {
       {
         id: suspension.interruptionId,
         status: 'pending',
-        operationId: 'request_script_intake_choice',
+        operationId: 'request_choice',
       },
     ])
   })

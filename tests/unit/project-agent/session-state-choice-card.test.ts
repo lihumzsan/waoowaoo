@@ -1,193 +1,96 @@
 import {
-  EDIT_FIRST_CHOICE_TOOL_IDS,
   beforeEach,
-  choiceCardMock,
   describe,
   eventMock,
   expect,
   getProjectAgentSessionState,
   interruptionsMock,
   it,
-  mockSessionTaskRows,
   prismaMock,
   runsMock,
   vi,
   waitsMock,
-  workflow,
-  workflowMock,
 } from './session-state.fixture'
 
-describe('project agent session-state', () => {
+const offer = {
+  card: {
+    cardId: 'choice-current-question-1',
+    runId: 'run-choice-1',
+    interruptionId: 'choice-interruption-1',
+    toolCallId: 'tool-choice-1',
+    mode: 'select',
+    replyMode: 'none',
+    title: '选择当前视觉方向',
+    description: '此选择只决定当前采用的视觉方向。',
+    groups: [{
+      key: 'direction',
+      label: '视觉方向',
+      required: true,
+      presentation: 'options',
+      options: [
+        { value: 'quiet', label: '克制写实' },
+        { value: 'bold', label: '强烈表现' },
+      ],
+    }],
+    submitLabel: '确认选择',
+  },
+  subject: {
+    kind: 'none',
+    fingerprint: '0'.repeat(64),
+  },
+  commitments: [],
+}
+
+describe('project agent session-state generic Choice projection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockSessionTaskRows([
-      {
-        id: 'task-1',
-        operationId: 'generate_edit_script_assets',
-        type: 'image_location',
-        targetType: 'LocationImage',
-        targetId: 'location-image-1',
-        status: 'processing',
-      },
-    ])
-    workflowMock.resolveEditFirstWorkflowView.mockResolvedValue(workflow)
-    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
-      {
-        id: 'run-1',
-        projectId: 'project-1',
-        userId: 'user-1',
-        assistantId: 'workspace-command',
-        scopeRef: 'episode:episode-1',
-        episodeId: 'episode-1',
-        requestId: 'request-1',
-        status: 'awaiting_task',
-        controlKind: 'approval_response',
-        stopReason: 'awaiting_task',
-      },
-    ])
-    runsMock.cancelStaleRunningProjectAgentRunsForScope.mockResolvedValue([])
-    waitsMock.listProjectAgentSessionWaits.mockResolvedValue([
-      {
-        runId: 'run-1',
-        waitId: 'wait-1',
-        operationId: 'generate_edit_script_assets',
-        taskIds: ['task-1'],
-        failedTaskIds: [],
-        status: 'pending',
-        followUpMode: 'resume_agent',
-        terminalStatus: null,
-        total: 1,
-        claimId: null,
-      },
-    ])
-    eventMock.getCurrentProjectAgentActivity.mockResolvedValue({
-      activityId: 'activity-wait-1',
-      runId: 'run-1',
-      type: 'waiting_task',
-      status: 'waiting',
-      operationId: 'generate_edit_script_assets',
-      sourceOperationId: null,
-      toolCallId: null,
-      choiceType: null,
-    })
-    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValue({
-      id: 'interruption-1',
-      runId: 'run-1',
-      activityId: 'activity-approval-1',
-      type: 'approval',
-      status: 'pending',
-      operationId: 'generate_edit_script_assets',
-      approvalId: 'approval-1',
-      toolCallId: 'tool-1',
-      payload: {},
-    })
-    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValue({
-      id: 'interruption-1',
-      runId: 'run-1',
-      activityId: 'activity-approval-1',
-      type: 'approval',
-      status: 'pending',
-      operationId: 'generate_edit_script_assets',
-      approvalId: 'approval-1',
-      toolCallId: 'tool-1',
-      payload: {},
-    })
-  })
-
-  it('rebuilds a pending choice card from the pending interruption row', async () => {
-    prismaMock.$queryRaw.mockResolvedValueOnce([
+    prismaMock.$queryRaw.mockResolvedValue([
       { kind: 'INTERRUPTION', id: 'choice-interruption-1', runId: 'run-choice-1' },
       { kind: 'ACTIVITY', id: 'activity-choice-1', runId: 'run-choice-1' },
     ])
-    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{
+    prismaMock.projectAgentRun.findMany.mockResolvedValue([{
       id: 'run-choice-1',
       status: 'awaiting_choice',
       controlKind: 'user_turn',
       errorCode: null,
       errorMessage: null,
     }])
-    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
-      {
-        id: 'run-choice-1',
-        projectId: 'project-1',
-        userId: 'user-1',
-        assistantId: 'workspace-command',
-        scopeRef: 'episode:episode-1',
-        episodeId: 'episode-1',
-        requestId: 'request-choice-1',
-        status: 'awaiting_choice',
-        controlKind: 'user_turn',
-        stopReason: 'awaiting_user_choice',
-      },
-    ])
-    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
-    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([{
+      id: 'run-choice-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-choice-1',
+      status: 'awaiting_choice',
+      controlKind: 'user_turn',
+      stopReason: 'awaiting_user_choice',
+    }])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValue([])
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValue({
       activityId: 'activity-choice-1',
       runId: 'run-choice-1',
       type: 'awaiting_choice',
       status: 'waiting',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+      operationId: 'request_choice',
       sourceOperationId: null,
       toolCallId: 'tool-choice-1',
-      choiceType: 'bible_review',
     })
-    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValue({
       id: 'choice-interruption-1',
       runId: 'run-choice-1',
       activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+      operationId: 'request_choice',
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
-      payload: {
-        card: {
-          cardId: 'edit-first-bible-review:plan-1',
-          runId: 'run-choice-1',
-          interruptionId: 'choice-interruption-1',
-          toolCallId: 'tool-choice-1',
-          choiceType: 'bible_review',
-          replyMode: 'whole_card',
-          title: '确认制作规划',
-          groups: [],
-          submitLabel: '确认制作规划',
-          submit: { kind: 'submit_tool_output', decision: 'approve' },
-        },
-        reviewedResource: {
-          kind: 'bible_review_plan',
-          fingerprint: '0'.repeat(64),
-        },
-      },
+      payload: offer,
     })
-    interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
-      id: 'choice-interruption-1',
-      runId: 'run-choice-1',
-      activityId: 'activity-choice-1',
-      type: 'choice',
-      status: 'pending',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
-      approvalId: 'choice:approval-1',
-      toolCallId: 'tool-choice-1',
-      payload: {
-        card: {
-          cardId: 'edit-first-bible-review:plan-1',
-          runId: 'run-choice-1',
-          interruptionId: 'choice-interruption-1',
-          toolCallId: 'tool-choice-1',
-          choiceType: 'bible_review',
-          replyMode: 'whole_card',
-          title: '确认制作规划',
-          groups: [],
-          submitLabel: '确认制作规划',
-          submit: { kind: 'submit_tool_output', decision: 'approve' },
-        },
-        reviewedResource: {
-          kind: 'bible_review_plan',
-          fingerprint: '0'.repeat(64),
-        },
-      },
-    })
+  })
 
+  it('rebuilds the exact persisted model-authored card without a workflow-specific builder', async () => {
     const state = await getProjectAgentSessionState({
       projectId: 'project-1',
       userId: 'user-1',
@@ -196,16 +99,39 @@ describe('project agent session-state', () => {
       locale: 'zh',
     })
 
-    expect(choiceCardMock.buildEditFirstAssistantChoiceCard).not.toHaveBeenCalled()
-    expect(state.pendingInteraction).toEqual(expect.objectContaining({
+    expect(state.pendingInteraction).toEqual({
       kind: 'choice',
       runId: 'run-choice-1',
       interruptionId: 'choice-interruption-1',
-      choiceType: 'bible_review',
-      choiceCard: expect.objectContaining({
-        runId: 'run-choice-1',
-        interruptionId: 'choice-interruption-1',
-      }),
-    }))
+      approvalId: 'choice:approval-1',
+      operationId: 'request_choice',
+      toolCallId: 'tool-choice-1',
+      choiceCard: offer.card,
+    })
+  })
+
+  it('fails closed when the persisted card identity does not match the interruption', async () => {
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
+      id: 'choice-interruption-1',
+      runId: 'run-choice-1',
+      activityId: 'activity-choice-1',
+      type: 'choice',
+      status: 'pending',
+      operationId: 'request_choice',
+      approvalId: 'choice:approval-1',
+      toolCallId: 'tool-choice-1',
+      payload: {
+        ...offer,
+        card: { ...offer.card, runId: 'run-stale' },
+      },
+    })
+
+    await expect(getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow('PROJECT_AGENT_PENDING_CHOICE_OFFER_IDENTITY_MISMATCH')
   })
 })

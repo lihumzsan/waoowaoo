@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
   buildRecoverableStructuredStreamCheckpointEvents,
   buildStructuredStreamTerminalSnapshotEvents,
@@ -38,12 +37,12 @@ function checkpointEvent(input: {
     projectId: 'project-1',
     userId: 'user-1',
     ts: '2026-07-19T00:00:00.000Z',
-    taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
-    targetType: 'ProjectEditSourceScript',
-    targetId: 'bible-1',
+    taskType: TASK_TYPE.CREATIVE_WORK,
+    targetType: 'Project',
+    targetId: 'project-1',
     episodeId: 'episode-1',
     payload: {
-      stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
+      stepId: 'creative-work-output',
       stepAttempt: input.stepAttempt,
       streamRunId: input.streamRunId,
       stream: {
@@ -62,12 +61,12 @@ function checkpointEvent(input: {
 }
 
 describe('Task structured-stream checkpoint protocol', () => {
-  it('lets the shared adapter registry select durable presentation checkpoints', () => {
+  it('does not persist presentation checkpoints without a registered adapter', () => {
     const input = {
       taskId: 'task-1',
-      taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+      taskType: TASK_TYPE.CREATIVE_WORK,
       payload: {
-        stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
+        stepId: 'creative-work-output',
         stepAttempt: 1,
         streamRunId: 'run-1',
         stream: { kind: 'text', lane: 'main', seq: 2, delta: 'tail' },
@@ -76,19 +75,7 @@ describe('Task structured-stream checkpoint protocol', () => {
       checkpointedAt: '2026-07-19T00:00:02.000Z',
     } as const
 
-    const first = buildTaskStructuredStreamCheckpoint(input)
-    const repeated = buildTaskStructuredStreamCheckpoint(input)
-    const unsupported = buildTaskStructuredStreamCheckpoint({
-      ...input,
-      taskType: TASK_TYPE.FINAL_VIDEO_RENDER,
-    })
-
-    expect(first?.idempotencyKey).toBe(repeated?.idempotencyKey)
-    expect(first?.payload).toMatchObject({
-      stream: { seq: 2, delta: '{"segments":[]}' },
-      streamCheckpoint: { fromSeq: 1, throughSeq: 2 },
-    })
-    expect(unsupported).toBeNull()
+    expect(buildTaskStructuredStreamCheckpoint(input)).toBeNull()
   })
 
   it('selects the newest run per logical lane and emits non-cursor recovery identities', () => {

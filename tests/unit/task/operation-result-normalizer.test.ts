@@ -5,16 +5,16 @@ import { TASK_TYPE } from '@/lib/task/types'
 function buildTask(overrides: Partial<OperationResultTaskRow>): OperationResultTaskRow {
   return {
     id: 'task-1',
-    type: TASK_TYPE.MUSIC_GENERATE,
+    type: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
     status: 'completed',
-    targetType: 'Project',
-    targetId: 'project-1',
+    targetType: 'CreativeResource',
+    targetId: 'resource-1',
     episodeId: null,
     payload: {},
     result: {},
     errorCode: null,
     errorMessage: null,
-    operationId: 'generate_project_music',
+    operationId: 'generate_creative_resource_audio',
     operationSource: 'assistant-confirmation',
     approvalGrantId: 'grant-1',
     operationExecutionId: 'execution-1',
@@ -38,7 +38,7 @@ describe('normalizeTaskOperationResult', () => {
     }))
 
     expect(result).toEqual(expect.objectContaining({
-      operationId: 'generate_project_music',
+      operationId: 'generate_creative_resource_audio',
       taskId: 'task-1',
       status: 'completed',
       source: 'assistant-confirmation',
@@ -57,10 +57,8 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes completed image result without exposing data urls', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.IMAGE_CHARACTER,
-      operationId: 'regenerate_panel_image',
-      targetType: 'CharacterAppearance',
-      targetId: 'panel-1',
+      type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      operationId: 'generate_creative_resource_image',
       payload: { imageModel: 'openai::image-model' },
       result: {
         imageUrl: 'data:image/png;base64,AAAA',
@@ -77,8 +75,8 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes completed video urls', () => {
     const video = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.VIDEO_SEGMENT,
-      operationId: 'generate_video_segments',
+      type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+      operationId: 'generate_creative_resource_video',
       result: { videoUrl: 'videos/panel.mp4' },
     }))
 
@@ -87,8 +85,8 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes failed task error from task columns', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.IMAGE_CHARACTER,
-      operationId: 'regenerate_panel_image',
+      type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      operationId: 'generate_creative_resource_image',
       status: 'failed',
       result: null,
       errorCode: 'PROVIDER_ERROR',
@@ -105,8 +103,8 @@ describe('normalizeTaskOperationResult', () => {
 
   it('normalizes processing task as active operation without result media', () => {
     const result = normalizeTaskOperationResult(buildTask({
-      type: TASK_TYPE.VIDEO_SEGMENT,
-      operationId: 'generate_video_segments',
+      type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+      operationId: 'generate_creative_resource_video',
       status: 'processing',
       result: null,
       finishedAt: null,

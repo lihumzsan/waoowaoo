@@ -17,7 +17,7 @@ describe('project agent business stop signals', () => {
   it('[SubmittedTasks] -> keeps the foreground model loop running', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      submittedTasksOutput('generate_edit_script', ['task-1']),
+      submittedTasksOutput('delegate_creative_work', ['task-1']),
     ])
 
     expect(stopPart).toBeNull()
@@ -26,7 +26,7 @@ describe('project agent business stop signals', () => {
   it('[SubmittedTasks batch] -> does not turn Task identity into a stop signal', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      submittedTasksOutput('generate_video_segments', ['task-video-1']),
+      submittedTasksOutput('create_video', ['task-video-1']),
     ])
 
     expect(stopPart).toBeNull()
@@ -35,8 +35,8 @@ describe('project agent business stop signals', () => {
   it('keeps multiple submitted Operations non-blocking in one model step', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
-      submittedTasksOutput('generate_edit_script', ['task-script-1']),
-      submittedTasksOutput('generate_video_segments', ['task-video-1', 'task-video-2']),
+      submittedTasksOutput('delegate_creative_work', ['task-screenplay-1']),
+      submittedTasksOutput('create_video', ['task-video-1', 'task-video-2']),
     ])).toBeNull()
   })
 
@@ -70,7 +70,7 @@ describe('project agent business stop signals', () => {
 
   it('[Noop approved plan] -> does not invent a Task wait from output fields', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([noopOutput('generate_edit_script_assets')])
+    const stopPart = controller.evaluateStep([noopOutput('create_image')])
 
     expect(stopPart).toBeNull()
   })

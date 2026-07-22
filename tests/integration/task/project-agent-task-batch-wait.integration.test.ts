@@ -28,11 +28,8 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const episode = await prisma.projectEpisode.create({
-      data: { projectId: project.id, episodeNumber: 1, name: 'Assistant batch render episode' },
+      data: { projectId: project.id, episodeNumber: 1, name: 'Assistant creative batch episode' },
     })
-    const chapters = await Promise.all([0, 1].map(async (chapterIndex) => await prisma.projectEditChapter.create({
-      data: { episodeId: episode.id, chapterIndex },
-    })))
     const { run } = await createProjectAgentUserTurnRun({
       runId: 'assistant-nonbillable-batch-run',
       requestId: 'assistant-nonbillable-batch-request',
@@ -42,7 +39,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
       message: {
         id: 'assistant-nonbillable-batch-message',
         role: 'user',
-        parts: [{ type: 'text', text: 'render chapters' }],
+        parts: [{ type: 'text', text: 'delegate two creative reviews' }],
       },
     })
     const runFence = createProjectAgentRunFence(run)
@@ -91,18 +88,18 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
       runFence,
       signal: new AbortController().signal,
       taskBatchBinding: binding,
-    }, async () => await submitOperationTaskBatch(chapters.map((chapter) => ({
+    }, async () => await submitOperationTaskBatch([1, 2].map((index) => ({
       request,
       userId: user.id,
       projectId: project.id,
       episodeId: episode.id,
-      type: TASK_TYPE.CHAPTER_RENDER,
-      targetType: 'ProjectEditChapter',
-      targetId: chapter.id,
-      operationId: 'render_chapters',
+      type: TASK_TYPE.CREATIVE_WORK,
+      targetType: 'CreativeWork',
+      targetId: `creative-work-${index}`,
+      operationId: 'delegate_creative_work',
       source: 'assistant-panel',
-      payload: { episodeId: episode.id, chapterId: chapter.id },
-      dedupeKey: `assistant-nonbillable-batch:${chapter.id}`,
+      payload: { requestKey: `creative-review-${index}` },
+      dedupeKey: `assistant-nonbillable-batch:${index}`,
       locale: 'en' as const,
       billingInfo: null,
     }))))

@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
-import { inspectWorkspaceCanvasMotionPresenceContract } from './canvas-motion-presence-contract-guard.mjs'
 
 const root = process.cwd()
 const canvasRoot = path.join(root, 'src/features/project-workspace/canvas')
@@ -95,24 +94,10 @@ if (/activeAssistantOperationId\s*===\s*['"][^'"]+['"]/.test(canvasSurface)) {
   violations.push('ProjectWorkspaceCanvas uses operationId as a private pending lifecycle switch')
 }
 
-violations.push(...inspectWorkspaceCanvasMotionPresenceContract(
-  read('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx'),
-))
-
 const overlay = read('src/lib/query/task-target-overlay.ts')
 const targetStateMap = read('src/lib/query/hooks/useTaskTargetStateMap.ts')
 if (/TASK_TARGET_OVERLAY_TTL_MS|expiresAt/.test(overlay) || /runtime\.expiresAt/.test(targetStateMap)) {
   violations.push('optimistic Task overlay must be cleared by lifecycle edges, not TTL')
-}
-
-const structuredRuntime = read('src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts')
-const structuredIdentity = read('src/features/project-workspace/canvas/structured-stream/workspace-structured-stream-identity.ts')
-const structuredRuntimeContract = `${structuredRuntime}\n${structuredIdentity}`
-for (const required of ['streamRunId', 'stepAttempt', 'lastSeq', 'MAX_STREAM_ACCUMULATORS', 'MAX_TERMINAL_STREAM_RUNS']) {
-  if (!structuredRuntimeContract.includes(required)) violations.push(`structured runtime identity/bound is missing ${required}`)
-}
-if (!structuredRuntime.includes('workspace-structured-stream-identity')) {
-  violations.push('structured runtime must consume the canonical stream identity/bound module')
 }
 
 const sseHook = read('src/lib/query/hooks/useSSE.ts')
@@ -135,14 +120,11 @@ for (const rendererPath of walk(path.join(canvasRoot, 'nodes'))) {
   if (/from ['"]@\/lib\/task\/(runtime-targets|state-service)/.test(content)) {
     violations.push(`${relativePath} reads Task runtime directly`)
   }
-  if (/useWorkspaceStructuredStreamRuntime|workspace-node-runtime/.test(content)) {
-    violations.push(`${relativePath} reads structured runtime directly`)
-  }
 }
 
 if (violations.length > 0) {
   console.error([
-    'CN-07/CN-08/CN-09/CN-12: Canvas lifecycle and renderer motion must have one resolver, exhaustive registries, and no recursive state writers.',
+    'CN-01/CN-04/CN-08: Canvas lifecycle must have one resolver, exhaustive registries, and no recursive state writers.',
     'See docs/architecture/modules/canvas-node.md#不变量.',
     ...Array.from(new Set(violations)),
   ].join('\n'))

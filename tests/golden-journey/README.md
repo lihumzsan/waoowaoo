@@ -1,14 +1,13 @@
 # Product Journey
 
-This directory contains one full repeatable Playwright product Journey,
-focused freeform lifecycle scenarios, and the small security boundary that
-cannot be proved by the creative mainline.
-
-The main Journey starts from an empty project, drives the real UI, API,
-services, database, queue, workers, Outbox, SSE, and projector, and finishes
-with a durable final video. Its deterministic local model produces at least
-two chapters and multiple assets. The Journey reloads every core processing
-stage and checks both the visible browser state and read-only database facts.
+This directory contains repeatable free-composition Playwright product
+Journeys and the small security boundary around them. Each creative Journey
+starts from an empty project and invokes independent Operations from natural
+language; no fixed stage sequence or recommended next action is part of the
+test oracle. The primary free-composition Journey also proves that a Creative
+Worker result materializes as an immutable Resource, one model-authored Choice
+can commit only its current decision, Style Bible creation does not imply an
+image preview, and Chapters appear only after explicit planning and adoption.
 
 Only paid or uncontrollable external model and media providers are replaced.
 The application being tested is never mocked. Playwright uses stable product
@@ -29,8 +28,8 @@ npm run test:journey
 
 `test:fast` contains pure logic and registry conformance. `test:critical`
 contains real infrastructure failure, transaction, retry, idempotency, and
-concurrency evidence. `test:journey` runs harness self-checks, then the one
-multi-chapter mainline, focused freeform semantics, and the unauthenticated,
-cross-user, and cross-project security scenarios. Playwright writes its JSON,
+concurrency evidence. `test:journey` runs harness self-checks, then the
+independent resource-composition, parallel-operation, interruption, and
+unauthenticated, cross-user, and cross-project security scenarios. Playwright writes its JSON,
 HTML, trace, screenshot, and video artifacts under
 `artifacts/golden-journey/runs/<run-id>/`.

@@ -1,57 +1,61 @@
 <!-- architecture-module: chapter-planning -->
 
-# 章节核心剪辑规划
+# Chapter、连续性与并行创作单元
 
 ## 设计理念
 
-章节计划把已确认剧本与章节事件组织成镜头和视频 Segment。模型是镜头结构与运镜决策者，不是剧情事实、资产 identity、资源生命周期或空间站位的第二 owner。系统不再生成分镜图；“分镜”只指最终直接提交给视频模型的镜头与 Segment 计划。
+Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段。它只在一个作品需要多个相对独立的工作单元、并行处理、局部失败恢复或有界上下文时提供价值；单一连续上下文即使很长，也不必被系统强制拆分。
+
+连续性不是“存在多个 Chapter”的同义词。Primary Agent 依据共享 canon、跨单元人物/场景/道具状态、时间顺序、视觉与声音延续、上下文预算和用户目标，决定是否委派 `continuity_analysis`、采用 Bible 或建立 Chapters。总时长大于 180 秒只是强规划信号，不是代码分支。
 
 ## 不变量
 
-- **CP-00A — 资产生成只依赖本次显式作用域。** `plan_chapters` 与 `generate_edit_script_assets` 都是独立 Operation，不由 Workflow 先后关系开放或关闭。显式 chapter/EditScript/requirement scope 只要目标 requirement 已持久化即可生成；无显式目标的 episode-wide pending batch 必须先确认本集全部章节 requirement 已就绪，避免迟到 requirement 永久停在 pending。二者不得合并为跨 Operation Group；Canvas 只有在能构造完整显式 scope 时才展示或预取该动作。资产审核仍面向本集唯一共享资产集。
-- **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。provenance 只能由服务端投影，模型不得输出第二份事实台账。
-- **CP-02 — 核心镜头契约最小且严格。** structure 输出只包含场景、动作、人物表演、对白、镜头内同步声音、时长、连续性与 `generationSegments`。`visibility`、`role`、`keyObjects`、lighting、空间站位、blocking、机位与生成 Prompt 都不属于该契约；strict schema 必须拒绝未知字段。
-- **CP-02A — Segment 声音时间线是可选的原生音频提示。** `synchronousSound` 继续属于单个 Shot，描述当前画面内的同期声；`generationSegments[].soundCues` 才描述一次视频模型生成内部的相对时间范围，可表达声音先于画面来源、跨 Shot 延续或画外对白先揭示人物。规划模型必须逐段判断同期、先行、延续、画外揭示或无特殊声音关系，但没有明确叙事价值时必须输出空数组，不得为了形式强加 cue。`sourceShotRef` 只可指向同一 Segment 内拥有该对白/声音来源的 Shot，解析后变为 canonical `sourceShotId`；只有非空 cue 才编译成最终视频 Prompt 的 `AUDIO TIMELINE`，它不创建独立环境音/SFX 状态或跨独立 Segment 的预播放承诺。
-- **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、token overlap、embedding 或数组位置将模型文本解释为 canonical fact。
-- **CP-04 — 资产 identity 由服务端解析。** 模型只从动态名称枚举输出 `locationName`/`characterName`/`speakerName`，并使用本次响应内的短 `shotRef` 组织 Segment。唯一 resolver 精确映射 UUID、校验对白归属并生成系统 shot identity。未知名称、重名、未知引用、顺序或覆盖不完整必须整份失败。
-- **CP-04A — UUID 是关联权威，名称只属于 View。** 持久计划、requirement、镜头执行计划与 Video Segment 关联只使用 canonical identity。对外 View 必须按当前 UUID 重新投影名称；缺失关联显式失败，禁止回退到历史名称、位置或 UUID 文案。
-- **CP-05 — 成功写入受 Task owner 围栏。** EditScript 与 ShotExecutionPlan 的正式资源在 owner-fenced 事务中提交；失败或晚到 attempt 不得改写章节事实。
-- **CP-06 — 镜头执行计划只决定三个字段。** 模型输入只是 `structure_json + visual_style + aspect_ratio`；每个 shot 只输出 `shotScale` 与 `cameraMovement.{movement,stability}`。`stability` 是镜头动态的稳定程度，只能是 `locked/stable/smooth/subtle_shake/handheld`。焦段、景深、机位、角度、构图、灯光、轴线、站位、道具位置与 Prompt 都不得输出。
-- **CP-07 — Video Segment 是唯一视频资源。** `ProjectVideoSegment` 以 `(editScriptId, segmentId)` 作为 canonical identity，只由 `generate_video_segments` 计划/批准链提交。确定性 `ProjectVideoSegment.id` 必须由同一 identity resolver 同时提供给 EditScript View 与 planner，使资源行创建前的 Canvas 节点也能声明准确 Task target；禁止使用临时 UI identity。参考图只来自已确认的角色与场景资产；最终 Prompt、有序参考图与 `inputSignature` 在批准时冻结进 Task payload，不得在资源表建立第二可编辑事实。超过模型 `maxReferenceImages` 必须整段失败，禁止截断。
-- **CP-07A — Segment 生成作用域与跳过语义唯一。** `generate_video_segments` 只接受穷尽的 `segment` 或 `pending` scope：Canvas 节点与 Agent 的精确重试必须携带 `chapterId + editScriptId + segmentId`，批量生成才表达待生成的 chapter/episode 范围。两个分支由同一个 Tool/runtime schema 和同一个 planner 解释，不得把 `segment` 隐藏成仅 UI 可用的第二协议。planner 是 `ProjectVideoSegment.status + generationTaskId + inputSignature` 的唯一解释者；同签名 active/completed Segment 必须在报价前跳过，不同签名 active Segment 必须 fail closed，`failed` 或取消后投影为 `pending` 的资源才可重新计划。禁止由客户端 submitting 集合、数组位置、Task dedupe 碰撞或批量提交顺序决定是否重复生成。
-- **CP-08 — 视频原生音频永远开启。** Segment 计划与 worker 都必须把 `generateAudio=true` 写入 provider 选项；缺失或 false 原地失败。原生片段音频与 BGM 是两类独立音轨，最终合成时才混合。
+- **CP-01 — Chapter 可选且独立。** Chapter 可以由显式 Operation 从精确剧本 Revision 或用户给出的结构创建、修改和删除；采用 Bible 不自动创建 Chapter，创建 Chapter 不自动生成 Bible、连续性分析、资产、视频或渲染。
+- **CP-02 — 没有时长状态机。** 服务端不得按 `<=15`、`15–180`、`>180` 自动选择流程、Operation 或 Worker。`>180s` 只进入 Primary 的规划提示；最终判断还必须考虑独立工作单元、共享事实、上下文与恢复价值。Primary 已经选择委派 `chapter_plan` 后，`adopt_chapters` 只校验每个已给独立单元不超过 180 秒；它不决定章数或边界。
+- **CP-03 — 剧本 Revision 是来源。** Chapter 必须显式引用一个精确 screenplay Resource Revision 及范围/内容 fingerprint；`ProjectEpisodeSourceDocument` 只是该 Revision 的严格不可变领域投影，不拥有第二份内容解释权。不存在 `confirmed_screenplay`、最近剧本或“正式剧本”副本。旧 Revision 即使不再是 head 仍可合法使用。
+- **CP-04 — Bible、连续性分析与 Chapter 分权。** Bible 是可采用的全局 canon Resource，continuity analysis 是针对一组精确输入 revisions 的专业结果，Chapter 是执行上下文单元。三者各有唯一 writer 和版本，互不自动派生，消费者必须显式传入实际使用的 revisions。
+- **CP-05 — 并行不产生 WorkerGroup。** Primary 可对多个 Chapter 调用 `delegate_creative_work({delegation:{source:'chapters'}})`；每个 Chapter 对应一个独立 `creative_work` Task，聚合只复用 OperationBatch/Wait。系统不持久化 WorkerGroup、章节批次状态机或跨 Task 共享可变内存。
+- **CP-06 — 最小上下文纯派生。** Context Compiler 只从显式 screenplay/Bible/Chapter/Style/asset revisions 为一个 Chapter 构造有界输入；缺失、scope 不符或 fingerprint 变化必须失败。它不写事实、不选择 Skill、不创建 Task、不决定执行顺序。
+- **CP-07 — 连续事实有唯一 owner。** 全局 canon 只由被采用的 Bible Revision 解释；一次 continuity analysis 只描述其精确输入的分析结果，不能覆盖 Bible。Chapter 局部状态只属于该 Chapter revision；跨单元冲突由 Primary 重新委派分析或显式采用新版本，不能由晚到 Task 覆盖。
+- **CP-08 — 媒体执行仍按精确输入。** 视频、资产和音乐 Resource 可以直接从任意合法 revisions 生成，也可以消费 Chapter context；是否使用 Chapter 不改变 Operation eligibility。provider 的单次时长/引用数量约束由 capability registry 在执行前校验，不得反向变成创作工作流。
+- **CP-09 — UI 只显示真实事实。** Canvas 可显示持久 Chapter、Resource、Task 与 Lineage，但不得投影“当前阶段”“下一章”“全局连续性已完成”或按时长自动生成节点。连线只来自实际 Revision lineage。
+
+## 状态所有权
+
+| 事实 | 唯一 owner / writer | 消费者 |
+| --- | --- | --- |
+| 剧本内容 | `screenplay_draft` Creative Resource Revision | Primary、Bible/continuity/Chapter Operations |
+| 全局 canon | 被采用的 Bible Resource Revision / Bible adoption Operation | Context Compiler、Primary、显式下游调用 |
+| Chapter identity 与版本 | Chapter service / Chapter Operation | Primary、Context Compiler、Canvas |
+| 连续性分析结果 | `creative_work(outputKind=continuity_analysis)` 终态 Revision | Primary；除非显式采用，不写其他事实 |
+| Chapter 专业结果 | 每 Chapter 的独立 `creative_work` Task/Resource Revision | Primary、显式下游 Operation |
+| 并行聚合与恢复 | OperationBatch + collecting Wait | Assistant continuation |
 
 ## 权威入口
 
-- 章节输入与 ledger：`src/lib/edit-chapter/input-assembler.ts`。
-- 核心计划契约与解析：`src/lib/edit-chapter/schemas.ts`、`src/lib/edit-script/types.ts`、`src/lib/edit-script/normalize.ts`。
-- 核心计划与镜头执行计划 Prompt：`src/lib/ai-prompts/templates/edit-script/structure/**`、`shot-execution-plan/**`。
-- Style Bible：`src/lib/edit-script/style-bible-prompt.ts`；视频使用 `visualStyle`，资产图使用 `assetImageStyle.{lighting,texture,composition}`。
-- 核心计划、镜头执行计划与 owner-fenced 持久化：`src/lib/edit-script/service.ts`、`src/lib/workers/handlers/edit-script-structured-generate.ts`。
-- Video Segment identity、scope、计划、Prompt 与 Task：`src/lib/video-segments/{identity,scope,planning-policy,planning,prompt,types}.ts`、`src/lib/operations/domains/video-segments/index.ts`、`src/lib/workers/video.worker.ts`。
-- BGM 规划/生成：`src/lib/bgm-design/**`、`src/lib/bgm-score/**`。
+- Chapter 创作判断：`creative_work(outputKind=chapter_plan)` 与相关 Skill；领域投影的显式采用：`adopt_chapters`。
+- Creative Worker 输出协议：`src/lib/creative-worker/output-registry.ts`。
+- Chapter 最小上下文：`src/lib/creative-worker/context-compiler.ts`、`src/lib/edit-chapter/creative-context-service.ts`。
+- Primary 规划规则：`src/lib/ai-prompts/templates/project-agent/system/**`；它只能提供判断标准，不能实现服务端分支。
+- 并行与恢复：`src/lib/project-agent/operation-batch.ts`、`waits.ts` 与 Task terminal continuation。
 
 ## 验证
 
-- `tests/unit/edit-script/shot-execution-normalize.test.ts` 反证旧执行字段和非法稳定性枚举。
-- `tests/unit/edit-script/core-plan-normalize.test.ts` 反证 Segment 声音 cue 的保留、时间范围和对白来源约束；`tests/unit/video-segments/prompt.test.ts` 反证可选 cue 被编译进唯一视频 Prompt 且不重复对白。
-- `tests/golden-journey/self-tests/model-provider.test.ts` 让受控 provider 输出通过生产 strict schema；它不证明真实模型必然服从 Prompt。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 验证多章节从计划到 `ProjectVideoSegment`、原生音频、BGM 和成片的真实主链，并拒绝独立分镜图 Task/Panel/VideoGroup 与旧环境音链回流。
-- `tests/unit/video-segments/planning-policy.test.ts` 验证 active/completed/failed/pending 状态在唯一 planner policy 中的跳过、拒绝与重试语义；`tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 验证 Canvas 报价与执行携带精确 Segment scope。
+- Operation/Task conformance 应证明 Chapter、Bible 与 continuity analysis 是独立能力，没有自动下游提交或 WorkerGroup identity。
+- Choice/Prompt guards 应拒绝固定阶段、`confirmed_screenplay`、时长配方和专用 Chapter 卡片。
+- 适用自由组合 Golden 应覆盖：不使用 Chapter 的单上下文作品；多个 Chapter 并行且只恢复一次；Bible/Chapter 独立采用；刷新后精确 Revision 与 Lineage 保持不变。
 
 ## 历史回归
 
-- `994b738981` 曾把第二次 LLM 分镜 Prompt 改成纯函数，但保留了独立 Operation、route、TaskType、worker、Workflow 阶段与 Panel 实体；只替换实现没有删除旧解释权。后续“全能参考”又作为旁路追加，使图片 Panel 与资产参考同时能生成视频。本次防线是一次性删除 Storyboard/Panel/图片阶段、空间档案和旧双模式，只保留唯一 `ProjectVideoSegment` 入口。
-- 多章节旧链曾通过 `updatedAt desc`、数组位置与 panel fallback 推断归属，导致异步顺序改变时停在无法推进的阶段。当前计划、Segment、Task 与媒体全程显式传递 `editScriptId + segmentId`。
-- 核心计划曾让模型回传 UUID，Canvas、对白、最终时间线与环境音又以 ID 作为缺名 fallback；当前 raw 模型协议只使用名称/短引用，服务端是唯一 identity resolver，UI 不回显 ID。
-- 章节规划与共享资产生成曾被放进同一并行 Operation Group；图片 Task 完成时，另一个章节的 requirement 可能尚未提交，完成投影只能更新当时已存在的行，迟到行永久停在 pending。首次改为串行后，Canvas 仍根据“已出现一个资产/脚本”提前挂载生成按钮并预取收费 plan，服务端只能以 episode gate 的 500 拒绝。旧 Golden 只证明 Task 时序，没有保持浏览器错误清洁。当前防线删除跨 Operation Group：显式 scoped 调用只校验该目标 requirement，无 scope 的 episode batch 原地要求全部 requirement ready；Canvas 只在自身领域事实足以构造完整输入时展示动作，完整 Journey 同时断言资产 Task 创建时间与零浏览器 5xx。
-- `d4fde69865` 将旧视频模式收敛为 `ProjectVideoSegment` 时，把 Canvas 单卡 action 退化为无目标的 episode 输入，planner 随后枚举全部 Segment；因此每张卡展示相同总价，点击一张也真实创建多个 Task，并非纯 UI 状态误显。旧 Logic 还把“episode-scoped canonical operation”写成 oracle，主 Golden 只走 Assistant 批量路径，防线反而固化了错误。当前仍保留唯一 Operation，但用共享穷尽 scope 区分 Canvas 精确单段与 Assistant pending 批量，服务端在报价前按持久状态跳过同签名 active/completed Segment；直接请求 Logic、planner policy 与主 Journey 的单卡后批量组合共同反证复发。
-- 本次是不兼容的 D 类协议切换。用户已决定废弃旧项目与旧数据，因此不提供 migration、backfill、fallback 或双轨 parser；新系统对旧形状显式失败。
+- 旧 Edit-first 把确认剧本、Bible、Chapter、核心剪辑、资产和视频编码成连续阶段；自由 Operation registry 上线后仍保留这条“专业主链”，形成两个入口和两个状态解释器。首次修正只把 WorkflowView 降级为 recommendation，没有删除 splitter、固定 Choice、旧 writer 与 stage Golden，因此真实剧本成功后仍弹出“确认剧本，生成制作规划”。当前删除整条流程解释权，Chapter 只作为独立事实存在。
+- 首次长视频修正用 `>180s` 自动启用 Source/Bible/Chapter，并把 15–180 秒写成另一固定配方。它能提醒模型注意上下文，却把启发式变成第二工作流，无法表达短但多线并行、长但单场连续等真实情况。当前只保留 Primary 可见的强信号，代码没有时长分支。
+- 旧 splitter 在采用 Bible 的同一事务创建全部 Chapter，导致 Bible writer 同时拥有执行分组；随后 `delegation.source=chapters` 容易被误解为持久 WorkerGroup。当前 Bible 与 Chapter writer 分离，一个 Chapter 一个 Task，批量只属于既有 Wait 聚合协议。
 
 ## 修改检查表
 
-1. 字段是否属于动作/表演/声音/连续性或三项镜头执行决策；声音事件是否放在正确的 Shot/Segment 层级？
-2. 是否重新引入 Panel、分镜图、空间档案、双视频模式或第二可编辑 Prompt？
-3. Segment identity、`inputSignature`、参考图顺序和 Task owner 是否稳定且 fail closed？
-4. 参考图超限是否显式失败，`generateAudio` 是否始终为 true？
-5. Canvas 是否只提交精确 Segment，Assistant 批量是否由同一 planner 跳过 active/completed 而不重复计费？
+1. Chapter 是否仍是可选独立事实，而不是阶段或时长分支？
+2. Bible、continuity analysis、Chapter 是否各有唯一 writer，且互不自动创建？
+3. 每个输入是否引用精确 Resource Revision/fingerprint，而非最近记录或确认副本？
+4. 多 Chapter 是否只复用 OperationBatch/Wait，没有 WorkerGroup 或第二恢复协议？
+5. Context Compiler 是否纯派生且 fail closed？
+6. UI/Canvas 是否只显示真实事实，没有阶段、下一步或伪造 Lineage？

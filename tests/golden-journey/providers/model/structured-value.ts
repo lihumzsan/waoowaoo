@@ -11,45 +11,84 @@ function readSchemaFromResponseFormat(value: unknown): unknown {
   return jsonSchema?.schema ?? null
 }
 
-function isScriptIntakeSchema(schemaValue: unknown): boolean {
-  const schema = asRecord(schemaValue)
-  const properties = asRecord(schema?.properties)
-  const questions = asRecord(properties?.questions)
-  const items = asRecord(questions?.items)
-  const itemProperties = asRecord(items?.properties)
-  return Boolean(itemProperties?.key && itemProperties?.label && itemProperties?.options)
+function schemaContainsConst(value: unknown, expected: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => schemaContainsConst(item, expected))
+  const record = asRecord(value)
+  if (!record) return false
+  if (record.const === expected) return true
+  return Object.values(record).some((item) => schemaContainsConst(item, expected))
 }
 
-export function buildGoldenScriptIntakePlan(): unknown {
+const GOLDEN_SCREENPLAY = [
+  'INT. OBSERVATORY - NIGHT\n',
+  'Mara crosses the silent circular room while the same storm turns beyond every window. ',
+  'She follows one uninterrupted trail of wet footprints to the central telescope. ',
+  'The telescope rotates by itself, revealing a handwritten warning beneath its brass base. ',
+  'Mara reads the warning, refuses to leave, and aligns the lens with the single red star. ',
+  'The room darkens without a cut. A second set of footprints appears beside hers. ',
+  'She completes the alignment and the storm stops at once, but her reflection keeps moving. ',
+  'Mara faces the glass and accepts that the observatory has recorded a future version of her. ',
+  'She closes the dome, breaks the recording mechanism, and remains in the same room until dawn.',
+].join('')
+
+function buildGoldenScreenplayDraft(): unknown {
   return {
-    questions: [
+    kind: 'screenplay_draft',
+    title: 'The Red Observatory',
+    logline: 'A lone astronomer confronts her moving reflection during one uninterrupted night.',
+    synopsis: 'One continuous observatory scene resolves a supernatural warning without a location change.',
+    screenplay: GOLDEN_SCREENPLAY,
+    estimatedDurationSeconds: 240,
+    assumptions: ['The requested 240 seconds remain one continuous dramatic context.'],
+    openQuestions: [],
+  }
+}
+
+function buildGoldenStyleBible(): unknown {
+  return {
+    kind: 'style_bible',
+    design: {
+      mode: 'final',
+      styleBible: {
+        rawUserStyle: 'restrained ink-wash science fiction',
+        styleSummary: 'Restrained monochrome ink-wash science fiction with one red accent.',
+        visualStyle: 'Fine ink contours, soft paper grain, measured negative space, and restrained motion.',
+        assetImageStyle: {
+          lighting: 'Low-key moonlight with a single controlled red practical accent.',
+          texture: 'Visible cold-press paper grain and dry-brush shadow edges.',
+          composition: 'Architectural wide frames with the protagonist isolated near the optical axis.',
+        },
+      },
+    },
+    assumptions: [],
+    warnings: [],
+  }
+}
+
+function buildGoldenChapterPlan(): unknown {
+  return {
+    kind: 'chapter_plan',
+    rationale: 'The user explicitly requested independently recoverable production units after retaining the continuous story context.',
+    chapters: [
       {
-        key: 'targetRuntime',
-        label: '目标时长',
-        options: [
-          { value: 'one_minute', label: '1分钟', description: '适合一个强钩子和一次清晰反转。' },
-          { value: 'three_minutes', label: '3分钟', description: '适合完整起承转合并完成收束。' },
-          { value: 'five_minutes', label: '5分钟', description: '适合多段冲突和较完整的结尾。' },
-          { value: 'ten_minutes', label: '10分钟', description: '适合慢铺垫、多场景和完整人物弧光。' },
-        ],
+        chapterIndex: 0,
+        title: 'The Warning',
+        summary: 'Mara enters, follows the footprints, and discovers the warning.',
+        sourceStart: 0,
+        sourceEnd: 330,
+        targetDurationSec: 120,
       },
       {
-        key: 'genreTone',
-        label: '类型基调',
-        options: [
-          { value: 'folk_horror', label: '民俗恐怖', description: '禁忌、仪式与乡土传说。' },
-          { value: 'psychological_horror', label: '心理恐怖', description: '不可靠感知与逐步失控。' },
-        ],
-      },
-      {
-        key: 'endingDirection',
-        label: '结局走向',
-        options: [
-          { value: 'closed_loop', label: '循环重启', description: '主角以为逃脱，却回到起点。' },
-          { value: 'costly_escape', label: '代价逃生', description: '主角脱身但付出不可逆代价。' },
-        ],
+        chapterIndex: 1,
+        title: 'The Reflection',
+        summary: 'Mara completes the alignment and resolves the moving reflection.',
+        sourceStart: 330,
+        sourceEnd: GOLDEN_SCREENPLAY.length,
+        targetDurationSec: 120,
       },
     ],
+    assumptions: ['Chapter boundaries are production units, not a change to story continuity.'],
+    warnings: [],
   }
 }
 
@@ -115,6 +154,8 @@ export function generateGoldenStructuredValue(schemaValue: unknown): unknown {
 export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
   const schema = readSchemaFromResponseFormat(responseFormat)
   if (!schema) return null
-  if (isScriptIntakeSchema(schema)) return JSON.stringify(buildGoldenScriptIntakePlan())
+  if (schemaContainsConst(schema, 'screenplay_draft')) return JSON.stringify(buildGoldenScreenplayDraft())
+  if (schemaContainsConst(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
+  if (schemaContainsConst(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))
 }

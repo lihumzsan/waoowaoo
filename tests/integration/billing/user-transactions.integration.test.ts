@@ -75,7 +75,7 @@ describe('billing/user transactions integration', () => {
       userId: user.id,
       projectId: project.id,
       episodeId: episode.id,
-      type: TASK_TYPE.IMAGE_CHARACTER,
+      type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       targetType: 'CharacterAppearance',
       targetId: appearance.id,
     })
@@ -93,8 +93,8 @@ describe('billing/user transactions integration', () => {
       {
         projectId: project.id,
         episodeId: episode.id,
-        taskType: TASK_TYPE.IMAGE_CHARACTER,
-        action: TASK_TYPE.IMAGE_CHARACTER,
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        action: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
         apiType: 'image',
         model: 'ark::doubao-seedream-4-5-251128',
         quantity: 1,
@@ -121,7 +121,7 @@ describe('billing/user transactions integration', () => {
     const transaction = readRecord(transactions[0])
     expect(transaction.type).toBe('consume')
     expect(transaction.amount).toBeCloseTo(-1.25, 8)
-    expect(transaction.action).toBe(TASK_TYPE.IMAGE_CHARACTER)
+    expect(transaction.action).toBe(TASK_TYPE.CREATIVE_RESOURCE_IMAGE)
     expect(transaction.projectId).toBe(project.id)
     expect(transaction.projectName).toBe(project.name)
     expect(transaction.episodeId).toBe(episode.id)
@@ -181,7 +181,7 @@ describe('billing/user transactions integration', () => {
         userId: user.id,
         projectId: project.id,
         episodeId: episode.id,
-        type: TASK_TYPE.IMAGE_CHARACTER,
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
         targetType: 'CharacterAppearance',
         targetId: appearance.id,
         operationId: 'generate_character_images',
@@ -201,8 +201,8 @@ describe('billing/user transactions integration', () => {
         {
           projectId: project.id,
           episodeId: episode.id,
-          taskType: TASK_TYPE.IMAGE_CHARACTER,
-          action: TASK_TYPE.IMAGE_CHARACTER,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+          action: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
           apiType: 'image',
           model: 'openai::gpt-image-2',
           quantity: 1,
@@ -233,7 +233,7 @@ describe('billing/user transactions integration', () => {
     expect(transaction.type).toBe('consume')
     expect(transaction.amount).toBeCloseTo(-3.42, 8)
     expect(transaction.balanceAfter).toBeCloseTo(6.58, 8)
-    expect(transaction.action).toBe(TASK_TYPE.IMAGE_CHARACTER)
+    expect(transaction.action).toBe(TASK_TYPE.CREATIVE_RESOURCE_IMAGE)
     expect(transaction.projectId).toBe(project.id)
     expect(transaction.projectName).toBe(project.name)
     expect(transaction.episodeId).toBe(episode.id)

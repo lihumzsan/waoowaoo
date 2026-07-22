@@ -32,15 +32,7 @@ export interface GoldenOracleSnapshot {
   readonly domain: {
     readonly sourceDocuments: readonly Record<string, unknown>[]
     readonly bibles: readonly Record<string, unknown>[]
-    readonly stylePreviews: readonly Record<string, unknown>[]
     readonly chapters: readonly Record<string, unknown>[]
-    readonly editScripts: readonly Record<string, unknown>[]
-    readonly shotExecutionPlans: readonly Record<string, unknown>[]
-    readonly videoSegments: readonly Record<string, unknown>[]
-    readonly assetRequirements: readonly Record<string, unknown>[]
-    readonly bgmDesigns: readonly Record<string, unknown>[]
-    readonly musicScores: readonly Record<string, unknown>[]
-    readonly finalOutputs: readonly Record<string, unknown>[]
   }
   readonly identities: GoldenOracleIdentitySummary
 }

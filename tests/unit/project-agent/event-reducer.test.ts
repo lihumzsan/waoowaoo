@@ -71,10 +71,9 @@ function createTxMock(): ProjectAgentReducerTxMock {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
         sourceOperationId: null,
         toolCallId: 'tool-1',
-        choiceType: null,
       })),
       create: vi.fn(async () => undefined),
       upsert: vi.fn(async () => undefined),
@@ -114,7 +113,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         activityId: 'activity-1',
         type: 'operation',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
         toolCallId: 'tool-1',
       },
     })
@@ -130,7 +129,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
       }),
     }))
     expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -145,14 +144,14 @@ describe('project agent event reducer', () => {
       runId: 'run-1',
       type: 'operation',
       status: 'running',
-      operationId: 'ingest_script',
+      operationId: 'create_text',
     }))
   })
-  it('resolves a style Task wait for the durable Agent continuation instead of fabricating a Choice Activity', async () => {
+  it('resolves a creative Task wait for the durable Agent continuation instead of fabricating a Choice Activity', async () => {
     tx.projectAgentWait.findUnique.mockResolvedValueOnce({
       id: 'wait-style-1',
       runId: 'run-style-1',
-      operationId: 'generate_edit_style_previews',
+      operationId: 'delegate_creative_work',
       followUpMode: 'resume_agent',
     })
     tx.projectAgentRun.findUnique
@@ -196,7 +195,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         activityId: 'activity-new',
         type: 'operation',
-        operationId: 'ingest_script',
+        operationId: 'create_text',
       },
     })).rejects.toThrow(/PROJECT_AGENT_ACTIVITY_OVERLAP/)
   })
@@ -210,13 +209,13 @@ describe('project agent event reducer', () => {
         activityId: 'activity-choice-1',
         interruptionId: 'interruption-1',
         interruptionKind: 'choice',
-        operationId: 'request_edit_bible_review_choice',
+        operationId: 'request_choice',
         approvalId: 'choice:approval-1',
         toolCallId: 'tool-choice-1',
-        choiceType: 'bible_review',
         payload: {
-          choiceType: 'bible_review',
-          cardId: 'edit-first-duration-aspect-ratio',
+          card: {
+            cardId: 'choice-current-question',
+          },
         },
         runState: null,
       },
@@ -227,8 +226,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         type: 'awaiting_choice',
         status: 'waiting',
-        operationId: 'request_edit_bible_review_choice',
-        choiceType: 'bible_review',
+        operationId: 'request_choice',
       }),
     }))
     expect(tx.projectAgentInterruption.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -238,7 +236,7 @@ describe('project agent event reducer', () => {
         activityId: 'activity-choice-1',
         type: 'choice',
         status: 'pending',
-        operationId: 'request_edit_bible_review_choice',
+        operationId: 'request_choice',
       }),
     }))
     const activityWriteOrder = tx.projectAgentActivity.create.mock.invocationCallOrder[0]

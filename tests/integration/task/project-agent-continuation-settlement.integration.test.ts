@@ -52,7 +52,7 @@ async function seedClaimedContinuation() {
       episodeId: episode.id,
       type: 'waiting_task',
       status: 'completed',
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       completedAt: new Date(),
     },
   })
@@ -65,7 +65,7 @@ async function seedClaimedContinuation() {
       assistantId: 'workspace-command',
       scopeRef: `episode:${episode.id}`,
       episodeId: episode.id,
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       activityId: WAIT_ACTIVITY_ID,
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',

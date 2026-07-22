@@ -27,9 +27,9 @@ async function seedTask(taskId: string) {
     id: taskId,
     userId: user.id,
     projectId: project.id,
-    type: TASK_TYPE.MUSIC_GENERATE,
-    targetType: 'Project',
-    targetId: project.id,
+    type: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+    targetType: 'CreativeResource',
+    targetId: `${taskId}-resource`,
     payload: { prompt: 'durable provider invocation' },
   })
 }

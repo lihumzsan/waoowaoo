@@ -7,10 +7,6 @@ import process from 'process'
 const root = process.cwd()
 const guardedRoots = [
   path.join(root, 'src/lib/workers'),
-  path.join(root, 'src/lib/bgm-score'),
-]
-const guardedFiles = [
-  path.join(root, 'src/lib/edit-script/service.ts'),
 ]
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx'])
 const TARGET_TERMINAL_WRITE = /(?:status|renderStatus)\s*:\s*['"](?:failed|cancelled|canceled)['"]/
@@ -28,7 +24,7 @@ function walk(dir, out = []) {
   return out
 }
 
-const violations = [...guardedRoots.flatMap((guardedRoot) => walk(guardedRoot)), ...guardedFiles].flatMap((fullPath) => {
+const violations = guardedRoots.flatMap((guardedRoot) => walk(guardedRoot)).flatMap((fullPath) => {
   const content = fs.readFileSync(fullPath, 'utf8')
   if (!TARGET_TERMINAL_WRITE.test(content) && !/\.catch\(\(\)\s*=>\s*undefined\)/.test(content)) return []
   return [path.relative(root, fullPath).split(path.sep).join('/')]

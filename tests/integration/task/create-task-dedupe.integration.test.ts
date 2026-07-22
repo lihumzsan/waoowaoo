@@ -19,12 +19,12 @@ function buildInput(params: {
   return {
     userId: params.userId,
     projectId: params.projectId,
-    type: TASK_TYPE.IMAGE_CHARACTER,
-    targetType: 'CharacterAppearance',
-    targetId: `appearance-${params.suffix}`,
-    dedupeKey: `image-character:${params.projectId}:${params.suffix}`,
+    type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+    targetType: 'CreativeResource',
+    targetId: `resource-${params.suffix}`,
+    dedupeKey: `creative-resource-image:${params.projectId}:${params.suffix}`,
     payload: {
-      appearanceId: `appearance-${params.suffix}`,
+      resourceId: `resource-${params.suffix}`,
       prompt: `prompt-${params.suffix}`,
       meta: { locale: 'en' },
     },
@@ -63,7 +63,7 @@ describe('transactional Task batch dedupe', () => {
     })).resolves.toBe(2)
   })
 
-  it('rejects a Task whose registry-declared terminal resource scope is missing or belongs to another project', async () => {
+  it('rejects an optional episode scope that belongs to another project', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const otherProject = await createTestProject(user.id)
@@ -73,13 +73,12 @@ describe('transactional Task batch dedupe', () => {
     const input: CreateTaskInput = {
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.VIDEO_SEGMENT,
-      targetType: 'ProjectVideoSegment',
-      targetId: 'video-segment-invalid-scope',
-      payload: { segmentId: 'segment-invalid-scope', meta: { locale: 'en' } },
+      type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+      targetType: 'CreativeResource',
+      targetId: 'video-resource-invalid-scope',
+      payload: { resourceId: 'video-resource-invalid-scope', meta: { locale: 'en' } },
     }
 
-    await expect(persistBatch([input])).rejects.toThrow('WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:video_segments')
     await expect(persistBatch([{ ...input, episodeId: otherEpisode.id }])).rejects.toThrow(
       `TASK_EPISODE_SCOPE_MISMATCH:${project.id}:${otherEpisode.id}`,
     )
@@ -177,7 +176,7 @@ describe('transactional Task batch dedupe', () => {
 
     await expect(persistBatch([{
       ...input,
-      payload: { appearanceId: 'panel-conflict', prompt: 'different', meta: { locale: 'en' } },
+      payload: { resourceId: 'resource-conflict', prompt: 'different', meta: { locale: 'en' } },
     }])).rejects.toThrow('TASK_BATCH_IDENTITY_CONFLICT')
   })
 
@@ -206,17 +205,17 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.IMAGE_CHARACTER,
-        targetType: 'CharacterAppearance',
-        targetId: 'appearance-progress',
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        targetType: 'CreativeResource',
+        targetId: 'resource-progress',
         status: TASK_STATUS.PROCESSING,
         attempt: 1,
         progress: 5,
         payload: {
-          appearanceId: 'appearance-progress',
+          resourceId: 'resource-progress',
           imageModel: 'fal::image-model',
           referenceMode: 'asset',
-          meta: { locale: 'zh', flowId: 'single:image_character' },
+          meta: { locale: 'zh', flowId: 'creative_resource:image' },
           ui: { intent: 'generate', hasOutputAtStart: true },
         },
         queuedAt: new Date(),
@@ -225,7 +224,7 @@ describe('transactional Task batch dedupe', () => {
     })
 
     expect(await tryUpdateTaskProgress(task.id, 1, 18, {
-      stage: 'generate_character_image',
+      stage: 'generate_creative_resource_image',
       meta: { locale: 'zh' },
     })).toBe(true)
     const stored = await prisma.task.findUnique({
@@ -235,10 +234,10 @@ describe('transactional Task batch dedupe', () => {
     const payload = asRecord(stored?.payload)
     expect(stored?.progress).toBe(18)
     expect(payload).toMatchObject({
-      stage: 'generate_character_image',
+      stage: 'generate_creative_resource_image',
       imageModel: 'fal::image-model',
       referenceMode: 'asset',
-      meta: { locale: 'zh', flowId: 'single:image_character' },
+      meta: { locale: 'zh', flowId: 'creative_resource:image' },
       ui: { intent: 'generate', hasOutputAtStart: true },
     })
   })
@@ -250,9 +249,9 @@ describe('transactional Task batch dedupe', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.IMAGE_CHARACTER,
-        targetType: 'CharacterAppearance',
-        targetId: 'appearance-stale-attempt',
+        type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+        targetType: 'CreativeResource',
+        targetId: 'resource-stale-attempt',
         status: TASK_STATUS.PROCESSING,
         attempt: 2,
         progress: 40,

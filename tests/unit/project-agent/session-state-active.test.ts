@@ -11,8 +11,6 @@ import {
   runsMock,
   vi,
   waitsMock,
-  workflow,
-  workflowMock,
 } from './session-state.fixture'
 import { TASK_TYPE } from '@/lib/task/types'
 
@@ -21,13 +19,12 @@ describe('project agent session-state', () => {
     vi.clearAllMocks()
     mockSessionTaskRows([{
       id: 'task-1',
-      operationId: 'generate_edit_script_assets',
-      type: 'image_location',
-      targetType: 'LocationImage',
-      targetId: 'location-image-1',
+      operationId: 'create_image',
+      type: 'creative_resource_image',
+      targetType: 'CreativeResource',
+      targetId: 'resource-image-1',
       status: 'processing',
     }])
-    workflowMock.resolveEditFirstWorkflowView.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
         id: 'run-1',
@@ -47,7 +44,7 @@ describe('project agent session-state', () => {
       {
         runId: 'run-1',
         waitId: 'wait-1',
-        operationId: 'generate_edit_script_assets',
+        operationId: 'create_image',
         taskIds: ['task-1'],
         failedTaskIds: [],
         status: 'pending',
@@ -62,10 +59,9 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       type: 'waiting_task',
       status: 'waiting',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       sourceOperationId: null,
       toolCallId: null,
-      choiceType: null,
     })
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValue({
       id: 'interruption-1',
@@ -73,7 +69,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       approvalId: 'approval-1',
       toolCallId: 'tool-1',
       payload: {},
@@ -84,7 +80,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-approval-1',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       approvalId: 'approval-1',
       toolCallId: 'tool-1',
       payload: {},
@@ -105,7 +101,7 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       interruptionId: 'interruption-1',
       approvalId: 'approval-1',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       toolCallId: 'tool-1',
       operationPlan: null,
     })
@@ -120,15 +116,15 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       type: 'waiting_task',
       status: 'waiting',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
     }))
-    expect(state.activeWaits.map((wait) => wait.operationId)).toEqual(['generate_edit_script_assets'])
+    expect(state.activeWaits.map((wait) => wait.operationId)).toEqual(['create_image'])
     expect(state.activeTasks).toEqual([{
       taskId: 'task-1',
-      operationId: 'generate_edit_script_assets',
-      taskType: 'image_location',
-      targetType: 'LocationImage',
-      targetId: 'location-image-1',
+      operationId: 'create_image',
+      taskType: 'creative_resource_image',
+      targetType: 'CreativeResource',
+      targetId: 'resource-image-1',
       status: 'processing',
     }])
     expect(prismaMock.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -175,7 +171,7 @@ describe('project agent session-state', () => {
       activityId: 'activity-foreign',
       type: 'approval',
       status: 'pending',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       approvalId: 'approval-foreign',
       toolCallId: 'tool-foreign',
       payload: {},
@@ -199,7 +195,7 @@ describe('project agent session-state', () => {
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([{
       runId: 'run-foreign',
       waitId: 'wait-foreign',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       taskIds: ['task-1'],
       failedTaskIds: [],
       status: 'pending',
@@ -227,10 +223,9 @@ describe('project agent session-state', () => {
       runId: 'run-foreign',
       type: 'waiting_task',
       status: 'waiting',
-      operationId: 'generate_edit_script_assets',
+      operationId: 'create_image',
       sourceOperationId: null,
       toolCallId: null,
-      choiceType: null,
     })
 
     await expect(getProjectAgentSessionState({

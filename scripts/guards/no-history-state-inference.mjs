@@ -72,9 +72,7 @@ const runtimeStatePath = 'src/features/project-workspace/components/workspace-as
 const runtimeState = fs.readFileSync(path.resolve(process.cwd(), runtimeStatePath), 'utf8')
 const renderersPath = 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'
 const renderers = fs.readFileSync(path.resolve(process.cwd(), renderersPath), 'utf8')
-const stylePreviewRendererPath = 'src/features/project-workspace/components/workspace-assistant/EditStylePreviewGenerationDataCard.tsx'
-const stylePreviewRenderer = fs.readFileSync(path.resolve(process.cwd(), stylePreviewRendererPath), 'utf8')
-const assistantRenderers = `${renderers}\n${stylePreviewRenderer}`
+const assistantRenderers = renderers
 const controlPath = 'src/lib/project-agent/control.ts'
 const control = fs.readFileSync(path.resolve(process.cwd(), controlPath), 'utf8')
 const commandServicePath = 'src/lib/project-agent/command-service.ts'
@@ -105,7 +103,7 @@ for (const marker of [
   "targetType: 'ProjectEditStylePreview'",
 ]) {
   if (assistantRenderers.includes(marker)) {
-    violations.push(`${renderersPath} or ${stylePreviewRendererPath} restores private style-preview lifecycle inference via ${JSON.stringify(marker)}`)
+    violations.push(`${renderersPath} restores private style-preview lifecycle inference via ${JSON.stringify(marker)}`)
   }
 }
 

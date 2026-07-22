@@ -18,8 +18,8 @@ describe('parseStructuredJsonByMode', () => {
 
   it('accepts one complete outer JSON or unlabeled fence', () => {
     for (const infoString of ['json', 'JSON', '']) {
-      const result = parseStructuredJsonByMode(`\`\`\`${infoString}\n{"stylePreviews":[]}\n\`\`\``, { kind: 'object' })
-      expect(result).toEqual({ ok: true, value: { stylePreviews: [] } })
+      const result = parseStructuredJsonByMode(`\`\`\`${infoString}\n{"items":[]}\n\`\`\``, { kind: 'object' })
+      expect(result).toEqual({ ok: true, value: { items: [] } })
     }
   })
 

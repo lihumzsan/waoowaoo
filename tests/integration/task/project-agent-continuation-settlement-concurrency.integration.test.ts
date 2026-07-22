@@ -28,9 +28,9 @@ async function seedClaimedContinuation() {
     id: 'task-1',
     userId: user.id,
     projectId: project.id,
-    type: TASK_TYPE.VIDEO_SEGMENT,
-    targetType: 'ProjectVideoSegment',
-    targetId: 'continuation-video-segment-1',
+    type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+    targetType: 'CreativeResource',
+    targetId: 'continuation-video-resource-1',
     payload: {},
   })
   await prisma.task.update({
@@ -66,7 +66,7 @@ async function seedClaimedContinuation() {
       scopeRef: `project:${project.id}`,
       type: 'task_follow_up',
       status: 'running',
-      sourceOperationId: 'generate_video_segments',
+      sourceOperationId: 'create_video',
     },
   })
   await prisma.projectAgentWait.create({
@@ -77,7 +77,7 @@ async function seedClaimedContinuation() {
       userId: user.id,
       assistantId: 'workspace-command',
       scopeRef: `project:${project.id}`,
-      operationId: 'generate_video_segments',
+      operationId: 'create_video',
       taskIds: ['task-1'],
       followUpMode: 'resume_agent',
       status: 'claimed',
@@ -253,17 +253,17 @@ describe('Project Agent continuation settlement DB integration', () => {
         scopeRef: `project:${project.id}`,
         type: 'waiting_task',
         status: 'waiting',
-        operationId: 'generate_bible_from_script',
+        operationId: 'delegate_creative_work',
       },
     })
     await createQueuedTask({
       id: taskId,
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-      targetType: 'ProjectEditBible',
-      targetId: 'superseded-edit-bible',
-      operationId: 'generate_bible_from_script',
+      type: TASK_TYPE.CREATIVE_WORK,
+      targetType: 'CreativeWork',
+      targetId: 'superseded-creative-work',
+      operationId: 'delegate_creative_work',
     })
     await prisma.projectAgentWait.create({
       data: {
@@ -274,7 +274,7 @@ describe('Project Agent continuation settlement DB integration', () => {
         userId: user.id,
         assistantId: 'workspace-command',
         scopeRef: `project:${project.id}`,
-        operationId: 'generate_bible_from_script',
+        operationId: 'delegate_creative_work',
         taskIds: [taskId],
         status: 'pending',
         runVersion: 1,
