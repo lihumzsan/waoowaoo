@@ -73,6 +73,7 @@ function decodeDataUrl(source: string): Buffer {
   const payload = match[2]
   assertImageSize(decodedBase64Size(payload))
   const buffer = Buffer.from(payload, 'base64')
+  assertImageSize(buffer.byteLength)
   if (buffer.toString('base64').replace(/=+$/, '') !== payload.replace(/=+$/, '')) {
     throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', 'invalid base64 payload')
   }

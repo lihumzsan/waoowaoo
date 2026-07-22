@@ -173,6 +173,23 @@ describe('episode cover image audit', () => {
     }
   })
 
+  it('rechecks decoded size when redundant padding hides a 10 MiB plus one PNG payload', async () => {
+    const png = await imageBuffer()
+    const oversized = Buffer.concat([
+      png,
+      Buffer.alloc(((10 * 1024 * 1024) + 1) - png.byteLength),
+    ])
+    expect(oversized.byteLength).toBe((10 * 1024 * 1024) + 1)
+    const canonicalPayload = oversized.toString('base64')
+    expect(canonicalPayload.endsWith('=')).toBe(true)
+    const redundantlyPaddedPayload = `${canonicalPayload}=`
+
+    await expect(
+      audit(`data:image/png;base64,${redundantlyPaddedPayload}`),
+    ).rejects.toThrow('EPISODE_COVER_IMAGE_TOO_LARGE')
+    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+  })
+
   it('rejects images without readable dimensions', async () => {
     await expect(audit(Buffer.from('not an image'))).rejects.toThrow('EPISODE_COVER_IMAGE_DIMENSIONS_MISSING')
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()
