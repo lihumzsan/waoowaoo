@@ -87,6 +87,7 @@ describe('Episode cover task submission', () => {
       type: 'image_episode_cover',
       targetType: 'NovelPromotionEpisode',
       targetId: 'episode-1',
+      maxAttempts: 2,
       dedupeKey: 'image_episode_cover:episode-1',
       payload: expect.objectContaining({
         episodeId: 'episode-1',

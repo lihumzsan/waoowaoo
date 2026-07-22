@@ -62,6 +62,10 @@ const mediaMock = vi.hoisted(() => ({
   ensureMediaObjectFromStorageKey: vi.fn(),
 }))
 
+const auditMock = vi.hoisted(() => ({
+  auditEpisodeCoverImage: vi.fn(),
+}))
+
 const promptMock = vi.hoisted(() => ({
   buildPrompt: vi.fn(() => 'episode cover base prompt'),
 }))
@@ -81,6 +85,7 @@ vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => u
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => sharedMock)
 vi.mock('@/lib/media/outbound-image', () => outboundMock)
 vi.mock('@/lib/media/service', () => mediaMock)
+vi.mock('@/lib/novel-promotion/episode-cover/audit', () => auditMock)
 vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: { NP_EPISODE_COVER_IMAGE: 'np_episode_cover_image' },
   buildPrompt: promptMock.buildPrompt,
@@ -150,6 +155,10 @@ async function loadHandler() {
 describe('worker episode cover image behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    generatorApiMock.generateImage.mockResolvedValue({
+      success: true,
+      imageUrl: 'generated-cover-source',
+    })
     configServiceMock.getProjectModelConfig.mockResolvedValue({
       storyboardModel: 'other-provider::ignored-model',
       videoRatio: '16:9',
@@ -170,6 +179,15 @@ describe('worker episode cover image behavior', () => {
       id: 'media-cover-1',
       publicId: 'episode-cover-public-1',
       url: '/m/episode-cover-public-1',
+    })
+    auditMock.auditEpisodeCoverImage.mockResolvedValue({
+      buffer: Buffer.from('audited-cover-bytes'),
+      metadata: {
+        mimeType: 'image/png',
+        sizeBytes: 19,
+        width: 1280,
+        height: 720,
+      },
     })
   })
 
@@ -201,10 +219,19 @@ describe('worker episode cover image behavior', () => {
       }),
     )
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
+    expect(auditMock.auditEpisodeCoverImage).toHaveBeenCalledWith({
+      userId: 'user-1',
+      projectId: 'project-1',
+      imageSource: 'generated-cover-source',
+      expectedAspectRatio: '16:9',
+    })
     expect(utilsMock.uploadImageSourceToCosWithMetadata).toHaveBeenCalledWith(
-      'generated-cover-source',
+      Buffer.from('audited-cover-bytes'),
       'episode-cover',
       'episode-1',
+    )
+    expect(auditMock.auditEpisodeCoverImage.mock.invocationCallOrder[0]).toBeLessThan(
+      utilsMock.uploadImageSourceToCosWithMetadata.mock.invocationCallOrder[0]!,
     )
     expect(prismaMock.novelPromotionEpisode.update).toHaveBeenCalledWith({
       where: { id: 'episode-1' },
@@ -248,5 +275,42 @@ describe('worker episode cover image behavior', () => {
 
     expect(mediaMock.ensureMediaObjectFromStorageKey).not.toHaveBeenCalled()
     expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+  })
+
+  it('creates no storage object, media row, or pointer update when audit fails', async () => {
+    prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
+    auditMock.auditEpisodeCoverImage.mockRejectedValue(new Error('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED'))
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
+
+    expect(utilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
+    expect(mediaMock.ensureMediaObjectFromStorageKey).not.toHaveBeenCalled()
+    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+  })
+
+  it('keeps both audit-failure attempts on Codex without a provider fallback', async () => {
+    auditMock.auditEpisodeCoverImage.mockRejectedValue(new Error('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED'))
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
+
+    expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(2)
+    expect(generatorApiMock.generateImage).toHaveBeenNthCalledWith(
+      1,
+      'user-1',
+      CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      expect.any(String),
+      expect.any(Object),
+    )
+    expect(generatorApiMock.generateImage).toHaveBeenNthCalledWith(
+      2,
+      'user-1',
+      CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      expect.any(String),
+      expect.any(Object),
+    )
+    expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 })

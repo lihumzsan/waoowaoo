@@ -44,6 +44,7 @@ export async function submitEpisodeCoverTask(params: {
     type: TASK_TYPE.IMAGE_EPISODE_COVER,
     targetType: 'NovelPromotionEpisode',
     targetId: episode.id,
+    maxAttempts: 2,
     payload: withTaskUiPayload({
       episodeId: episode.id,
       trigger: params.mode,

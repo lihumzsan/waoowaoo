@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getArtStylePrompt } from '@/lib/constants'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
+import { auditEpisodeCoverImage } from '@/lib/novel-promotion/episode-cover/audit'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
 import type { TaskJobData } from '@/lib/task/types'
@@ -141,7 +142,13 @@ export async function handleEpisodeCoverImageTask(job: Job<TaskJobData>) {
     pollProgress: { start: 30, end: 88 },
   })
 
-  const uploaded = await uploadImageSourceToCosWithMetadata(source, 'episode-cover', episode.id)
+  const audited = await auditEpisodeCoverImage({
+    userId: job.data.userId,
+    projectId: job.data.projectId,
+    imageSource: source,
+    expectedAspectRatio: aspectRatio,
+  })
+  const uploaded = await uploadImageSourceToCosWithMetadata(audited.buffer, 'episode-cover', episode.id)
   const media = await ensureMediaObjectFromStorageKey(uploaded.key, uploaded.metadata)
 
   await reportTaskProgress(job, 94, { stage: 'persist_episode_cover' })
