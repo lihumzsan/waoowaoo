@@ -20,8 +20,10 @@ interface StoryInputComposerProps {
   onCompositionStart?: () => void
   onCompositionEnd?: (event: CompositionEvent<HTMLTextAreaElement>) => void
   textareaClassName?: string
+  containerClassName?: string
   textareaShellClassName?: string
   controlsClassName?: string
+  actionsClassName?: string
   footerClassName?: string
 }
 
@@ -41,8 +43,10 @@ export default function StoryInputComposer({
   onCompositionStart,
   onCompositionEnd,
   textareaClassName,
+  containerClassName,
   textareaShellClassName,
   controlsClassName,
+  actionsClassName,
   footerClassName,
 }: StoryInputComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -86,9 +90,9 @@ export default function StoryInputComposer({
   }, [value, autoResizeTextarea])
 
   const isPlain = variant === 'plain'
-  const containerClassName = isPlain
+  const resolvedContainerClassName = containerClassName ?? (isPlain
     ? 'relative w-full'
-    : 'relative w-full glass-surface-elevated rounded-2xl'
+    : 'relative w-full glass-surface-elevated rounded-2xl')
   const textareaShell = textareaShellClassName ?? (isPlain ? '' : 'p-6 pb-4')
   const textareaClass = textareaClassName ?? (
     isPlain
@@ -106,7 +110,7 @@ export default function StoryInputComposer({
     : 'w-full resize-none border-none bg-transparent text-base text-[var(--glass-text-primary)] outline-none placeholder:text-[var(--glass-text-tertiary)] app-scrollbar'
 
   return (
-    <div className={containerClassName}>
+    <div className={resolvedContainerClassName}>
       <div className={textareaShell}>
         {topRight && (
           <div className="mb-3 flex items-center justify-end">
@@ -132,7 +136,7 @@ export default function StoryInputComposer({
       </div>
 
       <div className={controlsClass}>
-        <div className="ml-auto flex min-w-max items-center gap-2">
+        <div className={actionsClassName ?? 'ml-auto flex min-w-max items-center gap-2'}>
           {secondaryActions}
           {primaryAction}
         </div>

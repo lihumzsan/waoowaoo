@@ -17,7 +17,11 @@ import {
   capabilitySelectionCommandToSelections,
 } from '@/lib/ai-registry/capability-selection-command'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
+import {
+  isProjectVideoRatio,
+  PROJECT_VIDEO_RATIO_VALUES,
+  writeProjectVideoRatioInTransaction,
+} from '@/lib/projects/video-ratio-write'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -29,7 +33,6 @@ const MODEL_FIELDS = [
 ] as const
 
 const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
-const PROJECT_VIDEO_RATIO_VALUES = Object.keys(ASPECT_RATIO_CONFIGS)
 
 const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType> = {
   analysisModel: 'llm',
@@ -44,7 +47,7 @@ const projectModelKeySchema = z.string().trim().min(1).nullable()
   .describe('Exact provider::modelId returned by list_user_models, or null to clear the project override.')
 
 const projectVideoRatioSchema = z.string().trim().min(1).refine(
-  (value) => Object.prototype.hasOwnProperty.call(ASPECT_RATIO_CONFIGS, value),
+  isProjectVideoRatio,
   { message: 'Unsupported project video ratio.' },
 )
 
@@ -59,25 +62,6 @@ const updateProjectConfigInputSchema = z.object({
     .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
 }).strict()
-
-function normalizeProjectVideoRatio(value: unknown): string {
-  if (typeof value !== 'string') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_INVALID',
-      field: 'videoRatio',
-    })
-  }
-  const normalized = value.trim()
-  if (!Object.prototype.hasOwnProperty.call(ASPECT_RATIO_CONFIGS, normalized)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_INVALID',
-      field: 'videoRatio',
-      allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
-      agentRetryableAfterCorrection: true,
-    })
-  }
-  return normalized
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -352,7 +336,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         properties: {
           videoRatio: {
             type: 'string',
-            enum: PROJECT_VIDEO_RATIO_VALUES,
+            enum: [...PROJECT_VIDEO_RATIO_VALUES],
             minLength: 1,
             description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
           },
@@ -411,18 +395,26 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
             continue
           }
 
-          if (field === 'videoRatio') {
-            const videoRatio = normalizeProjectVideoRatio(body.videoRatio)
-            updateData.videoRatio = videoRatio
-            continue
-          }
+          if (field === 'videoRatio') continue
 
           updateData[field] = body[field]
         }
 
-        const updatedProject = await transaction.project.update({
+        if (Object.keys(updateData).length > 0) {
+          await transaction.project.update({
+            where: { id: ctx.projectId },
+            data: updateData,
+          })
+        }
+        if (body.videoRatio !== undefined) {
+          await writeProjectVideoRatioInTransaction({
+            transaction,
+            projectId: ctx.projectId,
+            videoRatio: body.videoRatio,
+          })
+        }
+        const updatedProject = await transaction.project.findUniqueOrThrow({
           where: { id: ctx.projectId },
-          data: updateData,
         })
 
         const projectWithSignedUrls = await attachMediaFieldsToProject(updatedProject)

@@ -12,6 +12,7 @@ import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
+import HomeVideoRatioSelect from '@/components/home/HomeVideoRatioSelect'
 import {
   TextAttachmentChips,
   TextAttachmentUploadDialog,
@@ -25,6 +26,7 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 
 interface ProjectStats {
   episodes: number
@@ -54,6 +56,7 @@ export default function HomePage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
+  const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -97,6 +100,7 @@ export default function HomePage() {
   const handleCreate = async () => {
     await submitHomeQuickStartLaunch({
       inputValue,
+      videoRatio,
       attachments,
       isSubmitting: createLoading,
       apiFetch,
@@ -127,6 +131,8 @@ export default function HomePage() {
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
   }, [])
 
+  const createDisabled = (!inputValue.trim() && attachments.length === 0) || createLoading
+
   // 时间格式化
   const formatTimeAgo = (dateString: string): string => {
     const diffMs = Date.now() - new Date(dateString).getTime()
@@ -144,7 +150,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="glass-page min-h-screen">
+    <div className="glass-page min-h-screen" style={{ backgroundColor: '#fcfcfd' }}>
       <Navbar />
 
       {/* 自定义呼吸动画 */}
@@ -296,7 +302,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-10 rounded-[48px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(6, 182, 212, 0.4), transparent 70%)',
+                background: 'radial-gradient(ellipse 80% 60% at 30% 40%, rgba(47, 123, 255, 0.30), transparent 70%)',
                 animation: 'breathe-drift-1 8s ease-in-out infinite',
                 filter: 'blur(30px)',
               }}
@@ -304,7 +310,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-10 rounded-[48px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 70% 80% at 70% 60%, rgba(139, 92, 246, 0.35), transparent 70%)',
+                background: 'radial-gradient(ellipse 70% 80% at 70% 60%, rgba(56, 189, 248, 0.24), transparent 70%)',
                 animation: 'breathe-drift-2 10s ease-in-out infinite',
                 filter: 'blur(35px)',
               }}
@@ -312,7 +318,7 @@ export default function HomePage() {
             <div
               className="absolute -inset-12 rounded-[56px] pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(59, 130, 246, 0.3), transparent 70%)',
+                background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(244, 114, 182, 0.18), transparent 70%)',
                 animation: 'breathe-drift-3 12s ease-in-out infinite',
                 filter: 'blur(40px)',
               }}
@@ -329,28 +335,52 @@ export default function HomePage() {
               onSubmit={handleCreate}
               placeholder={t('inputPlaceholder')}
               minRows={HOME_QUICK_START_MIN_ROWS}
-              textareaClassName="px-0 pt-0 pb-3 align-top"
+              containerClassName="relative mx-auto w-full max-w-[792px] rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]"
+              textareaShellClassName=""
+              textareaClassName="min-h-[112px] px-7 pb-3 pt-7 text-[17px] leading-7 align-top"
+              controlsClassName="flex items-center px-4 pb-4"
+              actionsClassName="flex w-full items-center justify-between"
+              footerClassName="px-7 pb-5"
               primaryAction={(
                 <button
+                  type="button"
+                  aria-label={t('startCreation')}
+                  title={t('startCreation')}
                   onClick={() => void handleCreate()}
-                  disabled={(!inputValue.trim() && attachments.length === 0) || createLoading}
-                  className="glass-btn-base glass-btn-primary h-10 flex-shrink-0 px-5 text-sm disabled:opacity-50"
+                  disabled={createDisabled}
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition"
+                  style={{
+                    background: createDisabled
+                      ? 'rgba(88,92,128,0.14)'
+                      : 'linear-gradient(140deg, var(--glass-accent-from) 0%, var(--glass-accent-to) 100%)',
+                    color: createDisabled ? 'rgba(88,92,128,0.72)' : '#fff',
+                    boxShadow: createDisabled ? 'none' : '0 6px 16px -4px var(--glass-accent-shadow-strong)',
+                  }}
                 >
-                  {createLoading ? tc('loading') : t('startCreation')}
-                  <AppIcon name="arrowRight" className="w-4 h-4" />
+                  <AppIcon name="arrowRight" className={`h-[18px] w-[18px] ${createLoading ? 'animate-pulse' : ''}`} />
                 </button>
               )}
               secondaryActions={(
-                <button
-                  type="button"
-                  aria-label={ta('attachments.openUpload')}
-                  title={ta('attachments.openUpload')}
-                  disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
-                  onClick={() => setAttachmentDialogOpen(true)}
-                  className="glass-btn-base glass-btn-secondary h-10 w-10 flex-shrink-0 px-0 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <AppIcon name="plus" className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={ta('attachments.openUpload')}
+                    title={ta('attachments.openUpload')}
+                    disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+                    onClick={() => setAttachmentDialogOpen(true)}
+                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[rgba(15,17,23,0.55)] transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <AppIcon name="plus" className="h-[18px] w-[18px]" />
+                  </button>
+                  <HomeVideoRatioSelect
+                    value={videoRatio}
+                    disabled={createLoading}
+                    onChange={(nextRatio) => {
+                      setVideoRatio(nextRatio)
+                      if (createError) setCreateError(null)
+                    }}
+                  />
+                </div>
               )}
               footer={attachments.length > 0 || createError ? (
                 <div className="space-y-3">

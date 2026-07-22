@@ -6,6 +6,7 @@ import {
   type HomeWorkspaceLaunchTarget,
 } from './create-project-launch'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
+import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 
 type CreateHomeProjectLaunch = (
   params: CreateHomeProjectLaunchParams,
@@ -20,6 +21,7 @@ type WriteHomeAssistantAutoStartMessage = (input: {
 
 export interface SubmitHomeQuickStartLaunchParams {
   readonly inputValue: string
+  readonly videoRatio: ProjectVideoRatio
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly isSubmitting: boolean
   readonly apiFetch: CreateHomeProjectLaunchParams['apiFetch']
@@ -35,6 +37,7 @@ export interface SubmitHomeQuickStartLaunchParams {
 
 export async function submitHomeQuickStartLaunch({
   inputValue,
+  videoRatio,
   attachments,
   isSubmitting,
   apiFetch,
@@ -59,6 +62,7 @@ export async function submitHomeQuickStartLaunch({
       apiFetch,
       projectName,
       storyText,
+      videoRatio,
       episodeName,
       hasAssistantDraftContent: storyText.length > 0 || draftAttachments.length > 0,
     })

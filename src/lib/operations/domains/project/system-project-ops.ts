@@ -13,6 +13,11 @@ import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/dep
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { createProjectEpisodeInTransaction } from '@/lib/projects/episode-service'
+import {
+  isProjectVideoRatio,
+  writeProjectVideoRatioInTransaction,
+} from '@/lib/projects/video-ratio-write'
 
 function readProjectDraftBody(body: unknown): ProjectDraftInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -203,6 +208,12 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
+        videoRatio: z.string().trim().min(1).refine(isProjectVideoRatio, {
+          message: 'Unsupported project video ratio.',
+        }).optional(),
+        initialEpisode: z.object({
+          name: z.string().trim().min(1),
+        }).strict().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
@@ -229,7 +240,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               where: { userId: ctx.userId },
             })
 
-        const project = await transaction.project.create({
+        let project = await transaction.project.create({
           data: {
             name: normalized.name.trim(),
             description: normalized.description?.trim() || null,
@@ -255,6 +266,24 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
             }),
           },
         })
+
+        if (input.videoRatio !== undefined) {
+          project = await writeProjectVideoRatioInTransaction({
+            transaction,
+            projectId: project.id,
+            videoRatio: input.videoRatio,
+          })
+        }
+
+        if (input.initialEpisode) {
+          const created = await createProjectEpisodeInTransaction({
+            transaction,
+            projectId: project.id,
+            userId: ctx.userId,
+            name: input.initialEpisode.name,
+          })
+          return { project: created.project, episode: created.episode }
+        }
 
         return { project }
       },

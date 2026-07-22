@@ -4,6 +4,7 @@ import {
   readProjectAssistantTextAttachmentsFromMetadata,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 
 export const HOME_ASSISTANT_AUTOSTART_QUERY = 'assistantAutoStart' as const
 export const HOME_ASSISTANT_AUTOSTART_VALUE = 'home-input' as const
@@ -14,9 +15,6 @@ interface ProjectCreationPayload {
   project?: {
     id?: string | null
   } | null
-}
-
-interface EpisodeCreationPayload {
   episode?: {
     id?: string | null
   } | null
@@ -32,6 +30,7 @@ export interface CreateHomeProjectLaunchParams {
   apiFetch: ApiFetchLike
   projectName: string
   storyText: string
+  videoRatio: ProjectVideoRatio
   episodeName: string
   hasAssistantDraftContent?: boolean
 }
@@ -62,22 +61,20 @@ function readNestedString(
   return typeof value === 'string' && value.trim() ? value : null
 }
 
-async function readProjectId(response: Response): Promise<string> {
+async function readHomeProjectLaunchIds(response: Response): Promise<{
+  readonly projectId: string
+  readonly episodeId: string
+}> {
   const payload = await response.json() as ProjectCreationPayload
   const projectId = readNestedString(readObject(payload), 'project', 'id')
   if (!projectId) {
     throw new Error('Project creation response missing project id')
   }
-  return projectId
-}
-
-async function readEpisodeId(response: Response): Promise<string> {
-  const payload = await response.json() as EpisodeCreationPayload
   const episodeId = readNestedString(readObject(payload), 'episode', 'id')
   if (!episodeId) {
-    throw new Error('Episode creation response missing episode id')
+    throw new Error('Project creation response missing initial episode id')
   }
-  return episodeId
+  return { projectId, episodeId }
 }
 
 export function buildHomeWorkspaceLaunchTarget(projectId: string, episodeId: string): HomeWorkspaceLaunchTarget {
@@ -155,6 +152,7 @@ export async function createHomeProjectLaunch({
   apiFetch,
   projectName,
   storyText,
+  videoRatio,
   episodeName,
   hasAssistantDraftContent = false,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
@@ -167,6 +165,8 @@ export async function createHomeProjectLaunch({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: projectName,
+      videoRatio,
+      initialEpisode: { name: episodeName },
     }),
   })
 
@@ -174,21 +174,7 @@ export async function createHomeProjectLaunch({
     throw new Error(await readApiErrorMessage(projectResponse, 'Failed to create project'))
   }
 
-  const projectId = await readProjectId(projectResponse)
-
-  const episodeResponse = await apiFetch(`/api/projects/${projectId}/episodes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: episodeName,
-    }),
-  })
-
-  if (!episodeResponse.ok) {
-    throw new Error(await readApiErrorMessage(episodeResponse, 'Failed to create first episode'))
-  }
-
-  const episodeId = await readEpisodeId(episodeResponse)
+  const { projectId, episodeId } = await readHomeProjectLaunchIds(projectResponse)
 
   return {
     projectId,

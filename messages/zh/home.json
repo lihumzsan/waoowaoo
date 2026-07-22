@@ -1,7 +1,14 @@
 {
   "title": "从灵感到银幕",
   "subtitle": "描述你想要创作的故事，AI 为你智能生成影视短剧",
-  "inputPlaceholder": "输入你的故事创意、小说片段或剧本大纲...",
+  "inputPlaceholder": "描述一个故事，或粘贴一段剧本……",
+  "aspectRatio": "画面比例",
+  "aspectRatioCurrent": "画面比例：{ratio}",
+  "aspectRatioHints": {
+    "widescreen": "宽银幕 · 电影感",
+    "landscape": "横屏 · 常规视频",
+    "portrait": "竖屏 · 手机短视频"
+  },
   "defaultProjectName": "新项目 {timestamp}",
   "createFailed": "项目创建失败，请稍后重试",
   "startCreation": "开始创作",
