@@ -179,12 +179,18 @@ async function persistLocalAiOutput({
   output: VideoSeamBridgePlan['input1']
 }) {
   const localOutput = await openVideoSeamOutput(workspace.outputPath)
-  const videoKey = await uploadObjectStream(
-    localOutput.body,
-    buildVideoToolOutputKey(job.data.userId),
-    localOutput.contentLength,
-    localOutput.mimeType,
-  )
+  let videoKey: string
+  try {
+    videoKey = await uploadObjectStream(
+      localOutput.body,
+      buildVideoToolOutputKey(job.data.userId),
+      localOutput.contentLength,
+      localOutput.mimeType,
+    )
+  } catch (error) {
+    await localOutput.body.cancel().catch(() => undefined)
+    throw error
+  }
   return {
     videoKey,
     videoUrl: getSignedUrl(videoKey),

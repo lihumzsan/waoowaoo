@@ -442,6 +442,32 @@ describe('video seam concat worker handler', () => {
     expect(uploadObjectStreamMock).not.toHaveBeenCalled()
   })
 
+  it('cancels the local AI output without masking a storage upload error', async () => {
+    const storageError = new Error('sentinel storage upload failed')
+    const cancelError = new Error('local output cancel failed')
+    const cancelOutput = vi.fn(async () => {
+      throw cancelError
+    })
+    const body = new ReadableStream<Uint8Array>({ cancel: cancelOutput })
+    openOutputMock.mockResolvedValue({
+      body,
+      contentLength: 3,
+      mimeType: 'video/mp4',
+    })
+    uploadObjectStreamMock.mockRejectedValue(storageError)
+
+    await expect(handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))).rejects.toBe(storageError)
+
+    expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
+    expect(cancelOutput).toHaveBeenCalledTimes(1)
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(getSignedUrlMock).not.toHaveBeenCalled()
+  })
+
   it('uses a prompt for continuous evolution across all four anchors when bridge motion is omitted', async () => {
     await handleVideoSeamConcatTask(buildJob({
       ...validPayload,
