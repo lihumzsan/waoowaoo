@@ -281,3 +281,7 @@ export function resolveVideoToolTaskView(task: VideoToolTask | null): VideoToolT
             : 'processing'
   return { phase, active: true, videoUrl: null, videoKey: null, errorMessage: null }
 }
+
+export function resolvePersistedVideoSeamTaskId(task: VideoToolTask | null): string | null {
+  return resolveVideoToolTaskView(task).active ? task?.id || null : null
+}

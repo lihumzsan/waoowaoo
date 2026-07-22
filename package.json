@@ -137,7 +137,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@testing-library/react": "^16.3.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -146,7 +145,6 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "jsdom": "^26.1.0",
     "rimraf": "^6.1.2",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",

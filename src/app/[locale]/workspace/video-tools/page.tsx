@@ -17,7 +17,13 @@ import {
   writeVideoSeamDraft,
 } from './video-seam-draft'
 import {
+  createVideoSeamRequestCoordinator,
+  requestVideoSeamTaskStatus,
+  type VideoSeamRequestCoordinator,
+} from './video-seam-request-coordinator'
+import {
   canSubmitVideoSeamConcat,
+  resolvePersistedVideoSeamTaskId,
   resolveVideoSeamDiagnostics,
   resolveVideoSeamErrorTranslationKey,
   resolveVideoToolTaskView,
@@ -26,13 +32,6 @@ import {
 } from './video-tools-state'
 
 type UploadSlot = 'input1' | 'input2'
-
-type TaskStatusRequest = {
-  scope: string
-  sequence: number
-  controller: AbortController
-  promise: Promise<void>
-}
 
 function statusDotClass(active: boolean, failed: boolean) {
   if (failed) return 'bg-red-500'
@@ -58,62 +57,55 @@ export default function VideoToolsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
   const [hydratedUserId, setHydratedUserId] = useState<string | null>(null)
-  const taskStatusRequestRef = useRef<TaskStatusRequest | null>(null)
-  const taskStatusSequenceRef = useRef(0)
   const authenticatedUserId = status === 'authenticated'
     ? (session?.user as { id?: string } | undefined)?.id?.trim() || null
     : null
+  const authenticatedUserIdRef = useRef<string | null>(authenticatedUserId)
+  authenticatedUserIdRef.current = authenticatedUserId
+  const requestCoordinatorRef = useRef<VideoSeamRequestCoordinator | null>(null)
+  if (!requestCoordinatorRef.current) {
+    requestCoordinatorRef.current = createVideoSeamRequestCoordinator({
+      getCurrentUserId: () => authenticatedUserIdRef.current,
+    })
+  }
+  const videoSeamRequestCoordinator = requestCoordinatorRef.current
 
   useEffect(() => {
     if (status === 'loading') return
     if (!session) router.push({ pathname: '/auth/signin' })
   }, [router, session, status])
 
-  const abortTaskStatusRequest = useCallback(() => {
-    taskStatusSequenceRef.current += 1
-    taskStatusRequestRef.current?.controller.abort()
-    taskStatusRequestRef.current = null
-  }, [])
-
   const fetchCurrentTask = useCallback((userId: string, taskId: string): Promise<void> => {
-    const scope = JSON.stringify([userId, taskId])
-    const existing = taskStatusRequestRef.current
-    if (existing?.scope === scope && !existing.controller.signal.aborted) return existing.promise
-
-    if (existing) abortTaskStatusRequest()
-    const sequence = taskStatusSequenceRef.current + 1
-    taskStatusSequenceRef.current = sequence
-    const controller = new AbortController()
-    const search = new URLSearchParams({ taskId })
-    const promise = (async () => {
-      try {
-        const response = await apiFetch(`/api/video-tools/seam-concat?${search}`, {
-          signal: controller.signal,
-        })
-        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
-        if (response.status === 404) {
+    return videoSeamRequestCoordinator.run({
+      kind: 'task_status',
+      userId,
+      requestKey: taskId,
+      reuseInFlight: true,
+      execute: (requestSignal) => requestVideoSeamTaskStatus({
+        taskId,
+        signal: requestSignal,
+        statusFailedMessage,
+      }),
+      onSuccess: (outcome) => {
+        if (outcome.kind === 'missing') {
           setCurrentTask((previous) => previous?.id === taskId ? null : previous)
           setPageError(null)
           return
         }
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, statusFailedMessage))
-        const task = await response.json() as VideoToolTask
-        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
-        setCurrentTask((previous) => previous?.id === taskId ? task : previous)
+        setCurrentTask((previous) => previous?.id === taskId ? outcome.task : previous)
         setPageError(null)
-      } catch (error) {
-        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
+      },
+      onError: (error) => {
         setPageError(error instanceof Error ? error.message : statusFailedMessage)
-      } finally {
-        if (taskStatusRequestRef.current?.sequence === sequence) taskStatusRequestRef.current = null
-      }
-    })()
-    taskStatusRequestRef.current = { scope, sequence, controller, promise }
-    return promise
-  }, [abortTaskStatusRequest, statusFailedMessage])
+      },
+    })
+  }, [statusFailedMessage, videoSeamRequestCoordinator])
 
   useEffect(() => {
-    abortTaskStatusRequest()
+    videoSeamRequestCoordinator.abortAll()
+    setUploadingSlot(null)
+    setUploadErrors({})
+    setSubmitting(false)
     if (!authenticatedUserId) {
       setHydratedUserId(null)
       return
@@ -135,10 +127,11 @@ export default function VideoToolsPage() {
     if (savedDraft?.taskId) {
       void fetchCurrentTask(authenticatedUserId, savedDraft.taskId)
     }
-    return abortTaskStatusRequest
-  }, [abortTaskStatusRequest, authenticatedUserId, fetchCurrentTask])
+    return () => videoSeamRequestCoordinator.abortAll()
+  }, [authenticatedUserId, fetchCurrentTask, videoSeamRequestCoordinator])
 
   const taskView = resolveVideoToolTaskView(currentTask)
+  const persistedTaskId = resolvePersistedVideoSeamTaskId(currentTask)
   const diagnostics = resolveVideoSeamDiagnostics(currentTask?.result || null)
 
   useEffect(() => {
@@ -151,20 +144,19 @@ export default function VideoToolsPage() {
       seamMode,
       bridgeDurationSeconds,
       bridgePrompt,
-      taskId: taskView.active ? currentTask?.id || null : null,
+      taskId: persistedTaskId,
     })
   }, [
     authenticatedUserId,
     bridgeDurationSeconds,
     bridgePrompt,
-    currentTask?.id,
     hydratedUserId,
     input1,
     input1TrimEndFrames,
     input2,
     input2TrimStartFrames,
+    persistedTaskId,
     seamMode,
-    taskView.active,
   ])
 
   useEffect(() => {
@@ -175,42 +167,54 @@ export default function VideoToolsPage() {
     return () => window.clearInterval(timer)
   }, [authenticatedUserId, currentTask, fetchCurrentTask, hydratedUserId, session, taskView.active])
 
-  const upload = async (slot: UploadSlot, file: File) => {
+  const upload = (slot: UploadSlot, file: File) => {
+    const operationUserId = authenticatedUserId
+    if (!operationUserId || hydratedUserId !== operationUserId) return
     setUploadingSlot(slot)
     setUploadErrors((previous) => ({ ...previous, [slot]: undefined }))
     setPageError(null)
-    try {
-      const headers = new Headers({ 'x-file-name': encodeURIComponent(file.name) })
-      if (file.type) headers.set('Content-Type', file.type)
-      const response = await apiFetch('/api/video-tools/uploads', {
-        method: 'POST',
-        headers,
-        body: file,
-      })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.uploadFailed')))
-      const uploaded = await response.json() as UploadedVideo & { success: boolean }
-      const value: UploadedVideo = {
-        key: uploaded.key,
-        url: uploaded.url,
-        name: uploaded.name,
-        size: uploaded.size,
-        mimeType: uploaded.mimeType,
-      }
-      if (slot === 'input1') setInput1(value)
-      else setInput2(value)
-    } catch (error) {
-      setUploadErrors((previous) => ({
-        ...previous,
-        [slot]: error instanceof Error ? error.message : t('errors.uploadFailed'),
-      }))
-    } finally {
-      setUploadingSlot(null)
-    }
+    void videoSeamRequestCoordinator.run({
+      kind: 'upload',
+      userId: operationUserId,
+      requestKey: slot,
+      execute: async (requestSignal) => {
+        const headers = new Headers({ 'x-file-name': encodeURIComponent(file.name) })
+        if (file.type) headers.set('Content-Type', file.type)
+        const response = await apiFetch('/api/video-tools/uploads', {
+          method: 'POST',
+          headers,
+          body: file,
+          signal: requestSignal,
+        })
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.uploadFailed')))
+        const uploaded = await response.json() as UploadedVideo & { success: boolean }
+        return {
+          key: uploaded.key,
+          url: uploaded.url,
+          name: uploaded.name,
+          size: uploaded.size,
+          mimeType: uploaded.mimeType,
+        }
+      },
+      onSuccess: (value) => {
+        if (slot === 'input1') setInput1(value)
+        else setInput2(value)
+      },
+      onError: (error) => {
+        setUploadErrors((previous) => ({
+          ...previous,
+          [slot]: error instanceof Error ? error.message : t('errors.uploadFailed'),
+        }))
+      },
+      onSettled: () => setUploadingSlot((current) => current === slot ? null : current),
+    })
   }
 
-  const submit = async () => {
+  const submit = () => {
+    const operationUserId = authenticatedUserId
     if (
-      !input1
+      !operationUserId
+      || !input1
       || !input2
       || !canSubmitVideoSeamConcat(
         input1,
@@ -224,39 +228,46 @@ export default function VideoToolsPage() {
     ) return
     setSubmitting(true)
     setPageError(null)
-    try {
-      const response = await apiFetch('/api/video-tools/seam-concat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input1: {
-            key: input1.key,
-            name: input1.name,
-            trimEndFrames: input1TrimEndFrames,
-          },
-          input2: {
-            key: input2.key,
-            name: input2.name,
-            trimStartFrames: input2TrimStartFrames,
-          },
-          mode: seamMode,
-          ...(seamMode === 'ai_bridge' ? {
-            bridge: {
-              durationSeconds: bridgeDurationSeconds,
-              ...(bridgePrompt.trim() ? { prompt: bridgePrompt.trim() } : {}),
+    void videoSeamRequestCoordinator.run({
+      kind: 'submit',
+      userId: operationUserId,
+      execute: async (requestSignal) => {
+        const response = await apiFetch('/api/video-tools/seam-concat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input1: {
+              key: input1.key,
+              name: input1.name,
+              trimEndFrames: input1TrimEndFrames,
             },
-          } : {}),
-        }),
-      })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
-      const data = await response.json() as { taskId: string }
-      abortTaskStatusRequest()
-      setCurrentTask(createRecoveredVideoSeamTask(data.taskId))
-    } catch (error) {
-      setPageError(error instanceof Error ? error.message : t('errors.submitFailed'))
-    } finally {
-      setSubmitting(false)
-    }
+            input2: {
+              key: input2.key,
+              name: input2.name,
+              trimStartFrames: input2TrimStartFrames,
+            },
+            mode: seamMode,
+            ...(seamMode === 'ai_bridge' ? {
+              bridge: {
+                durationSeconds: bridgeDurationSeconds,
+                ...(bridgePrompt.trim() ? { prompt: bridgePrompt.trim() } : {}),
+              },
+            } : {}),
+          }),
+          signal: requestSignal,
+        })
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
+        return await response.json() as { taskId: string }
+      },
+      onSuccess: (data) => {
+        videoSeamRequestCoordinator.abort('task_status')
+        setCurrentTask(createRecoveredVideoSeamTask(data.taskId))
+      },
+      onError: (error) => {
+        setPageError(error instanceof Error ? error.message : t('errors.submitFailed'))
+      },
+      onSettled: () => setSubmitting(false),
+    })
   }
 
   if (status === 'loading' || !session) {

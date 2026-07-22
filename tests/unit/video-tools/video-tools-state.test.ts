@@ -3,6 +3,7 @@ import {
   canSubmitVideoSeamConcat,
   resolveVideoSeamDiagnostics,
   resolveVideoSeamErrorTranslationKey,
+  resolvePersistedVideoSeamTaskId,
   resolveVideoToolTaskView,
   type UploadedVideo,
   type VideoToolTask,
@@ -128,6 +129,16 @@ describe('video tools state', () => {
       active: false,
       videoUrl: '/api/storage/sign?key=output',
     })
+  })
+
+  it('persists only recoverable active task ids', () => {
+    expect(resolvePersistedVideoSeamTaskId(task({ status: 'queued' }))).toBe('task-1')
+    expect(resolvePersistedVideoSeamTaskId(task({ status: 'processing' }))).toBe('task-1')
+    expect(resolvePersistedVideoSeamTaskId(task({ status: 'failed' }))).toBeNull()
+    expect(resolvePersistedVideoSeamTaskId(task({
+      status: 'completed',
+      result: { videoUrl: '/output.mp4' },
+    }))).toBeNull()
   })
 
   it.each([
