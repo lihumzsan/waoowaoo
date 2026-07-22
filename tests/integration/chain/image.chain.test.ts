@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TASKTYPE_BEHAVIOR_MATRIX } from '../../contracts/tasktype-behavior-matrix'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 type AddCall = {
@@ -127,6 +128,35 @@ describe('chain contract - image queue behavior', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.jobName).toBe(TASK_TYPE.MODIFY_ASSET_IMAGE)
     expect(calls[0]?.data.type).toBe(TASK_TYPE.MODIFY_ASSET_IMAGE)
+  })
+
+  it('routes Episode cover image jobs to the image worker queue without a video queue submission', async () => {
+    const { addTaskJob, QUEUE_NAME } = await import('@/lib/task/queues')
+
+    await addTaskJob({
+      taskId: 'task-episode-cover-1',
+      type: TASK_TYPE.IMAGE_EPISODE_COVER,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'NovelPromotionEpisode',
+      targetId: 'episode-1',
+      payload: {},
+      userId: 'user-1',
+    })
+
+    expect(queueState.addCallsByQueue.get(QUEUE_NAME.IMAGE)).toEqual([
+      expect.objectContaining({
+        jobName: TASK_TYPE.IMAGE_EPISODE_COVER,
+        data: expect.objectContaining({ type: TASK_TYPE.IMAGE_EPISODE_COVER }),
+      }),
+    ])
+    expect(queueState.addCallsByQueue.get(QUEUE_NAME.VIDEO) || []).toEqual([])
+    expect(TASKTYPE_BEHAVIOR_MATRIX).toContainEqual(expect.objectContaining({
+      taskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+      chainTest: 'tests/integration/chain/image.chain.test.ts',
+      apiContractTest: 'tests/integration/api/contract/direct-submit-routes.test.ts',
+    }))
   })
 
   it('queued image job payload can be consumed by worker handler and persist image fields', async () => {
