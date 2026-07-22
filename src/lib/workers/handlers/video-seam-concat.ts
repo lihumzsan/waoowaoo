@@ -265,6 +265,7 @@ async function buildAiBridgeResult({
         indices: [plan.sourceAnchors.input1Pre, plan.sourceAnchors.input1Endpoint],
         rawOutputPaths: workspace.input1AnchorPaths,
         normalizedOutputPaths: [workspace.normalizedAnchorPaths[0], workspace.normalizedAnchorPaths[1]],
+        displayRotationDegrees: probe1.displayRotationDegrees || 0,
         plan,
       }),
       extractVideoSeamAnchors({
@@ -272,6 +273,7 @@ async function buildAiBridgeResult({
         indices: [plan.sourceAnchors.input2Endpoint, plan.sourceAnchors.input2Post],
         rawOutputPaths: workspace.input2AnchorPaths,
         normalizedOutputPaths: [workspace.normalizedAnchorPaths[2], workspace.normalizedAnchorPaths[3]],
+        displayRotationDegrees: probe2.displayRotationDegrees || 0,
         plan,
       }),
     ])

@@ -12,6 +12,7 @@ import {
   VIDEO_SEAM_FPS_RELATIVE_TOLERANCE,
   type SeamProbeResult,
   type VideoSeamBridgePlan,
+  type VideoSeamDisplayRotationDegrees,
 } from '@/lib/video-tools/seam-bridge-plan'
 
 const execFileAsync = promisify(execFile)
@@ -73,6 +74,30 @@ function parsePositiveSeconds(raw: unknown): number | null {
 
 function formatSeconds(seconds: number): string {
   return seconds.toFixed(9)
+}
+
+function parseDisplayRotationDegrees(video: Record<string, unknown>): VideoSeamDisplayRotationDegrees {
+  const sideData = Array.isArray(video.side_data_list) ? video.side_data_list : []
+  const rotationEntry = sideData.find((entry) => (
+    entry !== null && typeof entry === 'object' && 'rotation' in entry
+  )) as Record<string, unknown> | undefined
+  if (!rotationEntry) return 0
+  const value = typeof rotationEntry.rotation === 'number'
+    ? rotationEntry.rotation
+    : typeof rotationEntry.rotation === 'string'
+      ? Number(rotationEntry.rotation)
+      : Number.NaN
+  if (!Number.isFinite(value)) throw mediaProbeError()
+  const quarterTurns = Math.round(value / 90)
+  if (Math.abs(value - quarterTurns * 90) > 0.01) throw mediaProbeError()
+  return (((quarterTurns % 4) + 4) % 4 * 90) as VideoSeamDisplayRotationDegrees
+}
+
+function displayRotationFilter(rotation: VideoSeamDisplayRotationDegrees): string | null {
+  if (rotation === 90) return 'transpose=cclock'
+  if (rotation === 180) return 'hflip,vflip'
+  if (rotation === 270) return 'transpose=clock'
+  return null
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
@@ -149,16 +174,24 @@ function parseVideoSeamProbeDetails(raw: string): VideoSeamProbeDetails {
     const fps = parseRational(video.avg_frame_rate)
     const frameCount = parsePositiveInteger(video.nb_read_frames)
     if (!width || !height || !fps || !frameCount) throw mediaProbeError()
+    const displayRotationDegrees = parseDisplayRotationDegrees(video)
+    const displayWidth = displayRotationDegrees === 90 || displayRotationDegrees === 270
+      ? height
+      : width
+    const displayHeight = displayRotationDegrees === 90 || displayRotationDegrees === 270
+      ? width
+      : height
     const audio = streams.find((stream) => stream.codec_type === 'audio')
     const format = (parsed as { format?: unknown }).format
     return {
       probe: {
-        width,
-        height,
+        width: displayWidth,
+        height: displayHeight,
         fps,
         frameCount,
         durationSeconds: frameCount / fps,
         hasAudio: Boolean(audio),
+        ...(displayRotationDegrees === 0 ? {} : { displayRotationDegrees }),
       },
       timing: {
         containerDurationSeconds: format && typeof format === 'object'
@@ -181,7 +214,7 @@ async function readVideoSeamProbeJson(filePath: string): Promise<string> {
   const executable = process.env.FFPROBE_PATH || 'ffprobe'
   const args = [
     '-v', 'error', '-count_frames',
-    '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,nb_read_frames,duration:format=duration',
+    '-show_entries', 'stream=codec_type,width,height,avg_frame_rate,nb_read_frames,duration:stream_side_data=rotation:format=duration',
     '-of', 'json', filePath,
   ]
   try {
@@ -201,11 +234,14 @@ export async function extractVideoSeamAnchors(params: {
   indices: [number, number]
   rawOutputPaths: [string, string]
   normalizedOutputPaths: [string, string]
+  displayRotationDegrees: VideoSeamDisplayRotationDegrees
   plan: VideoSeamBridgePlan
 }): Promise<void> {
   const select = 'select=eq(n\\,' + params.indices[0] + ')+eq(n\\,' + params.indices[1] + ')'
+  const rotationFilter = displayRotationFilter(params.displayRotationDegrees)
   const args = [
-    '-v', 'error', '-y', '-i', params.inputPath, '-vf', select,
+    '-v', 'error', '-y', '-noautorotate', '-display_rotation', '0', '-i', params.inputPath,
+    '-vf', [rotationFilter, select].filter(Boolean).join(','),
     '-frames:v', '2', '-fps_mode', 'passthrough', '-start_number', '0',
     buildAnchorOutputPattern(params.rawOutputPaths),
   ]
@@ -255,19 +291,23 @@ export function buildVideoSeamComposeCommand(params: {
   const canvas = plan.generationCanvas
   const outputSize = `${plan.input1.width}:${plan.input1.height}`
   const setpts = `setpts=N/(${plan.outputFps}*TB)`
+  const input1Rotation = displayRotationFilter(plan.input1.displayRotationDegrees || 0)
+  const input2Rotation = displayRotationFilter(plan.input2.displayRotationDegrees || 0)
+  const input1Filter = input1Rotation ? `${input1Rotation},` : ''
+  const input2Filter = input2Rotation ? `${input2Rotation},` : ''
   const bridgeFilter = [
     `crop=${canvas.contentWidth}:${canvas.contentHeight}:${canvas.padLeft}:${canvas.padTop}`,
     `scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos`,
     `crop=${outputSize}`,
   ].join(',')
   const videoFilters = [
-    `[0:v]trim=start_frame=0:end_frame=${input1Pre + 1},${setpts}[v0]`,
+    `[0:v]${input1Filter}trim=start_frame=0:end_frame=${input1Pre + 1},${setpts}[v0]`,
     `[1:v]${bridgeFilter},trim=start_frame=1:end_frame=${plan.handleFrames},${setpts}[v1]`,
-    `[0:v]trim=start_frame=${input1Endpoint}:end_frame=${input1Endpoint + 1},${setpts}[v2]`,
+    `[0:v]${input1Filter}trim=start_frame=${input1Endpoint}:end_frame=${input1Endpoint + 1},${setpts}[v2]`,
     `[1:v]${bridgeFilter},trim=start_frame=${bridgeCentralStart}:end_frame=${bridgeCentralEnd},${setpts}[v3]`,
-    `[2:v]scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos,crop=${outputSize},trim=start_frame=${input2Endpoint}:end_frame=${input2Endpoint + 1},${setpts}[v4]`,
+    `[2:v]${input2Filter}scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos,crop=${outputSize},trim=start_frame=${input2Endpoint}:end_frame=${input2Endpoint + 1},${setpts}[v4]`,
     `[1:v]${bridgeFilter},trim=start_frame=${bridgeOutgoingStart}:end_frame=${plan.generatedFrameCount - 1},${setpts}[v5]`,
-    `[2:v]scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos,crop=${outputSize},trim=start_frame=${input2Post},${setpts}[v6]`,
+    `[2:v]${input2Filter}scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos,crop=${outputSize},trim=start_frame=${input2Post},${setpts}[v6]`,
     '[v0][v1][v2][v3][v4][v5][v6]concat=n=7:v=1:a=0[vout]',
   ]
   const audioFilters = plan.audioPolicy === 'silent' ? [] : [
@@ -281,7 +321,10 @@ export function buildVideoSeamComposeCommand(params: {
     '[a0][ac][a2]concat=n=3:v=0:a=1[aout]',
   ]
   const args = [
-    '-v', 'error', '-y', '-i', params.input1Path, '-i', params.bridgePath, '-i', params.input2Path,
+    '-v', 'error', '-y',
+    '-noautorotate', '-display_rotation', '0', '-i', params.input1Path,
+    '-noautorotate', '-i', params.bridgePath,
+    '-noautorotate', '-display_rotation', '0', '-i', params.input2Path,
     '-filter_complex', [...videoFilters, ...audioFilters].join(';'),
     '-map', '[vout]',
     ...(plan.audioPolicy === 'silent' ? [] : ['-map', '[aout]']),

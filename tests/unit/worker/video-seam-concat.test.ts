@@ -86,6 +86,7 @@ const probe1 = {
   frameCount: 240,
   durationSeconds: 10,
   hasAudio: true,
+  displayRotationDegrees: 90 as const,
 }
 const probe2 = {
   width: 1280,
@@ -94,6 +95,7 @@ const probe2 = {
   frameCount: 300,
   durationSeconds: 12.5,
   hasAudio: true,
+  displayRotationDegrees: 270 as const,
 }
 const bridgeProbe = {
   width: 1280,
@@ -331,12 +333,14 @@ describe('video seam concat worker handler', () => {
       indices: [233, 239],
       rawOutputPaths: workspace.input1AnchorPaths,
       normalizedOutputPaths: [workspace.normalizedAnchorPaths[0], workspace.normalizedAnchorPaths[1]],
+      displayRotationDegrees: 90,
     }))
     expect(extractAnchorsMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
       inputPath: workspace.input2Path,
       indices: [1, 7],
       rawOutputPaths: workspace.input2AnchorPaths,
       normalizedOutputPaths: [workspace.normalizedAnchorPaths[2], workspace.normalizedAnchorPaths[3]],
+      displayRotationDegrees: 270,
     }))
     expect(readAnchorMock.mock.calls.map(([filePath]) => filePath)).toEqual(workspace.normalizedAnchorPaths)
     expect(runMotionBridgeWorkflowMock).toHaveBeenCalledWith({

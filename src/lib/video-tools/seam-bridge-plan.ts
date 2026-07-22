@@ -7,7 +7,10 @@ export type SeamProbeResult = {
   frameCount: number
   durationSeconds: number
   hasAudio: boolean
+  displayRotationDegrees?: Exclude<VideoSeamDisplayRotationDegrees, 0>
 }
+
+export type VideoSeamDisplayRotationDegrees = 0 | 90 | 180 | 270
 
 export type VideoSeamAudioPolicy = 'both' | 'video1_only' | 'video2_only' | 'silent'
 
@@ -61,6 +64,12 @@ function assertProbe(probe: SeamProbeResult): void {
   }
   if (!Number.isFinite(probe.fps) || probe.fps <= 0 || !Number.isInteger(probe.frameCount)
     || probe.frameCount <= 0 || !Number.isFinite(probe.durationSeconds) || probe.durationSeconds <= 0) {
+    throw new Error('VIDEO_SEAM_MEDIA_PROBE_FAILED')
+  }
+  if (probe.displayRotationDegrees !== undefined
+    && probe.displayRotationDegrees !== 90
+    && probe.displayRotationDegrees !== 180
+    && probe.displayRotationDegrees !== 270) {
     throw new Error('VIDEO_SEAM_MEDIA_PROBE_FAILED')
   }
 }
