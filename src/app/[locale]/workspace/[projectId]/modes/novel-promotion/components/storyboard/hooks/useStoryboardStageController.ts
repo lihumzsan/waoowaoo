@@ -81,6 +81,8 @@ export function useStoryboardStageController({
     sortedStoryboards,
     expandedClips,
     toggleExpandedClip,
+    openStoryboardId,
+    toggleOpenStoryboard,
     panelEditsRef,
     getClipInfo,
     getTextPanels,
@@ -206,7 +208,7 @@ export function useStoryboardStageController({
   })
 
   return {
-    localStoryboards, setLocalStoryboards, sortedStoryboards, expandedClips, toggleExpandedClip,
+    localStoryboards, setLocalStoryboards, sortedStoryboards, expandedClips, toggleExpandedClip, openStoryboardId, toggleOpenStoryboard,
     getClipInfo, getTextPanels, getPanelEditData, updatePanelEdit, formatClipTitle, totalPanels, storyboardStartIndex,
     savingPanels, deletingPanelIds, saveStateByPanel, hasUnsavedByPanel, submittingStoryboardTextIds, addingStoryboardGroup, movingClipId, insertingAfterPanelId,
     savePanelWithData, addPanel, deletePanel, deleteStoryboard, regenerateStoryboardText, addStoryboardGroup, moveStoryboardGroup, insertPanel,

@@ -15,6 +15,7 @@ interface StoryboardCanvasProps {
   sortedStoryboards: NovelPromotionStoryboard[]
   videoRatio: string
   expandedClips: Set<string>
+  openStoryboardId: string | null
   submittingStoryboardIds: Set<string>
   selectingCandidateIds: Set<string>
   submittingStoryboardTextIds: Set<string>
@@ -37,6 +38,7 @@ interface StoryboardCanvasProps {
   defaultStoryboardWorkflow: string
   formatClipTitle: (clip: NovelPromotionClip | undefined) => string
   onToggleExpandedClip: (storyboardId: string) => void
+  onToggleOpenStoryboard: (storyboardId: string) => void
   onMoveStoryboardGroup: (clipId: string, direction: 'up' | 'down') => Promise<void>
   onRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   onAddPanel: (storyboardId: string) => Promise<void>
@@ -79,6 +81,7 @@ export default function StoryboardCanvas({
   sortedStoryboards,
   videoRatio,
   expandedClips,
+  openStoryboardId,
   submittingStoryboardIds,
   selectingCandidateIds,
   submittingStoryboardTextIds,
@@ -101,6 +104,7 @@ export default function StoryboardCanvas({
   defaultStoryboardWorkflow,
   formatClipTitle,
   onToggleExpandedClip,
+  onToggleOpenStoryboard,
   onMoveStoryboardGroup,
   onRegenerateStoryboardText,
   onAddPanel,

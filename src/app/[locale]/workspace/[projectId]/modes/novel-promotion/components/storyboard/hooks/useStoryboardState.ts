@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setEpisodeQueriesData } from '@/lib/query/episode-cache'
 import { queryKeys } from '@/lib/query/keys'
@@ -13,6 +13,11 @@ import {
   getStoryboardPanels,
   sortStoryboardsByClipOrder,
 } from './storyboard-state-utils'
+import {
+  reconcileOpenStoryboardId,
+  resolveDefaultOpenStoryboardId,
+  toggleOpenStoryboardId,
+} from './storyboard-group-visibility'
 
 export interface StoryboardPanel {
   id: string
@@ -57,6 +62,35 @@ export function useStoryboardState({
     () => sortStoryboardsByClipOrder(initialStoryboards, clips),
     [clips, initialStoryboards],
   )
+  const [openStoryboardState, setOpenStoryboardState] = useState<{
+    episodeId: string
+    storyboardId: string | null
+  }>(() => ({
+    episodeId,
+    storyboardId: resolveDefaultOpenStoryboardId(localStoryboards),
+  }))
+
+  useEffect(() => {
+    setOpenStoryboardState((previous) => {
+      const storyboardId = previous.episodeId === episodeId
+        ? reconcileOpenStoryboardId(previous.storyboardId, localStoryboards)
+        : resolveDefaultOpenStoryboardId(localStoryboards)
+      if (previous.episodeId === episodeId && previous.storyboardId === storyboardId) return previous
+      return { episodeId, storyboardId }
+    })
+  }, [episodeId, localStoryboards])
+
+  const toggleOpenStoryboard = useCallback((storyboardId: string) => {
+    setOpenStoryboardState((previous) => ({
+      episodeId,
+      storyboardId: toggleOpenStoryboardId(
+        previous.episodeId === episodeId
+          ? previous.storyboardId
+          : resolveDefaultOpenStoryboardId(localStoryboards),
+        storyboardId,
+      ),
+    }))
+  }, [episodeId, localStoryboards])
 
   const setLocalStoryboards = useCallback<React.Dispatch<React.SetStateAction<NovelPromotionStoryboard[]>>>(
     (nextStoryboardsOrUpdater) => {
@@ -242,6 +276,8 @@ export function useStoryboardState({
     sortedStoryboards,
     expandedClips,
     toggleExpandedClip,
+    openStoryboardId: openStoryboardState.storyboardId,
+    toggleOpenStoryboard,
     panelEdits,
     setPanelEdits,
     panelEditsRef,
