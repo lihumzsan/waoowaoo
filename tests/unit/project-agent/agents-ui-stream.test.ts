@@ -1,4 +1,11 @@
-import { RunRawModelStreamEvent, type RunStreamEvent } from '@openai/agents'
+import {
+  Agent,
+  RunItemStreamEvent,
+  RunRawModelStreamEvent,
+  RunToolCallItem,
+  RunToolCallOutputItem,
+  type RunStreamEvent,
+} from '@openai/agents'
 import { describe, expect, it } from 'vitest'
 import {
   createDataChunk,
@@ -8,6 +15,60 @@ import {
 } from '@/lib/project-agent/agents-ui-stream'
 
 describe('Project Agent UI stream arbiter', () => {
+  it('keeps infrastructure discovery calls out of the persisted user-visible stream', async () => {
+    const agent = new Agent({ name: 'stream-test', instructions: 'test' })
+    const source = (async function* (): AsyncGenerator<RunStreamEvent> {
+      yield new RunItemStreamEvent('tool_called', new RunToolCallItem({
+        type: 'function_call',
+        callId: 'load-call',
+        name: 'load_tools',
+        arguments: JSON.stringify({ toolIds: ['get_project_context'] }),
+      }, agent))
+      yield new RunItemStreamEvent('tool_output', new RunToolCallOutputItem({
+        type: 'function_call_result',
+        callId: 'load-call',
+        name: 'load_tools',
+        status: 'completed',
+        output: { type: 'text', text: '{"loadedOperationIds":["get_project_context"]}' },
+      }, agent, { loadedOperationIds: ['get_project_context'] }))
+      yield new RunItemStreamEvent('tool_called', new RunToolCallItem({
+        type: 'function_call',
+        callId: 'operation-call',
+        name: 'get_project_context',
+        arguments: '{}',
+      }, agent))
+      yield new RunItemStreamEvent('tool_output', new RunToolCallOutputItem({
+        type: 'function_call_result',
+        callId: 'operation-call',
+        name: 'get_project_context',
+        status: 'completed',
+        output: { type: 'text', text: '{"ok":true}' },
+      }, agent, { ok: true }))
+    })()
+    const stream = createProjectAgentUiMessageStream({
+      source,
+      initialChunks: [],
+      resolveToolName: () => null,
+      hiddenToolNames: ['load_tools'],
+      sideChannel: createProjectAgentSideChannel(),
+      beforeFinish: async () => [],
+      onSettled: async () => undefined,
+    })
+    const chunks: ProjectAgentUiChunk[] = []
+    for await (const chunk of stream) chunks.push(chunk)
+
+    expect(chunks.some((chunk) => (
+      (chunk as { toolCallId?: unknown }).toolCallId === 'load-call'
+    ))).toBe(false)
+    expect(chunks.filter((chunk) => (
+      (chunk as { toolCallId?: unknown }).toolCallId === 'operation-call'
+    )).map((chunk) => (chunk as { type?: unknown }).type)).toEqual([
+      'tool-input-start',
+      'tool-input-available',
+      'tool-output-available',
+    ])
+  })
+
   it('wakes for reasoning while the upstream UI converter is waiting for answer text', async () => {
     let releaseSource!: () => void
     const sourceGate = new Promise<void>((resolve) => {

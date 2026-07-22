@@ -96,6 +96,8 @@ export interface CreateProjectAgentOperationToolParams {
     operationId: string
   }) => void
   approvalPreflightStore?: ProjectAgentApprovalPreflightStore
+  /** Re-evaluated by the Agent SDK before every model step. */
+  isEnabled?: () => boolean | Promise<boolean>
 }
 
 export function createProjectAgentOperationTool(
@@ -105,6 +107,7 @@ export function createProjectAgentOperationTool(
     operation: params.operation,
     billingConfirmationRequired: params.billingConfirmationRequired,
   })
+  const isEnabled = params.isEnabled
   const automaticallyAuthorizeBilling = params.operation.confirmation.kind === 'billable_media'
     && !params.billingConfirmationRequired
   const identifyToolCall = (toolCallId: string | null | undefined): string | null => {
@@ -142,6 +145,7 @@ export function createProjectAgentOperationTool(
     description: params.description,
     parameters: params.operation.toolInputSchema as never,
     strict: true,
+    ...(isEnabled ? { isEnabled: () => isEnabled() } : {}),
     ...(requiresApproval ? { needsApproval } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       let executionSettlementReported = false

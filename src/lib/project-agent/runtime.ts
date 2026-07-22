@@ -92,6 +92,12 @@ import { appendProjectAgentEvents } from './event'
 import {
   resolveProjectAgentToolset,
 } from './toolset'
+import {
+  PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+  createProjectAgentToolCatalog,
+  createProjectAgentToolDiscoveryState,
+  createProjectAgentToolDiscoveryTool,
+} from './tool-discovery'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
   PROJECT_AGENT_MAX_TURNS,
@@ -564,6 +570,7 @@ function collectFunctionToolOutputs(
 ): Array<{ toolCallId: string; toolName: string; outcome: ProjectAgentOperationOutcome }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
+    if (result.tool.name === PROJECT_AGENT_TOOL_DISCOVERY_NAME) return []
     const toolCallId = readApprovalString(result.runItem.rawItem, 'callId')
       ?? readApprovalString(result.runItem.rawItem, 'id')
     if (!toolCallId) {
@@ -967,6 +974,24 @@ export async function createProjectAgentChatResponse(input: {
     }
   })
   const toolDescriptions = new Map(selectedTools.map((item) => [item.operation.id, item.description]))
+  const toolCatalog = createProjectAgentToolCatalog({
+    registry: operations,
+    toolset,
+    describeOperation: (operationId, fallback) => (
+      localizeSelectableToolDescription(operationId, fallback, locale)
+    ),
+  })
+  const initiallyLoadedOperationIds = control.kind === 'approval'
+    ? Array.from(new Set(
+        (persistedApprovalItems.length > 0
+          ? persistedApprovalItems.map((item) => item.operationId)
+          : [control.interruption.operationId]),
+      ))
+    : []
+  const toolDiscoveryState = createProjectAgentToolDiscoveryState({
+    catalog: toolCatalog,
+    initiallyLoadedOperationIds,
+  })
   const projectStateInputItem = buildProjectStateInputItem({
     projectId: input.projectId,
     episodeId: context.episodeId || null,
@@ -1088,6 +1113,11 @@ export async function createProjectAgentChatResponse(input: {
       control: control.kind,
       runtimeFacts,
       toolset,
+      toolDiscovery: {
+        toolName: PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+        catalogSize: toolCatalog.length,
+        initiallyLoadedOperationIds: toolDiscoveryState.loadedOperationIds(),
+      },
     },
   })
 
@@ -1172,7 +1202,7 @@ export async function createProjectAgentChatResponse(input: {
   }
   const stopController = createProjectAgentStopController()
   const sideChannel = createProjectAgentSideChannel()
-  const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
+  const operationTools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
     createProjectAgentOperationTool({
       request: input.request,
       operation: item.operation,
@@ -1225,8 +1255,16 @@ export async function createProjectAgentChatResponse(input: {
       },
       onToolCallIdentified: registerToolCallIdentity,
       approvalPreflightStore,
+      isEnabled: () => toolDiscoveryState.isLoaded(item.operation.id),
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
+  const tools: Tool<ProjectAgentAgentsRunContext>[] = [
+    createProjectAgentToolDiscoveryTool<ProjectAgentAgentsRunContext>({
+      state: toolDiscoveryState,
+      locale,
+    }),
+    ...operationTools,
+  ]
 
   const systemPrompt = buildProjectAgentSystemPrompt({
     locale,
@@ -1463,6 +1501,7 @@ export async function createProjectAgentChatResponse(input: {
       source: observedRunSource,
       initialChunks,
       resolveToolName: (toolCallId) => operationIdByToolCallId.get(toolCallId) ?? null,
+      hiddenToolNames: [PROJECT_AGENT_TOOL_DISCOVERY_NAME],
       sideChannel,
       onChunk: recordAssistantChunk,
       beforeFinish: async () => {

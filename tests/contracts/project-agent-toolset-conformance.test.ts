@@ -17,6 +17,10 @@ import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
 import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-access'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
+import {
+  PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT,
+  createProjectAgentToolCatalog,
+} from '@/lib/project-agent/tool-discovery'
 import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 
@@ -58,7 +62,7 @@ function collectNullableEnumViolations(value: unknown, path: string, out: string
 }
 
 describe('project agent toolset conformance', () => {
-  it('exposes every tool-authorized Operation directly from the production registry', () => {
+  it('derives every tool-authorized capability from the production registry', () => {
     const registry = createProjectAgentOperationRegistry()
     const expectedOperationIds = Object.values(registry)
       .filter((operation) => operation.channels.tool)
@@ -121,6 +125,20 @@ describe('project agent toolset conformance', () => {
     })
     expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: '16:9' }).success).toBe(true)
     expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: null }).success).toBe(false)
+  })
+
+  it('projects the exhaustive registry into a compact schema-free discovery catalog', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const toolset = resolveProjectAgentToolset({ registry })
+    const catalog = createProjectAgentToolCatalog({ registry, toolset })
+
+    expect(catalog.map((entry) => entry.operationId)).toEqual(toolset.operationIds)
+    for (const entry of catalog) {
+      expect(Object.keys(entry).sort()).toEqual(['description', 'groupPath', 'operationId'])
+      expect(entry.groupPath.length).toBeGreaterThan(0)
+      expect(entry.description.length).toBeGreaterThan(0)
+      expect(entry.description.length).toBeLessThanOrEqual(PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT)
+    }
   })
 
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {

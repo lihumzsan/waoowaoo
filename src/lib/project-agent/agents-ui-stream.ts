@@ -108,6 +108,10 @@ function isToolOutputChunk(chunk: ProjectAgentUiChunk): boolean {
     || type === 'tool-output-denied'
 }
 
+function isToolChunk(chunk: ProjectAgentUiChunk): boolean {
+  return readChunkString(chunk, 'type')?.startsWith('tool-') ?? false
+}
+
 function readTextChunkDelta(chunk: ProjectAgentUiChunk): string | null {
   if (!isRecord(chunk)) return null
   const type = readChunkString(chunk, 'type')
@@ -207,6 +211,7 @@ export function createProjectAgentUiMessageStream(params: {
   source: Parameters<typeof createAiSdkUiMessageStream>[0]
   initialChunks: ProjectAgentUiChunk[]
   resolveToolName: (toolCallId: string) => string | null
+  hiddenToolNames?: readonly string[]
   sideChannel: ProjectAgentSideChannel
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onChunk?: (chunk: ProjectAgentUiChunk) => void
@@ -231,6 +236,10 @@ export function createProjectAgentUiMessageStream(params: {
       convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
+      const hiddenToolNames = new Set(
+        (params.hiddenToolNames ?? []).map((toolName) => toolName.trim()).filter(Boolean),
+      )
+      const hiddenToolCallIds = new Set<string>()
       const completedLiveReasoning: Array<{ reasoningId: string; text: string }> = []
       let suppressedReasoning: { reasoningId: string; expected: string; actual: string } | null = null
       const readSuppressedReasoning = (): {
@@ -250,6 +259,13 @@ export function createProjectAgentUiMessageStream(params: {
         let chunk = rawChunk
         assertNoTextProtocolLeak(chunk)
         const toolCallId = readChunkString(chunk, 'toolCallId')
+        if (toolCallId && isToolChunk(chunk)) {
+          const incomingToolName = readChunkString(chunk, 'toolName')
+          if (incomingToolName && hiddenToolNames.has(incomingToolName)) {
+            hiddenToolCallIds.add(toolCallId)
+          }
+          if (hiddenToolCallIds.has(toolCallId)) return
+        }
         if (toolCallId && isToolInputChunk(chunk)) {
           const incomingToolName = readChunkString(chunk, 'toolName')
           const mappedToolName = params.resolveToolName(toolCallId)?.trim() || null
