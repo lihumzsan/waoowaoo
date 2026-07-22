@@ -16,7 +16,8 @@
     "prompt": "Motion instruction (optional)",
     "promptPlaceholder": "For example: the camera continues a slow push-in while the subject turns naturally"
   },
-  "workflowNote": "Output uses local H.264 MP4 with the source geometry and frame rate, adaptive bitrate, and retained audio when available.",
+  "workflowNoteDirect": "Direct joins are processed remotely as NVENC H.264 MP4 with yuv420p at 10 Mbit/s.",
+  "workflowNoteAi": "AI bridge output uses local H.264 MP4 with Video 1 geometry and FPS, adaptive bitrate, and retained audio when available.",
   "input1": {
     "title": "Video 1",
     "description": "The first part of the result and the source of the output frame rate.",

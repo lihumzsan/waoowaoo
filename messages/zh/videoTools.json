@@ -16,7 +16,8 @@
     "prompt": "运动说明（可选）",
     "promptPlaceholder": "例如：镜头继续缓慢推进，人物自然转身"
   },
-  "workflowNote": "输出使用本地 H.264 MP4，沿用源视频画面尺寸和帧率，按画面自适应码率，并保留可用音频。",
+  "workflowNoteDirect": "直接拼接由远端处理，输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s。",
+  "workflowNoteAi": "AI 桥接使用本地 H.264 MP4，沿用 Video 1 的画面尺寸和帧率，按画面自适应码率，并保留可用音频。",
   "input1": {
     "title": "Video 1",
     "description": "拼接结果的前半段，并决定最终输出帧率。",

@@ -259,7 +259,12 @@ describe('video tools routes', () => {
     const completedResult = {
       videoKey: 'output.mp4',
       videoUrl: '/api/storage/sign?key=output.mp4',
+      mimeType: 'video/mp4',
       mode: 'ai_bridge',
+      input1Name: 'one.mp4',
+      input1TrimEndFrames: 0,
+      input2Name: 'two.mp4',
+      input2TrimStartFrames: 1,
       probes: {
         input1: {
           width: 1920,

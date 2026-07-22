@@ -59,4 +59,11 @@ describe('video tools page', () => {
     expect(source).toContain('resolveVideoSeamDiagnostics(currentTask?.result || null)')
     expect(source).toContain('<VideoSeamDiagnostics diagnostics={diagnostics}')
   })
+
+  it('selects truthful workflow copy for the active seam mode', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain("seamMode === 'ai_bridge' ? t('workflowNoteAi') : t('workflowNoteDirect')")
+    expect(source).not.toContain("{t('workflowNote')}")
+  })
 })

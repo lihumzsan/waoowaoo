@@ -297,7 +297,9 @@ export default function VideoToolsPage() {
               </fieldset>
 
               <div className="my-6 flex flex-col items-center rounded-3xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-5 py-5 text-center">
-                <p className="mb-4 text-xs leading-5 text-[var(--glass-text-tertiary)]">{t('workflowNote')}</p>
+                <p className="mb-4 text-xs leading-5 text-[var(--glass-text-tertiary)]">
+                  {seamMode === 'ai_bridge' ? t('workflowNoteAi') : t('workflowNoteDirect')}
+                </p>
                 <button
                   type="button"
                   onClick={() => void submit()}
