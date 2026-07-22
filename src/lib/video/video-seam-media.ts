@@ -26,6 +26,17 @@ export type VideoSeamWorkspace = {
 
 export type VideoSeamComposeCommand = { executable: string; args: string[] }
 
+type VideoSeamProbeTiming = {
+  containerDurationSeconds: number | null
+  videoDurationSeconds: number | null
+  audioDurationSeconds: number | null
+}
+
+type VideoSeamProbeDetails = {
+  probe: SeamProbeResult
+  timing: VideoSeamProbeTiming
+}
+
 function mediaProbeError(): Error {
   return new Error('VIDEO_SEAM_MEDIA_PROBE_FAILED')
 }
@@ -49,6 +60,11 @@ function parseRational(raw: unknown): number | null {
 function parsePositiveInteger(raw: unknown): number | null {
   const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN
   return Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+function parsePositiveSeconds(raw: unknown): number | null {
+  const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN
+  return Number.isFinite(value) && value > 0 ? value : null
 }
 
 function formatSeconds(seconds: number): string {
@@ -97,22 +113,25 @@ export async function createVideoSeamWorkspace(): Promise<VideoSeamWorkspace> {
 }
 
 export async function downloadVideoSeamFile(sourceUrl: string, destinationPath: string): Promise<void> {
+  let createdDestination = false
   try {
     const response = await fetch(toFetchableUrl(sourceUrl))
     if (!response.ok || !response.body) throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+    const destination = createWriteStream(destinationPath, { flags: 'wx' })
+    destination.once('open', () => { createdDestination = true })
     await pipeline(
       Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream),
-      createWriteStream(destinationPath, { flags: 'wx' }),
+      destination,
     )
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+  } catch {
+    if (createdDestination) {
       await fs.unlink(destinationPath).catch(() => undefined)
     }
     throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
   }
 }
 
-export function parseVideoSeamProbeJson(raw: string): SeamProbeResult {
+function parseVideoSeamProbeDetails(raw: string): VideoSeamProbeDetails {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { streams?: unknown }).streams)) {
@@ -126,20 +145,35 @@ export function parseVideoSeamProbeJson(raw: string): SeamProbeResult {
     const fps = parseRational(video.avg_frame_rate)
     const frameCount = parsePositiveInteger(video.nb_read_frames)
     if (!width || !height || !fps || !frameCount) throw mediaProbeError()
+    const audio = streams.find((stream) => stream.codec_type === 'audio')
+    const format = (parsed as { format?: unknown }).format
     return {
-      width,
-      height,
-      fps,
-      frameCount,
-      durationSeconds: frameCount / fps,
-      hasAudio: streams.some((stream) => stream.codec_type === 'audio'),
+      probe: {
+        width,
+        height,
+        fps,
+        frameCount,
+        durationSeconds: frameCount / fps,
+        hasAudio: Boolean(audio),
+      },
+      timing: {
+        containerDurationSeconds: format && typeof format === 'object'
+          ? parsePositiveSeconds((format as { duration?: unknown }).duration)
+          : null,
+        videoDurationSeconds: parsePositiveSeconds(video.duration),
+        audioDurationSeconds: audio ? parsePositiveSeconds(audio.duration) : null,
+      },
     }
   } catch {
     throw mediaProbeError()
   }
 }
 
-export async function probeVideoSeamFile(filePath: string): Promise<SeamProbeResult> {
+export function parseVideoSeamProbeJson(raw: string): SeamProbeResult {
+  return parseVideoSeamProbeDetails(raw).probe
+}
+
+async function readVideoSeamProbeJson(filePath: string): Promise<string> {
   const executable = process.env.FFPROBE_PATH || 'ffprobe'
   const args = [
     '-v', 'error', '-count_frames',
@@ -148,10 +182,14 @@ export async function probeVideoSeamFile(filePath: string): Promise<SeamProbeRes
   ]
   try {
     const { stdout } = await execFileAsync(executable, args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8 })
-    return parseVideoSeamProbeJson(stdout)
+    return stdout
   } catch (error) {
     throw ffmpegUnavailable(error) || mediaProbeError()
   }
+}
+
+export async function probeVideoSeamFile(filePath: string): Promise<SeamProbeResult> {
+  return parseVideoSeamProbeJson(await readVideoSeamProbeJson(filePath))
 }
 
 export async function extractVideoSeamAnchors(params: {
@@ -265,13 +303,21 @@ export async function composeVideoSeamOutput(
 }
 
 export async function verifyVideoSeamOutput(filePath: string, plan: VideoSeamBridgePlan): Promise<SeamProbeResult> {
-  const probe = await probeVideoSeamFile(filePath)
+  const { probe, timing } = parseVideoSeamProbeDetails(await readVideoSeamProbeJson(filePath))
   const maxDeviation = 1 / plan.outputFps
   const expectedAudio = plan.audioPolicy !== 'silent'
+  const measuredDurations = [timing.containerDurationSeconds, timing.videoDurationSeconds]
+  if (expectedAudio) measuredDurations.push(timing.audioDurationSeconds)
   if (probe.width !== plan.input1.width || probe.height !== plan.input1.height
     || probe.frameCount !== plan.outputFrameCount || probe.hasAudio !== expectedAudio
     || Math.abs(probe.fps - plan.outputFps) > maxDeviation
-    || Math.abs(probe.durationSeconds - plan.outputDurationSeconds) > maxDeviation) {
+    || Math.abs(probe.durationSeconds - plan.outputDurationSeconds) > maxDeviation
+    || measuredDurations.some((duration) => duration === null
+      || Math.abs(duration - plan.outputDurationSeconds) > maxDeviation)
+    || measuredDurations.some((duration, index) => measuredDurations
+      .slice(index + 1)
+      .some((otherDuration) => duration === null || otherDuration === null
+        || Math.abs(duration - otherDuration) > maxDeviation))) {
     throw mediaProbeError()
   }
   return probe

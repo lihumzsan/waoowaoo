@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { buildVideoSeamComposeCommand, parseVideoSeamProbeJson } from '@/lib/video/video-seam-media'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  buildVideoSeamComposeCommand,
+  downloadVideoSeamFile,
+  parseVideoSeamProbeJson,
+  verifyVideoSeamOutput,
+} from '@/lib/video/video-seam-media'
 import { buildVideoSeamBridgePlan } from '@/lib/video-tools/seam-bridge-plan'
+
+vi.mock('@/lib/storage', () => ({
+  toFetchableUrl: (value: string) => value,
+}))
 
 describe('video seam local media adapter', () => {
   it('parses counted frames, rational FPS, dimensions, duration, and audio', () => {
@@ -58,5 +70,66 @@ describe('video seam local media adapter', () => {
     })
     expect(command.args).not.toContain('[aout]')
     expect(command.args).not.toContain('aac')
+  })
+
+  it.each([
+    ['truncated container', 'containerDurationSeconds', -2],
+    ['overlong audio', 'audioDurationSeconds', 2],
+  ])('rejects %s even when the counted video frames match the plan', async (_name, changedDuration, frameDelta) => {
+    const plan = buildVideoSeamBridgePlan({
+      input1: { width: 1280, height: 720, fps: 24, frameCount: 240, durationSeconds: 10, hasAudio: true },
+      input2: { width: 1280, height: 720, fps: 24, frameCount: 240, durationSeconds: 10, hasAudio: true },
+      trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+    })
+    const expectedDurationSeconds = plan.outputDurationSeconds
+    const durations = {
+      containerDurationSeconds: expectedDurationSeconds,
+      videoDurationSeconds: expectedDurationSeconds,
+      audioDurationSeconds: expectedDurationSeconds,
+    }
+    durations[changedDuration as keyof typeof durations] += frameDelta / plan.outputFps
+    const raw = JSON.stringify({
+      streams: [
+        {
+          codec_type: 'video', width: plan.input1.width, height: plan.input1.height,
+          avg_frame_rate: '24/1', nb_read_frames: String(plan.outputFrameCount),
+          duration: durations.videoDurationSeconds.toFixed(9),
+        },
+        { codec_type: 'audio', duration: durations.audioDurationSeconds.toFixed(9) },
+      ],
+      format: { duration: durations.containerDurationSeconds.toFixed(9) },
+    })
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const executable = path.join(directory, 'ffprobe-fixture')
+    const originalProbePath = process.env.FFPROBE_PATH
+    const originalRaw = process.env.VIDEO_SEAM_TEST_PROBE_JSON
+    try {
+      await fs.writeFile(executable, '#!/usr/bin/env node\nprocess.stdout.write(process.env.VIDEO_SEAM_TEST_PROBE_JSON || \'\')\n', { mode: 0o755 })
+      process.env.FFPROBE_PATH = executable
+      process.env.VIDEO_SEAM_TEST_PROBE_JSON = raw
+      await expect(verifyVideoSeamOutput(path.join(directory, 'output.mp4'), plan))
+        .rejects.toThrow('VIDEO_SEAM_MEDIA_PROBE_FAILED')
+    } finally {
+      if (originalProbePath === undefined) delete process.env.FFPROBE_PATH
+      else process.env.FFPROBE_PATH = originalProbePath
+      if (originalRaw === undefined) delete process.env.VIDEO_SEAM_TEST_PROBE_JSON
+      else process.env.VIDEO_SEAM_TEST_PROBE_JSON = originalRaw
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a pre-existing destination when URL resolution or fetch fails', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const destinationPath = path.join(directory, 'existing.mp4')
+    try {
+      await fs.writeFile(destinationPath, 'preserve-me')
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network unavailable') }))
+      await expect(downloadVideoSeamFile('https://example.test/input.mp4', destinationPath))
+        .rejects.toThrow('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+      await expect(fs.readFile(destinationPath, 'utf8')).resolves.toBe('preserve-me')
+    } finally {
+      vi.unstubAllGlobals()
+      await fs.rm(directory, { recursive: true, force: true })
+    }
   })
 })
