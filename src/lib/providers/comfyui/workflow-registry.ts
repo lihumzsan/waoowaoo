@@ -87,10 +87,6 @@ export type ComfyUiWorkflowInject = {
   audioFilenames?: string[]
   videoFilenames?: string[]
   videoTrimFrames?: [number, number]
-  videoEndpoint?: {
-    position: 'start' | 'end'
-    trimFrames: number
-  }
   llmApi?: ComfyUiWorkflowLlmApiInject
   fps?: number
   durationSeconds?: number
@@ -1734,47 +1730,12 @@ function validateVideoSeamWorkflowContract(
   }
 }
 
-function isVideoSeamBridgeComposeWorkflow(workflowKey: string): boolean {
-  return normalizeWorkflowKey(workflowKey) === 'basevideo/tools/video-seam-bridge-compose-nvenc'
-}
-
-function validateVideoSeamBridgeComposeWorkflowContract(
-  graph: ComfyUiWorkflowGraph,
-  workflowKey: string,
-): void {
-  if (!isVideoSeamBridgeComposeWorkflow(workflowKey)) return
-
-  const expectedNodes = [
-    { nodeId: '1', classType: 'LoadVideo', inputField: 'file' },
-    { nodeId: '2', classType: 'LoadVideo', inputField: 'file' },
-    { nodeId: '3', classType: 'LoadVideo', inputField: 'file' },
-    { nodeId: '10', classType: 'ComfyMathExpression', inputField: 'values.b' },
-    { nodeId: '12', classType: 'ComfyMathExpression', inputField: 'values.b' },
-    { nodeId: '15', classType: 'ImageFromBatch', inputField: 'batch_index' },
-  ] as const
-  for (const { nodeId, classType, inputField } of expectedNodes) {
-    const node = graph[nodeId]
-    if (
-      !node
-      || node.class_type !== classType
-      || !isRecord(node.inputs)
-      || !Object.prototype.hasOwnProperty.call(node.inputs, inputField)
-    ) {
-      throw new Error(
-        `COMFYUI_VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_CONTRACT_INVALID: node ${nodeId} must be ${classType} with input ${inputField}`,
-      )
-    }
-  }
-}
-
 function applyVideoSeamTrimInjection(
   graph: ComfyUiWorkflowGraph,
   workflowKey: string,
   videoTrimFrames?: [number, number],
 ): void {
-  const isDirectConcat = normalizeWorkflowKey(workflowKey) === 'basevideo/tools/video-seam-concat-nvenc'
-  const isBridgeCompose = isVideoSeamBridgeComposeWorkflow(workflowKey)
-  if (!isDirectConcat && !isBridgeCompose) return
+  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-concat-nvenc') return
   if (!videoTrimFrames) return
 
   const [trimEndFrames, trimStartFrames] = videoTrimFrames
@@ -1788,65 +1749,15 @@ function applyVideoSeamTrimInjection(
       `COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
     )
   }
-  const video1RetainedFrames = graph[isBridgeCompose ? '10' : '7']
-  const video2RetainedFrames = graph[isBridgeCompose ? '12' : '8']
-  const video2Images = graph[isBridgeCompose ? '15' : '10']
+  const video1RetainedFrames = graph['7']
+  const video2RetainedFrames = graph['8']
+  const video2Images = graph['10']
 
   video1RetainedFrames.inputs['values.b'] = trimEndFrames
   video2RetainedFrames.inputs['values.b'] = trimStartFrames
   video2Images.inputs.batch_index = trimStartFrames
-  if (!isBridgeCompose) {
-    const video2AudioStart = graph['13']
-    video2AudioStart.inputs['values.a'] = trimStartFrames
-  }
-}
-
-function validateVideoSeamEndpointWorkflowContract(
-  graph: ComfyUiWorkflowGraph,
-  workflowKey: string,
-): void {
-  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-endpoint') return
-
-  const expectedNodes = [
-    { nodeId: '1', classType: 'LoadVideo', inputField: 'file' },
-    { nodeId: '4', classType: 'ComfyMathExpression', inputField: 'expression' },
-    { nodeId: '5', classType: 'ImageFromBatch', inputField: 'batch_index' },
-    { nodeId: '6', classType: 'SaveImage', inputField: 'images' },
-  ] as const
-  for (const { nodeId, classType, inputField } of expectedNodes) {
-    const node = graph[nodeId]
-    if (
-      !node
-      || node.class_type !== classType
-      || !isRecord(node.inputs)
-      || !Object.prototype.hasOwnProperty.call(node.inputs, inputField)
-    ) {
-      throw new Error(
-        `COMFYUI_VIDEO_SEAM_ENDPOINT_WORKFLOW_CONTRACT_INVALID: node ${nodeId} must be ${classType} with input ${inputField}`,
-      )
-    }
-  }
-}
-
-function applyVideoSeamEndpointInjection(
-  graph: ComfyUiWorkflowGraph,
-  workflowKey: string,
-  endpoint?: ComfyUiWorkflowInject['videoEndpoint'],
-): void {
-  if (normalizeWorkflowKey(workflowKey) !== 'basevideo/tools/video-seam-endpoint') return
-  if (!endpoint) return
-  if (!isValidVideoTrimFrames(endpoint.trimFrames)) {
-    throw new Error(
-      `COMFYUI_VIDEO_SEAM_ENDPOINT_TRIM_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
-    )
-  }
-
-  const indexNode = graph['4']
-  if (!indexNode) return
-  indexNode.inputs.expression = endpoint.position === 'end'
-    ? '(a - b - 1) / (a > b)'
-    : 'a * 0 + b'
-  indexNode.inputs['values.b'] = endpoint.trimFrames
+  const video2AudioStart = graph['13']
+  video2AudioStart.inputs['values.a'] = trimStartFrames
 }
 
 function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
@@ -3504,11 +3415,8 @@ export function resolveComfyUiWorkflow(
   applyImageInjection(graph, imageFilenames)
   applyAudioInjection(graph, inject.audioFilenames)
   validateVideoSeamWorkflowContract(graph, workflowKey)
-  validateVideoSeamBridgeComposeWorkflowContract(graph, workflowKey)
-  validateVideoSeamEndpointWorkflowContract(graph, workflowKey)
   applyVideoInjection(graph, inject.videoFilenames)
   applyVideoSeamTrimInjection(graph, workflowKey, inject.videoTrimFrames)
-  applyVideoSeamEndpointInjection(graph, workflowKey, inject.videoEndpoint)
   applyRhLlmApiInjection(graph, inject.llmApi)
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)

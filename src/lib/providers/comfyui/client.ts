@@ -1221,8 +1221,6 @@ export async function runComfyUiVideoWorkflow(params: {
 }
 
 export const COMFYUI_VIDEO_SEAM_CONCAT_WORKFLOW_ID = 'basevideo/tools/video-seam-concat-nvenc'
-export const COMFYUI_VIDEO_SEAM_ENDPOINT_WORKFLOW_ID = 'basevideo/tools/video-seam-endpoint'
-export const COMFYUI_VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_ID = 'basevideo/tools/video-seam-bridge-compose-nvenc'
 
 export async function runComfyUiVideoSeamMotionBridgeWorkflow(params: {
   baseUrl: string
@@ -1267,81 +1265,6 @@ export async function runComfyUiVideoSeamMotionBridgeWorkflow(params: {
     }
   }
 
-  const output = await runComfyUiWorkflow({
-    baseUrl: base,
-    workflow,
-    expect: 'video',
-    returnViewUrl: true,
-  })
-  return {
-    videoUrl: output.viewUrl,
-    mimeType: output.mimeType,
-    ...(output.contentLength === undefined ? {} : { contentLength: output.contentLength }),
-  }
-}
-
-export async function runComfyUiVideoSeamEndpointWorkflow(params: {
-  baseUrl: string
-  workflowKey?: string
-  videoUrl: string
-  position: 'start' | 'end'
-  trimFrames: number
-}): Promise<{ imageBase64: string; mimeType: string }> {
-  if (!isValidVideoTrimFrames(params.trimFrames)) {
-    throw new Error(
-      `COMFYUI_VIDEO_SEAM_ENDPOINT_TRIM_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
-    )
-  }
-
-  const base = normalizeComfyBaseUrl(params.baseUrl)
-  const workflowKey = params.workflowKey?.trim() || COMFYUI_VIDEO_SEAM_ENDPOINT_WORKFLOW_ID
-  const videoFilename = (await uploadComfyUiImages(base, [params.videoUrl], true))[0]
-  if (!videoFilename) throw new Error('COMFYUI_VIDEO_SEAM_ENDPOINT_UPLOAD_FAILED')
-
-  const workflow = resolveComfyUiWorkflow(workflowKey, {
-    videoFilenames: [videoFilename],
-    videoEndpoint: {
-      position: params.position,
-      trimFrames: params.trimFrames,
-    },
-  })
-  const output = await runComfyUiWorkflow({
-    baseUrl: base,
-    workflow,
-    expect: 'image',
-  })
-  return { imageBase64: output.dataBase64, mimeType: output.mimeType }
-}
-
-export async function runComfyUiVideoSeamBridgeComposeWorkflow(params: {
-  baseUrl: string
-  workflowKey?: string
-  videoUrls: [string, string, string]
-  trimEndFrames: number
-  trimStartFrames: number
-}): Promise<{ videoUrl: string; mimeType: string; contentLength?: number }> {
-  if (!isValidVideoTrimFrames(params.trimEndFrames)) {
-    throw new Error(
-      `COMFYUI_VIDEO_SEAM_TRIM_END_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
-    )
-  }
-  if (!isValidVideoTrimFrames(params.trimStartFrames)) {
-    throw new Error(
-      `COMFYUI_VIDEO_SEAM_TRIM_START_FRAMES_INVALID: expected an integer between 0 and ${VIDEO_SEAM_CONCAT_MAX_TRIM_FRAMES}`,
-    )
-  }
-
-  const base = normalizeComfyBaseUrl(params.baseUrl)
-  const workflowKey = params.workflowKey?.trim() || COMFYUI_VIDEO_SEAM_BRIDGE_COMPOSE_WORKFLOW_ID
-  const videoUrls = params.videoUrls.map((value) => value.trim())
-  if (videoUrls.some((value) => !value)) {
-    throw new Error('COMFYUI_VIDEO_SEAM_BRIDGE_COMPOSE_REQUIRES_THREE_INPUTS')
-  }
-  const videoFilenames = await uploadComfyUiImages(base, videoUrls, true)
-  const workflow = resolveComfyUiWorkflow(workflowKey, {
-    videoFilenames,
-    videoTrimFrames: [params.trimEndFrames, params.trimStartFrames],
-  })
   const output = await runComfyUiWorkflow({
     baseUrl: base,
     workflow,

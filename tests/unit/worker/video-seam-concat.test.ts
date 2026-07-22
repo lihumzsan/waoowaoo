@@ -1,38 +1,123 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Job } from 'bullmq'
 import type { TaskJobData } from '@/lib/task/types'
 import { handleVideoSeamConcatTask } from '@/lib/workers/handlers/video-seam-concat'
 import { getProviderConfig } from '@/lib/api-config'
 import {
-  runComfyUiVideoSeamBridgeComposeWorkflow,
   runComfyUiVideoSeamConcatWorkflow,
-  runComfyUiVideoSeamEndpointWorkflow,
-  runComfyUiVideoWorkflow,
+  runComfyUiVideoSeamMotionBridgeWorkflow,
 } from '@/lib/providers/comfyui/client'
 import { getSignedObjectUrl, getSignedUrl, uploadObjectStream } from '@/lib/storage'
+import {
+  composeVideoSeamOutput,
+  createVideoSeamWorkspace,
+  downloadVideoSeamFile,
+  extractVideoSeamAnchors,
+  openVideoSeamOutput,
+  probeVideoSeamFile,
+  readVideoSeamAnchorDataUrl,
+  verifyVideoSeamOutput,
+} from '@/lib/video/video-seam-media'
 
 vi.mock('@/lib/api-config', () => ({ getProviderConfig: vi.fn() }))
 vi.mock('@/lib/providers/comfyui/client', () => ({
-  runComfyUiVideoSeamBridgeComposeWorkflow: vi.fn(),
   runComfyUiVideoSeamConcatWorkflow: vi.fn(),
-  runComfyUiVideoSeamEndpointWorkflow: vi.fn(),
-  runComfyUiVideoWorkflow: vi.fn(),
+  runComfyUiVideoSeamMotionBridgeWorkflow: vi.fn(),
 }))
 vi.mock('@/lib/storage', () => ({
   getSignedObjectUrl: vi.fn(),
   getSignedUrl: vi.fn(),
   uploadObjectStream: vi.fn(),
 }))
+vi.mock('@/lib/video/video-seam-media', () => ({
+  composeVideoSeamOutput: vi.fn(),
+  createVideoSeamWorkspace: vi.fn(),
+  downloadVideoSeamFile: vi.fn(),
+  extractVideoSeamAnchors: vi.fn(),
+  openVideoSeamOutput: vi.fn(),
+  probeVideoSeamFile: vi.fn(),
+  readVideoSeamAnchorDataUrl: vi.fn(),
+  verifyVideoSeamOutput: vi.fn(),
+}))
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 
 const getProviderConfigMock = vi.mocked(getProviderConfig)
 const runWorkflowMock = vi.mocked(runComfyUiVideoSeamConcatWorkflow)
-const runEndpointWorkflowMock = vi.mocked(runComfyUiVideoSeamEndpointWorkflow)
-const runVideoWorkflowMock = vi.mocked(runComfyUiVideoWorkflow)
-const runBridgeComposeWorkflowMock = vi.mocked(runComfyUiVideoSeamBridgeComposeWorkflow)
+const runMotionBridgeWorkflowMock = vi.mocked(runComfyUiVideoSeamMotionBridgeWorkflow)
 const getSignedObjectUrlMock = vi.mocked(getSignedObjectUrl)
 const getSignedUrlMock = vi.mocked(getSignedUrl)
 const uploadObjectStreamMock = vi.mocked(uploadObjectStream)
+const composeOutputMock = vi.mocked(composeVideoSeamOutput)
+const createWorkspaceMock = vi.mocked(createVideoSeamWorkspace)
+const downloadFileMock = vi.mocked(downloadVideoSeamFile)
+const extractAnchorsMock = vi.mocked(extractVideoSeamAnchors)
+const openOutputMock = vi.mocked(openVideoSeamOutput)
+const probeFileMock = vi.mocked(probeVideoSeamFile)
+const readAnchorMock = vi.mocked(readVideoSeamAnchorDataUrl)
+const verifyOutputMock = vi.mocked(verifyVideoSeamOutput)
+
+const workspace = {
+  directory: '/tmp/video-seam-task-1',
+  input1Path: '/tmp/video-seam-task-1/input-1.mp4',
+  input2Path: '/tmp/video-seam-task-1/input-2.mp4',
+  input1AnchorPaths: [
+    '/tmp/video-seam-task-1/input-1-anchor-0.png',
+    '/tmp/video-seam-task-1/input-1-anchor-1.png',
+  ] as [string, string],
+  input2AnchorPaths: [
+    '/tmp/video-seam-task-1/input-2-anchor-0.png',
+    '/tmp/video-seam-task-1/input-2-anchor-1.png',
+  ] as [string, string],
+  normalizedAnchorPaths: [
+    '/tmp/video-seam-task-1/anchor-0-normalized.png',
+    '/tmp/video-seam-task-1/anchor-1-normalized.png',
+    '/tmp/video-seam-task-1/anchor-2-normalized.png',
+    '/tmp/video-seam-task-1/anchor-3-normalized.png',
+  ] as [string, string, string, string],
+  bridgePath: '/tmp/video-seam-task-1/bridge.mp4',
+  outputPath: '/tmp/video-seam-task-1/output.mp4',
+  cleanup: vi.fn(async () => undefined),
+}
+
+const probe1 = {
+  width: 1280,
+  height: 720,
+  fps: 24,
+  frameCount: 240,
+  durationSeconds: 10,
+  hasAudio: true,
+}
+const probe2 = {
+  width: 1280,
+  height: 720,
+  fps: 24,
+  frameCount: 300,
+  durationSeconds: 12.5,
+  hasAudio: true,
+}
+const bridgeProbe = {
+  width: 1280,
+  height: 736,
+  fps: 24,
+  frameCount: 97,
+  durationSeconds: 97 / 24,
+  hasAudio: false,
+}
+const verifiedOutput = {
+  width: 1280,
+  height: 720,
+  fps: 24,
+  frameCount: 622,
+  durationSeconds: 622 / 24,
+  hasAudio: true,
+}
+const anchors: [string, string, string, string] = [
+  'data:image/png;base64,AQ==',
+  'data:image/png;base64,Ag==',
+  'data:image/png;base64,Aw==',
+  'data:image/png;base64,BA==',
+]
+const operationOrder: string[] = []
 const persistedBytes: number[][] = []
 let responseBodyCancelCount = 0
 
@@ -87,43 +172,91 @@ describe('video seam concat worker handler', () => {
   }
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    operationOrder.length = 0
+    persistedBytes.length = 0
+    responseBodyCancelCount = 0
+
     getProviderConfigMock.mockResolvedValue({
       id: 'comfyui',
       name: 'ComfyUI',
       apiKey: '',
       baseUrl: 'http://127.0.0.1:8188',
     })
-    getSignedObjectUrlMock
-      .mockResolvedValueOnce('https://storage.test/one.mp4')
-      .mockResolvedValueOnce('https://storage.test/two.mp4')
+    getSignedObjectUrlMock.mockImplementation(async (key) => (
+      key.includes('/one.mp4')
+        ? 'https://storage.test/one.mp4'
+        : 'https://storage.test/two.mp4'
+    ))
     runWorkflowMock.mockResolvedValue({
       videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
       mimeType: 'video/mp4',
       contentLength: 3,
     })
-    runEndpointWorkflowMock.mockResolvedValue({ imageBase64: 'AQID', mimeType: 'image/png' })
-    runVideoWorkflowMock.mockResolvedValue({
-      videoUrl: 'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
-      mimeType: 'video/mp4',
-      contentLength: 3,
+    runMotionBridgeWorkflowMock.mockImplementation(async () => {
+      operationOrder.push('generate')
+      return {
+        videoUrl: 'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
+        mimeType: 'video/mp4',
+        contentLength: 3,
+      }
     })
-    runBridgeComposeWorkflowMock.mockResolvedValue({
-      videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
-      mimeType: 'video/mp4',
-      contentLength: 3,
+    createWorkspaceMock.mockResolvedValue(workspace)
+    workspace.cleanup.mockImplementation(async () => {
+      operationOrder.push('cleanup')
     })
-    persistedBytes.length = 0
-    responseBodyCancelCount = 0
+    downloadFileMock.mockImplementation(async (_sourceUrl, destinationPath) => {
+      operationOrder.push(`download:${destinationPath}`)
+    })
+    probeFileMock.mockImplementation(async (filePath) => {
+      operationOrder.push(`probe:${filePath}`)
+      if (filePath === workspace.input1Path) return probe1
+      if (filePath === workspace.input2Path) return probe2
+      if (filePath === workspace.bridgePath) return bridgeProbe
+      throw new Error(`unexpected probe path: ${filePath}`)
+    })
+    extractAnchorsMock.mockImplementation(async ({ inputPath }) => {
+      operationOrder.push(`extract:${inputPath}`)
+    })
+    readAnchorMock
+      .mockResolvedValueOnce(anchors[0])
+      .mockResolvedValueOnce(anchors[1])
+      .mockResolvedValueOnce(anchors[2])
+      .mockResolvedValueOnce(anchors[3])
+    composeOutputMock.mockImplementation(async () => {
+      operationOrder.push('compose')
+    })
+    verifyOutputMock.mockImplementation(async () => {
+      operationOrder.push('verify')
+      return verifiedOutput
+    })
+    openOutputMock.mockImplementation(async () => {
+      operationOrder.push('open')
+      return {
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array([6, 5, 4]))
+            controller.close()
+          },
+        }),
+        contentLength: 3,
+        mimeType: 'video/mp4',
+      }
+    })
     stubOutputResponse({ 'Content-Length': '3', 'Content-Type': 'video/mp4' })
     uploadObjectStreamMock.mockImplementation(async (body) => {
+      operationOrder.push('upload')
       persistedBytes.push(Array.from(new Uint8Array(await new Response(body).arrayBuffer())))
       return 'video-tools/user-1/outputs/result.mp4'
     })
     getSignedUrlMock.mockReturnValue('/api/storage/sign?key=result')
   })
 
-  it('runs the two inputs in order and persists the MP4 result', async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('runs the two direct inputs in order and persists the remote MP4 result', async () => {
     const result = await handleVideoSeamConcatTask(buildJob({
       input1Key: 'video-tools/user-1/inputs/one.mp4',
       input1Name: 'one.mp4',
@@ -157,64 +290,167 @@ describe('video seam concat worker handler', () => {
       videoKey: 'video-tools/user-1/outputs/result.mp4',
       videoUrl: '/api/storage/sign?key=result',
       mimeType: 'video/mp4',
+      mode: 'direct',
       input1Name: 'one.mp4',
       input1TrimEndFrames: 12,
       input2Name: 'two.mp4',
       input2TrimStartFrames: 3,
     }))
+    expect(createWorkspaceMock).not.toHaveBeenCalled()
+    expect(downloadFileMock).not.toHaveBeenCalled()
+    expect(probeFileMock).not.toHaveBeenCalled()
+    expect(extractAnchorsMock).not.toHaveBeenCalled()
+    expect(readAnchorMock).not.toHaveBeenCalled()
+    expect(composeOutputMock).not.toHaveBeenCalled()
+    expect(verifyOutputMock).not.toHaveBeenCalled()
+    expect(openOutputMock).not.toHaveBeenCalled()
+    expect(runMotionBridgeWorkflowMock).not.toHaveBeenCalled()
   })
 
-  it('builds an endpoint-locked LTX bridge instead of inserting a hard cut', async () => {
-    await handleVideoSeamConcatTask(buildJob({
+  it('builds, verifies, and persists one local four-anchor AI bridge output', async () => {
+    const result = await handleVideoSeamConcatTask(buildJob({
       ...validPayload,
       mode: 'ai_bridge',
-      bridge: { durationSeconds: 6, prompt: 'camera continues a slow push-in' },
+      bridge: { durationSeconds: 4, prompt: 'continuous motion through all four anchors' },
     }))
 
-    expect(runEndpointWorkflowMock).toHaveBeenNthCalledWith(1, {
-      baseUrl: 'http://127.0.0.1:8188',
-      videoUrl: 'https://storage.test/one.mp4',
-      position: 'end',
-      trimFrames: 0,
-    })
-    expect(runEndpointWorkflowMock).toHaveBeenNthCalledWith(2, {
-      baseUrl: 'http://127.0.0.1:8188',
-      videoUrl: 'https://storage.test/two.mp4',
-      position: 'start',
-      trimFrames: 1,
-    })
-    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
-      firstFrameImageUrl: 'data:image/png;base64,AQID',
-      lastFrameImageUrl: 'data:image/png;base64,AQID',
-      durationSeconds: 6,
-      fps: 24,
-      prompt: 'camera continues a slow push-in',
+    expect(downloadFileMock).toHaveBeenNthCalledWith(
+      1,
+      'https://storage.test/one.mp4',
+      workspace.input1Path,
+    )
+    expect(downloadFileMock).toHaveBeenNthCalledWith(
+      2,
+      'https://storage.test/two.mp4',
+      workspace.input2Path,
+    )
+    expect(probeFileMock).toHaveBeenNthCalledWith(1, workspace.input1Path)
+    expect(probeFileMock).toHaveBeenNthCalledWith(2, workspace.input2Path)
+    expect(extractAnchorsMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inputPath: workspace.input1Path,
+      indices: [233, 239],
+      rawOutputPaths: workspace.input1AnchorPaths,
+      normalizedOutputPaths: [workspace.normalizedAnchorPaths[0], workspace.normalizedAnchorPaths[1]],
     }))
-    expect(runBridgeComposeWorkflowMock).toHaveBeenCalledWith({
+    expect(extractAnchorsMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inputPath: workspace.input2Path,
+      indices: [1, 7],
+      rawOutputPaths: workspace.input2AnchorPaths,
+      normalizedOutputPaths: [workspace.normalizedAnchorPaths[2], workspace.normalizedAnchorPaths[3]],
+    }))
+    expect(readAnchorMock.mock.calls.map(([filePath]) => filePath)).toEqual(workspace.normalizedAnchorPaths)
+    expect(runMotionBridgeWorkflowMock).toHaveBeenCalledWith({
       baseUrl: 'http://127.0.0.1:8188',
-      videoUrls: [
-        'https://storage.test/one.mp4',
-        'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
-        'https://storage.test/two.mp4',
-      ],
-      trimEndFrames: 0,
-      trimStartFrames: 1,
+      prompt: 'continuous motion through all four anchors',
+      anchorImageUrls: anchors,
+      generatedAnchorIndices: [0, 6, 90, 96],
+      width: 1280,
+      height: 736,
+      fps: 24,
+      durationSeconds: 4,
     })
+    expect(downloadFileMock).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:8188/view?filename=bridge.mp4&type=output',
+      workspace.bridgePath,
+    )
+    expect(probeFileMock).toHaveBeenNthCalledWith(3, workspace.bridgePath)
+    expect(composeOutputMock).toHaveBeenCalledWith(expect.objectContaining({
+      input1Path: workspace.input1Path,
+      bridgePath: workspace.bridgePath,
+      input2Path: workspace.input2Path,
+      outputPath: workspace.outputPath,
+      plan: expect.objectContaining({ generatedFrameCount: 97 }),
+    }))
+    expect(verifyOutputMock).toHaveBeenCalledWith(
+      workspace.outputPath,
+      expect.objectContaining({ generatedFrameCount: 97 }),
+    )
+    expect(openOutputMock).toHaveBeenCalledWith(workspace.outputPath)
+    expect(uploadObjectStreamMock).toHaveBeenCalledTimes(1)
+    expect(uploadObjectStreamMock).toHaveBeenCalledWith(
+      expect.any(ReadableStream),
+      expect.stringMatching(/^video-tools\/user-1\/outputs\/.+\.mp4$/),
+      3,
+      'video/mp4',
+    )
+    expect(persistedBytes).toEqual([[6, 5, 4]])
+    expect(operationOrder.indexOf('verify')).toBeLessThan(operationOrder.indexOf('open'))
+    expect(operationOrder.indexOf('open')).toBeLessThan(operationOrder.indexOf('upload'))
+    expect(operationOrder.indexOf(`probe:${workspace.bridgePath}`))
+      .toBeLessThan(operationOrder.indexOf('compose'))
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(operationOrder.at(-1)).toBe('cleanup')
+    expect(fetch).not.toHaveBeenCalled()
     expect(runWorkflowMock).not.toHaveBeenCalled()
+    expect(result).toMatchObject({
+      videoKey: 'video-tools/user-1/outputs/result.mp4',
+      videoUrl: '/api/storage/sign?key=result',
+      mimeType: 'video/mp4',
+      mode: 'ai_bridge',
+      input1Name: 'one.mp4',
+      input2Name: 'two.mp4',
+      probes: { input1: probe1, input2: probe2 },
+      output: verifiedOutput,
+      bridge: {
+        requestedDurationSeconds: 4,
+        handleFrames: 6,
+        generatedFrameCount: 97,
+        generationCanvas: {
+          contentWidth: 1280,
+          contentHeight: 720,
+          width: 1280,
+          height: 736,
+          padLeft: 0,
+          padTop: 8,
+          padRight: 0,
+          padBottom: 8,
+        },
+        sourceAnchors: {
+          input1Pre: 233,
+          input1Endpoint: 239,
+          input2Endpoint: 1,
+          input2Post: 7,
+        },
+        generatedAnchors: [0, 6, 90, 96],
+        centralFrameCount: 83,
+        centralSilenceSeconds: 83 / 24,
+        video2AudioTempoFactor: 1,
+        audioPolicy: 'both',
+        targetBitrateMbps: 10,
+      },
+    })
   })
 
-  it('uses an immediate continuous-transition prompt when bridge motion is omitted', async () => {
+  it('cleans the AI workspace exactly once when LTX generation fails', async () => {
+    runMotionBridgeWorkflowMock.mockImplementation(async () => {
+      operationOrder.push('generate')
+      throw new Error('LTX generation failed')
+    })
+
+    await expect(handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))).rejects.toThrow('LTX generation failed')
+
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(operationOrder.at(-1)).toBe('cleanup')
+    expect(composeOutputMock).not.toHaveBeenCalled()
+    expect(verifyOutputMock).not.toHaveBeenCalled()
+    expect(openOutputMock).not.toHaveBeenCalled()
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+  })
+
+  it('uses a prompt for continuous evolution across all four anchors when bridge motion is omitted', async () => {
     await handleVideoSeamConcatTask(buildJob({
       ...validPayload,
       mode: 'ai_bridge',
       bridge: { durationSeconds: 4 },
     }))
 
-    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.stringContaining('Begin visible motion immediately from the first generated frame'),
-    }))
-    expect(runVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.not.stringContaining('Preserve subject identity, setting, lighting'),
+    expect(runMotionBridgeWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining('all four supplied anchors'),
     }))
   })
 
@@ -237,7 +473,7 @@ describe('video seam concat worker handler', () => {
       outputLength: 3,
       error: 'COMFYUI_VIEW_CONTENT_LENGTH_MISMATCH',
     },
-  ])('cancels the output body on $name before upload', async ({ headerLength, outputLength, error }) => {
+  ])('cancels the direct output body on $name before upload', async ({ headerLength, outputLength, error }) => {
     runWorkflowMock.mockResolvedValue({
       videoUrl: 'http://127.0.0.1:8188/view?filename=result.mp4&type=output',
       mimeType: 'video/mp4',
@@ -254,7 +490,7 @@ describe('video seam concat worker handler', () => {
     expect(responseBodyCancelCount).toBe(1)
   })
 
-  it('cancels the output body when streaming storage rejects before consuming it', async () => {
+  it('cancels the direct output body when streaming storage rejects before consuming it', async () => {
     stubOutputResponse({ 'Content-Length': '3', 'Content-Type': 'video/mp4' }, false)
     uploadObjectStreamMock.mockRejectedValue(new Error('storage upload failed'))
 
@@ -265,7 +501,7 @@ describe('video seam concat worker handler', () => {
     expect(responseBodyCancelCount).toBe(1)
   })
 
-  it('cancels the output body when ComfyUI returns an error response', async () => {
+  it('cancels the direct output body when ComfyUI returns an error response', async () => {
     stubOutputResponse({ 'Content-Type': 'text/plain' }, true, 502)
 
     await expect(handleVideoSeamConcatTask(buildJob(validPayload)))
@@ -275,7 +511,7 @@ describe('video seam concat worker handler', () => {
     expect(responseBodyCancelCount).toBe(1)
   })
 
-  it('preserves the upload error when output body cancellation also fails', async () => {
+  it('preserves the direct upload error when output body cancellation also fails', async () => {
     stubOutputResponse(
       { 'Content-Length': '3', 'Content-Type': 'video/mp4' },
       false,
@@ -291,18 +527,14 @@ describe('video seam concat worker handler', () => {
   })
 
   it('uses the legacy trim defaults when the payload omits both trim values', async () => {
-    const result = await handleVideoSeamConcatTask(buildJob({
-      input1Key: 'video-tools/user-1/inputs/one.mp4',
-      input1Name: 'one.mp4',
-      input2Key: 'video-tools/user-1/inputs/two.mp4',
-      input2Name: 'two.mp4',
-    }))
+    const result = await handleVideoSeamConcatTask(buildJob(validPayload))
 
     expect(runWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
       trimEndFrames: 0,
       trimStartFrames: 1,
     }))
     expect(result).toEqual(expect.objectContaining({
+      mode: 'direct',
       input1TrimEndFrames: 0,
       input2TrimStartFrames: 1,
     }))
@@ -313,10 +545,7 @@ describe('video seam concat worker handler', () => {
     ['input2 trim', { input2TrimStartFrames: 100_001 }],
   ])('rejects an invalid provided %s value', async (_label, invalidTrim) => {
     await expect(handleVideoSeamConcatTask(buildJob({
-      input1Key: 'video-tools/user-1/inputs/one.mp4',
-      input1Name: 'one.mp4',
-      input2Key: 'video-tools/user-1/inputs/two.mp4',
-      input2Name: 'two.mp4',
+      ...validPayload,
       ...invalidTrim,
     }))).rejects.toThrow('VIDEO_SEAM_CONCAT_PAYLOAD_INVALID')
 
@@ -332,11 +561,7 @@ describe('video seam concat worker handler', () => {
   it('requires a configured ComfyUI base URL', async () => {
     getProviderConfigMock.mockResolvedValue({ id: 'comfyui', name: 'ComfyUI', apiKey: '' })
 
-    await expect(handleVideoSeamConcatTask(buildJob({
-      input1Key: 'video-tools/user-1/inputs/one.mp4',
-      input1Name: 'one.mp4',
-      input2Key: 'video-tools/user-1/inputs/two.mp4',
-      input2Name: 'two.mp4',
-    }))).rejects.toThrow('COMFYUI_BASE_URL_MISSING')
+    await expect(handleVideoSeamConcatTask(buildJob(validPayload)))
+      .rejects.toThrow('COMFYUI_BASE_URL_MISSING')
   })
 })
