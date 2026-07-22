@@ -85,6 +85,13 @@ DROP INDEX `project_edit_bibles_generationTaskId_idx` ON `project_edit_bibles`;
 -- DropIndex
 DROP INDEX `project_episode_source_documents_rawFileMediaId_idx` ON `project_episode_source_documents`;
 
+-- This is an intentional empty-data cutover. The removed fixed workflow and
+-- its retained source/Bible/Chapter projections cannot remain in flight while
+-- their identities and required columns change.
+DELETE FROM `project_edit_chapters`;
+DELETE FROM `project_edit_bibles`;
+DELETE FROM `project_episode_source_documents`;
+
 -- AlterTable
 ALTER TABLE `project_edit_chapters` DROP COLUMN `outputMediaId`,
     DROP COLUMN `renderStatus`,
@@ -154,13 +161,13 @@ DROP TABLE `project_edit_bgm_designs`;
 DROP TABLE `project_video_segments`;
 
 -- CreateIndex
-CREATE UNIQUE INDEX `project_episode_source_documents_sourceRevisionId_key` ON `project_episode_source_documents`(`sourceRevisionId`);
+CREATE UNIQUE INDEX `project_episode_source_documents_episodeId_sourceRevisionId_key` ON `project_episode_source_documents`(`episodeId`, `sourceRevisionId`);
 
 -- CreateIndex
 CREATE INDEX `project_episode_source_documents_sourceResourceId_idx` ON `project_episode_source_documents`(`sourceResourceId`);
 
 -- CreateIndex
-CREATE UNIQUE INDEX `project_edit_bibles_bibleRevisionId_key` ON `project_edit_bibles`(`bibleRevisionId`);
+CREATE INDEX `project_edit_bibles_bibleRevisionId_idx` ON `project_edit_bibles`(`bibleRevisionId`);
 
 -- CreateIndex
 CREATE INDEX `project_edit_bibles_bibleResourceId_idx` ON `project_edit_bibles`(`bibleResourceId`);

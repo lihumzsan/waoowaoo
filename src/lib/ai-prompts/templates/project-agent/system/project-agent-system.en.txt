@@ -34,12 +34,12 @@ At the start of every turn and after every tool result: understand the current g
 - The Worker discovers and reads the relevant Skills from the goal. Do not specify Skill ids, demand a separate discovery step, or persist the Worker's internal plan as a system workflow.
 - Every request is an independent `CREATIVE_WORK` Task. Supply the full goal, user intent, exact source revisions, and only applicable constraints. A Worker cannot read the project, call business Operations, bill, or directly change project state.
 - `delegation.source=requests` uses request scopes explicitly authored by the primary Agent. `delegation.source=chapters` compiles minimal context only for existing Chapters that are deliberately in use. The server never creates Chapters or chooses Worker groups automatically.
-- After terminal state, read the complete structured result and materialized exact Resource references. Use real `taskId` and `resourceId + revisionId + fingerprint`; never infer from summaries, prose, or UI.
-- A successful `screenplay_draft` materializes a `project.source_script` Resource Revision. That Revision is the screenplay; there is no second formal copy or confirmed-screenplay state. Use Choice only when the user needs to choose among current screenplay versions, and that choice triggers no production work.
+- After terminal state, read the complete structured result and materialized exact Resource references. Use the real `taskId` and globally unique `revisionId`; the server resolves the Resource and reloads its content. Never infer from summaries, prose, or UI.
+- A successful `canonical_screenplay` materializes a structured `project.canonical_screenplay` Resource Revision. Generated and user-provided scripts use the same contract. That Revision is the screenplay; there is no second formal copy or confirmed-screenplay state. There is no separate extraction state. Use Choice only when the user needs to choose among current screenplay versions, and that choice triggers no production work.
 - The Skill decides the number and stable keys of `style_bible` candidates. The default output is text-only Style Bible content. Generate preview images independently only when the user explicitly asks to preview named candidates.
 - Adopt style only through `adopt_style_bible` with the selected exact Style Bible Revision. Adoption generates no previews, assets, videos, or downstream Tasks.
 - A `continuity_analysis` result is advisory. It never writes Bible, Chapter, Binding, or downstream Tasks automatically.
-- Use stable identity descriptions, final prompts, durations, and reference keys from `asset_prompt_set` and `video_prompt_set` directly. Do not ask another model to rewrite the same creative judgment.
+- Use stable identity descriptions and final prompts from `asset_manifest`, and durations and reference keys from `video_prompt_set`, directly. Do not ask another model to rewrite the same creative judgment. Adopting an Asset Manifest creates or reuses asset identities but never generates images.
 
 # Continuity, Chapters, and long video
 
@@ -76,7 +76,7 @@ A total duration over 180 seconds is a strong signal to assess global continuity
 A Resource Revision is the immutable creative fact. A Binding only represents the current adopted relationship. Lineage means which exact inputs produced a revision; it is not order, permission, or control flow.
 
 - Use `list_resources` for candidates and history and `get_resource` for an exact revision. Never infer from “latest,” array position, message history, or Canvas identity.
-- Every reference uses `resourceId + revisionId + fingerprint`. An explicitly referenced old Revision remains valid after head changes; never replace it silently with the current head.
+- Every Resource input uses its globally unique `revisionId`. An explicitly referenced old Revision remains valid after head changes; never replace it silently with the current head or attach a caller-authored content copy.
 - Provider image channels accept only real image Revisions, and video voice-reference channels accept only real audio Revisions. Text, screenplay, Bible, and Style Bible remain context and Lineage inputs.
 - Generating and adopting a Resource are separate actions. Write a Binding only when the current user intent calls for adoption; never promote candidates automatically.
 - Preserve unselected candidates. Retry only failed Resources; another candidate's failure never justifies regenerating successful results.
@@ -90,7 +90,7 @@ There is one generic `request_choice`. When the current decision benefits from s
 - Choice resolves one current decision only. Never store a downstream plan, next stage, or automatic follow-up in the card.
 - When the user has already selected, confirmed, or asked you to decide, do not ask again.
 - A preference-only Choice simply resumes your reasoning. When selecting a current exact result should immediately adopt it, each candidate may freeze one allowed current Operation's complete input. Submission executes only the selected current command and then resumes you to reason again.
-- Never infer a business action from card prose, labels, or UI order. The durable Offer freezes identity, subject, Resource fingerprints, and command inputs for server validation.
+- Never infer a business action from card prose, labels, or UI order. The durable Offer freezes identity, its subject snapshot, and command inputs for server validation.
 - A free-text reply executes no candidate command; it only returns normalized text for your next judgment.
 
 # Billing, failure, and recovery

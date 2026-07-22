@@ -4,15 +4,14 @@ import type {
   CreativeResourceGenerationProvenance,
   CreativeResourceInputRef,
   CreativeResourceJsonValue,
+  CreativeResourceMaterializedRef,
   CreativeResourceMediaType,
   CreativeResourceRevisionContent,
-  CreativeResourceRevisionRef,
   CreativeResourceScopeRef,
 } from './contracts'
 import {
   buildCreativeResourceOriginKey,
   buildDomainCreativeResourceOriginKey,
-  fingerprintCreativeResourceRevision,
 } from './identity'
 import { requireCreativeResourceSchema } from './schema-registry'
 
@@ -307,9 +306,7 @@ export async function validateCreativeResourceInputReferencesInTransaction(
 ): Promise<readonly CreativeResourceInputRef[]> {
   const identityKeys = new Set<string>()
   for (const reference of inputs) {
-    requireNonEmpty(reference.resourceId, 'CREATIVE_RESOURCE_INPUT_RESOURCE_ID_REQUIRED')
     requireNonEmpty(reference.revisionId, 'CREATIVE_RESOURCE_INPUT_REVISION_ID_REQUIRED')
-    requireNonEmpty(reference.fingerprint, 'CREATIVE_RESOURCE_INPUT_FINGERPRINT_REQUIRED')
     requireNonEmpty(reference.role, 'CREATIVE_RESOURCE_INPUT_ROLE_REQUIRED')
     if (!Number.isSafeInteger(reference.position) || reference.position < 0) {
       throw new Error('CREATIVE_RESOURCE_INPUT_POSITION_INVALID')
@@ -324,7 +321,6 @@ export async function validateCreativeResourceInputReferencesInTransaction(
     select: {
       id: true,
       resourceId: true,
-      fingerprint: true,
       resource: { select: { userId: true, status: true } },
     },
   })
@@ -332,15 +328,9 @@ export async function validateCreativeResourceInputReferencesInTransaction(
   return inputs.map((reference) => {
     const revision = byId.get(reference.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
-    if (revision.resourceId !== reference.resourceId) {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_RESOURCE_MISMATCH:${reference.revisionId}`)
-    }
     if (revision.resource.userId !== userId) throw new Error('CREATIVE_RESOURCE_INPUT_NOT_OWNED')
     if (revision.resource.status !== 'ready') {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_READY:${reference.resourceId}`)
-    }
-    if (revision.fingerprint !== reference.fingerprint) {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_FINGERPRINT_CHANGED:${reference.revisionId}`)
+      throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_READY:${revision.resourceId}`)
     }
     return reference
   })
@@ -397,7 +387,7 @@ function revisionStorage(content: CreativeResourceRevisionContent): {
 export async function appendCreativeResourceRevisionInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: AppendCreativeResourceRevisionInput,
-): Promise<CreativeResourceRevisionRef> {
+): Promise<CreativeResourceMaterializedRef> {
   const resourceId = requireNonEmpty(input.resourceId, 'CREATIVE_RESOURCE_ID_REQUIRED')
   const userId = requireNonEmpty(input.userId, 'CREATIVE_RESOURCE_USER_ID_REQUIRED')
   const resource = await lockResource(tx, resourceId)
@@ -407,29 +397,16 @@ export async function appendCreativeResourceRevisionInTransaction(
   }
   if (resource.status === 'canceled') throw new Error(`CREATIVE_RESOURCE_CANCELED:${resourceId}`)
   const references = await validateCreativeResourceInputReferencesInTransaction(tx, userId, input.inputs)
-  const fingerprint = fingerprintCreativeResourceRevision({
-    mediaType: input.mediaType,
-    schemaId: input.schemaId,
-    content: input.content,
-    inputs: references,
-    prompt: input.provenance.prompt,
-    modelKey: input.provenance.modelKey,
-    generationOptions: input.provenance.generationOptions,
-  })
   const taskId = input.provenance.taskId?.trim() || null
   if (taskId) {
     const existing = await tx.creativeResourceRevision.findUnique({
       where: { taskId_resourceId: { taskId, resourceId } },
-      select: { id: true, resourceId: true, fingerprint: true },
+      select: { id: true, resourceId: true },
     })
     if (existing) {
-      if (existing.fingerprint !== fingerprint) {
-        throw new Error(`CREATIVE_RESOURCE_TASK_REVISION_COLLISION:${taskId}:${resourceId}`)
-      }
       return {
         resourceId: existing.resourceId,
         revisionId: existing.id,
-        fingerprint: existing.fingerprint,
       }
     }
   }
@@ -448,7 +425,6 @@ export async function appendCreativeResourceRevisionInTransaction(
       id: randomUUID(),
       resourceId,
       revision,
-      fingerprint,
       ...storage,
       prompt: input.provenance.prompt?.trim() || null,
       modelKey: input.provenance.modelKey?.trim() || null,
@@ -460,7 +436,7 @@ export async function appendCreativeResourceRevisionInTransaction(
       executionSegmentId: input.provenance.executionSegmentId?.trim() || null,
       toolCallId: input.provenance.toolCallId?.trim() || null,
     },
-    select: { id: true, resourceId: true, fingerprint: true },
+    select: { id: true, resourceId: true },
   })
   if (references.length > 0) {
     await tx.creativeResourceLineage.createMany({
@@ -486,7 +462,6 @@ export async function appendCreativeResourceRevisionInTransaction(
   return {
     resourceId: created.resourceId,
     revisionId: created.id,
-    fingerprint: created.fingerprint,
   }
 }
 

@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import {
+  applyAssetImageFormatPolicy,
+  getAssetImageFormatPolicy,
+  resolveAssetImageKindForSchemaId,
+} from '@/lib/asset-generation'
+import {
   getCapabilityOptionFields,
   resolveBuiltinCapabilitiesByModelKey,
   resolveGenerationOptionsForModel,
@@ -120,6 +125,13 @@ const createTextInputSchema = z.object({
 const createImageNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   imageReferences: imageReferenceSchema,
+  assetBinding: z.object({
+    assetKind: z.enum(['character', 'location', 'prop']),
+    assetId: z.string().trim().min(1),
+    variantId: z.string().trim().min(1),
+    expectedVersion: z.number().int().nonnegative().nullable(),
+  }).strict().optional()
+    .describe('Optional exact Project asset variant that receives the completed image Resource binding. It never changes the asset design.'),
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image).optional()
     .describe('Professional meaning of the image Resource. Omit to use generic.image.'),
   aspectRatio: z.string().trim().min(1).optional()
@@ -202,7 +214,6 @@ type NewMediaGenerationRequest = CreateImageNewRequest | CreateAudioNewRequest |
 const resourceRefOutputSchema = z.object({
   resourceId: z.string().min(1),
   revisionId: z.string().min(1).optional(),
-  fingerprint: z.string().min(1).optional(),
   candidateIndex: z.number().int().min(0).nullable(),
 }).strict()
 
@@ -263,9 +274,7 @@ function normalizeInputReferences(
   },
 ): CreativeResourceInputRef[] {
   return (references ?? []).map((reference, position) => ({
-    resourceId: reference.resourceId,
     revisionId: reference.revisionId,
-    fingerprint: reference.fingerprint,
     role: reference.role ?? input.defaultRole,
     position: input.positionOffset + position,
   }))
@@ -290,12 +299,12 @@ function normalizeMediaInputReferences(input: NewMediaGenerationRequest): {
   })
   const seen = new Set<string>()
   for (const reference of [...contextInputs, ...providerInputs]) {
-    const identity = `${reference.resourceId}:${reference.revisionId}`
+    const identity = reference.revisionId
     if (seen.has(identity)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_RESOURCE_INPUT_REFERENCE_DUPLICATE',
         field: 'contextReferences',
-        resourceId: reference.resourceId,
+        revisionId: reference.revisionId,
         agentRetryableAfterCorrection: true,
       })
     }
@@ -316,17 +325,17 @@ async function assertInputReferences(
   await prisma.$transaction(async (tx) => {
     await validateCreativeResourceInputReferencesInTransaction(tx, userId, references)
     if (!requiredMediaType || references.length === 0) return
-    const resources = await tx.creativeResource.findMany({
-      where: { id: { in: references.map((reference) => reference.resourceId) } },
-      select: { id: true, mediaType: true },
+    const revisions = await tx.creativeResourceRevision.findMany({
+      where: { id: { in: references.map((reference) => reference.revisionId) } },
+      select: { id: true, resource: { select: { mediaType: true } } },
     })
-    const mediaTypeById = new Map(resources.map((resource) => [resource.id, resource.mediaType]))
+    const mediaTypeById = new Map(revisions.map((revision) => [revision.id, revision.resource.mediaType]))
     for (const reference of references) {
-      if (mediaTypeById.get(reference.resourceId) !== requiredMediaType) {
+      if (mediaTypeById.get(reference.revisionId) !== requiredMediaType) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
           field,
-          resourceId: reference.resourceId,
+          revisionId: reference.revisionId,
           allowedValues: [requiredMediaType],
           agentRetryableAfterCorrection: true,
         })
@@ -347,11 +356,11 @@ async function classifyProviderInputReferences(
   if (references.length === 0) {
     return { imageInputs: [], audioInputs: [], imageInputPositions: [], audioInputPositions: [] }
   }
-  const resources = await prisma.creativeResource.findMany({
-    where: { id: { in: references.map((reference) => reference.resourceId) } },
-    select: { id: true, mediaType: true },
+  const revisions = await prisma.creativeResourceRevision.findMany({
+    where: { id: { in: references.map((reference) => reference.revisionId) } },
+    select: { id: true, resource: { select: { mediaType: true } } },
   })
-  const mediaTypeById = new Map(resources.map((resource) => [resource.id, resource.mediaType]))
+  const mediaTypeById = new Map(revisions.map((revision) => [revision.id, revision.resource.mediaType]))
   const allowedMediaTypes: readonly CreativeResourceMediaType[] = mediaType === 'video'
     ? ['image', 'audio']
     : mediaType === 'image'
@@ -361,12 +370,12 @@ async function classifyProviderInputReferences(
   const imageInputs: CreativeResourceInputRef[] = []
   const audioInputs: CreativeResourceInputRef[] = []
   for (const reference of references) {
-    const referenceMediaType = mediaTypeById.get(reference.resourceId)
+    const referenceMediaType = mediaTypeById.get(reference.revisionId)
     if (!referenceMediaType || !allowedMediaTypes.some((allowed) => allowed === referenceMediaType)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
         field,
-        resourceId: reference.resourceId,
+        revisionId: reference.revisionId,
         allowedValues: allowedMediaTypes,
         agentRetryableAfterCorrection: true,
       })
@@ -542,6 +551,7 @@ function requireCapabilityField(params: {
 async function resolveFrozenGenerationOptions(input: {
   readonly ctx: ProjectAgentOperationContext
   readonly config: MediaPlanConfig
+  readonly schemaId: string
   readonly modelKey: string
   readonly publicInput: NewMediaGenerationRequest
 }): Promise<Record<string, string | number | boolean>> {
@@ -640,19 +650,26 @@ async function resolveFrozenGenerationOptions(input: {
       ? (input.publicInput as CreateVideoNewRequest).aspectRatio?.trim()
       : undefined
   const isFramedMedia = input.config.mediaType === 'image' || input.config.mediaType === 'video'
-  const projectAspectRatio = isFramedMedia
+  const assetImageKind = input.config.mediaType === 'image'
+    ? resolveAssetImageKindForSchemaId(input.schemaId)
+    : null
+  const assetAspectRatio = assetImageKind
+    ? getAssetImageFormatPolicy(assetImageKind).aspectRatio
+    : null
+  const projectAspectRatio = isFramedMedia && !assetAspectRatio
     ? requireProjectVideoRatio(projectConfig.videoRatio).value
     : null
-  if (isFramedMedia && requestedAspectRatio && requestedAspectRatio !== projectAspectRatio) {
+  const requiredAspectRatio = assetAspectRatio ?? projectAspectRatio
+  if (isFramedMedia && requestedAspectRatio && requestedAspectRatio !== requiredAspectRatio) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_MISMATCH',
+      code: assetAspectRatio ? 'ASSET_IMAGE_RATIO_MISMATCH' : 'PROJECT_VIDEO_RATIO_MISMATCH',
       field: 'aspectRatio',
       requestedAspectRatio,
-      projectAspectRatio,
+      requiredAspectRatio,
       agentRetryableAfterCorrection: true,
     })
   }
-  const resolvedAspectRatio = projectAspectRatio
+  const resolvedAspectRatio = requiredAspectRatio
   if (input.config.mediaType === 'image') {
     const publicInput = input.publicInput as CreateImageNewRequest
     frozen.aspectRatio = resolvedAspectRatio as string
@@ -675,9 +692,65 @@ async function planNewMediaGeneration(
   input: NewMediaGenerationRequest,
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
-  const episodeId = resolveEpisodeId(input, ctx)
   const schemaId = requireSchemaForMedia(input.schemaId ?? config.schemaId, config.mediaType)
-  const normalizedReferences = normalizeMediaInputReferences(input)
+  const requestedAssetBinding = config.mediaType === 'image'
+    ? (input as CreateImageNewRequest).assetBinding
+    : undefined
+  const episodeId = requestedAssetBinding ? null : resolveEpisodeId(input, ctx)
+  const assetImageKind = config.mediaType === 'image'
+    ? resolveAssetImageKindForSchemaId(schemaId)
+    : null
+  if (requestedAssetBinding) {
+    if (!assetImageKind || requestedAssetBinding.assetKind !== assetImageKind) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'ASSET_IMAGE_BINDING_SCHEMA_MISMATCH',
+        field: 'assetBinding.assetKind',
+        schemaId,
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    if ((input.count ?? 1) !== 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'ASSET_IMAGE_BINDING_SINGLE_CANDIDATE_REQUIRED',
+        field: 'count',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    const targetExists = requestedAssetBinding.assetKind === 'character'
+      ? await prisma.characterAppearance.count({
+          where: {
+            id: requestedAssetBinding.variantId,
+            characterId: requestedAssetBinding.assetId,
+            character: { projectId: ctx.projectId, project: { userId: ctx.userId } },
+          },
+        })
+      : await prisma.locationImage.count({
+          where: {
+            id: requestedAssetBinding.variantId,
+            locationId: requestedAssetBinding.assetId,
+            location: {
+              projectId: ctx.projectId,
+              assetKind: requestedAssetBinding.assetKind,
+              project: { userId: ctx.userId },
+            },
+          },
+        })
+    if (targetExists !== 1) {
+      throw new ApiError('NOT_FOUND', {
+        code: 'ASSET_IMAGE_BINDING_TARGET_NOT_FOUND',
+        field: 'assetBinding.variantId',
+      })
+    }
+  }
+  const prompt = assetImageKind
+    ? applyAssetImageFormatPolicy({
+        prompt: input.prompt,
+        kind: assetImageKind,
+        locale: resolveOperationLocale(ctx.context),
+      })
+    : input.prompt
+  const effectiveInput = prompt === input.prompt ? input : { ...input, prompt }
+  const normalizedReferences = normalizeMediaInputReferences(effectiveInput)
   const references = normalizedReferences.inputs
   await assertInputReferences(
     ctx.userId,
@@ -753,25 +826,27 @@ async function planNewMediaGeneration(
   const generationOptions = await resolveFrozenGenerationOptions({
     ctx,
     config,
+    schemaId,
     modelKey,
-    publicInput: input,
+    publicInput: effectiveInput,
   })
   const inputHash = hashTaskInput({
     operationId: config.operationId,
-    prompt: input.prompt,
+    prompt,
     modelKey,
     schemaId,
     references,
     imageInputPositions: providerReferences.imageInputPositions,
     audioInputPositions: providerReferences.audioInputPositions,
     generationOptions,
+    assetBinding: requestedAssetBinding ?? null,
     ...(config.mediaType === 'audio' ? {
-      durationSeconds: (input as CreateAudioNewRequest).durationSeconds,
-      vocalMode: (input as CreateAudioNewRequest).vocalMode,
-      genre: (input as CreateAudioNewRequest).genre,
-      mood: (input as CreateAudioNewRequest).mood,
-      bpm: (input as CreateAudioNewRequest).bpm,
-      outputFormat: (input as CreateAudioNewRequest).outputFormat,
+      durationSeconds: (effectiveInput as CreateAudioNewRequest).durationSeconds,
+      vocalMode: (effectiveInput as CreateAudioNewRequest).vocalMode,
+      genre: (effectiveInput as CreateAudioNewRequest).genre,
+      mood: (effectiveInput as CreateAudioNewRequest).mood,
+      bpm: (effectiveInput as CreateAudioNewRequest).bpm,
+      outputFormat: (effectiveInput as CreateAudioNewRequest).outputFormat,
     } : {}),
   })
   const requestId = [
@@ -781,7 +856,7 @@ async function planNewMediaGeneration(
     ctx.projectId,
     episodeId ?? 'project',
     ctx.context.runId?.trim() || 'no-run',
-    ctx.toolCallId?.trim() || stableArgsHash({ input, modelKey, schemaId, references, generationOptions }),
+    ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
   const resources = Array.from({ length: input.count ?? 1 }, (_, candidateIndex) => ({
@@ -801,7 +876,7 @@ async function planNewMediaGeneration(
       resourceId: resource.resourceId,
       mediaType: config.mediaType,
       schemaId,
-      prompt: input.prompt,
+      prompt,
       modelKey,
       inputHash,
       inputs: references,
@@ -813,20 +888,26 @@ async function planNewMediaGeneration(
       // segments; the commit receives its own operationExecutionId.
       executionSegmentId: null,
       toolCallId: ctx.toolCallId?.trim() || null,
+      ...(requestedAssetBinding ? {
+        binding: {
+          kind: 'project_asset_image' as const,
+          ...requestedAssetBinding,
+        },
+      } : {}),
     }
     const payload = {
       resource: resourcePayload,
       [config.modelPayloadKey]: modelKey,
-      prompt: input.prompt,
+      prompt,
       count: 1 as const,
       generationOptions,
       ...(config.mediaType === 'audio' ? {
-        durationSeconds: (input as CreateAudioNewRequest).durationSeconds,
-        ...((input as CreateAudioNewRequest).vocalMode ? { vocalMode: (input as CreateAudioNewRequest).vocalMode } : {}),
-        ...((input as CreateAudioNewRequest).genre ? { genre: (input as CreateAudioNewRequest).genre } : {}),
-        ...((input as CreateAudioNewRequest).mood ? { mood: (input as CreateAudioNewRequest).mood } : {}),
-        ...(typeof (input as CreateAudioNewRequest).bpm === 'number' ? { bpm: (input as CreateAudioNewRequest).bpm } : {}),
-        ...((input as CreateAudioNewRequest).outputFormat ? { outputFormat: (input as CreateAudioNewRequest).outputFormat } : {}),
+        durationSeconds: (effectiveInput as CreateAudioNewRequest).durationSeconds,
+        ...((effectiveInput as CreateAudioNewRequest).vocalMode ? { vocalMode: (effectiveInput as CreateAudioNewRequest).vocalMode } : {}),
+        ...((effectiveInput as CreateAudioNewRequest).genre ? { genre: (effectiveInput as CreateAudioNewRequest).genre } : {}),
+        ...((effectiveInput as CreateAudioNewRequest).mood ? { mood: (effectiveInput as CreateAudioNewRequest).mood } : {}),
+        ...(typeof (effectiveInput as CreateAudioNewRequest).bpm === 'number' ? { bpm: (effectiveInput as CreateAudioNewRequest).bpm } : {}),
+        ...((effectiveInput as CreateAudioNewRequest).outputFormat ? { outputFormat: (effectiveInput as CreateAudioNewRequest).outputFormat } : {}),
       } : {}),
     }
     return createPlannedTask({

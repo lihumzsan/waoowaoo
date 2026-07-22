@@ -17,10 +17,8 @@ export interface ProjectContextEditBibleSnapshot {
   id: string
   sourceResourceId: string
   sourceRevisionId: string
-  sourceFingerprint: string
   bibleResourceId: string
   bibleRevisionId: string
-  bibleFingerprint: string
   version: number
   updatedAt: string
 }

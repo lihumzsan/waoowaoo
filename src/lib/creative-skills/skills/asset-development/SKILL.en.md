@@ -2,15 +2,22 @@
 
 ## Purpose
 
-Translate story facts, user requirements, reference materials, and any confirmed Style Bible supplied in the input into reusable character, location, prop, and reference-asset designs. This Skill uses the union of all still-valid rules from the existing Chinese and English asset prompts so both languages follow the same discipline. Assets may be designed independently when no Style Bible exists. It returns asset design and generation prompts only; it does not generate images or write project state.
+Turn registered entities from an exact `canonical_screenplay`, user requirements, references, and an exact Style Bible into reusable character, location, and prop designs plus final generation prompts in one pass. This responsibility includes asset-fact extraction, appearance design, and prompt composition, but never image generation or project writes. Assets may be designed independently when no Style Bible exists for an ordinary single-asset task; a formal `asset_manifest` requires exactly one canonical screenplay Revision and the project's currently adopted exact Style Bible Revision.
+
+## Asset Manifest coverage
+
+- Design only the `character`, `location`, and `prop` entities registered by the canonical screenplay. Never extract a second competing entity set from prose.
+- Reference each registered identity with `canonicalEntity.entityId + kind`. Never invent a key, use array position as identity, or add an `other` type.
+- Cover every registered entity exactly once: no omission and no duplicate. This is a design manifest and project-asset identity mapping, not proof that an image already exists or will appear in the final video.
+- Perform fact extraction, stable identity design, and final prompt composition in one Creative Task. Do not emit a separate asset-extraction result or workflow state.
 
 ## Style-consumption boundary
 
 - When the input supplies a confirmed Style Bible, it is the sole authority for visual style. This Skill consumes its cross-media `visualStyle` and asset-only `assetImageStyle`; it must not redefine project style from one reference image or one asset. Without a Style Bible, the asset identity may still be designed, but the result must state that it is not bound to project style.
 - Always put style-free stable asset identity in `stableDescription`, then compose that identity with an actually supplied Style Bible in `generationPrompt`. Never use the final generation prompt to rewrite stable identity.
 - A stable character identity description excludes artistic style, filters, and lighting; the final image prompt appends them consistently.
-- A foundational location description preserves real spatial structure, materials, and physical lighting conditions. Stylized lighting, material treatment, and asset composition are composed with the Style Bible only in the final image prompt.
-- Video uses the cross-media overall style and must not inherit asset-board lighting or composition.
+- A foundational location description preserves real spatial structure, materials, and physical lighting conditions. Stylized lighting and material treatment are composed with the Style Bible only in the final image prompt; fixed layout comes from execution policy.
+- Video uses the cross-media overall style and must not inherit asset-image-only lighting or material treatment.
 - User or project style outranks source-image style. A reference preserves identity and structure and cannot override explicit art direction. Ignore incidental source color cast, lighting, blur, noise, and defects.
 
 ## Character design
@@ -95,7 +102,8 @@ Translate story facts, user requirements, reference materials, and any confirmed
 
 ## Review
 
-- If a confirmed Style Bible was supplied, does the design follow it and clearly separate cross-media style from asset-only lighting, material, and composition? If none was supplied, does the result clearly keep style unbound?
+- Does a formal Asset Manifest reference exact canonical entities, cover every registered entity exactly once, and use the project's currently adopted Style Bible?
+- For an ordinary single-asset task, if a Style Bible was supplied, does the design follow it and separate cross-media style from asset-only lighting and material treatment? If none was supplied, does the result keep style unbound?
 - Is the character stable, complete, era-consistent, explicit about footwear, and free of body color, action, background, uncertainty, and abstract aura?
 - Is a non-human identity described through its real form rather than a human template?
 - Is the location faithful, structurally complete, layered, anchored, and equipped with unmarked placement space?

@@ -1,10 +1,10 @@
 export const CREATIVE_WORK_OUTPUT_KINDS = [
-  'screenplay_draft',
+  'canonical_screenplay',
   'edit_bible_bundle',
   'chapter_plan',
   'continuity_analysis',
   'style_bible',
-  'asset_prompt_set',
+  'asset_manifest',
   'video_prompt_set',
   'music_direction',
   'creative_review',

@@ -3,6 +3,7 @@ import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import { MAX_BASE64_IMAGE_REQUEST_BYTES, readJsonWithLimit } from '@/lib/http/body-limits'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 /**
  * POST /api/asset-hub/upload-temp
@@ -18,7 +19,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const result = await executeProjectAgentOperationFromApi({
         request,
         operationId: 'api_asset_hub_upload_temp',
-        projectId: 'global-asset-hub',
+        projectId: GLOBAL_ASSET_PROJECT_ID,
         userId: authResult.session.user.id,
         input: body,
         source: 'asset-hub',

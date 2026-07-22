@@ -146,4 +146,4 @@ These are two separate, self-sufficient prompts. The seam changes from medium-wi
 
 ## Boundary
 
-This Skill provides video creative and final-prompt methods. Resource IDs, revisions, fingerprints, model capability validation, reference limits, provider parameters, media submission, billing, and deterministic execution templates belong to the caller and execution layer.
+This Skill provides video creative and final-prompt methods. Exact Resource revision IDs, model capability validation, reference limits, provider parameters, media submission, billing, and deterministic execution templates belong to the caller and execution layer.

@@ -132,8 +132,12 @@
       "sourcePaths": [
         "src/lib/creative-resource",
         "src/lib/creative-style",
+        "src/lib/canonical-screenplay",
+        "src/lib/asset-generation",
+        "src/lib/assets/services/project-asset-writer.ts",
         "src/lib/edit-source-document",
         "src/lib/operations/domains/creative-resource",
+        "src/lib/operations/domains/assistant/creative-asset-ops.ts",
         "src/lib/operations/domains/assistant/creative-style-ops.ts",
         "src/lib/workers/handlers/creative-resource-video-merge.ts",
         "src/app/api/projects/[projectId]/resources",
@@ -146,7 +150,9 @@
         "messages/zh/project-workflow.json",
         "prisma/schema.prisma",
         "prisma/migrations/20260717120000_add_creative_resource_spine/migration.sql",
-        "prisma/migrations/20260720190000_add_creative_resource_data/migration.sql"
+        "prisma/migrations/20260720190000_add_creative_resource_data/migration.sql",
+        "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql",
+        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts",
@@ -154,6 +160,8 @@
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/creative-resource/creative-data.test.ts",
         "tests/unit/creative-resource/creative-work-materialization.test.ts",
+        "tests/unit/canonical-screenplay/contracts.test.ts",
+        "tests/unit/asset-generation/asset-image-format.test.ts",
         "tests/contracts/creative-result-resource-conformance.test.ts",
         "tests/integration/task/creative-resource-voice-binding.integration.test.ts",
         "tests/golden-journey/journeys/freeform-resources.spec.ts"
@@ -172,7 +180,9 @@
         "src/lib/edit-chapter",
         "src/lib/edit-bible/service.ts",
         "src/lib/creative-resource/creative-work-materialization.ts",
+        "src/lib/canonical-screenplay",
         "src/lib/creative-skills/skills/story-development",
+        "src/lib/creative-skills/skills/screenplay-canonicalization",
         "src/lib/creative-skills/skills/continuity-memory",
         "src/lib/creative-worker/context-compiler.ts",
         "src/lib/creative-worker/output-registry.ts",
@@ -180,7 +190,8 @@
         "src/lib/query/hooks/index.ts",
         "src/lib/query/hooks/useProjectBible.ts",
         "src/lib/query/project-bible-error.ts",
-        "prisma/migrations/20260713013000_canonicalize_edit_execution_character_identity/migration.sql"
+        "prisma/migrations/20260713013000_canonicalize_edit_execution_character_identity/migration.sql",
+        "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql"
       ],
       "testPaths": [
         "tests/unit/edit-bible/chapter-plan-schema.test.ts",
@@ -587,6 +598,17 @@
         "src/app/api/deployment",
         "src/app/api/user/api-config",
         "src/app/[locale]/workspace/[projectId]/page.tsx",
+        "src/app/[locale]/home",
+        "src/components/home",
+        "src/lib/home",
+        "src/lib/projects/episode-service.ts",
+        "src/lib/projects/video-ratio.ts",
+        "src/lib/projects/video-ratio-write.ts",
+        "src/app/api/projects/route.ts",
+        "src/app/api/projects/[projectId]/episodes/route.ts",
+        "src/lib/operations/domains/project/system-project-ops.ts",
+        "messages/en/home.json",
+        "messages/zh/home.json",
         "messages/en/workspaceDetail.json",
         "messages/zh/workspaceDetail.json",
         "src/app/api/admin",
@@ -624,6 +646,7 @@
       "sourcePaths": [
         "src/lib/assets/services/asset-scope-ownership.ts",
         "src/lib/assets/services/asset-actions.ts",
+        "src/lib/assets/services/project-asset-writer.ts",
         "src/lib/assets/services/location-backed-assets.ts",
         "src/lib/assets/services/project-upload-render.ts",
         "src/lib/assets/upload-render-form.ts",
@@ -646,6 +669,8 @@
         "src/lib/operations/api-only/assets-api-ops.ts",
         "src/lib/operations/domains/asset",
         "src/lib/operations/domains/gui/gui-ops.ts",
+        "src/lib/operations/domains/assistant/creative-asset-ops.ts",
+        "src/lib/asset-generation",
         "src/lib/operations/domains/asset-hub",
         "src/lib/operations/domains/project/project-data-ops.ts",
         "src/components/shared/assets",
@@ -653,11 +678,13 @@
         "messages/en/assets.json",
         "messages/zh/assets.json",
         "src/app/api/assets",
-        "src/app/api/asset-hub"
+        "src/app/api/asset-hub",
+        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql"
       ],
       "testPaths": [
         "tests/golden-journey/journeys/asset-hub-ownership.spec.ts",
         "tests/integration/api/specific/asset-scope-ownership.integration.test.ts",
+        "tests/unit/asset-generation/asset-image-format.test.ts",
         "tests/golden-journey/journeys/auth-project-permission.spec.ts"
       ],
       "guardPaths": [

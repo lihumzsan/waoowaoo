@@ -146,7 +146,6 @@ export type ProjectAgentChoiceCardPartData = z.infer<typeof projectAgentChoiceCa
 export type ProjectAgentChoiceCardAuthoring = z.infer<typeof projectAgentChoiceCardAuthoringSchema>
 
 const resourceRevisionRequestSchema = z.object({
-  resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
 }).strict()
 
@@ -181,9 +180,7 @@ const projectAgentChoiceSubjectSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('resource_revisions'),
     revisions: z.array(z.object({
-      resourceId: z.string().trim().min(1),
       revisionId: z.string().trim().min(1),
-      fingerprint: fingerprintSchema,
     }).strict()).min(1).max(24),
     fingerprint: fingerprintSchema,
   }).strict(),
@@ -266,11 +263,11 @@ function cardDefinitionFromPersistedCard(
 }
 
 function assertUniqueResourceRevisionRequests(
-  revisions: readonly { resourceId: string; revisionId: string }[],
+  revisions: readonly { revisionId: string }[],
 ): void {
   const identities = new Set<string>()
   for (const revision of revisions) {
-    const identity = `${revision.resourceId}:${revision.revisionId}`
+    const identity = revision.revisionId
     if (identities.has(identity)) {
       throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_DUPLICATE:${identity}`)
     }
@@ -313,7 +310,7 @@ async function resolveResourceRevisionsSubject(params: {
   tx: Prisma.TransactionClient
   projectId: string
   userId: string
-  revisions: readonly { resourceId: string; revisionId: string }[]
+  revisions: readonly { revisionId: string }[]
 }): Promise<Extract<ProjectAgentChoiceSubject, { kind: 'resource_revisions' }>> {
   assertUniqueResourceRevisionRequests(params.revisions)
   const revisionIds = params.revisions.map((revision) => revision.revisionId)
@@ -329,7 +326,6 @@ async function resolveResourceRevisionsSubject(params: {
     select: {
       id: true,
       resourceId: true,
-      fingerprint: true,
       resource: {
         select: {
           projectId: true,
@@ -344,7 +340,7 @@ async function resolveResourceRevisionsSubject(params: {
   const byId = new Map(records.map((record) => [record.id, record]))
   const ordered = params.revisions.map((requested) => {
     const record = byId.get(requested.revisionId)
-    if (!record || record.resourceId !== requested.resourceId) {
+    if (!record) {
       throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_MISSING:${requested.revisionId}`)
     }
     return record
@@ -352,9 +348,7 @@ async function resolveResourceRevisionsSubject(params: {
   return {
     kind: 'resource_revisions',
     revisions: ordered.map((record) => ({
-      resourceId: record.resourceId,
       revisionId: record.id,
-      fingerprint: record.fingerprint,
     })),
     fingerprint: fingerprintProjectAgentChoiceSubject('resource_revisions', ordered),
   }
@@ -498,7 +492,6 @@ export async function assertProjectAgentChoiceOfferCurrent(params: {
       : {
           kind: 'resource_revisions',
           revisions: params.offer.subject.revisions.map((revision) => ({
-            resourceId: revision.resourceId,
             revisionId: revision.revisionId,
           })),
         }

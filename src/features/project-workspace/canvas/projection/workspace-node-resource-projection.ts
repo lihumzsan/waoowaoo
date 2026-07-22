@@ -83,11 +83,16 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
   })
 
   const edgeIds = new Set(edges.map((edge) => edge.id))
+  const nodeIdByRevisionId = new Map(cards.flatMap((card) => {
+    const revisionId = card.resource.headRevision?.revisionId
+    const nodeId = nodeIdByResourceId.get(card.resource.resourceId)
+    return revisionId && nodeId ? [[revisionId, nodeId] as const] : []
+  }))
   for (const card of cards) {
     const targetNodeId = nodeIdByResourceId.get(card.resource.resourceId)
     if (!targetNodeId) continue
     for (const input of card.resource.headRevision?.inputs ?? []) {
-      const sourceNodeId = nodeIdByResourceId.get(input.resourceId)
+      const sourceNodeId = nodeIdByRevisionId.get(input.revisionId)
       if (!sourceNodeId || sourceNodeId === targetNodeId) continue
       const edgeId = `resource-lineage:${input.revisionId}:${targetNodeId}:${input.role}:${String(input.position)}`
       if (edgeIds.has(edgeId)) continue

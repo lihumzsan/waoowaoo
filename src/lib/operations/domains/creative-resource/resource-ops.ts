@@ -8,6 +8,7 @@ import {
 } from '@/lib/creative-resource/creative-data'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
+  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
   CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
   CREATIVE_RESOURCE_MEDIA_TYPES,
   CREATIVE_RESOURCE_STATUSES,
@@ -32,6 +33,7 @@ function isReservedCreativeResourceBinding(input: {
   const role = input.role.trim()
   const slotKey = input.slotKey.trim()
   if (role === CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE) return true
+  if (role === CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE) return true
   return Object.values(CREATIVE_RESOURCE_CANONICAL_BINDINGS).some(
     (binding) => binding.role === role && binding.slotKey === slotKey,
   )
@@ -71,7 +73,7 @@ const editResourceInputSchema = z.object({
       op: z.literal('set'),
       path: creativeResourceEditPathSchema,
       valueJson: z.string().min(1).max(262_144)
-        .describe('One complete valid JSON value encoded as a string. Use {$resourceRef:{resourceId,revisionId,fingerprint}} for exact Resource references.'),
+        .describe('One complete valid JSON value encoded as a string. Use {$resourceRef:{revisionId}} for an exact immutable Resource reference.'),
     }).strict(),
     z.object({
       op: z.literal('remove'),

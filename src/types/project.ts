@@ -130,10 +130,8 @@ export interface ProjectEditBible {
   sourceDocumentId: string
   sourceResourceId: string
   sourceRevisionId: string
-  sourceFingerprint: string
   bibleResourceId: string
   bibleRevisionId: string
-  bibleFingerprint: string
   sourceText: string
   version: number
   bible: unknown

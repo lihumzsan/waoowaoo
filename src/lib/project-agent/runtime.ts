@@ -435,8 +435,8 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 interface ProjectRuntimeFacts {
   planning: {
     bibleVersion: number | null
-    screenplayFingerprint: string | null
-    bibleFingerprint: string | null
+    screenplayRevisionId: string | null
+    bibleRevisionId: string | null
     chapterCount: number
   }
 }
@@ -458,9 +458,9 @@ async function readProjectRuntimeFacts(params: {
           },
           select: {
             version: true,
-            bibleFingerprint: true,
+            bibleRevisionId: true,
             sourceDocument: {
-              select: { sourceFingerprint: true },
+              select: { sourceRevisionId: true },
             },
           },
         })
@@ -480,8 +480,8 @@ async function readProjectRuntimeFacts(params: {
   return {
     planning: {
       bibleVersion: bible?.version ?? null,
-      screenplayFingerprint: bible?.sourceDocument.sourceFingerprint ?? null,
-      bibleFingerprint: bible?.bibleFingerprint ?? null,
+      screenplayRevisionId: bible?.sourceDocument.sourceRevisionId ?? null,
+      bibleRevisionId: bible?.bibleRevisionId ?? null,
       chapterCount,
     },
   }
@@ -495,10 +495,10 @@ function buildProjectStateVersion(params: {
   return [
     params.videoRatio ?? 'none',
     String(params.facts.planning.bibleVersion ?? 'none'),
-    params.facts.planning.screenplayFingerprint ?? 'none',
-    params.facts.planning.bibleFingerprint ?? 'none',
+    params.facts.planning.screenplayRevisionId ?? 'none',
+    params.facts.planning.bibleRevisionId ?? 'none',
     String(params.facts.planning.chapterCount),
-    params.creativeWorkingSet.adoptedStyleBible?.fingerprint ?? 'none',
+    params.creativeWorkingSet.adoptedStyleBible?.revisionId ?? 'none',
     ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
   ].map(formatRuntimeStateValue).join(':')
 }
@@ -521,10 +521,11 @@ function buildProjectStateInputItem(params: {
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
     `planning.bibleVersion=${formatRuntimeStateValue(String(params.facts.planning.bibleVersion ?? 'none'))}`,
-    `planning.screenplayFingerprint=${formatRuntimeStateValue(params.facts.planning.screenplayFingerprint)}`,
-    `planning.bibleFingerprint=${formatRuntimeStateValue(params.facts.planning.bibleFingerprint)}`,
+    `planning.screenplayRevisionId=${formatRuntimeStateValue(params.facts.planning.screenplayRevisionId)}`,
+    `planning.bibleRevisionId=${formatRuntimeStateValue(params.facts.planning.bibleRevisionId)}`,
     `planning.chapterCount=${String(params.facts.planning.chapterCount)}`,
     `creativeWorkingSet.adoptedStyleBible=${JSON.stringify(params.creativeWorkingSet.adoptedStyleBible)}`,
+    `creativeWorkingSet.adoptedAssetManifest=${JSON.stringify(params.creativeWorkingSet.adoptedAssetManifest)}`,
     `creativeWorkingSet.bindings=${JSON.stringify(params.creativeWorkingSet.bindings)}`,
     `creativeWorkingSet.availableResources=${JSON.stringify(params.creativeWorkingSet.availableResources)}`,
     '[/project_state_snapshot]',

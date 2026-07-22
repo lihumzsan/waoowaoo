@@ -58,6 +58,7 @@ export type {
 } from './output-registry'
 export type {
   CreativeSkillReadTraceEntry,
+  CreativeWorkHydratedRequest,
   CreativeWorkOutputKind,
   CreativeWorkRequest,
   CreativeWorkerBudgetOverrides,

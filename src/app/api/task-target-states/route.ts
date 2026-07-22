@@ -6,6 +6,7 @@ import {
   requireProjectAuthLight,
   requireUserAuth,
 } from '@/lib/api-auth'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 type TaskTargetQuery = {
   targetType: string
@@ -62,7 +63,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   let userId: string
-  if (projectId === 'global-asset-hub') {
+  if (projectId === GLOBAL_ASSET_PROJECT_ID) {
     const authResult = await requireUserAuth()
     if (isErrorResponse(authResult)) return authResult
     userId = authResult.session.user.id
@@ -83,4 +84,3 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   return NextResponse.json(result)
 })
-

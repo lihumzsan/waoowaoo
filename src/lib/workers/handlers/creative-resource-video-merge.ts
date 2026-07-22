@@ -36,8 +36,6 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
     where: { id: { in: payload.resource.inputs.map((input) => input.revisionId) } },
     select: {
       id: true,
-      resourceId: true,
-      fingerprint: true,
       media: { select: { storageKey: true } },
       resource: { select: { userId: true, projectId: true, mediaType: true, status: true } },
     },
@@ -47,9 +45,7 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
     const revision = revisionById.get(input.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${input.revisionId}`)
     if (
-      revision.resourceId !== input.resourceId
-      || revision.fingerprint !== input.fingerprint
-      || revision.resource.userId !== job.data.userId
+      revision.resource.userId !== job.data.userId
       || revision.resource.status !== 'ready'
       || revision.resource.mediaType !== 'video'
       || (revision.resource.projectId && revision.resource.projectId !== job.data.projectId)

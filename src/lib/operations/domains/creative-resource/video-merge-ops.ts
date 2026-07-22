@@ -34,9 +34,7 @@ function normalizeVideoInputs(
   videos: z.infer<typeof mergeVideosInputSchema>['videos'],
 ): CreativeResourceInputRef[] {
   return videos.map((video, position) => ({
-    resourceId: video.resourceId,
     revisionId: video.revisionId,
-    fingerprint: video.fingerprint,
     role: 'source_video',
     position,
   }))
@@ -118,18 +116,22 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           locale: resolveOperationLocale(ctx.context),
           onTaskCreatedInTransaction: async (tx) => {
             await validateCreativeResourceInputReferencesInTransaction(tx, ctx.userId, references)
-            const resources = await tx.creativeResource.findMany({
-              where: { id: { in: references.map((reference) => reference.resourceId) } },
-              select: { id: true, projectId: true, mediaType: true },
+            const revisions = await tx.creativeResourceRevision.findMany({
+              where: { id: { in: references.map((reference) => reference.revisionId) } },
+              select: {
+                id: true,
+                resource: { select: { projectId: true, mediaType: true } },
+              },
             })
-            const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
+            const revisionById = new Map(revisions.map((revision) => [revision.id, revision]))
             for (const reference of references) {
-              const resource = resourceById.get(reference.resourceId)
+              const revision = revisionById.get(reference.revisionId)
+              const resource = revision?.resource
               if (!resource || resource.mediaType !== 'video' || (resource.projectId && resource.projectId !== ctx.projectId)) {
                 throw new ApiError('INVALID_PARAMS', {
                   code: 'VIDEO_MERGE_INPUT_RESOURCE_INVALID',
                   field: 'videos',
-                  resourceId: reference.resourceId,
+                  revisionId: reference.revisionId,
                   agentRetryableAfterCorrection: true,
                 })
               }

@@ -68,12 +68,12 @@
       "cancelled": "已取消"
     },
     "outputKinds": {
-      "screenplayDraft": "剧本创作",
+      "canonicalScreenplay": "规范剧本",
       "editBibleBundle": "制作 Bible",
       "continuityAnalysis": "连续性分析",
       "chapterPlan": "章节规划",
       "styleBible": "视觉风格设计",
-      "assetPromptSet": "视觉资产设计",
+      "assetManifest": "资产设计清单",
       "videoPromptSet": "视频生成设计",
       "musicDirection": "配乐设计",
       "creativeReview": "创作质量审查"

@@ -1,6 +1,7 @@
 import {
   CREATIVE_RESOURCE_SCHEMA,
-  getProjectCreativeResourceCard,
+  isCreativeResourceMediaType,
+  type CreativeResourceJsonValue,
   type CreativeResourceRevisionContent,
 } from '@/lib/creative-resource'
 import {
@@ -16,9 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 export interface CreativeChapterAssetReference {
-  readonly resourceId: string
   readonly revisionId: string
-  readonly fingerprint: string
   readonly entityRef: LedgerEntityRef | null
 }
 
@@ -71,18 +70,14 @@ interface ResolvedCreativeContextResource {
 }
 
 const exactResourceRevisionSchema = z.object({
-  resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
 }).strict()
 
 const chapterProvenanceSchema = z.object({
   sourceResourceId: z.string().trim().min(1),
   sourceRevisionId: z.string().trim().min(1),
-  sourceFingerprint: z.string().trim().min(1),
   chapterPlanResourceId: z.string().trim().min(1),
   chapterPlanRevisionId: z.string().trim().min(1),
-  chapterPlanFingerprint: z.string().trim().min(1),
   bible: exactResourceRevisionSchema.nullable(),
   contextRevisions: z.array(exactResourceRevisionSchema.extend({
     schemaId: z.string().trim().min(1),
@@ -94,7 +89,7 @@ const chapterProvenanceSchema = z.object({
 type ExactResourceRevision = z.infer<typeof exactResourceRevisionSchema>
 
 function exactReferenceKey(reference: ExactResourceRevision): string {
-  return `${reference.resourceId}:${reference.revisionId}:${reference.fingerprint}`
+  return reference.revisionId
 }
 
 async function resolveOptionalBibleBundle(input: {
@@ -109,12 +104,10 @@ async function resolveOptionalBibleBundle(input: {
   const revision = await prisma.creativeResourceRevision.findFirst({
     where: {
       id: input.reference.revisionId,
-      resourceId: input.reference.resourceId,
-      fingerprint: input.reference.fingerprint,
       resource: {
         userId: input.userId,
         projectId: input.projectId,
-        episodeId: input.episodeId,
+        episodeId: null,
         status: 'ready',
         mediaType: 'text',
         schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
@@ -133,7 +126,7 @@ async function resolveOptionalBibleBundle(input: {
       lineage.inputRevisionId === input.sourceRevisionId && lineage.role === 'source_material'
     ))
   ) {
-    fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: input.reference.resourceId })
+    fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: input.reference.revisionId })
   }
   return normalizeCreativeBibleResourceBundle({
     rawBundle: revision.contentJson,
@@ -146,49 +139,86 @@ async function resolveCreativeContextResources(input: {
   readonly userId: string
   readonly references: readonly CreativeChapterAssetReference[]
 }): Promise<ResolvedCreativeContextResource[]> {
-  requireUnique(input.references.map((reference) => reference.resourceId), 'resourceId')
+  requireUnique(input.references.map((reference) => reference.revisionId), 'revisionId')
   return await Promise.all(input.references.map(async (reference) => {
-    const card = await getProjectCreativeResourceCard({
-      projectId: input.projectId,
-      userId: input.userId,
-      resourceId: reference.resourceId,
+    const revision = await prisma.creativeResourceRevision.findFirst({
+      where: {
+        id: reference.revisionId,
+        resource: {
+          userId: input.userId,
+          projectId: input.projectId,
+          status: 'ready',
+        },
+      },
+      select: {
+        id: true,
+        contentText: true,
+        contentJson: true,
+        sourceType: true,
+        sourceId: true,
+        sourceRevision: true,
+        prompt: true,
+        media: {
+          select: {
+            id: true,
+            publicId: true,
+            mimeType: true,
+            width: true,
+            height: true,
+            durationMs: true,
+          },
+        },
+        resource: {
+          select: { id: true, mediaType: true, schemaId: true, name: true },
+        },
+      },
     })
-    if (!card) {
-      fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: reference.resourceId })
-    }
-    const resource = card.resource
-    const revision = resource.headRevision
     if (!revision) {
-      fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: reference.resourceId })
+      fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: reference.revisionId })
     }
-    if (
-      revision.revisionId !== reference.revisionId
-      || revision.fingerprint !== reference.fingerprint
-    ) {
-      fail('CREATIVE_CONTEXT_RESOURCE_REVISION_CHANGED', {
-        resourceId: reference.resourceId,
-        expectedRevisionId: reference.revisionId,
-        actualRevisionId: revision.revisionId,
-      })
+    if (!isCreativeResourceMediaType(revision.resource.mediaType)) {
+      fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'resourceMediaType' })
     }
+    const content: CreativeResourceRevisionContent = revision.media
+      ? {
+          kind: 'media',
+          mediaId: revision.media.id,
+          url: `/m/${encodeURIComponent(revision.media.publicId)}`,
+          mimeType: revision.media.mimeType,
+          width: revision.media.width,
+          height: revision.media.height,
+          durationMs: revision.media.durationMs,
+        }
+      : revision.sourceType && revision.sourceId && revision.sourceRevision && revision.contentJson !== null
+        ? {
+            kind: 'domain_snapshot',
+            sourceType: revision.sourceType,
+            sourceId: revision.sourceId,
+            sourceRevision: revision.sourceRevision,
+            snapshot: revision.contentJson as CreativeResourceJsonValue,
+          }
+        : revision.contentText !== null
+          ? { kind: 'text', text: revision.contentText }
+          : revision.contentJson !== null
+            ? { kind: 'structured', data: revision.contentJson as CreativeResourceJsonValue }
+            : fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: reference.revisionId })
     return {
       asset: {
-        resourceId: resource.resourceId,
-        revisionId: revision.revisionId,
-        fingerprint: revision.fingerprint,
-        mediaType: resource.mediaType,
-        schemaId: resource.schemaId,
-        name: resource.name,
+        resourceId: revision.resource.id,
+        revisionId: revision.id,
+        mediaType: revision.resource.mediaType,
+        schemaId: revision.resource.schemaId,
+        name: revision.resource.name,
         description: resourceDescription({
-          name: resource.name,
-          prompt: revision.provenance.prompt,
-          content: revision.content,
+          name: revision.resource.name,
+          prompt: revision.prompt,
+          content,
         }),
-        prompt: revision.provenance.prompt,
-        mediaId: revision.content.kind === 'media' ? revision.content.mediaId : null,
+        prompt: revision.prompt,
+        mediaId: content.kind === 'media' ? content.mediaId : null,
         entityRef: reference.entityRef,
       },
-      content: revision.content,
+      content,
     }
   }))
 }
@@ -229,7 +259,6 @@ export async function compileEpisodeChapterContexts(
             normalizedText: true,
             sourceResourceId: true,
             sourceRevisionId: true,
-            sourceFingerprint: true,
           },
         },
       },
@@ -253,7 +282,6 @@ export async function compileEpisodeChapterContexts(
       chapter.sourceDocument.id !== chapter.sourceDocumentId
       || provenance.data.sourceResourceId !== chapter.sourceDocument.sourceResourceId
       || provenance.data.sourceRevisionId !== chapter.sourceDocument.sourceRevisionId
-      || provenance.data.sourceFingerprint !== chapter.sourceDocument.sourceFingerprint
     ) {
       fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', { chapterId: chapter.id })
     }
@@ -334,9 +362,7 @@ export async function compileEpisodeChapterContexts(
       bibleBundle,
       styleBible: parsedStyleBible?.data ?? null,
       styleBibleSource: styleResource ? {
-        resourceId: styleResource.asset.resourceId,
         revisionId: styleResource.asset.revisionId,
-        fingerprint: styleResource.asset.fingerprint,
       } : null,
       referencedAssets,
       maxChars: input.maxCharsPerChapter,

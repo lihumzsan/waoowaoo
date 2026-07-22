@@ -5,6 +5,7 @@ export type CreativeSkillLocale = (typeof CREATIVE_SKILL_LOCALES)[number]
 export const CREATIVE_SKILL_IDS = [
   'creative-core',
   'story-development',
+  'screenplay-canonicalization',
   'continuity-memory',
   'director-core',
   'style-development',

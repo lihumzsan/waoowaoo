@@ -3,12 +3,19 @@ import { ApiError } from '@/lib/api-errors'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
+  CREATIVE_RESOURCE_CANONICAL_BINDINGS,
+  CREATIVE_RESOURCE_SCHEMA,
+  isCreativeResourceMediaType,
+} from '@/lib/creative-resource'
+import {
   buildCreativeWorkInputFingerprint,
   CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskPayloadSchema,
+  readCreativeWorkOutputDefinition,
   type CreativeWorkDelegationInput,
   type CreativeWorkDelegationItem,
+  type CreativeWorkHydratedRequest,
   type CreativeWorkTaskRequest,
 } from '@/lib/creative-worker'
 import { compileEpisodeChapterContexts } from '@/lib/edit-chapter'
@@ -23,7 +30,6 @@ import {
 } from '@/lib/operations/types'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { prisma } from '@/lib/prisma'
-import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import { createTaskBatchKey } from '@/lib/task/batch'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -78,10 +84,14 @@ async function resolveDelegationRequests(input: {
   readonly projectId: string
   readonly userId: string
   readonly contextEpisodeId: unknown
-}): Promise<CreativeWorkDelegationItem[]> {
+}): Promise<CreativeWorkHydratedItem[]> {
   const operationInput = input.operationInput
   if (operationInput.source === 'requests') {
-    return [...operationInput.requests]
+    return await hydrateExactResourceMaterials({
+      requests: operationInput.requests,
+      projectId: input.projectId,
+      userId: input.userId,
+    })
   }
   const compiled = await compileEpisodeChapterContexts({
     projectId: input.projectId,
@@ -91,7 +101,7 @@ async function resolveDelegationRequests(input: {
     referencedAssets: operationInput.referencedAssets,
     maxCharsPerChapter: CREATIVE_CHAPTER_CONTEXT_MAX_CHARS,
   })
-  return compiled.map((result, index) => {
+  const requests = compiled.map((result, index) => {
     const requestedChapter = operationInput.chapters[index]
     if (!requestedChapter || requestedChapter.chapterId !== result.context.chapter.chapterId) {
       throw new Error(`CREATIVE_WORK_CHAPTER_CONTEXT_ORDER_MISMATCH:${String(index)}`)
@@ -107,33 +117,191 @@ async function resolveDelegationRequests(input: {
         userRequest: operationInput.userRequest,
         sourceMaterials: [
           {
+            kind: 'inline' as const,
             label: `Chapter ${String(result.context.chapter.chapterIndex + 1)} context`,
-            kind: 'structured' as const,
+            mediaType: 'structured' as const,
             content: JSON.stringify(result.context),
             provenance: {
               kind: 'domain' as const,
               sourceType: 'creative_chapter_context',
               sourceId: result.context.chapter.chapterId,
               revision: `${String(sourceStart)}:${String(sourceEnd)}`,
-              fingerprint: stableArgsHash(result.context),
             },
           },
           ...(result.context.style.productionStyleBible && result.context.style.source ? [{
-            label: 'Final Style Bible',
-            kind: 'structured' as const,
-            content: JSON.stringify(result.context.style.productionStyleBible),
-            provenance: {
-              kind: 'resource' as const,
-              ...result.context.style.source,
-            },
+            kind: 'resource' as const,
+            revisionId: result.context.style.source.revisionId,
           }] : []),
         ],
         constraints: operationInput.constraints,
       },
     }
   })
+  return await hydrateExactResourceMaterials({
+    requests,
+    projectId: input.projectId,
+    userId: input.userId,
+  })
 }
 
+async function hydrateExactResourceMaterials(input: {
+  readonly requests: readonly CreativeWorkDelegationItem[]
+  readonly projectId: string
+  readonly userId: string
+}): Promise<CreativeWorkHydratedItem[]> {
+  const revisionIds = [...new Set(input.requests.flatMap((request) => (
+    request.context.sourceMaterials.flatMap((source) => (
+      source.kind === 'resource' ? [source.revisionId] : []
+    ))
+  )))]
+  const needsAssetManifest = input.requests.some((request) => request.outputKind === 'asset_manifest')
+  const [revisions, adoptedStyle] = await Promise.all([
+    revisionIds.length > 0 ? prisma.creativeResourceRevision.findMany({
+      where: {
+        id: { in: revisionIds },
+        resource: {
+          userId: input.userId,
+          status: 'ready',
+          OR: [
+            { projectId: input.projectId },
+            { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        contentText: true,
+        contentJson: true,
+        sourceType: true,
+        sourceId: true,
+        sourceRevision: true,
+        prompt: true,
+        media: { select: { mimeType: true, width: true, height: true, durationMs: true } },
+        resource: {
+          select: {
+            id: true,
+            name: true,
+            mediaType: true,
+            schemaId: true,
+            creativeData: true,
+            projectId: true,
+            episodeId: true,
+          },
+        },
+      },
+    }) : Promise.resolve([]),
+    needsAssetManifest ? prisma.creativeResourceBinding.findFirst({
+      where: {
+        userId: input.userId,
+        projectId: input.projectId,
+        scopeKind: 'project',
+        scopeId: input.projectId,
+        role: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.role,
+        slotKey: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.slotKey,
+      },
+      select: { revisionId: true },
+    }) : Promise.resolve(null),
+  ])
+  if (revisions.length !== revisionIds.length) {
+    const found = new Set(revisions.map((revision) => revision.id))
+    const missing = revisionIds.find((revisionId) => !found.has(revisionId)) ?? 'unknown'
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_WORK_RESOURCE_REVISION_NOT_FOUND',
+      field: 'sourceMaterials.provenance.revisionId',
+      revisionId: missing,
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const revisionById = new Map(revisions.map((revision) => [revision.id, revision]))
+  return input.requests.map((request) => {
+    const usedRevisionIds = new Set<string>()
+    const resourceSchemas: Array<{ revisionId: string; schemaId: string }> = []
+    const sourceMaterials = request.context.sourceMaterials.map((source) => {
+      if (source.kind === 'inline') {
+        return {
+          label: source.label,
+          kind: source.mediaType,
+          content: source.content,
+          provenance: source.provenance,
+        }
+      }
+      const revisionId = source.revisionId
+      if (usedRevisionIds.has(revisionId)) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_WORK_RESOURCE_REVISION_DUPLICATE',
+          field: 'sourceMaterials.provenance.revisionId',
+          revisionId,
+          agentRetryableAfterCorrection: true,
+        })
+      }
+      usedRevisionIds.add(revisionId)
+      const revision = revisionById.get(revisionId)
+      if (!revision) throw new Error(`CREATIVE_WORK_RESOURCE_REVISION_MISSING:${revisionId}`)
+      if (!isCreativeResourceMediaType(revision.resource.mediaType)) {
+        throw new Error(`CREATIVE_WORK_RESOURCE_MEDIA_TYPE_INVALID:${revisionId}`)
+      }
+      resourceSchemas.push({ revisionId, schemaId: revision.resource.schemaId })
+      const kind = revision.contentJson !== null
+        ? 'structured' as const
+        : revision.contentText !== null
+          ? 'text' as const
+          : revision.resource.mediaType
+      const content = revision.contentJson !== null
+        ? JSON.stringify(revision.contentJson)
+        : revision.contentText !== null
+          ? revision.contentText
+          : JSON.stringify({
+              name: revision.resource.name,
+              schemaId: revision.resource.schemaId,
+              prompt: revision.prompt,
+              creativeData: revision.resource.creativeData,
+              media: revision.media,
+              domainSource: revision.sourceType && revision.sourceId && revision.sourceRevision
+                ? {
+                    sourceType: revision.sourceType,
+                    sourceId: revision.sourceId,
+                    sourceRevision: revision.sourceRevision,
+                  }
+                : null,
+            })
+      return {
+        label: revision.resource.name,
+        kind,
+        content,
+        provenance: { kind: 'resource' as const, revisionId },
+      }
+    })
+    if (request.outputKind === 'asset_manifest') {
+      const screenplaySources = resourceSchemas.filter(
+        (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+      )
+      const styleSources = resourceSchemas.filter(
+        (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      )
+      if (screenplaySources.length !== 1) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'ASSET_MANIFEST_CANONICAL_SCREENPLAY_SOURCE_REQUIRED',
+          field: 'sourceMaterials',
+          agentRetryableAfterCorrection: true,
+        })
+      }
+      if (styleSources.length !== 1 || styleSources[0]?.revisionId !== adoptedStyle?.revisionId) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'ASSET_MANIFEST_ADOPTED_STYLE_SOURCE_REQUIRED',
+          field: 'sourceMaterials',
+          adoptedStyleRevisionId: adoptedStyle?.revisionId ?? null,
+          agentRetryableAfterCorrection: true,
+        })
+      }
+    }
+    return {
+      ...request,
+      context: { ...request.context, sourceMaterials },
+    }
+  })
+}
+
+type CreativeWorkHydratedItem = CreativeWorkHydratedRequest & { readonly requestKey: string }
 type CreativeWorkTaskItem = CreativeWorkTaskRequest & { readonly requestKey: string }
 
 function canComposeDuration(target: number, options: readonly number[]): boolean {
@@ -148,7 +316,7 @@ function canComposeDuration(target: number, options: readonly number[]): boolean
 }
 
 async function resolveTaskRequests(input: {
-  readonly requests: readonly CreativeWorkDelegationItem[]
+  readonly requests: readonly CreativeWorkHydratedItem[]
   readonly projectId: string
   readonly userId: string
 }): Promise<CreativeWorkTaskItem[]> {
@@ -250,7 +418,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           projectId: context.projectId,
           userId: context.userId,
         })
-        const taskEpisodeId = input.delegation.source === 'chapters'
+        const invocationEpisodeId = input.delegation.source === 'chapters'
           ? resolveEpisodeId(undefined, context.context.episodeId)
           : context.context.episodeId ?? null
         const requestKeys = new Set<string>()
@@ -299,7 +467,9 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
             request: context.request,
             userId: context.userId,
             projectId: context.projectId,
-            episodeId: taskEpisodeId,
+            episodeId: readCreativeWorkOutputDefinition(request.outputKind).resourceScope === 'project'
+              ? null
+              : invocationEpisodeId,
             type: TASK_TYPE.CREATIVE_WORK,
             targetType: 'CreativeWork',
             targetId,

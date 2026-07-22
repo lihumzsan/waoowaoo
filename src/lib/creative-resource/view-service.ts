@@ -48,7 +48,7 @@ const revisionRelationsInclude = {
     orderBy: [{ position: 'asc' as const }, { role: 'asc' as const }],
     include: {
       inputRevision: {
-        select: { id: true, resourceId: true, fingerprint: true },
+        select: { id: true },
       },
     },
   },
@@ -128,16 +128,12 @@ function revisionContent(row: NonNullable<ResourceRow['headRevision']>): Creativ
 
 function revisionView(row: NonNullable<ResourceRow['headRevision']>): CreativeResourceRevisionView {
   const inputs: CreativeResourceInputRef[] = row.outputLineage.map((lineage) => ({
-    resourceId: lineage.inputRevision.resourceId,
     revisionId: lineage.inputRevision.id,
-    fingerprint: lineage.inputRevision.fingerprint,
     role: lineage.role,
     position: lineage.position,
   }))
   return {
-    resourceId: row.resourceId,
     revisionId: row.id,
-    fingerprint: row.fingerprint,
     revision: row.revision,
     content: revisionContent(row),
     provenance: {
@@ -436,7 +432,6 @@ function workingBindingView(row: {
   readonly revision: {
     readonly resourceId: string
     readonly revision: number
-    readonly fingerprint: string
   }
 }): CreativeResourceWorkingBindingView {
   if (row.revision.resourceId !== row.resourceId) {
@@ -452,7 +447,6 @@ function workingBindingView(row: {
     resourceId: row.resourceId,
     revisionId: row.revisionId,
     revision: row.revision.revision,
-    fingerprint: row.revision.fingerprint,
     schemaId: row.resource.schemaId,
     mediaType: requireMediaType(row.resource.mediaType),
     name: row.resource.name,
@@ -510,7 +504,7 @@ export async function readProjectCreativeResourceWorkingSet(input: {
         resourceId: true,
         revisionId: true,
         resource: { select: { name: true, mediaType: true, schemaId: true } },
-        revision: { select: { resourceId: true, revision: true, fingerprint: true } },
+        revision: { select: { resourceId: true, revision: true } },
       },
       orderBy: [{ scopeKind: 'asc' }, { role: 'asc' }, { slotKey: 'asc' }],
     }),
@@ -543,6 +537,11 @@ export async function readProjectCreativeResourceWorkingSet(input: {
       bindings,
       CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
       CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+    ),
+    adoptedAssetManifest: canonicalBinding(
+      bindings,
+      CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest,
+      CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     ),
     bindings,
     availableResources: {

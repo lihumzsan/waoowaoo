@@ -21,6 +21,7 @@ import {
 import { queryKeys } from '@/lib/query/keys'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
@@ -38,7 +39,7 @@ export default function AssetHubPage() {
     const refreshAssets = useRefreshAssets({ scope: 'global' })
 
     const loading = foldersLoading || assetsLoading
-    useSSE({ projectId: 'global-asset-hub', enabled: true })
+    useSSE({ projectId: GLOBAL_ASSET_PROJECT_ID, enabled: true })
 
     // 弹窗状态
     const [showAddCharacter, setShowAddCharacter] = useState(false)

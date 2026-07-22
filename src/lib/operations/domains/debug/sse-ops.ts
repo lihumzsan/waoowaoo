@@ -63,7 +63,7 @@ function buildRecoveryMutationCheckpoint(params: {
     operationId: null,
     episodeId: params.episodeId,
     targets: [{
-      targetType: params.projectId === 'global-asset-hub' ? 'GlobalAsset' : 'ProjectEpisode',
+      targetType: params.projectId === GLOBAL_ASSET_PROJECT_ID ? 'GlobalAsset' : 'ProjectEpisode',
       targetId: params.episodeId ?? params.projectId,
     }],
   }

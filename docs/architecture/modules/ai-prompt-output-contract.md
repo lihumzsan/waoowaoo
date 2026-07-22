@@ -15,7 +15,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。
 - **AP-06 — `>180s` 只是规划信号。** Prompt 可要求 Primary 评估并行、上下文、恢复与连续性；服务端不得把时长变成 Chapter/Bible/continuity 分支。Primary 若需要 Chapter，先委派 `chapter_plan`，再显式采用；每单元 180 秒仅是采用时的局部校验。
 - **AP-07 — Style Bible 默认纯文本/结构化 Resource。** 只有用户明确要求预览时才调用普通图片 Operation；Style Choice 不隐式生成图片。
-- **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 必须传 Resource/Revision/fingerprint 及显式用途；禁止最近记录、数组位置、历史消息或模型输出 offset 推断。
+- **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 revisionId 及显式用途；服务端回库解析 Resource、schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。
 - **AP-09 — Provider 约束不升级为创作流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此写固定产品阶段。
 - **AP-10 — 双语语义一致。** System Prompt 与每个 Skill 的中英文版本必须具有相同契约变量、输出语义与禁止项；用户可见内容走 i18n。
 
@@ -50,5 +50,5 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 2. 是否让 `create_text`、UI、route 或 worker 成为第二专业 writer？
 3. Prompt 是否恢复固定阶段、next action、确认门或时长配方？
 4. Choice 是否只描述当前决定，Style 预览是否仍需用户明确请求？
-5. 输入与结果是否使用精确 Resource Revision/fingerprint/lineage？
+5. Resource 输入是否只使用精确 revisionId 并回库校验，结果是否保留真实 lineage？
 6. 双语 Prompt/Skill 与适用 Conformance/Golden 是否同步？

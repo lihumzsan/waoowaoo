@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 export const PATCH = apiHandler(async (
   request: NextRequest,
@@ -27,7 +28,7 @@ export const PATCH = apiHandler(async (
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'asset_hub_update_folder',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: session.user.id,
     input: {
       ...(body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {}),
@@ -52,7 +53,7 @@ export const DELETE = apiHandler(async (
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'asset_hub_delete_folder',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: session.user.id,
     input: { folderId },
     source: 'asset-hub',
@@ -60,4 +61,3 @@ export const DELETE = apiHandler(async (
 
   return NextResponse.json(result)
 })
-

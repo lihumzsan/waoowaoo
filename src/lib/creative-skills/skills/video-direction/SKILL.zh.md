@@ -146,4 +146,4 @@
 
 ## 边界
 
-本 Skill 负责视频创作和最终提示词方法。资源 ID、revision、fingerprint、模型能力校验、参考上限、provider 参数、媒体提交、计费和严格执行模板由调用方与执行层负责。
+本 Skill 负责视频创作和最终提示词方法。精确 Resource revision ID、模型能力校验、参考上限、provider 参数、媒体提交、计费和严格执行模板由调用方与执行层负责。

@@ -66,7 +66,6 @@ const chapterContextSourceSchema = z.object({
 const creativeContextAssetSchema = z.object({
   resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
   mediaType: z.enum(['text', 'image', 'audio', 'video']),
   schemaId: z.string().trim().min(1),
   name: z.string().trim().min(1),
@@ -77,9 +76,7 @@ const creativeContextAssetSchema = z.object({
 }).strict()
 
 const creativeStyleBibleSourceSchema = z.object({
-  resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
 }).strict()
 
 export const compileCreativeChapterContextInputSchema = z.object({

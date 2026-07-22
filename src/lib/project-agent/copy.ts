@@ -15,8 +15,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, ProjectAgentOperationTitl
     en: 'Delegate one or more professional creative requests as independent Creative Tasks. Each request carries a complete goal, exact source revisions, and real constraints. The Worker reads relevant Skills autonomously but cannot call business Operations, bill, or change project state. The server never creates Chapter or Worker groups automatically.',
   },
   adopt_style_bible: {
-    zh: '把一个精确的 project.style_bible Resource revision 绑定为当前 Style Bible。必须传真实 resourceId、revisionId、fingerprint 和替换时的 binding version；不复制内容、不生成预览，也不启动任何后续任务。',
-    en: 'Bind one exact project.style_bible Resource revision as the current Style Bible. Pass the real resourceId, revisionId, fingerprint, and current binding version when replacing. This copies no content, generates no preview, and starts no downstream work.',
+    zh: '把一个精确的 project.style_bible Resource revision 绑定为当前 Style Bible。必须传真实 revisionId 和替换时的 binding version；服务端回库校验内容，不复制、不生成预览，也不启动任何后续任务。',
+    en: 'Bind one exact project.style_bible Resource revision as the current Style Bible. Pass the real revisionId and current binding version when replacing; the server reloads the revision, copies no content, generates no preview, and starts no downstream work.',
+  },
+  adopt_asset_manifest: {
+    zh: '采用一个精确的 project.asset_manifest revision，并为其中每个 canonical entity 创建或复用项目资产 identity。只传 revisionId 和替换时的 binding version；不生成图片，也不启动后续任务。',
+    en: 'Adopt one exact project.asset_manifest revision and create or reuse one Project asset identity for every canonical entity. Pass only the revisionId and current binding version when replacing; this generates no images and starts no downstream work.',
   },
   update_plan: {
     zh: '为复杂工作维护简短计划；它只是工作记忆，不执行工作、不创建 Task，也不控制工具。',
@@ -56,6 +60,7 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   request_choice: { zh: '当前选择', en: 'Current choice' },
   delegate_creative_work: { zh: '专业创作', en: 'Creative work' },
   adopt_style_bible: { zh: '采用视觉 Style Bible', en: 'Adopt visual Style Bible' },
+  adopt_asset_manifest: { zh: '采用资产清单', en: 'Adopt asset manifest' },
   update_plan: { zh: '更新计划', en: 'Update plan' },
   get_project_snapshot: { zh: '项目快照', en: 'Project snapshot' },
   get_project_context: { zh: '项目上下文', en: 'Project context' },

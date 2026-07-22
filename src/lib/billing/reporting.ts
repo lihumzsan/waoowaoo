@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
 import { toMoneyNumber } from './money'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 interface RecordParams {
   projectId: string
@@ -24,7 +25,7 @@ interface PureRecordParams extends RecordParams {
   taskType?: string | null
 }
 
-const VIRTUAL_PROJECT_IDS = new Set(['asset-hub', 'global-asset-hub', 'system'])
+const VIRTUAL_PROJECT_IDS = new Set(['asset-hub', GLOBAL_ASSET_PROJECT_ID, 'system'])
 
 function isProjectScoped(projectId: string): boolean {
   return Boolean(projectId && !VIRTUAL_PROJECT_IDS.has(projectId))

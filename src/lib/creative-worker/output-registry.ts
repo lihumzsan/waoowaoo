@@ -4,23 +4,16 @@ import {
   rawEditBibleBundleSchema,
 } from '@/lib/edit-bible/schemas'
 import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
+import {
+  assetManifestWorkerOutputSchema,
+  canonicalScreenplayWorkerOutputSchema,
+} from '@/lib/canonical-screenplay'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
 const textList = (maxItems: number, maxLength: number) => z.array(
   z.string().trim().min(1).max(maxLength),
 ).max(maxItems)
-
-const screenplayDraftOutputSchema = z.object({
-  kind: z.literal('screenplay_draft'),
-  title: z.string().trim().min(1).max(300),
-  logline: nullableText(2_000),
-  synopsis: z.string().max(12_000),
-  screenplay: z.string().min(1).max(100_000),
-  estimatedDurationSeconds: z.number().finite().nonnegative().nullable(),
-  assumptions: textList(64, 2_000),
-  openQuestions: textList(64, 2_000),
-}).strict()
 
 const editBibleBundleOutputSchema = z.object({
   kind: z.literal('edit_bible_bundle'),
@@ -48,30 +41,6 @@ const continuityAnalysisOutputSchema = z.object({
   }).strict()).max(2_000),
   unresolved: textList(256, 4_000),
   assumptions: textList(64, 2_000),
-}).strict()
-
-const assetPromptSetOutputSchema = z.object({
-  kind: z.literal('asset_prompt_set'),
-  overview: z.string().max(8_000),
-  assets: z.array(z.object({
-    key: z.string().trim().min(1).max(160),
-    title: z.string().trim().min(1).max(300),
-    semanticKind: z.enum(['character', 'location', 'prop', 'other']),
-    stableDescription: z.string().min(1).max(16_000)
-      .describe('Stable visible asset identity and structure only; exclude transient action and project visual-style wording.'),
-    generationPrompt: z.string().min(1).max(24_000)
-      .describe('Final image-generation prompt assembled from stable asset facts plus any explicitly supplied Style Bible.'),
-    negativePrompt: nullableText(8_000),
-    styleSource: z.object({
-      sourceMaterialLabel: z.string().trim().min(1).max(240),
-      fingerprint: z.string().trim().min(1).max(500).nullable(),
-    }).strict().nullable()
-      .describe('Exact supplied style source used by generationPrompt, or null when the asset is intentionally designed without a Style Bible.'),
-    referenceRequirements: textList(64, 2_000),
-    continuityRequirements: textList(64, 2_000),
-  }).strict()).min(1).max(256),
-  assumptions: textList(64, 2_000),
-  warnings: textList(64, 2_000),
 }).strict()
 
 const styleBibleCandidateKeySchema = z.string()
@@ -162,12 +131,12 @@ const creativeReviewOutputSchema = z.object({
 }).strict()
 
 export const creativeWorkOutputSchemas = {
-  screenplay_draft: screenplayDraftOutputSchema,
+  canonical_screenplay: canonicalScreenplayWorkerOutputSchema,
   edit_bible_bundle: editBibleBundleOutputSchema,
   chapter_plan: creativeChapterPlanOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
   style_bible: styleBibleOutputSchema,
-  asset_prompt_set: assetPromptSetOutputSchema,
+  asset_manifest: assetManifestWorkerOutputSchema,
   video_prompt_set: videoPromptSetOutputSchema,
   music_direction: musicDirectionOutputSchema,
   creative_review: creativeReviewOutputSchema,
@@ -180,44 +149,54 @@ export type CreativeWorkOutput = {
 export interface CreativeWorkOutputDefinition {
   kind: CreativeWorkOutputKind
   schema: z.ZodObject
+  resourceScope: 'project' | 'episode'
 }
 
 export const creativeWorkOutputRegistry = {
-  screenplay_draft: {
-    kind: 'screenplay_draft',
-    schema: creativeWorkOutputSchemas.screenplay_draft,
+  canonical_screenplay: {
+    kind: 'canonical_screenplay',
+    schema: creativeWorkOutputSchemas.canonical_screenplay,
+    resourceScope: 'project',
   },
   edit_bible_bundle: {
     kind: 'edit_bible_bundle',
     schema: creativeWorkOutputSchemas.edit_bible_bundle,
+    resourceScope: 'project',
   },
   chapter_plan: {
     kind: 'chapter_plan',
     schema: creativeWorkOutputSchemas.chapter_plan,
+    resourceScope: 'episode',
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
     schema: creativeWorkOutputSchemas.continuity_analysis,
+    resourceScope: 'episode',
   },
   style_bible: {
     kind: 'style_bible',
     schema: creativeWorkOutputSchemas.style_bible,
+    resourceScope: 'project',
   },
-  asset_prompt_set: {
-    kind: 'asset_prompt_set',
-    schema: creativeWorkOutputSchemas.asset_prompt_set,
+  asset_manifest: {
+    kind: 'asset_manifest',
+    schema: creativeWorkOutputSchemas.asset_manifest,
+    resourceScope: 'project',
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
     schema: creativeWorkOutputSchemas.video_prompt_set,
+    resourceScope: 'episode',
   },
   music_direction: {
     kind: 'music_direction',
     schema: creativeWorkOutputSchemas.music_direction,
+    resourceScope: 'episode',
   },
   creative_review: {
     kind: 'creative_review',
     schema: creativeWorkOutputSchemas.creative_review,
+    resourceScope: 'episode',
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>
 

@@ -12,6 +12,7 @@ import {
   type Ledger,
 } from '@/lib/edit-ledger'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
+import { canonicalScreenplaySchema } from '@/lib/canonical-screenplay'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '@/lib/prisma'
 import { validateEditBibleBundle } from './cross-check'
@@ -44,10 +45,8 @@ export interface PersistedEditBibleBundle {
   readonly sourceDocumentId: string
   readonly sourceResourceId: string
   readonly sourceRevisionId: string
-  readonly sourceFingerprint: string
   readonly bibleResourceId: string
   readonly bibleRevisionId: string
-  readonly bibleFingerprint: string
   readonly sourceText: string
   readonly version: number
   readonly updatedAt: Date
@@ -74,7 +73,6 @@ const persistedBibleSelect = {
   emotionalCurveJson: true,
   bibleResourceId: true,
   bibleRevisionId: true,
-  bibleFingerprint: true,
   version: true,
   updatedAt: true,
   sourceDocument: {
@@ -82,7 +80,6 @@ const persistedBibleSelect = {
       normalizedText: true,
       sourceResourceId: true,
       sourceRevisionId: true,
-      sourceFingerprint: true,
     },
   },
 } as const
@@ -101,19 +98,16 @@ function mapPersistedBible(record: {
   readonly emotionalCurveJson: Prisma.JsonValue | null
   readonly bibleResourceId: string
   readonly bibleRevisionId: string
-  readonly bibleFingerprint: string
   readonly version: number
   readonly updatedAt: Date
   readonly sourceDocument: {
     readonly normalizedText: string
     readonly sourceResourceId: string
     readonly sourceRevisionId: string
-    readonly sourceFingerprint: string
   }
 }, projectId: string): PersistedEditBibleBundle {
   const sourceResourceId = record.sourceDocument.sourceResourceId
   const sourceRevisionId = record.sourceDocument.sourceRevisionId
-  const sourceFingerprint = record.sourceDocument.sourceFingerprint
   return {
     id: record.id,
     projectId,
@@ -121,10 +115,8 @@ function mapPersistedBible(record: {
     sourceDocumentId: record.sourceDocumentId,
     sourceResourceId,
     sourceRevisionId,
-    sourceFingerprint,
     bibleResourceId: record.bibleResourceId,
     bibleRevisionId: record.bibleRevisionId,
-    bibleFingerprint: record.bibleFingerprint,
     sourceText: record.sourceDocument.normalizedText,
     version: record.version,
     updatedAt: record.updatedAt,
@@ -183,24 +175,21 @@ async function resolveCreativeTextRevision(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly resourceId: string
   readonly revisionId: string
-  readonly fingerprint: string
   readonly schemaId:
-    | typeof CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT
+    | typeof CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY
     | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
-  readonly outputKind: 'screenplay_draft' | 'edit_bible_bundle' | 'chapter_plan'
+  readonly outputKind: 'canonical_screenplay' | 'edit_bible_bundle' | 'chapter_plan'
+  readonly resourceScope: 'project' | 'episode'
 }) {
   const revision = await input.tx.creativeResourceRevision.findFirst({
     where: {
       id: input.revisionId,
-      resourceId: input.resourceId,
-      fingerprint: input.fingerprint,
       resource: {
         userId: input.userId,
         projectId: input.projectId,
-        episodeId: input.episodeId,
+        episodeId: input.resourceScope === 'project' ? null : input.episodeId,
         status: 'ready',
         mediaType: 'text',
         schemaId: input.schemaId,
@@ -210,7 +199,6 @@ async function resolveCreativeTextRevision(input: {
     select: {
       id: true,
       resourceId: true,
-      fingerprint: true,
       contentText: true,
       contentJson: true,
       taskId: true,
@@ -243,8 +231,8 @@ export async function adoptCreativeBibleResources(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly screenplay: { readonly resourceId: string; readonly revisionId: string; readonly fingerprint: string }
-  readonly bible: { readonly resourceId: string; readonly revisionId: string; readonly fingerprint: string }
+  readonly screenplay: { readonly revisionId: string }
+  readonly bible: { readonly revisionId: string }
   readonly expectedVersion?: number | null
   readonly client?: Prisma.TransactionClient
 }): Promise<PersistedEditBibleBundle> {
@@ -255,8 +243,9 @@ export async function adoptCreativeBibleResources(input: {
         tx,
         ...input,
         ...input.screenplay,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-        outputKind: 'screenplay_draft',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+        outputKind: 'canonical_screenplay',
+        resourceScope: 'project',
       }),
       resolveCreativeTextRevision({
         tx,
@@ -264,11 +253,13 @@ export async function adoptCreativeBibleResources(input: {
         ...input.bible,
         schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
         outputKind: 'edit_bible_bundle',
+        resourceScope: 'project',
       }),
     ])
-    if (!screenplayRevision.contentText || bibleRevision.contentJson === null) {
+    if (screenplayRevision.contentJson === null || bibleRevision.contentJson === null) {
       throw new Error('CREATIVE_BIBLE_RESOURCE_CONTENT_INVALID')
     }
+    const screenplayText = canonicalScreenplaySchema.parse(screenplayRevision.contentJson).screenplayText
     const sourceLineage = bibleRevision.outputLineage.filter((lineage) => (
       lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
     ))
@@ -285,8 +276,7 @@ export async function adoptCreativeBibleResources(input: {
       episodeId: input.episodeId,
       resourceId: screenplayRevision.resourceId,
       revisionId: screenplayRevision.id,
-      fingerprint: screenplayRevision.fingerprint,
-      text: screenplayRevision.contentText,
+      text: screenplayText,
       client: tx,
     })
     const bundle = normalizeCreativeBibleResourceBundle({
@@ -304,7 +294,6 @@ export async function adoptCreativeBibleResources(input: {
       if (
         current.sourceDocumentId !== sourceDocument.id
         || current.bibleResourceId !== bibleRevision.resourceId
-        || current.bibleFingerprint !== bibleRevision.fingerprint
       ) {
         throw new Error(`CREATIVE_BIBLE_ADOPTION_COLLISION:${bibleRevision.id}`)
       }
@@ -326,7 +315,6 @@ export async function adoptCreativeBibleResources(input: {
       emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
       bibleResourceId: bibleRevision.resourceId,
       bibleRevisionId: bibleRevision.id,
-      bibleFingerprint: bibleRevision.fingerprint,
       version: (current?.version ?? 0) + 1,
     }
     const stored = current
@@ -341,18 +329,14 @@ export async function adoptCreativeBibleResources(input: {
 }
 
 interface ExactCreativeRevisionRef {
-  readonly resourceId: string
   readonly revisionId: string
-  readonly fingerprint: string
 }
 
 interface ChapterPlanProvenance {
   readonly sourceResourceId: string
   readonly sourceRevisionId: string
-  readonly sourceFingerprint: string
   readonly chapterPlanResourceId: string
   readonly chapterPlanRevisionId: string
-  readonly chapterPlanFingerprint: string
   readonly bible: ExactCreativeRevisionRef | null
   readonly contextRevisions: readonly (ExactCreativeRevisionRef & { readonly schemaId: string })[]
   readonly beatIds: readonly string[]
@@ -404,9 +388,8 @@ async function writeAdoptedChapterPlan(input: {
   readonly plans: readonly CreativeChapterPlanItem[]
   readonly planVersion: number
 }): Promise<readonly PersistedEditChapterPlan[]> {
-  const indexes = input.plans.map((plan) => plan.chapterIndex)
   await input.tx.projectEditChapter.deleteMany({
-    where: { episodeId: input.episodeId, chapterIndex: { notIn: indexes } },
+    where: { episodeId: input.episodeId },
   })
   const chapters: PersistedEditChapterPlan[] = []
   for (const plan of input.plans) {
@@ -428,10 +411,8 @@ async function writeAdoptedChapterPlan(input: {
       planVersion: input.planVersion,
       provenanceJson: toInputJsonValue(provenance),
     }
-    const record = await input.tx.projectEditChapter.upsert({
-      where: { episodeId_chapterIndex: { episodeId: input.episodeId, chapterIndex: plan.chapterIndex } },
-      create: { episodeId: input.episodeId, chapterIndex: plan.chapterIndex, ...data },
-      update: data,
+    const record = await input.tx.projectEditChapter.create({
+      data: { episodeId: input.episodeId, chapterIndex: plan.chapterIndex, ...data },
       select: { id: true, updatedAt: true },
     })
     chapters.push({
@@ -445,14 +426,10 @@ async function writeAdoptedChapterPlan(input: {
 }
 
 function exactRevisionRef(input: {
-  readonly resourceId: string
   readonly id: string
-  readonly fingerprint: string
 }): ExactCreativeRevisionRef {
   return {
-    resourceId: input.resourceId,
     revisionId: input.id,
-    fingerprint: input.fingerprint,
   }
 }
 
@@ -471,8 +448,9 @@ export async function adoptCreativeChapterPlan(input: {
         tx,
         ...input,
         ...input.screenplay,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-        outputKind: 'screenplay_draft',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+        outputKind: 'canonical_screenplay',
+        resourceScope: 'project',
       }),
       resolveCreativeTextRevision({
         tx,
@@ -480,11 +458,13 @@ export async function adoptCreativeChapterPlan(input: {
         ...input.chapterPlan,
         schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
         outputKind: 'chapter_plan',
+        resourceScope: 'episode',
       }),
     ])
-    if (!screenplayRevision.contentText || chapterPlanRevision.contentJson === null) {
+    if (screenplayRevision.contentJson === null || chapterPlanRevision.contentJson === null) {
       throw new Error('CREATIVE_CHAPTER_PLAN_RESOURCE_CONTENT_INVALID')
     }
+    const screenplayText = canonicalScreenplaySchema.parse(screenplayRevision.contentJson).screenplayText
     const screenplayLineage = chapterPlanRevision.outputLineage.filter((lineage) => (
       lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
     ))
@@ -510,7 +490,6 @@ export async function adoptCreativeChapterPlan(input: {
       select: {
         id: true,
         resourceId: true,
-        fingerprint: true,
         contentJson: true,
         taskId: true,
         task: { select: { type: true, status: true, payload: true } },
@@ -571,12 +550,12 @@ export async function adoptCreativeChapterPlan(input: {
       }
       bibleBundle = normalizeCreativeBibleResourceBundle({
         rawBundle: bibleRevision.contentJson,
-        sourceText: screenplayRevision.contentText,
+        sourceText: screenplayText,
       })
       bibleRef = exactRevisionRef(bibleRevision)
     }
     const output = creativeChapterPlanOutputSchema.parse(chapterPlanRevision.contentJson)
-    assertOrderedNonOverlappingSourceRanges(screenplayRevision.contentText, output.chapters)
+    assertOrderedNonOverlappingSourceRanges(screenplayText, output.chapters)
     for (const chapter of output.chapters) {
       if (chapter.targetDurationSec > CREATIVE_CHAPTER_MAX_DURATION_SECONDS) {
         throw new ApiError('INVALID_PARAMS', {
@@ -585,7 +564,7 @@ export async function adoptCreativeChapterPlan(input: {
           agentRetryableAfterCorrection: true,
         })
       }
-      if (!screenplayRevision.contentText.slice(chapter.sourceStart, chapter.sourceEnd).trim()) {
+      if (!screenplayText.slice(chapter.sourceStart, chapter.sourceEnd).trim()) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_CHAPTER_RANGE_EMPTY',
           field: `chapters.${String(chapter.chapterIndex)}`,
@@ -599,8 +578,7 @@ export async function adoptCreativeChapterPlan(input: {
       episodeId: input.episodeId,
       resourceId: screenplayRevision.resourceId,
       revisionId: screenplayRevision.id,
-      fingerprint: screenplayRevision.fingerprint,
-      text: screenplayRevision.contentText,
+      text: screenplayText,
       client: tx,
     })
     await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -630,10 +608,8 @@ export async function adoptCreativeChapterPlan(input: {
       provenance: {
         sourceResourceId: screenplayRevision.resourceId,
         sourceRevisionId: screenplayRevision.id,
-        sourceFingerprint: screenplayRevision.fingerprint,
         chapterPlanResourceId: chapterPlanRevision.resourceId,
         chapterPlanRevisionId: chapterPlanRevision.id,
-        chapterPlanFingerprint: chapterPlanRevision.fingerprint,
         bible: bibleRef,
         contextRevisions,
       },

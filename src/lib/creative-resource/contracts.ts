@@ -12,9 +12,14 @@ export const CREATIVE_RESOURCE_CANONICAL_BINDINGS = {
     role: 'adopted_style_bible',
     slotKey: 'primary',
   },
+  adoptedAssetManifest: {
+    role: 'adopted_asset_manifest',
+    slotKey: 'primary',
+  },
 } as const
 
 export const CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE = 'character_voice'
+export const CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE = 'project_asset_image'
 
 export type CreativeResourceCanonicalBinding = typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS[
   keyof typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS
@@ -44,10 +49,11 @@ export interface CreativeResourceRef {
   readonly resourceId: string
 }
 
-export interface CreativeResourceRevisionRef extends CreativeResourceRef {
+export interface CreativeResourceRevisionRef {
   readonly revisionId: string
-  readonly fingerprint: string
 }
+
+export interface CreativeResourceMaterializedRef extends CreativeResourceRef, CreativeResourceRevisionRef {}
 
 export interface CreativeResourceInputRef extends CreativeResourceRevisionRef {
   readonly role: string
@@ -168,7 +174,6 @@ export interface CreativeResourceWorkingBindingView {
   readonly resourceId: string
   readonly revisionId: string
   readonly revision: number
-  readonly fingerprint: string
   readonly schemaId: string
   readonly mediaType: CreativeResourceMediaType
   readonly name: string
@@ -176,6 +181,7 @@ export interface CreativeResourceWorkingBindingView {
 
 export interface CreativeResourceWorkingSetView {
   readonly adoptedStyleBible: CreativeResourceWorkingBindingView | null
+  readonly adoptedAssetManifest: CreativeResourceWorkingBindingView | null
   readonly bindings: readonly CreativeResourceWorkingBindingView[]
   readonly availableResources: {
     readonly total: number

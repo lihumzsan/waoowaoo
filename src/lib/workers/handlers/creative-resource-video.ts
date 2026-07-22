@@ -32,8 +32,6 @@ async function loadVideoImageReferences(
     where: { id: { in: imageInputs.map((reference) => reference.revisionId) } },
     select: {
       id: true,
-      resourceId: true,
-      fingerprint: true,
       media: { select: { storageKey: true } },
       resource: { select: { userId: true, mediaType: true, status: true } },
     },
@@ -43,9 +41,7 @@ async function loadVideoImageReferences(
     const revision = byId.get(reference.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
     if (
-      revision.resourceId !== reference.resourceId
-      || revision.fingerprint !== reference.fingerprint
-      || revision.resource.userId !== job.data.userId
+      revision.resource.userId !== job.data.userId
       || revision.resource.status !== 'ready'
     ) {
       throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
@@ -80,8 +76,6 @@ async function loadVideoAudioReferences(
     where: { id: { in: audioInputs.map((reference) => reference.revisionId) } },
     select: {
       id: true,
-      resourceId: true,
-      fingerprint: true,
       media: { select: { storageKey: true } },
       resource: { select: { userId: true, mediaType: true, status: true } },
     },
@@ -91,9 +85,7 @@ async function loadVideoAudioReferences(
     const revision = byId.get(reference.revisionId)
     if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
     if (
-      revision.resourceId !== reference.resourceId
-      || revision.fingerprint !== reference.fingerprint
-      || revision.resource.userId !== job.data.userId
+      revision.resource.userId !== job.data.userId
       || revision.resource.status !== 'ready'
     ) {
       throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)

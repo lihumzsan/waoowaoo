@@ -16,7 +16,6 @@ export interface EditSourceDocumentRecord {
   readonly version: number
   readonly sourceResourceId: string
   readonly sourceRevisionId: string
-  readonly sourceFingerprint: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -33,7 +32,6 @@ const editSourceDocumentSelect = {
   version: true,
   sourceResourceId: true,
   sourceRevisionId: true,
-  sourceFingerprint: true,
   createdAt: true,
   updatedAt: true,
 } as const
@@ -50,7 +48,6 @@ function mapSourceDocument(record: {
   readonly version: number
   readonly sourceResourceId: string
   readonly sourceRevisionId: string
-  readonly sourceFingerprint: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }): EditSourceDocumentRecord {
@@ -86,7 +83,6 @@ export async function materializeScreenplayResourceProjection(input: {
   readonly episodeId: string
   readonly resourceId: string
   readonly revisionId: string
-  readonly fingerprint: string
   readonly text: string
   readonly client: Prisma.TransactionClient
 }): Promise<CreatedEditSourceDocument> {
@@ -101,24 +97,27 @@ export async function materializeScreenplayResourceProjection(input: {
     throw new ApiError('INVALID_PARAMS', { code: error.code, message: error.message })
   }
   const checksum = checksumNormalizedText(normalizedText)
+  await input.client.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
+  `
   const existing = await input.client.projectEpisodeSourceDocument.findUnique({
-    where: { sourceRevisionId: input.revisionId },
+    where: {
+      episodeId_sourceRevisionId: {
+        episodeId: input.episodeId,
+        sourceRevisionId: input.revisionId,
+      },
+    },
     select: editSourceDocumentSelect,
   })
   if (existing) {
     if (
-      existing.episodeId !== input.episodeId
-      || existing.sourceResourceId !== input.resourceId
-      || existing.sourceFingerprint !== input.fingerprint
+      existing.sourceResourceId !== input.resourceId
       || existing.normalizedText !== normalizedText
     ) {
       throw new Error(`SCREENPLAY_RESOURCE_PROJECTION_COLLISION:${input.revisionId}`)
     }
     return { ...mapSourceDocument(existing), estimatedInputTokens }
   }
-  await input.client.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
-  `
   const latest = await input.client.projectEpisodeSourceDocument.findFirst({
     where: { episodeId: input.episodeId },
     orderBy: { version: 'desc' },
@@ -132,7 +131,6 @@ export async function materializeScreenplayResourceProjection(input: {
       version: (latest?.version ?? 0) + 1,
       sourceResourceId: input.resourceId,
       sourceRevisionId: input.revisionId,
-      sourceFingerprint: input.fingerprint,
     },
     select: editSourceDocumentSelect,
   })

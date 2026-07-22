@@ -11,6 +11,7 @@ import {
 } from './planning'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { isTaskType } from '@/lib/task/types'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(canonicalJson(value)) as Prisma.InputJsonValue
@@ -215,7 +216,7 @@ export async function persistOperationPlanSnapshot(params: {
 }): Promise<PersistedOperationPlanSnapshot> {
   assertOperationPlanTaskResourceScopes(params.plan)
   await assertOperationPlanTaskDependencies(params.plan)
-  const scopeKind = params.plan.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
+  const scopeKind = params.plan.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId
   const normalizedInput = toInputJson(params.normalizedInput)
   const planSnapshot = toInputJson(params.plan)

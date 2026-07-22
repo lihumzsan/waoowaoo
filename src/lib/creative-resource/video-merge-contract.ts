@@ -3,9 +3,7 @@ import { creativeResourceGenerationOptionsSchema } from './generation-contract'
 import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelope'
 
 const videoMergeInputRefSchema = z.object({
-  resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
   role: z.literal('source_video'),
   position: z.number().int().min(0),
 }).strict()

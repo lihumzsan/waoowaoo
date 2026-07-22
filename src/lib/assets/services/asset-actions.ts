@@ -10,12 +10,12 @@ import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-ur
 import type { AssetKind } from '@/lib/assets/contracts'
 import {
   createGlobalLocationBackedAsset,
-  createProjectLocationBackedAsset,
   deleteGlobalLocationBackedAsset,
   deleteProjectLocationBackedAsset,
   type LocationBackedAssetKind,
 } from '@/lib/assets/services/location-backed-assets'
 import { confirmProjectLocationBackedSelection } from '@/lib/assets/services/project-location-backed-selection'
+import { createOrReuseProjectAssetInTransaction } from '@/lib/assets/services/project-asset-writer'
 import { deleteCreativeResourceBindingSlotInTransaction } from '@/lib/creative-resource/binding-service'
 import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from '@/lib/creative-resource/contracts'
 import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
@@ -714,14 +714,15 @@ export async function createAsset(input: AssetCreateInput, transaction: Prisma.T
     return { success: true, assetId: created.id }
   }
 
-  const created = await createProjectLocationBackedAsset({
+  const created = await createOrReuseProjectAssetInTransaction({
+    tx: transaction,
     projectId: await requireOwnedAssetProject(input.access, transaction),
+    kind,
     name,
     summary,
-    initialDescription: description,
-    kind,
-  }, transaction)
-  return { success: true, assetId: created.id }
+    stableDescription: description,
+  })
+  return { success: true, assetId: created.assetId }
 }
 
 export async function removeAsset(input: AssetRemoveInput, transaction: Prisma.TransactionClient) {

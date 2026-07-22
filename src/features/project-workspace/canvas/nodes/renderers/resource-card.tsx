@@ -36,8 +36,7 @@ function renderStyleBibleOutput({
   if (!styleSummary || !visualStyle || !assetImageStyle) return null
   const lighting = readString(assetImageStyle, 'lighting')
   const texture = readString(assetImageStyle, 'texture')
-  const composition = readString(assetImageStyle, 'composition')
-  if (!lighting || !texture || !composition) return null
+  if (!lighting || !texture) return null
   return (
     <div className={`${SELECTABLE_TEXT_CLASS} space-y-4 rounded-2xl bg-slate-50 p-4 text-slate-700`}>
       <div>
@@ -52,7 +51,6 @@ function renderStyleBibleOutput({
         {([
           ['styleLighting', lighting],
           ['styleTexture', texture],
-          ['styleComposition', composition],
         ] as const).map(([label, value]) => (
           <div key={label} className="rounded-xl bg-white p-3">
             <p className="text-[11px] font-medium text-slate-400">{labels(label)}</p>
@@ -139,7 +137,7 @@ export function ResourceProvenanceContent({ data, labels }: WorkspaceCanvasNodeR
             <div className="flex flex-wrap gap-1.5">
               {inputs.map((reference) => (
                 <span key={`${reference.role}:${reference.position}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
-                  {reference.role} · {reference.resourceId.slice(0, 8)}
+                  {reference.role} · {reference.revisionId.slice(0, 8)}
                 </span>
               ))}
             </div>

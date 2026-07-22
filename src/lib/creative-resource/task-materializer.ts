@@ -4,7 +4,10 @@ import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type {
   CreativeResourceBindingView,
 } from './contracts'
-import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from './contracts'
+import {
+  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
+  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
+} from './contracts'
 import { bindCreativeResourceRevisionInTransaction } from './binding-service'
 import { planCreativeWorkResourceMaterialization } from './creative-work-materialization'
 import {
@@ -18,6 +21,8 @@ import {
   reserveDomainCreativeResourceInTransaction,
   settleCreativeResourceFailureInTransaction,
 } from './persistence'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { resolveAssetImageKindForSchemaId } from '@/lib/asset-generation'
 
 type TerminalTask = {
   readonly id: string
@@ -51,18 +56,21 @@ async function materializeDomainOutputs(
   if (task.type !== TASK_TYPE.CREATIVE_WORK) {
     throw new Error(`CREATIVE_RESOURCE_DOMAIN_TASK_UNSUPPORTED:${task.type}`)
   }
-  const scope = task.projectId === 'global-asset-hub'
+  const plan = planCreativeWorkResourceMaterialization({
+    taskId: task.id,
+    payload: task.payload,
+    result,
+  })
+  if (plan.resourceScope === 'episode' && !task.episodeId) {
+    throw new Error(`CREATIVE_WORK_EPISODE_RESOURCE_SCOPE_REQUIRED:${task.id}`)
+  }
+  const scope = task.projectId === GLOBAL_ASSET_PROJECT_ID
     ? buildCreativeResourceScopeRef({ kind: 'user', id: task.userId, userId: task.userId })
     : resolveProjectCreativeResourceScope({
         userId: task.userId,
         projectId: task.projectId,
-        episodeId: task.episodeId,
+        episodeId: plan.resourceScope === 'episode' ? task.episodeId : null,
       })
-  const plan = planCreativeWorkResourceMaterialization({
-      taskId: task.id,
-      payload: task.payload,
-      result,
-    })
   if (plan.outputs.length === 0) return null
   const resources = []
   for (const output of plan.outputs) {
@@ -98,7 +106,6 @@ async function materializeDomainOutputs(
       resources.push({
         resourceId: revision.resourceId,
         revisionId: revision.revisionId,
-        fingerprint: revision.fingerprint,
         schemaId: output.schemaId,
         mediaType: output.mediaType,
         name: output.name,
@@ -215,11 +222,65 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
         }
       }
     }
+  } else if (requestedBinding?.kind === 'project_asset_image') {
+    const schemaAssetKind = resolveAssetImageKindForSchemaId(payload.resource.schemaId)
+    if (schemaAssetKind !== requestedBinding.assetKind || payload.resource.mediaType !== 'image') {
+      throw new Error(`CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_SCHEMA_INVALID:${payload.resource.schemaId}`)
+    }
+    const target = requestedBinding.assetKind === 'character'
+      ? await tx.characterAppearance.findFirst({
+          where: {
+            id: requestedBinding.variantId,
+            characterId: requestedBinding.assetId,
+            character: {
+              projectId: input.task.projectId,
+              project: { userId: input.task.userId },
+            },
+          },
+          select: { id: true },
+        })
+      : await tx.locationImage.findFirst({
+          where: {
+            id: requestedBinding.variantId,
+            locationId: requestedBinding.assetId,
+            location: {
+              projectId: input.task.projectId,
+              assetKind: requestedBinding.assetKind,
+              project: { userId: input.task.userId },
+            },
+          },
+          select: { id: true },
+        })
+    if (!target) {
+      bindingResult = { status: 'target_missing', binding: null }
+    } else {
+      try {
+        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
+          scope: resolveProjectCreativeResourceScope({
+            userId: input.task.userId,
+            projectId: input.task.projectId,
+            episodeId: null,
+          }),
+          role: CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
+          slotKey: requestedBinding.variantId,
+          resourceId: revision.resourceId,
+          revisionId: revision.revisionId,
+          source: 'create_image',
+          expectedVersion: requestedBinding.expectedVersion,
+        })
+        bindingResult = { status: 'bound', binding }
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:')) {
+          bindingResult = { status: 'conflict', binding: null }
+        } else {
+          throw error
+        }
+      }
+    }
   }
   return {
     resourceId: revision.resourceId,
     revisionId: revision.revisionId,
-    fingerprint: revision.fingerprint,
     resourceStatus: 'ready',
     ...(bindingResult ? { bindingResult } : {}),
   }

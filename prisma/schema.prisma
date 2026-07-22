@@ -78,6 +78,7 @@ model LocationImage {
 model ProjectCharacter {
   id                      String                @id @default(uuid())
   projectId               String
+  canonicalEntityId       String?               @db.VarChar(80)
   name                    String
   aliases                 String?               @db.Text
   createdAt               DateTime              @default(now())
@@ -90,6 +91,7 @@ model ProjectCharacter {
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name])
+  @@unique([projectId, canonicalEntityId])
   @@index([projectId])
   @@map("project_characters")
 }
@@ -97,6 +99,7 @@ model ProjectCharacter {
 model ProjectLocation {
   id                     String          @id @default(uuid())
   projectId              String
+  canonicalEntityId      String?         @db.VarChar(80)
   name                   String
   summary                String?         @db.Text // 场景简要描述（用途/人物关联）
   assetKind              String          @default("location")
@@ -109,6 +112,7 @@ model ProjectLocation {
   project                Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, assetKind, name])
+  @@unique([projectId, assetKind, canonicalEntityId])
   @@index([projectId])
   @@map("project_locations")
 }
@@ -172,8 +176,7 @@ model ProjectEpisodeSourceDocument {
   checksum          String               @db.VarChar(64)
   version           Int
   sourceResourceId  String               @db.VarChar(191)
-  sourceRevisionId  String               @unique @db.VarChar(191)
-  sourceFingerprint String               @db.VarChar(64)
+  sourceRevisionId  String               @db.VarChar(191)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @default(now()) @updatedAt
   episode           ProjectEpisode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
@@ -181,6 +184,7 @@ model ProjectEpisodeSourceDocument {
   chapters          ProjectEditChapter[]
 
   @@unique([episodeId, version])
+  @@unique([episodeId, sourceRevisionId])
   @@index([episodeId])
   @@index([sourceResourceId])
   @@map("project_episode_source_documents")
@@ -195,8 +199,7 @@ model ProjectEditBible {
   ledgerJson         Json
   emotionalCurveJson Json
   bibleResourceId    String                       @db.VarChar(191)
-  bibleRevisionId    String                       @unique @db.VarChar(191)
-  bibleFingerprint   String                       @db.VarChar(64)
+  bibleRevisionId    String                       @db.VarChar(191)
   version            Int                          @default(1)
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @default(now()) @updatedAt
@@ -206,6 +209,7 @@ model ProjectEditBible {
   @@index([episodeId])
   @@index([sourceDocumentId])
   @@index([bibleResourceId])
+  @@index([bibleRevisionId])
   @@map("project_edit_bibles")
 }
 
@@ -1182,7 +1186,6 @@ model CreativeResourceRevision {
   id                   String                    @id @default(uuid())
   resourceId           String
   revision             Int
-  fingerprint          String                    @db.VarChar(64)
   contentText          String?                   @db.LongText
   contentJson          Json?
   mediaId              String?
@@ -1211,7 +1214,6 @@ model CreativeResourceRevision {
   @@unique([resourceId, revision], map: "creative_revisions_resource_revision_key")
   @@unique([taskId, resourceId], map: "creative_revisions_task_resource_key")
   @@unique([sourceType, sourceId, sourceRevision], map: "creative_revisions_source_key")
-  @@index([fingerprint], map: "creative_revisions_fingerprint_idx")
   @@index([mediaId], map: "creative_revisions_media_idx")
   @@index([taskId], map: "creative_revisions_task_idx")
   @@index([operationExecutionId], map: "creative_revisions_execution_idx")

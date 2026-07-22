@@ -7,7 +7,6 @@ export const creativeStyleBibleSchema = z.object({
   assetImageStyle: z.object({
     lighting: z.string().trim().min(1),
     texture: z.string().trim().min(1),
-    composition: z.string().trim().min(1),
   }).strict(),
 }).strict()
 

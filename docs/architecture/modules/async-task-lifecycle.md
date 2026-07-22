@@ -15,7 +15,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。
 - **TL-06 — 终态 writer 唯一。** worker 不能自行把 Task 或 Resource 写成最终失败。Terminal Service 负责最终 completed/failed/canceled、billing settlement、Task Event、Resource materialization、workspace impact 与 Assistant continuation。
 - **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Revision/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
-- **TL-08 — Resource 是媒体目标。** 通用媒体 Task 的 target 是 CreativeResource，输入冻结精确 Revision/fingerprint。旧 edit script、style preview、video segment、BGM design、final output 等专用 target/writer 不得恢复。
+- **TL-08 — Resource 是媒体目标。** 通用媒体 Task 的 target 是 CreativeResource，输入冻结全局唯一 revisionId，并在提交前回库校验真实内容与 scope。旧 edit script、style preview、video segment、BGM design、final output 等专用 target/writer 不得恢复。
 - **TL-09 — Wait 只聚合，不编排业务。** OperationBatch/Wait 可等待多个独立 Task，并在 seal 后处理早到、重复、失败和取消终态；它不表达固定阶段、WorkerGroup 或下一个 Operation。
 - **TL-10 — UI 不解释生命周期。** SSE 只传递持久事件；断线后按 watermark replay。Canvas 收到终态影响后重新读取正式 Resource/Task View，不能依赖轮询、TTL、历史卡片或本地 overlay 完成业务交接。
 - **TL-11 — 本地媒体进程有界。** 视频合并只经 `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts` 与 `video-merge-audio.ts`。FFmpeg 禁止交互 stdin，deadline 从明确媒体时长派生，音轨按 canonical duration pad/trim/reset PTS，不能用多路 EOF 或 `-shortest` 裁决正确性。
@@ -73,6 +73,6 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 
 1. 新执行是否登记在唯一 Task registry，还是增加了第二提交/worker/终态入口？
 2. Task 与 Resource 的 writer 是否各自唯一，失败、取消、重试、晚到和 replay 是否明确？
-3. 输入是否冻结精确 Resource Revision/fingerprint 与 scope？
+3. 输入是否只冻结精确 Resource revisionId，并由服务端回库校验 scope？
 4. 是否删除被替代的 TaskType、target、文案、测试、guard 与查询，而非增加兼容分支？
 5. 是否运行适用 Conformance、Logic、Critical、Golden，并明确 DB/Redis/provider 盲区？

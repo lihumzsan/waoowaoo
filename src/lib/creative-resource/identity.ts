@@ -1,8 +1,5 @@
 import { createHash } from 'node:crypto'
 import type {
-  CreativeResourceInputRef,
-  CreativeResourceJsonValue,
-  CreativeResourceRevisionContent,
   CreativeResourceScopeKind,
   CreativeResourceScopeRef,
 } from './contracts'
@@ -11,42 +8,6 @@ function requireIdentity(value: string, code: string): string {
   const normalized = value.trim()
   if (!normalized) throw new Error(code)
   return normalized
-}
-
-function canonicalize(value: CreativeResourceJsonValue): CreativeResourceJsonValue {
-  if (Array.isArray(value)) return value.map(canonicalize)
-  if (!value || typeof value !== 'object') return value
-  return Object.fromEntries(
-    Object.keys(value).sort().map((key) => [key, canonicalize(value[key] ?? null)]),
-  )
-}
-
-export function fingerprintCreativeResourceRevision(input: {
-  readonly mediaType: string
-  readonly schemaId: string
-  readonly content: CreativeResourceRevisionContent
-  readonly inputs: readonly CreativeResourceInputRef[]
-  readonly prompt: string | null
-  readonly modelKey: string | null
-  readonly generationOptions: CreativeResourceJsonValue | null
-}): string {
-  const normalizedInputs = [...input.inputs]
-    .sort((left, right) => left.position - right.position || left.role.localeCompare(right.role))
-    .map((reference) => ({
-      revisionId: reference.revisionId,
-      fingerprint: reference.fingerprint,
-      role: reference.role,
-      position: reference.position,
-    }))
-  return createHash('sha256').update(JSON.stringify(canonicalize({
-    mediaType: input.mediaType.trim(),
-    schemaId: input.schemaId.trim(),
-    content: input.content as unknown as CreativeResourceJsonValue,
-    inputs: normalizedInputs,
-    prompt: input.prompt?.trim() ?? null,
-    modelKey: input.modelKey?.trim() ?? null,
-    generationOptions: input.generationOptions,
-  }))).digest('hex')
 }
 
 export function buildCreativeResourceScopeRef(input: {

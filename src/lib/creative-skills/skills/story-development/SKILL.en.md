@@ -62,7 +62,7 @@ The purpose of intake is not to collect every setting detail. It is to find the 
 
 ## Boundary
 
-This Skill provides creative intake and screenwriting methods. Question counts, fields, indexes, JSON structures, size limits, and other strict output protocols are supplied by the caller and are not defined here.
+This Skill provides creative intake and screenwriting methods. When producing a `canonical_screenplay` from zero, read `screenplay-canonicalization` in the same Creative Task and normalize the completed script's entities and scene references immediately. This is one output's knowledge composition, not two Subagents or two states. Question counts, fields, indexes, JSON structures, size limits, and other strict output protocols are supplied by the caller and are not defined here.
 
 ## Chapter planning
 

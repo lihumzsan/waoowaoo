@@ -68,12 +68,12 @@
       "cancelled": "Cancelled"
     },
     "outputKinds": {
-      "screenplayDraft": "Screenplay Writing",
+      "canonicalScreenplay": "Canonical Screenplay",
       "editBibleBundle": "Production Bible",
       "continuityAnalysis": "Continuity Analysis",
       "chapterPlan": "Chapter Planning",
       "styleBible": "Visual Style Design",
-      "assetPromptSet": "Visual Asset Design",
+      "assetManifest": "Asset Manifest",
       "videoPromptSet": "Video Generation Design",
       "musicDirection": "Music Direction",
       "creativeReview": "Creative Quality Review"

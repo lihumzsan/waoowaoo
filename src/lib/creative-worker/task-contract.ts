@@ -14,12 +14,12 @@ import {
 } from './trace-contract'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
-  creativeWorkOutputSchemas.screenplay_draft,
+  creativeWorkOutputSchemas.canonical_screenplay,
   creativeWorkOutputSchemas.edit_bible_bundle,
   creativeWorkOutputSchemas.chapter_plan,
   creativeWorkOutputSchemas.continuity_analysis,
   creativeWorkOutputSchemas.style_bible,
-  creativeWorkOutputSchemas.asset_prompt_set,
+  creativeWorkOutputSchemas.asset_manifest,
   creativeWorkOutputSchemas.video_prompt_set,
   creativeWorkOutputSchemas.music_direction,
   creativeWorkOutputSchemas.creative_review,
@@ -73,9 +73,7 @@ export const creativeWorkChapterBatchInputSchema = z.object({
   constraints: z.array(z.string().trim().min(1).max(4_000)).max(64)
     .describe('Shared delivery, safety, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
-    resourceId: z.string().trim().min(1),
     revisionId: z.string().trim().min(1),
-    fingerprint: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
     .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Style Bible and any relevant media assets.'),
@@ -153,7 +151,6 @@ export const creativeWorkTaskResultSchema = z.object({
   resources: z.array(z.object({
     resourceId: z.string().trim().min(1),
     revisionId: z.string().trim().min(1),
-    fingerprint: z.string().trim().min(1),
     schemaId: z.string().trim().min(1),
     mediaType: z.enum(['text', 'image', 'audio', 'video']),
     name: z.string().trim().min(1),
@@ -217,7 +214,7 @@ export function buildCreativeWorkInputFingerprint(input: {
 
 export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string {
   switch (output.kind) {
-    case 'screenplay_draft':
+    case 'canonical_screenplay':
       return output.logline || output.synopsis || output.title
     case 'edit_bible_bundle':
       return output.bundle.bible.logline || output.bundle.bible.synopsis
@@ -229,7 +226,7 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
       return output.design.mode === 'final'
         ? output.design.styleBible.styleSummary
         : output.design.candidates.map((candidate) => candidate.title).join(' / ')
-    case 'asset_prompt_set':
+    case 'asset_manifest':
       return output.overview || output.assets.map((asset) => asset.title).join(' / ')
     case 'video_prompt_set':
       return output.segments.map((segment) => segment.key).join(' / ').slice(0, 4_000)

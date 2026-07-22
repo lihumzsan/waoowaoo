@@ -16,6 +16,7 @@ import {
   WorkspaceSseServerSession,
 } from '@/lib/sse/server-session'
 import { getSharedSubscriber } from '@/lib/sse/shared-subscriber'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 function formatSSE(event: SSEEvent, transportCursor: string) {
   const dataLine = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
@@ -33,7 +34,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const authResult = projectId === 'global-asset-hub'
+  const authResult = projectId === GLOBAL_ASSET_PROJECT_ID
     ? await requireUserAuth()
     : await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
@@ -147,7 +148,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
               if (payload.assistantId !== 'workspace-command') return
               if ((payload.episodeId ?? null) !== (episodeId ?? null)) return
             }
-            if (projectId === 'global-asset-hub' && payload.userId !== session.user.id) {
+            if (projectId === GLOBAL_ASSET_PROJECT_ID && payload.userId !== session.user.id) {
               logger.error({
                 action: 'sse.message.user_mismatch',
                 message: 'sse message userId mismatch',

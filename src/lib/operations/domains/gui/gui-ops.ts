@@ -4,12 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
+import { removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { readProjectEpisodeDetail } from '@/lib/projects/read-episode-detail'
+import { createProjectEpisodeInTransaction } from '@/lib/projects/episode-service'
+import { createOrReuseProjectAssetInTransaction } from '@/lib/assets/services/project-asset-writer'
 
 const EFFECTS_QUERY = {
   writes: false,
@@ -46,54 +48,6 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function isPrismaUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
-}
-
-function duplicateAssetError(assetType: 'character' | 'location', name: string): ApiError {
-  return new ApiError('CONFLICT', {
-    code: assetType === 'character'
-      ? 'PROJECT_CHARACTER_NAME_CONFLICT'
-      : 'PROJECT_LOCATION_NAME_CONFLICT',
-    field: 'name',
-    message: `${assetType === 'character' ? 'Character' : 'Location'} already exists in this project: ${name}`,
-  })
-}
-
-async function assertProjectCharacterNameAvailable(input: {
-  readonly projectId: string
-  readonly name: string
-  readonly client?: Pick<Prisma.TransactionClient, 'projectCharacter'>
-}): Promise<void> {
-  const client = input.client ?? prisma
-  const existing = await client.projectCharacter.findFirst({
-    where: {
-      projectId: input.projectId,
-      name: input.name,
-    },
-    select: { id: true },
-  })
-  if (existing) throw duplicateAssetError('character', input.name)
-}
-
-async function assertProjectLocationNameAvailable(input: {
-  readonly projectId: string
-  readonly name: string
-  readonly assetKind: string
-  readonly client?: Pick<Prisma.TransactionClient, 'projectLocation'>
-}): Promise<void> {
-  const client = input.client ?? prisma
-  const existing = await client.projectLocation.findFirst({
-    where: {
-      projectId: input.projectId,
-      assetKind: input.assetKind,
-      name: input.name,
-    },
-    select: { id: true },
-  })
-  if (existing) throw duplicateAssetError('location', input.name)
-}
-
 export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
   return {
     create_character: defineOperation({
@@ -114,38 +68,17 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         if (!name) {
           throw new ApiError('INVALID_PARAMS')
         }
-        await assertProjectCharacterNameAvailable({
-          projectId: ctx.projectId,
-          name,
-          client: transaction,
-        })
-
-        const character = await transaction.projectCharacter.create({
-          data: {
-            projectId: ctx.projectId,
-            name,
-            aliases: null,
-          },
-        }).catch((error: unknown) => {
-          if (isPrismaUniqueConstraintError(error)) throw duplicateAssetError('character', name)
-          throw error
-        })
-
         const descText = description || `${name} 的角色设定`
-        await transaction.characterAppearance.create({
-          data: {
-            characterId: character.id,
-            appearanceIndex: PRIMARY_APPEARANCE_INDEX,
-            changeReason: '初始形象',
-            description: descText,
-            descriptions: JSON.stringify([descText]),
-            imageUrls: encodeImageUrls([]),
-            previousImageUrls: encodeImageUrls([]),
-          },
+        const written = await createOrReuseProjectAssetInTransaction({
+          tx: transaction,
+          projectId: ctx.projectId,
+          kind: 'character',
+          name,
+          stableDescription: descText,
         })
 
         const characterWithAppearances = await transaction.projectCharacter.findUnique({
-          where: { id: character.id },
+          where: { id: written.assetId },
           include: { appearances: true },
         })
 
@@ -429,36 +362,18 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const cleanDescription = removeLocationPromptSuffix(description.trim())
-        const assetKind = 'location'
-        await assertProjectLocationNameAvailable({
+        const written = await createOrReuseProjectAssetInTransaction({
+          tx: transaction,
           projectId: ctx.projectId,
-          name: name.trim(),
-          assetKind,
-          client: transaction,
-        })
-        const location = await transaction.projectLocation.create({
-          data: {
-            projectId: ctx.projectId,
-            name: name.trim(),
-            assetKind,
-            summary: summary || null,
-          },
-        }).catch((error: unknown) => {
-          if (isPrismaUniqueConstraintError(error)) throw duplicateAssetError('location', name.trim())
-          throw error
-        })
-
-        await transaction.locationImage.createMany({
-          data: Array.from({ length: count }, (_value, imageIndex) => ({
-            locationId: location.id,
-            imageIndex,
-            description: cleanDescription,
-          })),
+          kind: 'location',
+          name,
+          summary,
+          stableDescription: removeLocationPromptSuffix(description),
+          imageSlotCount: count,
         })
 
         const locationWithImages = await transaction.projectLocation.findUnique({
-          where: { id: location.id },
+          where: { id: written.assetId },
           include: { images: true },
         })
 
@@ -622,37 +537,15 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       }),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        const project = await transaction.project.findUnique({
-          where: { id: ctx.projectId },
-          select: { id: true },
-        })
-        if (!project) throw new ApiError('NOT_FOUND')
-
-        const lastEpisode = await transaction.projectEpisode.findFirst({
-          where: { projectId: ctx.projectId },
-          orderBy: { episodeNumber: 'desc' },
-        })
-        const nextEpisodeNumber = (lastEpisode?.episodeNumber || 0) + 1
-
-        const createData: Prisma.ProjectEpisodeUncheckedCreateInput = {
+        const created = await createProjectEpisodeInTransaction({
+          transaction,
           projectId: ctx.projectId,
-          episodeNumber: nextEpisodeNumber,
+          userId: ctx.userId,
           name: input.name.trim(),
           description: input.description?.trim() || null,
-        }
-        if (typeof input.novelText === 'string') {
-          createData.novelText = input.novelText
-        }
-
-        const episode = await (async () => {
-          const createdEpisode = await transaction.projectEpisode.create({ data: createData })
-          await transaction.project.update({
-            where: { id: ctx.projectId },
-            data: { lastEpisodeId: createdEpisode.id },
-          })
-          return createdEpisode
-        })()
-        return { episode }
+          ...(typeof input.novelText === 'string' ? { novelText: input.novelText } : {}),
+        })
+        return { episode: created.episode }
       },
     }),
     list_episodes: defineOperation({

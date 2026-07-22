@@ -13,7 +13,7 @@ export type { CreativeSkillReadTraceEntry } from './trace-contract'
 
 export type CreativeWorkOutputKind = (typeof CREATIVE_WORK_OUTPUT_KINDS)[number]
 
-const creativeWorkSourceMaterialSchema = z.object({
+const creativeWorkHydratedSourceMaterialSchema = z.object({
   label: z.string().trim().min(1).max(240)
     .describe('Human-readable name that identifies this source material within the delegated task.'),
   kind: z.enum(['text', 'image', 'audio', 'video', 'structured'])
@@ -24,12 +24,8 @@ const creativeWorkSourceMaterialSchema = z.object({
     z.object({ kind: z.literal('none') }).strict(),
     z.object({
       kind: z.literal('resource'),
-      resourceId: z.string().trim().min(1).max(200)
-        .describe('Canonical Creative Resource identity supplied by the caller.'),
       revisionId: z.string().trim().min(1).max(200)
-        .describe('Exact immutable Resource Revision identity.'),
-      fingerprint: z.string().trim().min(1).max(500)
-        .describe('Persisted fingerprint of the exact Resource Revision.'),
+        .describe('Globally unique immutable Resource Revision identity; the server resolves all remaining identity and scope facts.'),
     }).strict(),
     z.object({
       kind: z.literal('domain'),
@@ -39,28 +35,62 @@ const creativeWorkSourceMaterialSchema = z.object({
         .describe('Canonical domain entity identity.'),
       revision: z.string().trim().min(1).max(200)
         .describe('Exact domain revision or version identity.'),
-      fingerprint: z.string().trim().min(1).max(500)
-        .describe('Persisted fingerprint of the exact domain revision.'),
     }).strict(),
   ]).describe('Exact provenance for this copied source material, or kind=none when it is not backed by a persisted fact.'),
 }).strict().describe('One source item explicitly copied into the stateless worker input by the primary agent.')
 
-export const creativeWorkDelegationRequestSchema = z.object({
+const creativeWorkDelegationSourceMaterialSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('resource'),
+    revisionId: z.string().trim().min(1).max(200)
+      .describe('Globally unique immutable Resource Revision identity. The server reloads its real content, schema, owner, and scope.'),
+  }).strict(),
+  z.object({
+    kind: z.literal('inline'),
+    label: z.string().trim().min(1).max(240),
+    mediaType: z.enum(['text', 'image', 'audio', 'video', 'structured']),
+    content: z.string().max(600_000),
+    provenance: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('none') }).strict(),
+      z.object({
+        kind: z.literal('domain'),
+        sourceType: z.string().trim().min(1).max(120),
+        sourceId: z.string().trim().min(1).max(200),
+        revision: z.string().trim().min(1).max(200),
+      }).strict(),
+    ]),
+  }).strict(),
+]).describe('Use kind=resource with revisionId only for persisted Resources. Inline material carries its own content and optional exact domain provenance.')
+
+const creativeWorkRequestBaseShape = {
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS)
     .describe('The strict structured result contract the creative worker must return.'),
   goal: z.string().trim().min(1).max(8_000)
     .describe('A concrete professional creative objective for this one stateless delegation.'),
   targetDurationSeconds: z.number().int().positive().max(36_000).optional()
     .describe('Overall requested delivery duration. For video_prompt_set this is the whole work or Chapter duration, never a caller-chosen segment duration or segment count.'),
+} as const
+
+export const creativeWorkDelegationRequestSchema = z.object({
+  ...creativeWorkRequestBaseShape,
   context: z.object({
     userRequest: z.string().max(30_000)
       .describe('The relevant original user request, preserved so the worker can remain faithful to user intent.'),
-    sourceMaterials: z.array(creativeWorkSourceMaterialSchema).max(64)
-      .describe('All project facts and source materials the worker may use; the worker cannot fetch additional project state.'),
+    sourceMaterials: z.array(creativeWorkDelegationSourceMaterialSchema).max(64)
+      .describe('Exact Resource revision IDs or inline non-Resource materials. Persisted Resource content is always reloaded by the server.'),
     constraints: z.array(z.string().trim().min(1).max(4_000)).max(64)
       .describe('Explicit creative, duration, format, continuity, safety, or delivery constraints that the result must satisfy.'),
   }).strict().describe('A complete caller-assembled context packet; it is data for analysis and grants no system access.'),
 }).strict().describe('Request for one isolated creative-worker run with a strict output contract.')
+
+export const creativeWorkHydratedRequestSchema = z.object({
+  ...creativeWorkRequestBaseShape,
+  context: z.object({
+    userRequest: z.string().max(30_000),
+    sourceMaterials: z.array(creativeWorkHydratedSourceMaterialSchema).max(64),
+    constraints: z.array(z.string().trim().min(1).max(4_000)).max(64),
+  }).strict(),
+}).strict()
 
 const creativeVideoProductionContextSchema = z.object({
   aspectRatio: z.string().trim().min(1),
@@ -82,13 +112,14 @@ const creativeVideoProductionContextSchema = z.object({
   }
 })
 
-export const creativeWorkRequestSchema = creativeWorkDelegationRequestSchema.extend({
+export const creativeWorkRequestSchema = creativeWorkHydratedRequestSchema.extend({
   productionContext: z.object({
     video: creativeVideoProductionContextSchema.nullable(),
   }).strict(),
 }).strict().describe('Server-compiled request for one isolated creative-worker run. productionContext is supplied by the execution layer, never by the primary Agent.')
 
 export type CreativeWorkDelegationRequest = z.infer<typeof creativeWorkDelegationRequestSchema>
+export type CreativeWorkHydratedRequest = z.infer<typeof creativeWorkHydratedRequestSchema>
 export type CreativeWorkRequest = z.infer<typeof creativeWorkRequestSchema>
 
 export interface CreativeWorkerBudgets {

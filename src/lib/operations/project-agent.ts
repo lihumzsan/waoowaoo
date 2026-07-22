@@ -25,6 +25,7 @@ import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
 import { createAssistantCreativeBibleOperations } from './domains/assistant/creative-bible-ops'
 import { createAssistantCreativeStyleOperations } from './domains/assistant/creative-style-ops'
+import { createAssistantCreativeAssetOperations } from './domains/assistant/creative-asset-ops'
 import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
 import { createVoiceOperations } from './domains/voice/voice-ops'
 import { withOperationPack } from './pack'
@@ -62,6 +63,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssistantCreativeStyleOperations(), {
+      groupPath: ['assistant', 'creative'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createAssistantCreativeAssetOperations(), {
       groupPath: ['assistant', 'creative'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { planProjectAgentOperationFromApi } from '@/lib/operations/planning'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -24,7 +25,7 @@ export const POST = apiHandler(async (
   return NextResponse.json(await planProjectAgentOperationFromApi({
     request,
     operationId,
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: authResult.session.user.id,
     context: {
       locale: typeof routeContext.locale === 'string' ? routeContext.locale : null,

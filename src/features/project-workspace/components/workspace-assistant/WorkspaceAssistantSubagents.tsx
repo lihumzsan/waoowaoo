@@ -20,12 +20,12 @@ function localizeOutputKind(
   t: AssistantAgentTranslator,
 ): string {
   switch (outputKind) {
-    case 'screenplay_draft': return t('subagents.outputKinds.screenplayDraft')
+    case 'canonical_screenplay': return t('subagents.outputKinds.canonicalScreenplay')
     case 'edit_bible_bundle': return t('subagents.outputKinds.editBibleBundle')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
     case 'chapter_plan': return t('subagents.outputKinds.chapterPlan')
     case 'style_bible': return t('subagents.outputKinds.styleBible')
-    case 'asset_prompt_set': return t('subagents.outputKinds.assetPromptSet')
+    case 'asset_manifest': return t('subagents.outputKinds.assetManifest')
     case 'video_prompt_set': return t('subagents.outputKinds.videoPromptSet')
     case 'music_direction': return t('subagents.outputKinds.musicDirection')
     case 'creative_review': return t('subagents.outputKinds.creativeReview')

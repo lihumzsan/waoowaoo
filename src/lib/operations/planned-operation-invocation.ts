@@ -10,6 +10,7 @@ import {
   buildCurrentOperationPlanArtifactHashes,
   changedOperationPlanArtifacts,
 } from './operation-plan-revalidation'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
 
@@ -188,7 +189,7 @@ function assertSnapshotScope(params: {
   normalizedInput: unknown
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
 }): void {
-  const expectedScopeKind = params.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
+  const expectedScopeKind = params.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
   const requestedEpisodeId = params.episodeId ?? null
   if (
     params.snapshot.userId !== params.userId ||

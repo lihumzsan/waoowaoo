@@ -5,12 +5,8 @@ import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelop
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
 export const creativeResourceInputRefSchema = z.object({
-  resourceId: z.string().trim().min(1)
-    .describe('Exact Resource identity returned by list_resources or get_resource.'),
   revisionId: z.string().trim().min(1)
-    .describe('Exact immutable revision identity returned for that Resource.'),
-  fingerprint: z.string().trim().min(1)
-    .describe('Exact revision fingerprint returned with revisionId; never invent or recompute it.'),
+    .describe('Globally unique immutable Resource Revision identity. The server resolves its Resource, schema, owner, and scope.'),
   role: z.string().trim().min(1).optional()
     .describe('Optional semantic role of this reference in the new output, such as character, location, or source_video.'),
 }).strict()
@@ -34,9 +30,7 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
     modelKey: z.string().trim().min(1),
     inputHash: z.string().trim().min(1),
     inputs: z.array(z.object({
-      resourceId: z.string().trim().min(1),
       revisionId: z.string().trim().min(1),
-      fingerprint: z.string().trim().min(1),
       role: z.string().trim().min(1),
       position: z.number().int().min(0),
     }).strict()),
@@ -61,11 +55,20 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
-    binding: z.object({
-      kind: z.literal('character_voice'),
-      characterId: z.string().trim().min(1),
-      expectedVersion: z.number().int().min(0).nullable(),
-    }).strict().optional(),
+    binding: z.discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('character_voice'),
+        characterId: z.string().trim().min(1),
+        expectedVersion: z.number().int().min(0).nullable(),
+      }).strict(),
+      z.object({
+        kind: z.literal('project_asset_image'),
+        assetKind: z.enum(['character', 'location', 'prop']),
+        assetId: z.string().trim().min(1),
+        variantId: z.string().trim().min(1),
+        expectedVersion: z.number().int().min(0).nullable(),
+      }).strict(),
+    ]).optional(),
   }).strict().superRefine((resource, context) => {
     const inputPositions = new Set(resource.inputs.map((input) => input.position))
     if (inputPositions.size !== resource.inputs.length) {

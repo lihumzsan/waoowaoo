@@ -26,9 +26,7 @@ export type CreativeResourceDataEdit =
     }
 
 interface EmbeddedCreativeResourceRef {
-  readonly resourceId: string
   readonly revisionId: string
-  readonly fingerprint: string
 }
 
 function invalidData(code: string, details: Record<string, unknown> = {}): never {
@@ -179,13 +177,11 @@ function collectEmbeddedRefs(
     }
     const raw = value.$resourceRef
     const keys = Object.keys(raw).sort()
-    if (JSON.stringify(keys) !== JSON.stringify(['fingerprint', 'resourceId', 'revisionId'])) {
+    if (JSON.stringify(keys) !== JSON.stringify(['revisionId'])) {
       invalidData('CREATIVE_RESOURCE_DATA_REFERENCE_INVALID', { field: '$resourceRef' })
     }
     refs.push({
-      resourceId: requireString(raw.resourceId, '$resourceRef.resourceId'),
       revisionId: requireString(raw.revisionId, '$resourceRef.revisionId'),
-      fingerprint: requireString(raw.fingerprint, '$resourceRef.fingerprint'),
     })
     return
   }
@@ -290,7 +286,7 @@ export async function editCreativeResourceDataInTransaction(
       if (!sameResourceScope || !sameEpisodeScope) {
         throw new ApiError('NOT_FOUND', {
           code: 'CREATIVE_RESOURCE_DATA_REFERENCE_SCOPE_INVALID',
-          field: '$resourceRef.resourceId',
+          field: '$resourceRef.revisionId',
         })
       }
     }

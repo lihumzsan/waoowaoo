@@ -7,9 +7,17 @@ import {
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
 } from '@/lib/creative-worker/task-contract'
+import { readCreativeWorkOutputDefinition } from '@/lib/creative-worker/output-registry'
 import { CREATIVE_RESOURCE_SCHEMA } from './schema-registry'
+import {
+  canonicalScreenplaySchema,
+  compileCanonicalScreenplay,
+  validateAssetManifestCoverage,
+} from '@/lib/canonical-screenplay'
+import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 
 export interface CreativeWorkResourceMaterializationPlan {
+  readonly resourceScope: 'project' | 'episode'
   readonly inputFingerprint: string
   readonly prompt: string
   readonly modelKey: string
@@ -21,12 +29,12 @@ export interface CreativeWorkResourceMaterializationPlan {
 export interface CreativeWorkResourceMaterializationOutput {
   readonly mediaType: 'text'
   readonly schemaId:
-    | typeof CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT
+    | typeof CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY
     | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
     | typeof CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS
     | typeof CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
-    | typeof CREATIVE_RESOURCE_SCHEMA.ASSET_PROMPT_SET
+    | typeof CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST
     | typeof CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET
     | typeof CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION
     | typeof CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW
@@ -66,14 +74,28 @@ function resourceInputsFromPayload(
   for (const source of payload.request.context.sourceMaterials) {
     if (source.provenance.kind !== 'resource') continue
     inputs.push({
-      resourceId: source.provenance.resourceId,
       revisionId: source.provenance.revisionId,
-      fingerprint: source.provenance.fingerprint,
       role: 'source_material',
       position: inputs.length,
     })
   }
   return inputs
+}
+
+function parseStructuredSourceMaterials(
+  payload: ReturnType<typeof creativeWorkTaskPayloadSchema.parse>,
+): readonly {
+  readonly revisionId: string
+  readonly value: unknown
+}[] {
+  return payload.request.context.sourceMaterials.flatMap((source) => {
+    if (source.kind !== 'structured' || source.provenance.kind !== 'resource') return []
+    try {
+      return [{ revisionId: source.provenance.revisionId, value: JSON.parse(source.content) as unknown }]
+    } catch {
+      throw new Error(`CREATIVE_WORK_STRUCTURED_SOURCE_INVALID:${source.provenance.revisionId}`)
+    }
+  })
 }
 
 export function planCreativeWorkResourceMaterialization(input: {
@@ -90,36 +112,33 @@ export function planCreativeWorkResourceMaterialization(input: {
     throw new Error(`CREATIVE_WORK_RESOURCE_RESULT_MISMATCH:${input.taskId}`)
   }
 
+  const output = result.creativeWorkResult.output
   const common = {
+    resourceScope: readCreativeWorkOutputDefinition(output.kind).resourceScope,
     inputFingerprint: payload.inputFingerprint,
     prompt: payload.request.goal,
     modelKey: payload.modelKey,
     toolCallId: payload.origin.toolCallId,
     inputs: resourceInputsFromPayload(payload),
   }
-  const output = result.creativeWorkResult.output
-  if (output.kind === 'screenplay_draft') {
+  if (output.kind === 'canonical_screenplay') {
+    const screenplay = compileCanonicalScreenplay(output)
     return {
       ...common,
       outputs: [{
         mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
         sourceType: 'CreativeWorkResult',
         sourceId: input.taskId,
         name: truncateResourceName(output.title),
         candidateSetId: null,
         candidateIndex: null,
         candidateKey: null,
-        content: { kind: 'text', text: output.screenplay },
+        content: { kind: 'structured', data: toCreativeJson(screenplay) },
         generationOptions: toCreativeJson({
           outputKind: output.kind,
           requestKey: payload.requestKey,
-          title: output.title,
-          logline: output.logline,
-          synopsis: output.synopsis,
-          estimatedDurationSeconds: output.estimatedDurationSeconds,
-          assumptions: output.assumptions,
-          openQuestions: output.openQuestions,
+          source: screenplay.source,
         }),
       }],
     }
@@ -164,14 +183,41 @@ export function planCreativeWorkResourceMaterialization(input: {
       generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
     })
   }
-  if (output.kind === 'asset_prompt_set') {
+  if (output.kind === 'asset_manifest') {
+    const structuredSources = parseStructuredSourceMaterials(payload)
+    const screenplaySources = structuredSources.flatMap((source) => {
+      const parsed = canonicalScreenplaySchema.safeParse(source.value)
+      return parsed.success ? [{ revisionId: source.revisionId, screenplay: parsed.data }] : []
+    })
+    const styleSources = structuredSources.flatMap((source) => {
+      const parsed = creativeStyleBibleSchema.safeParse(source.value)
+      return parsed.success ? [{ revisionId: source.revisionId }] : []
+    })
+    if (screenplaySources.length !== 1) {
+      throw new Error('ASSET_MANIFEST_CANONICAL_SCREENPLAY_SOURCE_REQUIRED')
+    }
+    if (styleSources.length !== 1) {
+      throw new Error('ASSET_MANIFEST_STYLE_BIBLE_SOURCE_REQUIRED')
+    }
+    const screenplaySource = screenplaySources[0]
+    const styleSource = styleSources[0]
+    if (!screenplaySource || !styleSource) throw new Error('ASSET_MANIFEST_SOURCE_REQUIRED')
+    const manifest = validateAssetManifestCoverage({
+      screenplay: screenplaySource.screenplay,
+      manifest: output,
+    })
     return structuredOutput({
       ...common,
       taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_PROMPT_SET,
-      name: output.overview || 'Asset prompt set',
-      data: output,
-      generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
+      schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
+      name: output.overview || 'Asset manifest',
+      data: manifest,
+      generationOptions: {
+        outputKind: output.kind,
+        requestKey: payload.requestKey,
+        canonicalScreenplayRevisionId: screenplaySource.revisionId,
+        styleBibleRevisionId: styleSource.revisionId,
+      },
     })
   }
   if (output.kind === 'video_prompt_set') {
@@ -264,6 +310,7 @@ export function planCreativeWorkResourceMaterialization(input: {
 }
 
 function structuredOutput(input: {
+  readonly resourceScope: 'project' | 'episode'
   readonly inputFingerprint: string
   readonly prompt: string
   readonly modelKey: string
@@ -276,6 +323,7 @@ function structuredOutput(input: {
   readonly generationOptions: unknown
 }): CreativeWorkResourceMaterializationPlan {
   return {
+    resourceScope: input.resourceScope,
     inputFingerprint: input.inputFingerprint,
     prompt: input.prompt,
     modelKey: input.modelKey,

@@ -3,6 +3,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
+import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 type UpdateVariantBody = {
   scope?: AssetScope
@@ -40,7 +41,7 @@ export const PATCH = apiHandler(async (
   const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'api_assets_update_variant',
-    projectId: 'global-asset-hub',
+    projectId: GLOBAL_ASSET_PROJECT_ID,
     userId: authResult.session.user.id,
     input: { assetId, variantId, ...body },
     source: 'project-ui',

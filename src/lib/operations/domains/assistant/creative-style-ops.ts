@@ -12,12 +12,8 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 const adoptStyleBibleInputSchema = z.object({
-  resourceId: z.string().trim().min(1)
-    .describe('Exact project.style_bible Resource materialized by a completed Creative Task.'),
   revisionId: z.string().trim().min(1)
     .describe('Exact immutable Style Bible revision selected by the current choice.'),
-  fingerprint: z.string().trim().min(1)
-    .describe('Exact persisted fingerprint returned with revisionId. Never infer it from content.'),
   expectedVersion: z.number().int().min(0).nullable().optional()
     .describe('Pass null for the first adoption; pass the current canonical style binding version when replacing it.'),
 }).strict()
@@ -26,7 +22,6 @@ const adoptStyleBibleOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  fingerprint: z.string().trim().min(1),
   schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE),
   binding: z.object({
     bindingId: z.string().trim().min(1),
@@ -77,12 +72,13 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
         const revision = await transaction.creativeResourceRevision.findFirst({
           where: {
             id: input.revisionId,
-            resourceId: input.resourceId,
-            fingerprint: input.fingerprint,
             taskId: { not: null },
             resource: {
               userId: context.userId,
               projectId: context.projectId,
+              episodeId: null,
+              scopeKind: 'project',
+              scopeId: context.projectId,
               status: 'ready',
               mediaType: 'text',
               schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
@@ -92,18 +88,12 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
           select: {
             id: true,
             resourceId: true,
-            fingerprint: true,
             taskId: true,
             task: {
               select: {
                 type: true,
                 status: true,
                 payload: true,
-              },
-            },
-            resource: {
-              select: {
-                episodeId: true,
               },
             },
           },
@@ -130,7 +120,7 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
         const scope = resolveProjectCreativeResourceScope({
           userId: context.userId,
           projectId: context.projectId,
-          episodeId: revision.resource.episodeId,
+          episodeId: null,
         })
         const binding = await bindCreativeResourceRevisionInTransaction(transaction, {
           scope,
@@ -144,7 +134,6 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
           success: true,
           resourceId: revision.resourceId,
           revisionId: revision.id,
-          fingerprint: revision.fingerprint,
           schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
           binding,
         })

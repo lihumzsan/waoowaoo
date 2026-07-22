@@ -36,16 +36,30 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
-      zh: '从创意问诊、关键方向收敛到时长受控剧本，以及基于精确剧本的可选 Chapter 规划方法。',
-      en: 'Methods for creative intake, direction setting, runtime-controlled scripts, and optional Chapter planning from an exact screenplay.',
+      zh: '从创意问诊、方向收敛到时长受控剧本；从零输出 canonical_screenplay 时必须与 screenplay-canonicalization 同轮读取。',
+      en: 'Creative intake, direction setting, and runtime-controlled scripts; a from-zero canonical_screenplay must read screenplay-canonicalization in the same run.',
     },
     tags: ['story', 'script', 'screenplay', 'intake', 'writing'],
     keywords: {
       zh: ['故事', '剧本', '编剧', '创意', '问诊', '扩写', '人物动机', '冲突', '结局', '时长', '章节规划', 'chapter_plan'],
       en: ['story', 'script', 'screenplay', 'writer', 'intake', 'runtime', 'motivation', 'conflict', 'ending', 'chapter planning', 'chapter_plan'],
+    },
+  }),
+  'screenplay-canonicalization': defineSkill({
+    id: 'screenplay-canonicalization',
+    version: '1.0.0',
+    title: { zh: '剧本统一提取', en: 'Screenplay Canonicalization' },
+    summary: {
+      zh: '把生成、上传或粘贴的剧本统一整理为实体登记、场景范围与引用；从零创作时必须与 story-development 同轮读取。',
+      en: 'Normalize generated, uploaded, or pasted screenplays into one entity registry, scene ranges, and references; from-zero writing must read story-development in the same run.',
+    },
+    tags: ['screenplay', 'canonicalization', 'entity', 'scene', 'reference'],
+    keywords: {
+      zh: ['剧本提取', '统一提取', '规范化', '角色登记', '地点登记', '道具登记', '场景引用', 'canonical_screenplay'],
+      en: ['screenplay extraction', 'canonicalization', 'entity registry', 'scene reference', 'canonical screenplay'],
     },
   }),
   'continuity-memory': defineSkill({
@@ -78,11 +92,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'style-development': defineSkill({
     id: 'style-development',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '视觉风格开发', en: 'Visual Style Development' },
     summary: {
-      zh: '跨图片与视频共享的视觉风格、资产图专用画面规则、风格候选与预览设计方法。',
-      en: 'Methods for cross-media visual style, asset-image-specific presentation rules, style candidates, and previews.',
+      zh: '跨图片与视频共享的视觉风格、资产图灯光/材质、风格候选与灵感词汇；不拥有固定构图后缀。',
+      en: 'Cross-media visual style, asset-image lighting and texture, style candidates, and inspiration vocabulary; fixed layout suffixes are excluded.',
     },
     tags: ['style', 'art-direction', 'palette', 'medium', 'preview'],
     keywords: {
@@ -92,11 +106,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '资产设计与生成提示词', en: 'Asset Development and Generation Prompts' },
     summary: {
-      zh: '角色、场景、道具、参考图、候选资产与已有资产修改的设计方法。',
-      en: 'Methods for characters, locations, props, reference images, asset candidates, and existing-asset modifications.',
+      zh: '在一个 Task 内完成登记实体的资产事实提取、外观设计与最终生成 Prompt；不生图、不写项目。',
+      en: 'Extract registered-entity asset facts, design appearances, and compose final generation prompts in one Task; never generate images or write the Project.',
     },
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
     keywords: {
@@ -106,7 +120,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.3.0',
+    version: '1.3.1',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
       zh: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
