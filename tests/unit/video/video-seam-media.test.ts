@@ -330,7 +330,9 @@ describe('video seam local media adapter', () => {
         const oneFrame = 1 / plan.outputFps
         const intervals = await detectAudioSilenceIntervals(outputPath, oneFrame)
         expect(intervals.some((interval) => (
-          interval.startSeconds <= expectedCentralStart + oneFrame
+          (_shortInput !== 'input 2'
+            || interval.startSeconds >= expectedCentralStart - oneFrame)
+          && interval.startSeconds <= expectedCentralStart + oneFrame
           && interval.endSeconds >= expectedCentralEnd - oneFrame
           && interval.endSeconds <= expectedCentralEnd + oneFrame
         ))).toBe(true)
