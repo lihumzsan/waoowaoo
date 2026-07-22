@@ -12,6 +12,11 @@ import FreeVoiceToolCard from './FreeVoiceToolCard'
 import VideoSeamDiagnostics from './VideoSeamDiagnostics'
 import VideoUploadCard from './VideoUploadCard'
 import {
+  createRecoveredVideoSeamTask,
+  readVideoSeamDraft,
+  writeVideoSeamDraft,
+} from './video-seam-draft'
+import {
   canSubmitVideoSeamConcat,
   resolveVideoSeamDiagnostics,
   resolveVideoSeamErrorTranslationKey,
@@ -32,6 +37,7 @@ export default function VideoToolsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const t = useTranslations('videoTools')
+  const statusFailedMessage = t('errors.statusFailed')
   const [input1, setInput1] = useState<UploadedVideo | null>(null)
   const [input2, setInput2] = useState<UploadedVideo | null>(null)
   const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
@@ -44,6 +50,10 @@ export default function VideoToolsPage() {
   const [currentTask, setCurrentTask] = useState<VideoToolTask | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
+  const [hydratedUserId, setHydratedUserId] = useState<string | null>(null)
+  const authenticatedUserId = status === 'authenticated'
+    ? (session?.user as { id?: string } | undefined)?.id?.trim() || null
+    : null
 
   useEffect(() => {
     if (status === 'loading') return
@@ -53,23 +63,74 @@ export default function VideoToolsPage() {
   const fetchCurrentTask = useCallback(async (taskId: string) => {
     const search = new URLSearchParams({ taskId })
     const response = await apiFetch(`/api/video-tools/seam-concat?${search}`)
-    if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.statusFailed')))
+    if (!response.ok) throw new Error(await readApiErrorMessage(response, statusFailedMessage))
     const task = await response.json() as VideoToolTask
     setCurrentTask((previous) => previous?.id === taskId ? task : previous)
-  }, [t])
+  }, [statusFailedMessage])
+
+  useEffect(() => {
+    if (!authenticatedUserId) {
+      setHydratedUserId(null)
+      return
+    }
+
+    setHydratedUserId(null)
+    const savedDraft = readVideoSeamDraft(authenticatedUserId)
+    setInput1(savedDraft?.input1 || null)
+    setInput2(savedDraft?.input2 || null)
+    setInput1TrimEndFrames(savedDraft?.input1TrimEndFrames ?? 0)
+    setInput2TrimStartFrames(savedDraft?.input2TrimStartFrames ?? 1)
+    setSeamMode(savedDraft?.seamMode || 'direct')
+    setBridgeDurationSeconds(savedDraft?.bridgeDurationSeconds || 4)
+    setBridgePrompt(savedDraft?.bridgePrompt || '')
+    setCurrentTask(savedDraft?.taskId ? createRecoveredVideoSeamTask(savedDraft.taskId) : null)
+    setPageError(null)
+    setHydratedUserId(authenticatedUserId)
+
+    if (savedDraft?.taskId) {
+      void fetchCurrentTask(savedDraft.taskId).catch((error) => {
+        setPageError(error instanceof Error ? error.message : statusFailedMessage)
+      })
+    }
+  }, [authenticatedUserId, fetchCurrentTask, statusFailedMessage])
+
+  useEffect(() => {
+    if (!authenticatedUserId || hydratedUserId !== authenticatedUserId) return
+    writeVideoSeamDraft(authenticatedUserId, {
+      input1,
+      input2,
+      input1TrimEndFrames,
+      input2TrimStartFrames,
+      seamMode,
+      bridgeDurationSeconds,
+      bridgePrompt,
+      taskId: currentTask?.id || null,
+    })
+  }, [
+    authenticatedUserId,
+    bridgeDurationSeconds,
+    bridgePrompt,
+    currentTask?.id,
+    hydratedUserId,
+    input1,
+    input1TrimEndFrames,
+    input2,
+    input2TrimStartFrames,
+    seamMode,
+  ])
 
   const taskView = resolveVideoToolTaskView(currentTask)
   const diagnostics = resolveVideoSeamDiagnostics(currentTask?.result || null)
 
   useEffect(() => {
-    if (!session || !currentTask || !taskView.active) return
+    if (!session || hydratedUserId !== authenticatedUserId || !currentTask || !taskView.active) return
     const timer = window.setInterval(() => {
       void fetchCurrentTask(currentTask.id).catch((error) => {
-        setPageError(error instanceof Error ? error.message : t('errors.statusFailed'))
+        setPageError(error instanceof Error ? error.message : statusFailedMessage)
       })
     }, 2000)
     return () => window.clearInterval(timer)
-  }, [currentTask, fetchCurrentTask, session, t, taskView.active])
+  }, [authenticatedUserId, currentTask, fetchCurrentTask, hydratedUserId, session, statusFailedMessage, taskView.active])
 
   const upload = async (slot: UploadSlot, file: File) => {
     setUploadingSlot(slot)
@@ -116,6 +177,7 @@ export default function VideoToolsPage() {
         input2TrimStartFrames,
       )
       || submitting
+      || hydratedUserId !== authenticatedUserId
     ) return
     setSubmitting(true)
     setPageError(null)
@@ -145,14 +207,7 @@ export default function VideoToolsPage() {
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
       const data = await response.json() as { taskId: string }
-      setCurrentTask({
-        id: data.taskId,
-        status: 'queued',
-        progress: 0,
-        payload: null,
-        result: null,
-        error: null,
-      })
+      setCurrentTask(createRecoveredVideoSeamTask(data.taskId))
     } catch (error) {
       setPageError(error instanceof Error ? error.message : t('errors.submitFailed'))
     } finally {
@@ -175,6 +230,7 @@ export default function VideoToolsPage() {
     input1TrimEndFrames,
     input2TrimStartFrames,
   ) && !submitting && !uploadingSlot
+    && hydratedUserId === authenticatedUserId
   const phaseLabel = t(`status.${taskView.phase}`)
 
   return (

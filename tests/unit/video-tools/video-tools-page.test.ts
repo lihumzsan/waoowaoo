@@ -66,4 +66,25 @@ describe('video tools page', () => {
     expect(source).toContain("seamMode === 'ai_bridge' ? t('workflowNoteAi') : t('workflowNoteDirect')")
     expect(source).not.toContain("{t('workflowNote')}")
   })
+
+  it('hydrates the authenticated user draft before allowing state persistence', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain("status === 'authenticated'")
+    expect(source).toContain("(session?.user as { id?: string } | undefined)?.id?.trim() || null")
+    expect(source).toContain('readVideoSeamDraft(authenticatedUserId)')
+    expect(source).toContain('setHydratedUserId(authenticatedUserId)')
+    expect(source).toContain('hydratedUserId !== authenticatedUserId')
+    expect(source).toContain('writeVideoSeamDraft(authenticatedUserId,')
+  })
+
+  it('recovers the stored task immediately and leaves active polling and submission guards in place', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain('createRecoveredVideoSeamTask(savedDraft.taskId)')
+    expect(source).toContain('void fetchCurrentTask(savedDraft.taskId)')
+    expect(source).toContain('hydratedUserId !== authenticatedUserId || !currentTask || !taskView.active')
+    expect(source).toContain('currentTask,')
+    expect(source).toContain('|| submitting')
+  })
 })
