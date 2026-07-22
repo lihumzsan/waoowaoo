@@ -29,6 +29,7 @@ import { generateText, streamText } from 'ai'
 import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-catalog'
 import {
   OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
+  OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
   OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
@@ -449,6 +450,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       const call = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?]
       const body = await requestBodyOf(call)
+      expect(body.cache_control).toBeUndefined()
       expect(body.messages).toEqual([{
         role: 'user',
         content: [{
@@ -466,6 +468,76 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         cacheWriteTokens: 5,
       })
       expect(result.providerMetadata?.openrouter?.usage).toMatchObject({ cost: 0.25 })
+    })
+
+    it('enables Claude automatic caching on every growing Agent request body', async () => {
+      const response = () => jsonResponse({
+        id: 'openrouter-agent-response',
+        model: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+        provider: 'Anthropic',
+        choices: [{
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'ok' },
+        }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          cost: 0.01,
+        },
+      })
+      fetchMock.mockResolvedValueOnce(response()).mockResolvedValueOnce(response())
+      const model = createAiLanguageModel({
+        providerKey: 'openrouter',
+        selection: {
+          provider: 'openrouter',
+          modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+          modelKey: `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
+        },
+        providerConfig: {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          apiKey: 'test-key',
+          baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        executionMode: 'agent',
+        reasoning: false,
+        reasoningEffort: 'medium',
+        openRouterSessionId: 'agent-session',
+      })
+      const firstTurn = [
+        { role: 'system' as const, content: 'stable system and tool context' },
+        { role: 'user' as const, content: 'turn one' },
+      ]
+      const secondTurn = [
+        ...firstTurn,
+        { role: 'assistant' as const, content: 'ok' },
+        { role: 'user' as const, content: 'turn two' },
+      ]
+
+      await generateText({ model, messages: firstTurn, maxRetries: 0 })
+      await generateText({ model, messages: secondTurn, maxRetries: 0 })
+
+      const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
+      const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
+      expect(firstBody.cache_control).toEqual({ type: 'ephemeral' })
+      expect(secondBody.cache_control).toEqual({ type: 'ephemeral' })
+      const firstWireMessages = [
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'stable system and tool context' }],
+        },
+        { role: 'user', content: 'turn one' },
+      ]
+      expect(firstBody.messages).toEqual(firstWireMessages)
+      expect(secondBody.messages).toEqual([
+        ...firstWireMessages,
+        { role: 'assistant', content: 'ok' },
+        { role: 'user', content: 'turn two' },
+      ])
+      const headers = new Headers((fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])[1]?.headers)
+      expect(headers.get('x-session-id')).toBe('agent-session')
     })
 
     it('passes Google thinking configuration through the Google AI SDK', async () => {

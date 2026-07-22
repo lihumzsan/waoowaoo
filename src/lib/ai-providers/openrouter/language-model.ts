@@ -4,7 +4,7 @@ import type {
   AiProviderLanguageModelContext,
   AiProviderLanguageModelValidationContext,
 } from '@/lib/ai-providers/runtime-types'
-import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
+import { applyOpenRouterPromptCaching } from '@/lib/ai-providers/openrouter/prompt-cache'
 import { createScopedLogger } from '@/lib/logging/core'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
@@ -49,19 +49,11 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
   return async (requestInput, requestInit) => {
     const startedAt = Date.now()
     const body = await readRequestBody(requestInput, requestInit)
-    const promptCacheRequest = input.messages
-      ? buildOpenRouterPromptCacheRequest({
-        modelId: input.selection.modelId,
-        messages: input.messages,
-      })
-      : null
-    const nextBody = JSON.stringify({
-      ...body,
-      ...(promptCacheRequest ? { messages: promptCacheRequest.messages } : {}),
-      ...(!body.cache_control && promptCacheRequest?.cacheControl
-        ? { cache_control: promptCacheRequest.cacheControl }
-        : {}),
-    })
+    const nextBody = JSON.stringify(applyOpenRouterPromptCaching({
+      modelId: input.selection.modelId,
+      body,
+      sourceMessages: input.messages,
+    }))
     const preparedInput = typeof Request !== 'undefined' && requestInput instanceof Request
       ? new Request(requestInput, { body: nextBody })
       : requestInput

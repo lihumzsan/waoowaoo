@@ -1,7 +1,5 @@
 import {
-  flattenProviderMessageContent,
   normalizeProviderContentParts,
-  providerMessageHasCacheControl,
   type ProviderChatMessage,
   type ProviderPromptCacheControl,
 } from '@/lib/ai-providers/shared/llm-support'
@@ -24,17 +22,10 @@ export type OpenRouterChatMessage = {
   content: string | OpenRouterTextContentPart[]
 }
 
-export type OpenRouterPromptCacheRequest = {
-  messages: OpenRouterChatMessage[]
-  cacheControl?: OpenRouterCacheControl
-}
-
 const DEFAULT_CACHE_CONTROL: OpenRouterCacheControl = {
   type: 'ephemeral',
-  ttl: '1h',
 }
 
-const CLAUDE_AUTOMATIC_CACHE_MIN_CHARS = 1024
 const ANTHROPIC_EXPLICIT_CACHE_BREAKPOINT_LIMIT = 4
 
 function normalizeModelId(modelId: string): string {
@@ -61,23 +52,6 @@ export function resolveOpenRouterPromptCacheFamily(modelId: string): OpenRouterP
 
 function supportsExplicitCacheControl(family: OpenRouterPromptCacheFamily): boolean {
   return family === 'anthropic' || family === 'google'
-}
-
-function totalPromptChars(messages: readonly ProviderChatMessage[]): number {
-  return messages.reduce((sum, message) => sum + flattenProviderMessageContent(message.content).length, 0)
-}
-
-function hasExplicitCacheControl(messages: readonly ProviderChatMessage[]): boolean {
-  return messages.some((message) => providerMessageHasCacheControl(message))
-}
-
-function shouldUseClaudeAutomaticCache(input: {
-  family: OpenRouterPromptCacheFamily
-  messages: readonly ProviderChatMessage[]
-}): boolean {
-  return input.family === 'anthropic'
-    && !hasExplicitCacheControl(input.messages)
-    && totalPromptChars(input.messages) >= CLAUDE_AUTOMATIC_CACHE_MIN_CHARS
 }
 
 function toOpenRouterContent(
@@ -107,19 +81,126 @@ function toOpenRouterContent(
   }))
 }
 
-export function buildOpenRouterPromptCacheRequest(input: {
+function buildOpenRouterExplicitCacheMessages(input: {
   modelId: string
   messages: readonly ProviderChatMessage[]
-}): OpenRouterPromptCacheRequest {
+}): OpenRouterChatMessage[] {
   const family = resolveOpenRouterPromptCacheFamily(input.modelId)
-  const messages = input.messages.map((message) => ({
+  return input.messages.map((message) => ({
     role: message.role,
     content: toOpenRouterContent(message, family),
   }))
-  return {
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function hasOwnCacheControl(value: Record<string, unknown>): boolean {
+  return Object.prototype.hasOwnProperty.call(value, 'cache_control')
+}
+
+function containsWireCacheControl(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some((item) => containsWireCacheControl(item))
+  const record = asRecord(value)
+  if (!record) return false
+  if (hasOwnCacheControl(record)) return true
+  return Object.values(record).some((item) => containsWireCacheControl(item))
+}
+
+function sourceMessagesHaveExplicitCacheControl(messages: readonly OpenRouterChatMessage[]): boolean {
+  return messages.some((message) => (
+    Array.isArray(message.content)
+    && message.content.some((part) => Boolean(part.cache_control))
+  ))
+}
+
+function applyExplicitCacheControlToContent(input: {
+  wireContent: unknown
+  sourceContent: OpenRouterChatMessage['content']
+}): unknown {
+  if (!Array.isArray(input.sourceContent)) return input.wireContent
+  const sourceParts = input.sourceContent
+  if (!sourceParts.some((part) => Boolean(part.cache_control))) return input.wireContent
+
+  const sourceText = sourceParts.map((part) => part.text).join('')
+  if (typeof input.wireContent === 'string') {
+    if (input.wireContent !== sourceText) {
+      throw new Error('OPENROUTER_PROMPT_CACHE_MESSAGE_CONTENT_MISMATCH')
+    }
+    return input.sourceContent
+  }
+  if (!Array.isArray(input.wireContent) || input.wireContent.length !== sourceParts.length) {
+    throw new Error('OPENROUTER_PROMPT_CACHE_MESSAGE_CONTENT_MISMATCH')
+  }
+  return input.wireContent.map((wirePart, index) => {
+    const record = asRecord(wirePart)
+    const sourcePart = sourceParts[index]
+    if (!record || record.type !== 'text' || record.text !== sourcePart.text) {
+      throw new Error('OPENROUTER_PROMPT_CACHE_MESSAGE_CONTENT_MISMATCH')
+    }
+    return {
+      ...record,
+      ...(sourcePart.cache_control ? { cache_control: sourcePart.cache_control } : {}),
+    }
+  })
+}
+
+function applyExplicitSourceMessages(input: {
+  wireMessages: unknown
+  sourceMessages: readonly OpenRouterChatMessage[]
+}): unknown {
+  if (!sourceMessagesHaveExplicitCacheControl(input.sourceMessages)) return input.wireMessages
+  if (!Array.isArray(input.wireMessages) || input.wireMessages.length !== input.sourceMessages.length) {
+    throw new Error('OPENROUTER_PROMPT_CACHE_MESSAGE_COUNT_MISMATCH')
+  }
+  return input.wireMessages.map((wireMessage, index) => {
+    const record = asRecord(wireMessage)
+    const sourceMessage = input.sourceMessages[index]
+    if (!record || record.role !== sourceMessage.role) {
+      throw new Error('OPENROUTER_PROMPT_CACHE_MESSAGE_ROLE_MISMATCH')
+    }
+    return {
+      ...record,
+      content: applyExplicitCacheControlToContent({
+        wireContent: record.content,
+        sourceContent: sourceMessage.content,
+      }),
+    }
+  })
+}
+
+export function applyOpenRouterPromptCaching(input: {
+  modelId: string
+  body: Record<string, unknown>
+  sourceMessages?: readonly ProviderChatMessage[]
+}): Record<string, unknown> {
+  const family = resolveOpenRouterPromptCacheFamily(input.modelId)
+  const sourceMessages = input.sourceMessages
+    ? buildOpenRouterExplicitCacheMessages({
+      modelId: input.modelId,
+      messages: input.sourceMessages,
+    })
+    : null
+  const messages = sourceMessages
+    ? applyExplicitSourceMessages({
+      wireMessages: input.body.messages,
+      sourceMessages,
+    })
+    : input.body.messages
+  const hasExplicitCacheControl = containsWireCacheControl([
     messages,
-    ...(shouldUseClaudeAutomaticCache({ family, messages: input.messages })
-      ? { cacheControl: DEFAULT_CACHE_CONTROL }
-      : {}),
+    input.body.tools,
+  ])
+  const shouldUseClaudeAutomaticCache = family === 'anthropic'
+    && !hasOwnCacheControl(input.body)
+    && !hasExplicitCacheControl
+
+  return {
+    ...input.body,
+    ...(messages !== input.body.messages ? { messages } : {}),
+    ...(shouldUseClaudeAutomaticCache ? { cache_control: DEFAULT_CACHE_CONTROL } : {}),
   }
 }
