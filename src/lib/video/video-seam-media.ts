@@ -60,7 +60,7 @@ function isAudioComposeFailure(error: unknown): boolean {
     : Buffer.isBuffer(stderr)
       ? stderr.toString('utf8')
       : ''
-  return /\b(?:aformat|atrim|asetpts|atempo|anullsrc)\b/i.test(detail)
+  return /\b(?:aformat|apad|atrim|asetpts|atempo|anullsrc)\b/i.test(detail)
     || /(?:stream specifier|input pad|output pad).*(?:\baudio\b|:a\b)/i.test(detail)
     || /\baudio\b.*(?:filter|stream|concat|merge|trim|tempo)/i.test(detail)
 }

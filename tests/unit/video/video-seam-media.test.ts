@@ -343,42 +343,45 @@ describe('video seam local media adapter', () => {
     30_000,
   )
 
-  it('maps audio filter failures to the stable audio compose code with the original cause', async () => {
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-audio-error-'))
-    const executable = path.join(directory, 'ffmpeg-audio-failure')
-    const originalFfmpegPath = process.env.FFMPEG_PATH
-    try {
-      await fs.writeFile(executable, [
-        '#!/usr/bin/env node',
-        'process.stderr.write("Error applying option to filter atempo: Invalid argument\\n")',
-        'process.exit(1)',
-        '',
-      ].join('\n'), { mode: 0o755 })
-      process.env.FFMPEG_PATH = executable
-      const plan = buildVideoSeamBridgePlan({
-        input1: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
-        input2: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
-        trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
-      })
-      let failure: unknown
+  it.each(['atempo', 'apad'])(
+    'maps %s filter failures to the stable audio compose code with the original cause',
+    async (filterName) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-audio-error-'))
+      const executable = path.join(directory, 'ffmpeg-audio-failure')
+      const originalFfmpegPath = process.env.FFMPEG_PATH
       try {
-        await composeVideoSeamOutput({
-          input1Path: '/tmp/a.mp4', bridgePath: '/tmp/g.mp4',
-          input2Path: '/tmp/b.mp4', outputPath: '/tmp/o.mp4', plan,
+        await fs.writeFile(executable, [
+          '#!/usr/bin/env node',
+          `process.stderr.write("Error initializing filter ${filterName}: Invalid argument\\n")`,
+          'process.exit(1)',
+          '',
+        ].join('\n'), { mode: 0o755 })
+        process.env.FFMPEG_PATH = executable
+        const plan = buildVideoSeamBridgePlan({
+          input1: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+          input2: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+          trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
         })
-      } catch (error) {
-        failure = error
+        let failure: unknown
+        try {
+          await composeVideoSeamOutput({
+            input1Path: '/tmp/a.mp4', bridgePath: '/tmp/g.mp4',
+            input2Path: '/tmp/b.mp4', outputPath: '/tmp/o.mp4', plan,
+          })
+        } catch (error) {
+          failure = error
+        }
+        expect(failure).toBeInstanceOf(Error)
+        expect((failure as Error).message).toBe('VIDEO_SEAM_AUDIO_COMPOSE_FAILED')
+        expect((failure as Error).cause).toBeInstanceOf(Error)
+        expect(String((failure as Error).cause)).toContain(filterName)
+      } finally {
+        if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
+        else process.env.FFMPEG_PATH = originalFfmpegPath
+        await fs.rm(directory, { recursive: true, force: true })
       }
-      expect(failure).toBeInstanceOf(Error)
-      expect((failure as Error).message).toBe('VIDEO_SEAM_AUDIO_COMPOSE_FAILED')
-      expect((failure as Error).cause).toBeInstanceOf(Error)
-      expect(String((failure as Error).cause)).toContain('atempo')
-    } finally {
-      if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
-      else process.env.FFMPEG_PATH = originalFfmpegPath
-      await fs.rm(directory, { recursive: true, force: true })
-    }
-  })
+    },
+  )
 
   it('does not misclassify a video encoder failure as audio composition', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-video-error-'))
