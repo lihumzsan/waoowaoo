@@ -47,10 +47,6 @@ const gateMock = vi.hoisted(() => ({
   withUserConcurrencyGate: vi.fn(async <T>(input: { run: () => Promise<T> }) => await input.run()),
 }))
 
-const generatorApiMock = vi.hoisted(() => ({
-  generateVideo: vi.fn(),
-}))
-
 const utilsMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
   getUserModels: vi.fn(async () => ({
@@ -110,7 +106,6 @@ vi.mock('@/lib/workers/shared', () => workerSharedMock)
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/workers/user-concurrency-gate', () => gateMock)
 vi.mock('@/lib/workers/handlers/image-task-handlers', () => imageHandlerMock)
-vi.mock('@/lib/generator-api', () => generatorApiMock)
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
@@ -179,7 +174,7 @@ describe('chain contract - image queue behavior', () => {
     expect(calls[0]?.data.type).toBe(TASK_TYPE.MODIFY_ASSET_IMAGE)
   })
 
-  it('routes Episode cover image jobs to the image worker without video generation', async () => {
+  it('routes Episode cover image jobs to the dedicated image worker handler', async () => {
     const { addTaskJob, QUEUE_NAME } = await import('@/lib/task/queues')
 
     await addTaskJob({
@@ -217,7 +212,6 @@ describe('chain contract - image queue behavior', () => {
     await workerState.processor!(queuedJob)
 
     expect(imageHandlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledWith(queuedJob)
-    expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 
   it('queued image job payload can be consumed by worker handler and persist image fields', async () => {

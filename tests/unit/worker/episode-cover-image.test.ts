@@ -8,17 +8,30 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     update: vi.fn(),
   },
+  task: {
+    findUnique: vi.fn(async () => null),
+  },
 }))
 
 const utilsMock = vi.hoisted(() => ({
-  assertTaskActive: vi.fn(async () => undefined),
-  getProjectModels: vi.fn(async () => ({
-    storyboardModel: 'other-provider::ignored-model',
-    videoRatio: '16:9',
-    artStyle: 'realistic',
-  })),
-  resolveImageSourceFromGeneration: vi.fn(),
   uploadImageSourceToCosWithMetadata: vi.fn(),
+}))
+
+const configServiceMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(),
+  resolveProjectModelCapabilityGenerationOptions: vi.fn(async () => ({})),
+}))
+
+const generatorApiMock = vi.hoisted(() => ({
+  generateImage: vi.fn(async () => ({
+    success: true,
+    imageUrl: 'generated-cover-source',
+  })),
+  generateVideo: vi.fn(),
+}))
+
+const taskServiceMock = vi.hoisted(() => ({
+  isTaskActive: vi.fn(async () => true),
 }))
 
 const sharedMock = vi.hoisted(() => ({
@@ -54,7 +67,16 @@ const promptMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/workers/utils', () => utilsMock)
+vi.mock('@/lib/config-service', () => configServiceMock)
+vi.mock('@/lib/generator-api', () => generatorApiMock)
+vi.mock('@/lib/task/service', () => taskServiceMock)
+vi.mock('@/lib/workers/utils', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/workers/utils')>('@/lib/workers/utils')
+  return {
+    ...actual,
+    uploadImageSourceToCosWithMetadata: utilsMock.uploadImageSourceToCosWithMetadata,
+  }
+})
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => sharedMock)
 vi.mock('@/lib/media/outbound-image', () => outboundMock)
@@ -128,14 +150,13 @@ async function loadHandler() {
 describe('worker episode cover image behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    utilsMock.getProjectModels.mockResolvedValue({
+    configServiceMock.getProjectModelConfig.mockResolvedValue({
       storyboardModel: 'other-provider::ignored-model',
       videoRatio: '16:9',
       artStyle: 'realistic',
     })
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode())
     prismaMock.novelPromotionEpisode.update.mockResolvedValue({ id: 'episode-1' })
-    utilsMock.resolveImageSourceFromGeneration.mockResolvedValue('generated-cover-source')
     utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValue({
       key: 'images/episode-cover/episode-1.png',
       metadata: {
@@ -166,20 +187,20 @@ describe('worker episode cover image behavior', () => {
         style: expect.any(String),
       },
     })
-    const generationArgs = utilsMock.resolveImageSourceFromGeneration.mock.calls[0]?.[1]
-    expect(generationArgs).toMatchObject({
-      userId: 'user-1',
-      modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY,
-      prompt: 'episode cover base prompt',
-      options: {
+    expect(generatorApiMock.generateImage).toHaveBeenCalledWith(
+      'user-1',
+      CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      'episode cover base prompt',
+      expect.objectContaining({
         aspectRatio: '16:9',
         referenceImages: [
           'normalized:images/hero.png',
           'normalized:images/old-town.png',
           'normalized:images/companion.png',
         ],
-      },
-    })
+      }),
+    )
+    expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
     expect(utilsMock.uploadImageSourceToCosWithMetadata).toHaveBeenCalledWith(
       'generated-cover-source',
       'episode-cover',
@@ -197,7 +218,7 @@ describe('worker episode cover image behavior', () => {
   })
 
   it('generates a Codex cover without a project storyboard model', async () => {
-    utilsMock.getProjectModels.mockResolvedValue({
+    configServiceMock.getProjectModelConfig.mockResolvedValue({
       videoRatio: '16:9',
       artStyle: 'realistic',
     })
@@ -209,17 +230,18 @@ describe('worker episode cover image behavior', () => {
       coverImageUrl: '/m/episode-cover-public-1',
     })
 
-    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY,
-      }),
+    expect(generatorApiMock.generateImage).toHaveBeenCalledWith(
+      'user-1',
+      CODEX_DEFAULT_IMAGE_MODEL_KEY,
+      expect.any(String),
+      expect.any(Object),
     )
+    expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 
   it('preserves the existing cover pointer when regeneration fails', async () => {
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
-    utilsMock.resolveImageSourceFromGeneration.mockRejectedValue(new Error('provider unavailable'))
+    generatorApiMock.generateImage.mockRejectedValue(new Error('provider unavailable'))
     const { handleEpisodeCoverImageTask } = await loadHandler()
 
     await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('provider unavailable')
