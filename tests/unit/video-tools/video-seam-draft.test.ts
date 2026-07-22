@@ -103,6 +103,37 @@ describe('video seam draft storage', () => {
     expect(localStorage.setItem).not.toHaveBeenCalled()
   })
 
+  it('normalizes every stored free-form string before hydrating state', () => {
+    installStorage([[
+      buildVideoSeamDraftStorageKey('user-1'),
+      JSON.stringify({
+        version: 1,
+        userId: 'user-1',
+        ...draft,
+        input1: {
+          key: ' video-tools/user-1/inputs/one.mp4 ',
+          url: ' /api/storage/sign?key=one ',
+          name: ' one.mp4 ',
+          size: 1024,
+          mimeType: ' video/mp4 ',
+        },
+        bridgePrompt: ' Preserve the moving subject. ',
+        taskId: ' task-1 ',
+      }),
+    ]])
+
+    expect(readVideoSeamDraft('user-1')).toMatchObject({
+      input1: {
+        key: 'video-tools/user-1/inputs/one.mp4',
+        url: '/api/storage/sign?key=one',
+        name: 'one.mp4',
+        mimeType: 'video/mp4',
+      },
+      bridgePrompt: 'Preserve the moving subject.',
+      taskId: 'task-1',
+    })
+  })
+
   it('creates an active queued placeholder for an immediately recovered server task', () => {
     const task = createRecoveredVideoSeamTask(' task-1 ')
 

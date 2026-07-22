@@ -33,7 +33,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readRequiredString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value : null
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function readUploadedVideo(value: unknown): UploadedVideo | null {
@@ -103,7 +103,7 @@ export function readVideoSeamDraft(userId: string): VideoSeamDraft | null {
       input2TrimStartFrames: value.input2TrimStartFrames,
       seamMode: value.seamMode,
       bridgeDurationSeconds: value.bridgeDurationSeconds,
-      bridgePrompt: value.bridgePrompt,
+      bridgePrompt: value.bridgePrompt.trim(),
       taskId,
     }
   } catch {

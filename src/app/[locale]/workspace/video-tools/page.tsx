@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
@@ -27,6 +27,13 @@ import {
 
 type UploadSlot = 'input1' | 'input2'
 
+type TaskStatusRequest = {
+  scope: string
+  sequence: number
+  controller: AbortController
+  promise: Promise<void>
+}
+
 function statusDotClass(active: boolean, failed: boolean) {
   if (failed) return 'bg-red-500'
   if (active) return 'bg-blue-500 animate-pulse'
@@ -51,6 +58,8 @@ export default function VideoToolsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
   const [hydratedUserId, setHydratedUserId] = useState<string | null>(null)
+  const taskStatusRequestRef = useRef<TaskStatusRequest | null>(null)
+  const taskStatusSequenceRef = useRef(0)
   const authenticatedUserId = status === 'authenticated'
     ? (session?.user as { id?: string } | undefined)?.id?.trim() || null
     : null
@@ -60,15 +69,51 @@ export default function VideoToolsPage() {
     if (!session) router.push({ pathname: '/auth/signin' })
   }, [router, session, status])
 
-  const fetchCurrentTask = useCallback(async (taskId: string) => {
+  const abortTaskStatusRequest = useCallback(() => {
+    taskStatusSequenceRef.current += 1
+    taskStatusRequestRef.current?.controller.abort()
+    taskStatusRequestRef.current = null
+  }, [])
+
+  const fetchCurrentTask = useCallback((userId: string, taskId: string): Promise<void> => {
+    const scope = JSON.stringify([userId, taskId])
+    const existing = taskStatusRequestRef.current
+    if (existing?.scope === scope && !existing.controller.signal.aborted) return existing.promise
+
+    if (existing) abortTaskStatusRequest()
+    const sequence = taskStatusSequenceRef.current + 1
+    taskStatusSequenceRef.current = sequence
+    const controller = new AbortController()
     const search = new URLSearchParams({ taskId })
-    const response = await apiFetch(`/api/video-tools/seam-concat?${search}`)
-    if (!response.ok) throw new Error(await readApiErrorMessage(response, statusFailedMessage))
-    const task = await response.json() as VideoToolTask
-    setCurrentTask((previous) => previous?.id === taskId ? task : previous)
-  }, [statusFailedMessage])
+    const promise = (async () => {
+      try {
+        const response = await apiFetch(`/api/video-tools/seam-concat?${search}`, {
+          signal: controller.signal,
+        })
+        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
+        if (response.status === 404) {
+          setCurrentTask((previous) => previous?.id === taskId ? null : previous)
+          setPageError(null)
+          return
+        }
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, statusFailedMessage))
+        const task = await response.json() as VideoToolTask
+        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
+        setCurrentTask((previous) => previous?.id === taskId ? task : previous)
+        setPageError(null)
+      } catch (error) {
+        if (controller.signal.aborted || sequence !== taskStatusSequenceRef.current) return
+        setPageError(error instanceof Error ? error.message : statusFailedMessage)
+      } finally {
+        if (taskStatusRequestRef.current?.sequence === sequence) taskStatusRequestRef.current = null
+      }
+    })()
+    taskStatusRequestRef.current = { scope, sequence, controller, promise }
+    return promise
+  }, [abortTaskStatusRequest, statusFailedMessage])
 
   useEffect(() => {
+    abortTaskStatusRequest()
     if (!authenticatedUserId) {
       setHydratedUserId(null)
       return
@@ -88,11 +133,13 @@ export default function VideoToolsPage() {
     setHydratedUserId(authenticatedUserId)
 
     if (savedDraft?.taskId) {
-      void fetchCurrentTask(savedDraft.taskId).catch((error) => {
-        setPageError(error instanceof Error ? error.message : statusFailedMessage)
-      })
+      void fetchCurrentTask(authenticatedUserId, savedDraft.taskId)
     }
-  }, [authenticatedUserId, fetchCurrentTask, statusFailedMessage])
+    return abortTaskStatusRequest
+  }, [abortTaskStatusRequest, authenticatedUserId, fetchCurrentTask])
+
+  const taskView = resolveVideoToolTaskView(currentTask)
+  const diagnostics = resolveVideoSeamDiagnostics(currentTask?.result || null)
 
   useEffect(() => {
     if (!authenticatedUserId || hydratedUserId !== authenticatedUserId) return
@@ -104,7 +151,7 @@ export default function VideoToolsPage() {
       seamMode,
       bridgeDurationSeconds,
       bridgePrompt,
-      taskId: currentTask?.id || null,
+      taskId: taskView.active ? currentTask?.id || null : null,
     })
   }, [
     authenticatedUserId,
@@ -117,20 +164,16 @@ export default function VideoToolsPage() {
     input2,
     input2TrimStartFrames,
     seamMode,
+    taskView.active,
   ])
-
-  const taskView = resolveVideoToolTaskView(currentTask)
-  const diagnostics = resolveVideoSeamDiagnostics(currentTask?.result || null)
 
   useEffect(() => {
     if (!session || hydratedUserId !== authenticatedUserId || !currentTask || !taskView.active) return
     const timer = window.setInterval(() => {
-      void fetchCurrentTask(currentTask.id).catch((error) => {
-        setPageError(error instanceof Error ? error.message : statusFailedMessage)
-      })
+      if (authenticatedUserId) void fetchCurrentTask(authenticatedUserId, currentTask.id)
     }, 2000)
     return () => window.clearInterval(timer)
-  }, [authenticatedUserId, currentTask, fetchCurrentTask, hydratedUserId, session, statusFailedMessage, taskView.active])
+  }, [authenticatedUserId, currentTask, fetchCurrentTask, hydratedUserId, session, taskView.active])
 
   const upload = async (slot: UploadSlot, file: File) => {
     setUploadingSlot(slot)
@@ -207,6 +250,7 @@ export default function VideoToolsPage() {
       })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.submitFailed')))
       const data = await response.json() as { taskId: string }
+      abortTaskStatusRequest()
       setCurrentTask(createRecoveredVideoSeamTask(data.taskId))
     } catch (error) {
       setPageError(error instanceof Error ? error.message : t('errors.submitFailed'))
