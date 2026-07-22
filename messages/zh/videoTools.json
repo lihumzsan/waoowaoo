@@ -10,12 +10,14 @@
     "label": "转接方式",
     "direct": "直接拼接",
     "ai": "自然 AI 桥接",
-    "description": "先提取裁剪后真正保留的首尾帧，用 LTX 2.3 只生成两帧之间的连续运动，最终输出再锁回原视频端点；不是淡化，也不是遮挡。",
+    "description": "从两段视频提取四个运动锚点，生成锚点之间的连续运动，并将最终输出锁回原视频端点；不是淡化，也不是遮挡。",
     "duration": "桥接时长",
+    "durationHelp": "四个运动锚点共同约束桥接；只有计算后的中央区间会增加到最终视频时长。",
     "prompt": "运动说明（可选）",
     "promptPlaceholder": "例如：镜头继续缓慢推进，人物自然转身"
   },
-  "workflowNote": "输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s，无需调整工作流参数。",
+  "workflowNoteDirect": "直接拼接由远端处理，输出固定使用 NVENC H.264 MP4、yuv420p 和 10 Mbit/s。",
+  "workflowNoteAi": "AI 桥接使用本地 H.264 MP4，沿用 Video 1 的画面尺寸和帧率，按画面自适应码率，并保留可用音频。",
   "input1": {
     "title": "Video 1",
     "description": "拼接结果的前半段，并决定最终输出帧率。",
@@ -40,6 +42,9 @@
     "uploading": "正在上传",
     "queued": "排队中",
     "preparing": "准备视频",
+    "probing": "检测媒体",
+    "generating": "生成桥接运动",
+    "composing": "合成视频",
     "processing": "正在拼接",
     "persisting": "保存结果",
     "completed": "已完成",
@@ -49,7 +54,32 @@
     "title": "拼接结果",
     "description": "任务完成后可在这里预览和下载。",
     "emptyHint": "上传两个视频并开始拼接，结果将在这里显示。",
-    "processingHint": "ComfyUI 正在处理视频，请保持当前页面打开，完成后可预览和下载。"
+    "processingHint": "正在处理视频，请保持当前页面打开，完成后可预览和下载。"
+  },
+  "diagnostics": {
+    "title": "AI 桥接诊断",
+    "output": "输出画面 / 帧率",
+    "outputFrames": "输出帧数",
+    "outputAudio": "输出音频",
+    "audioPresent": "有音频",
+    "audioAbsent": "无音频",
+    "requestedDuration": "请求生成时长",
+    "generatedFrames": "生成帧数",
+    "handleFrames": "两侧衔接帧数",
+    "centralFrames": "中央新增帧数",
+    "centralSilence": "中央静音时长",
+    "motionAnchors": "运动锚点",
+    "sourceAnchors": "源视频",
+    "generatedAnchors": "生成视频",
+    "generationCanvas": "生成画布 / 内容",
+    "canvasPadding": "左、上、右、下边距",
+    "targetBitrate": "自适应目标码率",
+    "audioPolicy": "音频策略",
+    "audioBoth": "保留两段视频音频",
+    "audioVideo1Only": "仅保留 Video 1 音频",
+    "audioVideo2Only": "仅保留 Video 2 音频",
+    "audioSilent": "输出静音",
+    "video2Tempo": "Video 2 音频速度因子"
   },
   "environmentSound": {
     "title": "独立环境音",
@@ -158,6 +188,18 @@
   "errors": {
     "uploadFailed": "视频上传失败",
     "submitFailed": "拼接任务提交失败",
-    "statusFailed": "无法读取当前拼接状态"
+    "statusFailed": "无法读取当前拼接状态",
+    "mediaDownloadFailed": "无法下载源视频，请确认上传结果仍有效后重试",
+    "ffmpegUnavailable": "当前处理环境缺少本地视频编码能力",
+    "mediaProbeFailed": "无法读取视频的媒体信息",
+    "dimensionsUnsupported": "视频画面尺寸不受支持",
+    "aspectRatioMismatch": "两段视频的画面比例不一致",
+    "fpsMismatch": "两段视频的帧率差异过大",
+    "contextTooShort": "裁剪后的视频不足以提取桥接运动锚点",
+    "anchorMissing": "生成结果缺少所需的运动锚点",
+    "fourAnchorUnsupported": "当前生成能力不支持四锚点桥接",
+    "generatedRangeInvalid": "生成结果的有效桥接区间不完整",
+    "audioComposeFailed": "视频已生成，但音频合成失败",
+    "processingFailed": "视频处理失败，请稍后重试"
   }
 }

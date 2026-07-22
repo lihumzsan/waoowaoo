@@ -63,4 +63,40 @@ describe('video tools page', () => {
     expect(source).toContain('controls preload="metadata"')
     expect(source).not.toContain("t('actions.download')")
   })
+
+  it('keeps direct mode as the default and renders only validated AI diagnostics', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain("useState<'direct' | 'ai_bridge'>('direct')")
+    expect(source).toContain('useState<4 | 6 | 8>(4)')
+    expect(source).toContain('resolveVideoSeamDiagnostics(currentTask?.result || null)')
+    expect(source).toContain('<VideoSeamDiagnostics diagnostics={diagnostics}')
+  })
+
+  it('selects truthful workflow copy for the active seam mode', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain("seamMode === 'ai_bridge' ? t('workflowNoteAi') : t('workflowNoteDirect')")
+    expect(source).not.toContain("{t('workflowNote')}")
+  })
+
+  it('wires task, upload, and submit requests through the authenticated-user coordinator', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain('createVideoSeamRequestCoordinator')
+    expect(source).toContain('getCurrentUserId: () => authenticatedUserIdRef.current')
+    expect(source).toContain("kind: 'task_status'")
+    expect(source).toContain("kind: 'upload'")
+    expect(source).toContain("kind: 'submit'")
+    expect(source).toContain('signal: requestSignal')
+    expect(source).toContain('videoSeamRequestCoordinator.abortAll()')
+  })
+
+  it('resets transient request state when a newly authenticated user is hydrated', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain('setUploadingSlot(null)')
+    expect(source).toContain('setUploadErrors({})')
+    expect(source).toContain('setSubmitting(false)')
+  })
 })
