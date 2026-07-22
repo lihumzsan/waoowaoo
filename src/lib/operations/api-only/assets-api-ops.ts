@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
+import { createAsset, copyAssetFromGlobal, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
 import {
   commitProjectAssetRenderUpload,
@@ -9,14 +9,9 @@ import {
 } from '@/lib/assets/services/project-upload-render'
 import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
-import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { taskSubmitOperationOutputSchema } from '@/lib/operations/output-schemas'
+import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
-import {
-  submitPlannedOperationTask,
-  type OperationPlan,
-} from '@/lib/operations/planning'
 import { assertFileSizeWithinLimit, MAX_IMAGE_BYTES } from '@/lib/http/body-limits'
 
 const ASSET_SCOPES = ['global', 'project'] as const
@@ -61,17 +56,6 @@ const EFFECTS_WRITE_OVERWRITE = {
   longRunning: false,
 } as const
 
-const EFFECTS_LONG_RUNNING = {
-  writes: true,
-  workspaceResourceImpact: 'none',
-  billable: true,
-  destructive: false,
-  overwrite: false,
-  bulk: false,
-  externalSideEffects: true,
-  longRunning: true,
-} as const
-
 const EFFECTS_UPLOAD_OVERWRITE = {
   writes: true,
   workspaceResourceImpact: 'scoped_assets',
@@ -95,12 +79,6 @@ function requireProjectId(scope: AssetScope, projectId: unknown): string {
   throw new ApiError('INVALID_PARAMS', { details: 'projectId is required for project scope' })
 }
 
-function readOptionalEpisodeId(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
 function omitBodyKeys(input: unknown, keys: ReadonlyArray<string>): Record<string, unknown> {
   const record = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {}
   const body: Record<string, unknown> = { ...record }
@@ -118,68 +96,6 @@ function isProjectUploadRenderInput(value: unknown): value is ProjectUploadRende
     && (record.kind === 'character' || record.kind === 'location')
     && typeof record.projectId === 'string'
     && !!record.file
-}
-
-async function planAssetGenerateOperation(
-  ctx: ProjectAgentOperationContext,
-  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
-): Promise<OperationPlan> {
-  const projectId = requireProjectId(input.scope, input.projectId)
-  const episodeId = readOptionalEpisodeId(input.episodeId)
-  const body = omitBodyKeys(input, ['assetId'])
-  const planned = await planAssetGenerateTask({
-    request: ctx.request,
-    kind: input.kind,
-    assetId: input.assetId,
-    body,
-    episodeId,
-    access: input.scope === 'project'
-      ? { scope: 'project', userId: ctx.userId, projectId }
-      : { scope: 'global', userId: ctx.userId },
-  })
-  return {
-    kind: 'task_submission',
-    operationId: 'api_assets_generate',
-    projectId: planned.projectId,
-    userId: planned.userId,
-    tasks: [planned.task],
-  }
-}
-
-async function commitAssetGenerateOperation(
-  ctx: ProjectAgentOperationContext,
-  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
-  plan: OperationPlan,
-) {
-  const task = plan.tasks[0]
-  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const projectId = requireProjectId(input.scope, input.projectId)
-  const episodeId = readOptionalEpisodeId(input.episodeId)
-  const body = omitBodyKeys(input, ['assetId'])
-  await ensureAssetGenerateCommitReady({
-    request: ctx.request,
-    kind: input.kind,
-    assetId: input.assetId,
-    body,
-    episodeId,
-    access: input.scope === 'project'
-      ? { scope: 'project', userId: ctx.userId, projectId }
-      : { scope: 'global', userId: ctx.userId },
-  })
-  return await submitPlannedOperationTask({
-    ctx,
-    task,
-    operationId: 'api_assets_generate',
-  })
-}
-
-function buildAssetGenerateSchema() {
-  return z.object({
-    assetId: z.string().min(1),
-    scope: scopeSchema,
-    kind: mutableKindSchema,
-    projectId: z.string().optional(),
-  }).passthrough()
 }
 
 export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft {
@@ -258,18 +174,6 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
             : { scope: 'global', userId: ctx.userId },
         }, transaction)
       },
-    }),
-
-    api_assets_generate: defineOperation({
-      id: 'api_assets_generate',
-      summary: 'API-only: Submit asset generate task (global or project scope).',
-      intent: 'act',
-      effects: EFFECTS_LONG_RUNNING,
-      confirmation: { kind: 'billable_media', required: true },
-      inputSchema: buildAssetGenerateSchema(),
-      outputSchema: taskSubmitOperationOutputSchema,
-      plan: async (ctx, input) => planAssetGenerateOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitAssetGenerateOperation(ctx, input, plan),
     }),
 
     api_assets_upload_render: defineOperation({

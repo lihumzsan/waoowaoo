@@ -1,7 +1,16 @@
-import { parseJsonStringArray } from '@/lib/workers/handlers/image-task-handler-shared'
-
 function trimText(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseJsonStringArray(value: string | null | undefined): string[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === 'string')
+  } catch {
+    return []
+  }
 }
 
 export function readIndexedDescription(params: {

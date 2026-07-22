@@ -1,19 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalLocation } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
-  requireTaskSubmissionReceipt,
   requestJsonWithError,
   requestVoidWithError,
 } from './mutation-shared'
 import {
-  GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
-import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectLocationImageContext {
   previousQueries: Array<{
@@ -121,49 +117,6 @@ function restoreUnifiedQuerySnapshots(
 ) {
   snapshots.forEach((snapshot) => {
     queryClient.setQueryData(snapshot.queryKey, snapshot.data)
-  })
-}
-
-export function useGenerateLocationImage() {
-  const queryClient = useQueryClient()
-  const assetOperationBillingPlan = useAssetOperationBillingPlan()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      locationId,
-      count,
-    }: {
-      locationId: string
-      count?: number
-    }) => {
-      const requestBody = {
-        scope: 'global',
-        kind: 'location',
-        count,
-      }
-      const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-      const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...requestBody,
-          ...confirmation,
-        }),
-      }, 'Failed to generate image')
-      return requireTaskSubmissionReceipt(result)
-    },
-    onSuccess: (receipt, { locationId }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocation',
-        targetId: locationId,
-        runningTaskId: receipt.taskId,
-        runningTaskType: receipt.taskType,
-        intent: 'generate',
-      })
-    },
-    onSettled: invalidateLocations,
   })
 }
 

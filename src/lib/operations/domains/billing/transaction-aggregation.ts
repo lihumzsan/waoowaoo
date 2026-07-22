@@ -62,7 +62,7 @@ type AggregationEntry =
 const GROUP_TARGET_LABEL_BY_TYPE: Record<string, string> = {
   CharacterAppearance: 'transactionTargets.characterAppearanceGroup',
   LocationImage: 'transactionTargets.locationImageGroup',
-  ProjectVideoSegment: 'transactionTargets.projectVideoSegmentGroup',
+  CreativeResource: 'transactionTargets.creativeResourceGroup',
 }
 
 function readNumber(value: unknown): number | null {

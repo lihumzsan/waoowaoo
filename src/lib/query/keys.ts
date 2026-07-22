@@ -45,11 +45,6 @@ export const queryKeys = {
         detail: (projectId: string) => ['project-assets', projectId, 'detail'] as const,
     },
 
-    // ============ 视频片段 ============
-    videoSegments: {
-        all: (episodeId: string) => ['video-segments', episodeId] as const,
-    },
-
     // ============ 用户模型 ============
     userModels: {
         all: () => ['user-models'] as const,
@@ -96,10 +91,6 @@ export const queryKeys = {
             ['project', projectId, 'assistant-thread', episodeId ?? ''] as const,
         editBible: (projectId: string, episodeId: string) =>
             ['project', projectId, 'edit-bible', episodeId] as const,
-        editScript: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-script', episodeId] as const,
-        editShotExecutionPlan: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-shot-execution-plan', episodeId] as const,
     },
 
     // ============ 顶层便捷函数 ============

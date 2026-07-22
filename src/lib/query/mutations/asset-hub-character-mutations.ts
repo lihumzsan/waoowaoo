@@ -1,19 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalCharacter } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
-  requireTaskSubmissionReceipt,
   requestJsonWithError,
   requestVoidWithError,
 } from './mutation-shared'
 import {
-  GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalCharacters,
 } from './asset-hub-mutations-shared'
-import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectCharacterImageContext {
   previousQueries: Array<{
@@ -128,55 +124,6 @@ function restoreUnifiedQuerySnapshots(
 ) {
   snapshots.forEach((snapshot) => {
     queryClient.setQueryData(snapshot.queryKey, snapshot.data)
-  })
-}
-
-export function useGenerateCharacterImage() {
-  const queryClient = useQueryClient()
-  const assetOperationBillingPlan = useAssetOperationBillingPlan()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      characterId,
-      appearanceId,
-      appearanceIndex,
-      count,
-    }: {
-      characterId: string
-      appearanceId: string
-      appearanceIndex: number
-      count?: number
-    }) => {
-      const requestBody = {
-        scope: 'global',
-        kind: 'character',
-        appearanceId,
-        appearanceIndex,
-        count,
-      }
-      const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-      const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...requestBody,
-          ...confirmation,
-        }),
-      }, 'Failed to generate image')
-      return requireTaskSubmissionReceipt(result)
-    },
-    onSuccess: (receipt, { appearanceId }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-        runningTaskId: receipt.taskId,
-        runningTaskType: receipt.taskType,
-        intent: 'generate',
-      })
-    },
-    onSettled: invalidateCharacters,
   })
 }
 

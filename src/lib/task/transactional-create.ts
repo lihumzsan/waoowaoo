@@ -7,14 +7,12 @@ import { getTaskDefinition } from './definition'
 import { buildTaskLifecycleEventPayload } from './publisher'
 import { createTaskExecutionFingerprint } from './execution-identity'
 import { projectTaskLifecyclePayload } from './result-projection'
-import { claimTaskTargetOwnershipInTransaction } from './target-ownership'
 import {
   TASK_EVENT_TYPE,
   TASK_STATUS,
   type BillingMode,
   type CreateTaskInput,
   type TaskBillingInfo,
-  type TaskType,
 } from './types'
 
 function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNull {
@@ -98,14 +96,6 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
     data: { billingInfo: toJson(preparedBilling) },
   })
 
-  await claimTaskTargetOwnershipInTransaction(params.tx, {
-    id: stored.id,
-    projectId: stored.projectId,
-    episodeId: stored.episodeId,
-    type: stored.type as TaskType,
-    targetType: stored.targetType,
-    targetId: stored.targetId,
-  })
   await params.onTaskCreatedInTransaction?.(params.tx, stored)
 
   const event = await params.tx.taskEvent.create({

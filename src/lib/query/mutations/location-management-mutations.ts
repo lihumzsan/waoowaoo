@@ -2,11 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import { resolveTaskResponse } from '@/lib/task/client'
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
-    requestTaskResponseWithError,
     requestVoidWithError,
 } from './mutation-shared'
 
@@ -142,95 +140,6 @@ export function useUpdateProjectLocationDescription(projectId: string) {
 }
 
 /**
- * 更新项目角色介绍
- */
-
-export function useAiModifyProjectLocationDescription(projectId: string) {
-    return useMutation({
-        mutationFn: async ({
-            locationId,
-            currentDescription,
-            modifyInstruction,
-            imageIndex,
-        }: {
-            locationId: string
-            currentDescription: string
-            modifyInstruction: string
-            imageIndex?: number
-        }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-modify-location`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        locationId,
-                        imageIndex: typeof imageIndex === 'number' ? imageIndex : 0,
-                        currentDescription,
-                        modifyInstruction,
-                    }),
-                },
-                'Failed to modify location description',
-            )
-            return resolveTaskResponse<{ prompt?: string; modifiedDescription?: string }>(response)
-        },
-    })
-}
-
-export function useAiModifyProjectPropDescription(projectId: string) {
-    return useMutation({
-        mutationFn: async ({
-            propId,
-            variantId,
-            currentDescription,
-            modifyInstruction,
-        }: {
-            propId: string
-            variantId?: string
-            currentDescription: string
-            modifyInstruction: string
-        }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-modify-prop`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        propId,
-                        variantId,
-                        currentDescription,
-                        modifyInstruction,
-                    }),
-                },
-                'Failed to modify prop description',
-            )
-            return resolveTaskResponse<{ modifiedDescription?: string }>(response)
-        },
-    })
-}
-
-/**
- * AI 设计项目场景描述
- */
-
-export function useAiCreateProjectLocation(projectId: string) {
-    return useMutation({
-        mutationFn: async (payload: { userInstruction: string }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-create-location`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-                'Failed to design location',
-            )
-            return await resolveTaskResponse<{ prompt?: string }>(response)
-        },
-    })
-}
-
-/**
  * 创建项目场景
  */
 
@@ -243,7 +152,6 @@ export function useCreateProjectLocation(projectId: string) {
         mutationFn: async (payload: {
             name: string
             description: string
-            count?: number
         }) =>
             await requestJsonWithError(
                 `/api/projects/${projectId}/location`,
@@ -257,10 +165,6 @@ export function useCreateProjectLocation(projectId: string) {
         onSuccess: invalidateProjectAssets,
     })
 }
-
-/**
- * AI 设计项目角色文案
- */
 
 export function useConfirmProjectLocationSelection(
     projectId: string,
@@ -288,7 +192,3 @@ export function useConfirmProjectLocationSelection(
         onSettled: invalidateProjectAssets,
     })
 }
-
-/**
- * 批量生成项目场景图片
- */

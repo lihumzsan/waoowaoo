@@ -165,13 +165,6 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PLAN_VALIDATION_FAILED',
     defaultMessage: 'Generated plan did not pass validation',
   },
-  EDIT_SCRIPT_ASSET_MENU_EMPTY: {
-    httpStatus: 409,
-    retryable: false,
-    category: ERROR_CATEGORY.VALIDATION,
-    userMessageKey: 'errors.EDIT_SCRIPT_ASSET_MENU_EMPTY',
-    defaultMessage: 'No confirmed assets are available for chapter planning',
-  },
   PROVIDER_POLL_FAILED: {
     httpStatus: 502,
     retryable: true,

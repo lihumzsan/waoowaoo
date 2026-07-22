@@ -3,11 +3,10 @@
 import { useTranslations } from 'next-intl'
 /**
  * 项目资产库 - 小说推文模式专用
- * 包含资产展示、复制、生成和编辑
+ * 包含资产展示、复制、上传、选择和编辑
  * 
  * 重构说明 v2:
  * - 角色和场景操作函数已提取到 hooks/useCharacterActions 和 hooks/useLocationActions
- * - 生成活动只合并提交窗口与正式 Task 状态
  * - 弹窗状态已提取到 hooks/useAssetModals
  * - UI已拆分为 CharacterSection, LocationSection, AssetToolbar, AssetModals 组件
  */
@@ -16,8 +15,6 @@ import { useState, useCallback, useMemo } from 'react'
 import { Character, CharacterAppearance } from '@/types/project'
 import {
   useAssetActions,
-  useGenerateProjectCharacterImage,
-  useGenerateProjectLocationImage,
   useAssets,
   useRefreshProjectAssets,
 } from '@/lib/query/hooks'
@@ -25,7 +22,6 @@ import {
 // Hooks
 import { useCharacterActions } from './assets/hooks/useCharacterActions'
 import { useLocationActions } from './assets/hooks/useLocationActions'
-import { useAssetGenerationActivity } from './assets/hooks/useAssetGenerationActivity'
 import { useAssetModals } from './assets/hooks/useAssetModals'
 import { useAssetsCopyFromHub } from './assets/hooks/useAssetsCopyFromHub'
 import { useAssetImageMaintenance } from './assets/hooks/useAssetImageMaintenance'
@@ -74,26 +70,6 @@ export default function ProjectAssetLibrary({
   const refreshAssets = useRefreshProjectAssets(projectId)
   const onRefresh = useCallback(() => { refreshAssets() }, [refreshAssets])
 
-  // 🔥 V6.6 重构：使用 mutation hooks 替代 onGenerateImage prop
-  const generateCharacterImage = useGenerateProjectCharacterImage(projectId)
-  const generateLocationImage = useGenerateProjectLocationImage(projectId)
-
-  // 🔥 内部图片生成函数 - 使用 mutation hooks 实现乐观更新
-  const handleGenerateImage = useCallback(async (
-    type: 'character' | 'location' | 'prop',
-    id: string,
-    appearanceId?: string,
-    count?: number,
-  ) => {
-    if (type === 'character' && appearanceId) {
-      await generateCharacterImage.mutateAsync({ characterId: id, appearanceId, count })
-    } else if (type === 'location') {
-      await generateLocationImage.mutateAsync({ locationId: id, count })
-    } else if (type === 'prop') {
-      await propAssetActions.generate({ id, count })
-    }
-  }, [generateCharacterImage, generateLocationImage, propAssetActions])
-
   const t = useTranslations('assets')
   // 计算资产总数
   const totalAppearances = characters.reduce((sum, character) => sum + character.variants.length, 0)
@@ -141,12 +117,6 @@ export default function ProjectAssetLibrary({
   // 🔥 V6.5 重构：hooks 现在内部订阅 useProjectAssets，不再需要传 characters/locations
 
   const {
-    activeTaskKeys,
-    registerSubmittingTaskKey,
-    clearSubmittingTaskKey,
-  } = useAssetGenerationActivity(projectId)
-
-  const {
     copyFromGlobalTarget,
     isGlobalCopyInFlight,
     handleCopyFromGlobal,
@@ -166,8 +136,6 @@ export default function ProjectAssetLibrary({
     handleDeleteAppearance,
     handleSelectCharacterImage,
     handleConfirmSelection,
-    handleRegenerateSingleCharacter,
-    handleRegenerateCharacterGroup
   } = useCharacterActions({
     projectId,
     showToast
@@ -178,8 +146,6 @@ export default function ProjectAssetLibrary({
     handleDeleteLocation,
     handleSelectLocationImage,
     handleConfirmLocationSelection,
-    handleRegenerateSingleLocation,
-    handleRegenerateLocationGroup
   } = useLocationActions({
     projectId,
     showToast
@@ -188,8 +154,6 @@ export default function ProjectAssetLibrary({
     handleDeleteLocation: handleDeleteProp,
     handleSelectLocationImage: handleSelectPropImage,
     handleConfirmLocationSelection: handleConfirmPropSelection,
-    handleRegenerateSingleLocation: handleRegenerateSingleProp,
-    handleRegenerateLocationGroup: handleRegeneratePropGroup,
   } = useLocationActions({
     projectId,
     assetType: 'prop',
@@ -269,18 +233,12 @@ export default function ProjectAssetLibrary({
             projectId={projectId}
             focusCharacterId={focusCharacterId}
             focusCharacterRequestId={focusCharacterRequestId}
-            activeTaskKeys={activeTaskKeys}
-            onClearSubmittingTaskKey={clearSubmittingTaskKey}
-            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddCharacter={() => setShowAddCharacter(true)}
             onDeleteCharacter={handleDeleteCharacter}
             onDeleteAppearance={handleDeleteAppearance}
             onEditAppearance={handleEditAppearance}
-            handleGenerateImage={handleGenerateImage}
             onSelectImage={handleSelectCharacterImage}
             onConfirmSelection={handleConfirmSelection}
-            onRegenerateSingle={handleRegenerateSingleCharacter}
-            onRegenerateGroup={handleRegenerateCharacterGroup}
             onUndo={handleUndoCharacter}
             onImageClick={setPreviewImage}
             onCopyFromGlobal={handleCopyFromGlobal}
@@ -292,17 +250,11 @@ export default function ProjectAssetLibrary({
           <LocationSection
             key="location"
             projectId={projectId}
-            activeTaskKeys={activeTaskKeys}
-            onClearSubmittingTaskKey={clearSubmittingTaskKey}
-            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddLocation={() => setShowAddLocation(true)}
             onDeleteLocation={handleDeleteLocation}
             onEditLocation={handleEditLocation}
-            handleGenerateImage={handleGenerateImage}
             onSelectImage={handleSelectLocationImage}
             onConfirmSelection={handleConfirmLocationSelection}
-            onRegenerateSingle={handleRegenerateSingleLocation}
-            onRegenerateGroup={handleRegenerateLocationGroup}
             onUndo={handleUndoLocation}
             onImageClick={setPreviewImage}
             onCopyFromGlobal={handleCopyLocationFromGlobal}
@@ -314,17 +266,11 @@ export default function ProjectAssetLibrary({
             key="prop"
             projectId={projectId}
             assetType="prop"
-            activeTaskKeys={activeTaskKeys}
-            onClearSubmittingTaskKey={clearSubmittingTaskKey}
-            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddLocation={() => setShowAddProp(true)}
             onDeleteLocation={handleDeleteProp}
             onEditLocation={handleEditProp}
-            handleGenerateImage={handleGenerateImage}
             onSelectImage={handleSelectPropImage}
             onConfirmSelection={handleConfirmPropSelection}
-            onRegenerateSingle={handleRegenerateSingleProp}
-            onRegenerateGroup={handleRegeneratePropGroup}
             onUndo={(propId) => {
               void propAssetActions.revertRender({ id: propId }).catch(() => undefined)
             }}
@@ -338,7 +284,6 @@ export default function ProjectAssetLibrary({
         projectId={projectId}
         onRefresh={onRefresh}
         onClosePreview={() => setPreviewImage(null)}
-        handleGenerateImage={handleGenerateImage}
         handleUpdateAppearanceDescription={handleUpdateAppearanceDescription}
         handleUpdateLocationDescription={handleUpdateLocationDescription}
         handleCloseCopyPicker={handleCloseCopyPicker}

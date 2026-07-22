@@ -10,9 +10,7 @@ import {
 } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  useProjectAssistantThread,
-} from '@/lib/query/hooks'
+import { useProjectAssistantThread } from '@/lib/query/hooks'
 import type {
   ProjectAgentSessionPendingInteraction,
   ProjectAgentSessionState,
@@ -110,6 +108,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   submitChoiceResponse: (params: {
     runId: string
     interruptionId: string
+    cardId: string
     toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
@@ -446,13 +445,14 @@ export function useWorkspaceAssistantRuntime({
   const submitChoiceResponse = useCallback(async (params: {
     runId: string
     interruptionId: string
+    cardId: string
     toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
   }) => {
     const interruptionId = params.interruptionId?.trim()
     const toolCallId = params.toolCallId?.trim()
-    const cardId = typeof params.output.cardId === 'string' ? params.output.cardId.trim() : ''
+    const cardId = params.cardId?.trim()
     if (!interruptionId || !toolCallId || !cardId) {
       throw new Error('PROJECT_AGENT_CHOICE_OFFER_IDENTITY_REQUIRED')
     }

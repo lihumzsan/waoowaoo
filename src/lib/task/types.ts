@@ -68,38 +68,6 @@ export const TASK_TYPE = {
   CREATIVE_RESOURCE_VOICE: 'creative_resource_voice',
   CREATIVE_RESOURCE_VIDEO: 'creative_resource_video',
   CREATIVE_RESOURCE_VIDEO_MERGE: 'creative_resource_video_merge',
-  EDIT_STYLE_PREVIEW_OPTIONS_GENERATE: 'edit_style_preview_options_generate',
-  EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
-  IMAGE_CHARACTER: 'image_character',
-  IMAGE_LOCATION: 'image_location',
-  MUSIC_GENERATE: 'music_generate',
-  BGM_DESIGN_PLAN: 'bgm_design_plan',
-  MUSIC_SCORE_GENERATE: 'music_score_generate',
-  FINAL_VIDEO_RENDER: 'final_video_render',
-  CHAPTER_RENDER: 'chapter_render',
-  VIDEO_SEGMENT: 'video_segment',
-  MODIFY_ASSET_IMAGE: 'modify_asset_image',
-  REGENERATE_GROUP: 'regenerate_group',
-  ASSET_HUB_IMAGE: 'asset_hub_image',
-  ASSET_HUB_MODIFY: 'asset_hub_modify',
-  EDIT_SOURCE_SCRIPT_GENERATE: 'edit_source_script_generate',
-  EDIT_BIBLE_GENERATE: 'edit_bible_generate',
-  EDIT_SCRIPT_GENERATE: 'edit_script_generate',
-  EDIT_SHOT_EXECUTION_PLAN_GENERATE: 'edit_shot_execution_plan_generate',
-  AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
-  AI_MODIFY_LOCATION: 'ai_modify_location',
-  AI_MODIFY_PROP: 'ai_modify_prop',
-  AI_CREATE_CHARACTER: 'ai_create_character',
-  AI_CREATE_LOCATION: 'ai_create_location',
-  REFERENCE_TO_CHARACTER: 'reference_to_character',
-  REFERENCE_CHARACTER_DESCRIPTION_EXTRACT: 'reference_character_description_extract',
-  ASSET_HUB_AI_DESIGN_CHARACTER: 'asset_hub_ai_design_character',
-  ASSET_HUB_AI_DESIGN_LOCATION: 'asset_hub_ai_design_location',
-  ASSET_HUB_AI_MODIFY_CHARACTER: 'asset_hub_ai_modify_character',
-  ASSET_HUB_AI_MODIFY_LOCATION: 'asset_hub_ai_modify_location',
-  ASSET_HUB_AI_MODIFY_PROP: 'asset_hub_ai_modify_prop',
-  ASSET_HUB_REFERENCE_TO_CHARACTER: 'asset_hub_reference_to_character',
-  ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT: 'asset_hub_reference_character_description_extract',
 } as const
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
@@ -200,11 +168,8 @@ export type MutationBatchSSEEvent = {
 
 export type WorkspaceResourceName =
   | 'editBible'
-  | 'editScript'
-  | 'editShotExecutionPlan'
   | 'projectAssets'
   | 'globalAssets'
-  | 'videoSegments'
   | 'episodeData'
   | 'projectData'
   | 'projectContext'

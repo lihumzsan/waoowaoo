@@ -8,22 +8,13 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceUserModels } from './useWorkspaceUserModels'
 import { useWorkspaceExecution } from './useWorkspaceExecution'
-import { useWorkspaceVideoActions } from './useWorkspaceVideoActions'
 import { useWorkspaceAssetLibraryShell } from './useWorkspaceAssetLibraryShell'
 import { useWorkspaceProjectSnapshot } from './useWorkspaceProjectSnapshot'
 import { useWorkspaceModalEscape } from './useWorkspaceModalEscape'
-import { useWorkspaceRuntime } from './useWorkspaceRuntime'
 import { useWorkspaceConfigActions } from './useWorkspaceConfigActions'
 import { buildWorkspaceControllerViewModel } from './workspace-controller-view-model'
 import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
-import {
-  useCreateProjectEditBible,
-  useCreateProjectEditScript,
-  useCreateProjectEditShotExecutionPlan,
-  useUpdateProjectEditScriptAssetRequirementDescription,
-} from '@/lib/query/hooks'
-import type { WorkspaceEditBibleGenerationInput } from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
   project,
@@ -96,66 +87,6 @@ export function useProjectWorkspaceController({
     t,
   })
 
-  const videoActions = useWorkspaceVideoActions({
-    projectId,
-    episodeId,
-    t,
-  })
-  const createEditBible = useCreateProjectEditBible(projectId)
-  const createEditScript = useCreateProjectEditScript(projectId)
-  const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
-  const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
-  const handleGenerateEditBible = async (input: WorkspaceEditBibleGenerationInput) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await createEditBible.mutateAsync({
-      episodeId,
-      text: input.prompt,
-      sourceKind: 'prompt_generated_outline',
-    })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleGenerateEditScript = async () => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await createEditScript.mutateAsync({
-      episodeId,
-    })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleGenerateEditShotExecutionPlan = async (editScriptId: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await createEditShotExecutionPlan.mutateAsync({
-      episodeId,
-      editScriptId,
-    })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleUpdateEditAssetRequirementDescription = async (editScriptId: string, requirementId: string, description: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await updateEditAssetRequirementDescription.mutateAsync({ episodeId, editScriptId, requirementId, description })
-    await onRefresh({ mode: 'full' })
-  }
-
-  const workspaceRuntime = useWorkspaceRuntime({
-    assetsLoading,
-    isTransitioning: execution.isTransitioning,
-    isConfirmingAssets: execution.isConfirmingAssets,
-    isAssistantWorkflowStarting: createEditBible.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
-    videoRatio: projectSnapshot.videoRatio,
-    videoModel: projectSnapshot.videoModel,
-    capabilityOverrides: projectSnapshot.capabilityOverrides,
-    userVideoModels: userModels.userVideoModels || [],
-    handleUpdateEpisode: configActions.handleUpdateEpisode,
-    handleUpdateConfig: configActions.handleUpdateConfig,
-    onRequestAssistantGuidance: execution.requestAssistantGuidance,
-    handleGenerateEditBible,
-    handleGenerateEditScript,
-    openAssetLibrary: assetLibrary.openAssetLibrary,
-    handlePlanBgmScore: videoActions.handlePlanBgmScore,
-    handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
-    handleGenerateEditShotExecutionPlan,
-    handleUpdateEditAssetRequirementDescription,
-  })
-
   const uiState = {
     onRefresh,
     assetsLoading,
@@ -177,7 +108,6 @@ export function useProjectWorkspaceController({
   const executionState = {
     isConfirmingAssets: execution.isConfirmingAssets,
     isTransitioning: execution.isTransitioning,
-    isAssistantWorkflowStarting: false,
     transitionProgress: execution.transitionProgress,
     requestAssistantGuidance: execution.requestAssistantGuidance,
     showCreatingToast: execution.showCreatingToast,
@@ -197,7 +127,6 @@ export function useProjectWorkspaceController({
     uiState,
     rebuildState,
     executionState,
-    workspaceRuntime,
     actionsState,
   })
 }

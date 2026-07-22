@@ -10,7 +10,8 @@ import {
 import {
   assertProjectAgentChoiceOfferCurrent,
   buildProjectAgentChoiceOffer,
-  type ProjectAgentChoiceReviewedResource,
+  type ProjectAgentChoiceCommitment,
+  type ProjectAgentChoiceSubject,
 } from './choice-offer'
 import type {
   ProjectAgentChoiceCardDefinition,
@@ -64,7 +65,8 @@ export interface ProjectAgentChoiceHandoffReceipt {
 
 export interface ProjectAgentPreparedChoiceHandoff extends ProjectAgentChoiceHandoffReceipt {
   card: ProjectAgentChoiceCardDefinition
-  reviewedResource: ProjectAgentChoiceReviewedResource
+  subject: ProjectAgentChoiceSubject
+  commitments: ProjectAgentChoiceCommitment[]
 }
 
 export interface ProjectAgentApprovalHandoffReceipt {
@@ -79,7 +81,8 @@ export interface ProjectAgentApprovalHandoffReceipt {
 
 interface ChoiceHandoffPayload {
   card: ProjectAgentChoiceCardDefinition
-  reviewedResource: ProjectAgentChoiceReviewedResource
+  subject: ProjectAgentChoiceSubject
+  commitments: ProjectAgentChoiceCommitment[]
 }
 
 interface ApprovalHandoffPayload {
@@ -121,17 +124,25 @@ function parseChoicePayload(value: Prisma.JsonValue): ChoiceHandoffPayload {
   }
   const record = value as Record<string, unknown>
   const card = record.card
-  const reviewedResource = record.reviewedResource
+  const subject = record.subject
+  const commitments = record.commitments
   if (!card || typeof card !== 'object' || Array.isArray(card)) {
     throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_CARD_INVALID')
   }
-  if (!reviewedResource || typeof reviewedResource !== 'object' || Array.isArray(reviewedResource)) {
-    throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_RESOURCE_INVALID')
+  if (!subject || typeof subject !== 'object' || Array.isArray(subject) || !Array.isArray(commitments)) {
+    throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_SUBJECT_INVALID')
   }
-  return {
+  const payload = {
     card: card as ProjectAgentChoiceCardDefinition,
-    reviewedResource: reviewedResource as ProjectAgentChoiceReviewedResource,
+    subject: subject as ProjectAgentChoiceSubject,
+    commitments: commitments as ProjectAgentChoiceCommitment[],
   }
+  buildProjectAgentChoiceOffer({
+    runId: 'prepared-payload',
+    interruptionId: 'prepared-payload',
+    ...payload,
+  })
+  return payload
 }
 
 function parseApprovalPayload(value: Prisma.JsonValue): ApprovalHandoffPayload {
@@ -233,7 +244,8 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
   operationId: string
   toolCallId: string
   card: ProjectAgentChoiceCardDefinition
-  reviewedResource: ProjectAgentChoiceReviewedResource
+  subject: ProjectAgentChoiceSubject
+  commitments: ProjectAgentChoiceCommitment[]
 }): Promise<ProjectAgentPreparedChoiceHandoff> {
   const executionSegmentId = requireIdentity(
     input.executionSegmentId,
@@ -249,7 +261,8 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
   })
   const payload: ChoiceHandoffPayload = {
     card: input.card,
-    reviewedResource: input.reviewedResource,
+    subject: input.subject,
+    commitments: input.commitments,
   }
   let handoffId = ''
 
@@ -260,14 +273,13 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
-      offer: {
-        card: {
-          ...input.card,
-          runId,
-          interruptionId: `prepared:${executionSegmentId}`,
-        },
-        reviewedResource: input.reviewedResource,
-      },
+      offer: buildProjectAgentChoiceOffer({
+        runId,
+        interruptionId: `prepared:${executionSegmentId}`,
+        card: input.card,
+        subject: input.subject,
+        commitments: input.commitments,
+      }),
     })
     const existing = await tx.projectAgentExecutionHandoff.findUnique({
       where: { executionSegmentId },
@@ -321,7 +333,8 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
     operationId,
     toolCallId,
     card: input.card,
-    reviewedResource: input.reviewedResource,
+    subject: input.subject,
+    commitments: input.commitments,
   }
   recordProjectAgentChoiceHandoffReceipt(receipt)
   return receipt
@@ -984,7 +997,8 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
       runId: input.handoff.runId,
       interruptionId,
       card: payload.card,
-      reviewedResource: payload.reviewedResource,
+      subject: payload.subject,
+      commitments: payload.commitments,
     })
     await assertProjectAgentChoiceOfferCurrent({
       tx,
@@ -1016,7 +1030,6 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
           operationId: input.handoff.operationId,
           approvalId: `choice:${randomUUID()}`,
           toolCallId: input.handoff.toolCallId,
-          choiceType: offer.card.choiceType,
           payload: offer as unknown as Prisma.InputJsonValue,
           runState: null,
         },
@@ -1051,7 +1064,6 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
       interruptionId,
       cardId: offer.card.cardId,
       toolCallId: offer.card.toolCallId,
-      choiceType: offer.card.choiceType,
       card: offer.card as ProjectAgentChoiceCardPartData,
     }
   })

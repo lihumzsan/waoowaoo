@@ -1,16 +1,12 @@
 import type { Prisma } from '@prisma/client'
-import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { getTaskDefinition } from '@/lib/task/definition'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type {
   CreativeResourceBindingView,
-  CreativeResourceInputRef,
-  CreativeResourceJsonValue,
-  CreativeResourceMediaType,
-  CreativeResourceRevisionContent,
 } from './contracts'
 import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from './contracts'
 import { bindCreativeResourceRevisionInTransaction } from './binding-service'
+import { planCreativeWorkResourceMaterialization } from './creative-work-materialization'
 import {
   parseCreativeResourceGenerationTaskPayload,
   toCreativeResourceJsonValue,
@@ -22,7 +18,6 @@ import {
   reserveDomainCreativeResourceInTransaction,
   settleCreativeResourceFailureInTransaction,
 } from './persistence'
-import { CREATIVE_RESOURCE_SCHEMA, type CreativeResourceSchemaId } from './schema-registry'
 
 type TerminalTask = {
   readonly id: string
@@ -37,20 +32,6 @@ type TerminalTask = {
   readonly operationExecutionId: string | null
 }
 
-type DomainOutputDescriptor = {
-  readonly mediaType: CreativeResourceMediaType
-  readonly schemaId: CreativeResourceSchemaId
-  readonly sourceType: string
-  readonly sourceId: string
-  readonly mediaId: string | null
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
 function readString(record: Record<string, unknown>, key: string): string | null {
   const value = record[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -62,235 +43,14 @@ function readRequiredString(record: Record<string, unknown>, key: string, code: 
   return value
 }
 
-function readStringArray(record: Record<string, unknown>, key: string): readonly string[] {
-  const value = record[key]
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item) => typeof item === 'string' && item.trim() ? [item.trim()] : [])
-}
-
-function jsonValue(value: unknown): CreativeResourceJsonValue {
-  return JSON.parse(JSON.stringify(value ?? null)) as CreativeResourceJsonValue
-}
-
-function promptFromPayload(payload: Record<string, unknown>): string | null {
-  for (const key of ['prompt', 'imagePrompt', 'modifyInstruction', 'userPrompt', 'requirement']) {
-    const value = readString(payload, key)
-    if (value) return value
-  }
-  return null
-}
-
-function modelFromPayload(payload: Record<string, unknown>): string | null {
-  for (const key of ['imageModel', 'videoModel', 'musicModel', 'voiceModel', 'analysisModel', 'editModel', 'model']) {
-    const value = readString(payload, key)
-    if (value) return value
-  }
-  return null
-}
-
-function resourceInputsFromPayload(payload: Record<string, unknown>): readonly CreativeResourceInputRef[] {
-  const value = payload.resourceInputs
-  if (value === undefined) return []
-  if (!Array.isArray(value)) throw new Error('CREATIVE_RESOURCE_DOMAIN_INPUTS_INVALID')
-  return value.map((item, position) => {
-    const record = asRecord(item)
-    const explicitPosition = record.position
-    return {
-      resourceId: readRequiredString(record, 'resourceId', 'CREATIVE_RESOURCE_INPUT_RESOURCE_ID_REQUIRED'),
-      revisionId: readRequiredString(record, 'revisionId', 'CREATIVE_RESOURCE_INPUT_REVISION_ID_REQUIRED'),
-      fingerprint: readRequiredString(record, 'fingerprint', 'CREATIVE_RESOURCE_INPUT_FINGERPRINT_REQUIRED'),
-      role: readString(record, 'role') ?? 'input',
-      position: typeof explicitPosition === 'number' && Number.isSafeInteger(explicitPosition) && explicitPosition >= 0
-        ? explicitPosition
-        : position,
-    }
-  })
-}
-
-function descriptor(input: DomainOutputDescriptor): DomainOutputDescriptor {
-  if (!input.sourceType.trim() || !input.sourceId.trim()) {
-    throw new Error(`CREATIVE_RESOURCE_DOMAIN_SOURCE_INVALID:${input.sourceType}:${input.sourceId}`)
-  }
-  return input
-}
-
-function imageDescriptor(input: {
-  readonly schemaId: CreativeResourceSchemaId
-  readonly sourceType: string
-  readonly sourceId: string
-}): DomainOutputDescriptor {
-  return descriptor({ ...input, mediaType: 'image', mediaId: null })
-}
-
-function resolveDomainOutputs(task: TerminalTask, result: Record<string, unknown>): readonly DomainOutputDescriptor[] {
-  switch (task.type) {
-    case TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE:
-      return [descriptor({
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-        sourceType: 'ProjectEpisodeSourceDocument',
-        sourceId: readRequiredString(result, 'sourceDocumentId', 'CREATIVE_RESOURCE_SOURCE_DOCUMENT_ID_REQUIRED'),
-        mediaId: null,
-      })]
-    case TASK_TYPE.EDIT_BIBLE_GENERATE:
-      return [descriptor({
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
-        sourceType: 'ProjectEditBible',
-        sourceId: readRequiredString(result, 'editBibleId', 'CREATIVE_RESOURCE_EDIT_BIBLE_ID_REQUIRED'),
-        mediaId: null,
-      })]
-    case TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE:
-      return [imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE,
-        sourceType: 'ProjectEditStylePreview',
-        sourceId: readRequiredString(result, 'stylePreviewId', 'CREATIVE_RESOURCE_STYLE_PREVIEW_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.IMAGE_CHARACTER:
-      return [imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
-        sourceType: 'CharacterAppearance',
-        sourceId: readRequiredString(result, 'appearanceId', 'CREATIVE_RESOURCE_CHARACTER_APPEARANCE_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.IMAGE_LOCATION:
-      return readStringArray(result, 'locationIds').map((sourceId) => imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
-        sourceType: 'ProjectLocation',
-        sourceId,
-      }))
-    case TASK_TYPE.MODIFY_ASSET_IMAGE:
-    case TASK_TYPE.REGENERATE_GROUP: {
-      const appearanceId = readString(result, 'appearanceId')
-      if (appearanceId) return [imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
-        sourceType: 'CharacterAppearance',
-        sourceId: appearanceId,
-      })]
-      const locationImageId = readString(result, 'locationImageId')
-      if (locationImageId) return [imageDescriptor({
-        schemaId: readString(result, 'type') === 'prop'
-          ? CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE
-          : CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
-        sourceType: 'LocationImage',
-        sourceId: locationImageId,
-      })]
-      return readStringArray(result, 'locationIds').map((sourceId) => imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
-        sourceType: 'ProjectLocation',
-        sourceId,
-      }))
-    }
-    case TASK_TYPE.ASSET_HUB_IMAGE:
-    case TASK_TYPE.ASSET_HUB_MODIFY: {
-      const appearanceId = readString(result, 'appearanceId')
-      if (appearanceId) return [imageDescriptor({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
-        sourceType: 'GlobalCharacterAppearance',
-        sourceId: appearanceId,
-      })]
-      const locationImageId = readString(result, 'locationImageId')
-      if (locationImageId) return [imageDescriptor({
-        schemaId: readString(result, 'type') === 'prop'
-          ? CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE
-          : CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
-        sourceType: 'GlobalLocationImage',
-        sourceId: locationImageId,
-      })]
-      const locationId = readString(result, 'locationId')
-      return locationId ? [imageDescriptor({
-        schemaId: readString(result, 'type') === 'prop'
-          ? CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE
-          : CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
-        sourceType: 'GlobalLocation',
-        sourceId: locationId,
-      })] : []
-    }
-    case TASK_TYPE.EDIT_SCRIPT_GENERATE:
-      return [descriptor({
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_SCRIPT,
-        sourceType: 'ProjectEditScript',
-        sourceId: readRequiredString(result, 'editScriptId', 'CREATIVE_RESOURCE_EDIT_SCRIPT_ID_REQUIRED'),
-        mediaId: null,
-      })]
-    case TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE:
-      return [descriptor({
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SHOT_EXECUTION_PLAN,
-        sourceType: 'ProjectEditShotExecutionPlan',
-        sourceId: readRequiredString(result, 'shotExecutionPlanId', 'CREATIVE_RESOURCE_SHOT_PLAN_ID_REQUIRED'),
-        mediaId: null,
-      })]
-    case TASK_TYPE.VIDEO_SEGMENT:
-      return [descriptor({
-        mediaType: 'video',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.VIDEO_SEGMENT,
-        sourceType: 'ProjectVideoSegment',
-        sourceId: readRequiredString(result, 'videoSegmentId', 'CREATIVE_RESOURCE_VIDEO_SEGMENT_ID_REQUIRED'),
-        mediaId: readRequiredString(result, 'videoMediaId', 'CREATIVE_RESOURCE_VIDEO_MEDIA_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.CHAPTER_RENDER:
-      return [descriptor({
-        mediaType: 'video',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_VIDEO,
-        sourceType: 'ProjectEditChapter',
-        sourceId: readRequiredString(result, 'chapterId', 'CREATIVE_RESOURCE_CHAPTER_ID_REQUIRED'),
-        mediaId: readRequiredString(result, 'mediaId', 'CREATIVE_RESOURCE_CHAPTER_MEDIA_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.BGM_DESIGN_PLAN:
-      return [descriptor({
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.BGM_DESIGN,
-        sourceType: 'ProjectEditBgmDesign',
-        sourceId: readRequiredString(result, 'episodeId', 'CREATIVE_RESOURCE_EPISODE_ID_REQUIRED'),
-        mediaId: null,
-      })]
-    case TASK_TYPE.MUSIC_SCORE_GENERATE:
-      return [descriptor({
-        mediaType: 'audio',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO,
-        sourceType: 'ProjectEditMusicScore',
-        sourceId: readRequiredString(result, 'episodeId', 'CREATIVE_RESOURCE_EPISODE_ID_REQUIRED'),
-        mediaId: readRequiredString(result, 'mediaId', 'CREATIVE_RESOURCE_AUDIO_MEDIA_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.FINAL_VIDEO_RENDER:
-      return [descriptor({
-        mediaType: 'video',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.RENDERED_VIDEO,
-        sourceType: 'ProjectEpisodeFinalOutput',
-        sourceId: readRequiredString(result, 'episodeId', 'CREATIVE_RESOURCE_EPISODE_ID_REQUIRED'),
-        mediaId: readRequiredString(result, 'videoMediaId', 'CREATIVE_RESOURCE_FINAL_MEDIA_ID_REQUIRED'),
-      })]
-    case TASK_TYPE.MUSIC_GENERATE:
-      return [descriptor({
-        mediaType: 'audio',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
-        sourceType: 'GeneratedMusicTask',
-        sourceId: task.id,
-        mediaId: readRequiredString(result, 'mediaId', 'CREATIVE_RESOURCE_AUDIO_MEDIA_ID_REQUIRED'),
-      })]
-    default:
-      throw new Error(`CREATIVE_RESOURCE_DOMAIN_TASK_UNSUPPORTED:${task.type}`)
-  }
-}
-
-function domainContent(output: DomainOutputDescriptor, result: Record<string, unknown>, taskId: string): CreativeResourceRevisionContent {
-  if (output.mediaId) return { kind: 'media', mediaId: output.mediaId }
-  return {
-    kind: 'domain_snapshot',
-    sourceType: output.sourceType,
-    sourceId: output.sourceId,
-    sourceRevision: taskId,
-    snapshot: jsonValue(result),
-  }
-}
-
 async function materializeDomainOutputs(
   tx: Prisma.TransactionClient,
   task: TerminalTask,
   result: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const payload = asRecord(task.payload)
+): Promise<Record<string, unknown> | null> {
+  if (task.type !== TASK_TYPE.CREATIVE_WORK) {
+    throw new Error(`CREATIVE_RESOURCE_DOMAIN_TASK_UNSUPPORTED:${task.type}`)
+  }
   const scope = task.projectId === 'global-asset-hub'
     ? buildCreativeResourceScopeRef({ kind: 'user', id: task.userId, userId: task.userId })
     : resolveProjectCreativeResourceScope({
@@ -298,49 +58,54 @@ async function materializeDomainOutputs(
         projectId: task.projectId,
         episodeId: task.episodeId,
       })
-  const outputs = resolveDomainOutputs(task, result)
-  if (outputs.length === 0) throw new Error(`CREATIVE_RESOURCE_DOMAIN_OUTPUTS_REQUIRED:${task.type}`)
-  const refs = []
-  for (const output of outputs) {
-    const reserved = await reserveDomainCreativeResourceInTransaction(tx, {
-      scope,
-      mediaType: output.mediaType,
-      schemaId: output.schemaId,
-      sourceType: output.sourceType,
-      sourceId: output.sourceId,
-      name: `${output.schemaId}:${output.sourceId.slice(0, 8)}`,
+  const plan = planCreativeWorkResourceMaterialization({
+      taskId: task.id,
+      payload: task.payload,
+      result,
     })
-    const revision = await appendCreativeResourceRevisionInTransaction(tx, {
-      resourceId: reserved.resourceId,
-      userId: task.userId,
-      mediaType: output.mediaType,
-      schemaId: output.schemaId,
-      content: domainContent(output, result, task.id),
-      inputs: resourceInputsFromPayload(payload),
-      provenance: {
-        operationId: task.operationId,
-        inputHash: stableArgsHash(payload),
-        taskId: task.id,
-        operationExecutionId: task.operationExecutionId,
-        executionSegmentId: null,
-        toolCallId: null,
-        prompt: promptFromPayload(payload),
-        modelKey: modelFromPayload(payload),
-        generationOptions: jsonValue(payload),
-      },
-    })
-    refs.push({
-      resourceId: revision.resourceId,
-      revisionId: revision.revisionId,
-      fingerprint: revision.fingerprint,
-      schemaId: output.schemaId,
-      mediaType: output.mediaType,
-    })
+  if (plan.outputs.length === 0) return null
+  const resources = []
+  for (const output of plan.outputs) {
+      const reserved = await reserveDomainCreativeResourceInTransaction(tx, {
+        scope,
+        mediaType: output.mediaType,
+        schemaId: output.schemaId,
+        sourceType: output.sourceType,
+        sourceId: output.sourceId,
+        name: output.name,
+        candidateSetId: output.candidateSetId,
+        candidateIndex: output.candidateIndex,
+      })
+      const revision = await appendCreativeResourceRevisionInTransaction(tx, {
+        resourceId: reserved.resourceId,
+        userId: task.userId,
+        mediaType: output.mediaType,
+        schemaId: output.schemaId,
+        content: output.content,
+        inputs: plan.inputs,
+        provenance: {
+          operationId: task.operationId,
+          inputHash: plan.inputFingerprint,
+          taskId: task.id,
+          operationExecutionId: task.operationExecutionId,
+          executionSegmentId: null,
+          toolCallId: plan.toolCallId,
+          prompt: plan.prompt,
+          modelKey: plan.modelKey,
+          generationOptions: output.generationOptions,
+        },
+      })
+      resources.push({
+        resourceId: revision.resourceId,
+        revisionId: revision.revisionId,
+        fingerprint: revision.fingerprint,
+        schemaId: output.schemaId,
+        mediaType: output.mediaType,
+        name: output.name,
+        candidateKey: output.candidateKey,
+      })
   }
-  return {
-    resources: refs,
-    ...(refs.length === 1 ? refs[0] : {}),
-  }
+  return { resources }
 }
 
 export async function materializeCreativeResourceTaskTerminalInTransaction(

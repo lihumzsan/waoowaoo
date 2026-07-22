@@ -5,7 +5,6 @@ import type { ReactFlowInstance } from '@xyflow/react'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { isWorkspaceCanvasLifecycleRunning } from '../lifecycle/workspace-canvas-lifecycle'
 import {
-  getWorkspaceCanvasOperationFocusKindPriority,
   WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY,
 } from '../registry/workspace-canvas-focus-policy'
 
@@ -63,27 +62,12 @@ function firstNodeIdByKind(
 
 export function resolveWorkspaceCanvasFocusNodeIds(
   nodes: readonly WorkspaceCanvasFlowNode[],
-  activeAssistantOperationId: string | null | undefined,
 ): string[] {
-  const operationKindPriority = getWorkspaceCanvasOperationFocusKindPriority(activeAssistantOperationId)
-  if (operationKindPriority) {
-    const runningOperationNodeId = firstNodeIdByKind(nodes, operationKindPriority, true)
-    if (runningOperationNodeId) return [runningOperationNodeId]
-
-    const operationNodeId = firstNodeIdByKind(nodes, operationKindPriority, false)
-    return operationNodeId ? [operationNodeId] : []
-  }
-
   const runningPriorityNodeId = firstNodeIdByKind(nodes, WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY, true)
   if (runningPriorityNodeId) return [runningPriorityNodeId]
 
   const runningNodeId = nodes.find((node) => isWorkspaceCanvasLifecycleRunning(node.data.lifecycle))?.id
   return runningNodeId ? [runningNodeId] : []
-}
-
-export function resolveWorkspaceCanvasStyleBibleFocusNodeIds(nodes: readonly WorkspaceCanvasFlowNode[]): string[] {
-  const styleBibleNodeId = firstNodeIdByKind(nodes, ['editStyleBible'], false)
-  return styleBibleNodeId ? [styleBibleNodeId] : []
 }
 
 export function resolveCanvasFocusFollowDecision({

@@ -1,5 +1,4 @@
 'use client'
-import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
 
 /**
@@ -13,25 +12,17 @@ import { Location, Prop } from '@/types/project'
 import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
 import LocationCard from './LocationCard'
 import { AppIcon } from '@/components/ui/icons'
-import { resolveLocationBackedGenerateType } from './location-backed-asset'
 
 interface LocationSectionProps {
     // 🔥 V6.5 删除：locations prop - 现在内部直接订阅
     projectId: string
     assetType?: 'location' | 'prop'
-    activeTaskKeys: Set<string>
-    onClearSubmittingTaskKey: (key: string) => void
-    onRegisterSubmittingTaskKey: (key: string) => void
     // 回调函数
     onAddLocation: () => void
     onDeleteLocation: (locationId: string) => void
     onEditLocation: (location: Location | Prop) => void
-    // 🔥 V6.6 重构：重命名为 handleGenerateImage
-    handleGenerateImage: (type: 'character' | 'location' | 'prop', id: string, appearanceId?: string, count?: number) => Promise<void>
     onSelectImage: (locationId: string, imageIndex: number | null) => void
     onConfirmSelection: (locationId: string) => Promise<void> | void
-    onRegenerateSingle: (locationId: string, imageIndex: number) => Promise<void>
-    onRegenerateGroup: (locationId: string, count?: number) => Promise<void>
     onUndo: (locationId: string) => void
     onImageClick: (imageUrl: string) => void
     onCopyFromGlobal: (locationId: string) => void  // 🆕 从资产中心复制
@@ -43,17 +34,11 @@ export default function LocationSection({
     // 🔥 V6.5 删除：locations prop - 现在内部直接订阅
     projectId,
     assetType = 'location',
-    activeTaskKeys,
-    onClearSubmittingTaskKey,
-    onRegisterSubmittingTaskKey,
     onAddLocation,
     onDeleteLocation,
     onEditLocation,
-    handleGenerateImage,
     onSelectImage,
     onConfirmSelection,
-    onRegenerateSingle,
-    onRegenerateGroup,
     onUndo,
     onImageClick,
     onCopyFromGlobal,
@@ -67,7 +52,6 @@ export default function LocationSection({
         : assets?.locations ?? []
     const locations = filterIds ? allLocations.filter((l) => filterIds.has(l.id)) : allLocations
     const assetKey = assetType === 'prop' ? 'prop' : 'location'
-    const generateType = resolveLocationBackedGenerateType(assetType)
 
     return (
         <div className="glass-surface p-6">
@@ -101,49 +85,10 @@ export default function LocationSection({
                         assetType={assetType}
                         onEdit={() => onEditLocation(location)}
                         onDelete={() => onDeleteLocation(location.id)}
-                        onRegenerate={(count) => {
-                            // 获取有效图片数量
-                            const validImages = location.images?.filter(img => img.imageUrl) || []
-
-                            _ulogInfo('[LocationSection] 重新生成判断:', {
-                                locationName: location.name,
-                                images: location.images,
-                                validImages,
-                                validImageCount: validImages.length
-                            })
-
-                            // 单图：重新生成单张
-                            if (validImages.length === 1) {
-                                const imageIndex = validImages[0].imageIndex
-                                const taskKey = `location-${location.id}-${imageIndex}`
-                                _ulogInfo('[LocationSection] 调用单张重新生成, imageIndex:', imageIndex)
-                                onRegisterSubmittingTaskKey(taskKey)
-                                void onRegenerateSingle(location.id, imageIndex)
-                                    .catch(() => undefined)
-                                    .finally(() => onClearSubmittingTaskKey(taskKey))
-                            }
-                            // 多图或无图：重新生成整组
-                            else {
-                                const taskKey = `location-${location.id}-group`
-                                _ulogInfo('[LocationSection] 调用整组重新生成')
-                                onRegisterSubmittingTaskKey(taskKey)
-                                void onRegenerateGroup(location.id, count)
-                                    .catch(() => undefined)
-                                    .finally(() => onClearSubmittingTaskKey(taskKey))
-                            }
-                        }}
-                        onGenerate={(count) => {
-                            const taskKey = `location-${location.id}-group`
-                            onRegisterSubmittingTaskKey(taskKey)
-                            void handleGenerateImage(generateType, location.id, undefined, count)
-                                .catch(() => undefined)
-                                .finally(() => onClearSubmittingTaskKey(taskKey))
-                        }}
                         onUndo={() => onUndo(location.id)}
                         onImageClick={onImageClick}
                         onSelectImage={onSelectImage}
                         onCopyFromGlobal={() => onCopyFromGlobal(location.id)}
-                        activeTaskKeys={activeTaskKeys}
                         projectId={projectId}
                         onConfirmSelection={onConfirmSelection}
                     />

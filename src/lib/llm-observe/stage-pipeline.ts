@@ -1,5 +1,4 @@
 import { getTaskTypeLabel } from '@/lib/task/progress-message'
-import { TASK_TYPE } from '@/lib/task/types'
 
 export type LLMTaskPipelineStage = {
   id: string
@@ -24,48 +23,7 @@ type LLMTaskFlowDefinition = {
   stages: LLMTaskPipelineStage[]
 }
 
-const FLOW_DEFINITIONS: ReadonlyArray<LLMTaskFlowDefinition> = [
-  {
-    id: 'project_ai_create_character',
-    stages: [
-      {
-        id: TASK_TYPE.AI_CREATE_CHARACTER,
-        taskType: TASK_TYPE.AI_CREATE_CHARACTER,
-        title: getTaskTypeLabel(TASK_TYPE.AI_CREATE_CHARACTER),
-      },
-    ],
-  },
-  {
-    id: 'project_ai_create_location',
-    stages: [
-      {
-        id: TASK_TYPE.AI_CREATE_LOCATION,
-        taskType: TASK_TYPE.AI_CREATE_LOCATION,
-        title: getTaskTypeLabel(TASK_TYPE.AI_CREATE_LOCATION),
-      },
-    ],
-  },
-  {
-    id: 'asset_hub_ai_design_character',
-    stages: [
-      {
-        id: TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER,
-        taskType: TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER,
-        title: getTaskTypeLabel(TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER),
-      },
-    ],
-  },
-  {
-    id: 'asset_hub_ai_design_location',
-    stages: [
-      {
-        id: TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION,
-        taskType: TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION,
-        title: getTaskTypeLabel(TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION),
-      },
-    ],
-  },
-]
+const FLOW_DEFINITIONS: ReadonlyArray<LLMTaskFlowDefinition> = []
 
 const FLOW_BY_ID: Record<string, LLMTaskFlowDefinition> = FLOW_DEFINITIONS.reduce(
   (acc, flow) => {

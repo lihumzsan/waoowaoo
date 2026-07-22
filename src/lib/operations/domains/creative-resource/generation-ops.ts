@@ -45,6 +45,7 @@ import {
   submitPlannedOperationTasks,
   type OperationPlan,
 } from '@/lib/operations/planning'
+import { requireProjectVideoRatio } from '@/lib/operations/project-video-ratio-policy'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
@@ -93,8 +94,6 @@ const retryMediaGenerationRequestSchema = z.object({
 
 const createTextInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).optional()
-    .describe('Professional meaning of the text Resource. Omit to use generic.text.'),
   name: z.string().trim().min(1).max(200).optional()
     .describe('Optional display name for the text Resource or candidate set.'),
   prompt: z.string().trim().min(1)
@@ -231,6 +230,10 @@ const generationPlanMetadataBaseShape = {
   episodeId: z.string().nullable(),
   requestId: z.string().min(1),
   candidateSetId: z.string().nullable(),
+  projectVideoRatio: z.object({
+    value: z.string().min(1),
+    fingerprint: z.string().length(64),
+  }).strict().optional(),
 } as const
 
 const generationPlanMetadataSchema = z.discriminatedUnion('retry', [
@@ -424,7 +427,7 @@ async function createTextResources(
   input: CreateTextInput,
   tx: Parameters<NonNullable<ReturnType<typeof defineOperation>['executeInTransaction']>>[2],
 ) {
-  const schemaId = requireSchemaForMedia(input.schemaId ?? CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT, 'text')
+  const schemaId = CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT
   const episodeId = resolveEpisodeId(input, ctx)
   const scope = resolveProjectCreativeResourceScope({
     userId: ctx.userId,
@@ -636,15 +639,10 @@ async function resolveFrozenGenerationOptions(input: {
     : input.config.mediaType === 'video'
       ? (input.publicInput as CreateVideoNewRequest).aspectRatio?.trim()
       : undefined
-  const projectAspectRatio = projectConfig.videoRatio?.trim() || null
   const isFramedMedia = input.config.mediaType === 'image' || input.config.mediaType === 'video'
-  if (isFramedMedia && !projectAspectRatio) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_CONFIRMATION_REQUIRED',
-      field: 'aspectRatio',
-      agentRetryableAfterCorrection: true,
-    })
-  }
+  const projectAspectRatio = isFramedMedia
+    ? requireProjectVideoRatio(projectConfig.videoRatio).value
+    : null
   if (isFramedMedia && requestedAspectRatio && requestedAspectRatio !== projectAspectRatio) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'PROJECT_VIDEO_RATIO_MISMATCH',
@@ -1164,7 +1162,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more independent text resources authored in this Agent turn. Use schemaId to express script, edit table, plan, or generic text semantics; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one or more generic text Resources authored in this Agent turn. Professional screenplay, Bible, continuity, style, prompt-set, music-direction, review, and chapter-planning outputs must be delegated to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,
@@ -1180,7 +1178,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         kind: 'resource',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
-        outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'text'),
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT],
         supportsCandidates: true,
       },
       confirmation: { kind: 'none', required: false },

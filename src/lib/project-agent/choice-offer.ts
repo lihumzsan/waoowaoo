@@ -1,91 +1,232 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import type {
-  ProjectAgentChoiceCardDefinition,
-  ProjectAgentChoiceCardPartData,
-} from './types'
-import {
-  getEditFirstChoiceDefinition,
-  isEditFirstChoiceType,
-  type EditFirstChoiceType,
-} from './edit-first-choice-tools'
-import {
-  parseEditFirstChoiceDecision,
-  type EditFirstChoiceDecision,
-} from './edit-first-choice-result'
-
-const choiceTypeSchema = z.custom<EditFirstChoiceType>(isEditFirstChoiceType)
+import { parseProjectAgentChoiceDecision as parseChoiceDecision } from './choice-result'
+import type { ProjectAgentChoiceDecision } from './choice-result'
 
 const choiceCardOptionSchema = z.object({
-  value: z.string().min(1),
-  label: z.string().min(1),
-  description: z.string().nullable().optional(),
-  imageUrl: z.string().nullable().optional(),
-  meta: z.string().nullable().optional(),
+  value: z.string().trim().min(1).max(160)
+    .describe('Stable value returned for this exact option; use an exact domain identity when one exists.'),
+  label: z.string().trim().min(1).max(300)
+    .describe('User-visible option label in the current conversation language.'),
+  description: z.string().trim().max(1200).nullable().optional(),
+  imageUrl: z.string().trim().max(4096).nullable().optional(),
+  meta: z.string().trim().max(500).nullable().optional(),
 }).strict()
 
 const choiceCardGroupSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
+  key: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+  label: z.string().trim().min(1).max(300),
   required: z.boolean(),
-  presentation: z.enum(['options', 'aspect_ratio', 'image']),
-  options: z.array(choiceCardOptionSchema),
-}).strict()
+  presentation: z.enum(['options', 'aspect_ratio', 'image'])
+    .describe('Choose the renderer that best represents this group; image requires imageUrl on every option.'),
+  allowCustomText: z.boolean().optional()
+    .describe('Enable only with replyMode=per_group when the user may replace an offered option with text.'),
+  options: z.array(choiceCardOptionSchema).min(1).max(12),
+}).strict().superRefine((group, context) => {
+  const values = new Set<string>()
+  for (const option of group.options) {
+    if (values.has(option.value)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['options'],
+        message: `duplicate option value: ${option.value}`,
+      })
+    }
+    values.add(option.value)
+    if (group.presentation === 'image' && !option.imageUrl) {
+      context.addIssue({
+        code: 'custom',
+        path: ['options'],
+        message: `image presentation requires imageUrl: ${option.value}`,
+      })
+    }
+  }
+})
 
-const choiceCardSubmitSchema = z.object({
-  kind: z.literal('submit_tool_output'),
-  decision: z.enum(['approve', 'select']),
-}).strict()
+const choiceCardContentFields = {
+  mode: z.enum(['confirm', 'confirm_or_text', 'select', 'select_or_text'])
+    .describe('The exact interaction needed for this current decision; it never implies a later workflow.'),
+  replyMode: z.enum(['none', 'whole_card', 'per_group'])
+    .describe('How optional user-authored text is collected.'),
+  title: z.string().trim().min(1).max(500)
+    .describe('Model-authored title in the current conversation language.'),
+  description: z.string().trim().max(4000).nullable().optional()
+    .describe('Model-authored explanation scoped only to the current decision.'),
+  groups: z.array(choiceCardGroupSchema).max(12),
+  submitLabel: z.string().trim().min(1).max(200)
+    .describe('Label only the current decision; never promise or name a downstream action.'),
+  replyLabel: z.string().trim().min(1).max(300).nullable().optional(),
+  replyPlaceholder: z.string().trim().min(1).max(1000).nullable().optional(),
+  replySubmitLabel: z.string().trim().min(1).max(200).nullable().optional()
+    .describe('Label only submission of the current free-text answer.'),
+} as const
+
+const choiceCardDefinitionFields = {
+  cardId: z.string().trim().min(1).max(191),
+  toolCallId: z.string().trim().min(1).max(191),
+  ...choiceCardContentFields,
+} as const
+
+function validateChoiceCard(
+  card: {
+    mode: 'confirm' | 'confirm_or_text' | 'select' | 'select_or_text'
+    replyMode: 'none' | 'whole_card' | 'per_group'
+    groups: Array<{ key: string; allowCustomText?: boolean }>
+    replyLabel?: string | null
+    replyPlaceholder?: string | null
+    replySubmitLabel?: string | null
+  },
+  context: z.RefinementCtx,
+): void {
+  const groupKeys = new Set<string>()
+  for (const group of card.groups) {
+    if (groupKeys.has(group.key)) {
+      context.addIssue({ code: 'custom', path: ['groups'], message: `duplicate group key: ${group.key}` })
+    }
+    groupKeys.add(group.key)
+  }
+  const isConfirmation = card.mode === 'confirm' || card.mode === 'confirm_or_text'
+  const acceptsWholeCardText = card.mode === 'confirm_or_text' || card.mode === 'select_or_text'
+  if (isConfirmation && card.groups.length > 0) {
+    context.addIssue({ code: 'custom', path: ['groups'], message: 'confirmation cards cannot declare option groups' })
+  }
+  if (!isConfirmation && card.groups.length === 0) {
+    context.addIssue({ code: 'custom', path: ['groups'], message: 'selection cards require at least one group' })
+  }
+  if (acceptsWholeCardText && card.replyMode === 'none') {
+    context.addIssue({ code: 'custom', path: ['replyMode'], message: `${card.mode} requires a reply mode` })
+  }
+  if (card.mode === 'confirm' && card.replyMode !== 'none') {
+    context.addIssue({ code: 'custom', path: ['replyMode'], message: 'confirm cards cannot accept text' })
+  }
+  if (isConfirmation && card.replyMode === 'per_group') {
+    context.addIssue({ code: 'custom', path: ['replyMode'], message: 'confirmation cards require whole-card replies' })
+  }
+  const customTextGroups = card.groups.filter((group) => group.allowCustomText === true)
+  if (customTextGroups.length > 0 && card.replyMode !== 'per_group') {
+    context.addIssue({
+      code: 'custom',
+      path: ['groups'],
+      message: 'custom group text requires per_group reply mode',
+    })
+  }
+  if (card.replyMode === 'per_group' && customTextGroups.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['replyMode'],
+      message: 'per_group reply mode requires at least one custom-text group',
+    })
+  }
+  const hasReplyCopy = Boolean(card.replyLabel || card.replyPlaceholder || card.replySubmitLabel)
+  if (card.replyMode === 'none' && hasReplyCopy) {
+    context.addIssue({ code: 'custom', path: ['replyMode'], message: 'reply copy requires an enabled reply mode' })
+  }
+  if (card.replyMode !== 'none' && (!card.replyLabel || !card.replyPlaceholder || !card.replySubmitLabel)) {
+    context.addIssue({ code: 'custom', path: ['replyMode'], message: 'enabled replies require all reply labels' })
+  }
+}
+
+export const projectAgentChoiceCardDefinitionSchema = z.object(choiceCardDefinitionFields)
+  .strict()
+  .superRefine(validateChoiceCard)
+
+export const projectAgentChoiceCardAuthoringSchema = z.object(choiceCardContentFields)
+  .strict()
+  .superRefine(validateChoiceCard)
 
 export const projectAgentChoiceCardSchema = z.object({
-  cardId: z.string().min(1),
-  runId: z.string().min(1),
-  interruptionId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  choiceType: choiceTypeSchema,
-  variant: z.enum(['choice', 'confirm', 'confirm_or_reply']).optional(),
-  replyMode: z.enum(['whole_card', 'per_group']),
-  autoSubmitOnReady: z.boolean().optional(),
-  title: z.string().min(1),
-  description: z.string().nullable().optional(),
-  groups: z.array(choiceCardGroupSchema),
-  submitLabel: z.string().min(1),
-  submit: choiceCardSubmitSchema,
-  replyLabel: z.string().nullable().optional(),
-  replyPlaceholder: z.string().nullable().optional(),
-  replySubmitLabel: z.string().nullable().optional(),
-  replyToolOutputKey: z.string().nullable().optional(),
+  ...choiceCardDefinitionFields,
+  runId: z.string().trim().min(1).max(191),
+  interruptionId: z.string().trim().min(1).max(191),
+}).strict().superRefine(validateChoiceCard)
+
+export type ProjectAgentChoiceCardDefinition = z.infer<typeof projectAgentChoiceCardDefinitionSchema>
+export type ProjectAgentChoiceCardPartData = z.infer<typeof projectAgentChoiceCardSchema>
+export type ProjectAgentChoiceCardAuthoring = z.infer<typeof projectAgentChoiceCardAuthoringSchema>
+
+const resourceRevisionRequestSchema = z.object({
+  resourceId: z.string().trim().min(1),
+  revisionId: z.string().trim().min(1),
 }).strict()
 
-export const CHOICE_REVIEWED_RESOURCE_KINDS = [
-  'script_intake_prompt',
-  'script_review_document',
-  'bible_review_plan',
-  'style_preview_set',
-  'asset_review_set',
-] as const
+export const projectAgentChoiceSubjectRequestSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }).strict()
+    .describe('No mutable domain fact is being reviewed.'),
+  z.object({
+    kind: z.literal('task_result'),
+    taskId: z.string().trim().min(1)
+      .describe('Exact completed Task whose current persisted result is being reviewed.'),
+  }).strict().describe('Bind the Choice to one exact completed Task result.'),
+  z.object({
+    kind: z.literal('resource_revisions'),
+    revisions: z.array(resourceRevisionRequestSchema).min(1).max(24),
+  }).strict().describe('Bind the Choice to exact immutable Resource revisions.'),
+])
 
-export type ProjectAgentChoiceReviewedResourceKind = (typeof CHOICE_REVIEWED_RESOURCE_KINDS)[number]
+export type ProjectAgentChoiceSubjectRequest = z.infer<typeof projectAgentChoiceSubjectRequestSchema>
 
-const choiceReviewedResourceSchema = z.object({
-  kind: z.enum(CHOICE_REVIEWED_RESOURCE_KINDS),
-  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/)
+
+const projectAgentChoiceSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('none'),
+    fingerprint: fingerprintSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal('task_result'),
+    taskId: z.string().trim().min(1),
+    fingerprint: fingerprintSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal('resource_revisions'),
+    revisions: z.array(z.object({
+      resourceId: z.string().trim().min(1),
+      revisionId: z.string().trim().min(1),
+      fingerprint: fingerprintSchema,
+    }).strict()).min(1).max(24),
+    fingerprint: fingerprintSchema,
+  }).strict(),
+])
+
+export type ProjectAgentChoiceSubject = z.infer<typeof projectAgentChoiceSubjectSchema>
+
+const commitmentWhenSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('confirm') }).strict(),
+  z.object({
+    kind: z.literal('option'),
+    groupKey: z.string().trim().min(1),
+    optionValue: z.string().trim().min(1),
+  }).strict(),
+])
+
+export const projectAgentChoiceCommitmentRequestSchema = z.object({
+  when: commitmentWhenSchema,
+  operationId: z.string().trim().min(1).max(128)
+    .describe('Exact Choice-eligible operation to invoke for this one answer.'),
+  inputJson: z.string().trim().min(2).max(100_000)
+    .describe('Complete frozen operation input as one JSON object string; the server validates it against the target schema.'),
 }).strict()
+
+const projectAgentChoiceCommitmentSchema = z.object({
+  when: commitmentWhenSchema,
+  operationId: z.string().trim().min(1).max(128),
+  input: z.record(z.string(), z.unknown()),
+}).strict()
+
+export type ProjectAgentChoiceCommitmentRequest = z.infer<typeof projectAgentChoiceCommitmentRequestSchema>
+export type ProjectAgentChoiceCommitment = z.infer<typeof projectAgentChoiceCommitmentSchema>
 
 const projectAgentChoiceOfferSchema = z.object({
   card: projectAgentChoiceCardSchema,
-  reviewedResource: choiceReviewedResourceSchema,
+  subject: projectAgentChoiceSubjectSchema,
+  commitments: z.array(projectAgentChoiceCommitmentSchema).max(12),
 }).strict()
-
-export interface ProjectAgentChoiceReviewedResource {
-  kind: ProjectAgentChoiceReviewedResourceKind
-  fingerprint: string
-}
 
 export interface ProjectAgentChoiceOffer {
   card: ProjectAgentChoiceCardPartData
-  reviewedResource: ProjectAgentChoiceReviewedResource
+  subject: ProjectAgentChoiceSubject
+  commitments: ProjectAgentChoiceCommitment[]
 }
 
 type CanonicalJson = null | boolean | number | string | CanonicalJson[] | { [key: string]: CanonicalJson }
@@ -107,297 +248,269 @@ function canonicalize(value: unknown): CanonicalJson {
   throw new Error('PROJECT_AGENT_CHOICE_FINGERPRINT_VALUE_INVALID')
 }
 
-export function fingerprintProjectAgentChoiceResource(input: {
-  kind: ProjectAgentChoiceReviewedResourceKind
-  snapshot: unknown
-}): ProjectAgentChoiceReviewedResource {
-  const fingerprint = createHash('sha256')
-    .update(input.kind)
+export function fingerprintProjectAgentChoiceSubject(kind: ProjectAgentChoiceSubject['kind'], snapshot: unknown): string {
+  return createHash('sha256')
+    .update(kind)
     .update('\n')
-    .update(JSON.stringify(canonicalize(input.snapshot)))
+    .update(JSON.stringify(canonicalize(snapshot)))
     .digest('hex')
-  return { kind: input.kind, fingerprint }
+}
+
+function cardDefinitionFromPersistedCard(
+  card: ProjectAgentChoiceCardPartData,
+): ProjectAgentChoiceCardDefinition {
+  const definition: Record<string, unknown> = { ...card }
+  delete definition.runId
+  delete definition.interruptionId
+  return projectAgentChoiceCardDefinitionSchema.parse(definition)
+}
+
+function assertUniqueResourceRevisionRequests(
+  revisions: readonly { resourceId: string; revisionId: string }[],
+): void {
+  const identities = new Set<string>()
+  for (const revision of revisions) {
+    const identity = `${revision.resourceId}:${revision.revisionId}`
+    if (identities.has(identity)) {
+      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_DUPLICATE:${identity}`)
+    }
+    identities.add(identity)
+  }
+}
+
+async function resolveTaskResultSubject(params: {
+  tx: Prisma.TransactionClient
+  projectId: string
+  userId: string
+  taskId: string
+}): Promise<Extract<ProjectAgentChoiceSubject, { kind: 'task_result' }>> {
+  const task = await params.tx.task.findFirst({
+    where: {
+      id: params.taskId,
+      projectId: params.projectId,
+      userId: params.userId,
+      status: 'completed',
+    },
+    select: {
+      id: true,
+      episodeId: true,
+      type: true,
+      status: true,
+      targetType: true,
+      targetId: true,
+      result: true,
+    },
+  })
+  if (!task || task.result === null) throw new Error('PROJECT_AGENT_CHOICE_TASK_RESULT_MISSING')
+  return {
+    kind: 'task_result',
+    taskId: task.id,
+    fingerprint: fingerprintProjectAgentChoiceSubject('task_result', task),
+  }
+}
+
+async function resolveResourceRevisionsSubject(params: {
+  tx: Prisma.TransactionClient
+  projectId: string
+  userId: string
+  revisions: readonly { resourceId: string; revisionId: string }[]
+}): Promise<Extract<ProjectAgentChoiceSubject, { kind: 'resource_revisions' }>> {
+  assertUniqueResourceRevisionRequests(params.revisions)
+  const revisionIds = params.revisions.map((revision) => revision.revisionId)
+  const records = await params.tx.creativeResourceRevision.findMany({
+    where: {
+      id: { in: revisionIds },
+      resource: {
+        userId: params.userId,
+        status: 'ready',
+        OR: [{ projectId: params.projectId }, { projectId: null }],
+      },
+    },
+    select: {
+      id: true,
+      resourceId: true,
+      fingerprint: true,
+      resource: {
+        select: {
+          projectId: true,
+          episodeId: true,
+          mediaType: true,
+          schemaId: true,
+          status: true,
+        },
+      },
+    },
+  })
+  const byId = new Map(records.map((record) => [record.id, record]))
+  const ordered = params.revisions.map((requested) => {
+    const record = byId.get(requested.revisionId)
+    if (!record || record.resourceId !== requested.resourceId) {
+      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_MISSING:${requested.revisionId}`)
+    }
+    return record
+  })
+  return {
+    kind: 'resource_revisions',
+    revisions: ordered.map((record) => ({
+      resourceId: record.resourceId,
+      revisionId: record.id,
+      fingerprint: record.fingerprint,
+    })),
+    fingerprint: fingerprintProjectAgentChoiceSubject('resource_revisions', ordered),
+  }
+}
+
+export async function resolveProjectAgentChoiceSubject(params: {
+  tx: Prisma.TransactionClient
+  projectId: string
+  userId: string
+  request: ProjectAgentChoiceSubjectRequest
+  card: ProjectAgentChoiceCardDefinition
+  commitments: readonly ProjectAgentChoiceCommitment[]
+}): Promise<ProjectAgentChoiceSubject> {
+  if (params.request.kind === 'none') {
+    return {
+      kind: 'none',
+      fingerprint: fingerprintProjectAgentChoiceSubject('none', {
+        card: params.card,
+        commitments: params.commitments,
+      }),
+    }
+  }
+  if (params.request.kind === 'task_result') {
+    return await resolveTaskResultSubject({
+      tx: params.tx,
+      projectId: params.projectId,
+      userId: params.userId,
+      taskId: params.request.taskId,
+    })
+  }
+  return await resolveResourceRevisionsSubject({
+    tx: params.tx,
+    projectId: params.projectId,
+    userId: params.userId,
+    revisions: params.request.revisions,
+  })
+}
+
+export function parseProjectAgentChoiceCommitmentInputJson(inputJson: string): Record<string, unknown> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(inputJson)
+  } catch {
+    throw new Error('PROJECT_AGENT_CHOICE_COMMITMENT_INPUT_JSON_INVALID')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('PROJECT_AGENT_CHOICE_COMMITMENT_INPUT_OBJECT_REQUIRED')
+  }
+  canonicalize(parsed)
+  return parsed as Record<string, unknown>
+}
+
+export function assertProjectAgentChoiceCommitmentsMatchCard(params: {
+  card: ProjectAgentChoiceCardDefinition
+  commitments: readonly ProjectAgentChoiceCommitment[]
+}): void {
+  const identities = new Set<string>()
+  for (const commitment of params.commitments) {
+    const identity = commitment.when.kind === 'confirm'
+      ? 'confirm'
+      : `option:${commitment.when.groupKey}:${commitment.when.optionValue}`
+    if (identities.has(identity)) {
+      throw new Error(`PROJECT_AGENT_CHOICE_COMMITMENT_DUPLICATE:${identity}`)
+    }
+    identities.add(identity)
+    if (commitment.when.kind === 'confirm') {
+      if (params.card.mode !== 'confirm' && params.card.mode !== 'confirm_or_text') {
+        throw new Error('PROJECT_AGENT_CHOICE_CONFIRM_COMMITMENT_MODE_INVALID')
+      }
+      continue
+    }
+    if (
+      params.card.mode === 'confirm'
+      || params.card.mode === 'confirm_or_text'
+      || params.card.groups.length !== 1
+    ) {
+      throw new Error('PROJECT_AGENT_CHOICE_OPTION_COMMITMENT_CARD_INVALID')
+    }
+    const when = commitment.when
+    const group = params.card.groups[0]
+    if (
+      !group
+      || group.key !== when.groupKey
+      || !group.options.some((option) => option.value === when.optionValue)
+    ) {
+      throw new Error(
+        `PROJECT_AGENT_CHOICE_COMMITMENT_OPTION_NOT_OFFERED:${when.groupKey}:${when.optionValue}`,
+      )
+    }
+  }
 }
 
 export function buildProjectAgentChoiceOffer(params: {
   runId: string
   interruptionId: string
   card: ProjectAgentChoiceCardDefinition
-  reviewedResource: ProjectAgentChoiceReviewedResource
+  subject: ProjectAgentChoiceSubject
+  commitments: readonly ProjectAgentChoiceCommitment[]
 }): ProjectAgentChoiceOffer {
-  const offer: ProjectAgentChoiceOffer = {
+  assertProjectAgentChoiceCommitmentsMatchCard({ card: params.card, commitments: params.commitments })
+  return parseProjectAgentChoiceOffer({
     card: {
       ...params.card,
       runId: params.runId,
       interruptionId: params.interruptionId,
     },
-    reviewedResource: params.reviewedResource,
-  }
-  return parseProjectAgentChoiceOffer(offer)
+    subject: params.subject,
+    commitments: [...params.commitments],
+  })
 }
 
 export function parseProjectAgentChoiceOffer(value: Prisma.JsonValue | unknown): ProjectAgentChoiceOffer {
   const parsed = projectAgentChoiceOfferSchema.safeParse(value)
   if (!parsed.success) {
-    throw new Error(`PROJECT_AGENT_CHOICE_OFFER_INVALID:${parsed.error.issues.map((issue) => issue.path.join('.')).join(',')}`)
+    throw new Error(
+      `PROJECT_AGENT_CHOICE_OFFER_INVALID:${parsed.error.issues.map((issue) => issue.path.join('.')).join(',')}`,
+    )
   }
+  assertProjectAgentChoiceCommitmentsMatchCard({ card: parsed.data.card, commitments: parsed.data.commitments })
   return parsed.data
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function assertOfferSelections(offer: ProjectAgentChoiceOffer, response: unknown): void {
-  if (!isRecord(response)) throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
-  const selections = isRecord(response.selections) ? response.selections : {}
-  const allowedKeys = new Set(offer.card.groups.map((group) => group.key))
-  for (const key of Object.keys(selections)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`PROJECT_AGENT_CHOICE_SELECTION_KEY_INVALID:${key}`)
-    }
-  }
-  for (const group of offer.card.groups) {
-    const selectedValue = selections[group.key]
-    const topLevelValue = response[group.key]
-    const value = typeof selectedValue === 'string'
-      ? selectedValue.trim()
-      : typeof topLevelValue === 'string'
-        ? topLevelValue.trim()
-        : ''
-    if (!value) {
-      if (group.required && response.decision !== 'revise') {
-        throw new Error(`PROJECT_AGENT_CHOICE_SELECTION_REQUIRED:${group.key}`)
-      }
-      continue
-    }
-    if (!group.options.some((option) => option.value === value)) {
-      throw new Error(`PROJECT_AGENT_CHOICE_SELECTION_NOT_OFFERED:${group.key}:${value}`)
-    }
-  }
 }
 
 export function parseProjectAgentChoiceDecision(params: {
   offer: ProjectAgentChoiceOffer
-  response: Prisma.InputJsonValue
-  latestUserText: string
-}): EditFirstChoiceDecision {
-  assertOfferSelections(params.offer, params.response)
-  const decision = parseEditFirstChoiceDecision({
-    choiceType: params.offer.card.choiceType,
-    output: params.response as Record<string, unknown>,
-    latestUserText: params.latestUserText,
-  })
-  if (!decision) throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
-  return decision
-}
-
-export function expectedReviewedResourceKind(choiceType: EditFirstChoiceType): ProjectAgentChoiceReviewedResourceKind {
-  return getEditFirstChoiceDefinition(choiceType).reviewedResourceKind
-}
-
-interface ChoiceResourceResolverParams {
-  tx: Prisma.TransactionClient
-  projectId: string
-  userId: string
-  episodeId: string
-  card: ProjectAgentChoiceCardPartData
-}
-
-export async function resolveScriptIntakeChoiceResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  return fingerprintProjectAgentChoiceResource({
-    kind: 'script_intake_prompt',
-    snapshot: {
-      cardId: params.card.cardId,
-      choiceType: params.card.choiceType,
-      groups: params.card.groups,
-    },
-  })
-}
-
-export async function resolveScriptReviewChoiceResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  const editBible = await params.tx.projectEditBible.findFirst({
-    where: {
-      episodeId: params.episodeId,
-      episode: {
-        projectId: params.projectId,
-        project: { userId: params.userId },
-      },
-    },
-    select: {
-      id: true,
-      status: true,
-      version: true,
-      updatedAt: true,
-      sourceDocument: {
-        select: {
-          id: true,
-          sourceKind: true,
-          checksum: true,
-          version: true,
-          normalizedText: true,
-          updatedAt: true,
-        },
-      },
-    },
-  })
-  if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-  return fingerprintProjectAgentChoiceResource({ kind: 'script_review_document', snapshot: editBible })
-}
-
-export async function resolveBibleReviewChoiceResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  const editBible = await params.tx.projectEditBible.findFirst({
-    where: {
-      episodeId: params.episodeId,
-      episode: {
-        projectId: params.projectId,
-        project: { userId: params.userId },
-      },
-    },
-    select: {
-      id: true,
-      status: true,
-      version: true,
-      bibleJson: true,
-      beatSheetJson: true,
-      ledgerJson: true,
-      emotionalCurveJson: true,
-      styleBibleJson: true,
-      diagnosticsJson: true,
-      updatedAt: true,
-      sourceDocument: {
-        select: {
-          id: true,
-          checksum: true,
-          version: true,
-          updatedAt: true,
-        },
-      },
-    },
-  })
-  if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-  return fingerprintProjectAgentChoiceResource({ kind: 'bible_review_plan', snapshot: editBible })
-}
-
-export async function resolveStyleChoiceResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  const [project, editBible] = await Promise.all([
-    params.tx.project.findFirst({
-      where: { id: params.projectId, userId: params.userId },
-      select: {
-        id: true,
-        videoRatio: true,
-        videoRatioConfirmedAt: true,
-        videoRatioConfirmationVersion: true,
-      },
-    }),
-    params.tx.projectEditBible.findFirst({
-      where: {
-        episodeId: params.episodeId,
-        episode: {
-          projectId: params.projectId,
-          project: { userId: params.userId },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        version: true,
-        stylePreviews: {
-          where: { status: { in: ['completed', 'confirmed'] } },
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            styleKey: true,
-            title: true,
-            summary: true,
-            imageKey: true,
-            status: true,
-            updatedAt: true,
-          },
-        },
-      },
-    }),
-  ])
-  if (!project || !editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-  return fingerprintProjectAgentChoiceResource({
-    kind: 'style_preview_set',
-    snapshot: {
-      project,
-      bible: {
-        id: editBible.id,
-        status: editBible.status,
-        version: editBible.version,
-      },
-      stylePreviews: editBible.stylePreviews,
-    },
-  })
-}
-
-export async function resolveAssetReviewChoiceResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  const editScripts = await params.tx.projectEditScript.findMany({
-    where: {
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      project: { userId: params.userId },
-    },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      chapterId: true,
-      updatedAt: true,
-      requirements: {
-        orderBy: [{ kind: 'asc' }, { name: 'asc' }],
-        select: {
-          id: true,
-          kind: true,
-          name: true,
-          status: true,
-          targetId: true,
-          updatedAt: true,
-          errorMessage: true,
-        },
-      },
-    },
-  })
-  return fingerprintProjectAgentChoiceResource({ kind: 'asset_review_set', snapshot: editScripts })
-}
-
-export async function resolveCurrentProjectAgentChoiceReviewedResource(
-  params: ChoiceResourceResolverParams,
-): Promise<ProjectAgentChoiceReviewedResource> {
-  return await getEditFirstChoiceDefinition(params.card.choiceType).resolveReviewedResource(params)
+  response: Prisma.InputJsonValue | unknown
+}): ProjectAgentChoiceDecision {
+  return parseChoiceDecision({ card: params.offer.card, response: params.response })
 }
 
 export async function assertProjectAgentChoiceOfferCurrent(params: {
   tx: Prisma.TransactionClient
   projectId: string
   userId: string
-  episodeId: string | null | undefined
+  episodeId?: string | null
   offer: ProjectAgentChoiceOffer
 }): Promise<void> {
-  if (!params.episodeId) throw new Error('PROJECT_AGENT_CHOICE_EPISODE_ID_REQUIRED')
-  const expectedKind = expectedReviewedResourceKind(params.offer.card.choiceType)
-  if (params.offer.reviewedResource.kind !== expectedKind) {
-    throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_KIND_INVALID')
-  }
-  const current = await resolveCurrentProjectAgentChoiceReviewedResource({
+  const request: ProjectAgentChoiceSubjectRequest = params.offer.subject.kind === 'none'
+    ? { kind: 'none' }
+    : params.offer.subject.kind === 'task_result'
+      ? { kind: 'task_result', taskId: params.offer.subject.taskId }
+      : {
+          kind: 'resource_revisions',
+          revisions: params.offer.subject.revisions.map((revision) => ({
+            resourceId: revision.resourceId,
+            revisionId: revision.revisionId,
+          })),
+        }
+  const current = await resolveProjectAgentChoiceSubject({
     tx: params.tx,
     projectId: params.projectId,
     userId: params.userId,
-    episodeId: params.episodeId,
-    card: params.offer.card,
+    request,
+    card: cardDefinitionFromPersistedCard(params.offer.card),
+    commitments: params.offer.commitments,
   })
-  if (current.fingerprint !== params.offer.reviewedResource.fingerprint) {
+  if (current.fingerprint !== params.offer.subject.fingerprint) {
     throw new Error('PROJECT_AGENT_CHOICE_OFFER_STALE')
   }
 }

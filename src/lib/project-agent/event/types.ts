@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import type { EditFirstChoiceType } from '../edit-first-choice-tools'
 import type { ProjectAgentRunControlKind, ProjectAgentRunStatus } from '../runs'
 import type { ProjectAgentWaitFollowUpMode, ProjectAgentWaitTerminalStatus } from '../waits'
 import type { ProjectAssistantId } from '../types'
@@ -86,7 +85,6 @@ export type ProjectAgentEventPayload =
     sourceOperationId?: string | null
     targetKey?: string | null
     toolCallId?: string | null
-    choiceType?: EditFirstChoiceType | null
   }
   | {
     kind: 'activity.completed'
@@ -171,7 +169,6 @@ export type ProjectAgentEventPayload =
     operationId: string
     approvalId: string
     toolCallId?: string | null
-    choiceType?: EditFirstChoiceType | null
     payload: Prisma.InputJsonValue
     runState?: string | null
   }
@@ -203,7 +200,6 @@ export interface ProjectAgentActivitySnapshot {
   operationId: string | null
   sourceOperationId: string | null
   toolCallId: string | null
-  choiceType: EditFirstChoiceType | null
 }
 
 export function normalizeProjectAgentActivityType(value: string): ProjectAgentActivityType {

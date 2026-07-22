@@ -1,4 +1,3 @@
-import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getProfileTransactionKindTranslationKey, type ProfileTransactionKindTranslationKey } from './transaction-labels'
 
@@ -36,29 +35,8 @@ export type ProfileTransactionScopeInput = {
   target?: unknown | null
 }
 
-const SYNC_PROFILE_ACTION_KEYS = [
-  AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
-  AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
-  AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
-  AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
-  AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
-  AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
-  AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
-  'ai_design_character',
-  'ai_design_location',
-] as const
-
-const WORKER_USAGE_ACTION_KEYS = [
-  'character_candidate_prompts',
-  'location_candidate_prompt',
-  'global_character_candidate_prompts',
-  'global_location_candidate_prompt',
-] as const
-
 export const PROFILE_ACTION_KEY_LIST: readonly string[] = [
   ...Object.values(TASK_TYPE),
-  ...SYNC_PROFILE_ACTION_KEYS,
-  ...WORKER_USAGE_ACTION_KEYS,
 ]
 
 const PROFILE_ACTION_KEYS = new Set<string>([

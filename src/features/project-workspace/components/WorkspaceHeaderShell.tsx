@@ -4,10 +4,8 @@ import { useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { EpisodeSelector } from '@/components/ui/CapsuleNav'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
-import type { ProjectEditChapter, ProjectVideoSegment } from '@/types/project'
+import type { ProjectEditChapter } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
-import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
-import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
 import {
   WORKSPACE_SCOPE_ALL_ID,
   workspaceChapterScopeId,
@@ -28,12 +26,6 @@ interface EpisodeSummary {
   novelText?: string | null
   chapters?: ProjectEditChapter[] | null
   editBible?: EpisodePlanningBibleSource | null
-  editScript?: {
-    content?: string | null
-    scriptText?: string | null
-    bible?: string | null
-  } | null
-  videoSegments?: ProjectVideoSegment[]
 }
 
 interface UserModelOption {
@@ -79,7 +71,6 @@ interface WorkspaceHeaderShellProps {
   onProjectRename?: (newName: string) => void | Promise<void>
   projectConfigurable: boolean
   currentEditBible?: EpisodePlanningBibleSource | null
-  currentWorkflow?: EditFirstWorkflowView | null
   workspaceChapters?: readonly ProjectEditChapter[]
   currentWorkspaceScopeId?: WorkspaceScopeId
   onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
@@ -105,8 +96,8 @@ interface EpisodeSelectorOverviewChapter {
 
 interface EpisodeSelectorOverview {
   readonly title: string
-  readonly stageLabel: string
-  readonly statusTone: 'muted' | 'ready' | 'processing' | 'success' | 'warning' | 'danger'
+  readonly summaryLabel: string
+  readonly statusTone: 'muted' | 'ready' | 'processing' | 'success' | 'danger'
   readonly metrics: readonly EpisodeSelectorOverviewMetric[]
   readonly chips: readonly EpisodeSelectorOverviewChip[]
   readonly chapters: readonly EpisodeSelectorOverviewChapter[]
@@ -114,19 +105,7 @@ interface EpisodeSelectorOverview {
 }
 
 function resolveOverviewTone(overview: EpisodePlanningOverview): EpisodeSelectorOverview['statusTone'] {
-  if (overview.failedChapterCount > 0 || overview.workflowStatus === 'failed') return 'danger'
-  if (overview.workflowStatus === 'processing' || overview.processingChapterCount > 0) return 'processing'
-  if (overview.workflowStatus === 'needs_user_choice') return 'warning'
-  if (overview.workflowStatus === 'completed') return 'success'
-  if (overview.chapterCount > 0 || overview.bibleStatus) return 'ready'
-  return 'muted'
-}
-
-function resolveChapterTone(chapter: EpisodePlanningOverview['chapters'][number]): EpisodeSelectorOverviewChapter['tone'] {
-  if (chapter.status === 'failed' || chapter.renderStatus === 'failed') return 'danger'
-  if (chapter.status === 'generating' || chapter.renderStatus === 'processing') return 'processing'
-  if (chapter.renderStatus === 'completed') return 'success'
-  if (chapter.status === 'confirmed' || chapter.status === 'ready') return 'ready'
+  if (overview.chapterCount > 0 || overview.hasBible) return 'ready'
   return 'muted'
 }
 
@@ -158,14 +137,11 @@ export default function WorkspaceHeaderShell({
   onProjectRename,
   projectConfigurable,
   currentEditBible = null,
-  currentWorkflow = null,
   workspaceChapters = [],
   currentWorkspaceScopeId = WORKSPACE_SCOPE_ALL_ID,
   onWorkspaceScopeSelect,
 }: WorkspaceHeaderShellProps) {
   const overviewT = useTranslations('projectWorkflow.episodeOverview')
-  const workflowStepT = useTranslations('projectWorkflow.workflowSteps')
-  const workflowStatusT = useTranslations('projectWorkflow.workflowStatuses')
   const handleCapabilityOverridesChange = useCallback((value: CapabilitySelections) => {
     void onUpdateConfig('capabilityOverrides', value)
   }, [onUpdateConfig])
@@ -179,35 +155,17 @@ export default function WorkspaceHeaderShell({
     onWorkspaceScopeSelect?.(scope)
   }, [onWorkspaceScopeSelect])
 
-  const chapterPlanStatusLabel = useCallback((status: string) => {
-    if (status === 'confirmed') return overviewT('chapterStatus.confirmed')
-    if (status === 'ready') return overviewT('chapterStatus.ready')
-    if (status === 'generating') return overviewT('chapterStatus.generating')
-    if (status === 'failed') return overviewT('chapterStatus.failed')
-    if (status === 'pending') return overviewT('chapterStatus.pending')
-    return status || overviewT('unknown')
-  }, [overviewT])
-
-  const chapterRenderStatusLabel = useCallback((status: string | null) => {
-    if (!status) return overviewT('renderStatus.empty')
-    if (status === 'completed') return overviewT('renderStatus.completed')
-    if (status === 'processing') return overviewT('renderStatus.processing')
-    if (status === 'failed') return overviewT('renderStatus.failed')
-    if (status === 'pending') return overviewT('renderStatus.pending')
-    return status
-  }, [overviewT])
-
   const toEpisodeSelectorOverview = useCallback((overview: EpisodePlanningOverview): EpisodeSelectorOverview => ({
     title: overview.bible.title ? overviewT('titleWithBible', { title: overview.bible.title }) : overviewT('title'),
-    stageLabel: `${workflowStepT(overview.workflowStep)} · ${workflowStatusT(overview.workflowStatus)}`,
+    summaryLabel: `${overviewT('chapters')}: ${String(overview.chapterCount)}`,
     statusTone: resolveOverviewTone(overview),
     metrics: [
       { label: overviewT('chapters'), value: String(overview.chapterCount) },
       { label: overviewT('targetDuration'), value: formatEpisodePlanningDuration(overview.targetDurationSec) },
-      { label: overviewT('confirmed'), value: String(overview.confirmedChapterCount) },
-      { label: overviewT('rendered'), value: String(overview.renderedChapterCount) },
-      { label: overviewT('failed'), value: String(overview.failedChapterCount) },
-      { label: overviewT('episodePlan'), value: overview.bibleStatus ? overviewT('bibleStatus', { status: overview.bibleStatus }) : overviewT('emptyValue') },
+      { label: overviewT('characters', { count: overview.bible.characterCount }), value: String(overview.bible.characterCount) },
+      { label: overviewT('locations', { count: overview.bible.locationCount }), value: String(overview.bible.locationCount) },
+      { label: overviewT('beats', { count: overview.bible.beatCount }), value: String(overview.bible.beatCount) },
+      { label: overviewT('ledgerEvents', { count: overview.bible.ledgerEventCount }), value: String(overview.bible.ledgerEventCount) },
     ],
     chips: [
       { label: overviewT('characters', { count: overview.bible.characterCount }) },
@@ -222,15 +180,13 @@ export default function WorkspaceHeaderShell({
       title: chapter.title,
       summary: chapter.summary,
       indexLabel: overviewT('chapterIndex', { index: chapter.chapterIndex + 1 }),
-      tone: resolveChapterTone(chapter),
+      tone: 'ready',
       meta: [
         overviewT('chapterDuration', { duration: formatEpisodePlanningDuration(chapter.targetDurationSec) }),
-        overviewT('chapterPlanStatus', { status: chapterPlanStatusLabel(chapter.status) }),
-        overviewT('chapterRenderStatus', { status: chapterRenderStatusLabel(chapter.renderStatus) }),
       ],
     })),
     emptyChaptersLabel: overviewT('emptyChapters'),
-  }), [chapterPlanStatusLabel, chapterRenderStatusLabel, overviewT, workflowStatusT, workflowStepT])
+  }), [overviewT])
 
   return (
     <>
@@ -286,24 +242,13 @@ export default function WorkspaceHeaderShell({
                 ? buildEpisodePlanningOverview({
                     editBible: episodeEditBible,
                     chapters: episodeChapters,
-                    workflow: ep.id === currentEpisodeId ? currentWorkflow : null,
                   })
                 : null
-              const episodeArtifacts = resolveEpisodeArtifactReadiness({
-                novelText: ep.novelText ?? null,
-                editScript: ep.editScript ?? null,
-                editBible: ep.editBible ?? null,
-                videoSegments: ep.videoSegments || [],
-              })
               return {
                 id: ep.id,
                 title: ep.name,
                 summary: ep.description ?? undefined,
                 overview: planningOverview ? toEpisodeSelectorOverview(planningOverview) : undefined,
-                status: {
-                  script: episodeArtifacts.hasScript ? 'ready' as const : 'empty' as const,
-                  visual: episodeArtifacts.hasVideo ? 'ready' as const : 'empty' as const,
-                },
               }
             })}
             currentId={currentEpisodeId}

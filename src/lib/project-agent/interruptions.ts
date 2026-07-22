@@ -18,8 +18,10 @@ import {
   parseProjectAgentChoiceOffer,
   type ProjectAgentChoiceOffer,
 } from './choice-offer'
-import type { EditFirstChoiceDecision } from './edit-first-choice-result'
-import { resolveEditFirstChoiceAtomicConfirmationCommand } from './edit-first-choice-tools'
+import {
+  resolveProjectAgentChoiceCommitment,
+  type ProjectAgentChoiceDecision,
+} from './choice-result'
 import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
@@ -66,7 +68,7 @@ export interface ProjectAgentChoiceInterruptionRecord {
 }
 
 export interface ProjectAgentConsumedChoiceInterruptionRecord extends ProjectAgentChoiceInterruptionRecord {
-  parsedResponse: EditFirstChoiceDecision
+  parsedResponse: ProjectAgentChoiceDecision
   appliedOperationId: string | null
 }
 
@@ -501,7 +503,6 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   cardId: string
   toolCallId: string
   response: Prisma.InputJsonValue
-  latestUserText: string
   operationSignal: AbortSignal
   locale?: string | null
   visibleMessages?: UIMessage[]
@@ -548,17 +549,16 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
       const parsedResponse = parseProjectAgentChoiceDecision({
         offer,
         response: params.response,
-        latestUserText: params.latestUserText,
       })
       const executionSegment = createProjectAgentExecutionSegment({
         kind: 'choice_response',
         interruptionId: record.id,
       })
-      const atomicCommand = resolveEditFirstChoiceAtomicConfirmationCommand(parsedResponse)
+      const atomicCommand = resolveProjectAgentChoiceCommitment({ offer, decision: parsedResponse })
       const atomicExecution = atomicCommand
         ? await invokeProjectAgentOperation({
             transaction: tx,
-            invocationMode: 'atomic_choice_confirmation',
+            invocationMode: 'atomic_choice_commit',
             registry: createProjectAgentOperationRegistry(),
             channel: 'tool',
             operationId: atomicCommand.operationId,
@@ -589,7 +589,7 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
           })
         : null
       if (atomicExecution?.kind === 'approval_required') {
-        throw new Error(`PROJECT_AGENT_CHOICE_ATOMIC_OPERATION_APPROVAL_INVALID:${atomicCommand?.operationId ?? 'unknown'}`)
+        throw new Error(`PROJECT_AGENT_CHOICE_COMMIT_OPERATION_APPROVAL_INVALID:${atomicCommand?.operationId ?? 'unknown'}`)
       }
       const atomicActivityId = atomicExecution ? randomUUID() : null
       const events: ProjectAgentEventInput[] = [
@@ -618,7 +618,6 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
               operationId: atomicExecution.operation.id,
               sourceOperationId: record.operationId,
               toolCallId: record.toolCallId,
-              choiceType: offer.card.choiceType,
             },
           },
           {
@@ -693,7 +692,6 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
     cardId: string
     toolCallId: string
     response: Prisma.InputJsonValue
-    latestUserText: string
     visibleMessages?: UIMessage[]
   },
 ): Promise<ProjectAgentConsumedChoiceInterruptionRecord | null> {
@@ -723,10 +721,9 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
     const parsedResponse = parseProjectAgentChoiceDecision({
       offer,
       response: params.response,
-      latestUserText: params.latestUserText,
     })
     if (!isDeepStrictEqual(record.response, parsedResponse)) return null
-    const atomicCommand = resolveEditFirstChoiceAtomicConfirmationCommand(parsedResponse)
+    const atomicCommand = resolveProjectAgentChoiceCommitment({ offer, decision: parsedResponse })
     const appliedActivity = atomicCommand
       ? await tx.projectAgentActivity.findFirst({
           where: {
@@ -734,7 +731,6 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
             operationId: atomicCommand.operationId,
             sourceOperationId: record.operationId,
             toolCallId: record.toolCallId,
-            choiceType: offer.card.choiceType,
             status: 'completed',
           },
           orderBy: { createdAt: 'desc' },

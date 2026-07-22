@@ -113,8 +113,6 @@ export interface ProjectModelConfig {
   videoModel: string | null
   musicModel: string | null
   videoRatio: string | null
-  videoRatioConfirmedAt: Date | null
-  videoRatioConfirmationVersion: number
   capabilityDefaults: CapabilitySelections
   capabilityOverrides: CapabilitySelections
 }
@@ -173,8 +171,6 @@ export async function getProjectModelConfig(
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
       videoRatio: projectData?.videoRatio ?? null,
-      videoRatioConfirmedAt: projectData?.videoRatioConfirmedAt ?? null,
-      videoRatioConfirmationVersion: projectData?.videoRatioConfirmationVersion ?? 0,
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
     }
@@ -193,8 +189,6 @@ export async function getProjectModelConfig(
     videoModel: extractModelKey(projectData?.videoModel) || extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
     videoRatio: projectData?.videoRatio ?? null,
-    videoRatioConfirmedAt: projectData?.videoRatioConfirmedAt ?? null,
-    videoRatioConfirmationVersion: projectData?.videoRatioConfirmationVersion ?? 0,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
   }

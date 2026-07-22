@@ -1,16 +1,16 @@
 import type { UIMessage } from 'ai'
 import type {
   ProjectContextEditBibleSnapshot,
-  ProjectContextEditScriptSnapshot,
+  ProjectContextEditChapterSnapshot,
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
-import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
-import type { EditFirstChoiceDecision } from './edit-first-choice-result'
-import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
+import type { ProjectAgentChoiceDecision } from './choice-result'
+import type {
+  ProjectAgentChoiceCardPartData,
+} from './choice-offer'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import type {
   ProjectAgentRunControlKind,
   ProjectAgentRunStatus,
@@ -35,7 +35,7 @@ export interface ProjectAgentContext {
   executionSegmentId?: string | null
   /** Exact visible text from the user message that started this user-turn segment. */
   userTurnText?: string | null
-  choiceDecision?: EditFirstChoiceDecision | null
+  choiceDecision?: ProjectAgentChoiceDecision | null
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
   /** Exact approved invocation keyed by the SDK tool-call identity. */
@@ -64,18 +64,12 @@ export interface ProjectAgentActivityPartData {
   operationId?: string | null
   sourceOperationId?: string | null
   toolCallId?: string | null
-  choiceType?: EditFirstChoiceType | null
 }
 
 export type ProjectAgentSubagentPartData = ProjectAgentSubagentEventPartData
 
 export interface ProjectContextPartData {
   context: ProjectAssistantContextSnapshot
-}
-
-export interface ProjectPhasePartData {
-  phase: ProjectPhase
-  snapshot: ProjectPhaseSnapshot
 }
 
 export type ProjectAgentStopPartData =
@@ -124,7 +118,6 @@ export interface ProjectAgentInterruptionResolvedPartData {
 export interface ProjectAgentChoiceResolvedPartData {
   runId?: string | null
   interruptionId?: string | null
-  choiceType: EditFirstChoiceType
   toolCallId?: string | null
   cardId?: string | null
 }
@@ -154,61 +147,18 @@ export interface AgentRuntimeContextPartData {
     operationIds: string[]
     disabledOperationIds: string[]
   }
-  editFirstWorkflow: EditFirstWorkflowView
   selectedTools: Array<{
     operationId: string
     description: string
   }>
 }
 
-export interface ProjectAgentChoiceCardSubmit {
-  kind: 'submit_tool_output'
-  decision: 'approve' | 'select'
-}
-
-export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm' | 'confirm_or_reply'
-export type ProjectAgentChoiceCardReplyMode = 'whole_card' | 'per_group'
-
-export interface ProjectAgentChoiceCardOption {
-  value: string
-  label: string
-  description?: string | null
-  imageUrl?: string | null
-  meta?: string | null
-}
-
-export interface ProjectAgentChoiceCardGroup {
-  key: string
-  label: string
-  required: boolean
-  presentation: 'options' | 'aspect_ratio' | 'image'
-  options: ProjectAgentChoiceCardOption[]
-}
-
-export interface ProjectAgentChoiceCardPartData {
-  cardId: string
-  runId: string
-  interruptionId: string
-  toolCallId: string
-  choiceType: EditFirstChoiceType
-  variant?: ProjectAgentChoiceCardVariant
-  replyMode: ProjectAgentChoiceCardReplyMode
-  autoSubmitOnReady?: boolean
-  title: string
-  description?: string | null
-  groups: ProjectAgentChoiceCardGroup[]
-  submitLabel: string
-  submit: ProjectAgentChoiceCardSubmit
-  replyLabel?: string | null
-  replyPlaceholder?: string | null
-  replySubmitLabel?: string | null
-  replyToolOutputKey?: string | null
-}
-
-export type ProjectAgentChoiceCardDefinition = Omit<
+export type {
+  ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCardPartData,
-  'runId' | 'interruptionId'
->
+} from './choice-offer'
+export type ProjectAgentChoiceCardGroup = ProjectAgentChoiceCardPartData['groups'][number]
+export type ProjectAgentChoiceCardOption = ProjectAgentChoiceCardGroup['options'][number]
 
 export interface TaskSubmittedPartData {
   operationId: string
@@ -255,13 +205,9 @@ export interface ProjectAssistantContextSnapshot {
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']
   recentOperationResults: ProjectContextSnapshot['recentOperationResults']
   editBible?: ProjectContextEditBibleSnapshot | null
-  editScript?: ProjectContextEditScriptSnapshot | null
-  editScripts?: ProjectContextEditScriptSnapshot[]
-  editFirstWorkflow: EditFirstWorkflowView
+  chapters?: ProjectContextEditChapterSnapshot[]
   config: {
     videoRatio: string | null
-    videoRatioConfirmedAt: string | null
-    videoRatioConfirmationVersion: number
   }
 }
 
@@ -289,7 +235,6 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'
-  | 'data-project-phase'
   | 'data-task-submitted'
   | 'data-task-batch-submitted'
   | 'data-project-context'

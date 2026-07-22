@@ -5,14 +5,12 @@
 // ==================== Asset Hub (全局资产) ====================
 export {
     // 角色相关
-    useGenerateCharacterImage,
     useSelectCharacterImage,
     useUndoCharacterImage,
     useUploadCharacterImage,
     useDeleteCharacter,
     useDeleteCharacterAppearance,
     // 场景相关
-    useGenerateLocationImage,
     useSelectLocationImage,
     useUndoLocationImage,
     useUploadLocationImage,
@@ -22,14 +20,8 @@ export {
     useUpdateLocationName,
     useUpdateCharacterAppearanceDescription,
     useUpdateLocationSummary,
-    useAiModifyCharacterDescription,
-    useAiModifyLocationDescription,
-    useAiModifyPropDescription,
     useUploadAssetHubTempMedia,
-    useAiDesignCharacter,
-    useExtractAssetHubReferenceCharacterDescription,
     useCreateAssetHubCharacter,
-    useGenerateAssetHubCharacterFromReference,
 } from './useAssetHubMutations'
 
 // ==================== Project (项目资产) ====================

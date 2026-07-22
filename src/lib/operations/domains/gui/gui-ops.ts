@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
-import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
@@ -45,36 +44,6 @@ const EFFECTS_WRITE_DESTRUCTIVE = {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function assertNoLegacyArtStyle(input: Record<string, unknown>) {
-  if (!Object.prototype.hasOwnProperty.call(input, 'artStyle')) return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'LEGACY_ART_STYLE_REMOVED',
-    field: 'artStyle',
-    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
-  })
-}
-
-const CREATE_CHARACTER_GENERATION_FIELDS = [
-  'referenceImageUrl',
-  'referenceImageUrls',
-  'generateFromReference',
-  'customDescription',
-  'count',
-  'meta',
-] as const
-
-function assertCreateCharacterRecordOnlyInput(input: Record<string, unknown>): void {
-  const unsupportedField = CREATE_CHARACTER_GENERATION_FIELDS.find((field) =>
-    Object.prototype.hasOwnProperty.call(input, field),
-  )
-  if (!unsupportedField) return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'PROJECT_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
-    field: unsupportedField,
-    message: 'create_character only creates the records; submit reference_to_character explicitly after creation.',
-  })
 }
 
 function isPrismaUniqueConstraintError(error: unknown): boolean {
@@ -139,8 +108,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
-        assertNoLegacyArtStyle(body)
-        assertCreateCharacterRecordOnlyInput(body)
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
 
@@ -451,7 +418,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
         const summary = normalizeString(input.summary)
@@ -680,7 +646,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 
         const episode = await (async () => {
           const createdEpisode = await transaction.projectEpisode.create({ data: createData })
-          await createDefaultEditChapter(createdEpisode.id, transaction)
           await transaction.project.update({
             where: { id: ctx.projectId },
             data: { lastEpisodeId: createdEpisode.id },

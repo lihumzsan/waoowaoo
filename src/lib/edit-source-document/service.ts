@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma'
 import { assertEditSourceDocumentWithinTokenBudget } from './estimator'
 import { isEditSourceDocumentValidationError } from './errors'
 import { normalizeEditSourceDocumentText } from './normalize'
-import { editSourceDocumentKindSchema, type EditSourceDocumentKind } from './schemas'
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient
 
@@ -14,10 +13,10 @@ export interface EditSourceDocumentRecord {
   readonly episodeId: string
   readonly normalizedText: string
   readonly checksum: string
-  readonly sourceKind: EditSourceDocumentKind
-  readonly scriptStructureJson: Prisma.JsonValue | null
-  readonly rawFileMediaId: string | null
   readonly version: number
+  readonly sourceResourceId: string
+  readonly sourceRevisionId: string
+  readonly sourceFingerprint: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -31,10 +30,10 @@ const editSourceDocumentSelect = {
   episodeId: true,
   normalizedText: true,
   checksum: true,
-  sourceKind: true,
-  scriptStructureJson: true,
-  rawFileMediaId: true,
   version: true,
+  sourceResourceId: true,
+  sourceRevisionId: true,
+  sourceFingerprint: true,
   createdAt: true,
   updatedAt: true,
 } as const
@@ -43,30 +42,19 @@ function checksumNormalizedText(text: string): string {
   return createHash('sha256').update(text).digest('hex')
 }
 
-function parseSourceKind(value: string): EditSourceDocumentKind {
-  return editSourceDocumentKindSchema.parse(value)
-}
-
 function mapSourceDocument(record: {
   readonly id: string
   readonly episodeId: string
   readonly normalizedText: string
   readonly checksum: string
-  readonly sourceKind: string
-  readonly scriptStructureJson: Prisma.JsonValue | null
-  readonly rawFileMediaId: string | null
   readonly version: number
+  readonly sourceResourceId: string
+  readonly sourceRevisionId: string
+  readonly sourceFingerprint: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }): EditSourceDocumentRecord {
-  return {
-    ...record,
-    sourceKind: parseSourceKind(record.sourceKind),
-  }
-}
-
-function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+  return record
 }
 
 async function assertEpisodeAccess(input: {
@@ -86,182 +74,67 @@ async function assertEpisodeAccess(input: {
   if (!episode) throw new ApiError('NOT_FOUND')
 }
 
-export async function assertEpisodeSourceWritable(input: {
+/**
+ * Builds the immutable source-range projection used by Bible and Chapter
+ * algorithms from one exact screenplay Resource revision. The Resource
+ * revision remains the screenplay authority; this row is only its indexed
+ * text projection and can never be confirmed or edited independently.
+ */
+export async function materializeScreenplayResourceProjection(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly client?: PrismaClientLike
-}) {
-  const client = input.client ?? prisma
-  await assertEpisodeAccess({ ...input, client })
-  const bible = await client.projectEditBible.findUnique({
-    where: { episodeId: input.episodeId },
-    select: { status: true, lockedAt: true },
-  })
-  if (!bible) return
-  if (bible.lockedAt || bible.status === 'confirmed') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SOURCE_DOCUMENT_LOCKED',
-      message: 'Episode source document cannot be changed after the edit bible is confirmed.',
-    })
-  }
-  if (bible.status === 'generating') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_BIBLE_GENERATION_ALREADY_RUNNING',
-      message: 'Edit bible generation is already running for this episode.',
-    })
-  }
-}
-
-export async function createEpisodeSourceDocument(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly sourceKind: EditSourceDocumentKind
+  readonly resourceId: string
+  readonly revisionId: string
+  readonly fingerprint: string
   readonly text: string
-  readonly rawFileMediaId?: string
-  readonly client?: PrismaClientLike
+  readonly client: Prisma.TransactionClient
 }): Promise<CreatedEditSourceDocument> {
-  const client = input.client ?? prisma
-  await assertEpisodeSourceWritable({ ...input, client })
-
-  if (input.sourceKind === 'upload' && !input.rawFileMediaId) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SOURCE_DOCUMENT_UPLOAD_MEDIA_REQUIRED',
-      message: 'Uploaded source documents must keep the raw file media id.',
-    })
-  }
-
+  await assertEpisodeAccess({ ...input, client: input.client })
   let normalizedText: string
   let estimatedInputTokens: number
   try {
     normalizedText = normalizeEditSourceDocumentText(input.text)
     estimatedInputTokens = assertEditSourceDocumentWithinTokenBudget(normalizedText)
-  } catch (error) {
+  } catch (error: unknown) {
     if (!isEditSourceDocumentValidationError(error)) throw error
-    throw new ApiError('INVALID_PARAMS', {
-      code: error.code,
-      message: error.message,
-    })
+    throw new ApiError('INVALID_PARAMS', { code: error.code, message: error.message })
   }
-  const latest = await client.projectEpisodeSourceDocument.findFirst({
+  const checksum = checksumNormalizedText(normalizedText)
+  const existing = await input.client.projectEpisodeSourceDocument.findUnique({
+    where: { sourceRevisionId: input.revisionId },
+    select: editSourceDocumentSelect,
+  })
+  if (existing) {
+    if (
+      existing.episodeId !== input.episodeId
+      || existing.sourceResourceId !== input.resourceId
+      || existing.sourceFingerprint !== input.fingerprint
+      || existing.normalizedText !== normalizedText
+    ) {
+      throw new Error(`SCREENPLAY_RESOURCE_PROJECTION_COLLISION:${input.revisionId}`)
+    }
+    return { ...mapSourceDocument(existing), estimatedInputTokens }
+  }
+  await input.client.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
+  `
+  const latest = await input.client.projectEpisodeSourceDocument.findFirst({
     where: { episodeId: input.episodeId },
     orderBy: { version: 'desc' },
     select: { version: true },
   })
-  const version = (latest?.version ?? 0) + 1
-  const record = await client.projectEpisodeSourceDocument.create({
+  const record = await input.client.projectEpisodeSourceDocument.create({
     data: {
       episodeId: input.episodeId,
       normalizedText,
-      checksum: checksumNormalizedText(normalizedText),
-      sourceKind: input.sourceKind,
-      rawFileMediaId: input.rawFileMediaId ?? null,
-      version,
+      checksum,
+      version: (latest?.version ?? 0) + 1,
+      sourceResourceId: input.resourceId,
+      sourceRevisionId: input.revisionId,
+      sourceFingerprint: input.fingerprint,
     },
     select: editSourceDocumentSelect,
   })
-  return {
-    ...mapSourceDocument(record),
-    estimatedInputTokens,
-  }
-}
-
-export async function readLatestEpisodeSourceDocument(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly client?: PrismaClientLike
-}): Promise<EditSourceDocumentRecord | null> {
-  const client = input.client ?? prisma
-  const record = await client.projectEpisodeSourceDocument.findFirst({
-    where: {
-      episodeId: input.episodeId,
-      episode: { projectId: input.projectId },
-    },
-    orderBy: { version: 'desc' },
-    select: editSourceDocumentSelect,
-  })
-  return record ? mapSourceDocument(record) : null
-}
-
-export async function readEpisodeSourceDocumentById(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly sourceDocumentId: string
-  readonly client?: PrismaClientLike
-}): Promise<EditSourceDocumentRecord> {
-  const client = input.client ?? prisma
-  const record = await client.projectEpisodeSourceDocument.findFirst({
-    where: {
-      id: input.sourceDocumentId,
-      episodeId: input.episodeId,
-      episode: { projectId: input.projectId },
-    },
-    select: editSourceDocumentSelect,
-  })
-  if (!record) throw new ApiError('NOT_FOUND')
-  return mapSourceDocument(record)
-}
-
-export async function materializePromptGeneratedSourceDocument(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly sourceDocumentId: string
-  readonly text: string
-  readonly scriptStructure: unknown
-  readonly client?: PrismaClientLike
-}): Promise<CreatedEditSourceDocument> {
-  const client = input.client ?? prisma
-  let normalizedText: string
-  let estimatedInputTokens: number
-  try {
-    normalizedText = normalizeEditSourceDocumentText(input.text)
-    estimatedInputTokens = assertEditSourceDocumentWithinTokenBudget(normalizedText)
-  } catch (error) {
-    if (!isEditSourceDocumentValidationError(error)) throw error
-    throw new ApiError('INVALID_PARAMS', {
-      code: error.code,
-      message: error.message,
-    })
-  }
-  const existing = await client.projectEpisodeSourceDocument.findFirst({
-    where: {
-      id: input.sourceDocumentId,
-      episodeId: input.episodeId,
-      sourceKind: 'prompt_generated_outline',
-      episode: { projectId: input.projectId },
-    },
-    select: { id: true },
-  })
-  if (!existing) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SOURCE_DOCUMENT_PROMPT_GENERATED_REQUIRED',
-      message: 'Only prompt-generated source documents can be materialized by the edit bible worker.',
-    })
-  }
-  const record = await client.projectEpisodeSourceDocument.update({
-    where: { id: input.sourceDocumentId },
-    data: {
-      normalizedText,
-      checksum: checksumNormalizedText(normalizedText),
-      sourceKind: 'prompt_generated_script',
-      scriptStructureJson: toInputJsonValue(input.scriptStructure),
-      version: { increment: 1 },
-    },
-    select: editSourceDocumentSelect,
-  })
-  return {
-    ...mapSourceDocument(record),
-    estimatedInputTokens,
-  }
-}
-
-export async function deleteEpisodeSourceDocumentForRollback(input: {
-  readonly sourceDocumentId: string
-  readonly client?: PrismaClientLike
-}) {
-  const client = input.client ?? prisma
-  await client.projectEpisodeSourceDocument.deleteMany({
-    where: { id: input.sourceDocumentId },
-  })
+  return { ...mapSourceDocument(record), estimatedInputTokens }
 }

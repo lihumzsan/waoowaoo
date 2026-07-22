@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
-import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { TextAttachmentUploadDialog } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
@@ -39,10 +38,7 @@ import { useWorkspaceAssistantComposer } from './workspace-assistant/useWorkspac
 import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useWorkspaceAssistantMessageDispatch'
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
-import { EditStylePreviewGenerationDataCard } from './workspace-assistant/EditStylePreviewGenerationDataCard'
-import { useWorkspaceStylePreviewGenerationView } from './workspace-assistant/useWorkspaceStylePreviewGenerationView'
 import {
-  resolveWorkspaceAssistantActiveOperationPresentation,
   resolveWorkspaceAssistantAwaitingExternalTask,
   resolveWorkspaceAssistantAwaitingUserInput,
   resolveWorkspaceAssistantRunFailureDetail,
@@ -62,7 +58,6 @@ interface WorkspaceAssistantPanelProps {
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
-  onStyleBibleConfirmed?: () => void
 }
 
 export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
@@ -116,8 +111,6 @@ export default function WorkspaceAssistantPanel({
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
-  const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
   const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(() => new Set())
   const visibleSubagents = useMemo(() => assistantRuntime.subagents.filter(
@@ -151,9 +144,6 @@ export default function WorkspaceAssistantPanel({
     storageLoading: assistantRuntime.storageLoading,
     onActiveOperationChange,
   })
-  const activeOperationPresentation = resolveWorkspaceAssistantActiveOperationPresentation(
-    activeExternalTaskOperationId,
-  )
   const activeExternalTasks = assistantRuntime.sessionState?.activeTasks ?? []
   const activeExternalTaskOperationIds = Array.from(new Set(
     activeExternalTasks.flatMap((task) => task.operationId ? [task.operationId] : []),
@@ -163,27 +153,7 @@ export default function WorkspaceAssistantPanel({
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
     ? { key: pendingInteraction.interruptionId, data: pendingInteraction.choiceCard }
     : null
-  const stylePreviewChoiceCard = activeChoiceCard?.data.choiceType === 'style'
-    ? activeChoiceCard
-    : null
-  const stylePreviewGenerationView = useWorkspaceStylePreviewGenerationView({
-    projectId,
-    episodeId,
-    enabled: activeOperationPresentation === 'stylePreviewGeneration' || Boolean(stylePreviewChoiceCard),
-  })
-  const stylePreviewDockCardKey = stylePreviewGenerationView
-    ? [
-        stylePreviewChoiceCard?.data.cardId ?? 'generation',
-        ...stylePreviewGenerationView.allCandidates.map((candidate) => candidate.id),
-      ].join(':')
-    : null
-  useEffect(() => {
-    setStylePreviewDockCollapsed(false)
-  }, [stylePreviewDockCardKey])
-
-  const displayedActiveChoiceCard = serverPendingApproval || activeChoiceCard?.data.choiceType === 'style'
-    ? null
-    : activeChoiceCard
+  const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     hideChoiceCards: true,
     onSubmitChoiceResponse: assistantRuntime.submitChoiceResponse,
@@ -304,29 +274,6 @@ export default function WorkspaceAssistantPanel({
                           })}
                         />
                       ) : null}
-                      {stylePreviewGenerationView ? (
-                        stylePreviewDockCollapsed ? (
-                          <button
-                            type="button"
-                            onClick={() => setStylePreviewDockCollapsed(false)}
-                            className="flex w-full items-center gap-2 rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 px-3.5 py-2.5 text-left shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-colors hover:bg-neutral-50"
-                          >
-                            <AppIcon name="imageAlt" className="h-4 w-4 shrink-0 text-[var(--glass-accent-from)]" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
-                              {t('panel.stylePreviewDockCollapsed', { count: stylePreviewGenerationView.candidates.length })}
-                            </span>
-                            <span className="shrink-0 text-sm font-medium text-[var(--glass-text-tertiary)]">{t('panel.stylePreviewDockExpand')}</span>
-                            <AppIcon name="chevronDown" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
-                          </button>
-                        ) : (
-                          <EditStylePreviewGenerationDataCard
-                            view={stylePreviewGenerationView}
-                            choiceCard={stylePreviewChoiceCard?.data ?? null}
-                            onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
-                            onPreviewImage={setPreviewImageUrl}
-                          />
-                        )
-                      ) : null}
                     </div>
                   </div>
                 )}
@@ -357,7 +304,6 @@ export default function WorkspaceAssistantPanel({
                     attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
                     onChange={composer.setText}
                     onSubmit={async () => {
-                      setStylePreviewDockCollapsed(true)
                       await composer.submit()
                     }}
                     onStopReply={assistantRuntime.stopReply}
@@ -370,9 +316,6 @@ export default function WorkspaceAssistantPanel({
           </AssistantRuntimeProvider>
         </div>
       </div>
-      {previewImageUrl ? (
-        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
-      ) : null}
       <TextAttachmentUploadDialog
         open={composer.attachmentDialogOpen}
         disabled={

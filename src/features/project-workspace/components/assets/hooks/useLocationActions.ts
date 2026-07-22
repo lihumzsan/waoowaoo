@@ -4,19 +4,17 @@ import { useTranslations } from 'next-intl'
 
 /**
  * useLocationActions - 场景资产操作 Hook
- * 从项目资产库模块提取，负责场景的 CRUD 和图片生成操作
+ * 从项目资产库模块提取，负责场景的 CRUD 和图片选择操作
  * 
  * 🔥 V6.5 重构：直接订阅 useProjectAssets，消除 props drilling
  */
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { isAbortError } from '@/lib/error-utils'
 import {
     useAssetActions,
     useProjectAssets,
     useRefreshProjectAssets,
-    useRegenerateSingleLocationImage,
-    useRegenerateLocationGroup,
     useDeleteProjectLocation,
     useSelectProjectLocationImage,
     useConfirmProjectLocationSelection,
@@ -46,16 +44,16 @@ export function useLocationActions({
     const t = useTranslations('assets')
     // 🔥 直接订阅缓存 - 消除 props drilling
     const { data: assets } = useProjectAssets(projectId)
-    const locations = assetType === 'prop' ? assets?.props ?? [] : assets?.locations ?? []
+    const locations = useMemo(
+        () => assetType === 'prop' ? assets?.props ?? [] : assets?.locations ?? [],
+        [assetType, assets?.locations, assets?.props],
+    )
     const propActions = useAssetActions({ scope: 'project', projectId, kind: 'prop' })
     const assetKey = assetType === 'prop' ? 'prop' : 'location'
 
     // 🔥 使用刷新函数 - mutations 完成后刷新缓存
     const refreshAssets = useRefreshProjectAssets(projectId)
 
-    // 🔥 V6.7: 使用重新生成mutation hooks
-    const regenerateSingleImage = useRegenerateSingleLocationImage(projectId)
-    const regenerateGroup = useRegenerateLocationGroup(projectId)
     const deleteLocationMutation = useDeleteProjectLocation(projectId)
     const selectLocationImageMutation = useSelectProjectLocationImage(projectId)
     const confirmLocationSelectionMutation = useConfirmProjectLocationSelection(projectId, assetType)
@@ -106,39 +104,7 @@ export function useLocationActions({
             }
             showToast?.(t('image.confirmFailed', { error: getErrorMessage(error, t('common.unknownError')) }), 'error')
         }
-    }, [assetType, confirmLocationSelectionMutation, showToast, t])
-
-    // 单张重新生成场景图片 - 🔥 V6.7: 使用mutation hook
-    const handleRegenerateSingleLocation = useCallback(async (locationId: string, imageIndex: number) => {
-        try {
-            if (assetType === 'prop') {
-                await propActions.generate({ id: locationId, imageIndex })
-            } else {
-                await regenerateSingleImage.mutateAsync({ locationId, imageIndex })
-            }
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
-            }
-            throw error
-        }
-    }, [assetType, propActions, regenerateSingleImage, t])
-
-    // 整组重新生成场景图片 - 🔥 V6.7: 使用mutation hook
-    const handleRegenerateLocationGroup = useCallback(async (locationId: string, count?: number) => {
-        try {
-            if (assetType === 'prop') {
-                await propActions.generate({ id: locationId, count })
-            } else {
-                await regenerateGroup.mutateAsync({ locationId, count })
-            }
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
-            }
-            throw error
-        }
-    }, [assetType, propActions, regenerateGroup, t])
+    }, [confirmLocationSelectionMutation, showToast, t])
 
     // 更新场景描述 - 🔥 保存到服务器
     const handleUpdateLocationDescription = useCallback(async (
@@ -177,8 +143,6 @@ export function useLocationActions({
         handleDeleteLocation,
         handleSelectLocationImage,
         handleConfirmLocationSelection,
-        handleRegenerateSingleLocation,
-        handleRegenerateLocationGroup,
         handleUpdateLocationDescription
     }
 }

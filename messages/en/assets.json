@@ -220,12 +220,6 @@
     "upload": "Upload",
     "unknownError": "Unknown error"
   },
-  "video": {
-    "panelCard": {
-      "generating": "Generating...",
-      "editPrompt": "Edit Prompt"
-    }
-  },
   "errors": {
     "saveFailed": "Save Failed, please retry",
     "failed": "failed, please retry",

@@ -20,7 +20,6 @@
     "PARSE_ERROR": "Model output could not be parsed. Please retry",
     "MODEL_OUTPUT_SCHEMA_INVALID": "Model output did not match the required schema. Please retry",
     "PLAN_VALIDATION_FAILED": "Generated plan did not pass validation. Please revise and retry",
-    "EDIT_SCRIPT_ASSET_MENU_EMPTY": "No confirmed scene or character assets are available for chapter planning",
     "PROVIDER_POLL_FAILED": "Provider polling failed. Please retry later",
     "PROVIDER_SUBMIT_FAILED": "Provider submission failed. Please retry later",
     "PROVIDER_SUBMISSION_REJECTED": "The provider rejected this generation request",

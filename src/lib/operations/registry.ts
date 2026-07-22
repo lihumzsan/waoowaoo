@@ -130,6 +130,29 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_LIFECYCLE_CONTRACT_INVALID:${operationId}`)
       }
     }
+    const choiceCommit = op.choiceCommit as { enabled?: unknown } | undefined
+    if (choiceCommit !== undefined) {
+      if (
+        !choiceCommit
+        || typeof choiceCommit !== 'object'
+        || Array.isArray(choiceCommit)
+        || choiceCommit.enabled !== true
+        || intent !== 'act'
+        || channels.tool !== true
+        || effects.writes !== true
+        || effects.billable !== false
+        || effects.destructive !== false
+        || effects.bulk !== false
+        || effects.externalSideEffects !== false
+        || effects.longRunning !== false
+        || confirmation.kind !== 'none'
+        || confirmation.required !== false
+        || agentFlow?.suspendsFor != null
+        || typeof op.executeInTransaction !== 'function'
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_COMMIT_CONTRACT_INVALID:${operationId}`)
+      }
+    }
     if (confirmation.kind === 'billable_media') {
       if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)

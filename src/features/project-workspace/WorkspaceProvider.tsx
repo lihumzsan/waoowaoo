@@ -51,8 +51,7 @@ export function WorkspaceProvider({ projectId, episodeId, children }: WorkspaceP
 
     if (episodeId) {
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.editBible(projectId, episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.editScript(projectId, episodeId) }))
-      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, episodeId) }))
+      promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.creativeResources(projectId, episodeId) }))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.project.context(projectId, episodeId) }))
       promises.push(queryClient.refetchQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) }))
     }

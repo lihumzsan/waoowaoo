@@ -4,7 +4,7 @@ import {
   type OperationPlanArtifactHashes,
 } from './operation-plan-snapshot'
 import { quoteOperationPlan } from './planning'
-import { enforceProjectVideoRatioConfirmation } from './project-video-ratio-policy'
+import { freezeProjectVideoRatioIntoPlan } from './project-video-ratio-policy'
 
 export type OperationPlanArtifactKey = keyof OperationPlanArtifactHashes
 
@@ -28,7 +28,7 @@ export async function buildCurrentOperationPlanArtifactHashes<Input>(params: {
     writer: null,
     executionAuthorization: null,
   }, params.normalizedInput)
-  const currentPlan = await enforceProjectVideoRatioConfirmation(rawCurrentPlan)
+  const currentPlan = await freezeProjectVideoRatioIntoPlan(rawCurrentPlan)
   const currentQuote = await quoteOperationPlan(currentPlan)
   return hashOperationPlanArtifacts({
     normalizedInput: params.normalizedInput,

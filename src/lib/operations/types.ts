@@ -160,6 +160,16 @@ export interface OperationAgentFlow {
   suspendsFor?: 'choice' | null
 }
 
+/**
+ * Opt-in capability for a deterministic, transaction-only domain mutation
+ * that may be frozen into a durable Choice Offer and committed with the
+ * user's current answer. Choice never owns domain semantics; the target
+ * Operation remains the sole writer and revalidates its complete input.
+ */
+export interface OperationChoiceCommit {
+  enabled: true
+}
+
 export type RuntimeSchemaSafeParseResult<T> = { success: true; data: T } | { success: false; error: { issues: unknown } }
 
 export type RuntimeSchema<T> = FlexibleSchema<T> & {
@@ -224,6 +234,7 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
   effects: OperationEffects
   resourceContract?: CreativeResourceOperationContract
   agentFlow?: OperationAgentFlow
+  choiceCommit?: OperationChoiceCommit
   /**
    * Model-facing OpenAI Agents SDK tool input schema.
    * This schema must never expose internal execution fields such as

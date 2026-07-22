@@ -11,7 +11,6 @@ import {
 } from '../run-fence'
 import { readProjectAgentDecisionInterruptionId } from '../execution-segment'
 import { PROJECT_AGENT_RUN_NON_TERMINAL_STATUSES } from '../run-state-machine'
-import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
   type ProjectAgentActivityStatus,
@@ -71,12 +70,7 @@ function toActivitySnapshot(record: {
   operationId: string | null
   sourceOperationId: string | null
   toolCallId: string | null
-  choiceType: string | null
 }): ProjectAgentActivitySnapshot {
-  const choiceType = record.choiceType
-  if (choiceType !== null && !isEditFirstChoiceType(choiceType)) {
-    throw new Error(`PROJECT_AGENT_ACTIVITY_CHOICE_TYPE_INVALID:${choiceType}`)
-  }
   return {
     activityId: record.id,
     runId: record.runId,
@@ -85,7 +79,6 @@ function toActivitySnapshot(record: {
     operationId: record.operationId,
     sourceOperationId: record.sourceOperationId,
     toolCallId: record.toolCallId,
-    choiceType,
   }
 }
 
@@ -104,7 +97,6 @@ async function getActivitySnapshot(
       operationId: true,
       sourceOperationId: true,
       toolCallId: true,
-      choiceType: true,
     },
   })
   return record ? toActivitySnapshot(record) : null
@@ -275,7 +267,6 @@ async function applyActivityStarted(
         operationId: event.operationId ?? null,
         sourceOperationId: event.sourceOperationId ?? null,
         toolCallId: event.toolCallId ?? null,
-        choiceType: event.choiceType ?? null,
       },
     })
   } catch (error) {
@@ -565,7 +556,6 @@ async function applyInterruptionRaised(
     type: event.interruptionKind === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
     operationId: event.operationId,
     toolCallId: event.toolCallId ?? null,
-    choiceType: event.choiceType ?? null,
   }, expectedFence)
   await tx.projectAgentInterruption.create({
     data: {

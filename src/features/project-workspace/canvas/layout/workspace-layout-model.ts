@@ -1,14 +1,6 @@
 import type { WorkspaceCanvasFlowEdge, WorkspaceCanvasFlowNode, WorkspaceCanvasNodeKind } from '../node-canvas-types'
 
-export type WorkspaceCanvasLayoutLane =
-  | 'story'
-  | 'editPipeline'
-  | 'editScript'
-  | 'assets'
-  | 'execution'
-  | 'videoPlan'
-  | 'bgm'
-  | 'resource'
+export type WorkspaceCanvasLayoutLane = 'resource'
 
 export type WorkspaceCanvasAnchorMode = 'none' | 'fixed' | 'manual'
 
@@ -74,48 +66,12 @@ function estimatedNodeSize(node: WorkspaceCanvasFlowNode): WorkspaceCanvasLayout
 }
 
 export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind): WorkspaceCanvasLayoutLane {
-  switch (kind) {
-    case 'editSourceScript':
-    case 'editBible':
-    case 'editStyleBible':
-      return 'story'
-    case 'editPipelineStep':
-    case 'editProcessGroup':
-      return 'editPipeline'
-    case 'editScript':
-      return 'editScript'
-    case 'editRequiredAsset':
-    case 'editAssetGroup':
-      return 'assets'
-    case 'editShotExecutionPlan':
-      return 'execution'
-    case 'videoPlan':
-      return 'videoPlan'
-    case 'bgmScore':
-      return 'bgm'
-    case 'resourceCard':
-      return 'resource'
-  }
+  void kind
+  return 'resource'
 }
 
-function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode, lane: WorkspaceCanvasLayoutLane): string {
-  switch (lane) {
-    case 'story':
-    case 'editPipeline':
-    case 'editScript':
-    case 'execution':
-    case 'bgm':
-    case 'resource':
-      return lane
-    case 'assets':
-      return node.data.editAssetDetails?.editScriptId
-        ? `assets:${node.data.editAssetDetails.editScriptId}`
-        : `assets:${node.data.targetType}`
-    case 'videoPlan':
-      return node.data.videoPlanDetails?.editScriptId
-        ? `videoPlan:${node.data.videoPlanDetails.editScriptId}`
-        : 'videoPlan'
-  }
+function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode): string {
+  return node.data.resourceDetails.resource.candidateSetId ?? node.data.targetId
 }
 
 function resolveAnchorMode(
@@ -167,7 +123,7 @@ export function buildWorkspaceCanvasLayoutModel(
       targetType: node.data.targetType,
       targetId: node.data.targetId,
       lane,
-      groupId: resolveWorkspaceCanvasGroupId(node, lane),
+      groupId: resolveWorkspaceCanvasGroupId(node),
       order,
       estimatedSize: estimatedNodeSize(node),
       measuredSize,

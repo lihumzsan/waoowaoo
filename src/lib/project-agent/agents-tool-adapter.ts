@@ -66,7 +66,6 @@ function writeActivityDataPart(
     operationId: activity.operationId,
     sourceOperationId: activity.sourceOperationId,
     toolCallId: activity.toolCallId,
-    choiceType: activity.choiceType,
   })
 }
 

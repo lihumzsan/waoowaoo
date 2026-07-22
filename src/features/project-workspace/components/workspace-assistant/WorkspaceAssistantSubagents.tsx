@@ -23,6 +23,7 @@ function localizeOutputKind(
     case 'screenplay_draft': return t('subagents.outputKinds.screenplayDraft')
     case 'edit_bible_bundle': return t('subagents.outputKinds.editBibleBundle')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
+    case 'chapter_plan': return t('subagents.outputKinds.chapterPlan')
     case 'style_bible': return t('subagents.outputKinds.styleBible')
     case 'asset_prompt_set': return t('subagents.outputKinds.assetPromptSet')
     case 'video_prompt_set': return t('subagents.outputKinds.videoPromptSet')

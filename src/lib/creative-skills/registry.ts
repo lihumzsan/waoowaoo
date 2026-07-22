@@ -39,13 +39,13 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     version: '1.0.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
-      zh: '从创意问诊、关键方向收敛到时长受控、完整可拍摄剧本的创作方法。',
-      en: 'Methods for creative intake, high-impact direction setting, runtime control, and complete filmable scripts.',
+      zh: '从创意问诊、关键方向收敛到时长受控剧本，以及基于精确剧本的可选 Chapter 规划方法。',
+      en: 'Methods for creative intake, direction setting, runtime-controlled scripts, and optional Chapter planning from an exact screenplay.',
     },
     tags: ['story', 'script', 'screenplay', 'intake', 'writing'],
     keywords: {
-      zh: ['故事', '剧本', '编剧', '创意', '问诊', '扩写', '人物动机', '冲突', '结局', '时长'],
-      en: ['story', 'script', 'screenplay', 'writer', 'intake', 'runtime', 'motivation', 'conflict', 'ending'],
+      zh: ['故事', '剧本', '编剧', '创意', '问诊', '扩写', '人物动机', '冲突', '结局', '时长', '章节规划', 'chapter_plan'],
+      en: ['story', 'script', 'screenplay', 'writer', 'intake', 'runtime', 'motivation', 'conflict', 'ending', 'chapter planning', 'chapter_plan'],
     },
   }),
   'continuity-memory': defineSkill({
@@ -53,13 +53,13 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     version: '1.0.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
-      zh: '从原文提取稳定事实、剧情节拍、持续状态变化与情绪区间的方法。',
-      en: 'Methods for extracting stable facts, narrative beats, persistent state changes, and emotional regions.',
+      zh: '从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
+      en: 'Methods for extracting stable facts, beats, and persistent state, plus continuity judgment for optional Chapter boundaries.',
     },
     tags: ['continuity', 'bible', 'story', 'state', 'analysis'],
     keywords: {
-      zh: ['连续性', '圣经', '设定', '角色', '地点', '节拍', '状态', '事件', '情绪', '时间线'],
-      en: ['continuity', 'bible', 'canon', 'character', 'location', 'beat', 'state', 'event', 'emotion', 'timeline'],
+      zh: ['连续性', '圣经', '设定', '角色', '地点', '节拍', '状态', '事件', '情绪', '时间线', '章节边界', 'chapter_plan'],
+      en: ['continuity', 'bible', 'canon', 'character', 'location', 'beat', 'state', 'event', 'emotion', 'timeline', 'chapter boundary', 'chapter_plan'],
     },
   }),
   'director-core': defineSkill({

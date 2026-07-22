@@ -21,36 +21,6 @@ function normalizeFolderFilter(value: unknown): string | null | undefined {
   return text
 }
 
-function assertNoLegacyArtStyle(body: Record<string, unknown>) {
-  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'LEGACY_ART_STYLE_REMOVED',
-    field: 'artStyle',
-    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
-  })
-}
-
-const ASSET_HUB_CHARACTER_GENERATION_FIELDS = [
-  'referenceImageUrl',
-  'referenceImageUrls',
-  'generateFromReference',
-  'customDescription',
-  'count',
-  'meta',
-] as const
-
-function assertAssetHubCharacterRecordOnlyInput(body: Record<string, unknown>): void {
-  const unsupportedField = ASSET_HUB_CHARACTER_GENERATION_FIELDS.find((field) =>
-    Object.prototype.hasOwnProperty.call(body, field),
-  )
-  if (!unsupportedField) return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'ASSET_HUB_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
-    field: unsupportedField,
-    message: 'asset_hub_create_character only creates records; submit asset_hub_reference_to_character explicitly.',
-  })
-}
-
 export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperationRegistryDraft {
   return {
     asset_hub_list_characters: defineOperation({
@@ -114,8 +84,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
-        assertNoLegacyArtStyle(body)
-        assertAssetHubCharacterRecordOnlyInput(body)
 
         const name = normalizeString(body.name)
         if (!name) throw new ApiError('INVALID_PARAMS')

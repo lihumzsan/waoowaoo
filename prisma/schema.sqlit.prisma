@@ -28,7 +28,7 @@ model Account {
 }
 
 model CharacterAppearance {
-  id                   String                  @id @default(uuid())
+  id                   String           @id @default(uuid())
   characterId          String
   appearanceIndex      Int
   changeReason         String
@@ -37,14 +37,14 @@ model CharacterAppearance {
   imageUrl             String?
   imageUrls            String?
   selectedIndex        Int?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @default(now()) @updatedAt
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @default(now()) @updatedAt
   previousImageUrl     String?
   previousImageUrls    String?
   previousDescription  String? // 上一次的描述词（用于撤回）
   previousDescriptions String? // 上一次的描述词数组（用于撤回）
   imageMediaId         String?
-  imageMedia           MediaObject?            @relation("CharacterAppearanceImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  imageMedia           MediaObject?     @relation("CharacterAppearanceImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
   character            ProjectCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, appearanceIndex])
@@ -54,18 +54,18 @@ model CharacterAppearance {
 }
 
 model LocationImage {
-  id                  String                 @id @default(uuid())
+  id                  String            @id @default(uuid())
   locationId          String
   imageIndex          Int
   description         String?
   imageUrl            String?
-  isSelected          Boolean                @default(false)
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @default(now()) @updatedAt
+  isSelected          Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @default(now()) @updatedAt
   previousImageUrl    String?
   previousDescription String? // 上一次的描述词（用于撤回）
   imageMediaId        String?
-  imageMedia          MediaObject?             @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  imageMedia          MediaObject?      @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
   location            ProjectLocation   @relation("LocationImages", fields: [locationId], references: [id], onDelete: Cascade)
   selectedByLocations ProjectLocation[] @relation("SelectedLocationImage")
 
@@ -95,18 +95,18 @@ model ProjectCharacter {
 }
 
 model ProjectLocation {
-  id                      String                @id @default(uuid())
-  projectId               String
-  name                    String
-  summary                 String? // 场景简要描述（用途/人物关联）
-  assetKind               String                @default("location")
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @default(now()) @updatedAt
-  sourceGlobalLocationId  String? // 🆕 来源全局场景ID（复制时记录）
-  selectedImageId         String?
-  selectedImage           LocationImage?        @relation("SelectedLocationImage", fields: [selectedImageId], references: [id], onDelete: SetNull)
-  images                  LocationImage[]       @relation("LocationImages")
-  project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                     String          @id @default(uuid())
+  projectId              String
+  name                   String
+  summary                String? // 场景简要描述（用途/人物关联）
+  assetKind              String          @default("location")
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @default(now()) @updatedAt
+  sourceGlobalLocationId String? // 🆕 来源全局场景ID（复制时记录）
+  selectedImageId        String?
+  selectedImage          LocationImage?  @relation("SelectedLocationImage", fields: [selectedImageId], references: [id], onDelete: SetNull)
+  images                 LocationImage[] @relation("LocationImages")
+  project                Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, assetKind, name])
   @@index([projectId])
@@ -115,28 +115,19 @@ model ProjectLocation {
 }
 
 model ProjectEpisode {
-  id                      String                     @id @default(uuid())
-  projectId               String
-  episodeNumber           Int
-  name                    String
-  description             String?
-  novelText               String?
-  audioUrl                String?
-  audioMediaId            String?
-  audioMedia              MediaObject?               @relation("ProjectEpisodeAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
-  srtContent              String?
-  createdAt               DateTime                   @default(now())
-  updatedAt               DateTime                   @default(now()) @updatedAt
-  project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  musicScore              ProjectEditMusicScore?
-  bgmDesign              ProjectEditBgmDesign?
-  finalOutput             ProjectEpisodeFinalOutput?
-  editBible          ProjectEditBible?
-  editStylePreviews       ProjectEditStylePreview[]
-  editScript              ProjectEditScript?
-  editShotExecutionPlan   ProjectEditShotExecutionPlan?
-  editAssetRequirements   ProjectEditAssetRequirement[]
-  videoSegments           ProjectVideoSegment[]
+  id            String       @id @default(uuid())
+  projectId     String
+  episodeNumber Int
+  name          String
+  description   String?
+  novelText     String?
+  audioUrl      String?
+  audioMediaId  String?
+  audioMedia    MediaObject? @relation("ProjectEpisodeAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
+  srtContent    String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, episodeNumber])
   @@index([projectId])
@@ -144,245 +135,32 @@ model ProjectEpisode {
   @@map("project_episodes")
 }
 
-model ProjectEditBible {
-  id             String         @id @default(uuid())
-  projectId      String
-  episodeId      String         @unique
-  userPrompt     String
-  styleBibleJson Json?
-  bibleText String
-  status         String         @default("ready")
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @default(now()) @updatedAt
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode        ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  stylePreviews  ProjectEditStylePreview[]
-  editScript     ProjectEditScript?
-
-  @@index([projectId])
-  @@index([episodeId])
-  @@map("project_edit_bibles")
-}
-
-model ProjectEditStylePreview {
-  id               String                @id @default(uuid())
-  projectId        String
-  episodeId        String
-  editBibleId String
-  styleKey         String
-  aspectRatio      String
-  title            String
-  summary          String
-  styleBibleJson   Json
-  imagePrompt      String
-  imageKey         String?
-  status           String                @default("pending")
-  taskId           String?
-  errorMessage     String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @default(now()) @updatedAt
-  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode          ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editBible   ProjectEditBible @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
-
-  @@unique([editBibleId, styleKey])
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([editBibleId])
-  @@index([taskId])
-  @@map("project_edit_style_previews")
-}
-
-model ProjectEditScript {
-  id             String                         @id @default(uuid())
-  projectId      String
-  episodeId      String                         @unique
-  editBibleId String                       @unique
-  corePlanJson  Json?
-  durationSec    Int
-  shotCount      Int
-  status         String                         @default("ready")
-  assetReviewStatus String                      @default("pending")
-  createdAt      DateTime                       @default(now())
-  updatedAt      DateTime                       @default(now()) @updatedAt
-  project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editBible ProjectEditBible          @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
-  shotExecutionPlan ProjectEditShotExecutionPlan?
-  requirements   ProjectEditAssetRequirement[]
-  videoSegments   ProjectVideoSegment[]
-
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([editBibleId])
-  @@map("project_edit_scripts")
-}
-
-model ProjectEditShotExecutionPlan {
-  id           String            @id @default(uuid())
-  projectId    String
-  episodeId    String            @unique
-  editScriptId String            @unique
-  executionPlanJson Json
-  status       String            @default("ready")
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @default(now()) @updatedAt
-  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode      ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScript   ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([editScriptId])
-  @@map("project_edit_shot_execution_plans")
-}
-
-model ProjectEditAssetRequirement {
-  id           String            @id @default(uuid())
-  editScriptId String
-  projectId    String
-  episodeId    String
-  kind         String
-  name         String
-  description  String
-  requiredForShotNumbers Json
-  status       String            @default("pending")
-  targetId     String?
-  errorMessage String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @default(now()) @updatedAt
-  editScript   ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
-  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode      ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@unique([editScriptId, kind, name])
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([targetId])
-  @@map("project_edit_asset_requirements")
-}
-
-// 视频编辑器项目 - 存储剪辑数据
-model ProjectEpisodeFinalOutput {
-  id            String         @id @default(uuid())
-  episodeId     String         @unique
-  renderStatus  String?
-  renderTaskId  String?
-  outputUrl     String?
-  outputMediaId String?
-  outputMedia   MediaObject?   @relation("ProjectEpisodeFinalOutputMedia", fields: [outputMediaId], references: [id], onDelete: SetNull)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @default(now()) @updatedAt
-  episode       ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([outputMediaId])
-  @@map("project_episode_final_outputs")
-}
-
-model ProjectEditMusicScore {
-  id                String         @id @default(uuid())
-  episodeId         String         @unique
-  cuesJson          Json?
-  mixJson           Json?
-  diagnosticsJson   Json?
-  version           Int            @default(1)
-  status            String         @default("pending")
-  taskId            String?
-  timelineSignature String?
-  designSignature   String?
-  musicModel        String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @default(now()) @updatedAt
-  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([episodeId])
-  @@index([taskId])
-  @@map("project_edit_music_scores")
-}
-
-model ProjectEditBgmDesign {
-  id                String         @id @default(uuid())
-  episodeId         String         @unique
-  designJson        Json?
-  diagnosticsJson   Json?
-  status            String         @default("pending")
-  taskId            String?
-  timelineSignature String?
-  designSignature   String?
-  analysisModel     String?
-  musicModel        String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @default(now()) @updatedAt
-  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([episodeId])
-  @@index([taskId])
-  @@map("project_edit_bgm_designs")
-}
-
-model ProjectVideoSegment {
-  id               String            @id @default(uuid())
-  projectId        String
-  episodeId        String
-  editScriptId     String
-  segmentId        String
-  inputSignature   String
-  durationSec      Int
-  status           String            @default("pending")
-  generationTaskId String?
-  errorCode        String?
-  errorMessage     String?
-  videoMediaId     String?
-  videoMedia       MediaObject?      @relation("ProjectVideoSegmentVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @default(now()) @updatedAt
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode          ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScript       ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
-
-  @@unique([editScriptId, segmentId])
-  @@index([projectId])
-  @@index([episodeId])
-  @@index([editScriptId])
-  @@index([videoMediaId])
-  @@index([generationTaskId])
-  @@map("project_video_segments")
-}
-
 model Project {
-  id                 String                 @id @default(uuid())
-  name               String
-  description        String?
-  userId             String
-  analysisModel      String?
-  imageModel         String?
-  videoModel         String?
-  musicModel         String?
-  videoRatio                      String?
-  videoRatioConfirmedAt           DateTime?
-  videoRatioConfirmationVersion   Int                    @default(0)
-  globalAssetText    String?
-  characterModel     String?
-  locationModel      String?
-  editModel          String?
-  videoResolution    String                 @default("720p")
+  id                  String             @id @default(uuid())
+  name                String
+  description         String?
+  userId              String
+  analysisModel       String?
+  imageModel          String?
+  videoModel          String?
+  musicModel          String?
+  videoRatio          String?
+  globalAssetText     String?
+  characterModel      String?
+  locationModel       String?
+  editModel           String?
+  videoResolution     String             @default("720p")
   capabilityOverrides String?
-  lastEpisodeId      String?
-  imageResolution    String                 @default("2K")
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @default(now()) @updatedAt
-  lastAccessedAt     DateTime?
-  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts         UsageCost[]
-  episodes           ProjectEpisode[]
-  characters         ProjectCharacter[]
-  locations          ProjectLocation[]
-  editBibles    ProjectEditBible[]
-  editStylePreviews  ProjectEditStylePreview[]
-  editScripts        ProjectEditScript[]
-  editShotExecutionPlans ProjectEditShotExecutionPlan[]
-  editAssetRequirements ProjectEditAssetRequirement[]
-  videoSegments      ProjectVideoSegment[]
+  lastEpisodeId       String?
+  imageResolution     String             @default("2K")
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @default(now()) @updatedAt
+  lastAccessedAt      DateTime?
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageCosts          UsageCost[]
+  episodes            ProjectEpisode[]
+  characters          ProjectCharacter[]
+  locations           ProjectLocation[]
 
   @@index([userId])
   @@map("projects")
@@ -449,25 +227,25 @@ model User {
 }
 
 model UserPreference {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  assistantModel  String? // 用户配置的 Assistant 对话模型（nullable，必须配置后才能使用）
-  analysisModel   String? // 用户配置的分析模型（nullable，必须配置后才能使用）
-  characterModel  String? // 用户配置的角色图片模型
-  locationModel   String? // 用户配置的场景图片模型
-  editModel       String? // 用户配置的修图模型
-  videoModel      String? // 用户配置的视频模型
-  musicModel      String? // 用户配置的音乐/配乐模型
-  analysisConcurrency Int? // 分析流程并发上限
-  imageConcurrency Int? // 图像流程并发上限
-  videoConcurrency Int? // 视频流程并发上限
-  videoRatio      String   @default("9:16")
-  videoResolution String   @default("720p")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
-  imageResolution String   @default("2K")
-  capabilityDefaults String?
-  assistantBillingConfirmationRequired Boolean @default(true)
+  id                                   String   @id @default(uuid())
+  userId                               String   @unique
+  assistantModel                       String? // 用户配置的 Assistant 对话模型（nullable，必须配置后才能使用）
+  analysisModel                        String? // 用户配置的分析模型（nullable，必须配置后才能使用）
+  characterModel                       String? // 用户配置的角色图片模型
+  locationModel                        String? // 用户配置的场景图片模型
+  editModel                            String? // 用户配置的修图模型
+  videoModel                           String? // 用户配置的视频模型
+  musicModel                           String? // 用户配置的音乐/配乐模型
+  analysisConcurrency                  Int? // 分析流程并发上限
+  imageConcurrency                     Int? // 图像流程并发上限
+  videoConcurrency                     Int? // 视频流程并发上限
+  videoRatio                           String   @default("9:16")
+  videoResolution                      String   @default("720p")
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @default(now()) @updatedAt
+  imageResolution                      String   @default("2K")
+  capabilityDefaults                   String?
+  assistantBillingConfirmationRequired Boolean  @default(true)
 
   // API Key 配置（极简版）
   llmBaseUrl  String? @default("https://openrouter.ai/api/v1")
@@ -510,18 +288,18 @@ model UserBalance {
 }
 
 model InviteCode {
-  id              String    @id @default(uuid())
-  codeHash        String    @unique
-  amount          Decimal
-  maxRedemptions  Int?
-  redeemedCount   Int       @default(0)
-  expiresAt       DateTime?
-  disabledAt      DateTime?
-  description     String?
-  createdBy       String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @default(now()) @updatedAt
-  redemptions     InviteRedemption[]
+  id             String             @id @default(uuid())
+  codeHash       String             @unique
+  amount         Decimal
+  maxRedemptions Int?
+  redeemedCount  Int                @default(0)
+  expiresAt      DateTime?
+  disabledAt     DateTime?
+  description    String?
+  createdBy      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @default(now()) @updatedAt
+  redemptions    InviteRedemption[]
 
   @@index([expiresAt])
   @@index([disabledAt])
@@ -543,18 +321,18 @@ model InviteRedemption {
 }
 
 model BalanceFreeze {
-  id        String   @id @default(uuid())
-  userId    String
-  amount    Decimal
-  status    String   @default("pending")
-  source    String?
-  taskId    String?
-  requestId String?
-  idempotencyKey String? @unique
-  metadata  String?
-  expiresAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id             String    @id @default(uuid())
+  userId         String
+  amount         Decimal
+  status         String    @default("pending")
+  source         String?
+  taskId         String?
+  requestId      String?
+  idempotencyKey String?   @unique
+  metadata       String?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -573,20 +351,20 @@ model BalanceTransaction {
   freezeId        String?
   operatorId      String?
   externalOrderId String?
-  idempotencyKey String?
+  idempotencyKey  String?
   projectId       String?
   episodeId       String?
   taskType        String?
   billingMeta     String?
   createdAt       DateTime @default(now())
 
+  @@unique([userId, type, idempotencyKey])
   @@index([userId])
   @@index([type])
   @@index([createdAt])
   @@index([freezeId])
   @@index([externalOrderId])
   @@index([projectId])
-  @@unique([userId, type, idempotencyKey])
   @@map("balance_transactions")
 }
 
@@ -696,10 +474,10 @@ model GlobalCharacter {
 
 // 全局角色形象（结构与 CharacterAppearance 一致）
 model GlobalCharacterAppearance {
-  id                   String   @id @default(uuid())
+  id                   String       @id @default(uuid())
   characterId          String
   appearanceIndex      Int
-  changeReason         String   @default("default")
+  changeReason         String       @default("default")
   description          String?
   descriptions         String?
   imageUrl             String?
@@ -713,8 +491,8 @@ model GlobalCharacterAppearance {
   previousImageUrls    String?
   previousDescription  String? // 上一次的描述词（用于撤回）
   previousDescriptions String? // 上一次的描述词数组（用于撤回）
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   character GlobalCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
@@ -746,20 +524,20 @@ model GlobalLocation {
 
 // 全局场景图片（结构与 LocationImage 一致）
 model GlobalLocationImage {
-  id                  String   @id @default(uuid())
-  locationId          String
-  imageIndex          Int
-  description         String?
-  imageUrl            String?
-  imageMediaId        String?
-  imageMedia          MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  isSelected          Boolean  @default(false)
-  previousImageUrl    String?
+  id                   String       @id @default(uuid())
+  locationId           String
+  imageIndex           Int
+  description          String?
+  imageUrl             String?
+  imageMediaId         String?
+  imageMedia           MediaObject? @relation("GlobalLocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+  isSelected           Boolean      @default(false)
+  previousImageUrl     String?
   previousImageMediaId String?
-  previousImageMedia  MediaObject? @relation("GlobalLocationImagePreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
-  previousDescription String? // 上一次的描述词（用于撤回）
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  previousImageMedia   MediaObject? @relation("GlobalLocationImagePreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
+  previousDescription  String? // 上一次的描述词（用于撤回）
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   location GlobalLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
@@ -785,13 +563,12 @@ model MediaObject {
 
   characterAppearanceImages             CharacterAppearance[]       @relation("CharacterAppearanceImageMedia")
   locationImages                        LocationImage[]             @relation("LocationImageMedia")
-  projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
-  projectVideoSegmentVideos             ProjectVideoSegment[]        @relation("ProjectVideoSegmentVideoMedia")
-  projectEpisodeFinalOutputVideos        ProjectEpisodeFinalOutput[] @relation("ProjectEpisodeFinalOutputMedia")
+  projectEpisodeAudios                  ProjectEpisode[]            @relation("ProjectEpisodeAudioMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]       @relation("GlobalLocationImageMedia")
   globalLocationImagePreviousImages     GlobalLocationImage[]       @relation("GlobalLocationImagePreviousImageMedia")
+
   @@index([createdAt])
   @@map("media_objects")
 }

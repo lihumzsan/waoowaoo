@@ -1,7 +1,6 @@
 'use client'
 
 import type { UserModelsPayload } from './useWorkspaceUserModels'
-import type { WorkspaceRuntimeValue } from '../WorkspaceRuntimeContext'
 import type { TaskPresentationState } from '@/lib/task/presentation'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
@@ -59,12 +58,10 @@ interface BuildWorkspaceControllerViewModelParams {
   executionState: {
     isConfirmingAssets: boolean
     isTransitioning: boolean
-    isAssistantWorkflowStarting: boolean
     transitionProgress: { step?: string; total?: number; current?: number }
     requestAssistantGuidance: () => Promise<void>
     showCreatingToast: boolean
   }
-  workspaceRuntime: WorkspaceRuntimeValue
   actionsState: {
     handleUpdateConfig: (key: string, value: unknown) => Promise<void>
     handleUpdateConfigPatch: (patch: Record<string, unknown>) => Promise<void>
@@ -80,7 +77,6 @@ export function buildWorkspaceControllerViewModel({
   uiState,
   rebuildState,
   executionState,
-  workspaceRuntime,
   actionsState,
 }: BuildWorkspaceControllerViewModelParams) {
   return {
@@ -89,7 +85,6 @@ export function buildWorkspaceControllerViewModel({
     ui: uiState,
     rebuild: rebuildState,
     execution: executionState,
-    runtime: { workspaceRuntime },
     actions: actionsState,
   }
 }

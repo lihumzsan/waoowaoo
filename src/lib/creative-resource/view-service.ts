@@ -539,11 +539,6 @@ export async function readProjectCreativeResourceWorkingSet(input: {
     count: entry._count._all,
   }))
   return {
-    confirmedScreenplay: canonicalBinding(
-      bindings,
-      CREATIVE_RESOURCE_CANONICAL_BINDINGS.confirmedScreenplay,
-      CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-    ),
     adoptedStyleBible: canonicalBinding(
       bindings,
       CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,

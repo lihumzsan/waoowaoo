@@ -80,13 +80,6 @@ async function publishMutationBatchEvent(params: Parameters<typeof buildMutation
   }
 }
 
-function resolveReplayEpisodeId(entries: Array<{ targetType: string }>, episodeId: string | null) {
-  const hasEpisodeScopedTarget = entries.some(
-    (entry) => entry.targetType === 'ProjectVideoSegment' || entry.targetType === 'ProjectEpisode',
-  )
-  return hasEpisodeScopedTarget ? episodeId : null
-}
-
 export async function listMutationBatchReplayEvents(params: {
   projectId: string
   userId: string
@@ -125,7 +118,7 @@ export async function listMutationBatchReplayEvents(params: {
       projectId: batch.projectId,
       userId: batch.userId,
       operationId: batch.operationId,
-      episodeId: resolveReplayEpisodeId(batch.entries, params.episodeId ?? null),
+      episodeId: null,
       entries: batch.entries,
       createdAt: batch.createdAt,
     }),

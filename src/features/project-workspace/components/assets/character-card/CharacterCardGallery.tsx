@@ -2,12 +2,8 @@
 
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { resolveErrorDisplay } from '@/lib/errors/display'
-import type { TaskPresentationState } from '@/lib/task/presentation'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
-import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
-import { buildAssetImageProgressSource } from '@/lib/task/asset-image-progress'
 
 type CharacterCardGalleryProps =
   | {
@@ -17,9 +13,6 @@ type CharacterCardGalleryProps =
     characterName: string
     imageUrlsWithIndex: Array<{ url: string; originalIndex: number }>
     selectedIndex: number | null
-    isGroupTaskRunning: boolean
-    isImageTaskRunning: (imageIndex: number) => boolean
-    displayTaskPresentation: TaskPresentationState | null
     onImageClick: (imageUrl: string) => void
     onSelectImage?: (characterId: string, appearanceId: string, imageIndex: number | null) => void
   }
@@ -31,75 +24,27 @@ type CharacterCardGalleryProps =
     currentImageUrl: string | null | undefined
     selectedIndex: number | null
     hasMultipleImages: boolean
-    isAppearanceTaskRunning: boolean
-    displayTaskPresentation: TaskPresentationState | null
-    appearanceErrorMessage?: string | null
     onImageClick: (imageUrl: string) => void
     overlayActions: ReactNode
   }
 
 export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
   const t = useTranslations('assets')
-  const tErrors = useTranslations('errors')
 
   if (props.mode === 'selection') {
     return (
       <div className="grid grid-cols-3 gap-3">
         {props.imageUrlsWithIndex.map(({ url, originalIndex }) => {
-          const isThisSelected = props.selectedIndex === originalIndex
-          const isThisTaskRunning = props.isImageTaskRunning(originalIndex) || props.isGroupTaskRunning
+          const isSelected = props.selectedIndex === originalIndex
           return (
             <div key={originalIndex} className="relative group/thumb">
-              <div
-                onClick={() => props.onImageClick(url)}
-                className={`rounded-lg overflow-hidden border-2 transition-all cursor-pointer relative ${isThisSelected
-                  ? 'border-[var(--glass-stroke-success)] ring-2 ring-[var(--glass-focus-ring)]'
-                  : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'
-                  }`}
-              >
-                <MediaImageWithLoading
-                  src={url}
-                  alt={`${props.characterName} - ${t('image.optionNumber', { number: originalIndex + 1 })}`}
-                  containerClassName="w-full min-h-[96px]"
-                  className="w-full h-auto object-contain"
-                />
-
-                {isThisTaskRunning && (
-                  <MediaGenerationLoading
-                    taskState={buildAssetImageProgressSource({
-                      assetKind: 'character',
-                      targetId: `${props.characterId}:${originalIndex}`,
-                      running: true,
-                    })}
-                    styleImageUrl={null}
-                    size={48}
-                  />
-                )}
-
-                <div
-                  className={`absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded ${isThisSelected ? 'bg-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-overlay)]'
-                    }`}
-                >
+              <div onClick={() => props.onImageClick(url)} className={`rounded-lg overflow-hidden border-2 cursor-pointer relative ${isSelected ? 'border-[var(--glass-stroke-success)] ring-2 ring-[var(--glass-focus-ring)]' : 'border-[var(--glass-stroke-base)] hover:border-[var(--glass-stroke-focus)]'}`}>
+                <MediaImageWithLoading src={url} alt={`${props.characterName} - ${t('image.optionNumber', { number: originalIndex + 1 })}`} containerClassName="w-full min-h-[96px]" className="w-full h-auto object-contain" />
+                <div className={`absolute bottom-2 left-2 flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded ${isSelected ? 'bg-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-overlay)]'}`}>
                   <span>{t('image.optionNumber', { number: originalIndex + 1 })}</span>
-                  {isThisSelected && (
-                    <AppIcon name="checkTiny" className="h-3 w-3" />
-                  )}
+                  {isSelected && <AppIcon name="checkTiny" className="h-3 w-3" />}
                 </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (!isThisTaskRunning) {
-                      props.onSelectImage?.(props.characterId, props.appearanceId, isThisSelected ? null : originalIndex)
-                    }
-                  }}
-                  disabled={isThisTaskRunning}
-                  className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-sm ${isThisSelected
-                    ? 'bg-[var(--glass-tone-success-fg)] text-white'
-                    : 'bg-[var(--glass-bg-surface-strong)] hover:bg-[var(--glass-accent-from)] hover:text-white'
-                    } disabled:opacity-50`}
-                  title={isThisSelected ? t('image.cancelSelection') : t('image.useThis')}
-                >
+                <button onClick={(event) => { event.stopPropagation(); props.onSelectImage?.(props.characterId, props.appearanceId, isSelected ? null : originalIndex) }} className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center ${isSelected ? 'bg-[var(--glass-tone-success-fg)] text-white' : 'bg-[var(--glass-bg-surface-strong)]'}`} title={isSelected ? t('image.cancelSelection') : t('image.useThis')}>
                   <AppIcon name="check" className="w-4 h-4" />
                 </button>
               </div>
@@ -110,57 +55,19 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
     )
   }
 
-  const appearanceErrorDisplay = resolveErrorDisplay({
-    code: props.appearanceErrorMessage || null,
-    message: props.appearanceErrorMessage || null,
-  }, (code) => tErrors(code))
-
   return (
     <div className={`relative overflow-hidden rounded-lg border-2 border-[var(--glass-stroke-base)] ${props.aspectClassName}`}>
       {props.currentImageUrl ? (
         <div className="relative h-full w-full">
-          <MediaImageWithLoading
-            src={props.currentImageUrl}
-            alt={`${props.characterName} - ${props.changeReason}`}
-            containerClassName="h-full w-full"
-            className="h-full w-full object-contain cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => props.onImageClick(props.currentImageUrl!)}
-          />
-          {props.selectedIndex !== null && props.hasMultipleImages && (
-            <div className="absolute bottom-2 left-2 bg-[var(--glass-tone-success-fg)] text-white text-xs px-2 py-0.5 rounded">
-              {t('image.optionNumber', { number: props.selectedIndex + 1 })}
-            </div>
-          )}
+          <MediaImageWithLoading src={props.currentImageUrl} alt={`${props.characterName} - ${props.changeReason}`} containerClassName="h-full w-full" className="h-full w-full object-contain cursor-pointer hover:opacity-90" onClick={() => props.onImageClick(props.currentImageUrl!)} />
+          {props.selectedIndex !== null && props.hasMultipleImages && <div className="absolute bottom-2 left-2 bg-[var(--glass-tone-success-fg)] text-white text-xs px-2 py-0.5 rounded">{t('image.optionNumber', { number: props.selectedIndex + 1 })}</div>}
         </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[var(--glass-bg-muted)]">
-          {appearanceErrorDisplay && !props.isAppearanceTaskRunning ? (
-            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-              <AppIcon name="alert" className="w-8 h-8 text-[var(--glass-tone-danger-fg)] mb-2" />
-              <div className="text-[var(--glass-tone-danger-fg)] text-xs font-medium mb-1">{t('common.generateFailed')}</div>
-              <div className="text-[var(--glass-tone-danger-fg)] text-xs max-w-full break-words">{appearanceErrorDisplay.message}</div>
-            </div>
-          ) : (
-            <AppIcon name="userAlt" className="w-8 h-8 text-[var(--glass-text-tertiary)]" />
-          )}
+          <AppIcon name="userAlt" className="w-8 h-8 text-[var(--glass-text-tertiary)]" />
         </div>
       )}
-      {props.isAppearanceTaskRunning && (
-        <MediaGenerationLoading
-          taskState={buildAssetImageProgressSource({
-            assetKind: 'character',
-            targetId: props.characterName,
-            running: true,
-          })}
-          styleImageUrl={null}
-          size={64}
-        />
-      )}
-      {!props.isAppearanceTaskRunning && (
-        <div className="absolute top-2 left-2 flex gap-1">
-          {props.overlayActions}
-        </div>
-      )}
+      <div className="absolute top-2 left-2 flex gap-1">{props.overlayActions}</div>
     </div>
   )
 }

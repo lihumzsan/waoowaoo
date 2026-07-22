@@ -1,9 +1,46 @@
+import { createHash } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
+import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 import { prisma } from '@/lib/prisma'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 import type { OperationPlan } from './planning'
 
-const PROJECT_VIDEO_RATIO_CONFIRMATION_METADATA_KEY = 'projectVideoRatioConfirmation'
+const PROJECT_VIDEO_RATIO_METADATA_KEY = 'projectVideoRatio'
+
+export interface ProjectVideoRatioSnapshot {
+  value: string
+  fingerprint: string
+}
+
+export function requireProjectVideoRatio(value: string | null | undefined): ProjectVideoRatioSnapshot {
+  const videoRatio = value?.trim() || null
+  if (!videoRatio) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
+      field: 'videoRatio',
+      allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
+      correction: {
+        choiceOperationId: 'request_choice',
+        commitmentOperationId: 'update_project_config',
+        commitmentInputField: 'videoRatio',
+      },
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  if (!Object.prototype.hasOwnProperty.call(ASPECT_RATIO_CONFIGS, videoRatio)) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_VIDEO_RATIO_INVALID',
+      field: 'videoRatio',
+      value: videoRatio,
+      allowedValues: Object.keys(ASPECT_RATIO_CONFIGS),
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  return {
+    value: videoRatio,
+    fingerprint: createHash('sha256').update(videoRatio).digest('hex'),
+  }
+}
 
 function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
   return plan.tasks.some((task) => (
@@ -13,11 +50,11 @@ function containsProjectImageOrVideoTask(plan: OperationPlan): boolean {
 }
 
 /**
- * Freezes the user-confirmed project frame into every image/video plan. This is
+ * Freezes the current project frame fact into every image/video plan. This is
  * the single planning boundary shared by Agent and API callers, so no task,
- * approval, retry, or replay can bypass confirmation or reuse an older version.
+ * approval, retry, or replay can reuse a plan after the fact changes.
  */
-export async function enforceProjectVideoRatioConfirmation(
+export async function freezeProjectVideoRatioIntoPlan(
   plan: OperationPlan,
 ): Promise<OperationPlan> {
   if (plan.projectId === GLOBAL_ASSET_PROJECT_ID || !containsProjectImageOrVideoTask(plan)) {
@@ -31,35 +68,17 @@ export async function enforceProjectVideoRatioConfirmation(
     },
     select: {
       videoRatio: true,
-      videoRatioConfirmedAt: true,
-      videoRatioConfirmationVersion: true,
     },
   })
   if (!project) throw new ApiError('NOT_FOUND')
 
-  const videoRatio = project.videoRatio?.trim() || null
-  if (
-    !videoRatio
-    || !project.videoRatioConfirmedAt
-    || project.videoRatioConfirmationVersion < 1
-  ) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_CONFIRMATION_REQUIRED',
-      field: 'videoRatio',
-      videoRatio,
-      confirmationVersion: project.videoRatioConfirmationVersion,
-      agentRetryableAfterCorrection: true,
-    })
-  }
+  const snapshot = requireProjectVideoRatio(project.videoRatio)
 
   return {
     ...plan,
     metadata: {
       ...(plan.metadata ?? {}),
-      [PROJECT_VIDEO_RATIO_CONFIRMATION_METADATA_KEY]: {
-        videoRatio,
-        version: project.videoRatioConfirmationVersion,
-      },
+      [PROJECT_VIDEO_RATIO_METADATA_KEY]: snapshot,
     },
   }
 }

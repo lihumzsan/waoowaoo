@@ -121,15 +121,15 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
                       },
                     },
                   },
+                  creativeResources: {
+                    where: { mediaType: 'video', status: 'ready', headRevisionId: { not: null } },
+                    select: { id: true },
+                  },
                   episodes: {
                     orderBy: { episodeNumber: 'asc' },
                     select: {
                       episodeNumber: true,
                       novelText: true,
-                      videoSegments: {
-                        where: { videoMediaId: { not: null } },
-                        select: { id: true },
-                      },
                     },
                   },
                 },
@@ -157,7 +157,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               (total, location) => total + location.images.filter((image) => image.imageMediaId || image.imageUrl).length,
               0,
             )
-            const videoCount = projectEntry.episodes.reduce((total, episode) => total + episode.videoSegments.length, 0)
+            const videoCount = projectEntry.creativeResources.length
             const firstEpisode = projectEntry.episodes[0]
             const preview = firstEpisode?.novelText ? firstEpisode.novelText.slice(0, 100) : null
             return [

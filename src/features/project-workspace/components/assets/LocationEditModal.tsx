@@ -8,10 +8,8 @@ interface LocationEditModalProps {
   description: string
   projectId: string
   onClose: () => void
-  onSave: (locationId: string) => void
   onUpdate: (newDescription: string) => void
   onNameUpdate?: (newName: string) => void
-  isTaskRunning?: boolean
 }
 
 export default function LocationEditModal({
@@ -20,10 +18,8 @@ export default function LocationEditModal({
   description,
   projectId,
   onClose,
-  onSave,
   onUpdate,
   onNameUpdate,
-  isTaskRunning = false,
 }: LocationEditModalProps) {
   return (
     <SharedLocationEditModal
@@ -33,10 +29,8 @@ export default function LocationEditModal({
       description={description}
       projectId={projectId}
       onClose={onClose}
-      onSave={onSave}
       onUpdate={onUpdate}
       onNameUpdate={onNameUpdate}
-      isTaskRunning={isTaskRunning}
     />
   )
 }

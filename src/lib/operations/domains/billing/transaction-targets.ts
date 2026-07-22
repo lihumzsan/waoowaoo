@@ -19,14 +19,8 @@ export async function resolveBillingTransactionTargets(
   const characterAppearanceIds = idsFor(idsByType, 'CharacterAppearance')
   const projectLocationIds = idsFor(idsByType, 'ProjectLocation')
   const locationImageIds = idsFor(idsByType, 'LocationImage')
-  const videoSegmentIds = idsFor(idsByType, 'ProjectVideoSegment')
-  const stylePreviewIds = idsFor(idsByType, 'ProjectEditStylePreview')
+  const creativeResourceIds = idsFor(idsByType, 'CreativeResource')
   const episodeIds = idsFor(idsByType, 'ProjectEpisode')
-  const editSourceScriptIds = idsFor(idsByType, 'ProjectEditSourceScript')
-  const editBibleIds = idsFor(idsByType, 'ProjectEditBible')
-  const editBibleRecordIds = Array.from(new Set([...editSourceScriptIds, ...editBibleIds]))
-  const editScriptIds = idsFor(idsByType, 'ProjectEditScript')
-  const editShotExecutionPlanIds = idsFor(idsByType, 'ProjectEditShotExecutionPlan')
   const projectIds = idsFor(idsByType, 'Project')
   const globalCharacterIds = idsFor(idsByType, 'GlobalCharacter')
   const globalCharacterAppearanceIds = idsFor(idsByType, 'GlobalCharacterAppearance')
@@ -37,12 +31,8 @@ export async function resolveBillingTransactionTargets(
     characterAppearances,
     projectLocations,
     locationImages,
-    videoSegments,
-    stylePreviews,
+    creativeResources,
     episodes,
-    editBibles,
-    editScripts,
-    editShotExecutionPlans,
     projects,
     globalCharacters,
     globalCharacterAppearances,
@@ -73,40 +63,16 @@ export async function resolveBillingTransactionTargets(
         select: { id: true, imageIndex: true, location: { select: { name: true } } },
       })
       : Promise.resolve([]),
-    videoSegmentIds.length > 0
-      ? prisma.projectVideoSegment.findMany({
-        where: { id: { in: videoSegmentIds } },
-        select: { id: true, segmentId: true },
-      })
-      : Promise.resolve([]),
-    stylePreviewIds.length > 0
-      ? prisma.projectEditStylePreview.findMany({
-        where: { id: { in: stylePreviewIds } },
-        select: { id: true, title: true, styleKey: true },
+    creativeResourceIds.length > 0
+      ? prisma.creativeResource.findMany({
+        where: { id: { in: creativeResourceIds } },
+        select: { id: true, name: true },
       })
       : Promise.resolve([]),
     episodeIds.length > 0
       ? prisma.projectEpisode.findMany({
         where: { id: { in: episodeIds } },
         select: { id: true, episodeNumber: true, name: true },
-      })
-      : Promise.resolve([]),
-    editBibleRecordIds.length > 0
-      ? prisma.projectEditBible.findMany({
-        where: { id: { in: editBibleRecordIds } },
-        select: { id: true, episode: { select: { episodeNumber: true, name: true } } },
-      })
-      : Promise.resolve([]),
-    editScriptIds.length > 0
-      ? prisma.projectEditScript.findMany({
-        where: { id: { in: editScriptIds } },
-        select: { id: true, episode: { select: { episodeNumber: true, name: true } } },
-      })
-      : Promise.resolve([]),
-    editShotExecutionPlanIds.length > 0
-      ? prisma.projectEditShotExecutionPlan.findMany({
-        where: { id: { in: editShotExecutionPlanIds } },
-        select: { id: true, episode: { select: { episodeNumber: true, name: true } } },
       })
       : Promise.resolve([]),
     projectIds.length > 0
@@ -177,21 +143,12 @@ export async function resolveBillingTransactionTargets(
     })
   }
 
-  for (const segment of videoSegments) {
+  for (const resource of creativeResources) {
     assignTargetView(result, refsByKey, {
-      targetType: 'ProjectVideoSegment',
-      targetId: segment.id,
-      labelKey: 'transactionTargets.projectVideoSegment',
-      labelParams: { segment: segment.segmentId },
-    })
-  }
-
-  for (const preview of stylePreviews) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditStylePreview',
-      targetId: preview.id,
-      labelKey: 'transactionTargets.projectEditStylePreview',
-      labelParams: { title: preview.title || preview.styleKey },
+      targetType: 'CreativeResource',
+      targetId: resource.id,
+      labelKey: 'transactionTargets.creativeResource',
+      labelParams: { name: resource.name },
     })
   }
 
@@ -201,39 +158,6 @@ export async function resolveBillingTransactionTargets(
       targetId: episode.id,
       labelKey: 'transactionTargets.projectEpisode',
       labelParams: { number: episode.episodeNumber, name: episode.name },
-    })
-  }
-
-  for (const bible of editBibles) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditSourceScript',
-      targetId: bible.id,
-      labelKey: 'transactionTargets.projectEditSourceScript',
-      labelParams: { number: bible.episode.episodeNumber },
-    })
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditBible',
-      targetId: bible.id,
-      labelKey: 'transactionTargets.projectEditBible',
-      labelParams: { number: bible.episode.episodeNumber },
-    })
-  }
-
-  for (const script of editScripts) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditScript',
-      targetId: script.id,
-      labelKey: 'transactionTargets.projectEditScript',
-      labelParams: { number: script.episode.episodeNumber },
-    })
-  }
-
-  for (const plan of editShotExecutionPlans) {
-    assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditShotExecutionPlan',
-      targetId: plan.id,
-      labelKey: 'transactionTargets.projectEditShotExecutionPlan',
-      labelParams: { number: plan.episode.episodeNumber },
     })
   }
 

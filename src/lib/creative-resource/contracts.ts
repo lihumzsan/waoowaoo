@@ -8,10 +8,6 @@ export const CREATIVE_RESOURCE_STATUSES = ['pending', 'ready', 'failed', 'cancel
 export type CreativeResourceStatus = typeof CREATIVE_RESOURCE_STATUSES[number]
 
 export const CREATIVE_RESOURCE_CANONICAL_BINDINGS = {
-  confirmedScreenplay: {
-    role: 'confirmed_screenplay',
-    slotKey: 'primary',
-  },
   adoptedStyleBible: {
     role: 'adopted_style_bible',
     slotKey: 'primary',
@@ -179,7 +175,6 @@ export interface CreativeResourceWorkingBindingView {
 }
 
 export interface CreativeResourceWorkingSetView {
-  readonly confirmedScreenplay: CreativeResourceWorkingBindingView | null
   readonly adoptedStyleBible: CreativeResourceWorkingBindingView | null
   readonly bindings: readonly CreativeResourceWorkingBindingView[]
   readonly availableResources: {

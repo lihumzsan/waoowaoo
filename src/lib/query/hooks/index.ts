@@ -2,7 +2,7 @@
  * React Query Hooks 统一导出
  * 
  * 使用示例：
- * import { useProjectAssets, useGenerateProjectCharacterImage } from '@/lib/query/hooks'
+ * import { useProjectAssets } from '@/lib/query/hooks'
  */
 
 // 中心资产库
@@ -29,13 +29,11 @@ export {
     type GlobalFolder,
 } from './useGlobalAssets'
 export {
-    useGenerateCharacterImage,
     useSelectCharacterImage,
     useUndoCharacterImage,
     useUploadCharacterImage,
     useDeleteCharacter,
     useDeleteCharacterAppearance,
-    useGenerateLocationImage,
     useSelectLocationImage,
     useUndoLocationImage,
     useUploadLocationImage,
@@ -44,16 +42,9 @@ export {
     useUpdateLocationName,
     useUpdateCharacterAppearanceDescription,
     useUpdateLocationSummary,
-    useAiModifyCharacterDescription,
-    useAiModifyLocationDescription,
-    useAiModifyPropDescription,
-    useAiDesignLocation,
     useCreateAssetHubLocation,
     useUploadAssetHubTempMedia,
-    useAiDesignCharacter,
-    useExtractAssetHubReferenceCharacterDescription,
     useCreateAssetHubCharacter,
-    useGenerateAssetHubCharacterFromReference,
 } from '../mutations/useAssetHubMutations'
 
 // 项目资产
@@ -66,18 +57,12 @@ export {
     type ProjectAssetsData,
 } from './useProjectAssets'
 export {
-    useGenerateProjectCharacterImage,
-    useRegenerateCharacterGroup,
-    useRegenerateSingleCharacterImage,
     useSelectProjectCharacterImage,
     useUndoProjectCharacterImage,
     useUploadProjectCharacterImage,
     useDeleteProjectCharacter,
     useDeleteProjectAppearance,
     useUpdateProjectCharacterName,
-    useGenerateProjectLocationImage,
-    useRegenerateLocationGroup,
-    useRegenerateSingleLocationImage,
     useSelectProjectLocationImage,
     useUndoProjectLocationImage,
     useUploadProjectLocationImage,
@@ -86,16 +71,9 @@ export {
     useUpdateProjectAppearanceDescription,
     useUpdateProjectLocationDescription,
     useUpdateProjectCharacterIntroduction,
-    useAiModifyProjectAppearanceDescription,
-    useAiModifyProjectLocationDescription,
-    useAiModifyProjectPropDescription,
-    useAiCreateProjectLocation,
     useCreateProjectLocation,
-    useAiCreateProjectCharacter,
     useUploadProjectTempMedia,
-    useExtractProjectReferenceCharacterDescription,
     useCreateProjectCharacter,
-    useGenerateProjectCharacterFromReference,
     useCreateProjectCharacterAppearance,
     useCopyProjectAssetFromGlobal,
     useUpdateProjectConfig,
@@ -113,11 +91,6 @@ export type {
     Prop,
     PropImage,
 } from '@/types/project'
-
-export {
-    useRenderFinalVideo,
-    usePlanBgmDesign,
-} from './useFinalMedia'
 
 // 实时任务
 export {
@@ -153,15 +126,7 @@ export {
     projectEditBibleQueryOptions,
     useProjectEditBible,
     useProjectEditBibleResponse,
-    useProjectEditScript,
-    useProjectEditShotExecutionPlan,
-    useCreateProjectEditShotExecutionPlan,
-    useCreateProjectEditBible,
-    useCreateProjectEditScript,
-    useConfirmProjectEditBible,
-    useReviseProjectEditBible,
-    useUpdateProjectEditScriptAssetRequirementDescription,
-} from './useProjectEditScript'
+} from './useProjectBible'
 
 export {
     useProjectAssistantThread,

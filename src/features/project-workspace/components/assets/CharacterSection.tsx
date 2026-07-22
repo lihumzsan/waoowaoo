@@ -1,5 +1,4 @@
 'use client'
-import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
@@ -21,20 +20,13 @@ interface CharacterSectionProps {
     projectId: string
     focusCharacterId?: string | null
     focusCharacterRequestId?: number
-    activeTaskKeys: Set<string>
-    onClearSubmittingTaskKey: (key: string) => void
-    onRegisterSubmittingTaskKey: (key: string) => void
     // 回调函数
     onAddCharacter: () => void
     onDeleteCharacter: (characterId: string) => void
     onDeleteAppearance: (characterId: string, appearanceId: string) => void
     onEditAppearance: (characterId: string, characterName: string, appearance: CharacterAppearance, introduction?: string | null) => void
-    // 🔥 V6.6 重构：重命名为 handleGenerateImage
-    handleGenerateImage: (type: 'character' | 'location', id: string, appearanceId?: string, count?: number) => Promise<void>
     onSelectImage: (characterId: string, appearanceId: string, imageIndex: number | null) => void
-    onConfirmSelection: (characterId: string, appearanceId: string) => void
-    onRegenerateSingle: (characterId: string, appearanceId: string, imageIndex: number) => Promise<void>
-    onRegenerateGroup: (characterId: string, appearanceId: string, count?: number) => Promise<void>
+    onConfirmSelection: (characterId: string, appearanceId: string) => Promise<void> | void
     onUndo: (characterId: string, appearanceId: string) => void
     onImageClick: (imageUrl: string) => void
     onCopyFromGlobal: (characterId: string) => void  // 🆕 从资产中心复制
@@ -49,18 +41,12 @@ export default function CharacterSection({
     projectId,
     focusCharacterId = null,
     focusCharacterRequestId = 0,
-    activeTaskKeys,
-    onClearSubmittingTaskKey,
-    onRegisterSubmittingTaskKey,
     onAddCharacter,
     onDeleteCharacter,
     onDeleteAppearance,
     onEditAppearance,
-    handleGenerateImage,
     onSelectImage,
     onConfirmSelection,
-    onRegenerateSingle,
-    onRegenerateGroup,
     onUndo,
     onImageClick,
     onCopyFromGlobal,
@@ -161,11 +147,6 @@ export default function CharacterSection({
                     const sortedAppearances = [...appearances].sort((a, b) => a.appearanceIndex - b.appearanceIndex)
                     const primaryAppearance = sortedAppearances.find(a => a.appearanceIndex === PRIMARY_APPEARANCE_INDEX) || sortedAppearances[0]
 
-                    const primaryImageUrl = primaryAppearance?.selectedIndex !== null && primaryAppearance?.selectedIndex !== undefined
-                        ? (primaryAppearance?.imageUrls?.[primaryAppearance.selectedIndex!] || primaryAppearance?.imageUrl)
-                        : (primaryAppearance?.imageUrl || (primaryAppearance?.imageUrls && primaryAppearance.imageUrls.length > 0 ? primaryAppearance.imageUrls[0] : null))
-                    const primarySelected = !!primaryImageUrl
-
                     return (
                         <div
                             key={character.id}
@@ -211,54 +192,12 @@ export default function CharacterSection({
                                             onEdit={() => onEditAppearance(character.id, character.name, appearance, character.introduction)}
                                             onDelete={() => onDeleteCharacter(character.id)}
                                             onDeleteAppearance={() => appearance.id && onDeleteAppearance(character.id, appearance.id)}
-                                            onRegenerate={(count) => {
-                                                // 获取有效图片数量
-                                                const imageUrls = appearance.imageUrls || []
-                                                const validImageCount = imageUrls.filter(url => !!url).length
-
-                                                _ulogInfo('[CharacterSection] 重新生成判断:', {
-                                                    characterName: character.name,
-                                                    appearanceIndex: appearance.appearanceIndex,
-                                                    imageUrls,
-                                                    validImageCount,
-                                                    selectedIndex: appearance.selectedIndex
-                                                })
-
-                                                // 单图：重新生成单张
-                                                if (validImageCount === 1) {
-                                                    const selectedIndex = appearance.selectedIndex ?? 0
-                                                    const taskKey = `character-${character.id}-${appearance.appearanceIndex}-${selectedIndex}`
-                                                    _ulogInfo('[CharacterSection] 调用单张重新生成, imageIndex:', selectedIndex)
-                                                    onRegisterSubmittingTaskKey(taskKey)
-                                                    void onRegenerateSingle(character.id, appearance.id, selectedIndex)
-                                                        .catch(() => undefined)
-                                                        .finally(() => onClearSubmittingTaskKey(taskKey))
-                                                }
-                                                // 多图或无图：重新生成整组
-                                                else {
-                                                    const taskKey = `character-${character.id}-${appearance.appearanceIndex}-group`
-                                                    _ulogInfo('[CharacterSection] 调用整组重新生成')
-                                                    onRegisterSubmittingTaskKey(taskKey)
-                                                    void onRegenerateGroup(character.id, appearance.id, count)
-                                                        .catch(() => undefined)
-                                                        .finally(() => onClearSubmittingTaskKey(taskKey))
-                                                }
-                                            }}
-                                            onGenerate={(count) => {
-                                                const taskKey = `character-${character.id}-${appearance.appearanceIndex}-group`
-                                                onRegisterSubmittingTaskKey(taskKey)
-                                                void handleGenerateImage('character', character.id, appearance.id, count)
-                                                    .catch(() => undefined)
-                                                    .finally(() => onClearSubmittingTaskKey(taskKey))
-                                            }}
                                             onUndo={() => onUndo(character.id, appearance.id)}
                                             onImageClick={onImageClick}
                                             showDeleteButton={true}
                                             appearanceCount={sortedAppearances.length}
                                             onSelectImage={onSelectImage}
-                                            activeTaskKeys={activeTaskKeys}
                                             isPrimaryAppearance={isPrimary}
-                                            primaryAppearanceSelected={primarySelected}
                                             projectId={projectId}
                                             onConfirmSelection={onConfirmSelection}
                                         />

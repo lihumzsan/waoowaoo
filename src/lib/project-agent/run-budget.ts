@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { stableArgsHash } from './stable-args-hash'
 import type { ProjectAgentContext } from './types'
 import type { ProjectAgentToolResult } from '@/lib/operations/types'
 
@@ -29,24 +30,12 @@ export function buildProjectAgentOperationTargetKey(input: {
   context: ProjectAgentContext
   toolInput: unknown
 }): string {
-  const record = isRecord(input.toolInput) ? input.toolInput : {}
-  const targetFields = [
-    'chapterId',
-    'taskId',
-    'batchKey',
-    'stylePreviewId',
-    'requirementId',
-    'segmentId',
-    'assetId',
-    'editScriptId',
-  ] as const
-  for (const field of targetFields) {
-    const value = readTrimmedString(record[field])
-    if (value) return `${field}:${value}`
-  }
-  const episodeId = readTrimmedString(input.context.episodeId)
-  if (episodeId) return `episodeId:${episodeId}`
-  return `projectId:${input.projectId}`
+  return `input:${stableArgsHash({
+    operationId: input.operationId,
+    projectId: input.projectId,
+    episodeId: input.context.episodeId ?? null,
+    input: input.toolInput,
+  })}`
 }
 
 export async function enforceProjectAgentOperationRunBudget(input: {

@@ -68,8 +68,7 @@ import {
   isProjectAgentRunOwnershipLostError,
   startProjectAgentRunHeartbeat,
 } from './run-heartbeat'
-import type { EditFirstChoiceResult } from './edit-first-choice-result'
-import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
+import type { ProjectAgentChoiceResult } from './choice-result'
 import {
   type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
@@ -109,7 +108,6 @@ import {
   readProjectAssistantTextAttachmentsFromMessage,
 } from './text-attachments'
 import { appendProjectAssistantThreadMessages } from './persistence'
-import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import {
   mergeOperationPlanViewsForApproval,
   type OperationPlanView,
@@ -188,9 +186,8 @@ function resolveProjectAgentRunFailureTerminal(params: {
 /**
  * Control resolved by the route from the structured request body + database.
  * Choice controls carry the submitted user decision plus the identity of an
- * atomic confirmation Operation already committed by the Choice transaction,
- * when applicable. The model chooses only the subsequent tool from the
- * refreshed workflow availability.
+ * current Choice-eligible Operation already committed by the Choice
+ * transaction, when applicable. Follow-up work is a fresh Primary decision.
  */
 export type ProjectAgentResolvedControl =
   | {
@@ -206,11 +203,10 @@ export type ProjectAgentResolvedControl =
   | {
     kind: 'choice'
     interruptionId: string
-    choiceType: EditFirstChoiceType
     toolCallId: string | null
     cardId: string | null
     appliedOperationId: string | null
-    choiceResult: EditFirstChoiceResult
+    choiceResult: ProjectAgentChoiceResult
   }
   | {
     kind: 'task_follow_up'
@@ -436,25 +432,72 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
   return normalized || 'none'
 }
 
+interface ProjectRuntimeFacts {
+  planning: {
+    bibleVersion: number | null
+    screenplayFingerprint: string | null
+    bibleFingerprint: string | null
+    chapterCount: number
+  }
+}
+
+async function readProjectRuntimeFacts(params: {
+  projectId: string
+  userId: string
+  episodeId: string | null
+}): Promise<ProjectRuntimeFacts> {
+  const [bible, chapterCount] = await Promise.all([
+    params.episodeId
+      ? prisma.projectEditBible.findFirst({
+          where: {
+            episodeId: params.episodeId,
+            episode: {
+              projectId: params.projectId,
+              project: { userId: params.userId },
+            },
+          },
+          select: {
+            version: true,
+            bibleFingerprint: true,
+            sourceDocument: {
+              select: { sourceFingerprint: true },
+            },
+          },
+        })
+      : Promise.resolve(null),
+    params.episodeId
+      ? prisma.projectEditChapter.count({
+          where: {
+            episodeId: params.episodeId,
+            episode: {
+              projectId: params.projectId,
+              project: { userId: params.userId },
+            },
+          },
+        })
+      : Promise.resolve(0),
+  ])
+  return {
+    planning: {
+      bibleVersion: bible?.version ?? null,
+      screenplayFingerprint: bible?.sourceDocument.sourceFingerprint ?? null,
+      bibleFingerprint: bible?.bibleFingerprint ?? null,
+      chapterCount,
+    },
+  }
+}
+
 function buildProjectStateVersion(params: {
   videoRatio: string | null
-  videoRatioConfirmationVersion: number
-  phase: ProjectPhaseSnapshot
+  facts: ProjectRuntimeFacts
   creativeWorkingSet: CreativeResourceWorkingSetView
 }): string {
-  const workflow = params.phase.editFirstWorkflow
   return [
     params.videoRatio ?? 'none',
-    String(params.videoRatioConfirmationVersion),
-    params.phase.phase,
-    workflow.step,
-    workflow.status.kind,
-    workflow.recommendation.recommendedAction?.operationId ?? 'none',
-    params.phase.planning.editBibleStatus ?? 'none',
-    String(params.phase.planning.chapterCount),
-    String(params.phase.progress.plannedVideoSegmentCount),
-    String(params.phase.progress.completedVideoSegmentCount),
-    params.creativeWorkingSet.confirmedScreenplay?.fingerprint ?? 'none',
+    String(params.facts.planning.bibleVersion ?? 'none'),
+    params.facts.planning.screenplayFingerprint ?? 'none',
+    params.facts.planning.bibleFingerprint ?? 'none',
+    String(params.facts.planning.chapterCount),
     params.creativeWorkingSet.adoptedStyleBible?.fingerprint ?? 'none',
     ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
   ].map(formatRuntimeStateValue).join(':')
@@ -464,35 +507,23 @@ function buildProjectStateInputItem(params: {
   projectId: string
   episodeId: string | null
   videoRatio: string | null
-  videoRatioConfirmedAt: Date | null
-  videoRatioConfirmationVersion: number
-  phase: ProjectPhaseSnapshot
+  facts: ProjectRuntimeFacts
   creativeWorkingSet: CreativeResourceWorkingSetView
 }): AgentInputItem {
-  const workflow = params.phase.editFirstWorkflow
   const lines = [
     '[project_state_snapshot]',
     `version=${buildProjectStateVersion({
       videoRatio: params.videoRatio,
-      videoRatioConfirmationVersion: params.videoRatioConfirmationVersion,
-      phase: params.phase,
+      facts: params.facts,
       creativeWorkingSet: params.creativeWorkingSet,
     })}`,
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
-    `config.videoRatioConfirmed=${String(Boolean(params.videoRatio && params.videoRatioConfirmedAt && params.videoRatioConfirmationVersion > 0))}`,
-    `config.videoRatioConfirmationVersion=${String(params.videoRatioConfirmationVersion)}`,
-    `phase=${formatRuntimeStateValue(params.phase.phase)}`,
-    `mainlineStep=${formatRuntimeStateValue(workflow.step)}`,
-    `mainlineStatus=${workflow.status.kind}`,
-    `mainlineStatusReason=${formatRuntimeStateValue(workflow.status.reason)}`,
-    `mainlineRecommendedOperation=${formatRuntimeStateValue(workflow.recommendation.recommendedAction?.operationId)}`,
-    `planning.editBibleStatus=${formatRuntimeStateValue(params.phase.planning.editBibleStatus)}`,
-    `planning.chapterCount=${String(params.phase.planning.chapterCount)}`,
-    `progress.plannedVideoSegmentCount=${String(params.phase.progress.plannedVideoSegmentCount)}`,
-    `progress.completedVideoSegmentCount=${String(params.phase.progress.completedVideoSegmentCount)}`,
-    `creativeWorkingSet.confirmedScreenplay=${JSON.stringify(params.creativeWorkingSet.confirmedScreenplay)}`,
+    `planning.bibleVersion=${formatRuntimeStateValue(String(params.facts.planning.bibleVersion ?? 'none'))}`,
+    `planning.screenplayFingerprint=${formatRuntimeStateValue(params.facts.planning.screenplayFingerprint)}`,
+    `planning.bibleFingerprint=${formatRuntimeStateValue(params.facts.planning.bibleFingerprint)}`,
+    `planning.chapterCount=${String(params.facts.planning.chapterCount)}`,
     `creativeWorkingSet.adoptedStyleBible=${JSON.stringify(params.creativeWorkingSet.adoptedStyleBible)}`,
     `creativeWorkingSet.bindings=${JSON.stringify(params.creativeWorkingSet.bindings)}`,
     `creativeWorkingSet.availableResources=${JSON.stringify(params.creativeWorkingSet.availableResources)}`,
@@ -799,8 +830,8 @@ export async function createProjectAgentChatResponse(input: {
         }
       : {}),
   }
-  const [resolvedPhase, projectConfigSnapshot, creativeWorkingSet] = await Promise.all([
-    resolveProjectPhase({
+  const [runtimeFacts, projectConfigSnapshot, creativeWorkingSet] = await Promise.all([
+    readProjectRuntimeFacts({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: context.episodeId || null,
@@ -809,8 +840,6 @@ export async function createProjectAgentChatResponse(input: {
       where: { id: input.projectId, userId: input.userId },
       select: {
         videoRatio: true,
-        videoRatioConfirmedAt: true,
-        videoRatioConfirmationVersion: true,
       },
     }),
     readProjectCreativeResourceWorkingSet({
@@ -820,7 +849,6 @@ export async function createProjectAgentChatResponse(input: {
     }),
   ])
   if (!projectConfigSnapshot) throw new Error(`PROJECT_AGENT_PROJECT_NOT_FOUND:${input.projectId}`)
-  const phase = resolvedPhase
   const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
     userId: input.userId,
@@ -924,7 +952,7 @@ export async function createProjectAgentChatResponse(input: {
   const approvalPreflightStore = createProjectAgentApprovalPreflightStore()
   const toolset = resolveProjectAgentToolset({
     registry: operations,
-    disabledOperationIds: control.kind === 'choice' ? [EDIT_FIRST_CHOICE_TOOL_IDS[control.choiceType]] : [],
+    disabledOperationIds: [],
   })
   const operationIds = toolset.operationIds
   const selectedTools = operationIds.map((operationId) => {
@@ -942,9 +970,7 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     episodeId: context.episodeId || null,
     videoRatio: projectConfigSnapshot.videoRatio,
-    videoRatioConfirmedAt: projectConfigSnapshot.videoRatioConfirmedAt,
-    videoRatioConfirmationVersion: projectConfigSnapshot.videoRatioConfirmationVersion,
-    phase,
+    facts: runtimeFacts,
     creativeWorkingSet,
   })
   const currentPlan = control.kind === 'approval'
@@ -998,7 +1024,6 @@ export async function createProjectAgentChatResponse(input: {
         operationIds: [...toolset.operationIds],
         disabledOperationIds: [...toolset.disabledOperationIds],
       },
-      editFirstWorkflow: phase.editFirstWorkflow,
       selectedTools: selectedTools.map((item) => ({
         operationId: item.operation.id,
         description: item.description,
@@ -1028,7 +1053,6 @@ export async function createProjectAgentChatResponse(input: {
     initialChunks.push(createDataChunk('data-assistant-choice-resolved', {
       runId: input.run.id,
       interruptionId: control.interruptionId,
-      choiceType: control.choiceType,
       toolCallId: control.toolCallId,
       cardId: control.cardId,
     } satisfies ProjectAgentChoiceResolvedPartData))
@@ -1042,8 +1066,8 @@ export async function createProjectAgentChatResponse(input: {
       `control=${control.kind}`,
       `toolsetSource=${toolset.source}`,
       `tools=${String(operationIds.length)}`,
-      `editFirstStep=${phase.editFirstWorkflow.step}`,
-      `editFirstStatus=${phase.editFirstWorkflow.status.kind}`,
+      `chapterCount=${String(runtimeFacts.planning.chapterCount)}`,
+      `bibleVersion=${String(runtimeFacts.planning.bibleVersion ?? 'none')}`,
     ].join('\n')))
     initialChunks.push(createDataChunk('data-agent-debug', {
       requestId,
@@ -1061,7 +1085,7 @@ export async function createProjectAgentChatResponse(input: {
     details: {
       runtime: 'openai-agents-sdk',
       control: control.kind,
-      editFirstWorkflow: phase.editFirstWorkflow,
+      runtimeFacts,
       toolset,
     },
   })
@@ -1673,8 +1697,7 @@ export async function createProjectAgentChatResponse(input: {
             runId: input.run.id,
             episodeId: context.episodeId || null,
             error: errorMessage,
-            workflowStep: phase.editFirstWorkflow.step,
-            workflowStatus: phase.editFirstWorkflow.status.kind,
+            runtimeFacts,
             stopReason: latestStopPart?.reason ?? null,
             runStatusFinalized,
           },

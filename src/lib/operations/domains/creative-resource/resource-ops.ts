@@ -22,7 +22,6 @@ import {
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import {
-  CREATIVE_RESOURCE_SCHEMA,
   CREATIVE_RESOURCE_SCHEMAS,
 } from '@/lib/creative-resource/schema-registry'
 
@@ -89,16 +88,6 @@ const adoptResourceInputSchema = z.object({
   role: z.string().trim().min(1).max(64),
   slotKey: z.string().trim().min(1).max(128),
   expectedVersion: z.number().int().min(0).nullable().optional(),
-}).strict()
-
-const confirmScriptResourceInputSchema = z.object({
-  episodeId: z.string().trim().min(1).nullable().optional(),
-  resourceId: z.string().trim().min(1)
-    .describe('Exact ready project.source_script Resource to confirm; obtain it from list_resources.'),
-  revisionId: z.string().trim().min(1)
-    .describe('Exact immutable screenplay revision to confirm; this operation never copies or rewrites its content.'),
-  expectedVersion: z.number().int().min(0).nullable().optional()
-    .describe('Pass null for the first confirmation; pass the current binding version when replacing a previously confirmed screenplay.'),
 }).strict()
 
 const resourceCardSchema = z.object({
@@ -176,11 +165,6 @@ const adoptResourceOutputSchema = z.object({
     version: z.number().int().min(0),
     source: z.string().min(1),
   }).strict(),
-}).strict()
-
-const confirmScriptResourceOutputSchema = adoptResourceOutputSchema.extend({
-  schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT),
-  fingerprint: z.string().trim().min(1),
 }).strict()
 
 export function createCreativeResourceOperations(): ProjectAgentOperationRegistryDraft {
@@ -336,7 +320,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
             code: 'CREATIVE_RESOURCE_RESERVED_BINDING_OPERATION_REQUIRED',
             field: 'role',
             requestedValue: `${input.role}:${input.slotKey}`,
-            allowedValues: ['confirm_script_resource', 'adopt_style_bible', 'bind_voice'],
+            allowedValues: ['adopt_style_bible', 'bind_voice'],
             agentRetryableAfterCorrection: true,
           })
         }
@@ -355,68 +339,6 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
           expectedVersion: input.expectedVersion ?? null,
         })
         return adoptResourceOutputSchema.parse({ success: true, binding })
-      },
-    }),
-    confirm_script_resource: defineOperation({
-      id: 'confirm_script_resource',
-      summary: 'Confirm one exact ready project.source_script revision as the current project or episode screenplay. This only updates the canonical Binding; it never copies, regenerates, or rewrites screenplay content.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'creative_resources',
-        billable: false,
-        destructive: false,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      resourceContract: {
-        kind: 'none',
-        reason: 'confirms an existing immutable screenplay revision through the canonical Binding writer',
-      },
-      confirmation: { kind: 'none', required: false },
-      inputSchema: confirmScriptResourceInputSchema,
-      outputSchema: confirmScriptResourceOutputSchema,
-      executeInTransaction: async (ctx, input, tx) => {
-        const episodeId = input.episodeId === undefined ? (ctx.context.episodeId ?? null) : input.episodeId
-        const revision = await tx.creativeResourceRevision.findFirst({
-          where: {
-            id: input.revisionId,
-            resourceId: input.resourceId,
-            resource: {
-              userId: ctx.userId,
-              status: 'ready',
-              mediaType: 'text',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-            },
-          },
-          select: { fingerprint: true },
-        })
-        if (!revision) {
-          throw new ApiError('NOT_FOUND', {
-            code: 'CONFIRMED_SCREENPLAY_REVISION_NOT_FOUND',
-            field: 'revisionId',
-          })
-        }
-        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
-          scope: resolveProjectCreativeResourceScope({
-            userId: ctx.userId,
-            projectId: ctx.projectId,
-            episodeId,
-          }),
-          ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.confirmedScreenplay,
-          resourceId: input.resourceId,
-          revisionId: input.revisionId,
-          source: 'script_confirmation',
-          expectedVersion: input.expectedVersion ?? null,
-        })
-        return confirmScriptResourceOutputSchema.parse({
-          success: true,
-          binding,
-          schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
-          fingerprint: revision.fingerprint,
-        })
       },
     }),
   }

@@ -1,12 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { resolveTaskResponse } from '@/lib/task/client'
 import {
   invalidateQueryTemplates,
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
-import { fetchOperationPlanView, issueOperationApprovalGrant } from '@/lib/query/operation-plan-client'
 
 export function useUpdateProjectCharacterIntroduction(projectId: string) {
     const queryClient = useQueryClient()
@@ -32,63 +29,6 @@ export function useUpdateProjectCharacterIntroduction(projectId: string) {
 }
 
 /**
- * AI 修改项目角色形象描述
- */
-
-export function useAiModifyProjectAppearanceDescription(projectId: string) {
-    return useMutation({
-        mutationFn: async ({
-            characterId,
-            appearanceId,
-            currentDescription,
-            modifyInstruction,
-        }: {
-            characterId: string
-            appearanceId: string
-            currentDescription: string
-            modifyInstruction: string
-        }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-modify-appearance`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        characterId,
-                        appearanceId,
-                        currentDescription,
-                        modifyInstruction,
-                    }),
-                },
-                'Failed to modify appearance description',
-            )
-            return resolveTaskResponse<{ modifiedDescription?: string }>(response)
-        },
-    })
-}
-
-/**
- * AI 修改项目场景描述
- */
-
-export function useAiCreateProjectCharacter(projectId: string) {
-    return useMutation({
-        mutationFn: async (payload: { userInstruction: string }) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/ai-create-character`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-                'Failed to design character',
-            )
-            return await resolveTaskResponse<{ prompt?: string }>(response)
-        },
-    })
-}
-
-/**
  * 上传临时媒体（项目）
  */
 
@@ -104,27 +44,6 @@ export function useUploadProjectTempMedia() {
                 },
                 '上传失败',
             )
-        },
-    })
-}
-
-/**
- * 参考图提取角色描述（项目）
- */
-
-export function useExtractProjectReferenceCharacterDescription(projectId: string) {
-    return useMutation({
-        mutationFn: async (referenceImageUrls: string[]) => {
-            const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/reference-to-character/extract`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ referenceImageUrls }),
-                },
-                'Failed to extract character description',
-            )
-            return resolveTaskResponse<{ description?: string }>(response)
         },
     })
 }
@@ -159,54 +78,6 @@ export function useCreateProjectCharacter(projectId: string) {
                 'Failed to create character',
             ),
         onSuccess: invalidateProjectAssets,
-    })
-}
-
-/**
- * Explicitly submit reference generation after the character records exist.
- * Record creation and Task submission are separate user-visible operations;
- * neither operation calls the other route internally.
- */
-export function useGenerateProjectCharacterFromReference(projectId: string) {
-    return useMutation({
-        mutationFn: async (payload: {
-            referenceImageUrls: string[]
-            characterName: string
-            characterId: string
-            appearanceId: string
-            count: number
-            customDescription?: string
-        }) => {
-            const input = {
-                referenceImageUrls: payload.referenceImageUrls,
-                target: {
-                    kind: 'appearance' as const,
-                    characterName: payload.characterName,
-                    characterId: payload.characterId,
-                    appearanceId: payload.appearanceId,
-                },
-                count: payload.count,
-                ...(payload.customDescription ? { customDescription: payload.customDescription } : {}),
-            }
-            const plan = await fetchOperationPlanView({
-                projectId,
-                operationId: 'reference_to_character',
-                input,
-            })
-            const authorization = await issueOperationApprovalGrant(plan)
-            return await requestJsonWithError<{ async: true; taskId: string }>(
-                `/api/projects/${projectId}/reference-to-character`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ...input,
-                        ...authorization,
-                    }),
-                },
-                'Failed to submit reference character generation',
-            )
-        },
     })
 }
 

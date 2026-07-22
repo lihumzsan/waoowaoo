@@ -1,4 +1,3 @@
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import type { ProjectAgentChoiceCardPartData } from './types'
 
 /**
@@ -20,7 +19,6 @@ export interface ProjectAgentChoiceSuspensionReceipt extends ProjectAgentSuspens
   interruptionId: string
   cardId: string
   toolCallId: string
-  choiceType: EditFirstChoiceType
   card: ProjectAgentChoiceCardPartData
 }
 
@@ -68,7 +66,6 @@ export function isSameProjectAgentSuspensionReceipt(
     return left.interruptionId === right.interruptionId
       && left.cardId === right.cardId
       && left.toolCallId === right.toolCallId
-      && left.choiceType === right.choiceType
   }
   if (left.kind === 'approval' && right.kind === 'approval') {
     return left.interruptionId === right.interruptionId

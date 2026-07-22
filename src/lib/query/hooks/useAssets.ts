@@ -1,16 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import { useAssetOperationBillingPlan } from '@/lib/query/use-asset-operation-billing-plan'
-import { requireTaskSubmissionReceipt } from '@/lib/query/mutations/mutation-shared'
 import { queryKeys } from '@/lib/query/keys'
-import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
-import {
-  upsertTaskTargetOverlay,
-} from '@/lib/query/task-target-overlay'
-import { isTaskRuntimeRunningPhase, taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import { syncWorkspaceResourceChanges } from '@/lib/query/resource-change-sync'
 import {
   GLOBAL_ASSET_PROJECT_ID,
@@ -20,96 +12,8 @@ import {
 import type {
   AssetKind,
   AssetQueryInput,
-  AssetRenderSummary,
-  AssetSummary,
-  AssetTaskRef,
-  AssetTaskState,
-  AssetVariantSummary,
-  CharacterAssetSummary,
-  LocationAssetSummary,
-  PropAssetSummary,
   ReadAssetsResponse,
 } from '@/lib/assets/contracts'
-
-function flattenTaskRefs(assets: AssetSummary[]): AssetTaskRef[] {
-  const refs: AssetTaskRef[] = []
-  for (const asset of assets) {
-    refs.push(...asset.taskRefs)
-    for (const variant of asset.variants) {
-      refs.push(...variant.taskRefs)
-      for (const render of variant.renders) {
-        refs.push(...render.taskRefs)
-      }
-    }
-  }
-  return refs
-}
-
-function createTaskState(isRunning: boolean, lastError: { code: string; message: string } | null): AssetTaskState {
-  return {
-    isRunning,
-    lastError,
-  }
-}
-
-function resolveTaskState(refs: AssetTaskRef[], byKey: Map<string, { phase: string | null; lastError: { code: string; message: string } | null }>): AssetTaskState {
-  let isRunning = false
-  let lastError: { code: string; message: string } | null = null
-  for (const ref of refs) {
-    const state = byKey.get(taskRuntimeTargetQueryKey(ref))
-    if (!state) continue
-    if (isTaskRuntimeRunningPhase(state.phase)) {
-      isRunning = true
-    }
-    if (!lastError && state.lastError) {
-      lastError = state.lastError
-    }
-  }
-  return createTaskState(isRunning, lastError)
-}
-
-function withTaskState(render: AssetRenderSummary, byKey: Map<string, { phase: string | null; lastError: { code: string; message: string } | null }>): AssetRenderSummary {
-  return {
-    ...render,
-    taskState: resolveTaskState(render.taskRefs, byKey),
-  }
-}
-
-function withTaskStateVariant(variant: AssetVariantSummary, byKey: Map<string, { phase: string | null; lastError: { code: string; message: string } | null }>): AssetVariantSummary {
-  return {
-    ...variant,
-    renders: variant.renders.map((render) => withTaskState(render, byKey)),
-    taskState: resolveTaskState(variant.taskRefs, byKey),
-  }
-}
-
-function withTaskStateAsset(asset: AssetSummary, byKey: Map<string, { phase: string | null; lastError: { code: string; message: string } | null }>): AssetSummary {
-  const variants = asset.variants.map((variant) => withTaskStateVariant(variant, byKey))
-  if (asset.kind === 'character') {
-    const characterAsset: CharacterAssetSummary = {
-      ...asset,
-      variants,
-      taskState: resolveTaskState(asset.taskRefs, byKey),
-    }
-    return characterAsset
-  }
-
-  if (asset.kind === 'location') {
-    const locationAsset: LocationAssetSummary = {
-      ...asset,
-      variants,
-      taskState: resolveTaskState(asset.taskRefs, byKey),
-    }
-    return locationAsset
-  }
-
-  const propAsset: PropAssetSummary = {
-    ...asset,
-    variants,
-    taskState: resolveTaskState(asset.taskRefs, byKey),
-  }
-  return propAsset
-}
 
 function buildQueryPath(input: AssetQueryInput): string {
   const searchParams = new URLSearchParams({
@@ -128,7 +32,7 @@ function buildQueryPath(input: AssetQueryInput): string {
 }
 
 export function useAssets(input: AssetQueryInput) {
-  const assetsQuery = useQuery({
+  return useQuery({
     queryKey: queryKeys.assets.list(input),
     queryFn: async () => {
       const response = await apiFetch(buildQueryPath(input))
@@ -141,95 +45,12 @@ export function useAssets(input: AssetQueryInput) {
     enabled: input.scope === 'global' || !!input.projectId,
     staleTime: 5_000,
   })
-
-  const taskProjectId = input.scope === 'global' ? 'global-asset-hub' : input.projectId ?? ''
-  const taskRefs = useMemo(() => flattenTaskRefs(assetsQuery.data ?? []), [assetsQuery.data])
-  const taskTargets = useMemo(() => taskRefs.map((ref) => ({
-    targetType: ref.targetType,
-    targetId: ref.targetId,
-    types: ref.types,
-  })), [taskRefs])
-  const taskStatesQuery = useTaskTargetStateMap(taskProjectId, taskTargets, {
-    enabled: taskProjectId.length > 0 && taskTargets.length > 0,
-  })
-
-  const data = useMemo(() => {
-    const assets = assetsQuery.data ?? []
-    return assets.map((asset) => withTaskStateAsset(asset, taskStatesQuery.byQueryKey))
-  }, [assetsQuery.data, taskStatesQuery.byQueryKey])
-
-  return {
-    ...assetsQuery,
-    data,
-    isFetching: assetsQuery.isFetching || taskStatesQuery.isFetching,
-  }
 }
 
 type AssetActionScopeInput = {
   scope: 'global' | 'project'
   projectId?: string | null
   kind: AssetKind
-}
-
-type GenerateOverlayTarget = {
-  projectId: string
-  targetType: string
-  targetId: string
-}
-
-function normalizeOptionalString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function resolveGenerateOverlayTarget(
-  input: AssetActionScopeInput,
-  payload: Record<string, unknown>,
-): GenerateOverlayTarget | null {
-  const assetId = normalizeOptionalString(payload.id)
-    ?? normalizeOptionalString(payload.characterId)
-    ?? normalizeOptionalString(payload.locationId)
-  if (!assetId) {
-    return null
-  }
-
-  if (input.scope === 'global') {
-    if (input.kind === 'character') {
-      const appearanceId = normalizeOptionalString(payload.appearanceId)
-      if (!appearanceId) return null
-      return {
-        projectId: 'global-asset-hub',
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-      }
-    }
-    return {
-      projectId: 'global-asset-hub',
-      targetType: 'GlobalLocation',
-      targetId: assetId,
-    }
-  }
-
-  const projectId = normalizeOptionalString(input.projectId)
-  if (!projectId) {
-    return null
-  }
-
-  if (input.kind === 'character') {
-    const appearanceId = normalizeOptionalString(payload.appearanceId)
-    return {
-      projectId,
-      targetType: 'CharacterAppearance',
-      targetId: appearanceId ?? assetId,
-    }
-  }
-
-  return {
-    projectId,
-    targetType: 'LocationImage',
-    targetId: assetId,
-  }
 }
 
 function invalidateScopeQueries(queryClient: ReturnType<typeof useQueryClient>, input: AssetActionScopeInput) {
@@ -263,7 +84,6 @@ export function useRefreshAssets(input: { scope: 'global' | 'project'; projectId
 
 export function useAssetActions(input: AssetActionScopeInput) {
   const queryClient = useQueryClient()
-  const assetOperationBillingPlan = useAssetOperationBillingPlan()
 
   const create = async (payload: Record<string, unknown>) => {
     const response = await apiFetch('/api/assets', {
@@ -318,40 +138,22 @@ export function useAssetActions(input: AssetActionScopeInput) {
     return response.json()
   }
 
-  const generate = async (payload: Record<string, unknown>) => {
-    const assetId = String(payload.id)
-    const requestBody = {
-      scope: input.scope,
-      kind: input.kind,
-      projectId: input.projectId,
-      ...payload,
-    }
-    const confirmation = await assetOperationBillingPlan(assetId, 'generate', requestBody)
-    const overlayTarget = resolveGenerateOverlayTarget(input, payload)
-
-    const response = await apiFetch(`/api/assets/${assetId}/generate`, {
+  const uploadRender = async (assetId: string, file: File, imageIndex?: number) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('scope', input.scope)
+    formData.append('kind', input.kind)
+    if (input.projectId) formData.append('projectId', input.projectId)
+    if (imageIndex !== undefined) formData.append('imageIndex', String(imageIndex))
+    const response = await apiFetch(`/api/assets/${assetId}/upload-render`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...requestBody,
-        ...confirmation,
-      }),
+      body: formData,
     })
     if (!response.ok) {
-      throw new Error('Failed to generate asset render')
-    }
-    const result: unknown = await response.json()
-    const receipt = requireTaskSubmissionReceipt(result)
-    if (overlayTarget) {
-      upsertTaskTargetOverlay(queryClient, {
-        ...overlayTarget,
-        runningTaskId: receipt.taskId,
-        runningTaskType: receipt.taskType,
-        intent: 'generate',
-      })
+      throw new Error('Failed to upload asset render')
     }
     await invalidateScopeQueries(queryClient, input)
-    return result
+    return response.json()
   }
 
   const selectRender = async (payload: Record<string, unknown>) => {
@@ -432,8 +234,8 @@ export function useAssetActions(input: AssetActionScopeInput) {
     create,
     update,
     updateVariant,
+    uploadRender,
     remove,
-    generate,
     selectRender,
     revertRender,
     copyFromGlobal,

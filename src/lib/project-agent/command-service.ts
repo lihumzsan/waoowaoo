@@ -22,7 +22,7 @@ import {
   readRetryableConsumedProjectAgentChoiceInterruption,
   type DeclinedProjectAgentInterruption,
 } from './interruptions'
-import { buildEditFirstChoiceResultFromDecision } from './edit-first-choice-result'
+import { buildProjectAgentChoiceResultFromDecision } from './choice-result'
 import {
   createProjectAgentConsumedControlRetryRun,
   createProjectAgentUserTurnRun,
@@ -212,7 +212,6 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (!params.operationSignal) throw new Error('PROJECT_AGENT_CHOICE_OPERATION_SIGNAL_REQUIRED')
-  const latestUserText = readLatestVisibleUserText(params.messages)
   const choiceParams = {
     ...scope,
     request: params.request,
@@ -221,7 +220,6 @@ async function resolveProjectAgentControl(params: {
     cardId: controlAction.cardId,
     toolCallId: controlAction.toolCallId,
     response: controlAction.output as Prisma.InputJsonObject,
-    latestUserText,
     operationSignal: params.operationSignal,
     locale: params.locale,
     visibleMessages: params.visibleUserMessages,
@@ -233,13 +231,13 @@ async function resolveProjectAgentControl(params: {
     control: {
       kind: 'choice',
       interruptionId: consumedChoice.id,
-      choiceType: consumedChoice.offer.card.choiceType,
       toolCallId: consumedChoice.offer.card.toolCallId,
       cardId: consumedChoice.offer.card.cardId,
       appliedOperationId: consumedChoice.appliedOperationId,
-      choiceResult: buildEditFirstChoiceResultFromDecision({
+      choiceResult: buildProjectAgentChoiceResultFromDecision({
         decision: consumedChoice.parsedResponse,
         toolCallId: consumedChoice.offer.card.toolCallId,
+        operationId: consumedChoice.operationId,
       }),
     },
     retryInterruptionId: consumed ? null : consumedChoice.id,

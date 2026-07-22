@@ -1,21 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { mapGlobalCharacterToAsset } from '@/lib/assets/mappers'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import type { GlobalCharacter } from '@/lib/query/hooks/useGlobalAssets'
 import { queryKeys } from '@/lib/query/keys'
 import {
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
 import {
   invalidateGlobalCharacters,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
-import {
-  fetchAssetHubOperationPlanView,
-  issueOperationApprovalGrant,
-} from '@/lib/query/operation-plan-client'
 
 type CreateAssetHubCharacterResponse = {
   character?: GlobalCharacter
@@ -74,23 +68,6 @@ function upsertCreatedCharacterCaches(
     })
 }
 
-export function useAiDesignLocation() {
-  return useMutation({
-    mutationFn: async (userInstruction: string) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/ai-design-location',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userInstruction }),
-        },
-        'Failed to design location',
-      )
-      return resolveTaskResponse<{ prompt?: string }>(response)
-    },
-  })
-}
-
 export function useCreateAssetHubLocation() {
   const queryClient = useQueryClient()
   const invalidateLocations = () => invalidateGlobalLocations(queryClient)
@@ -127,40 +104,6 @@ export function useUploadAssetHubTempMedia() {
   })
 }
 
-export function useAiDesignCharacter() {
-  return useMutation({
-    mutationFn: async (userInstruction: string) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/ai-design-character',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userInstruction }),
-        },
-        'Failed to design character',
-      )
-      return resolveTaskResponse<{ prompt?: string }>(response)
-    },
-  })
-}
-
-export function useExtractAssetHubReferenceCharacterDescription() {
-  return useMutation({
-    mutationFn: async (referenceImageUrls: string[]) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/reference-to-character/extract',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ referenceImageUrls }),
-        },
-        'Failed to extract character description',
-      )
-      return resolveTaskResponse<{ description?: string }>(response)
-    },
-  })
-}
-
 export function useCreateAssetHubCharacter() {
   const queryClient = useQueryClient()
   const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
@@ -177,45 +120,6 @@ export function useCreateAssetHubCharacter() {
         upsertCreatedCharacterCaches(queryClient, data.character)
       }
       invalidateCharacters()
-    },
-  })
-}
-
-export function useGenerateAssetHubCharacterFromReference() {
-  return useMutation({
-    mutationFn: async (payload: {
-      referenceImageUrls: string[]
-      characterName: string
-      characterId: string
-      appearanceId: string
-      count: number
-      customDescription?: string
-    }) => {
-      const input = {
-        referenceImageUrls: payload.referenceImageUrls,
-        target: {
-          kind: 'appearance' as const,
-          characterName: payload.characterName,
-          characterId: payload.characterId,
-          appearanceId: payload.appearanceId,
-        },
-        count: payload.count,
-        ...(payload.customDescription ? { customDescription: payload.customDescription } : {}),
-      }
-      const plan = await fetchAssetHubOperationPlanView({
-        operationId: 'asset_hub_reference_to_character',
-        input,
-      })
-      const authorization = await issueOperationApprovalGrant(plan)
-      return await requestJsonWithError<{ async: true; taskId: string }>(
-        '/api/asset-hub/reference-to-character',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...input, ...authorization }),
-        },
-        'Failed to submit asset-hub reference character generation',
-      )
     },
   })
 }

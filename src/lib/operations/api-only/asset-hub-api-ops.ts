@@ -56,15 +56,6 @@ function parseAppearanceIndex(value: unknown): number | null {
   return num
 }
 
-function assertNoLegacyArtStyle(body: Record<string, unknown>) {
-  if (!Object.prototype.hasOwnProperty.call(body, 'artStyle')) return
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'LEGACY_ART_STYLE_REMOVED',
-    field: 'artStyle',
-    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
-  })
-}
-
 const uploadImageOutputSchema = z.object({
   success: z.literal(true),
   imageKey: z.string().min(1),
@@ -437,7 +428,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const description = normalizeString((input as unknown as Record<string, unknown>).description)
-        assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
 
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
@@ -490,7 +480,6 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
-        assertNoLegacyArtStyle(body)
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',

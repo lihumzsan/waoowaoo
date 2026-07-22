@@ -67,7 +67,6 @@ const creativeVideoProductionContextSchema = z.object({
   allowedSegmentDurationsSeconds: z.array(z.number().int().positive()).min(1),
   minSegmentDurationSeconds: z.number().int().positive(),
   maxSegmentDurationSeconds: z.number().int().positive(),
-  styleBibleRequired: z.literal(true),
 }).strict().superRefine((context, refinement) => {
   const sorted = [...context.allowedSegmentDurationsSeconds].sort((left, right) => left - right)
   if (

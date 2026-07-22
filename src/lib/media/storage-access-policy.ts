@@ -3,7 +3,6 @@ import type { NextResponse } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { requireUserAuth, isErrorResponse, type AuthSession } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { extractStorageKeyFromLegacyValue } from './service'
 
 const mediaReadSelect = {
   id: true,
@@ -39,111 +38,8 @@ function normalizeStorageKey(key: string): string {
 
 function ownedMediaRelations(userId: string): Prisma.MediaObjectWhereInput[] {
   return [
-    { characterAppearanceImages: { some: { character: { project: { userId } } } } },
-    { locationImages: { some: { location: { project: { userId } } } } },
-    { projectEpisodeAudios: { some: { project: { userId } } } },
-    { projectEpisodeSourceDocumentRawFiles: { some: { episode: { project: { userId } } } } },
-    { projectEditChapterOutputVideos: { some: { episode: { project: { userId } } } } },
-    { projectVideoSegmentVideos: { some: { project: { userId } } } },
-    { projectEpisodeFinalOutputVideos: { some: { episode: { project: { userId } } } } },
-    { globalCharacterAppearanceImages: { some: { character: { userId } } } },
-    { globalCharacterAppearancePreviousImgs: { some: { character: { userId } } } },
-    { globalLocationImageImages: { some: { location: { userId } } } },
-    { globalLocationImagePreviousImages: { some: { location: { userId } } } },
     { creativeResourceRevisions: { some: { resource: { userId } } } },
   ]
-}
-
-function legacyValueReferencesKey(value: string | null, storageKey: string): boolean {
-  if (!value) return false
-  const direct = extractStorageKeyFromLegacyValue(value)
-  if (direct === storageKey) return true
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) && parsed.some((item) =>
-      typeof item === 'string' && extractStorageKeyFromLegacyValue(item) === storageKey)
-  } catch {
-    return false
-  }
-}
-
-async function hasOwnedLegacyReference(userId: string, storageKey: string): Promise<boolean> {
-  const [
-    projectAppearances,
-    projectLocationImages,
-    projectEpisodes,
-    finalOutputs,
-    stylePreviews,
-    globalAppearances,
-    globalLocationImages,
-  ] = await Promise.all([
-    prisma.characterAppearance.findMany({
-      where: {
-        character: { project: { userId } },
-        OR: [
-          { imageUrl: { contains: storageKey } },
-          { imageUrls: { contains: storageKey } },
-          { previousImageUrl: { contains: storageKey } },
-          { previousImageUrls: { contains: storageKey } },
-        ],
-      },
-      select: { imageUrl: true, imageUrls: true, previousImageUrl: true, previousImageUrls: true },
-    }),
-    prisma.locationImage.findMany({
-      where: {
-        location: { project: { userId } },
-        OR: [
-          { imageUrl: { contains: storageKey } },
-          { previousImageUrl: { contains: storageKey } },
-        ],
-      },
-      select: { imageUrl: true, previousImageUrl: true },
-    }),
-    prisma.projectEpisode.findMany({
-      where: { project: { userId }, audioUrl: { contains: storageKey } },
-      select: { audioUrl: true },
-    }),
-    prisma.projectEpisodeFinalOutput.findMany({
-      where: { episode: { project: { userId } }, outputUrl: { contains: storageKey } },
-      select: { outputUrl: true },
-    }),
-    prisma.projectEditStylePreview.findMany({
-      where: { project: { userId }, imageKey: storageKey },
-      select: { imageKey: true },
-    }),
-    prisma.globalCharacterAppearance.findMany({
-      where: {
-        character: { userId },
-        OR: [
-          { imageUrl: { contains: storageKey } },
-          { imageUrls: { contains: storageKey } },
-          { previousImageUrl: { contains: storageKey } },
-          { previousImageUrls: { contains: storageKey } },
-        ],
-      },
-      select: { imageUrl: true, imageUrls: true, previousImageUrl: true, previousImageUrls: true },
-    }),
-    prisma.globalLocationImage.findMany({
-      where: {
-        location: { userId },
-        OR: [
-          { imageUrl: { contains: storageKey } },
-          { previousImageUrl: { contains: storageKey } },
-        ],
-      },
-      select: { imageUrl: true, previousImageUrl: true },
-    }),
-  ])
-
-  return [
-    ...projectAppearances.flatMap((row) => [row.imageUrl, row.imageUrls, row.previousImageUrl, row.previousImageUrls]),
-    ...projectLocationImages.flatMap((row) => [row.imageUrl, row.previousImageUrl]),
-    ...projectEpisodes.map((row) => row.audioUrl),
-    ...finalOutputs.map((row) => row.outputUrl),
-    ...stylePreviews.map((row) => row.imageKey),
-    ...globalAppearances.flatMap((row) => [row.imageUrl, row.imageUrls, row.previousImageUrl, row.previousImageUrls]),
-    ...globalLocationImages.flatMap((row) => [row.imageUrl, row.previousImageUrl]),
-  ].some((value) => legacyValueReferencesKey(value, storageKey))
 }
 
 async function requireOwnedMediaObject(input: {
@@ -162,14 +58,6 @@ async function requireOwnedMediaObject(input: {
     select: mediaReadSelect,
   })
   if (media) return media
-
-  const unscoped = await prisma.mediaObject.findFirst({ where: selector, select: mediaReadSelect })
-  if (
-    unscoped
-    && await hasOwnedLegacyReference(input.userId, unscoped.storageKey)
-  ) {
-    return unscoped
-  }
   throw new ApiError('NOT_FOUND', { code: 'MEDIA_NOT_FOUND' })
 }
 

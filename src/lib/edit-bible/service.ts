@@ -1,185 +1,66 @@
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { AppError } from '@/lib/errors/app-error'
-import { prisma } from '@/lib/prisma'
-import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
-import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
+import {
+  assertOrderedNonOverlappingSourceRanges,
+  buildEditSourceBlocks,
+  materializeScreenplayResourceProjection,
+} from '@/lib/edit-source-document'
 import {
   collectLedgerEventsInRange,
+  ledgerSchema,
   projectLedgerSnapshotAtSourceOffset,
+  type Ledger,
 } from '@/lib/edit-ledger'
-import { readEpisodeSourceDocumentById } from '@/lib/edit-source-document'
-import { EDIT_BIBLE_STATUS, type EditBibleStatus } from './constraints'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
+import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import { prisma } from '@/lib/prisma'
 import { validateEditBibleBundle } from './cross-check'
-import { assertEditBibleCanBeRevised, assertEditBibleReadyForConfirmation } from './lock'
-import { splitEditBibleIntoChapterPlans } from './chapter-split'
-import { getSignedUrl } from '@/lib/storage'
+import { CREATIVE_CHAPTER_MAX_DURATION_SECONDS } from './constraints'
 import {
-  editScriptStyleBibleSchema,
-  editStylePreviewKeySchema,
-  type EditScriptStyleBible,
-  type EditScriptVideoRatio,
-  type EditStylePreviewKey,
-  type EditStylePreviewPayload,
-  type EditStylePreviewStatus,
-} from '@/lib/edit-script/types'
-import {
+  creativeChapterPlanOutputSchema,
   editBibleBeatSheetSchema,
-  editBibleBundleSchema,
   editBibleEmotionalCurveSchema,
   editBibleSchema,
-  editSourceScriptStructureSchema,
+  rawEditBibleBundleSchema,
   type EditBible,
   type EditBibleBeatSheet,
   type EditBibleBundle,
-  type EditBibleChapterPlan,
-  type EditBibleDiagnostics,
+  type CreativeChapterPlanItem,
   type EditBibleEmotionalCurve,
-  type EditSourceScriptStructure,
 } from './schemas'
-import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
+import {
+  normalizeRawBeatSheet,
+  normalizeRawEditBible,
+  normalizeRawEmotionalCurve,
+  normalizeRawLedger,
+} from './source-anchor-normalization'
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient
-
-function normalizeBibleAssetName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ')
-}
-
-function bibleAssetNameKey(name: string): string {
-  return normalizeBibleAssetName(name).toLocaleLowerCase()
-}
-
-async function ensureEditBibleAssets(input: {
-  readonly tx: Prisma.TransactionClient
-  readonly projectId: string
-  readonly bible: EditBible
-}): Promise<void> {
-  const existingCharacters = await input.tx.projectCharacter.findMany({
-    where: { projectId: input.projectId },
-    select: { name: true },
-  })
-  const existingCharacterNames = new Set(existingCharacters.map((character) => bibleAssetNameKey(character.name)))
-  for (const character of input.bible.characters) {
-    const name = normalizeBibleAssetName(character.name)
-    if (!name || existingCharacterNames.has(bibleAssetNameKey(name))) continue
-    await input.tx.projectCharacter.create({
-      data: {
-        projectId: input.projectId,
-        name,
-        aliases: character.aliases.length > 0 ? JSON.stringify(character.aliases) : null,
-        profileData: character.summary,
-        profileConfirmed: false,
-        introduction: character.summary,
-        appearances: {
-          create: {
-            appearanceIndex: PRIMARY_APPEARANCE_INDEX,
-            changeReason: 'edit_bible',
-            description: character.summary,
-            descriptions: JSON.stringify([character.summary]),
-            imageUrls: encodeImageUrls([]),
-            previousImageUrls: encodeImageUrls([]),
-          },
-        },
-      },
-    })
-    existingCharacterNames.add(bibleAssetNameKey(name))
-  }
-
-  const existingLocations = await input.tx.projectLocation.findMany({
-    where: { projectId: input.projectId, assetKind: 'location' },
-    select: { name: true },
-  })
-  const existingLocationNames = new Set(existingLocations.map((location) => bibleAssetNameKey(location.name)))
-  for (const location of input.bible.locations) {
-    const name = normalizeBibleAssetName(location.name)
-    if (!name || existingLocationNames.has(bibleAssetNameKey(name))) continue
-    await input.tx.projectLocation.create({
-      data: {
-        projectId: input.projectId,
-        name,
-        summary: location.summary,
-        assetKind: 'location',
-        images: {
-          create: {
-            imageIndex: 0,
-            description: location.summary,
-          },
-        },
-      },
-    })
-    existingLocationNames.add(bibleAssetNameKey(name))
-  }
-}
-
-interface PersistedBibleSnapshot {
-  readonly id: string
-  readonly sourceDocumentId: string
-  readonly bibleJson: Prisma.JsonValue | null
-  readonly beatSheetJson: Prisma.JsonValue | null
-  readonly ledgerJson: Prisma.JsonValue | null
-  readonly emotionalCurveJson: Prisma.JsonValue | null
-  readonly styleBibleJson: Prisma.JsonValue | null
-  readonly diagnosticsJson: Prisma.JsonValue | null
-  readonly version: number
-  readonly status: string
-  readonly lockedAt: Date | null
-  readonly generationTaskId: string | null
-}
-
-interface PersistedBibleStylePreview {
-  readonly id: string
-  readonly projectId: string
-  readonly episodeId: string
-  readonly editBibleId: string
-  readonly styleKey: string
-  readonly aspectRatio: string
-  readonly title: string
-  readonly summary: string
-  readonly styleBibleJson: Prisma.JsonValue
-  readonly imagePrompt: string
-  readonly imageKey: string | null
-  readonly status: string
-  readonly taskId: string | null
-  readonly errorMessage: string | null
-  readonly updatedAt: Date
-}
-
-export interface EditBibleGenerationTarget {
-  readonly editBibleId: string
-  readonly episodeId: string
-  readonly sourceDocumentId: string
-  readonly version: number
-  readonly baseVersion: number
-  readonly rollback: () => Promise<void>
-}
 
 export interface PersistedEditBibleBundle {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
   readonly sourceDocumentId: string
-  readonly sourceKind: string
+  readonly sourceResourceId: string
+  readonly sourceRevisionId: string
+  readonly sourceFingerprint: string
+  readonly bibleResourceId: string
+  readonly bibleRevisionId: string
+  readonly bibleFingerprint: string
   readonly sourceText: string
   readonly version: number
-  readonly status: EditBibleStatus
-  readonly lockedAt: Date | null
-  readonly generationTaskId: string | null
   readonly updatedAt: Date
-  readonly bible: EditBible | null
-  readonly beatSheet: EditBibleBeatSheet | null
-  readonly ledger: Ledger | null
-  readonly emotionalCurve: EditBibleEmotionalCurve | null
-  readonly styleBible: EditScriptStyleBible | null
-  readonly stylePreviews: readonly EditStylePreviewPayload[]
-  readonly diagnostics: EditBibleDiagnostics | null
-  readonly scriptStructure: EditSourceScriptStructure | null
+  readonly bible: EditBible
+  readonly beatSheet: EditBibleBeatSheet
+  readonly ledger: Ledger
+  readonly emotionalCurve: EditBibleEmotionalCurve
 }
 
-export interface PersistedEditChapterPlan extends EditBibleChapterPlan {
+export interface PersistedEditChapterPlan extends CreativeChapterPlanItem {
   readonly id: string
-  readonly status: string
-  readonly renderStatus: string | null
-  readonly outputMediaId: string | null
+  readonly beatIds: readonly string[]
+  readonly eventIds: readonly string[]
   readonly updatedAt: Date
 }
 
@@ -191,121 +72,23 @@ const persistedBibleSelect = {
   beatSheetJson: true,
   ledgerJson: true,
   emotionalCurveJson: true,
-  styleBibleJson: true,
-  diagnosticsJson: true,
+  bibleResourceId: true,
+  bibleRevisionId: true,
+  bibleFingerprint: true,
   version: true,
-  status: true,
-  lockedAt: true,
   updatedAt: true,
-  generationTaskId: true,
   sourceDocument: {
     select: {
-      sourceKind: true,
       normalizedText: true,
-      scriptStructureJson: true,
-    },
-  },
-  stylePreviews: {
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      projectId: true,
-      episodeId: true,
-      editBibleId: true,
-      styleKey: true,
-      aspectRatio: true,
-      title: true,
-      summary: true,
-      styleBibleJson: true,
-      imagePrompt: true,
-      imageKey: true,
-      status: true,
-      taskId: true,
-      errorMessage: true,
-      updatedAt: true,
+      sourceResourceId: true,
+      sourceRevisionId: true,
+      sourceFingerprint: true,
     },
   },
 } as const
 
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
-function toNullableInputJsonValue(value: unknown | null): Prisma.InputJsonValue | typeof Prisma.JsonNull {
-  return value === null ? Prisma.JsonNull : toInputJsonValue(value)
-}
-
-function normalizeBibleStatus(value: string): EditBibleStatus {
-  if (
-    value === EDIT_BIBLE_STATUS.PENDING
-    || value === EDIT_BIBLE_STATUS.GENERATING
-    || value === EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW
-    || value === EDIT_BIBLE_STATUS.SCRIPT_APPROVED
-    || value === EDIT_BIBLE_STATUS.READY_FOR_REVIEW
-    || value === EDIT_BIBLE_STATUS.CONFIRMED
-    || value === EDIT_BIBLE_STATUS.FAILED
-  ) {
-    return value
-  }
-  throw new Error(`EDIT_BIBLE_STATUS_INVALID:${value}`)
-}
-
-function parseBundlePart<TData>(value: Prisma.JsonValue | null, parse: (value: unknown) => TData): TData | null {
-  return value === null ? null : parse(value)
-}
-
-function parseOptionalStyleBibleJson(value: Prisma.JsonValue | null): EditScriptStyleBible | null {
-  if (value === null) return null
-  const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
-  if (!parsed.success) {
-    throw new Error('EDIT_BIBLE_STYLE_BIBLE_INVALID')
-  }
-  return parsed.data.styleBible
-}
-
-function parseRequiredStyleBibleJson(value: Prisma.JsonValue): EditScriptStyleBible {
-  const parsed = editScriptStyleBibleSchema.safeParse({ styleBible: value })
-  if (!parsed.success) {
-    throw new Error('EDIT_STYLE_PREVIEW_STYLE_BIBLE_INVALID')
-  }
-  return parsed.data.styleBible
-}
-
-function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
-  if (value === 'generating' || value === 'completed' || value === 'confirmed' || value === 'failed') return value
-  return 'pending'
-}
-
-function normalizeStylePreviewKey(value: string): EditStylePreviewKey {
-  const parsed = editStylePreviewKeySchema.safeParse(value)
-  if (!parsed.success) throw new Error(`EDIT_STYLE_PREVIEW_KEY_INVALID:${value}`)
-  return parsed.data as EditStylePreviewKey
-}
-
-function normalizeStylePreviewAspectRatio(value: string): EditScriptVideoRatio {
-  if (value === '9:16' || value === '16:9' || value === '21:9') return value
-  throw new Error(`EDIT_STYLE_PREVIEW_ASPECT_RATIO_INVALID:${value}`)
-}
-
-function mapPersistedStylePreview(preview: PersistedBibleStylePreview): EditStylePreviewPayload {
-  return {
-    id: preview.id,
-    projectId: preview.projectId,
-    episodeId: preview.episodeId,
-    bibleId: preview.editBibleId,
-    styleKey: normalizeStylePreviewKey(preview.styleKey),
-    aspectRatio: normalizeStylePreviewAspectRatio(preview.aspectRatio),
-    title: preview.title,
-    summary: preview.summary,
-    styleBible: parseRequiredStyleBibleJson(preview.styleBibleJson),
-    gridImagePrompt: preview.imagePrompt,
-    imageKey: preview.imageKey,
-    imageUrl: preview.imageKey ? getSignedUrl(preview.imageKey, 7 * 24 * 3600) : null,
-    status: normalizeStylePreviewStatus(preview.status),
-    taskId: preview.taskId,
-    errorMessage: preview.errorMessage,
-    updatedAt: preview.updatedAt,
-  }
 }
 
 function mapPersistedBible(record: {
@@ -316,46 +99,39 @@ function mapPersistedBible(record: {
   readonly beatSheetJson: Prisma.JsonValue | null
   readonly ledgerJson: Prisma.JsonValue | null
   readonly emotionalCurveJson: Prisma.JsonValue | null
-  readonly styleBibleJson: Prisma.JsonValue | null
-  readonly diagnosticsJson: Prisma.JsonValue | null
+  readonly bibleResourceId: string
+  readonly bibleRevisionId: string
+  readonly bibleFingerprint: string
   readonly version: number
-  readonly status: string
-  readonly lockedAt: Date | null
-  readonly generationTaskId: string | null
   readonly updatedAt: Date
   readonly sourceDocument: {
-    readonly sourceKind: string
     readonly normalizedText: string
-    readonly scriptStructureJson: Prisma.JsonValue | null
+    readonly sourceResourceId: string
+    readonly sourceRevisionId: string
+    readonly sourceFingerprint: string
   }
-  readonly stylePreviews?: readonly PersistedBibleStylePreview[]
 }, projectId: string): PersistedEditBibleBundle {
-  const diagnostics = record.diagnosticsJson && typeof record.diagnosticsJson === 'object'
-    ? record.diagnosticsJson as EditBibleDiagnostics
-    : null
-  const scriptStructure = record.sourceDocument.scriptStructureJson
-    ? editSourceScriptStructureSchema.parse(record.sourceDocument.scriptStructureJson)
-    : null
+  const sourceResourceId = record.sourceDocument.sourceResourceId
+  const sourceRevisionId = record.sourceDocument.sourceRevisionId
+  const sourceFingerprint = record.sourceDocument.sourceFingerprint
   return {
     id: record.id,
     projectId,
     episodeId: record.episodeId,
     sourceDocumentId: record.sourceDocumentId,
-    sourceKind: record.sourceDocument.sourceKind,
+    sourceResourceId,
+    sourceRevisionId,
+    sourceFingerprint,
+    bibleResourceId: record.bibleResourceId,
+    bibleRevisionId: record.bibleRevisionId,
+    bibleFingerprint: record.bibleFingerprint,
     sourceText: record.sourceDocument.normalizedText,
     version: record.version,
-    status: normalizeBibleStatus(record.status),
-    lockedAt: record.lockedAt,
-    generationTaskId: record.generationTaskId,
     updatedAt: record.updatedAt,
-    bible: parseBundlePart(record.bibleJson, (value) => editBibleSchema.parse(value)),
-    beatSheet: parseBundlePart(record.beatSheetJson, (value) => editBibleBeatSheetSchema.parse(value)),
-    ledger: parseBundlePart(record.ledgerJson, (value) => ledgerSchema.parse(value)),
-    emotionalCurve: parseBundlePart(record.emotionalCurveJson, (value) => editBibleEmotionalCurveSchema.parse(value)),
-    styleBible: parseOptionalStyleBibleJson(record.styleBibleJson),
-    stylePreviews: (record.stylePreviews ?? []).map(mapPersistedStylePreview),
-    diagnostics,
-    scriptStructure,
+    bible: editBibleSchema.parse(record.bibleJson),
+    beatSheet: editBibleBeatSheetSchema.parse(record.beatSheetJson),
+    ledger: ledgerSchema.parse(record.ledgerJson),
+    emotionalCurve: editBibleEmotionalCurveSchema.parse(record.emotionalCurveJson),
   }
 }
 
@@ -364,7 +140,7 @@ async function assertEpisodeAccess(input: {
   readonly userId: string
   readonly episodeId: string
   readonly client: PrismaClientLike
-}) {
+}): Promise<void> {
   const episode = await input.client.projectEpisode.findFirst({
     where: {
       id: input.episodeId,
@@ -376,422 +152,497 @@ async function assertEpisodeAccess(input: {
   if (!episode) throw new ApiError('NOT_FOUND')
 }
 
-async function restoreBibleSnapshot(input: {
-  readonly editBibleId: string
-  readonly sourceDocumentId: string
-  readonly preparedVersion: number
-  readonly snapshot: PersistedBibleSnapshot | null
-  readonly client?: PrismaClientLike
-}) {
-  const client = input.client ?? prisma
-  if (!input.snapshot) {
-    await client.projectEditBible.deleteMany({
-      where: {
-        id: input.editBibleId,
-        sourceDocumentId: input.sourceDocumentId,
-        version: input.preparedVersion,
-      },
-    })
-    return
-  }
-  await client.projectEditBible.updateMany({
-    where: {
-      id: input.snapshot.id,
-      sourceDocumentId: input.sourceDocumentId,
-      version: input.preparedVersion,
-    },
-    data: {
-      sourceDocumentId: input.snapshot.sourceDocumentId,
-      bibleJson: toNullableInputJsonValue(input.snapshot.bibleJson),
-      beatSheetJson: toNullableInputJsonValue(input.snapshot.beatSheetJson),
-      ledgerJson: toNullableInputJsonValue(input.snapshot.ledgerJson),
-      emotionalCurveJson: toNullableInputJsonValue(input.snapshot.emotionalCurveJson),
-      styleBibleJson: toNullableInputJsonValue(input.snapshot.styleBibleJson),
-      diagnosticsJson: toNullableInputJsonValue(input.snapshot.diagnosticsJson),
-      version: input.snapshot.version,
-      status: input.snapshot.status,
-      lockedAt: input.snapshot.lockedAt,
-      generationTaskId: input.snapshot.generationTaskId,
+export function normalizeCreativeBibleResourceBundle(input: {
+  readonly rawBundle: unknown
+  readonly sourceText: string
+}): EditBibleBundle {
+  const raw = rawEditBibleBundleSchema.parse(input.rawBundle)
+  const blocks = buildEditSourceBlocks(input.sourceText)
+  const beatSheet = normalizeRawBeatSheet({
+    raw: raw.beatSheet,
+    sourceText: input.sourceText,
+    blocks,
+  })
+  return validateEditBibleBundle({
+    sourceText: input.sourceText,
+    bundle: {
+      bible: normalizeRawEditBible({ raw: raw.bible }),
+      beatSheet,
+      ledger: normalizeRawLedger({ raw: raw.ledger, beatSheet }),
+      emotionalCurve: normalizeRawEmotionalCurve({
+        raw: raw.emotionalCurve,
+        sourceText: input.sourceText,
+        blocks,
+      }),
     },
   })
 }
 
-export async function prepareEditBibleGenerationTarget(input: {
+async function resolveCreativeTextRevision(input: {
+  readonly tx: Prisma.TransactionClient
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly sourceDocumentId: string
-  readonly client?: Prisma.TransactionClient
-}): Promise<EditBibleGenerationTarget> {
-  const prepare = async (tx: Prisma.TransactionClient) => {
-    await assertEpisodeAccess({ ...input, client: tx })
-    const sourceDocument = await tx.projectEpisodeSourceDocument.findFirst({
-      where: {
-        id: input.sourceDocumentId,
+  readonly resourceId: string
+  readonly revisionId: string
+  readonly fingerprint: string
+  readonly schemaId:
+    | typeof CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT
+    | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
+    | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
+  readonly outputKind: 'screenplay_draft' | 'edit_bible_bundle' | 'chapter_plan'
+}) {
+  const revision = await input.tx.creativeResourceRevision.findFirst({
+    where: {
+      id: input.revisionId,
+      resourceId: input.resourceId,
+      fingerprint: input.fingerprint,
+      resource: {
+        userId: input.userId,
+        projectId: input.projectId,
         episodeId: input.episodeId,
+        status: 'ready',
+        mediaType: 'text',
+        schemaId: input.schemaId,
+        sourceType: 'CreativeWorkResult',
       },
-      select: { id: true },
+    },
+    select: {
+      id: true,
+      resourceId: true,
+      fingerprint: true,
+      contentText: true,
+      contentJson: true,
+      taskId: true,
+      task: { select: { type: true, status: true, payload: true } },
+      outputLineage: { select: { inputRevisionId: true, role: true, position: true } },
+    },
+  })
+  if (!revision?.taskId || !revision.task) {
+    throw new ApiError('NOT_FOUND', { code: 'CREATIVE_TEXT_REVISION_NOT_FOUND', field: 'revisionId' })
+  }
+  const payload = revision.task.payload
+  const request = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as { request?: { outputKind?: unknown } }).request
+    : null
+  if (
+    revision.task.type !== TASK_TYPE.CREATIVE_WORK
+    || revision.task.status !== TASK_STATUS.COMPLETED
+    || request?.outputKind !== input.outputKind
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_TEXT_REVISION_PROVENANCE_INVALID',
+      field: 'revisionId',
+      agentRetryableAfterCorrection: true,
     })
-    if (!sourceDocument) throw new ApiError('NOT_FOUND')
+  }
+  return revision
+}
 
+export async function adoptCreativeBibleResources(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly screenplay: { readonly resourceId: string; readonly revisionId: string; readonly fingerprint: string }
+  readonly bible: { readonly resourceId: string; readonly revisionId: string; readonly fingerprint: string }
+  readonly expectedVersion?: number | null
+  readonly client?: Prisma.TransactionClient
+}): Promise<PersistedEditBibleBundle> {
+  const adopt = async (tx: Prisma.TransactionClient): Promise<PersistedEditBibleBundle> => {
+    await assertEpisodeAccess({ ...input, client: tx })
+    const [screenplayRevision, bibleRevision] = await Promise.all([
+      resolveCreativeTextRevision({
+        tx,
+        ...input,
+        ...input.screenplay,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
+        outputKind: 'screenplay_draft',
+      }),
+      resolveCreativeTextRevision({
+        tx,
+        ...input,
+        ...input.bible,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
+        outputKind: 'edit_bible_bundle',
+      }),
+    ])
+    if (!screenplayRevision.contentText || bibleRevision.contentJson === null) {
+      throw new Error('CREATIVE_BIBLE_RESOURCE_CONTENT_INVALID')
+    }
+    const sourceLineage = bibleRevision.outputLineage.filter((lineage) => (
+      lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+    ))
+    if (sourceLineage.length !== 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_BIBLE_SCREENPLAY_LINEAGE_REQUIRED',
+        field: 'bible.revisionId',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    const sourceDocument = await materializeScreenplayResourceProjection({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId,
+      resourceId: screenplayRevision.resourceId,
+      revisionId: screenplayRevision.id,
+      fingerprint: screenplayRevision.fingerprint,
+      text: screenplayRevision.contentText,
+      client: tx,
+    })
+    const bundle = normalizeCreativeBibleResourceBundle({
+      rawBundle: bibleRevision.contentJson,
+      sourceText: sourceDocument.normalizedText,
+    })
     await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id
-      FROM project_edit_bibles
-      WHERE episodeId = ${input.episodeId}
-      FOR UPDATE
+      SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
     `)
-
-    const snapshot = await tx.projectEditBible.findUnique({
+    const current = await tx.projectEditBible.findUnique({
       where: { episodeId: input.episodeId },
       select: persistedBibleSelect,
     })
-    if (snapshot) {
-      assertEditBibleCanBeRevised({
-        status: snapshot.status,
-        lockedAt: snapshot.lockedAt,
+    if (current?.bibleRevisionId === bibleRevision.id) {
+      if (
+        current.sourceDocumentId !== sourceDocument.id
+        || current.bibleResourceId !== bibleRevision.resourceId
+        || current.bibleFingerprint !== bibleRevision.fingerprint
+      ) {
+        throw new Error(`CREATIVE_BIBLE_ADOPTION_COLLISION:${bibleRevision.id}`)
+      }
+      return mapPersistedBible(current, input.projectId)
+    }
+    const expectedVersion = input.expectedVersion ?? null
+    if ((current?.version ?? null) !== expectedVersion) {
+      throw new ApiError('CONFLICT', {
+        code: 'CREATIVE_BIBLE_ADOPTION_VERSION_CONFLICT',
+        expectedVersion,
+        actualVersion: current?.version ?? null,
       })
     }
-
-    const version = (snapshot?.version ?? 0) + 1
-    const baseVersion = snapshot?.version ?? 0
-    const bible = snapshot
-      ? await tx.projectEditBible.update({
-          where: { id: snapshot.id },
-          data: {
-            sourceDocumentId: input.sourceDocumentId,
-            bibleJson: Prisma.JsonNull,
-            beatSheetJson: Prisma.JsonNull,
-            ledgerJson: Prisma.JsonNull,
-            emotionalCurveJson: Prisma.JsonNull,
-            styleBibleJson: Prisma.JsonNull,
-            diagnosticsJson: Prisma.JsonNull,
-            version,
-            status: EDIT_BIBLE_STATUS.GENERATING,
-            lockedAt: null,
-            generationTaskId: null,
-          },
-          select: { id: true },
-        })
+    const data = {
+      sourceDocumentId: sourceDocument.id,
+      bibleJson: toInputJsonValue(bundle.bible),
+      beatSheetJson: toInputJsonValue(bundle.beatSheet),
+      ledgerJson: toInputJsonValue(bundle.ledger),
+      emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
+      bibleResourceId: bibleRevision.resourceId,
+      bibleRevisionId: bibleRevision.id,
+      bibleFingerprint: bibleRevision.fingerprint,
+      version: (current?.version ?? 0) + 1,
+    }
+    const stored = current
+      ? await tx.projectEditBible.update({ where: { id: current.id }, data, select: persistedBibleSelect })
       : await tx.projectEditBible.create({
-          data: {
-            episodeId: input.episodeId,
-            sourceDocumentId: input.sourceDocumentId,
-            version,
-            status: EDIT_BIBLE_STATUS.GENERATING,
-            generationTaskId: null,
-          },
-          select: { id: true },
+          data: { episodeId: input.episodeId, ...data },
+          select: persistedBibleSelect,
         })
+    return mapPersistedBible(stored, input.projectId)
+  }
+  return input.client ? await adopt(input.client) : await prisma.$transaction(adopt)
+}
 
+interface ExactCreativeRevisionRef {
+  readonly resourceId: string
+  readonly revisionId: string
+  readonly fingerprint: string
+}
+
+interface ChapterPlanProvenance {
+  readonly sourceResourceId: string
+  readonly sourceRevisionId: string
+  readonly sourceFingerprint: string
+  readonly chapterPlanResourceId: string
+  readonly chapterPlanRevisionId: string
+  readonly chapterPlanFingerprint: string
+  readonly bible: ExactCreativeRevisionRef | null
+  readonly contextRevisions: readonly (ExactCreativeRevisionRef & { readonly schemaId: string })[]
+  readonly beatIds: readonly string[]
+  readonly eventIds: readonly string[]
+}
+
+function chapterFacts(input: {
+  readonly bundle: EditBibleBundle | null
+  readonly plan: CreativeChapterPlanItem
+}): {
+  readonly beatIds: readonly string[]
+  readonly eventIds: readonly string[]
+  readonly events: readonly Ledger['events'][number][]
+  readonly entrySnapshot: ReturnType<typeof projectLedgerSnapshotAtSourceOffset>
+} {
+  if (!input.bundle) {
     return {
-      editBibleId: bible.id,
-      version,
-      baseVersion,
-      snapshot,
+      beatIds: [],
+      eventIds: [],
+      events: [],
+      entrySnapshot: { sourceEnd: input.plan.sourceStart, facts: [], entities: [] },
     }
   }
-  const target = input.client
-    ? await prepare(input.client)
-    : await prisma.$transaction(prepare)
-
+  const overlappingBeats = input.bundle.beatSheet.beats.filter((beat) => (
+    beat.sourceStart < input.plan.sourceEnd && beat.sourceEnd > input.plan.sourceStart
+  ))
+  const events = collectLedgerEventsInRange({
+    ledger: input.bundle.ledger,
+    sourceStart: input.plan.sourceStart,
+    sourceEnd: input.plan.sourceEnd,
+  })
   return {
-    editBibleId: target.editBibleId,
-    episodeId: input.episodeId,
-    sourceDocumentId: input.sourceDocumentId,
-    version: target.version,
-    baseVersion: target.baseVersion,
-    rollback: async () => await restoreBibleSnapshot({
-      editBibleId: target.editBibleId,
-      sourceDocumentId: input.sourceDocumentId,
-      preparedVersion: target.version,
-      snapshot: target.snapshot,
-      ...(input.client ? { client: input.client } : {}),
+    beatIds: overlappingBeats.map((beat) => beat.beatId),
+    eventIds: events.map((event) => event.eventId),
+    events,
+    entrySnapshot: projectLedgerSnapshotAtSourceOffset({
+      ledger: input.bundle.ledger,
+      sourceEnd: input.plan.sourceStart,
     }),
   }
 }
 
-async function assertNoDownstreamChapterArtifacts(input: {
-  readonly episodeId: string
-  readonly client: PrismaClientLike
-}) {
-  const chapter = await input.client.projectEditChapter.findFirst({
-    where: {
-      episodeId: input.episodeId,
-      OR: [
-        { editScript: { isNot: null } },
-        { shotExecutionPlan: { isNot: null } },
-        { requirements: { some: {} } },
-        { videoSegments: { some: {} } },
-      ],
-    },
-    select: { id: true, chapterIndex: true },
-  })
-  if (chapter) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_BIBLE_CHAPTER_REPLACEMENT_BLOCKED_BY_DOWNSTREAM_ARTIFACTS',
-      message: `Chapter ${String(chapter.chapterIndex)} already has downstream edit artifacts.`,
-    })
-  }
-}
-
-async function writeChapterPlans(input: {
+async function writeAdoptedChapterPlan(input: {
   readonly tx: Prisma.TransactionClient
   readonly episodeId: string
   readonly sourceDocumentId: string
-  readonly bibleVersion: number
-  readonly bundle: EditBibleBundle
-  readonly plans: readonly EditBibleChapterPlan[]
+  readonly provenance: Omit<ChapterPlanProvenance, 'beatIds' | 'eventIds'>
+  readonly bundle: EditBibleBundle | null
+  readonly plans: readonly CreativeChapterPlanItem[]
+  readonly planVersion: number
 }): Promise<readonly PersistedEditChapterPlan[]> {
-  const planIndexes = input.plans.map((plan) => plan.chapterIndex)
-  if (planIndexes.length === 0) throw new Error('EDIT_BIBLE_CHAPTER_PLANS_EMPTY')
+  const indexes = input.plans.map((plan) => plan.chapterIndex)
   await input.tx.projectEditChapter.deleteMany({
-    where: {
-      episodeId: input.episodeId,
-      chapterIndex: { notIn: planIndexes },
-    },
+    where: { episodeId: input.episodeId, chapterIndex: { notIn: indexes } },
   })
-
   const chapters: PersistedEditChapterPlan[] = []
   for (const plan of input.plans) {
-    const events = collectLedgerEventsInRange({
-      ledger: input.bundle.ledger,
+    const facts = chapterFacts({ bundle: input.bundle, plan })
+    const provenance: ChapterPlanProvenance = {
+      ...input.provenance,
+      beatIds: facts.beatIds,
+      eventIds: facts.eventIds,
+    }
+    const data = {
+      title: plan.title,
+      summary: plan.summary,
+      sourceDocumentId: input.sourceDocumentId,
       sourceStart: plan.sourceStart,
       sourceEnd: plan.sourceEnd,
-    })
-    const entrySnapshot = projectLedgerSnapshotAtSourceOffset({
-      ledger: input.bundle.ledger,
-      sourceEnd: plan.sourceStart,
-    })
+      targetDurationSec: plan.targetDurationSec,
+      entrySnapshotJson: toInputJsonValue(facts.entrySnapshot),
+      eventsJson: toInputJsonValue(facts.events),
+      planVersion: input.planVersion,
+      provenanceJson: toInputJsonValue(provenance),
+    }
     const record = await input.tx.projectEditChapter.upsert({
-      where: {
-        episodeId_chapterIndex: {
-          episodeId: input.episodeId,
-          chapterIndex: plan.chapterIndex,
-        },
-      },
-      create: {
-        episodeId: input.episodeId,
-        chapterIndex: plan.chapterIndex,
-        title: plan.title,
-        summary: plan.summary,
-        sourceDocumentId: input.sourceDocumentId,
-        sourceStart: plan.sourceStart,
-        sourceEnd: plan.sourceEnd,
-        targetDurationSec: plan.targetDurationSec,
-        entrySnapshotJson: toInputJsonValue(entrySnapshot),
-        eventsJson: toInputJsonValue(events),
-        provenanceJson: toInputJsonValue({
-          sourceDocumentId: input.sourceDocumentId,
-          bibleVersion: input.bibleVersion,
-          beatIds: plan.beatIds,
-          eventIds: plan.eventIds,
-        }),
-        status: 'ready',
-      },
-      update: {
-        title: plan.title,
-        summary: plan.summary,
-        sourceDocumentId: input.sourceDocumentId,
-        sourceStart: plan.sourceStart,
-        sourceEnd: plan.sourceEnd,
-        targetDurationSec: plan.targetDurationSec,
-        entrySnapshotJson: toInputJsonValue(entrySnapshot),
-        eventsJson: toInputJsonValue(events),
-        provenanceJson: toInputJsonValue({
-          sourceDocumentId: input.sourceDocumentId,
-          bibleVersion: input.bibleVersion,
-          beatIds: plan.beatIds,
-          eventIds: plan.eventIds,
-        }),
-        status: 'ready',
-      },
-      select: {
-        id: true,
-        status: true,
-        renderStatus: true,
-        outputMediaId: true,
-        updatedAt: true,
-      },
+      where: { episodeId_chapterIndex: { episodeId: input.episodeId, chapterIndex: plan.chapterIndex } },
+      create: { episodeId: input.episodeId, chapterIndex: plan.chapterIndex, ...data },
+      update: data,
+      select: { id: true, updatedAt: true },
     })
     chapters.push({
       ...plan,
-      id: record.id,
-      status: record.status,
-      renderStatus: record.renderStatus,
-      outputMediaId: record.outputMediaId,
-      updatedAt: record.updatedAt,
+      beatIds: facts.beatIds,
+      eventIds: facts.eventIds,
+      ...record,
     })
   }
   return chapters
 }
 
-export async function persistGeneratedEditBibleBundle(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly editBibleId: string
-  readonly sourceDocumentId: string
-  readonly taskId: string
-  readonly bundle: EditBibleBundle
-  readonly client?: Prisma.TransactionClient
-}): Promise<{
-  readonly editBible: PersistedEditBibleBundle
-  readonly chapters: readonly PersistedEditChapterPlan[]
-}> {
-  const persist = async (tx: Prisma.TransactionClient) => {
-    const locked = await tx.$queryRaw<Array<{
-      id: string
-      episodeId: string
-      sourceDocumentId: string
-      generationTaskId: string | null
-      status: string
-    }>>(Prisma.sql`
-      SELECT id, episodeId, sourceDocumentId, generationTaskId, status
-      FROM project_edit_bibles
-      WHERE id = ${input.editBibleId}
-      FOR UPDATE
-    `)
-    const lockedBible = locked[0]
-    if (!lockedBible) throw new ApiError('NOT_FOUND')
-    if (
-      lockedBible.episodeId !== input.episodeId
-      || lockedBible.sourceDocumentId !== input.sourceDocumentId
-      || lockedBible.generationTaskId !== input.taskId
-    ) {
-      throw new Error(`EDIT_BIBLE_GENERATION_OWNERSHIP_STALE:${input.editBibleId}:${input.taskId}`)
-    }
-    if (lockedBible.status !== EDIT_BIBLE_STATUS.GENERATING) {
-      throw new Error(`EDIT_BIBLE_GENERATION_STATUS_INVALID:${lockedBible.status}`)
-    }
-    const bible = await tx.projectEditBible.findUniqueOrThrow({
-      where: { id: input.editBibleId },
-      select: persistedBibleSelect,
-    })
-    const sourceDocument = await readEpisodeSourceDocumentById({
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      sourceDocumentId: input.sourceDocumentId,
-      client: tx,
-    })
-    const bundle = validateEditBibleBundle({
-      bundle: input.bundle,
-      sourceText: sourceDocument.normalizedText,
-    })
-    let plans: readonly EditBibleChapterPlan[]
-    try {
-      plans = splitEditBibleIntoChapterPlans({
-        bundle,
-        sourceText: sourceDocument.normalizedText,
-      })
-    } catch (error: unknown) {
-      throw new AppError(
-        'PLAN_VALIDATION_FAILED',
-        error instanceof Error ? error.message : String(error),
-        { cause: error },
-      )
-    }
-
-    await assertNoDownstreamChapterArtifacts({
-      episodeId: input.episodeId,
-      client: tx,
-    })
-    const chapters = await writeChapterPlans({
-      tx,
-      episodeId: input.episodeId,
-      sourceDocumentId: input.sourceDocumentId,
-      bibleVersion: bible.version,
-      bundle,
-      plans,
-    })
-    await tx.projectEditStylePreview.deleteMany({
-      where: { editBibleId: bible.id },
-    })
-    const updated = await tx.projectEditBible.updateMany({
-      where: {
-        id: bible.id,
-        episodeId: input.episodeId,
-        sourceDocumentId: input.sourceDocumentId,
-        generationTaskId: input.taskId,
-        status: EDIT_BIBLE_STATUS.GENERATING,
-      },
-      data: {
-        bibleJson: toInputJsonValue(bundle.bible),
-        beatSheetJson: toInputJsonValue(bundle.beatSheet),
-        ledgerJson: toInputJsonValue(bundle.ledger),
-        emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
-        styleBibleJson: Prisma.JsonNull,
-        diagnosticsJson: Prisma.JsonNull,
-        status: EDIT_BIBLE_STATUS.READY_FOR_REVIEW,
-      },
-    })
-    if (updated.count !== 1) {
-      throw new Error(`EDIT_BIBLE_GENERATION_FINAL_CAS_FAILED:${bible.id}:${input.taskId}`)
-    }
-    const persisted = await tx.projectEditBible.findUniqueOrThrow({
-      where: { id: bible.id },
-      select: persistedBibleSelect,
-    })
-    return {
-      editBible: mapPersistedBible(persisted, input.projectId),
-      chapters,
-    }
-  }
-  return input.client
-    ? await persist(input.client)
-    : await prisma.$transaction(persist)
-}
-
-export async function markEditBibleScriptReadyForReview(input: {
-  readonly editBibleId: string
-  readonly sourceDocumentId: string
-  readonly taskId: string
-}) {
-  const result = await prisma.projectEditBible.updateMany({
-    where: {
-      id: input.editBibleId,
-      sourceDocumentId: input.sourceDocumentId,
-      generationTaskId: input.taskId,
-      status: EDIT_BIBLE_STATUS.GENERATING,
-    },
-    data: {
-      status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
-      diagnosticsJson: Prisma.JsonNull,
-    },
-  })
-  if (result.count !== 1) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_READY_TRANSITION_NOT_ALLOWED',
-      message: 'Expanded script can only be marked ready from the current generating edit bible.',
-    })
+function exactRevisionRef(input: {
+  readonly resourceId: string
+  readonly id: string
+  readonly fingerprint: string
+}): ExactCreativeRevisionRef {
+  return {
+    resourceId: input.resourceId,
+    revisionId: input.id,
+    fingerprint: input.fingerprint,
   }
 }
 
-export async function approveEpisodePromptGeneratedScript(input: {
+export async function adoptCreativeChapterPlan(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly screenplay: ExactCreativeRevisionRef
+  readonly chapterPlan: ExactCreativeRevisionRef
   readonly client?: Prisma.TransactionClient
-}) {
-  const client = input.client ?? prisma
-  const result = await client.projectEditBible.updateMany({
-    where: {
-      episodeId: input.episodeId,
-      status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
-      episode: {
-        projectId: input.projectId,
-        project: { userId: input.userId },
+}): Promise<readonly PersistedEditChapterPlan[]> {
+  const adopt = async (tx: Prisma.TransactionClient): Promise<readonly PersistedEditChapterPlan[]> => {
+    await assertEpisodeAccess({ ...input, client: tx })
+    const [screenplayRevision, chapterPlanRevision] = await Promise.all([
+      resolveCreativeTextRevision({
+        tx,
+        ...input,
+        ...input.screenplay,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
+        outputKind: 'screenplay_draft',
+      }),
+      resolveCreativeTextRevision({
+        tx,
+        ...input,
+        ...input.chapterPlan,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
+        outputKind: 'chapter_plan',
+      }),
+    ])
+    if (!screenplayRevision.contentText || chapterPlanRevision.contentJson === null) {
+      throw new Error('CREATIVE_CHAPTER_PLAN_RESOURCE_CONTENT_INVALID')
+    }
+    const screenplayLineage = chapterPlanRevision.outputLineage.filter((lineage) => (
+      lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+    ))
+    if (screenplayLineage.length !== 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_CHAPTER_PLAN_SCREENPLAY_LINEAGE_REQUIRED',
+        field: 'chapterPlan.revisionId',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    const lineageRevisionIds = chapterPlanRevision.outputLineage.map((lineage) => lineage.inputRevisionId)
+    const uniqueLineageRevisionIds = [...new Set(lineageRevisionIds)]
+    const scopedLineageRevisions = await tx.creativeResourceRevision.findMany({
+      where: {
+        id: { in: uniqueLineageRevisionIds },
+        resource: {
+          userId: input.userId,
+          projectId: input.projectId,
+          status: 'ready',
+          OR: [{ episodeId: input.episodeId }, { episodeId: null }],
+        },
       },
-    },
-    data: {
-      status: EDIT_BIBLE_STATUS.SCRIPT_APPROVED,
-      diagnosticsJson: Prisma.JsonNull,
-    },
-  })
-  if (result.count !== 1) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_APPROVAL_NOT_ALLOWED',
-      message: 'Expanded script can only be approved while it is ready for review.',
+      select: {
+        id: true,
+        resourceId: true,
+        fingerprint: true,
+        contentJson: true,
+        taskId: true,
+        task: { select: { type: true, status: true, payload: true } },
+        outputLineage: { select: { inputRevisionId: true, role: true } },
+        resource: { select: { schemaId: true, mediaType: true, sourceType: true } },
+      },
+    })
+    if (scopedLineageRevisions.length !== uniqueLineageRevisionIds.length) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_CHAPTER_PLAN_CONTEXT_LINEAGE_SCOPE_INVALID',
+        field: 'chapterPlan.revisionId',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    const bibleCandidates = scopedLineageRevisions.filter((revision) => (
+      revision.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
+      && revision.resource.mediaType === 'text'
+      && revision.resource.sourceType === 'CreativeWorkResult'
+    ))
+    if (bibleCandidates.length > 1) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_CHAPTER_PLAN_BIBLE_LINEAGE_AMBIGUOUS',
+        field: 'chapterPlan.revisionId',
+        agentRetryableAfterCorrection: true,
+      })
+    }
+    const bibleRevision = bibleCandidates[0] ?? null
+    const contextRevisions = scopedLineageRevisions
+      .filter((revision) => revision.id !== screenplayRevision.id)
+      .map((revision) => ({
+        ...exactRevisionRef(revision),
+        schemaId: revision.resource.schemaId,
+      }))
+      .sort((left, right) => left.revisionId.localeCompare(right.revisionId))
+    let bibleBundle: EditBibleBundle | null = null
+    let bibleRef: ExactCreativeRevisionRef | null = null
+    if (bibleRevision) {
+      const payload = bibleRevision.task?.payload
+      const request = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as { request?: { outputKind?: unknown } }).request
+        : null
+      const hasScreenplayLineage = bibleRevision.outputLineage.some((lineage) => (
+        lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+      ))
+      if (
+        !bibleRevision.taskId
+        || bibleRevision.task?.type !== TASK_TYPE.CREATIVE_WORK
+        || bibleRevision.task.status !== TASK_STATUS.COMPLETED
+        || request?.outputKind !== 'edit_bible_bundle'
+        || bibleRevision.contentJson === null
+        || !hasScreenplayLineage
+      ) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_CHAPTER_PLAN_BIBLE_LINEAGE_INVALID',
+          field: 'chapterPlan.revisionId',
+          agentRetryableAfterCorrection: true,
+        })
+      }
+      bibleBundle = normalizeCreativeBibleResourceBundle({
+        rawBundle: bibleRevision.contentJson,
+        sourceText: screenplayRevision.contentText,
+      })
+      bibleRef = exactRevisionRef(bibleRevision)
+    }
+    const output = creativeChapterPlanOutputSchema.parse(chapterPlanRevision.contentJson)
+    assertOrderedNonOverlappingSourceRanges(screenplayRevision.contentText, output.chapters)
+    for (const chapter of output.chapters) {
+      if (chapter.targetDurationSec > CREATIVE_CHAPTER_MAX_DURATION_SECONDS) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_CHAPTER_DURATION_EXCEEDS_LIMIT',
+          field: `chapters.${String(chapter.chapterIndex)}.targetDurationSec`,
+          agentRetryableAfterCorrection: true,
+        })
+      }
+      if (!screenplayRevision.contentText.slice(chapter.sourceStart, chapter.sourceEnd).trim()) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_CHAPTER_RANGE_EMPTY',
+          field: `chapters.${String(chapter.chapterIndex)}`,
+          agentRetryableAfterCorrection: true,
+        })
+      }
+    }
+    const sourceDocument = await materializeScreenplayResourceProjection({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId,
+      resourceId: screenplayRevision.resourceId,
+      revisionId: screenplayRevision.id,
+      fingerprint: screenplayRevision.fingerprint,
+      text: screenplayRevision.contentText,
+      client: tx,
+    })
+    await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
+    `)
+    const existing = await tx.projectEditChapter.findMany({
+      where: { episodeId: input.episodeId },
+      select: { planVersion: true, provenanceJson: true },
+    })
+    const alreadyAdopted = existing.length === output.chapters.length && existing.every((chapter) => {
+      const provenance = chapter.provenanceJson
+      return provenance && typeof provenance === 'object' && !Array.isArray(provenance)
+        && (provenance as { chapterPlanRevisionId?: unknown }).chapterPlanRevisionId === chapterPlanRevision.id
+    })
+    if (alreadyAdopted) {
+      return await readEpisodeEditChapters({
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        client: tx,
+      })
+    }
+    const planVersion = Math.max(0, ...existing.map((chapter) => chapter.planVersion)) + 1
+    return await writeAdoptedChapterPlan({
+      tx,
+      episodeId: input.episodeId,
+      sourceDocumentId: sourceDocument.id,
+      provenance: {
+        sourceResourceId: screenplayRevision.resourceId,
+        sourceRevisionId: screenplayRevision.id,
+        sourceFingerprint: screenplayRevision.fingerprint,
+        chapterPlanResourceId: chapterPlanRevision.resourceId,
+        chapterPlanRevisionId: chapterPlanRevision.id,
+        chapterPlanFingerprint: chapterPlanRevision.fingerprint,
+        bible: bibleRef,
+        contextRevisions,
+      },
+      bundle: bibleBundle,
+      plans: output.chapters,
+      planVersion,
     })
   }
+  return input.client ? await adopt(input.client) : await prisma.$transaction(adopt)
 }
 
 export async function readEpisodeEditBible(input: {
@@ -801,10 +652,7 @@ export async function readEpisodeEditBible(input: {
 }): Promise<PersistedEditBibleBundle | null> {
   const client = input.client ?? prisma
   const record = await client.projectEditBible.findFirst({
-    where: {
-      episodeId: input.episodeId,
-      episode: { projectId: input.projectId },
-    },
+    where: { episodeId: input.episodeId, episode: { projectId: input.projectId } },
     select: persistedBibleSelect,
   })
   return record ? mapPersistedBible(record, input.projectId) : null
@@ -820,9 +668,6 @@ export async function readEpisodeEditChapters(input: {
     where: {
       episodeId: input.episodeId,
       episode: { projectId: input.projectId },
-      sourceStart: { not: null },
-      sourceEnd: { not: null },
-      targetDurationSec: { not: null },
     },
     orderBy: { chapterIndex: 'asc' },
     select: {
@@ -834,32 +679,13 @@ export async function readEpisodeEditChapters(input: {
       sourceEnd: true,
       targetDurationSec: true,
       provenanceJson: true,
-      eventsJson: true,
-      renderStatus: true,
-      outputMediaId: true,
-      status: true,
       updatedAt: true,
     },
   })
   return chapters.map((chapter) => {
-    if (
-      chapter.sourceStart === null
-      || chapter.sourceEnd === null
-      || chapter.targetDurationSec === null
-      || !chapter.title
-      || !chapter.summary
-    ) {
-      throw new Error(`EDIT_CHAPTER_SOURCE_PLAN_INCOMPLETE:${chapter.id}`)
-    }
     const provenance = chapter.provenanceJson && typeof chapter.provenanceJson === 'object'
       ? chapter.provenanceJson as { beatIds?: unknown; eventIds?: unknown }
       : {}
-    const beatIds = Array.isArray(provenance.beatIds)
-      ? provenance.beatIds.filter((value): value is string => typeof value === 'string')
-      : []
-    const eventIds = Array.isArray(provenance.eventIds)
-      ? provenance.eventIds.filter((value): value is string => typeof value === 'string')
-      : []
     return {
       id: chapter.id,
       chapterIndex: chapter.chapterIndex,
@@ -868,149 +694,13 @@ export async function readEpisodeEditChapters(input: {
       sourceStart: chapter.sourceStart,
       sourceEnd: chapter.sourceEnd,
       targetDurationSec: chapter.targetDurationSec,
-      beatIds,
-      eventIds,
-      status: chapter.status,
+      beatIds: Array.isArray(provenance.beatIds)
+        ? provenance.beatIds.filter((value): value is string => typeof value === 'string')
+        : [],
+      eventIds: Array.isArray(provenance.eventIds)
+        ? provenance.eventIds.filter((value): value is string => typeof value === 'string')
+        : [],
       updatedAt: chapter.updatedAt,
-      renderStatus: chapter.renderStatus,
-      outputMediaId: chapter.outputMediaId,
     }
   })
-}
-
-export async function confirmEpisodeEditBible(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly client?: Prisma.TransactionClient
-}): Promise<PersistedEditBibleBundle> {
-  const confirm = async (tx: Prisma.TransactionClient): Promise<PersistedEditBibleBundle> => {
-    await assertEpisodeAccess({ ...input, client: tx })
-    const bible = await tx.projectEditBible.findUnique({
-      where: { episodeId: input.episodeId },
-      select: persistedBibleSelect,
-    })
-    if (!bible) throw new ApiError('NOT_FOUND')
-    assertEditBibleReadyForConfirmation({ status: bible.status })
-    const chapterCount = await tx.projectEditChapter.count({
-      where: {
-        episodeId: input.episodeId,
-        sourceDocumentId: bible.sourceDocumentId,
-      },
-    })
-    if (chapterCount < 1) {
-      throw new Error('EDIT_BIBLE_CONFIRMATION_REQUIRES_CHAPTERS')
-    }
-    const parsedBible = editBibleSchema.parse(bible.bibleJson)
-    await ensureEditBibleAssets({
-      tx,
-      projectId: input.projectId,
-      bible: parsedBible,
-    })
-    const updated = await tx.projectEditBible.update({
-      where: { id: bible.id },
-      data: {
-        status: EDIT_BIBLE_STATUS.CONFIRMED,
-        lockedAt: new Date(),
-      },
-      select: persistedBibleSelect,
-    })
-    return mapPersistedBible(updated, input.projectId)
-  }
-  return input.client ? await confirm(input.client) : await prisma.$transaction(confirm)
-}
-
-export async function reviseEpisodeEditBible(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly patch: {
-    readonly bible?: EditBible
-    readonly beatSheet?: EditBibleBeatSheet
-    readonly ledger?: Ledger
-    readonly emotionalCurve?: EditBibleEmotionalCurve
-  }
-  readonly client?: Prisma.TransactionClient
-}): Promise<{
-  readonly editBible: PersistedEditBibleBundle
-  readonly chapters: readonly PersistedEditChapterPlan[]
-}> {
-  const existing = await readEpisodeEditBible({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-  })
-  if (!existing) throw new ApiError('NOT_FOUND')
-  assertEditBibleCanBeRevised({
-    status: existing.status,
-    lockedAt: existing.lockedAt,
-  })
-  if (!existing.bible || !existing.beatSheet || !existing.ledger || !existing.emotionalCurve) {
-    throw new Error('EDIT_BIBLE_REVISION_REQUIRES_READY_BUNDLE')
-  }
-  const sourceDocument = await readEpisodeSourceDocumentById({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    sourceDocumentId: existing.sourceDocumentId,
-  })
-  const bundle = validateEditBibleBundle({
-    bundle: editBibleBundleSchema.parse({
-      bible: input.patch.bible ?? existing.bible,
-      beatSheet: input.patch.beatSheet ?? existing.beatSheet,
-      ledger: input.patch.ledger ?? existing.ledger,
-      emotionalCurve: input.patch.emotionalCurve ?? existing.emotionalCurve,
-    }),
-    sourceText: sourceDocument.normalizedText,
-  })
-
-  const revise = async (tx: Prisma.TransactionClient) => {
-    await assertEpisodeAccess({ ...input, client: tx })
-    await assertNoDownstreamChapterArtifacts({
-      episodeId: input.episodeId,
-      client: tx,
-    })
-    const current = await tx.projectEditBible.findUnique({
-      where: { episodeId: input.episodeId },
-      select: persistedBibleSelect,
-    })
-    if (!current) throw new ApiError('NOT_FOUND')
-    assertEditBibleCanBeRevised({
-      status: current.status,
-      lockedAt: current.lockedAt,
-    })
-    const version = current.version + 1
-    const plans = splitEditBibleIntoChapterPlans({
-      bundle,
-      sourceText: sourceDocument.normalizedText,
-    })
-    const chapters = await writeChapterPlans({
-      tx,
-      episodeId: input.episodeId,
-      sourceDocumentId: current.sourceDocumentId,
-      bibleVersion: version,
-      bundle,
-      plans,
-    })
-    await tx.projectEditStylePreview.deleteMany({
-      where: { editBibleId: current.id },
-    })
-    const updated = await tx.projectEditBible.update({
-      where: { id: current.id },
-      data: {
-        bibleJson: toInputJsonValue(bundle.bible),
-        beatSheetJson: toInputJsonValue(bundle.beatSheet),
-        ledgerJson: toInputJsonValue(bundle.ledger),
-        emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
-        styleBibleJson: Prisma.JsonNull,
-        diagnosticsJson: Prisma.JsonNull,
-        version,
-        status: EDIT_BIBLE_STATUS.READY_FOR_REVIEW,
-      },
-      select: persistedBibleSelect,
-    })
-    return {
-      editBible: mapPersistedBible(updated, input.projectId),
-      chapters,
-    }
-  }
-  return input.client ? await revise(input.client) : await prisma.$transaction(revise)
 }

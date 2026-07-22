@@ -5,7 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
-import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import { AppIcon } from '@/components/ui/icons'
 import {
   workspaceCanvasLifecycleStatusKey,
   workspaceCanvasLifecycleTaskState,
@@ -19,9 +19,7 @@ import {
   WorkspaceNodeImagePreviewContext,
   nodeIsRunning,
 } from './renderers/renderer-shared'
-import { nodeActionIconName } from './workspace-node-action-policy'
 import { NodeContent } from './workspace-node-renderer-registry'
-import { CanvasActionButton } from './CanvasActionButton'
 
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
@@ -29,14 +27,8 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const expanded = data.disclosure?.effectiveExpanded ?? data.expanded === true
   const nodeDefinition = getWorkspaceCanvasNodeDefinition(data.kind)
   const presentation = nodeDefinition.presentation
-  const action = data.action
   const isRunning = nodeIsRunning(data)
-  const secondaryAction = data.secondaryAction
-  const tertiaryAction = data.tertiaryAction
-  const secondaryActionIcon: AppIconName = secondaryAction ? nodeActionIconName(secondaryAction) : 'externalLink'
-  const tertiaryActionIcon: AppIconName = tertiaryAction ? nodeActionIconName(tertiaryAction) : 'externalLink'
   const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)
-  const showHeaderAction = Boolean(action && data.actionLabel && presentation.actionPlacement === 'header')
   const fixedExpandedShell = expanded && Boolean(getWorkspaceCanvasNodePresentationProfile(data.kind).expanded)
   const usesGridAutoHeightShell = presentation.usesGridAutoHeightShell
   const shellLayoutClass = usesGridAutoHeightShell
@@ -49,9 +41,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const statusLabel = statusLabels(workspaceCanvasLifecycleStatusKey(data.lifecycle))
   const shouldShowFooter =
     showDetailsToggle ||
-    Boolean(action && data.actionLabel && !showHeaderAction) ||
-    Boolean(secondaryAction && data.secondaryActionLabel) ||
-    Boolean(tertiaryAction && data.tertiaryActionLabel) ||
     presentation.showsMetaFooter
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
@@ -76,10 +65,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
           data-node-id={data.nodeId}
           data-lifecycle-phase={data.lifecycle.phase}
           data-lifecycle-task-id={data.lifecycle.taskId ?? ''}
-          data-terminal-handoff-task-id={data.terminalHandoffTaskId ?? ''}
-          data-stream-presentation={
-            data.lifecycle.stream ? (data.lifecycle.stream.isStreaming ? 'active' : 'handoff') : 'none'
-          }
           data-disclosure-mode={data.disclosure?.mode ?? 'none'}
           data-expanded={expanded ? 'true' : 'false'}
         >
@@ -90,13 +75,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-[11px] bg-slate-100 text-[var(--glass-text-secondary)]">
                     <AppIcon name={presentation.iconName} className="h-4 w-4" />
                   </span>
-                  {data.indexLabel ? (
-                    <span
-                      className={`${SELECTABLE_TEXT_CLASS} inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-100 px-2 text-[11px] font-semibold text-[var(--glass-text-secondary)]`}
-                    >
-                      {data.indexLabel}
-                    </span>
-                  ) : null}
                   <p className={`${SELECTABLE_TEXT_CLASS} truncate`}>{data.eyebrow}</p>
                 </div>
                 {presentation.showsLargeTitle ? (
@@ -108,20 +86,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                 ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {showHeaderAction && action && data.actionLabel ? (
-                  <CanvasActionButton
-                    action={action}
-                    nodeId={data.nodeId ?? data.targetId}
-                    type="button"
-                    icon={nodeActionIconName(action)}
-                    label={data.actionLabel}
-                    className="py-2"
-                    disabled={data.actionDisabled === true || isRunning}
-                    onDirectAction={() => {
-                      if (!isRunning) data.onAction?.(action, data.nodeId)
-                    }}
-                  />
-                ) : null}
                 <span
                   className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${isRunning ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-[var(--glass-text-secondary)]'}`}
                 >
@@ -160,48 +124,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                       >
                         {expanded ? labels('collapseDetails') : labels('expandDetails')}
                       </button>
-                    ) : null}
-                    {action && data.actionLabel && !showHeaderAction ? (
-                      <CanvasActionButton
-                        action={action}
-                        nodeId={data.nodeId ?? data.targetId}
-                        type="button"
-                        icon={nodeActionIconName(action)}
-                        label={data.actionLabel}
-                        loading={isRunning}
-                        disabled={data.actionDisabled === true || isRunning}
-                        onDirectAction={() => {
-                          if (!isRunning) data.onAction?.(action, data.nodeId)
-                        }}
-                      />
-                    ) : null}
-                    {secondaryAction && data.secondaryActionLabel ? (
-                      <CanvasActionButton
-                        action={secondaryAction}
-                        nodeId={data.nodeId ?? data.targetId}
-                        type="button"
-                        tone="secondary"
-                        icon={secondaryActionIcon}
-                        label={data.secondaryActionLabel}
-                        disabled={data.actionDisabled === true || isRunning}
-                        onDirectAction={() => {
-                          if (!isRunning) data.onAction?.(secondaryAction, data.nodeId)
-                        }}
-                      />
-                    ) : null}
-                    {tertiaryAction && data.tertiaryActionLabel ? (
-                      <CanvasActionButton
-                        action={tertiaryAction}
-                        nodeId={data.nodeId ?? data.targetId}
-                        type="button"
-                        tone="secondary"
-                        icon={tertiaryActionIcon}
-                        label={data.tertiaryActionLabel}
-                        disabled={data.actionDisabled === true || isRunning}
-                        onDirectAction={() => {
-                          if (!isRunning) data.onAction?.(tertiaryAction, data.nodeId)
-                        }}
-                      />
                     ) : null}
                   </div>
                 </div>

@@ -66,10 +66,12 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 }
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
-  if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.MUSIC_SCORE_GENERATE) return 'music'
+  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_AUDIO) return 'music'
+  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_VOICE) return 'audio'
+  if (taskType === TASK_TYPE.CREATIVE_RESOURCE_IMAGE) return 'image'
   if (
-    taskType === TASK_TYPE.VIDEO_SEGMENT
-    || taskType === TASK_TYPE.FINAL_VIDEO_RENDER
+    taskType === TASK_TYPE.CREATIVE_RESOURCE_VIDEO
+    || taskType === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
   ) return 'video'
   if (readString(result, 'audioUrl')) return 'audio'
   if (readString(result, 'videoUrl')) return 'video'

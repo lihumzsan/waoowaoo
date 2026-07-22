@@ -16,6 +16,7 @@ import {
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay_draft,
   creativeWorkOutputSchemas.edit_bible_bundle,
+  creativeWorkOutputSchemas.chapter_plan,
   creativeWorkOutputSchemas.continuity_analysis,
   creativeWorkOutputSchemas.style_bible,
   creativeWorkOutputSchemas.asset_prompt_set,
@@ -77,7 +78,7 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     fingerprint: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
-    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including the required project.style_bible Resource and any image assets.'),
+    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Style Bible and any relevant media assets.'),
 }).strict()
 
 const creativeWorkRequestBatchInputSchema = z.object({
@@ -110,7 +111,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v3' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v4' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -149,6 +150,16 @@ export const creativeWorkTaskResultSchema = z.object({
   continuationProjection: creativeWorkContinuationProjectionSchema,
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
   creativeWorkResult: creativeWorkerResultSchema,
+  resources: z.array(z.object({
+    resourceId: z.string().trim().min(1),
+    revisionId: z.string().trim().min(1),
+    fingerprint: z.string().trim().min(1),
+    schemaId: z.string().trim().min(1),
+    mediaType: z.enum(['text', 'image', 'audio', 'video']),
+    name: z.string().trim().min(1),
+    candidateKey: z.string().trim().min(1).nullable(),
+  }).strict()).min(1).optional()
+    .describe('Exact immutable Resource revisions materialized atomically from this completed result. Absent when this output kind has no persistent Resource projection.'),
 }).strict().superRefine((result, context) => {
   const mismatches: Array<{ readonly path: readonly PropertyKey[]; readonly code: string }> = []
   if (result.continuationProjection.requestKey !== result.requestKey) {
@@ -210,12 +221,14 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
       return output.logline || output.synopsis || output.title
     case 'edit_bible_bundle':
       return output.bundle.bible.logline || output.bundle.bible.synopsis
+    case 'chapter_plan':
+      return output.rationale
     case 'continuity_analysis':
       return output.summary
     case 'style_bible':
       return output.design.mode === 'final'
         ? output.design.styleBible.styleSummary
-        : output.design.options.stylePreviews.map((preview) => preview.title).join(' / ')
+        : output.design.candidates.map((candidate) => candidate.title).join(' / ')
     case 'asset_prompt_set':
       return output.overview || output.assets.map((asset) => asset.title).join(' / ')
     case 'video_prompt_set':

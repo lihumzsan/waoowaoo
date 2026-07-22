@@ -1,138 +1,150 @@
 import { z } from 'zod'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
 import {
-  adoptCreativeEditBibleBundle,
-  saveCreativeEditSource,
+  adoptCreativeBibleResources,
+  adoptCreativeChapterPlan,
 } from '@/lib/edit-bible'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 
-const episodeScopeSchema = z.object({
-  episodeId: z.string().trim().min(1).optional()
-    .describe('Exact episode ID. Omit to use the episode currently open in the workspace.'),
-})
-
-const saveEditSourceInputSchema = episodeScopeSchema.extend({
-  sourceKind: z.enum(['upload', 'paste'])
-    .describe('How this non-AI source entered the project. Upload requires rawFileMediaId.'),
-  text: z.string().min(1)
-    .describe('Complete source text to normalize and persist as one immutable SourceDocument revision.'),
-  rawFileMediaId: z.string().trim().min(1).optional()
-    .describe('Exact uploaded file Media identity; required only when sourceKind is upload.'),
+const exactRevisionSchema = z.object({
+  resourceId: z.string().trim().min(1),
+  revisionId: z.string().trim().min(1),
+  fingerprint: z.string().trim().min(1),
 }).strict()
 
-const saveEditSourceOutputSchema = z.object({
-  id: z.string().trim().min(1),
-  normalizedText: z.string().min(1),
-  checksum: z.string().length(64),
+const adoptBibleInputSchema = z.object({
+  screenplay: exactRevisionSchema.describe('Exact immutable project.source_script revision used by the Bible Task.'),
+  bible: exactRevisionSchema.describe('Exact immutable project.edit_bible revision to adopt.'),
+  expectedVersion: z.number().int().min(0).nullable().optional()
+    .describe('Use null for first adoption, or the current Bible projection version when replacing it.'),
+}).strict()
+
+const adoptBibleOutputSchema = z.object({
+  success: z.literal(true),
+  episodeId: z.string().trim().min(1),
+  bibleRevisionId: z.string().trim().min(1),
   version: z.number().int().positive(),
-  sourceKind: z.enum(['upload', 'paste']),
 }).strict()
 
-const adoptEditBibleBundleInputSchema = episodeScopeSchema.extend({
-  sourceDocumentId: z.string().trim().min(1)
-    .describe('Exact persisted SourceDocument identity copied into the Creative Task input.'),
-  taskId: z.string().trim().min(1)
-    .describe('Exact completed creative_work Task whose strict edit_bible_bundle result should be adopted.'),
+const adoptChaptersInputSchema = z.object({
+  screenplay: exactRevisionSchema.describe('Exact immutable project.source_script revision used to create the Chapter plan.'),
+  chapterPlan: exactRevisionSchema.describe('Exact immutable project.chapter_plan revision to adopt.'),
 }).strict()
 
-const adoptEditBibleBundleOutputSchema = z.object({
-  editBibleId: z.string().trim().min(1),
-  sourceDocumentId: z.string().trim().min(1),
-  generationTaskId: z.string().trim().min(1),
-  version: z.number().int().positive(),
-  status: z.enum(['ready_for_review', 'confirmed']),
-  chapterCount: z.number().int().positive(),
-  chapterIds: z.array(z.string().trim().min(1)).min(1),
+const adoptChaptersOutputSchema = z.object({
+  success: z.literal(true),
+  episodeId: z.string().trim().min(1),
+  screenplayRevisionId: z.string().trim().min(1),
+  chapterPlanRevisionId: z.string().trim().min(1),
+  chapters: z.array(z.object({
+    chapterId: z.string().trim().min(1),
+    chapterIndex: z.number().int().nonnegative(),
+    title: z.string().trim().min(1),
+    targetDurationSec: z.number().int().positive(),
+  }).strict()).min(1),
 }).strict()
 
-const EFFECTS_SOURCE_WRITE = {
-  writes: true,
-  workspaceResourceImpact: 'edit_pipeline',
-  billable: false,
-  destructive: false,
-  overwrite: false,
-  bulk: false,
-  externalSideEffects: false,
-  longRunning: false,
-} as const
-
-const EFFECTS_BIBLE_ADOPTION = {
-  writes: true,
-  workspaceResourceImpact: 'edit_pipeline',
-  billable: false,
-  destructive: false,
-  overwrite: true,
-  bulk: true,
-  externalSideEffects: false,
-  longRunning: false,
-} as const
-
-function resolveEpisodeId(inputEpisodeId: string | undefined, contextEpisodeId: unknown): string {
-  const episodeId = inputEpisodeId?.trim()
-    || (typeof contextEpisodeId === 'string' ? contextEpisodeId.trim() : '')
-  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+function requireEpisodeId(value: unknown): string {
+  const episodeId = typeof value === 'string' ? value.trim() : ''
+  if (!episodeId) throw new Error('CREATIVE_ADOPTION_EPISODE_CONTEXT_REQUIRED')
   return episodeId
 }
 
 export function createAssistantCreativeBibleOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    save_edit_source: defineOperation({
-      id: 'save_edit_source',
-      summary: 'Persist user-provided or uploaded text as a normalized immutable episode SourceDocument without running AI. Use the returned id, version, and checksum as exact domain provenance when delegating edit_bible_bundle work.',
+    adopt_bible: defineOperation({
+      id: 'adopt_bible',
+      summary: 'Adopt one exact Bible Resource revision derived from one exact screenplay Resource revision. This writes only the current Bible/source-range projection; it does not confirm the screenplay, create Chapters, generate assets, or start downstream work.',
       intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_SOURCE_WRITE,
+      effects: {
+        writes: true,
+        workspaceResourceImpact: 'creative_resources',
+        billable: false,
+        destructive: false,
+        overwrite: true,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      resourceContract: {
+        kind: 'resource',
+        acceptsReferences: true,
+        outputMediaTypes: ['text'],
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE],
+        supportsCandidates: false,
+      },
       confirmation: { kind: 'none', required: false },
-      inputSchema: saveEditSourceInputSchema,
-      outputSchema: saveEditSourceOutputSchema,
+      prerequisites: { episodeId: 'required' },
+      choiceCommit: { enabled: true },
+      inputSchema: adoptBibleInputSchema,
+      outputSchema: adoptBibleOutputSchema,
       executeInTransaction: async (context, input, transaction) => {
-        const source = await saveCreativeEditSource({
+        const episodeId = requireEpisodeId(context.context.episodeId)
+        const bible = await adoptCreativeBibleResources({
           projectId: context.projectId,
           userId: context.userId,
-          episodeId: resolveEpisodeId(input.episodeId, context.context.episodeId),
-          sourceKind: input.sourceKind,
-          text: input.text,
-          ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
+          episodeId,
+          screenplay: input.screenplay,
+          bible: input.bible,
+          expectedVersion: input.expectedVersion ?? null,
           client: transaction,
         })
-        return saveEditSourceOutputSchema.parse({
-          id: source.id,
-          normalizedText: source.normalizedText,
-          checksum: source.checksum,
-          version: source.version,
-          sourceKind: source.sourceKind,
+        return adoptBibleOutputSchema.parse({
+          success: true,
+          episodeId,
+          bibleRevisionId: bible.bibleRevisionId,
+          version: bible.version,
         })
       },
     }),
-    adopt_edit_bible_bundle: defineOperation({
-      id: 'adopt_edit_bible_bundle',
-      summary: 'Adopt one completed edit_bible_bundle Creative Task into the episode Bible. The Task, source provenance, exact source revision and strict output are revalidated; the existing Bible service atomically writes the formal Bible and its deterministic Chapter plans without starting any downstream work.',
+    adopt_chapters: defineOperation({
+      id: 'adopt_chapters',
+      summary: 'Adopt one exact chapter_plan Resource revision derived from one exact screenplay Resource revision. The Creative Skill/Subagent owns Chapter-boundary judgment; this operation only validates scope, exact lineage, source ranges and the 180-second per-Chapter ceiling, then persists the Chapter projection. A Bible, continuity analysis or Style Bible may be optional context, never a prerequisite. This operation starts no downstream work.',
       intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BIBLE_ADOPTION,
+      effects: {
+        writes: true,
+        workspaceResourceImpact: 'creative_resources',
+        billable: false,
+        destructive: false,
+        overwrite: true,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      resourceContract: {
+        kind: 'resource',
+        acceptsReferences: true,
+        outputMediaTypes: ['text'],
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN],
+        supportsCandidates: false,
+      },
       confirmation: { kind: 'none', required: false },
-      inputSchema: adoptEditBibleBundleInputSchema,
-      outputSchema: adoptEditBibleBundleOutputSchema,
+      prerequisites: { episodeId: 'required' },
+      choiceCommit: { enabled: true },
+      inputSchema: adoptChaptersInputSchema,
+      outputSchema: adoptChaptersOutputSchema,
       executeInTransaction: async (context, input, transaction) => {
-        const adopted = await adoptCreativeEditBibleBundle({
+        const episodeId = requireEpisodeId(context.context.episodeId)
+        const chapters = await adoptCreativeChapterPlan({
           projectId: context.projectId,
           userId: context.userId,
-          episodeId: resolveEpisodeId(input.episodeId, context.context.episodeId),
-          sourceDocumentId: input.sourceDocumentId,
-          taskId: input.taskId,
+          episodeId,
+          screenplay: input.screenplay,
+          chapterPlan: input.chapterPlan,
           client: transaction,
         })
-        if (adopted.editBible.generationTaskId !== input.taskId) {
-          throw new Error(`CREATIVE_EDIT_BIBLE_GENERATION_TASK_MISMATCH:${input.taskId}`)
-        }
-        return adoptEditBibleBundleOutputSchema.parse({
-          editBibleId: adopted.editBible.id,
-          sourceDocumentId: adopted.editBible.sourceDocumentId,
-          generationTaskId: adopted.editBible.generationTaskId,
-          version: adopted.editBible.version,
-          status: adopted.editBible.status,
-          chapterCount: adopted.chapters.length,
-          chapterIds: adopted.chapters.map((chapter) => chapter.id),
+        return adoptChaptersOutputSchema.parse({
+          success: true,
+          episodeId,
+          screenplayRevisionId: input.screenplay.revisionId,
+          chapterPlanRevisionId: input.chapterPlan.revisionId,
+          chapters: chapters.map((chapter) => ({
+            chapterId: chapter.id,
+            chapterIndex: chapter.chapterIndex,
+            title: chapter.title,
+            targetDurationSec: chapter.targetDurationSec,
+          })),
         })
       },
     }),

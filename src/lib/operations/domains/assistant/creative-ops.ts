@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
-import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeWorkInputFingerprint,
@@ -16,6 +15,7 @@ import { compileEpisodeChapterContexts } from '@/lib/edit-chapter'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { refineTaskBatchSubmitOperationOutputSchema } from '@/lib/operations/output-schemas'
+import { requireProjectVideoRatio } from '@/lib/operations/project-video-ratio-policy'
 import { submitOperationTaskBatch } from '@/lib/operations/submit-operation-task'
 import {
   writeOperationDataPart,
@@ -27,8 +27,6 @@ import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import { createTaskBatchKey } from '@/lib/task/batch'
 import { TASK_TYPE } from '@/lib/task/types'
-import { createAssistantCreativeBibleOperations } from './creative-bible-ops'
-import { createAssistantCreativeStyleOperations } from './creative-style-ops'
 
 const creativeWorkDelegationOutputSchema = refineTaskBatchSubmitOperationOutputSchema(z.object({
   success: z.literal(true),
@@ -120,7 +118,7 @@ async function resolveDelegationRequests(input: {
               fingerprint: stableArgsHash(result.context),
             },
           },
-          {
+          ...(result.context.style.productionStyleBible && result.context.style.source ? [{
             label: 'Final Style Bible',
             kind: 'structured' as const,
             content: JSON.stringify(result.context.style.productionStyleBible),
@@ -128,7 +126,7 @@ async function resolveDelegationRequests(input: {
               kind: 'resource' as const,
               ...result.context.style.source,
             },
-          },
+          }] : []),
         ],
         constraints: operationInput.constraints,
       },
@@ -162,50 +160,6 @@ async function resolveTaskRequests(input: {
     }))
   }
 
-  const videoRequests = input.requests.filter((request) => request.outputKind === 'video_prompt_set')
-  for (const request of videoRequests) {
-    const resourceReferences = request.context.sourceMaterials
-      .map((source) => source.provenance)
-      .filter((provenance) => provenance.kind === 'resource')
-    const revisionIds = resourceReferences.map((reference) => reference.revisionId)
-    const revisions = revisionIds.length > 0
-      ? await prisma.creativeResourceRevision.findMany({
-          where: { id: { in: revisionIds } },
-          select: {
-            id: true,
-            resourceId: true,
-            fingerprint: true,
-            resource: {
-              select: {
-                userId: true,
-                projectId: true,
-                status: true,
-                schemaId: true,
-              },
-            },
-          },
-        })
-      : []
-    const byRevisionId = new Map(revisions.map((revision) => [revision.id, revision]))
-    const styleReferences = resourceReferences.filter((reference) => {
-      const revision = byRevisionId.get(reference.revisionId)
-      return revision?.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
-        && revision.resourceId === reference.resourceId
-        && revision.fingerprint === reference.fingerprint
-        && revision.resource.userId === input.userId
-        && revision.resource.projectId === input.projectId
-        && revision.resource.status === 'ready'
-    })
-    if (styleReferences.length !== 1) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'CREATIVE_VIDEO_STYLE_BIBLE_REQUIRED',
-        field: 'context.sourceMaterials',
-        requestedValue: styleReferences.length,
-        agentRetryableAfterCorrection: true,
-      })
-    }
-  }
-
   const [project, videoModelKey] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
@@ -220,14 +174,7 @@ async function resolveTaskRequests(input: {
   if (!project) {
     throw new ApiError('NOT_FOUND', { code: 'PROJECT_NOT_FOUND', field: 'projectId' })
   }
-  const aspectRatio = project.videoRatio?.trim() || ''
-  if (!aspectRatio) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'PROJECT_VIDEO_RATIO_REQUIRED',
-      field: 'videoRatio',
-      agentRetryableAfterCorrection: true,
-    })
-  }
+  const aspectRatio = requireProjectVideoRatio(project.videoRatio).value
   const rawDurationOptions = resolveBuiltinCapabilitiesByModelKey('video', videoModelKey)?.video?.durationOptions ?? []
   const allowedSegmentDurationsSeconds = Array.from(new Set(rawDurationOptions
     .filter((duration): duration is number => Number.isInteger(duration)
@@ -270,7 +217,6 @@ async function resolveTaskRequests(input: {
           allowedSegmentDurationsSeconds,
           minSegmentDurationSeconds,
           maxSegmentDurationSeconds,
-          styleBibleRequired: true as const,
         },
       },
     }
@@ -279,8 +225,6 @@ async function resolveTaskRequests(input: {
 
 export function createAssistantCreativeOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    ...createAssistantCreativeBibleOperations(),
-    ...createAssistantCreativeStyleOperations(),
     delegate_creative_work: defineOperation({
       id: 'delegate_creative_work',
       summary: 'Delegate one or more bounded professional creative reasoning requests to background Subagents. Set delegation.source=requests with a one-or-more requests list for caller-supplied contexts, or delegation.source=chapters to compile persisted Chapter contexts server-side. Every request becomes one independent Creative Task; the Worker sees the complete registered Skill catalog, autonomously reads relevant Skills, and returns structured advice until a normal project Operation adopts or executes it.',

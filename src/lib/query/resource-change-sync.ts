@@ -17,18 +17,6 @@ function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
     return [queryKeys.project.editBible(ref.projectId, ref.episodeId)]
   }
 
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT && ref.episodeId) {
-    return [queryKeys.project.editScript(ref.projectId, ref.episodeId)]
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN && ref.episodeId) {
-    return [queryKeys.project.editShotExecutionPlan(ref.projectId, ref.episodeId)]
-  }
-
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.VIDEO_SEGMENTS && ref.episodeId) {
-    return [queryKeys.videoSegments.all(ref.episodeId)]
-  }
-
   if (ref.kind === WORKSPACE_RESOURCE_KIND.EPISODE_DATA && ref.episodeId) {
     return [queryKeys.episodeData(ref.projectId, ref.episodeId)]
   }
@@ -44,7 +32,6 @@ function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
       queryKeys.projectData(ref.projectId),
     ]
     if (ref.episodeId) {
-      projectAssetKeys.push(queryKeys.project.editScript(ref.projectId, ref.episodeId))
       projectAssetKeys.push(queryKeys.episodeData(ref.projectId, ref.episodeId))
       projectAssetKeys.push(queryKeys.project.context(ref.projectId, ref.episodeId))
     }

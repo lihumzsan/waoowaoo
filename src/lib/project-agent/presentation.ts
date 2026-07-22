@@ -16,13 +16,9 @@ export function buildAssistantProjectContextSnapshot(
     activeOperationTasks: context.activeOperationTasks,
     recentOperationResults: context.recentOperationResults,
     editBible: context.episodeDetail?.editBible ?? null,
-    editScript: context.episodeDetail?.editScript ?? null,
-    editScripts: context.episodeDetail?.editScripts ?? [],
-    editFirstWorkflow: context.editFirstWorkflow,
+    chapters: context.episodeDetail?.chapters ?? [],
     config: {
       videoRatio: context.policy.videoRatio,
-      videoRatioConfirmedAt: context.policy.videoRatioConfirmedAt,
-      videoRatioConfirmationVersion: context.policy.videoRatioConfirmationVersion,
     },
   }
 }

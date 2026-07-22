@@ -196,12 +196,12 @@ export async function invokeProjectAgentOperation(params: {
   approvedInvocation?: PlannedOperationInvocation | null
   returnApprovalRequired?: boolean
   transaction?: Prisma.TransactionClient
-  invocationMode?: 'default' | 'atomic_choice_confirmation'
+  invocationMode?: 'default' | 'atomic_choice_commit'
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
   const invocationMode = params.invocationMode ?? 'default'
-  const atomicChoiceConfirmation = invocationMode === 'atomic_choice_confirmation'
-  if (Boolean(params.transaction) !== atomicChoiceConfirmation) {
+  const atomicChoiceCommit = invocationMode === 'atomic_choice_commit'
+  if (Boolean(params.transaction) !== atomicChoiceCommit) {
     throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`)
   }
   const executionFence = params.context.executionFence ?? null
@@ -223,11 +223,15 @@ export async function invokeProjectAgentOperation(params: {
     }
   }
   if (
-    atomicChoiceConfirmation
+    atomicChoiceCommit
     && (
-      operation.intent !== 'act'
+      operation.choiceCommit?.enabled !== true
+      || operation.channels.tool !== true
+      || operation.intent !== 'act'
       || !operation.effects.writes
       || operation.effects.billable
+      || operation.effects.destructive
+      || operation.effects.bulk
       || operation.effects.longRunning
       || operation.effects.externalSideEffects
       || operation.confirmation.kind !== 'none'
@@ -235,7 +239,7 @@ export async function invokeProjectAgentOperation(params: {
       || !operation.executeInTransaction
     )
   ) {
-    throw new Error(`PROJECT_AGENT_CHOICE_ATOMIC_OPERATION_CONTRACT_INVALID:${operation.id}`)
+    throw new Error(`PROJECT_AGENT_CHOICE_COMMIT_OPERATION_CONTRACT_INVALID:${operation.id}`)
   }
   const prepared = prepareProjectAgentOperationInput({
     channel: params.channel,

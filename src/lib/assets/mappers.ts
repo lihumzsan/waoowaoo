@@ -2,7 +2,6 @@ import {
   createIdleTaskState,
   type AssetRenderSummary,
   type AssetSummary,
-  type AssetTaskRef,
   type AssetVariantSummary,
   type CharacterAssetSummary,
   type LocationAssetSummary,
@@ -106,10 +105,10 @@ function createRender(params: {
   isSelected: boolean
   previousImageUrl: string | null
   previousMedia: MediaRef | null
-  taskRefs: AssetTaskRef[]
 }): AssetRenderSummary {
   return {
     ...params,
+    taskRefs: [],
     taskState: createIdleTaskState(),
   }
 }
@@ -121,7 +120,6 @@ function createVariant(params: {
   description: string | null
   selectedRenderIndex: number | null
   renders: AssetRenderSummary[]
-  taskRefs: AssetTaskRef[]
 }): AssetVariantSummary {
   return {
     id: params.id,
@@ -132,7 +130,7 @@ function createVariant(params: {
     selectionState: {
       selectedRenderIndex: params.selectedRenderIndex,
     },
-    taskRefs: params.taskRefs,
+    taskRefs: [],
     taskState: createIdleTaskState(),
   }
 }
@@ -151,7 +149,6 @@ export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): C
         isSelected: appearance.selectedIndex === renderIndex,
         previousImageUrl: appearance.previousImageUrls?.[renderIndex] ?? appearance.previousImageUrl ?? null,
         previousMedia: previousImageMedias[renderIndex] ?? appearance.previousMedia ?? null,
-        taskRefs: [],
       }),
     )
     return createVariant({
@@ -161,13 +158,6 @@ export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): C
       description: appearance.description,
       selectedRenderIndex: appearance.selectedIndex,
       renders,
-      taskRefs: [
-        {
-          targetType: 'CharacterAppearance',
-          targetId: appearance.id,
-          types: ['image_character', 'modify_asset_image', 'regenerate_group'],
-        },
-      ],
     })
   })
 
@@ -179,13 +169,7 @@ export function mapProjectCharacterToAsset(character: ProjectCharacterRecord): C
     name: character.name,
     folderId: null,
     capabilities: registration.capabilities,
-    taskRefs: [
-      {
-        targetType: 'CharacterAppearance',
-        targetId: character.id,
-        types: ['image_character', 'modify_asset_image', 'regenerate_group'],
-      },
-    ],
+    taskRefs: [],
     taskState: createIdleTaskState(),
     variants,
     introduction: character.introduction ?? null,
@@ -208,13 +192,6 @@ export function mapGlobalCharacterToAsset(character: GlobalCharacterRecord): Cha
         isSelected: appearance.selectedIndex === renderIndex,
         previousImageUrl: appearance.previousImageUrls[renderIndex] ?? appearance.previousImageUrl ?? null,
         previousMedia: previousImageMedias[renderIndex] ?? appearance.previousMedia ?? null,
-        taskRefs: [
-          {
-            targetType: 'GlobalCharacterAppearance',
-            targetId: `${character.id}:${appearance.appearanceIndex}:${renderIndex}`,
-            types: ['asset_hub_modify'],
-          },
-        ],
       }),
     )
     return createVariant({
@@ -224,13 +201,6 @@ export function mapGlobalCharacterToAsset(character: GlobalCharacterRecord): Cha
       description: appearance.description,
       selectedRenderIndex: appearance.selectedIndex,
       renders,
-      taskRefs: [
-        {
-          targetType: 'GlobalCharacterAppearance',
-          targetId: appearance.id,
-          types: ['asset_hub_image', 'asset_hub_modify', 'asset_hub_reference_to_character'],
-        },
-      ],
     })
   })
 
@@ -252,19 +222,9 @@ export function mapGlobalCharacterToAsset(character: GlobalCharacterRecord): Cha
 }
 
 function buildLocationVariants(
-  scope: 'global' | 'project',
-  assetId: string,
   images: LocationImageRecord[],
 ): AssetVariantSummary[] {
   return images.map((image) => {
-    const targetType = scope === 'global' ? 'GlobalLocationImage' : 'LocationImage'
-    const renderTaskRef: AssetTaskRef | null = scope === 'global'
-      ? {
-        targetType,
-        targetId: `${assetId}:${image.imageIndex}`,
-        types: ['asset_hub_modify'],
-      }
-      : null
     return createVariant({
       id: image.id,
       index: image.imageIndex,
@@ -280,15 +240,7 @@ function buildLocationVariants(
           isSelected: image.isSelected,
           previousImageUrl: image.previousImageUrl,
           previousMedia: image.previousMedia ?? null,
-          taskRefs: renderTaskRef ? [renderTaskRef] : [],
         }),
-      ],
-      taskRefs: [
-        {
-          targetType,
-          targetId: image.id,
-          types: scope === 'global' ? ['asset_hub_modify'] : ['image_location', 'modify_asset_image', 'regenerate_group'],
-        },
       ],
     })
   })
@@ -299,7 +251,7 @@ function mapLocationLikeProjectAsset(
   asset: ProjectLocationRecord | ProjectPropRecord,
 ): LocationAssetSummary | PropAssetSummary {
   const registration = getAssetKindRegistration(kind)
-  const variants = buildLocationVariants('project', asset.id, asset.images)
+  const variants = buildLocationVariants(asset.images)
   const selectedVariant = variants.find((variant) => variant.renders[0]?.isSelected)
   const base = {
     id: asset.id,
@@ -309,13 +261,7 @@ function mapLocationLikeProjectAsset(
     name: asset.name,
     folderId: null,
     capabilities: registration.capabilities,
-    taskRefs: [
-      {
-        targetType: 'LocationImage',
-        targetId: asset.id,
-        types: ['image_location', 'modify_asset_image', 'regenerate_group'],
-      },
-    ],
+    taskRefs: [],
     taskState: createIdleTaskState(),
     variants,
     summary: asset.summary,
@@ -329,7 +275,7 @@ function mapLocationLikeGlobalAsset(
   asset: GlobalLocationRecord | GlobalPropRecord,
 ): LocationAssetSummary | PropAssetSummary {
   const registration = getAssetKindRegistration(kind)
-  const variants = buildLocationVariants('global', asset.id, asset.images)
+  const variants = buildLocationVariants(asset.images)
   const selectedVariant = variants.find((variant) => variant.renders[0]?.isSelected)
   return {
     id: asset.id,
@@ -339,13 +285,7 @@ function mapLocationLikeGlobalAsset(
     name: asset.name,
     folderId: asset.folderId,
     capabilities: registration.capabilities,
-    taskRefs: [
-      {
-        targetType: 'GlobalLocation',
-        targetId: asset.id,
-        types: ['asset_hub_image'],
-      },
-    ],
+    taskRefs: [],
     taskState: createIdleTaskState(),
     variants,
     summary: asset.summary,

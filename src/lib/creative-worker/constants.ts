@@ -1,6 +1,7 @@
 export const CREATIVE_WORK_OUTPUT_KINDS = [
   'screenplay_draft',
   'edit_bible_bundle',
+  'chapter_plan',
   'continuity_analysis',
   'style_bible',
   'asset_prompt_set',

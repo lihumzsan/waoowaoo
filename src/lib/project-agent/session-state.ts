@@ -1,7 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import { parseProjectAgentChoiceOffer } from './choice-offer'
 import type {
   ProjectAgentChoiceCardPartData,
@@ -25,10 +24,6 @@ import {
   getCurrentProjectAgentActivity,
   type ProjectAgentActivitySnapshot,
 } from './event'
-import {
-  type EditFirstWorkflowView,
-} from '@/lib/project-workflow/edit-first-view'
-import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 import { TASK_STATUS, TASK_TYPE, type TaskStatus } from '@/lib/task/types'
 import {
   CREATIVE_WORK_TASK_PROTOCOL,
@@ -83,7 +78,6 @@ export type ProjectAgentSessionPendingInteraction =
     approvalId: string
     operationId: string
     toolCallId: string
-    choiceType: EditFirstChoiceType
     choiceCard: ProjectAgentChoiceCardPartData
   }
 
@@ -104,7 +98,6 @@ export interface ProjectAgentSessionState {
   activeTasks: ProjectAgentSessionTask[]
   subagents: ProjectAgentSubagentView[]
   plan: ProjectAgentPlanSnapshot | null
-  editFirstWorkflow: EditFirstWorkflowView
 }
 
 export interface ProjectAgentSessionSnapshot {
@@ -333,14 +326,11 @@ async function buildPendingChoiceInteraction(params: {
     approvalId: params.interruption.approvalId,
     operationId: params.interruption.operationId,
     toolCallId,
-    choiceType: choiceCard.choiceType,
     choiceCard,
   }
 }
 
 async function buildPendingInteraction(params: {
-  scope: ProjectAgentSessionScopeInput
-  workflow: EditFirstWorkflowView
   interruption: ProjectAgentInterruptionSnapshot | null
 }): Promise<ProjectAgentSessionPendingInteraction | null> {
   if (!params.interruption) return null
@@ -486,12 +476,7 @@ async function buildProjectAgentSessionState(
     ...input,
     assistantId,
   }
-  const [workflow, activeRun, recentRuns, waits, pendingInterruption, openFacts, plan] = await Promise.all([
-    resolveEditFirstWorkflowView({
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-    }),
+  const [activeRun, recentRuns, waits, pendingInterruption, openFacts, plan] = await Promise.all([
     readUniqueActiveProjectAgentRun({
       projectId: input.projectId,
       userId: input.userId,
@@ -553,8 +538,6 @@ async function buildProjectAgentSessionState(
   })
   const [pendingInteraction, activeTasks, subagents] = await Promise.all([
     buildPendingInteraction({
-      scope,
-      workflow,
       interruption: facts.interruption,
     }),
     listActiveTasksForWaits({
@@ -585,7 +568,6 @@ async function buildProjectAgentSessionState(
     activeTasks,
     subagents,
     plan,
-    editFirstWorkflow: workflow,
   }
 }
 

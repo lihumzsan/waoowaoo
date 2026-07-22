@@ -94,6 +94,30 @@ function schemaAllowsNull(schema: JsonValue): boolean {
 
 const OMIT_NULLISH_MODEL_VALUE = Symbol('omit-nullish-model-value')
 
+function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean {
+  if (!isRecord(schema)) return true
+  if (Object.prototype.hasOwnProperty.call(schema, 'const')) return value === schema.const
+  if (Array.isArray(schema.enum)) return schema.enum.some((candidate) => candidate === value)
+  if (!isRecord(value)) return true
+  const properties = readProperties(schema)
+  for (const [key, propertySchema] of Object.entries(properties)) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+    if (!schemaMatchesDiscriminator(value[key], propertySchema)) return false
+  }
+  return true
+}
+
+function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null {
+  const branches = Array.isArray(schema.oneOf)
+    ? schema.oneOf
+    : Array.isArray(schema.anyOf)
+      ? schema.anyOf
+      : []
+  if (branches.length === 0) return null
+  const matches = branches.filter((branch) => schemaMatchesDiscriminator(value, toJsonValue(branch)))
+  return matches.length === 1 ? toJsonValue(matches[0]) : null
+}
+
 function normalizeNullableModelValue(value: unknown, schema: JsonValue): unknown | typeof OMIT_NULLISH_MODEL_VALUE {
   if (value === null) {
     return schemaAllowsNull(schema) ? OMIT_NULLISH_MODEL_VALUE : value
@@ -106,6 +130,8 @@ function normalizeNullableModelValue(value: unknown, schema: JsonValue): unknown
     })
   }
   if (!isRecord(value) || !isRecord(schema)) return value
+  const selectedBranch = selectUnionBranch(value, schema)
+  if (selectedBranch) return normalizeNullableModelValue(value, selectedBranch)
   const properties = readProperties(schema)
   const normalized: UnknownRecord = {}
   for (const [key, child] of Object.entries(value)) {

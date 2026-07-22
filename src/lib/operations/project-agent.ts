@@ -2,22 +2,12 @@ import { createReadOperations } from './domains/project/read-ops'
 import { createGovernanceOperations } from './domains/governance/governance-ops'
 import { createEditOperations } from './domains/assets/edit-ops'
 import { createGuiOperations } from './domains/gui/gui-ops'
-import { createExtraOperations } from './domains/extra/extra-ops'
-import { createLlmTaskOperations } from './domains/llm/llm-task-ops'
-import { createMediaOperations } from './domains/media/media-ops'
-import { createVideoOperations } from './domains/media/video-ops'
-import { createVideoSegmentOperations } from './domains/video-segments'
-import { createMusicGenerationOperations } from './domains/music/generation/music-generation-ops'
-import { createFinalRenderOperations } from './domains/render/final-video/final-render-ops'
-import { createBibleOperations } from './domains/media/bible-ops'
-import { createEditScriptOperations } from './domains/media/edit-script-ops'
 import { createConfigOperations } from './domains/config/config-ops'
 import { createProjectDataOperations } from './domains/project/project-data-ops'
 import { createProjectCrudOperations } from './domains/project/project-crud-ops'
 import { createSystemProjectOperations } from './domains/project/system-project-ops'
 import { createTaskOperations } from './domains/task/task-ops'
 import { createSseOperations } from './domains/debug/sse-ops'
-import { createAssetHubLlmOperations } from './domains/asset-hub/asset-hub-llm-ops'
 import { createAssetHubFolderOperations } from './domains/asset-hub/asset-hub-folder-ops'
 import { createAssetHubCharacterLibraryOperations } from './domains/asset-hub/asset-hub-character-library-ops'
 import { createAssetHubCharacterAppearanceOperations } from './domains/asset-hub/asset-hub-character-appearance-ops'
@@ -28,12 +18,14 @@ import { createUserModelsOperations } from './domains/config/user-models-ops'
 import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createAuthOperations } from './domains/auth/auth-ops'
-import { createAssetOperations } from './domains/asset/generation'
 import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
+import { createAssistantCreativeBibleOperations } from './domains/assistant/creative-bible-ops'
+import { createAssistantCreativeStyleOperations } from './domains/assistant/creative-style-ops'
+import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
 import { createVoiceOperations } from './domains/voice/voice-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
@@ -45,6 +37,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
   const PREREQ_EPISODE_OPTIONAL = { episodeId: 'optional' } as const
 
   return {
+    ...withOperationPack(createAssistantChoiceOperations(), {
+      groupPath: ['assistant', 'choice'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
     ...withOperationPack(createAssistantPlanOperations(), {
       groupPath: ['assistant', 'plan'],
       channels: { tool: true, api: false },
@@ -52,6 +50,18 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createAssistantCreativeOperations(), {
+      groupPath: ['assistant', 'creative'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createAssistantCreativeBibleOperations(), {
+      groupPath: ['assistant', 'creative'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createAssistantCreativeStyleOperations(), {
       groupPath: ['assistant', 'creative'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,
@@ -105,12 +115,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createAssetHubLlmOperations(), {
-      groupPath: ['asset-hub', 'ai'],
-      channels: CHANNELS_API_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createAssetHubFolderOperations(), {
       groupPath: ['asset-hub', 'folder'],
       channels: CHANNELS_API_ONLY,
@@ -153,44 +157,8 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createVideoOperations(), {
-      groupPath: ['media', 'video'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createVideoSegmentOperations(), {
-      groupPath: ['media', 'video'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createMusicGenerationOperations(), {
-      groupPath: ['media', 'music'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createVoiceOperations(), {
       groupPath: ['media', 'voice'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createFinalRenderOperations(), {
-      groupPath: ['media', 'video'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createEditScriptOperations(), {
-      groupPath: ['edit-script'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createBibleOperations(), {
-      groupPath: ['edit-bible'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
@@ -227,24 +195,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createExtraOperations(), {
-      groupPath: ['extra'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createLlmTaskOperations(), {
-      groupPath: ['llm', 'task'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createMediaOperations(), {
-      groupPath: ['media'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createCreativeResourceGenerationOperations(), {
       groupPath: ['resource'],
       channels: CHANNELS_TOOL_API,
@@ -259,12 +209,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createCreativeResourceVideoMergeOperations(), {
       groupPath: ['resource'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createAssetOperations(), {
-      groupPath: ['asset'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

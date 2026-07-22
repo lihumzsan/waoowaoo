@@ -1,8 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { resolveTaskResponse } from '@/lib/task/client'
 import {
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
 import {
   invalidateGlobalCharacters,
@@ -114,109 +112,5 @@ export function useUpdateLocationSummary() {
       }, 'Failed to update location summary')
     },
     onSuccess: invalidateLocations,
-  })
-}
-
-export function useAiModifyCharacterDescription() {
-  const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      characterId,
-      appearanceIndex,
-      currentDescription,
-      modifyInstruction,
-    }: {
-      characterId: string
-      appearanceIndex: number
-      currentDescription: string
-      modifyInstruction: string
-    }) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/ai-modify-character',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            characterId,
-            appearanceIndex,
-            currentDescription,
-            modifyInstruction,
-          }),
-        },
-        'Failed to modify character description',
-      )
-      return resolveTaskResponse<{ modifiedDescription?: string }>(response)
-    },
-    onSettled: invalidateCharacters,
-  })
-}
-
-export function useAiModifyLocationDescription() {
-  const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      locationId,
-      imageIndex,
-      currentDescription,
-      modifyInstruction,
-    }: {
-      locationId: string
-      imageIndex: number
-      currentDescription: string
-      modifyInstruction: string
-    }) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/ai-modify-location',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            locationId,
-            imageIndex,
-            currentDescription,
-            modifyInstruction,
-          }),
-        },
-        'Failed to modify location description',
-      )
-      return resolveTaskResponse<{ modifiedDescription?: string }>(response)
-    },
-    onSettled: invalidateLocations,
-  })
-}
-
-export function useAiModifyPropDescription() {
-  return useMutation({
-    mutationFn: async ({
-      propId,
-      variantId,
-      currentDescription,
-      modifyInstruction,
-    }: {
-      propId: string
-      variantId?: string
-      currentDescription: string
-      modifyInstruction: string
-    }) => {
-      const response = await requestTaskResponseWithError(
-        '/api/asset-hub/ai-modify-prop',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            propId,
-            variantId,
-            currentDescription,
-            modifyInstruction,
-          }),
-        },
-        'Failed to modify prop description',
-      )
-      return resolveTaskResponse<{ modifiedDescription?: string }>(response)
-    },
   })
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   editBibleBundleSchema,
+  editBibleBeatSchema,
   editBibleCharacterSchema,
   editBibleEntitySchema,
   editBibleStyleGuideSchema,
@@ -11,13 +12,11 @@ import {
   ledgerSnapshotSchema,
   projectLedgerSnapshotAtSourceOffset,
 } from '@/lib/edit-ledger'
-import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
+import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 
 export const CREATIVE_CONTEXT_COMPILER_ERROR_CODES = [
   'CREATIVE_CONTEXT_INPUT_INVALID',
   'CREATIVE_CONTEXT_SOURCE_MISMATCH',
-  'CREATIVE_CONTEXT_BIBLE_INCOMPLETE',
-  'CREATIVE_CONTEXT_STYLE_BIBLE_REQUIRED',
   'CREATIVE_CONTEXT_CHAPTER_NOT_FOUND',
   'CREATIVE_CONTEXT_RESOURCE_NOT_FOUND',
   'CREATIVE_CONTEXT_RESOURCE_REVISION_CHANGED',
@@ -77,22 +76,31 @@ const creativeContextAssetSchema = z.object({
   entityRef: ledgerEntityRefSchema.nullable(),
 }).strict()
 
+const creativeStyleBibleSourceSchema = z.object({
+  resourceId: z.string().trim().min(1),
+  revisionId: z.string().trim().min(1),
+  fingerprint: z.string().trim().min(1),
+}).strict()
+
 export const compileCreativeChapterContextInputSchema = z.object({
   sourceDocument: z.object({
     id: z.string().trim().min(1),
     normalizedText: z.string().min(1),
   }).strict(),
   chapter: chapterContextSourceSchema,
-  bibleBundle: editBibleBundleSchema,
-  styleBible: editScriptStyleBibleSchema.shape.styleBible,
-  styleBibleSource: z.object({
-    resourceId: z.string().trim().min(1),
-    revisionId: z.string().trim().min(1),
-    fingerprint: z.string().trim().min(1),
-  }).strict(),
+  bibleBundle: editBibleBundleSchema.nullable(),
+  styleBible: creativeStyleBibleSchema.nullable(),
+  styleBibleSource: creativeStyleBibleSourceSchema.nullable(),
   referencedAssets: z.array(creativeContextAssetSchema).max(128),
   maxChars: z.number().int().positive(),
-}).strict()
+}).strict().superRefine((input, context) => {
+  if ((input.styleBible === null) === (input.styleBibleSource === null)) return
+  context.addIssue({
+    code: 'custom',
+    message: 'CREATIVE_CONTEXT_STYLE_SOURCE_PAIR_INVALID',
+    path: ['styleBibleSource'],
+  })
+})
 
 const chapterIdentitySchema = z.object({
   chapterId: z.string().trim().min(1),
@@ -122,20 +130,20 @@ const compiledChapterContextSchema = z.object({
     text: z.string().min(1),
   }).strict(),
   narrative: z.object({
-    beatIds: z.array(z.string().trim().min(1)).min(1),
-    beats: editBibleBundleSchema.shape.beatSheet.shape.beats,
+    beatIds: z.array(z.string().trim().min(1)),
+    beats: z.array(editBibleBeatSchema),
     eventIds: z.array(z.string().trim().min(1)),
     emotionalCues: editBibleBundleSchema.shape.emotionalCurve.shape.cues,
   }).strict(),
   continuity: z.object({
-    bible: selectedBibleSchema,
+    bible: selectedBibleSchema.nullable(),
     entrySnapshot: ledgerSnapshotSchema,
     events: z.array(ledgerEventSchema),
   }).strict(),
   style: z.object({
     storyStyleGuide: editBibleStyleGuideSchema,
-    productionStyleBible: editScriptStyleBibleSchema.shape.styleBible,
-    source: compileCreativeChapterContextInputSchema.shape.styleBibleSource,
+    productionStyleBible: creativeStyleBibleSchema.nullable(),
+    source: creativeStyleBibleSourceSchema.nullable(),
   }).strict(),
   referencedAssets: z.array(creativeContextAssetSchema),
 }).strict()
@@ -235,7 +243,7 @@ function isContainedByRange(
 }
 
 function selectRelevantBibleEntities(input: {
-  readonly bundle: CompileCreativeChapterContextInput['bibleBundle']
+  readonly bundle: NonNullable<CompileCreativeChapterContextInput['bibleBundle']>
   readonly entityRefs: readonly z.infer<typeof ledgerEntityRefSchema>[]
 }) {
   const characterByName = new Map<string, (typeof input.bundle.bible.characters)[number]>()
@@ -330,37 +338,36 @@ export function compileCreativeChapterContext(
   const sourceStart = chapter.sourceStart
   const sourceEnd = chapter.sourceEnd
 
-  assertUniqueIds(
-    bibleBundle.beatSheet.beats.map((beat) => beat.beatId),
-    'CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID',
-    'beatId',
-  )
-  assertUniqueIds(
-    bibleBundle.ledger.events.map((event) => event.eventId),
-    'CREATIVE_CONTEXT_EVENT_MISMATCH',
-    'eventId',
-  )
+  if (bibleBundle) {
+    assertUniqueIds(
+      bibleBundle.beatSheet.beats.map((beat) => beat.beatId),
+      'CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID',
+      'beatId',
+    )
+    assertUniqueIds(
+      bibleBundle.ledger.events.map((event) => event.eventId),
+      'CREATIVE_CONTEXT_EVENT_MISMATCH',
+      'eventId',
+    )
+  }
   assertUniqueIds(
     input.referencedAssets.map((asset) => asset.resourceId),
     'CREATIVE_CONTEXT_ASSET_CONFLICT',
     'resourceId',
   )
 
-  const overlappingBeats = bibleBundle.beatSheet.beats.filter((beat) => (
+  const overlappingBeats = (bibleBundle?.beatSheet.beats ?? []).filter((beat) => (
     overlapsRange(beat, sourceStart, sourceEnd)
   ))
-  const beats = overlappingBeats.filter((beat) => (
-    isContainedByRange(beat, sourceStart, sourceEnd)
-  ))
-  if (beats.length === 0 || beats.length !== overlappingBeats.length) {
+  const beats = overlappingBeats
+  if (bibleBundle && beats.length === 0) {
     fail('CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID', {
       chapterId: chapter.id,
       overlappingBeatCount: overlappingBeats.length,
-      containedBeatCount: beats.length,
     })
   }
 
-  const events = bibleBundle.ledger.events.filter((event) => (
+  const events = (bibleBundle?.ledger.events ?? []).filter((event) => (
     isContainedByRange(event, sourceStart, sourceEnd)
   ))
   const persistedEventsResult = z.array(ledgerEventSchema).safeParse(chapter.eventsJson)
@@ -375,10 +382,9 @@ export function compileCreativeChapterContext(
     fail('CREATIVE_CONTEXT_EVENT_MISMATCH', { chapterId: chapter.id })
   }
 
-  const expectedSnapshot = projectLedgerSnapshotAtSourceOffset({
-    ledger: bibleBundle.ledger,
-    sourceEnd: sourceStart,
-  })
+  const expectedSnapshot = bibleBundle
+    ? projectLedgerSnapshotAtSourceOffset({ ledger: bibleBundle.ledger, sourceEnd: sourceStart })
+    : { sourceEnd: sourceStart, facts: [], entities: [] }
   const persistedSnapshotResult = ledgerSnapshotSchema.safeParse(chapter.entrySnapshotJson)
   if (!persistedSnapshotResult.success) {
     throw new CreativeContextCompilerError(
@@ -400,13 +406,14 @@ export function compileCreativeChapterContext(
   ]
   const chapterEntityKeys = new Set(chapterEntityRefs.map(entityRefKey))
   const referencedAssets = input.referencedAssets.filter((asset) => (
-    asset.entityRef === null || chapterEntityKeys.has(entityRefKey(asset.entityRef))
+    !bibleBundle
+    || asset.entityRef === null
+    || chapterEntityKeys.has(entityRefKey(asset.entityRef))
   ))
-  const selectedEntities = selectRelevantBibleEntities({
-    bundle: bibleBundle,
-    entityRefs: chapterEntityRefs,
-  })
-  const emotionalCues = bibleBundle.emotionalCurve.cues.filter((cue) => (
+  const selectedEntities = bibleBundle
+    ? selectRelevantBibleEntities({ bundle: bibleBundle, entityRefs: chapterEntityRefs })
+    : { characters: [], locations: [] }
+  const emotionalCues = (bibleBundle?.emotionalCurve.cues ?? []).filter((cue) => (
     overlapsRange(cue, sourceStart, sourceEnd)
   ))
   const sourceText = sourceDocument.normalizedText.slice(sourceStart, sourceEnd)
@@ -441,19 +448,19 @@ export function compileCreativeChapterContext(
       emotionalCues,
     },
     continuity: {
-      bible: {
+      bible: bibleBundle ? {
         title: bibleBundle.bible.title ?? null,
         logline: bibleBundle.bible.logline ?? null,
         synopsis: bibleBundle.bible.synopsis,
         worldRules: bibleBundle.bible.worldRules,
         characters: selectedEntities.characters,
         locations: selectedEntities.locations,
-      },
+      } : null,
       entrySnapshot: expectedSnapshot,
       events,
     },
     style: {
-      storyStyleGuide: bibleBundle.bible.styleGuide,
+      storyStyleGuide: bibleBundle?.bible.styleGuide ?? {},
       productionStyleBible: input.styleBible,
       source: input.styleBibleSource,
     },

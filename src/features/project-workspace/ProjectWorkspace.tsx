@@ -5,7 +5,7 @@ import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { apiFetch } from '@/lib/api-fetch'
-import { useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
+import { useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
@@ -13,7 +13,6 @@ import WorkspaceHeaderShell from './components/WorkspaceHeaderShell'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantSelectionContext } from './canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
-import { WorkspaceRuntimeProvider } from './WorkspaceRuntimeContext'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
 import {
@@ -41,7 +40,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const vm = useProjectWorkspaceController(props)
   const [assistantSelection, setAssistantSelection] = useState<WorkspaceAssistantSelectionContext>({})
   const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
-  const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
   const [workspaceScopeSelection, setWorkspaceScopeSelection] = useState<WorkspaceScopeSelection>(() => ({
     episodeId: props.episodeId ?? null,
@@ -62,7 +60,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   } = props
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
   const editBibleForWorkspace = editBibleResponse?.editBible ?? null
-  const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const workspaceChapters = useMemo(
     () => editBibleResponse?.chapters ?? [],
     [editBibleResponse?.chapters],
@@ -132,7 +129,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onProjectRename={onProjectRename}
         projectConfigurable={projectConfigurable}
         currentEditBible={editBibleForWorkspace ?? null}
-        currentWorkflow={projectContext?.editFirstWorkflow ?? null}
         workspaceChapters={workspaceChapters}
         currentWorkspaceScopeId={workspaceScopeId}
         onWorkspaceScopeSelect={handleWorkspaceScopeSelect}
@@ -148,17 +144,12 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             autoStartKey={props.assistantAutoStartKey ?? null}
             onAutoStartConsumed={props.onAssistantAutoStartConsumed}
             onActiveOperationChange={setActiveAssistantFocusRequest}
-            onStyleBibleConfirmed={() => setStyleBibleFocusRequestId((current) => current + 1)}
           />
           <div className={isEpisodeWorkspace ? 'h-full min-w-0 overflow-hidden' : 'min-w-0'}>
-            <WorkspaceRuntimeProvider value={vm.runtime.workspaceRuntime}>
-              <ProjectWorkspaceCanvas
-                onAssistantSelectionChange={setAssistantSelection}
-                activeAssistantFocusRequest={activeAssistantFocusRequest}
-                styleBibleFocusRequestId={styleBibleFocusRequestId}
-                workspaceScopeId={workspaceScopeId}
-              />
-            </WorkspaceRuntimeProvider>
+            <ProjectWorkspaceCanvas
+              onAssistantSelectionChange={setAssistantSelection}
+              activeAssistantFocusRequest={activeAssistantFocusRequest}
+            />
           </div>
         </div>
 

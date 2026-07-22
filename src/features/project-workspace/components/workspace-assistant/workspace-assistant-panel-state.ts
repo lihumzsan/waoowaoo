@@ -3,7 +3,6 @@ import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-st
 import type { ChatStatus } from 'ai'
 
 export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
-  generate_edit_style_preview_images: 'stylePreviewGeneration',
 } as const
 
 export type WorkspaceAssistantActiveOperationPresentation =

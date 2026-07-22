@@ -7,15 +7,12 @@ import { shouldShowError } from '@/lib/error-utils'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import {
-    useAiModifyCharacterDescription,
-    useAiModifyProjectAppearanceDescription,
     useUpdateCharacterAppearanceDescription,
     useUpdateCharacterName,
     useUpdateProjectAppearanceDescription,
     useUpdateProjectCharacterIntroduction,
     useUpdateProjectCharacterName,
 } from '@/lib/query/hooks'
-import { AiModifyDescriptionField } from './AiModifyDescriptionField'
 
 export interface CharacterEditModalProps {
     mode: 'asset-hub' | 'project'
@@ -27,10 +24,8 @@ export interface CharacterEditModalProps {
     projectId?: string
     appearanceId?: string
     descriptionIndex?: number
-    isTaskRunning?: boolean
     introduction?: string | null
     onClose: () => void
-    onSave: (characterId: string, appearanceId: string) => void
     onUpdate?: (newDescription: string) => void
     onIntroductionUpdate?: (newIntroduction: string) => void
     onNameUpdate?: (newName: string) => void
@@ -47,10 +42,8 @@ export function CharacterEditModal({
     projectId,
     appearanceId,
     descriptionIndex,
-    isTaskRunning = false,
     introduction,
     onClose,
-    onSave,
     onUpdate,
     onIntroductionUpdate,
     onNameUpdate,
@@ -58,24 +51,10 @@ export function CharacterEditModal({
 }: CharacterEditModalProps) {
     const t = useTranslations('assets')
 
-    const appearanceKey = mode === 'asset-hub'
-        ? String(appearanceIndex ?? 0)
-        : String(appearanceId ?? '')
-
     const [editingName, setEditingName] = useState(characterName)
     const [editingDescription, setEditingDescription] = useState(description)
     const [editingIntroduction, setEditingIntroduction] = useState(introduction || '')
-    const [aiModifyInstruction, setAiModifyInstruction] = useState('')
-    const [isAiModifying, setIsAiModifying] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-    const aiModifyingState = isAiModifying
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'modify',
-            resource: 'image',
-            hasOutput: true,
-        })
-        : null
     const savingState = isSaving
         ? resolveTaskPresentationState({
             phase: 'processing',
@@ -84,22 +63,12 @@ export function CharacterEditModal({
             hasOutput: false,
         })
         : null
-    const taskRunningState = isTaskRunning
-        ? resolveTaskPresentationState({
-            phase: 'processing',
-            intent: 'modify',
-            resource: 'image',
-            hasOutput: true,
-        })
-        : null
 
     const updateAssetHubName = useUpdateCharacterName()
     const updateProjectName = useUpdateProjectCharacterName(projectId ?? '')
     const updateAssetHubAppearanceDesc = useUpdateCharacterAppearanceDescription()
     const updateProjectAppearanceDesc = useUpdateProjectAppearanceDescription(projectId ?? '')
     const updateProjectIntroduction = useUpdateProjectCharacterIntroduction(projectId ?? '')
-    const aiModifyAssetHub = useAiModifyCharacterDescription()
-    const aiModifyProject = useAiModifyProjectAppearanceDescription(projectId ?? '')
 
     const getErrorMessage = (error: unknown, fallback: string) => {
         if (error instanceof Error && error.message) return error.message
@@ -151,52 +120,6 @@ export function CharacterEditModal({
         onIntroductionUpdate?.(nextIntro)
     }
 
-    const handleAiModify = async () => {
-        if (!aiModifyInstruction.trim()) return false
-
-        try {
-            setIsAiModifying(true)
-
-            if (mode === 'asset-hub') {
-                const data = await aiModifyAssetHub.mutateAsync({
-                    characterId,
-                    appearanceIndex: appearanceIndex ?? 0,
-                    currentDescription: editingDescription,
-                    modifyInstruction: aiModifyInstruction,
-                })
-                if (data?.modifiedDescription) {
-                    setEditingDescription(data.modifiedDescription)
-                    onUpdate?.(data.modifiedDescription)
-                    setAiModifyInstruction('')
-                    return true
-                }
-                return false
-            }
-
-            if (!appearanceId) throw new Error('Missing appearanceId')
-            const data = await aiModifyProject.mutateAsync({
-                characterId,
-                appearanceId,
-                currentDescription: editingDescription,
-                modifyInstruction: aiModifyInstruction,
-            })
-            if (data?.modifiedDescription) {
-                setEditingDescription(data.modifiedDescription)
-                onUpdate?.(data.modifiedDescription)
-                setAiModifyInstruction('')
-                return true
-            }
-            return false
-        } catch (error: unknown) {
-            if (shouldShowError(error)) {
-                alert(`${t('modal.modifyFailed')}: ${getErrorMessage(error, t('errors.failed'))}`)
-            }
-            return false
-        } finally {
-            setIsAiModifying(false)
-        }
-    }
-
     const handleSaveName = async () => {
         try {
             await persistNameIfNeeded()
@@ -225,28 +148,6 @@ export function CharacterEditModal({
         } finally {
             setIsSaving(false)
         }
-    }
-
-    const handleSaveAndGenerate = async () => {
-        const savedDescription = editingDescription
-        const savedAppearanceKey = appearanceKey
-        onClose()
-
-        ; (async () => {
-            try {
-                await persistNameIfNeeded()
-                await persistDescription()
-                await persistIntroductionIfNeeded()
-
-                onUpdate?.(savedDescription)
-                onRefresh?.()
-                onSave(characterId, savedAppearanceKey)
-            } catch (error: unknown) {
-                if (shouldShowError(error)) {
-                    alert(getErrorMessage(error, t('errors.saveFailed')))
-                }
-            }
-        })()
     }
 
     return (
@@ -318,21 +219,17 @@ export function CharacterEditModal({
                         </div>
                     )}
 
-                    <AiModifyDescriptionField
-                        label={t('modal.appearancePrompt')}
-                        description={editingDescription}
-                        onDescriptionChange={setEditingDescription}
-                        descriptionPlaceholder={t('modal.descPlaceholder')}
-                        descriptionHeightClassName="h-64"
-                        aiInstruction={aiModifyInstruction}
-                        onAiInstructionChange={setAiModifyInstruction}
-                        aiInstructionPlaceholder={t('modal.modifyPlaceholderCharacter')}
-                        onAiModify={handleAiModify}
-                        isAiModifying={isAiModifying}
-                        aiModifyingState={aiModifyingState}
-                        actionLabel={t('modal.modifyDescription')}
-                        cancelLabel={t('common.cancel')}
-                    />
+                    <div className="space-y-2">
+                        <label className="glass-field-label block">
+                            {t('modal.appearancePrompt')}
+                        </label>
+                        <textarea
+                            value={editingDescription}
+                            onChange={(event) => setEditingDescription(event.target.value)}
+                            className="glass-textarea-base w-full h-64 px-3 py-2 resize-none"
+                            placeholder={t('modal.descPlaceholder')}
+                        />
+                    </div>
                 </div>
 
                 <div className="flex gap-3 justify-end p-4 border-t border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] rounded-b-lg flex-shrink-0">
@@ -351,18 +248,7 @@ export function CharacterEditModal({
                         {isSaving ? (
                             <TaskStatusInline state={savingState} className="text-white [&>span]:text-white [&_svg]:text-white" />
                         ) : (
-                            t('modal.saveOnly')
-                        )}
-                    </button>
-                    <button
-                        onClick={handleSaveAndGenerate}
-                        disabled={isSaving || isTaskRunning || !editingDescription.trim()}
-                        className="glass-btn-base glass-btn-primary px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        {isTaskRunning ? (
-                            <TaskStatusInline state={taskRunningState} className="text-white [&>span]:text-white [&_svg]:text-white" />
-                        ) : (
-                            t('modal.saveAndGenerate')
+                            t('modal.save')
                         )}
                     </button>
                 </div>

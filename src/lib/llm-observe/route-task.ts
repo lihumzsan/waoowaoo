@@ -8,7 +8,7 @@ import type { LLMObserveDisplayMode } from './config'
 import { getLLMTaskPolicy } from './task-policy'
 import { getTaskFlowMeta } from './stage-pipeline'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
+import { getProjectModelConfig } from '@/lib/config-service'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -100,17 +100,9 @@ export async function maybeSubmitLLMTask(params: {
   const hasModel = typeof payload.analysisModel === 'string' && payload.analysisModel.trim()
     || typeof payload.model === 'string' && payload.model.trim()
   if (!hasModel && isBillableTaskType(params.type)) {
-    const useUserLevelConfig = params.type === TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
-    if (useUserLevelConfig) {
-      const userConfig = await getUserModelConfig(params.userId)
-      if (userConfig.analysisModel) {
-        payload.analysisModel = userConfig.analysisModel
-      }
-    } else {
-      const modelConfig = await getProjectModelConfig(params.projectId, params.userId)
-      if (modelConfig.analysisModel) {
-        payload.analysisModel = modelConfig.analysisModel
-      }
+    const modelConfig = await getProjectModelConfig(params.projectId, params.userId)
+    if (modelConfig.analysisModel) {
+      payload.analysisModel = modelConfig.analysisModel
     }
   }
 

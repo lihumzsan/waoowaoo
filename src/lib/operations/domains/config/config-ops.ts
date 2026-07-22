@@ -29,6 +29,7 @@ const MODEL_FIELDS = [
 ] as const
 
 const CLOUD_PROJECT_CONFIG_FIELDS = ['videoRatio'] as const
+const PROJECT_VIDEO_RATIO_VALUES = Object.keys(ASPECT_RATIO_CONFIGS)
 
 const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType> = {
   analysisModel: 'llm',
@@ -42,6 +43,11 @@ const MODEL_FIELD_TO_TYPE: Record<typeof MODEL_FIELDS[number], UnifiedModelType>
 const projectModelKeySchema = z.string().trim().min(1).nullable()
   .describe('Exact provider::modelId returned by list_user_models, or null to clear the project override.')
 
+const projectVideoRatioSchema = z.string().trim().min(1).refine(
+  (value) => Object.prototype.hasOwnProperty.call(ASPECT_RATIO_CONFIGS, value),
+  { message: 'Unsupported project video ratio.' },
+)
+
 const updateProjectConfigInputSchema = z.object({
   analysisModel: projectModelKeySchema.optional(),
   characterModel: projectModelKeySchema.optional(),
@@ -49,13 +55,12 @@ const updateProjectConfigInputSchema = z.object({
   editModel: projectModelKeySchema.optional(),
   videoModel: projectModelKeySchema.optional(),
   musicModel: projectModelKeySchema.optional(),
-  videoRatio: z.string().trim().min(1).nullable().optional()
-    .describe('Project output aspect ratio, for example 16:9 or 9:16, or null when the project has not decided one yet.'),
+  videoRatio: projectVideoRatioSchema.optional()
+    .describe('Explicit project output aspect ratio, for example 16:9 or 9:16.'),
   capabilityOverrides: capabilitySelectionCommandSchema.optional(),
 }).strict()
 
-function normalizeProjectVideoRatio(value: unknown): string | null {
-  if (value === null) return null
+function normalizeProjectVideoRatio(value: unknown): string {
   if (typeof value !== 'string') {
     throw new ApiError('INVALID_PARAMS', {
       code: 'PROJECT_VIDEO_RATIO_INVALID',
@@ -72,25 +77,6 @@ function normalizeProjectVideoRatio(value: unknown): string | null {
     })
   }
   return normalized
-}
-
-function assertAssistantRatioWriteComesFromUserTurn(ctx: {
-  source: string
-  context: { executionSegmentId?: string | null; userTurnText?: string | null }
-}, videoRatio: string): void {
-  if (ctx.source !== 'assistant-panel') return
-  const userTurnText = ctx.context.userTurnText?.normalize('NFKC') ?? ''
-  const compactRatio = videoRatio.replace(/\s+/g, '')
-  const userMentionedRatio = userTurnText
-    .replace(/\s+/g, '')
-    .split(/([^0-9:])/)
-    .includes(compactRatio)
-  if (ctx.context.executionSegmentId?.startsWith('user-turn:') && userMentionedRatio) return
-  throw new ApiError('FORBIDDEN', {
-    code: 'PROJECT_VIDEO_RATIO_USER_CONFIRMATION_REQUIRED',
-    field: 'videoRatio',
-    agentRetryableAfterCorrection: false,
-  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -346,7 +332,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
     update_project_config: defineOperation({
       id: 'update_project_config',
-      summary: 'Persist a user-confirmed project output aspect ratio. The Agent may call this only from the user turn whose visible text explicitly contains that exact ratio; API callers may also clear it.',
+      summary: 'Persist one explicit project output aspect ratio. This is the sole writer for that project fact and may be committed atomically by a generic Choice answer.',
       intent: 'act',
       channels: { tool: true, api: true },
       effects: {
@@ -360,13 +346,15 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: false,
       },
       confirmation: { kind: 'none', required: false },
+      choiceCommit: { enabled: true },
       toolInputSchema: {
         type: 'object',
         properties: {
           videoRatio: {
             type: 'string',
+            enum: PROJECT_VIDEO_RATIO_VALUES,
             minLength: 1,
-            description: 'Exact project output aspect ratio explicitly present in the current user message, such as 16:9 or 9:16.',
+            description: 'Exact project output aspect ratio decided by the user, such as 16:9 or 9:16.',
           },
         },
         required: ['videoRatio'],
@@ -425,10 +413,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
 
           if (field === 'videoRatio') {
             const videoRatio = normalizeProjectVideoRatio(body.videoRatio)
-            if (videoRatio) assertAssistantRatioWriteComesFromUserTurn(ctx, videoRatio)
             updateData.videoRatio = videoRatio
-            updateData.videoRatioConfirmedAt = videoRatio ? new Date() : null
-            updateData.videoRatioConfirmationVersion = { increment: 1 }
             continue
           }
 

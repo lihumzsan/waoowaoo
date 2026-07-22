@@ -10,18 +10,18 @@ import { getObjectBuffer, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import {
-  concatFinalRenderAudioClips,
-  muxFinalRenderSourceAudio,
-  renderFinalRenderClipAudio,
-} from '@/lib/video-compose/final-render-audio'
+  concatVideoMergeAudioClips,
+  muxVideoMergeSourceAudio,
+  renderVideoMergeClipAudio,
+} from '@/lib/video-compose/video-merge-audio'
 import { createFfmpegCommandRunner } from '@/lib/video-compose/ffmpeg-command'
-import { reportTaskProgress } from '@/lib/workers/shared'
 import {
-  concatClips,
-  normalizeClip,
-  probeDurationSeconds,
+  concatVideoClips,
+  normalizeVideoClip,
+  probeMediaDurationSeconds,
   probeVideoDimensions,
-} from '@/lib/workers/final-video-render'
+} from '@/lib/video-compose/video-merge-ffmpeg'
+import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 
 export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>) {
@@ -70,7 +70,7 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
       sourcePaths.push(sourcePath)
     }
     const dimensions = await probeVideoDimensions(sourcePaths[0] ?? '')
-    const durations = await Promise.all(sourcePaths.map(probeDurationSeconds))
+    const durations = await Promise.all(sourcePaths.map(probeMediaDurationSeconds))
     const totalDurationSeconds = durations.reduce((sum, duration) => sum + duration, 0)
     const normalizedPaths: string[] = []
     const audioPaths: string[] = []
@@ -80,14 +80,14 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
       if (!durationSeconds) throw new Error(`CREATIVE_RESOURCE_VIDEO_MERGE_DURATION_MISSING:${String(index)}`)
       const normalizedPath = path.join(workspaceDir, `normalized-${String(index)}.mp4`)
       const audioPath = path.join(workspaceDir, `audio-${String(index)}.wav`)
-      await normalizeClip({
+      await normalizeVideoClip({
         sourcePath,
         outputPath: normalizedPath,
         durationSeconds,
         width: dimensions.width,
         height: dimensions.height,
       })
-      const clipHasAudio = await renderFinalRenderClipAudio({
+      const clipHasAudio = await renderVideoMergeClipAudio({
         runCommand: createFfmpegCommandRunner({
           stage: 'creative_resource_video_merge_clip_audio',
           expectedDurationSeconds: durationSeconds,
@@ -103,15 +103,15 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
 
     await reportTaskProgress(job, 65, { stage: 'creative_resource_video_merge_compose' })
     const stitchedPath = path.join(workspaceDir, 'stitched.mp4')
-    await concatClips({
+    await concatVideoClips({
       clipPaths: normalizedPaths,
       listPath: path.join(workspaceDir, 'concat.txt'),
       outputPath: stitchedPath,
       durationSeconds: totalDurationSeconds,
     })
-    const stitchedDurationSeconds = await probeDurationSeconds(stitchedPath)
+    const stitchedDurationSeconds = await probeMediaDurationSeconds(stitchedPath)
     const mainAudioPath = path.join(workspaceDir, 'audio.wav')
-    await concatFinalRenderAudioClips({
+    await concatVideoMergeAudioClips({
       runCommand: createFfmpegCommandRunner({
         stage: 'creative_resource_video_merge_concat_audio',
         expectedDurationSeconds: stitchedDurationSeconds,
@@ -121,7 +121,7 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
       durationSeconds: stitchedDurationSeconds,
     })
     const outputPath = path.join(workspaceDir, 'merged.mp4')
-    await muxFinalRenderSourceAudio({
+    await muxVideoMergeSourceAudio({
       runCommand: createFfmpegCommandRunner({
         stage: 'creative_resource_video_merge_mux',
         expectedDurationSeconds: stitchedDurationSeconds,

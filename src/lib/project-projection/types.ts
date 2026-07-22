@@ -1,8 +1,10 @@
 import type { ProjectPolicySnapshot } from '@/lib/project-context/types'
+import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
 
-export interface ProjectProjectionProgress {
-  plannedVideoSegmentCount: number
-  completedVideoSegmentCount: number
+export interface ProjectProjectionResourceSummary {
+  totalCount: number
+  readyCount: number
+  failedCount: number
 }
 
 export interface ProjectProjectionLite {
@@ -12,26 +14,9 @@ export interface ProjectProjectionLite {
   episodeName?: string | null
   selectedScopeRef?: string | null
   policy: ProjectPolicySnapshot
-  progress: ProjectProjectionProgress
-}
-
-export interface ProjectProjectionVideoSegmentSnapshot {
-  id: string
-  editScriptId: string
-  chapterId: string
-  segmentId: string
-  inputSignature: string
-  durationSec: number
-  status: string
-  generationTaskId: string | null
-  errorMessage: string | null
-  videoMediaId: string | null
-  createdAt: string
-  updatedAt: string
+  resources: ProjectProjectionResourceSummary
 }
 
 export interface ProjectProjectionFull extends ProjectProjectionLite {
-  episodeDetail: null | {
-    videoSegments: ProjectProjectionVideoSegmentSnapshot[]
-  }
+  creativeResources: CreativeResourceCardView[]
 }

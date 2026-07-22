@@ -1,26 +1,22 @@
 import { prisma } from '@/lib/prisma'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveProjectContextPolicy } from '@/lib/project-context/policy'
-import type { ProjectProjectionLite, ProjectProjectionProgress } from './types'
+import type { ProjectProjectionLite, ProjectProjectionResourceSummary } from './types'
 
-async function resolveEpisodeProgress(episodeId: string | null): Promise<ProjectProjectionProgress> {
-  if (!episodeId) {
-    return {
-      plannedVideoSegmentCount: 0,
-      completedVideoSegmentCount: 0,
-    }
-  }
-
-  const [plannedVideoSegmentCount, completedVideoSegmentCount] = await Promise.all([
-    prisma.projectVideoSegment.count({ where: { episodeId } }),
-    prisma.projectVideoSegment.count({
-      where: { episodeId, status: 'completed', videoMediaId: { not: null } },
+async function resolveResourceSummary(projectId: string, episodeId: string | null): Promise<ProjectProjectionResourceSummary> {
+  const scope = { projectId, episodeId }
+  const [totalCount, readyCount, failedCount] = await Promise.all([
+    prisma.creativeResource.count({ where: scope }),
+    prisma.creativeResource.count({
+      where: { ...scope, status: 'ready', headRevisionId: { not: null } },
     }),
+    prisma.creativeResource.count({ where: { ...scope, status: 'failed' } }),
   ])
 
   return {
-    plannedVideoSegmentCount,
-    completedVideoSegmentCount,
+    totalCount,
+    readyCount,
+    failedCount,
   }
 }
 
@@ -31,15 +27,13 @@ export async function assembleProjectProjectionLite(params: {
   selectedScopeRef?: string | null
 }): Promise<ProjectProjectionLite> {
   const episodeId = params.episodeId || null
-  const [project, episode, progress, projectModelConfig] = await Promise.all([
+  const [project, episode, resources, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
       select: {
         id: true,
         name: true,
         videoRatio: true,
-        videoRatioConfirmedAt: true,
-        videoRatioConfirmationVersion: true,
       },
     }),
     episodeId
@@ -48,7 +42,7 @@ export async function assembleProjectProjectionLite(params: {
           select: { id: true, name: true },
         })
       : Promise.resolve(null),
-    resolveEpisodeProgress(episodeId),
+    resolveResourceSummary(params.projectId, episodeId),
     getProjectModelConfig(params.projectId, params.userId),
   ])
 
@@ -63,8 +57,6 @@ export async function assembleProjectProjectionLite(params: {
       projectId: params.projectId,
       episodeId,
       videoRatio: projectModelConfig.videoRatio ?? project.videoRatio,
-      videoRatioConfirmedAt: project.videoRatioConfirmedAt?.toISOString() ?? null,
-      videoRatioConfirmationVersion: project.videoRatioConfirmationVersion,
       analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },
@@ -77,6 +69,6 @@ export async function assembleProjectProjectionLite(params: {
     episodeName: episode?.name || null,
     selectedScopeRef: params.selectedScopeRef || null,
     policy,
-    progress,
+    resources,
   }
 }

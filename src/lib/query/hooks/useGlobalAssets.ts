@@ -82,7 +82,7 @@ export function useGlobalCharacters(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).character.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).character.map((asset) => ({
             id: asset.id,
             name: asset.name,
             folderId: asset.folderId,
@@ -125,7 +125,7 @@ export function useGlobalLocations(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).location.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).location.map((asset) => ({
             id: asset.id,
             name: asset.name,
             summary: asset.summary,
@@ -157,7 +157,7 @@ export function useGlobalProps(folderId?: string | null) {
     })
     return {
         ...assetsQuery,
-        data: groupAssetsByKind(assetsQuery.data).prop.map((asset) => ({
+        data: groupAssetsByKind(assetsQuery.data ?? []).prop.map((asset) => ({
             id: asset.id,
             name: asset.name,
             summary: asset.summary,

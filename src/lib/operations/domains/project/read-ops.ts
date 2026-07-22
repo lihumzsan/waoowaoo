@@ -39,23 +39,15 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function parseProjectionSegmentId(scopeRef: string | undefined): string | null {
-  const normalized = normalizeString(scopeRef)
-  if (!normalized) return null
-  if (!normalized.startsWith('video-segment:')) return null
-  return normalizeString(normalized.slice('video-segment:'.length)) || null
-}
-
 export function createReadOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_snapshot: defineOperation({
       id: 'get_project_snapshot',
-      summary: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete user request or user-intent tool input. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters. Use detail=full only when video segment status or output identity is explicitly needed.',
+      summary: 'Read the current project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete user request or user-intent tool input. Do not call merely to confirm general status, projectId, episodeId, approval state, or system-derived tool parameters.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
         detail: z.enum(['lite', 'full']).optional(),
-        scopeRef: z.string().optional(),
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => (input.detail === 'full'
@@ -63,8 +55,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId: ctx.context.episodeId || null,
-            selectedScopeRef: input.scopeRef,
-            segmentId: parseProjectionSegmentId(input.scopeRef),
           })
         : assembleProjectProjectionLite({
             projectId: ctx.projectId,
@@ -74,7 +64,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Read the compact current project working set: exact confirmed screenplay and adopted Style Bible bindings, project configuration, active work, and professional domain state. Use list_resources to browse candidates/history and get_resource to read one exact full revision; never infer current adoption from latest resources, history, Canvas, or chat.',
+      summary: 'Read the compact current project working set: exact adopted screenplay and Bible revisions, Creative Resource bindings, optional Chapter context units, project configuration, and active work. Use list_resources to browse candidates/history and get_resource to read one exact full revision; never infer current adoption from latest resources, history, Canvas, or chat.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({

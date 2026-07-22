@@ -7,7 +7,6 @@ import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
 import type { TaskJobData } from '@/lib/task/types'
-import { handleBgmScoreGenerateTask } from '@/lib/bgm-score/generate'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from './audio-artifact'
@@ -107,6 +106,7 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
     mediaId: media.id,
     audioUrl: media.url,
     storageKey,
+    modelKey: musicModel,
     musicModel,
     provider: musicModel.split('::')[0] || null,
     metadata: generated.metadata || {},
@@ -117,8 +117,6 @@ type MusicTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknow
 
 const MUSIC_TASK_HANDLERS = {
   creative_resource_audio: handleMusicGenerateTask,
-  music_generate: handleMusicGenerateTask,
-  music_score_generate: handleBgmScoreGenerateTask,
 } satisfies Record<MusicTaskHandlerKey, MusicTaskHandler>
 
 async function processMusicTask(job: Job<TaskJobData>) {

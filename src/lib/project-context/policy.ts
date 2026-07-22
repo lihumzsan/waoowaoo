@@ -12,11 +12,7 @@ export function resolveProjectContextPolicy(params: {
   return {
     projectId: params.projectId,
     episodeId: params.episodeId || null,
-    videoRatio: commandPolicy?.videoRatio !== undefined
-      ? commandPolicy.videoRatio
-      : (projectPolicy?.videoRatio ?? null),
-    videoRatioConfirmedAt: projectPolicy?.videoRatioConfirmedAt ?? null,
-    videoRatioConfirmationVersion: projectPolicy?.videoRatioConfirmationVersion ?? 0,
+    videoRatio: projectPolicy?.videoRatio ?? null,
     analysisModel:
       commandPolicy?.analysisModel !== undefined
         ? commandPolicy.analysisModel

@@ -220,12 +220,6 @@
     "upload": "上传",
     "unknownError": "未知错误"
   },
-  "video": {
-    "panelCard": {
-      "generating": "生成中...",
-      "editPrompt": "编辑提示词"
-    }
-  },
   "errors": {
     "saveFailed": "保存失败，请重试",
     "failed": "失败，请重试",

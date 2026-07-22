@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { rawEditBibleBundleSchema } from '@/lib/edit-bible/schemas'
 import {
-  editScriptStyleBibleSchema,
-  editStylePreviewOptionsSchema,
-} from '@/lib/edit-script/types'
+  creativeChapterPlanOutputSchema,
+  rawEditBibleBundleSchema,
+} from '@/lib/edit-bible/schemas'
+import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
@@ -74,24 +74,42 @@ const assetPromptSetOutputSchema = z.object({
   warnings: textList(64, 2_000),
 }).strict()
 
-const styleBibleCandidateOptionsSchema = editStylePreviewOptionsSchema.refine(
-  (value) => value.stylePreviews.length === 3,
-  {
-    path: ['stylePreviews'],
-    message: 'CREATIVE_STYLE_BIBLE_CANDIDATE_COUNT_INVALID',
-  },
-)
+const styleBibleCandidateKeySchema = z.string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/)
+  .describe('Model-authored stable identity for this candidate. It is not tied to a fixed option count or a predefined A/B/C vocabulary.')
+
+const styleBibleCandidatesSchema = z.array(z.object({
+  candidateKey: styleBibleCandidateKeySchema,
+  title: z.string().trim().min(1).max(300),
+  summary: z.string().trim().min(1).max(4_000),
+  styleBible: creativeStyleBibleSchema,
+}).strict()).min(2).max(12).superRefine((candidates, context) => {
+  const keys = new Set<string>()
+  for (const [index, candidate] of candidates.entries()) {
+    if (keys.has(candidate.candidateKey)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, 'candidateKey'],
+        message: 'CREATIVE_STYLE_BIBLE_CANDIDATE_KEY_DUPLICATE',
+      })
+    }
+    keys.add(candidate.candidateKey)
+  }
+})
 
 const styleBibleOutputSchema = z.object({
   kind: z.literal('style_bible'),
   design: z.discriminatedUnion('mode', [
     z.object({
       mode: z.literal('final'),
-      styleBible: editScriptStyleBibleSchema.shape.styleBible,
+      styleBible: creativeStyleBibleSchema,
     }).strict(),
     z.object({
       mode: z.literal('candidates'),
-      options: styleBibleCandidateOptionsSchema,
+      candidates: styleBibleCandidatesSchema,
     }).strict(),
   ]).describe('Return one finalized Style Bible, or a validated candidate set when the user needs comparison.'),
   assumptions: textList(64, 2_000),
@@ -146,6 +164,7 @@ const creativeReviewOutputSchema = z.object({
 export const creativeWorkOutputSchemas = {
   screenplay_draft: screenplayDraftOutputSchema,
   edit_bible_bundle: editBibleBundleOutputSchema,
+  chapter_plan: creativeChapterPlanOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
   style_bible: styleBibleOutputSchema,
   asset_prompt_set: assetPromptSetOutputSchema,
@@ -171,6 +190,10 @@ export const creativeWorkOutputRegistry = {
   edit_bible_bundle: {
     kind: 'edit_bible_bundle',
     schema: creativeWorkOutputSchemas.edit_bible_bundle,
+  },
+  chapter_plan: {
+    kind: 'chapter_plan',
+    schema: creativeWorkOutputSchemas.chapter_plan,
   },
   continuity_analysis: {
     kind: 'continuity_analysis',

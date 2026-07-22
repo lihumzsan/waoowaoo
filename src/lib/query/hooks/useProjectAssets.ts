@@ -110,7 +110,7 @@ export function useProjectAssets(projectId: string | null) {
         scope: 'project',
         projectId,
     })
-    const groups = groupAssetsByKind(assetsQuery.data)
+    const groups = groupAssetsByKind(assetsQuery.data ?? [])
     const data = mapAssetGroupsToProjectAssetsData(groups)
 
     return {

@@ -1,4 +1,4 @@
-import { TASK_TYPE, type TaskType } from './types'
+import type { TaskType } from './types'
 
 export type TaskRuntimePhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 
@@ -85,58 +85,7 @@ function target(
 }
 
 export const TASK_RUNTIME_TARGETS = {
-  projectEpisodeEditScriptGeneration(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
-  },
-  projectEditChapterScriptGeneration(chapterId: string | null | undefined) {
-    return target('ProjectEditChapter', chapterId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
-  },
-  projectEditSourceScript(bibleId: string | null | undefined) {
-    return target('ProjectEditSourceScript', bibleId, [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE])
-  },
-  projectEditBible(bibleId: string | null | undefined) {
-    return target('ProjectEditBible', bibleId, [TASK_TYPE.EDIT_BIBLE_GENERATE])
-  },
-  projectEditStylePreviewOptions(bibleId: string | null | undefined) {
-    return target('ProjectEditBible', bibleId, [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE])
-  },
-  projectEditShotExecutionPlan(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE])
-  },
-  projectEditStylePreviewImage(stylePreviewId: string | null | undefined) {
-    return target('ProjectEditStylePreview', stylePreviewId, [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE])
-  },
-  projectEpisodeFinalRender(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.FINAL_VIDEO_RENDER])
-  },
-  projectEpisodeBgmScore(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [
-      TASK_TYPE.BGM_DESIGN_PLAN,
-      TASK_TYPE.MUSIC_SCORE_GENERATE,
-    ])
-  },
-  projectEditChapterRender(chapterId: string | null | undefined) {
-    return target('ProjectEditChapter', chapterId, [TASK_TYPE.CHAPTER_RENDER])
-  },
-  projectEditAssetImage(
-    targetType: 'CharacterAppearance' | 'LocationImage' | null | undefined,
-    targetId: string | null | undefined,
-  ) {
-    if (targetType === 'CharacterAppearance') {
-      return target('CharacterAppearance', targetId, [
-        TASK_TYPE.IMAGE_CHARACTER,
-        TASK_TYPE.MODIFY_ASSET_IMAGE,
-      ])
-    }
-    if (targetType === 'LocationImage') {
-      return target('LocationImage', targetId, [
-        TASK_TYPE.IMAGE_LOCATION,
-        TASK_TYPE.MODIFY_ASSET_IMAGE,
-      ])
-    }
-    return null
-  },
-  projectVideoSegment(segmentId: string | null | undefined) {
-    return target('ProjectVideoSegment', segmentId, [TASK_TYPE.VIDEO_SEGMENT])
+  creativeResource(resourceId: string | null | undefined, types: readonly TaskType[]) {
+    return target('CreativeResource', resourceId, types)
   },
 } as const

@@ -3,13 +3,10 @@ import { useRef } from 'react'
 import type { Location, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
-    requireTaskSubmissionReceipt,
     requestJsonWithError,
 } from './mutation-shared'
-import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectProjectLocationImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -65,68 +62,6 @@ function applyLocationSelectionToProject(
     }
 }
 
-export function useGenerateProjectLocationImage(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-
-    return useMutation({
-        mutationFn: async ({
-            locationId,
-            imageIndex,
-            count,
-        }: {
-            locationId: string
-            imageIndex?: number
-            count?: number
-        }) => {
-            const requestBody = buildProjectLocationGenerateImageBody({
-                projectId,
-                locationId,
-                imageIndex,
-                count,
-            })
-            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...confirmation,
-                })
-            }, 'Failed to generate image')
-            return requireTaskSubmissionReceipt(result)
-        },
-        onSuccess: (receipt, { locationId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
-                runningTaskId: receipt.taskId,
-                runningTaskType: receipt.taskType,
-                intent: 'generate',
-            })
-        },
-        onSettled: invalidateProjectAssets,
-    })
-}
-
-export function buildProjectLocationGenerateImageBody(input: {
-    projectId: string
-    locationId: string
-    imageIndex?: number
-    count?: number
-}) {
-    return {
-        scope: 'project' as const,
-        kind: 'location' as const,
-        projectId: input.projectId,
-        imageIndex: input.imageIndex,
-        count: input.count,
-    }
-}
-
 /**
  * 上传项目场景图片
  */
@@ -157,88 +92,6 @@ export function useUploadProjectLocationImage(projectId: string) {
             }, 'Failed to upload image')
         },
         onSuccess: invalidateProjectAssets,
-    })
-}
-
-export function useRegenerateLocationGroup(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-
-    return useMutation({
-        mutationFn: async ({ locationId, count }: { locationId: string; count?: number }) => {
-            const requestBody = {
-                scope: 'project',
-                kind: 'location',
-                projectId,
-                count,
-            }
-            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...confirmation,
-                })
-            }, 'Failed to regenerate group')
-            return requireTaskSubmissionReceipt(result)
-        },
-        onSuccess: (receipt, { locationId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
-                runningTaskId: receipt.taskId,
-                runningTaskType: receipt.taskType,
-                intent: 'regenerate',
-            })
-        },
-        onSettled: invalidateProjectAssets,
-    })
-}
-
-/**
- * 重新生成单张场景图片
- */
-
-export function useRegenerateSingleLocationImage(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-
-    return useMutation({
-        mutationFn: async ({ locationId, imageIndex }: { locationId: string; imageIndex: number }) => {
-            const requestBody = {
-                scope: 'project',
-                kind: 'location',
-                projectId,
-                imageIndex,
-            }
-            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...confirmation,
-                })
-            }, 'Failed to regenerate image')
-            return requireTaskSubmissionReceipt(result)
-        },
-        onSuccess: (receipt, { locationId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
-                runningTaskId: receipt.taskId,
-                runningTaskType: receipt.taskType,
-                intent: 'regenerate',
-            })
-        },
-        onSettled: invalidateProjectAssets,
     })
 }
 

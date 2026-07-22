@@ -15,41 +15,19 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
-import { useQueryClient } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
-import { apiFetch } from '@/lib/api-fetch'
-import { issueOperationApprovalGrant } from '@/lib/query/operation-plan-client'
-import { queryKeys } from '@/lib/query/keys'
-import { resolveTaskErrorMessage } from '@/lib/task/error-message'
-import type { ProjectEditScript } from '@/types/project'
-import {
-  isTaskRuntimeRunningPhase,
-  TASK_RUNTIME_TARGETS,
-} from '@/lib/task/runtime-targets'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useCreativeResources, useProjectAssets, useProjectEditBibleResponse } from '@/lib/query/hooks'
+import { useCreativeResources, useEpisodeData } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
-import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
-import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
-import {
-  readWorkspaceScopeId,
-  type WorkspaceScopeId,
-} from '../workspace-scope'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
-import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
-import {
-  WorkspaceCanvasBillingProvider,
-  type WorkspaceCanvasBillableExecution,
-} from './WorkspaceCanvasBillingContext'
 import {
   resolveWorkspaceCanvasFocusNodeIds,
-  resolveWorkspaceCanvasStyleBibleFocusNodeIds,
   useCanvasFocusFollow,
 } from './hooks/useCanvasFocusFollow'
 import { buildWorkspaceCanvasLayoutInput } from './canvasLayoutInput'
@@ -68,11 +46,9 @@ import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
-  WorkspaceCanvasNodeAction,
 } from './node-canvas-types'
 import {
   getWorkspaceCanvasNodePresentationProfile,
-  resolveCompletedWorkspaceCanvasStreamPresentationNodeIds,
   resolveWorkspaceCanvasNodeDisclosure,
   resolveWorkspaceCanvasNodeSize,
 } from './node-presentation-profiles'
@@ -80,13 +56,9 @@ import {
   collectWorkspaceNodeRuntimeTargets,
   resolveWorkspaceCanvasNodeData,
 } from './workspace-node-runtime'
-import { useWorkspaceStructuredStreamRuntime } from './structured-stream/useWorkspaceStructuredStreamRuntime'
-import { isTerminalHandoffResourceCurrent } from './structured-stream/workspace-structured-stream-handoff'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
-const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
-const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
 const WORKSPACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true } as const
 
 export interface WorkspaceAssistantSelectionContext {
@@ -96,10 +68,7 @@ export interface WorkspaceAssistantSelectionContext {
 
 interface ProjectWorkspaceCanvasContentProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
-  editScriptPending?: boolean
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
-  styleBibleFocusRequestId?: number
-  workspaceScopeId?: WorkspaceScopeId
 }
 
 interface CanvasViewportControlsProps {
@@ -215,62 +184,21 @@ function CanvasViewportControls({
 
 function ProjectWorkspaceCanvasContent({
   onAssistantSelectionChange,
-  editScriptPending = false,
   activeAssistantFocusRequest = null,
-  styleBibleFocusRequestId = 0,
-  workspaceScopeId,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const { projectId, episodeId } = useWorkspaceProvider()
-  const queryClient = useQueryClient()
-  const runtime = useWorkspaceRuntime()
-  const {
-    episodeName,
-    editScript,
-    editScripts,
-    editShotExecutionPlans,
-    finalVideo,
-    videoSegments,
-  } = useWorkspaceEpisodeCanvasData()
-  const { data: projectAssets } = useProjectAssets(projectId)
-  const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
+  const { data: episodeData } = useEpisodeData(projectId, episodeId ?? null)
+  const episodeName = typeof episodeData?.name === 'string' ? episodeData.name : undefined
   const { data: creativeResourcesResponse } = useCreativeResources(projectId, episodeId ?? null)
-  const editBible = editBibleResponse?.editBible ?? null
-  const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
-  const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
-  const scopedVideoSegments = useMemo(() => (
-    workspaceScope.kind === 'chapter'
-      ? videoSegments.filter((segment) => segment.chapterId === workspaceScope.chapterId)
-      : videoSegments
-  ), [videoSegments, workspaceScope])
-  const scopedEditScript = useMemo(() => {
-    if (workspaceScope.kind === 'chapter') {
-      return editScripts.find((script) => script.chapterId === workspaceScope.chapterId)
-        ?? (editScript?.chapterId === workspaceScope.chapterId ? editScript : null)
-    }
-    return null
-  }, [editScript, editScripts, workspaceScope])
-  const scopedEditShotExecutionPlans = useMemo(() => {
-    if (workspaceScope.kind === 'chapter') {
-      return editShotExecutionPlans.filter((plan) => plan.chapterId === workspaceScope.chapterId)
-    }
-    return editShotExecutionPlans
-  }, [editShotExecutionPlans, workspaceScope])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
-  const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
-  const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
-  const [submittingNodeIds, setSubmittingNodeIds] = useState<ReadonlySet<string>>(() => new Set())
   const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
-  const [focusHighlightRevision, setFocusHighlightRevision] = useState(0)
   const [reactFlowReady, setReactFlowReady] = useState(false)
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
-  const streamPresentationDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
   const assistantSelectionSignatureRef = useRef<string | null>(null)
   const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
   const projectedFlowNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
@@ -282,44 +210,6 @@ function ProjectWorkspaceCanvasContent({
   const reactFlowRef = useRef(reactFlow)
   reactFlowRef.current = reactFlow
   const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
-  const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
-  const activeAssistantTaskTargets = activeAssistantFocusRequest?.taskTargets ?? EMPTY_ACTIVE_TASK_TARGETS
-
-  const executeBillableAction = useCallback(async ({
-    request,
-    plan,
-    nodeId,
-  }: WorkspaceCanvasBillableExecution) => {
-    setSubmittingNodeIds((current) => new Set(current).add(nodeId))
-    try {
-      const approval = await issueOperationApprovalGrant(plan)
-      const response = await apiFetch(
-        `/api/projects/${projectId}/operations/${request.operationId}/execute`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            input: request.input,
-            ...approval,
-          }),
-        },
-      )
-      if (!response.ok) {
-        const error: unknown = await response.json().catch(() => ({}))
-        throw new Error(resolveTaskErrorMessage(error, t('errors.mediaOperationExecutionFailed')))
-      }
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.tasks.targetStatesAll(projectId),
-        exact: false,
-      })
-    } finally {
-      setSubmittingNodeIds((current) => {
-        const next = new Set(current)
-        next.delete(nodeId)
-        return next
-      })
-    }
-  }, [projectId, queryClient, t])
 
   const {
     layout,
@@ -331,95 +221,6 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
-  const editScriptGenerationChapterIds = useMemo(() => {
-    const ids = new Set<string>()
-    if (workspaceScope.kind === 'chapter') ids.add(workspaceScope.chapterId)
-    if (scopedEditScript?.chapterId) ids.add(scopedEditScript.chapterId)
-    if (editScript?.chapterId) ids.add(editScript.chapterId)
-    editScripts.forEach((script) => {
-      if (script.chapterId) ids.add(script.chapterId)
-    })
-    editBibleChapters.forEach((chapter) => {
-      if (chapter.id) ids.add(chapter.id)
-    })
-    return Array.from(ids)
-  }, [editBibleChapters, editScript?.chapterId, editScripts, scopedEditScript?.chapterId, workspaceScope])
-  const editScriptGenerationTargets = useMemo(
-    () => editScriptGenerationChapterIds
-      .map((chapterId) => TASK_RUNTIME_TARGETS.projectEditChapterScriptGeneration(chapterId))
-      .filter((target): target is NonNullable<typeof target> => target !== null),
-    [editScriptGenerationChapterIds],
-  )
-  const editScriptGenerationTaskStateMap = useTaskTargetStateMap(projectId, editScriptGenerationTargets, {
-    enabled: Boolean(projectId && episodeId),
-    staleTime: 1000,
-  })
-  const editScriptGenerationActiveChapterIds = useMemo(() => {
-    const ids = new Set<string>()
-    editScriptGenerationTargets.forEach((target) => {
-      const state = editScriptGenerationTaskStateMap.getQueryState(target)
-      if (isTaskRuntimeRunningPhase(state?.phase)) ids.add(target.targetId)
-    })
-    return ids
-  }, [editScriptGenerationTargets, editScriptGenerationTaskStateMap])
-  const editScriptGenerationActive = scopedEditScript?.chapterId
-    ? editScriptGenerationActiveChapterIds.has(scopedEditScript.chapterId)
-    : editScriptGenerationActiveChapterIds.size > 0
-  const projectedEditScript = scopedEditScript
-  const projectedEditScripts = useMemo((): readonly ProjectEditScript[] => {
-    if (workspaceScope.kind === 'chapter') return projectedEditScript ? [projectedEditScript] : []
-    const byId = new Map<string, ProjectEditScript>()
-    editScripts.forEach((script) => byId.set(script.id, script))
-    if (projectedEditScript) byId.set(projectedEditScript.id, projectedEditScript)
-    return Array.from(byId.values())
-  }, [editScripts, projectedEditScript, workspaceScope])
-  const effectiveEditScriptPending = editScriptPending
-    || (editScriptGenerationActive && !scopedEditScript)
-  const clearFocusHighlightedNode = useCallback((nodeId: string) => {
-    const timer = focusHighlightClearTimersRef.current.get(nodeId)
-    if (timer !== undefined) {
-      window.clearTimeout(timer)
-      focusHighlightClearTimersRef.current.delete(nodeId)
-    }
-    const nextIds = new Set(focusHighlightedNodeIdsRef.current)
-    nextIds.delete(nodeId)
-    focusHighlightedNodeIdsRef.current = nextIds
-    setFocusHighlightRevision((current) => current + 1)
-  }, [])
-  const markNodesFocusHighlighted = useCallback((nodeIds: readonly string[]) => {
-    if (nodeIds.length === 0) return
-    const nextIds = new Set(focusHighlightedNodeIdsRef.current)
-    nodeIds.forEach((nodeId) => {
-      const existingTimer = focusHighlightClearTimersRef.current.get(nodeId)
-      if (existingTimer !== undefined) window.clearTimeout(existingTimer)
-      nextIds.add(nodeId)
-    })
-    focusHighlightedNodeIdsRef.current = nextIds
-    setFocusHighlightRevision((current) => current + 1)
-    nodeIds.forEach((nodeId) => {
-      const timer = window.setTimeout(() => clearFocusHighlightedNode(nodeId), FOCUS_HIGHLIGHT_TIMEOUT_MS)
-      focusHighlightClearTimersRef.current.set(nodeId, timer)
-    })
-  }, [clearFocusHighlightedNode])
-  const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
-    if (nodeId) {
-      setSubmittingNodeIds((current) => new Set(current).add(nodeId))
-    }
-    try {
-      await runNodeAction(action)
-    } catch (error: unknown) {
-      _ulogWarn('[ProjectWorkspaceCanvas] node action failed', error)
-      throw error
-    } finally {
-      if (nodeId) {
-        setSubmittingNodeIds((current) => {
-          const next = new Set(current)
-          next.delete(nodeId)
-          return next
-        })
-      }
-    }
-  }, [runNodeAction])
   const updateNodeDisclosureOverrides = useCallback((
     updater: (current: ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>) => ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>,
   ) => {
@@ -443,31 +244,12 @@ function ProjectWorkspaceCanvasContent({
       return next
     })
   }, [reactFlow, updateNodeDisclosureOverrides])
-  const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
-    episodeId: episodeId ?? 'pending-episode',
-    translate: t,
-  })
-  const { releaseTerminalHandoffs } = structuredStreamRuntime
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
-    episodeId: episodeId ?? 'pending-episode',
     episodeName,
-    editBible,
-    editScript: projectedEditScript,
-    editScripts: projectedEditScripts,
-    editShotExecutionPlans: scopedEditShotExecutionPlans,
-    projectCharacters: projectAssets.characters,
-    projectLocations: projectAssets.locations,
-    activeTaskTargets: activeAssistantTaskTargets,
-    editScriptPending: effectiveEditScriptPending,
-    streamTargets: structuredStreamRuntime.targets,
-    finalVideo,
-    videoSegments: scopedVideoSegments,
-    defaultVideoModel: runtime.videoModel ?? null,
     creativeResources: creativeResourcesResponse?.resources ?? [],
     savedLayouts: savedNodeLayouts,
     translate: t,
-    onAction: onNodeAction,
   })
   const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
@@ -479,33 +261,18 @@ function ProjectWorkspaceCanvasContent({
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
     staleTime: 1000,
   })
-  const streamPatchByNodeId = useMemo(
-    () => new Map(structuredStreamRuntime.patches.map((patch) => [patch.nodeId, patch])),
-    [structuredStreamRuntime.patches],
-  )
   const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => {
-    void focusHighlightRevision
     return inputNodes.map((node) => {
       const resolvedData = resolveWorkspaceCanvasNodeData({
         node,
         statesByQueryKey: workspaceTaskStateMap.byQueryKey,
-        streamPatch: streamPatchByNodeId.get(node.id) ?? null,
-        submitting: submittingNodeIds.has(node.id),
       })
       const profile = getWorkspaceCanvasNodePresentationProfile(resolvedData.kind)
-      const isStreaming = resolvedData.lifecycle.phase === 'streaming'
-      const shouldCollapseCompletedStream = !isStreaming
-        && resolvedData.lifecycle.stream === null
-        && streamPresentationDisclosureNodeIdsRef.current.has(node.id)
-        && profile.disclosure.kind === 'collapsible'
-        && profile.disclosure.collapseWhenStreamCompletes
       const disclosureOverride = nodeDisclosureOverrides.get(node.id)
       const disclosure = resolveWorkspaceCanvasNodeDisclosure({
         kind: resolvedData.kind,
-        userExpandedOverride: shouldCollapseCompletedStream ? false : disclosureOverride?.expanded,
+        userExpandedOverride: disclosureOverride?.expanded,
         defaultExpanded: resolvedData.defaultExpanded,
-        isStreaming,
-        hasStreamPresentation: resolvedData.lifecycle.stream !== null,
       })
       const expanded = disclosure.effectiveExpanded
       const size = resolveWorkspaceCanvasNodeSize({
@@ -527,7 +294,6 @@ function ProjectWorkspaceCanvasContent({
         },
         data: {
           ...resolvedData,
-          focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
           disclosure,
           expanded,
           expandedLayout: expanded ? profile.expandedLayout : undefined,
@@ -536,11 +302,8 @@ function ProjectWorkspaceCanvasContent({
       }
     })
   }, [
-    focusHighlightRevision,
     nodeDisclosureOverrides,
     selectedNodeId,
-    streamPatchByNodeId,
-    submittingNodeIds,
     toggleNodeExpanded,
     workspaceTaskStateMap.byQueryKey,
   ])
@@ -548,32 +311,6 @@ function ProjectWorkspaceCanvasContent({
     () => attachNodeUiState(projectedNodes),
     [attachNodeUiState, projectedNodes],
   )
-  const releasableTerminalStreamHandoffs = useMemo(() => {
-    const resolvedNodeById = new Map(resolvedProjectedNodes.map((node) => [node.id, node] as const))
-    const targetByNodeTask = new Map(structuredStreamRuntime.targets.map((target) => (
-      [`${target.nodeId}\u0000${target.taskId}`, target] as const
-    )))
-    return structuredStreamRuntime.patches.flatMap((patch) => {
-      const resolvedNode = resolvedNodeById.get(patch.nodeId)
-      const target = targetByNodeTask.get(`${patch.nodeId}\u0000${patch.taskId}`)
-      return resolvedNode && isTerminalHandoffResourceCurrent({
-        terminalHandoff: patch.terminalHandoff === true,
-        streamTaskId: patch.taskId,
-        resourceTaskId: resolvedNode.data.terminalHandoffTaskId,
-        resourcePhase: resolvedNode.data.lifecycle.phase,
-      }) && target
-        ? [{
-            taskId: target.taskId,
-            targetType: target.targetType,
-            targetId: target.targetId,
-          }]
-        : []
-    })
-  }, [resolvedProjectedNodes, structuredStreamRuntime.patches, structuredStreamRuntime.targets])
-  useEffect(() => {
-    if (releasableTerminalStreamHandoffs.length === 0) return
-    releaseTerminalHandoffs(releasableTerminalStreamHandoffs)
-  }, [releasableTerminalStreamHandoffs, releaseTerminalHandoffs])
   resolvedProjectedNodesRef.current = resolvedProjectedNodes
   userNodePositionsRef.current = userNodePositions
   const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
@@ -622,33 +359,13 @@ function ProjectWorkspaceCanvasContent({
     if (!reactFlowReady) return
     syncProjectionToReactFlow()
   }, [flowNodeSignature, projectionEdgeSignature, reactFlowReady, syncProjectionToReactFlow])
-  const operationFocusNodeIds = useMemo(
-    () => resolveWorkspaceCanvasFocusNodeIds(flowNodes, activeAssistantOperationId),
-    [activeAssistantOperationId, flowNodes],
+  const focusNodeIds = useMemo(
+    () => resolveWorkspaceCanvasFocusNodeIds(flowNodes),
+    [flowNodes],
   )
-  const hasUnhandledStyleBibleFocusRequest = styleBibleFocusRequestId > handledStyleBibleFocusRequestId
-  const styleBibleFocusNodeIds = useMemo(
-    () => (
-      hasUnhandledStyleBibleFocusRequest
-        ? resolveWorkspaceCanvasStyleBibleFocusNodeIds(flowNodes)
-        : []
-    ),
-    [flowNodes, hasUnhandledStyleBibleFocusRequest],
-  )
-  const styleBibleFocusRequestKey = styleBibleFocusNodeIds.length > 0
-    ? `style-bible-confirmed:${String(styleBibleFocusRequestId)}`
-    : null
-  const focusNodeIds = styleBibleFocusNodeIds.length > 0 ? styleBibleFocusNodeIds : operationFocusNodeIds
-  const operationFocusRequestKey = operationFocusNodeIds.length > 0
+  const focusRequestKey = focusNodeIds.length > 0
     ? activeAssistantFocusRequest?.requestKey ?? null
     : null
-  const focusRequestKey = styleBibleFocusRequestKey ?? operationFocusRequestKey
-  const handleFocusComplete = useCallback((focusKey: string) => {
-    if (!styleBibleFocusRequestKey) return
-    if (!focusKey.startsWith(`${styleBibleFocusRequestKey}:`)) return
-    markNodesFocusHighlighted(styleBibleFocusNodeIds)
-    setHandledStyleBibleFocusRequestId(styleBibleFocusRequestId)
-  }, [markNodesFocusHighlighted, styleBibleFocusNodeIds, styleBibleFocusRequestId, styleBibleFocusRequestKey])
   const {
     pendingFocusNodeIds,
     focusNow: focusCurrentRunningNodes,
@@ -659,38 +376,7 @@ function ProjectWorkspaceCanvasContent({
     enabled: autoFollowEnabled,
     focusNodeIds,
     focusRequestKey,
-    onFocusComplete: handleFocusComplete,
   })
-
-  useEffect(() => () => {
-    focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    focusHighlightClearTimersRef.current.clear()
-  }, [])
-
-  useEffect(() => {
-    const currentStreamPresentationNodeIds = new Set<string>()
-    flowNodes.forEach((node) => {
-      const disclosure = node.data.disclosure
-      if (disclosure?.isStreamPresentationExpanded === true && disclosure.collapseWhenStreamCompletes) {
-        currentStreamPresentationNodeIds.add(node.id)
-      }
-    })
-    const completedStreamingNodeIds = resolveCompletedWorkspaceCanvasStreamPresentationNodeIds({
-      previousStreamPresentationNodeIds: streamPresentationDisclosureNodeIdsRef.current,
-      currentStreamPresentationNodeIds,
-    })
-    streamPresentationDisclosureNodeIdsRef.current = currentStreamPresentationNodeIds
-    if (completedStreamingNodeIds.length === 0) return
-
-    updateNodeDisclosureOverrides((current) => {
-      let changed = false
-      const next = new Map(current)
-      completedStreamingNodeIds.forEach((nodeId) => {
-        changed = next.delete(nodeId) || changed
-      })
-      return changed ? next : current
-    })
-  }, [flowNodes, updateNodeDisclosureOverrides])
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
@@ -855,11 +541,6 @@ function ProjectWorkspaceCanvasContent({
   if (!episodeId) return null
 
   return (
-    <WorkspaceCanvasBillingProvider value={{
-      projectId,
-      episodeId,
-      execute: executeBillableAction,
-    }}>
     <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
@@ -944,33 +625,23 @@ function ProjectWorkspaceCanvasContent({
         </ReactFlow>
       </div>
     </div>
-    </WorkspaceCanvasBillingProvider>
   )
 }
 
 interface ProjectWorkspaceCanvasProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
-  editScriptPending?: boolean
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
-  styleBibleFocusRequestId?: number
-  workspaceScopeId?: WorkspaceScopeId
 }
 
 export default function ProjectWorkspaceCanvas({
   onAssistantSelectionChange,
-  editScriptPending = false,
   activeAssistantFocusRequest = null,
-  styleBibleFocusRequestId = 0,
-  workspaceScopeId,
 }: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
       <ProjectWorkspaceCanvasContent
         onAssistantSelectionChange={onAssistantSelectionChange}
-        editScriptPending={editScriptPending}
         activeAssistantFocusRequest={activeAssistantFocusRequest}
-        styleBibleFocusRequestId={styleBibleFocusRequestId}
-        workspaceScopeId={workspaceScopeId}
       />
     </ReactFlowProvider>
   )

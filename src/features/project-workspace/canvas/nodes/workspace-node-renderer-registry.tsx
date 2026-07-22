@@ -1,45 +1,11 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
-import { EditAssetContent, EditAssetGroupContent, StyleBibleContent } from './renderers/assets-style'
-import { BgmScoreContent } from './renderers/audio-final'
-import { EditBibleContent, SourceScriptContent } from './renderers/bible'
-import { EditScriptContent, EditShotExecutionPlanContent } from './renderers/edit-plans'
-import { MediaPreview } from './renderers/media'
-import { EditPipelineStepContent, ProcessGroupContent } from './renderers/pipeline'
-import { nodeIsRunning } from './renderers/renderer-shared'
+import { ResourceCardContent } from './renderers/resource-card'
 import type { WorkspaceCanvasNodeRenderer, WorkspaceCanvasNodeRendererProps } from './renderers/types'
-import { VideoPlanContent } from './renderers/video-plan'
-import { ResourceCardContent, ResourceProvenanceContent } from './renderers/resource-card'
-import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 
 export const WORKSPACE_CANVAS_NODE_RENDERERS = {
-  editSourceScript: SourceScriptContent,
-  editBible: EditBibleContent,
-  editStyleBible: StyleBibleContent,
-  editPipelineStep: EditPipelineStepContent,
-  editProcessGroup: ProcessGroupContent,
-  editScript: EditScriptContent,
-  editShotExecutionPlan: EditShotExecutionPlanContent,
-  videoPlan: VideoPlanContent,
-  bgmScore: BgmScoreContent,
-  editRequiredAsset: EditAssetContent,
-  editAssetGroup: EditAssetGroupContent,
   resourceCard: ResourceCardContent,
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>
 
-export function NodeContent({ data, labels, expanded }: WorkspaceCanvasNodeRendererProps) {
-  if (
-    nodeIsRunning(data) &&
-    getWorkspaceCanvasNodeDefinition(data.kind).presentation.runningRenderer === 'mediaPreview'
-  ) {
-    return <MediaPreview data={data} />
-  }
-  const Renderer = WORKSPACE_CANVAS_NODE_RENDERERS[data.kind]
-  return (
-    <div className="space-y-3">
-      <Renderer data={data} labels={labels} expanded={expanded} />
-      {data.kind !== 'resourceCard' && data.resourceDetails
-        ? <ResourceProvenanceContent data={data} labels={labels} expanded={expanded} />
-        : null}
-    </div>
-  )
+export function NodeContent(props: WorkspaceCanvasNodeRendererProps) {
+  return <ResourceCardContent {...props} />
 }

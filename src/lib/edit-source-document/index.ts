@@ -30,20 +30,11 @@ export {
   sliceEditSourceText,
 } from './offsets'
 export {
-  createEditSourceDocumentInputSchema,
-  editSourceDocumentKindSchema,
   editSourceRangeSchema,
-  type CreateEditSourceDocumentInput,
-  type EditSourceDocumentKind,
   type EditSourceRange,
 } from './schemas'
 export {
-  assertEpisodeSourceWritable,
-  createEpisodeSourceDocument,
-  deleteEpisodeSourceDocumentForRollback,
-  materializePromptGeneratedSourceDocument,
-  readEpisodeSourceDocumentById,
-  readLatestEpisodeSourceDocument,
+  materializeScreenplayResourceProjection,
   type CreatedEditSourceDocument,
   type EditSourceDocumentRecord,
 } from './service'

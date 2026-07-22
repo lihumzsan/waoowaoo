@@ -7,7 +7,7 @@ import type {
 export type ChoiceCardSelections = Record<string, string>
 export type ChoiceCardCustomOptions = Record<string, ProjectAgentChoiceCardOption>
 
-const CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX = 'custom_choice:'
+export const CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX = 'custom_choice:'
 
 export function buildChoiceCardCustomOptionValue(groupKey: string): string {
   return `${CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX}${groupKey}`
@@ -41,21 +41,6 @@ export function isChoiceCardSubmitReady(
   })
 }
 
-export function resolveChoiceCardSelectionLabels(
-  groups: readonly ProjectAgentChoiceCardGroup[],
-  selections: ChoiceCardSelections,
-): ChoiceCardSelections {
-  const labels: ChoiceCardSelections = {}
-  groups.forEach((group) => {
-    const selectedValue = selections[group.key]
-    if (!selectedValue) return
-    const selectedOption = group.options.find((option) => option.value === selectedValue)
-    if (!selectedOption) return
-    labels[`${group.key}Label`] = selectedOption.label
-  })
-  return labels
-}
-
 export function buildSingleOptionChoiceCardSelections(
   card: Pick<ProjectAgentChoiceCardPartData, 'groups'>,
   optionValue: string,
@@ -74,9 +59,7 @@ export function buildSingleOptionChoiceCardSelections(
 }
 
 export function shouldShowChoiceCardManualSubmit(
-  card: Pick<ProjectAgentChoiceCardPartData, 'autoSubmitOnReady' | 'variant'>,
+  card: Pick<ProjectAgentChoiceCardPartData, 'mode'>,
 ): boolean {
-  return card.autoSubmitOnReady !== true
-    && card.variant !== 'confirm'
-    && card.variant !== 'confirm_or_reply'
+  return card.mode !== 'confirm' && card.mode !== 'confirm_or_text'
 }

@@ -4,38 +4,20 @@ export interface WorkspaceCanvasConformanceFixture<K extends WorkspaceCanvasNode
   readonly kind: K
   readonly canonicalNodeId: string
   readonly taskTarget: {
-    readonly targetType: string
+    readonly targetType: 'CreativeResource'
     readonly targetId: string
     readonly taskType: string
-  } | null
+  }
 }
 
-const fixture = <K extends WorkspaceCanvasNodeKind>(
-  kind: K,
-  taskTarget: WorkspaceCanvasConformanceFixture['taskTarget'],
-): WorkspaceCanvasConformanceFixture<K> => ({
-  kind,
-  canonicalNodeId: `${kind}:conformance-resource`,
-  taskTarget,
-})
-
-const taskTarget = {
-  targetType: 'ConformanceTarget',
-  targetId: 'conformance-resource',
-  taskType: 'conformance_task',
-} as const
-
 export const WORKSPACE_CANVAS_CONFORMANCE_FIXTURES = {
-  editSourceScript: fixture('editSourceScript', taskTarget),
-  editBible: fixture('editBible', taskTarget),
-  editStyleBible: fixture('editStyleBible', taskTarget),
-  editPipelineStep: fixture('editPipelineStep', taskTarget),
-  editProcessGroup: fixture('editProcessGroup', null),
-  editScript: fixture('editScript', taskTarget),
-  editShotExecutionPlan: fixture('editShotExecutionPlan', taskTarget),
-  videoPlan: fixture('videoPlan', taskTarget),
-  bgmScore: fixture('bgmScore', taskTarget),
-  editRequiredAsset: fixture('editRequiredAsset', taskTarget),
-  editAssetGroup: fixture('editAssetGroup', taskTarget),
-  resourceCard: fixture('resourceCard', taskTarget),
+  resourceCard: {
+    kind: 'resourceCard',
+    canonicalNodeId: 'resource:conformance-resource',
+    taskTarget: {
+      targetType: 'CreativeResource',
+      targetId: 'conformance-resource',
+      taskType: 'creative_resource_image',
+    },
+  },
 } as const satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasConformanceFixture>

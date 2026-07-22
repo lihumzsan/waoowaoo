@@ -39,7 +39,6 @@ interface ProjectAssetLibraryModalsProps {
   projectId: string
   onRefresh: () => void
   onClosePreview: () => void
-  handleGenerateImage: (type: 'character' | 'location' | 'prop', id: string, appearanceId?: string) => Promise<void>
   handleUpdateAppearanceDescription: (newDescription: string) => Promise<void>
   handleUpdateLocationDescription: (newDescription: string) => Promise<void>
   handleCloseCopyPicker: () => void
@@ -65,7 +64,6 @@ export default function ProjectAssetLibraryModals({
   projectId,
   onRefresh,
   onClosePreview,
-  handleGenerateImage,
   handleUpdateAppearanceDescription,
   handleUpdateLocationDescription,
   handleCloseCopyPicker,
@@ -101,7 +99,6 @@ export default function ProjectAssetLibraryModals({
           introduction={editingAppearance.introduction}
           projectId={projectId}
           onClose={closeEditingAppearance}
-          onSave={(characterId, appearanceId) => void handleGenerateImage('character', characterId, appearanceId)}
           onUpdate={handleUpdateAppearanceDescription}
         />
       )}
@@ -114,7 +111,6 @@ export default function ProjectAssetLibraryModals({
           description={editingLocation.description}
           projectId={projectId}
           onClose={closeEditingLocation}
-          onSave={(locationId) => void handleGenerateImage('location', locationId)}
           onUpdate={handleUpdateLocationDescription}
         />
       )}

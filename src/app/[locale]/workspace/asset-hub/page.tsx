@@ -14,7 +14,6 @@ import { FolderModal } from './components/FolderModal'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import {
     useAssets,
-    useAssetActions,
     useRefreshAssets,
     useGlobalFolders,
     useSSE,
@@ -22,13 +21,10 @@ import {
 import { queryKeys } from '@/lib/query/keys'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
-import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
     const queryClient = useQueryClient()
-    const { count: characterGenerationCount } = useImageGenerationCount('character')
-    const { count: locationGenerationCount } = useImageGenerationCount('location')
 
     // 文件夹选择状态
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -39,8 +35,6 @@ export default function AssetHubPage() {
         scope: 'global',
         folderId: selectedFolderId,
     })
-    const characterActions = useAssetActions({ scope: 'global', kind: 'character' })
-    const locationActions = useAssetActions({ scope: 'global', kind: 'location' })
     const refreshAssets = useRefreshAssets({ scope: 'global' })
 
     const loading = foldersLoading || assetsLoading
@@ -199,38 +193,6 @@ export default function AssetHubPage() {
             description: variant?.description || typedProp.summary || '',
             variantId: variant?.id,
         })
-    }
-
-    // 角色编辑后触发生成
-    const handleCharacterEditGenerate = async () => {
-        if (!characterEditModal) return
-
-        try {
-            await characterActions.generate({
-                id: characterEditModal.characterId,
-                appearanceId: characterEditModal.appearanceId,
-                appearanceIndex: characterEditModal.appearanceIndex,
-                count: characterGenerationCount,
-            })
-            refreshAssets()
-        } catch (error) {
-            _ulogError('触发生成失败:', error)
-        }
-    }
-
-    // 场景编辑后触发生成
-    const handleLocationEditGenerate = async () => {
-        if (!locationEditModal) return
-
-        try {
-            await locationActions.generate({
-                id: locationEditModal.locationId,
-                count: locationGenerationCount,
-            })
-            refreshAssets()
-        } catch (error) {
-            _ulogError('触发生成失败:', error)
-        }
     }
 
     // 打包下载所有图片资产
@@ -445,7 +407,6 @@ export default function AssetHubPage() {
                     changeReason={characterEditModal.changeReason}
                     description={characterEditModal.description}
                     onClose={() => setCharacterEditModal(null)}
-                    onSave={handleCharacterEditGenerate}
                 />
             )}
 
@@ -459,7 +420,6 @@ export default function AssetHubPage() {
                     imageIndex={locationEditModal.imageIndex}
                     description={locationEditModal.description}
                     onClose={() => setLocationEditModal(null)}
-                    onSave={handleLocationEditGenerate}
                 />
             )}
 

@@ -2,18 +2,8 @@ import { z } from 'zod'
 import { editSourceAnchorSchema } from '@/lib/edit-source-document/anchors'
 import { editSourceRangeSchema } from '@/lib/edit-source-document/schemas'
 import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger/schemas'
-import { EDIT_BIBLE_STATUS } from './constraints'
+import { CREATIVE_CHAPTER_MAX_DURATION_SECONDS } from './constraints'
 import { editBibleCharacterVoiceProfileSchema } from './voice-profile'
-
-export const editBibleStatusSchema = z.enum([
-  EDIT_BIBLE_STATUS.PENDING,
-  EDIT_BIBLE_STATUS.GENERATING,
-  EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
-  EDIT_BIBLE_STATUS.SCRIPT_APPROVED,
-  EDIT_BIBLE_STATUS.READY_FOR_REVIEW,
-  EDIT_BIBLE_STATUS.CONFIRMED,
-  EDIT_BIBLE_STATUS.FAILED,
-])
 
 export const editBibleEntityBaseSchema = z.object({
   entityId: z.string().trim().min(1),
@@ -139,111 +129,47 @@ export const editBibleBundleSchema = z.object({
 
 export type EditBibleBundle = z.infer<typeof editBibleBundleSchema>
 
-const scriptStructureText = z.string().trim().min(1)
-
-export const editSourceScriptBeatSchema = z.object({
-  beatIndex: z.number().int().min(0),
-  title: scriptStructureText.max(120),
-  summary: scriptStructureText.max(500),
-}).strict()
-
-export const editSourceScriptSceneSchema = z.object({
-  sceneIndex: z.number().int().min(0),
-  title: scriptStructureText.max(160),
-  location: scriptStructureText.max(120),
-  timeOfDay: z.string().trim().max(80).optional().nullable(),
-  characters: z.array(scriptStructureText.max(80)).default([]),
-  summary: scriptStructureText.max(800),
-  body: scriptStructureText.max(10000),
-  beats: z.array(editSourceScriptBeatSchema).min(1).max(24),
-}).strict()
-
-export const editSourceScriptActSchema = z.object({
-  actIndex: z.number().int().min(0),
-  title: scriptStructureText.max(160),
-  summary: scriptStructureText.max(800),
-  scenes: z.array(editSourceScriptSceneSchema).min(1).max(40),
-}).strict()
-
-export const editSourceScriptEpisodeSchema = z.object({
-  episodeIndex: z.number().int().min(0),
-  title: scriptStructureText.max(160),
-  summary: scriptStructureText.max(1000),
-  acts: z.array(editSourceScriptActSchema).min(1).max(8),
-}).strict()
-
-export const editSourceScriptStructureSchema = z.object({
-  title: scriptStructureText.max(160),
-  summary: scriptStructureText.max(1200),
-  episodes: z.array(editSourceScriptEpisodeSchema).min(1).max(12),
-}).strict()
-
-export type EditSourceScriptBeat = z.infer<typeof editSourceScriptBeatSchema>
-export type EditSourceScriptScene = z.infer<typeof editSourceScriptSceneSchema>
-export type EditSourceScriptAct = z.infer<typeof editSourceScriptActSchema>
-export type EditSourceScriptEpisode = z.infer<typeof editSourceScriptEpisodeSchema>
-export type EditSourceScriptStructure = z.infer<typeof editSourceScriptStructureSchema>
-
-export const sourceScriptSceneSegmentSchema = editSourceScriptSceneSchema.omit({
-  sceneIndex: true,
-}).extend({
-  episodeIndex: z.number().int().min(0),
-  episodeTitle: scriptStructureText.max(160),
-  episodeSummary: scriptStructureText.max(1000),
-  actIndex: z.number().int().min(0),
-  actTitle: scriptStructureText.max(160),
-  actSummary: scriptStructureText.max(800),
-  sceneIndex: z.number().int().min(0),
-}).strict()
-
-export const expandedSourceScriptOutputSchema = z.object({
-  title: scriptStructureText.max(160),
-  summary: scriptStructureText.max(1200),
-  segments: z.array(sourceScriptSceneSegmentSchema).min(1).max(480),
-}).strict()
-
-export type SourceScriptSceneSegment = z.infer<typeof sourceScriptSceneSegmentSchema>
-export type ExpandedSourceScriptOutput = z.infer<typeof expandedSourceScriptOutputSchema>
-
-export const editBibleDiagnosticsSchema = z.object({
-  bible: z.unknown().optional(),
-  beatSheet: z.unknown().optional(),
-  ledger: z.unknown().optional(),
-  emotionalCurve: z.unknown().optional(),
-  error: z.string().optional(),
-}).passthrough()
-
-export type EditBibleDiagnostics = z.infer<typeof editBibleDiagnosticsSchema>
-
-export const editBibleChapterPlanSchema = editSourceRangeSchema.extend({
+export const creativeChapterPlanItemSchema = editSourceRangeSchema.extend({
   chapterIndex: z.number().int().min(0),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   targetDurationSec: z.number().int().positive(),
-  beatIds: z.array(z.string().trim().min(1)),
-  eventIds: z.array(z.string().trim().min(1)),
+}).strict()
+
+export type CreativeChapterPlanItem = z.infer<typeof creativeChapterPlanItemSchema>
+
+export const creativeChapterPlanOutputSchema = z.object({
+  kind: z.literal('chapter_plan'),
+  rationale: z.string().trim().min(1).max(12_000),
+  chapters: z.array(creativeChapterPlanItemSchema.safeExtend({
+    title: z.string().trim().min(1).max(300),
+    summary: z.string().trim().min(1).max(8_000),
+    targetDurationSec: z.number().int().positive().max(CREATIVE_CHAPTER_MAX_DURATION_SECONDS),
+  }).strict()).min(1).max(128),
+  assumptions: z.array(z.string().trim().min(1).max(2_000)).max(64),
+  warnings: z.array(z.string().trim().min(1).max(2_000)).max(64),
+}).strict().superRefine((output, context) => {
+  let previousEnd = -1
+  for (const [index, chapter] of output.chapters.entries()) {
+    if (chapter.chapterIndex !== index) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['chapters', index, 'chapterIndex'],
+        message: 'CREATIVE_CHAPTER_PLAN_INDEX_NOT_CONTIGUOUS',
+      })
+    }
+    if (chapter.sourceStart < previousEnd) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['chapters', index, 'sourceStart'],
+        message: 'CREATIVE_CHAPTER_PLAN_RANGE_OVERLAP',
+      })
+    }
+    previousEnd = chapter.sourceEnd
+  }
 })
 
-export type EditBibleChapterPlan = z.infer<typeof editBibleChapterPlanSchema>
-
-export const ingestEditBibleScriptInputSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  sourceKind: z.enum(['upload', 'paste', 'prompt_generated_outline']),
-  text: z.string().min(1),
-  rawFileMediaId: z.string().trim().min(1).optional(),
-})
-
-export const reviseEditBibleInputSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  bible: editBibleSchema.optional(),
-  beatSheet: editBibleBeatSheetSchema.optional(),
-  ledger: ledgerSchema.optional(),
-  emotionalCurve: editBibleEmotionalCurveSchema.optional(),
-})
-
-export const confirmEditBibleInputSchema = z.object({
-  episodeId: z.string().trim().min(1),
-})
+export type CreativeChapterPlanOutput = z.infer<typeof creativeChapterPlanOutputSchema>
 
 export const getEditBibleInputSchema = z.object({
   episodeId: z.string().trim().min(1),

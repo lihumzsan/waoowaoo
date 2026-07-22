@@ -1,7 +1,6 @@
 import type { Job } from 'bullmq'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
-import { resolveReferenceAudioUrl } from '@/lib/ai-providers/shared/audio-utils'
 import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
@@ -9,6 +8,7 @@ import {
 import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
+import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { resolveVideoDownloadHeaders } from '@/lib/workers/video-download'
@@ -101,7 +101,7 @@ async function loadVideoAudioReferences(
     if (revision.resource.mediaType !== 'audio' || !revision.media?.storageKey) {
       throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.revisionId}`)
     }
-    return await resolveReferenceAudioUrl(revision.media.storageKey)
+    return getSignedUrl(revision.media.storageKey, 3600)
   }))
 }
 

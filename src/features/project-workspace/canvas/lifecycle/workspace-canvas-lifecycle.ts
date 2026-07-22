@@ -1,12 +1,9 @@
 import type { TaskRuntimeStateLike } from '@/lib/task/runtime-targets'
-import type { WorkspaceCanvasStreamPresentation } from '../node-canvas-types'
 
 export type WorkspaceCanvasLifecyclePhase =
   | 'pending'
-  | 'submitting'
   | 'queued'
   | 'processing'
-  | 'streaming'
   | 'succeeded'
   | 'failed'
   | 'canceled'
@@ -22,7 +19,6 @@ export interface WorkspaceCanvasLifecycle {
   readonly taskType: string | null
   readonly progress: number | null
   readonly error: WorkspaceCanvasLifecycleError | null
-  readonly stream: WorkspaceCanvasStreamPresentation | null
 }
 
 export type WorkspaceCanvasPersistedPhase = 'pending' | 'succeeded' | 'failed' | 'canceled'
@@ -30,13 +26,6 @@ export type WorkspaceCanvasPersistedPhase = 'pending' | 'succeeded' | 'failed' |
 export interface WorkspaceCanvasLifecycleFacts {
   readonly persistedPhase: WorkspaceCanvasPersistedPhase
   readonly task: TaskRuntimeStateLike | null
-  readonly stream: {
-    readonly taskId: string
-    readonly taskType: string | null
-    readonly terminalHandoff: boolean
-    readonly presentation: WorkspaceCanvasStreamPresentation
-  } | null
-  readonly submitting: boolean
   readonly contractError?: WorkspaceCanvasLifecycleError | null
 }
 
@@ -54,208 +43,64 @@ function readTaskType(task: TaskRuntimeStateLike | null): string | null {
   return normalizeIdentity(task?.runningTaskType)
 }
 
-function readTaskError(task: TaskRuntimeStateLike | null): WorkspaceCanvasLifecycleError | null {
-  const lastError = task?.lastError
-  if (lastError === null || lastError === undefined) return null
-  const message = lastError.message
-  if (typeof message !== 'string' || !message.trim()) return null
-  const code = lastError.code
-  return {
-    code: typeof code === 'string' && code.trim() ? code.trim() : 'TASK_FAILED',
-    message: message.trim(),
-  }
-}
-
 function readTaskProgress(task: TaskRuntimeStateLike | null): number | null {
-  const progress = task?.progress as number
-  return Number.isFinite(progress)
+  const progress = task?.progress
+  return typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, Math.floor(progress)))
     : null
 }
 
-function lifecycle(input: Omit<WorkspaceCanvasLifecycle, 'stream'> & {
-  readonly stream?: WorkspaceCanvasStreamPresentation | null
-}): WorkspaceCanvasLifecycle {
+function readTaskError(task: TaskRuntimeStateLike | null): WorkspaceCanvasLifecycleError {
+  const message = task?.lastError?.message
+  const code = task?.lastError?.code
   return {
-    ...input,
-    stream: input.stream ?? null,
+    code: typeof code === 'string' && code.trim() ? code.trim() : 'TASK_FAILED',
+    message: typeof message === 'string' && message.trim() ? message.trim() : 'Task failed',
   }
 }
 
-/**
- * The only business lifecycle resolver for workspace canvas nodes.
- * It is intentionally pure: callers must provide resource, task, stream,
- * submission, and contract facts explicitly.
- */
+/** The single resolver for a Resource card's persisted and Task lifecycle facts. */
 export function resolveWorkspaceCanvasLifecycle(
   facts: WorkspaceCanvasLifecycleFacts,
 ): WorkspaceCanvasLifecycle {
-  if (facts.contractError) {
-    return lifecycle({
-      phase: 'failed',
-      taskId: readTaskId(facts.task) ?? facts.stream?.taskId ?? null,
-      taskType: readTaskType(facts.task) ?? facts.stream?.taskType ?? null,
-      progress: readTaskProgress(facts.task),
-      error: facts.contractError,
-    })
-  }
-
   const taskId = readTaskId(facts.task)
   const taskType = readTaskType(facts.task)
-  const streamMatchesTask = Boolean(
-    facts.stream
-    && taskId
-    && facts.stream.taskId === taskId,
-  )
+  const progress = readTaskProgress(facts.task)
 
+  if (facts.contractError) {
+    return { phase: 'failed', taskId, taskType, progress, error: facts.contractError }
+  }
   if (facts.task?.phase === 'queued' && taskId) {
-    return lifecycle({
-      phase: 'queued',
-      taskId,
-      taskType,
-      progress: readTaskProgress(facts.task),
-      error: null,
-    })
+    return { phase: 'queued', taskId, taskType, progress, error: null }
   }
-
   if (facts.task?.phase === 'processing' && taskId) {
-    if (streamMatchesTask && facts.stream) {
-      return lifecycle({
-        phase: 'streaming',
-        taskId,
-        taskType: taskType ?? facts.stream.taskType,
-        progress: readTaskProgress(facts.task),
-        error: null,
-        stream: facts.stream.presentation,
-      })
-    }
-    return lifecycle({
-      phase: 'processing',
-      taskId,
-      taskType,
-      progress: readTaskProgress(facts.task),
-      error: null,
-    })
+    return { phase: 'processing', taskId, taskType, progress, error: null }
   }
-
   if (facts.task?.phase === 'failed') {
-    return lifecycle({
-      phase: 'failed',
-      taskId,
-      taskType,
-      progress: readTaskProgress(facts.task),
-      error: readTaskError(facts.task) ?? {
-        code: 'TASK_FAILED',
-        message: 'Task failed',
-      },
-    })
+    return { phase: 'failed', taskId, taskType, progress, error: readTaskError(facts.task) }
   }
-
   if (facts.task?.phase === 'canceled' || facts.task?.phase === 'dismissed') {
-    return lifecycle({
-      phase: 'canceled',
-      taskId,
-      taskType,
-      progress: readTaskProgress(facts.task),
-      error: null,
-    })
+    return { phase: 'canceled', taskId, taskType, progress, error: null }
   }
-
-  if (facts.task?.phase === 'completed') {
-    return lifecycle({
-      phase: facts.persistedPhase,
-      taskId,
-      taskType,
-      progress: readTaskProgress(facts.task),
-      error: null,
-      stream: facts.stream?.terminalHandoff === true ? facts.stream.presentation : null,
-    })
-  }
-
-  if (facts.stream) {
-    if (facts.stream.terminalHandoff) {
-      return lifecycle({
-        phase: facts.persistedPhase,
-        taskId: facts.stream.taskId,
-        taskType: facts.stream.taskType,
-        progress: readTaskProgress(facts.task),
-        error: null,
-        stream: facts.stream.presentation,
-      })
-    }
-    return lifecycle({
-      phase: 'streaming',
-      taskId: facts.stream.taskId,
-      taskType: facts.stream.taskType,
-      progress: readTaskProgress(facts.task),
-      error: null,
-      stream: facts.stream.presentation,
-    })
-  }
-
-  if (facts.submitting) {
-    return lifecycle({
-      phase: 'submitting',
-      taskId: null,
-      taskType: null,
-      progress: null,
-      error: null,
-    })
-  }
-
-  return lifecycle({
-    phase: facts.persistedPhase,
-    taskId: null,
-    taskType: null,
-    progress: null,
-    error: facts.persistedPhase === 'failed'
-      ? readTaskError(facts.task)
-      : null,
-  })
+  return { phase: facts.persistedPhase, taskId, taskType, progress, error: null }
 }
 
-export function isWorkspaceCanvasLifecycleRunning(
-  lifecycleValue: WorkspaceCanvasLifecycle,
-): boolean {
-  return lifecycleValue.phase === 'submitting'
-    || lifecycleValue.phase === 'queued'
-    || lifecycleValue.phase === 'processing'
-    || lifecycleValue.phase === 'streaming'
+export function isWorkspaceCanvasLifecycleRunning(lifecycle: WorkspaceCanvasLifecycle): boolean {
+  return lifecycle.phase === 'queued' || lifecycle.phase === 'processing'
 }
 
-export function isWorkspaceCanvasLifecycleStreaming(
-  lifecycleValue: WorkspaceCanvasLifecycle,
-): boolean {
-  return lifecycleValue.phase === 'streaming'
+export function workspaceCanvasLifecycleStatusKey(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasLifecyclePhase {
+  return lifecycle.phase
 }
 
-export function workspaceCanvasLifecycleStatusKey(
-  lifecycleValue: WorkspaceCanvasLifecycle,
-): 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' {
-  switch (lifecycleValue.phase) {
-    case 'pending':
-    case 'succeeded':
-    case 'failed':
-    case 'canceled':
-      return lifecycleValue.phase
-    case 'submitting':
-    case 'queued':
-    case 'processing':
-    case 'streaming':
-      return 'processing'
-  }
-}
-
-export function workspaceCanvasLifecycleTaskState(
-  lifecycleValue: WorkspaceCanvasLifecycle,
-): TaskRuntimeStateLike | null {
-  if (!lifecycleValue.taskId) return null
-  const phase = lifecycleValue.phase === 'streaming' ? 'processing' : lifecycleValue.phase
+export function workspaceCanvasLifecycleTaskState(lifecycle: WorkspaceCanvasLifecycle): TaskRuntimeStateLike | null {
+  if (!lifecycle.taskId) return null
   return {
-    phase,
-    runningTaskId: lifecycleValue.taskId,
-    runningTaskType: lifecycleValue.taskType,
-    progress: lifecycleValue.progress,
-    lastError: lifecycleValue.error,
+    taskId: lifecycle.taskId,
+    runningTaskId: lifecycle.taskId,
+    runningTaskType: lifecycle.taskType,
+    phase: lifecycle.phase,
+    progress: lifecycle.progress,
+    lastError: lifecycle.error,
   }
 }

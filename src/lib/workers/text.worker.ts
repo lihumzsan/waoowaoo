@@ -5,32 +5,12 @@ import { getTaskDefinitionForQueue, type TextTaskHandlerKey } from '@/lib/task/d
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
-import { handleAssetHubAIDesignTask } from './handlers/asset-hub-ai-design'
-import { handleAssetHubAIModifyTask } from './handlers/asset-hub-ai-modify'
-import { handleReferenceToCharacterTask } from './handlers/reference-to-character'
-import { handleShotAITask } from './handlers/shot-ai-tasks'
-import { handleEditScriptGenerateTask } from './handlers/edit-script-generate'
-import { handleEditBibleGenerateTask } from './handlers/edit-bible-generate'
-import { handleEditStylePreviewOptionsTask } from './handlers/edit-style-preview-options-task-handler'
-import {
-  handleEditShotExecutionPlanGenerateTask,
-} from './handlers/edit-script-structured-generate'
-import { handleBgmDesignPlanTask } from '@/lib/bgm-design/generate'
 import { handleCreativeWorkTask } from './handlers/creative-work'
 
 type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const TEXT_TASK_HANDLERS = {
   creative_work: handleCreativeWorkTask,
-  bgm_design_plan: handleBgmDesignPlanTask,
-  edit_bible_generate: handleEditBibleGenerateTask,
-  edit_style_preview_options_generate: handleEditStylePreviewOptionsTask,
-  edit_script_generate: handleEditScriptGenerateTask,
-  edit_shot_execution_plan_generate: handleEditShotExecutionPlanGenerateTask,
-  asset_hub_ai_design: handleAssetHubAIDesignTask,
-  asset_hub_ai_modify: handleAssetHubAIModifyTask,
-  shot_ai: handleShotAITask,
-  reference_to_character: handleReferenceToCharacterTask,
 } satisfies Record<TextTaskHandlerKey, TextTaskHandler>
 
 async function processTextTask(job: Job<TaskJobData>) {

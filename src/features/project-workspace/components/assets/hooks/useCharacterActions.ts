@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl'
 
 /**
  * useCharacterActions - 角色资产操作 Hook
- * 从项目资产库模块提取，负责角色的 CRUD 和图片生成操作
+ * 从项目资产库模块提取，负责角色的 CRUD 和图片选择操作
  * 
  * 🔥 V6.5 重构：直接订阅 useProjectAssets，消除 props drilling
  */
@@ -15,8 +15,6 @@ import { isAbortError } from '@/lib/error-utils'
 import {
     useProjectAssets,
     useRefreshProjectAssets,
-    useRegenerateSingleCharacterImage,
-    useRegenerateCharacterGroup,
     useDeleteProjectCharacter,
     useDeleteProjectAppearance,
     useSelectProjectCharacterImage,
@@ -51,9 +49,6 @@ export function useCharacterActions({
     // 🔥 使用刷新函数 - mutations 完成后刷新缓存
     const refreshAssets = useRefreshProjectAssets(projectId)
 
-    // 🔥 V6.7: 使用重新生成mutation hooks
-    const regenerateSingleImage = useRegenerateSingleCharacterImage(projectId)
-    const regenerateGroup = useRegenerateCharacterGroup(projectId)
     const deleteCharacterMutation = useDeleteProjectCharacter(projectId)
     const deleteAppearanceMutation = useDeleteProjectAppearance(projectId)
     const selectCharacterImageMutation = useSelectProjectCharacterImage(projectId)
@@ -126,38 +121,6 @@ export function useCharacterActions({
         }
     }, [confirmCharacterSelectionMutation, showToast, t])
 
-    // 单张重新生成角色图片 - 🔥 V6.7: 使用mutation hook
-    const handleRegenerateSingleCharacter = useCallback(async (
-        characterId: string,
-        appearanceId: string,
-        imageIndex: number
-    ) => {
-        try {
-            await regenerateSingleImage.mutateAsync({ characterId, appearanceId, imageIndex })
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
-            }
-            throw error
-        }
-    }, [regenerateSingleImage, t])
-
-    // 整组重新生成角色图片 - 🔥 V6.7: 使用mutation hook
-    const handleRegenerateCharacterGroup = useCallback(async (
-        characterId: string,
-        appearanceId: string,
-        count?: number,
-    ) => {
-        try {
-            await regenerateGroup.mutateAsync({ characterId, appearanceId, count })
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                alert(t('image.regenerateFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
-            }
-            throw error
-        }
-    }, [regenerateGroup, t])
-
     // 更新形象描述 - 🔥 仍需保存到服务器
     const handleUpdateAppearanceDescription = useCallback(async (
         characterId: string,
@@ -188,8 +151,6 @@ export function useCharacterActions({
         handleDeleteAppearance,
         handleSelectCharacterImage,
         handleConfirmSelection,
-        handleRegenerateSingleCharacter,
-        handleRegenerateCharacterGroup,
         handleUpdateAppearanceDescription
     }
 }

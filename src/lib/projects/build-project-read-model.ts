@@ -4,7 +4,6 @@ import type {
   ProjectEpisodeSummary,
   ProjectWorkflowData,
   Prop,
-  ProjectVideoSegment,
 } from '@/types/project'
 
 type ProjectLikeRecord = {
@@ -29,8 +28,6 @@ type ProjectWorkflowSource = {
   videoModel?: string | null
   musicModel?: string | null
   videoRatio?: string | null
-  videoRatioConfirmedAt?: Date | null
-  videoRatioConfirmationVersion?: number
   capabilityOverrides?: ProjectWorkflowData['capabilityOverrides']
   videoResolution?: string | null
   imageResolution?: string | null
@@ -38,7 +35,6 @@ type ProjectWorkflowSource = {
   characters?: ProjectRecord[]
   locations?: ProjectLocationLike[]
   episodes?: ProjectRecord[]
-  videoSegments?: ProjectRecord[]
 }
 
 function splitProjectLocations(locations: ProjectLocationLike[] | undefined): Pick<ProjectWorkflowData, 'locations' | 'props'> {
@@ -62,8 +58,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     videoModel: source.videoModel ?? null,
     musicModel: source.musicModel ?? null,
     videoRatio: source.videoRatio ?? null,
-    videoRatioConfirmedAt: source.videoRatioConfirmedAt ?? null,
-    videoRatioConfirmationVersion: source.videoRatioConfirmationVersion ?? 0,
     capabilityOverrides: source.capabilityOverrides ?? null,
     videoResolution: source.videoResolution ?? null,
     imageResolution: source.imageResolution ?? null,
@@ -72,7 +66,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     locations: assets.locations || [],
     props: assets.props || [],
     episodes: (source.episodes || []) as unknown as ProjectEpisodeSummary[],
-    videoSegments: (source.videoSegments || []) as unknown as ProjectVideoSegment[],
   }
 }
 

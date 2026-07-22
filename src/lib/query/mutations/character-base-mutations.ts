@@ -3,14 +3,11 @@ import { useRef } from 'react'
 import type { Character, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
-    requireTaskSubmissionReceipt,
     requestJsonWithError,
     requestVoidWithError,
 } from './mutation-shared'
-import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectProjectCharacterImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -98,54 +95,6 @@ function removeCharacterFromProject(
         ...previous,
         characters: currentCharacters.filter((character) => character.id !== characterId),
     }
-}
-
-export function useGenerateProjectCharacterImage(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-
-    return useMutation({
-        mutationFn: async ({
-            characterId,
-            appearanceId,
-            count,
-        }: {
-            characterId: string
-            appearanceId: string
-            count?: number
-        }) => {
-            const requestBody = {
-                scope: 'project',
-                kind: 'character',
-                projectId,
-                appearanceId,
-                count,
-            }
-            const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-            const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...confirmation,
-                })
-            }, 'Failed to generate image')
-            return requireTaskSubmissionReceipt(result)
-        },
-        onSuccess: (receipt, { appearanceId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
-                runningTaskId: receipt.taskId,
-                runningTaskType: receipt.taskType,
-                intent: 'generate',
-            })
-        },
-        onSettled: invalidateProjectAssets,
-    })
 }
 
 /**
