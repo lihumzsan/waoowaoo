@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '../keys'
+import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   cancelEpisodeQueries,
   getEpisodeQueriesSnapshot,
@@ -115,6 +117,66 @@ export function useSaveProjectEpisodesBatch(projectId: string) {
         },
         '保存剧集失败',
       ),
+  })
+}
+
+/**
+ * 为单集生成一张独立封面图。任务入队后由统一任务状态与 SSE 驱动界面刷新。
+ */
+export function useGenerateEpisodeCover(projectId: string, episodeId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<{
+    success?: boolean
+    async?: boolean
+    taskId?: string
+  }, Error, { hasOutput: boolean }>({
+    mutationFn: async () =>
+      await requestJsonWithError<{
+        success?: boolean
+        async?: boolean
+        taskId?: string
+      }>(
+        `/api/novel-promotion/${projectId}/episodes/${episodeId}/cover`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+        'Failed to generate episode cover',
+      ),
+    onMutate: async ({ hasOutput }) => {
+      upsertTaskTargetOverlay(queryClient, {
+        projectId,
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+        runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+        intent: hasOutput ? 'regenerate' : 'generate',
+        hasOutputAtStart: hasOutput,
+      })
+    },
+    onSuccess: (data, { hasOutput }) => {
+      upsertTaskTargetOverlay(queryClient, {
+        projectId,
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+        runningTaskId: data.taskId || null,
+        runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+        intent: hasOutput ? 'regenerate' : 'generate',
+        hasOutputAtStart: hasOutput,
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.targetStatesAll(projectId),
+        exact: false,
+      })
+    },
+    onError: () => {
+      clearTaskTargetOverlay(queryClient, {
+        projectId,
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+      })
+    },
   })
 }
 

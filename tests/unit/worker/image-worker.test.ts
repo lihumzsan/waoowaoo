@@ -17,6 +17,7 @@ const handlerMock = vi.hoisted(() => ({
   handleAssetHubImageTask: vi.fn(async () => ({ ok: true })),
   handleAssetHubModifyTask: vi.fn(async () => ({ ok: true })),
   handleCharacterImageTask: vi.fn(async () => ({ ok: true })),
+  handleEpisodeCoverImageTask: vi.fn(async () => ({ ok: true })),
   handleLocationImageTask: vi.fn(async () => ({ ok: true })),
   handleModifyAssetImageTask: vi.fn(async () => ({ ok: true })),
   handlePanelImageTask: vi.fn(async () => ({ ok: true })),
@@ -102,5 +103,15 @@ describe('worker image concurrency behavior', () => {
       limit: 5,
     }))
     expect(handlerMock.handlePanelImageTask).toHaveBeenCalledWith(job)
+  })
+
+  it('routes Episode cover image jobs to the dedicated image handler', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob('image_episode_cover' as TaskJobData['type'])
+    await processor!(job)
+
+    expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledWith(job)
   })
 })

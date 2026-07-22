@@ -277,6 +277,9 @@ export interface NovelPromotionProject {
     description: string | null
     novelText: string | null
     audioUrl: string | null
+    coverImageMediaId: string | null
+    coverImageMedia?: MediaRef | null
+    coverImageUrl?: string | null
     srtContent: string | null
     artifactReadiness?: StageArtifactReadiness
     createdAt: Date

@@ -33,6 +33,8 @@ interface Episode {
   description?: string | null
   novelText?: string | null
   audioUrl?: string | null
+  coverImageMediaId?: string | null
+  coverImageUrl?: string | null
   srtContent?: string | null
   createdAt: string
   artifactReadiness?: StageArtifactReadiness

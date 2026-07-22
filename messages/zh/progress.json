@@ -44,6 +44,7 @@
   "taskType": {
     "generic": "任务",
     "imagePanel": "分镜图片",
+    "episodeCoverImage": "剧集封面图片",
     "imageCharacter": "角色图片",
     "imageLocation": "场景图片",
     "videoPanel": "视频生成",
@@ -95,6 +96,8 @@
     "generateCharacterImage": "生成角色图片",
     "generateLocationImage": "生成场景图片",
     "generatePanelCandidate": "生成候选分镜图",
+    "generateEpisodeCover": "生成剧集封面",
+    "persistEpisodeCover": "保存剧集封面",
     "generatePanelVideo": "生成分镜视频",
     "generateVoiceSubmit": "提交配音任务",
     "generateVoicePersist": "保存配音结果",

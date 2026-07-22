@@ -112,6 +112,7 @@ export {
     useAiModifyProjectShotPrompt,
     useUpdateProjectConfig,
     useUpdateProjectEpisodeField,
+    useGenerateEpisodeCover,
     useAnalyzeProjectAssets,
     useGetProjectStoryboardStats,
     useUpdateProjectPanelVideoPrompt,

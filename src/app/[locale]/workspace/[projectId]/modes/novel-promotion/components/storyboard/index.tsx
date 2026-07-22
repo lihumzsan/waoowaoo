@@ -7,6 +7,7 @@ import StoryboardToolbar from './StoryboardToolbar'
 import StoryboardCanvas from './StoryboardCanvas'
 import { useStoryboardStageController } from './hooks/useStoryboardStageController'
 import { useStoryboardModalRuntime } from './hooks/useStoryboardModalRuntime'
+import { EpisodeCoverSection } from './EpisodeCoverCard'
 
 const CharacterPickerModal = dynamic(() => import('../PanelEditForm').then((mod) => mod.CharacterPickerModal))
 const LocationPickerModal = dynamic(() => import('../PanelEditForm').then((mod) => mod.LocationPickerModal))
@@ -19,6 +20,7 @@ interface StoryboardStageProps {
   episodeId: string
   storyboards: NovelPromotionStoryboard[]
   clips: NovelPromotionClip[]
+  coverImageUrl?: string | null
   videoRatio: string
   onBack: () => void
   onNext: () => void
@@ -30,6 +32,7 @@ export default function StoryboardStage({
   episodeId,
   storyboards: initialStoryboards,
   clips,
+  coverImageUrl = null,
   videoRatio,
   onBack,
   onNext,
@@ -167,6 +170,13 @@ export default function StoryboardStage({
           onGenerateAllPanels={handleGenerateAllPanels}
           onAddStoryboardGroupAtStart={() => addStoryboardGroup(0)}
           onBack={onBack}
+        />
+
+        <EpisodeCoverSection
+          projectId={projectId}
+          episodeId={episodeId}
+          coverImageUrl={coverImageUrl}
+          videoRatio={videoRatio}
         />
 
         <StoryboardCanvas
