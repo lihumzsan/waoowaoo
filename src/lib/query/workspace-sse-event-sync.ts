@@ -45,10 +45,6 @@ export function applyWorkspaceSSEEvent(params: {
     return
   }
 
-  if (event.type === WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH) {
-    return
-  }
-
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
     const changes = requireWorkspaceResourceRefs(event.affectedResources)
     void syncWorkspaceResourceChanges({ queryClient, changes })

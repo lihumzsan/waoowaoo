@@ -60,9 +60,6 @@ export function inspectTerminalResourceRefetchContract(input) {
   if (input.canvas.includes('useTaskTargetTerminalInvalidation')) {
     violations.push('Canvas must not restore the competing target-state terminal resource observer')
   }
-  if (input.mutationBatch.includes('hasMutationBatchModel')) {
-    violations.push('MutationBatch must fail closed when its required persistence model is unavailable')
-  }
   for (const required of ['invalidateQueries', "refetchType: 'active'"]) {
     if (!input.resourceSync.includes(required)) violations.push(`resource sync is missing ${required}`)
   }
@@ -123,7 +120,6 @@ function runCli() {
     outboxWorker: read('src/lib/workers/outbox.worker.ts'),
     sseProtocol: read('src/lib/sse/protocol.ts'),
     canvas: read('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx'),
-    mutationBatch: read('src/lib/mutation-batch/service.ts'),
     checkpoint: read('src/lib/task/execution-checkpoint.ts'),
     sseSync: read('src/lib/query/workspace-sse-event-sync.ts'),
     resourceSync: read('src/lib/query/resource-change-sync.ts'),

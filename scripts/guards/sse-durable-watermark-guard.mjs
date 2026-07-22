@@ -21,21 +21,19 @@ export function inspectSseDurableWatermarkContract(input) {
   }
   for (const required of [
     'taskEventId',
-    'mutationEventAtMs',
-    'mutationBatchId',
     'agentEventId',
     'resourceEventAtMs',
     'resourceOutboxId',
-    'v3;',
+    'v4;',
     'advanceWorkspaceSseCursor',
   ]) {
     if (!input.protocol.includes(required)) violations.push(`SSE composite cursor contract missing: ${required}`)
   }
-  for (const forbidden of ['v1;', 'v2;']) {
+  for (const forbidden of ['v1;', 'v2;', 'v3;']) {
     if (input.protocol.includes(forbidden)) violations.push(`SSE obsolete cursor protocol restored: ${forbidden}`)
   }
-  if (!input.client.includes('workspace-sse-cursor:v3:')) {
-    violations.push('SSE client storage key must isolate the v3 resource watermark protocol')
+  if (!input.client.includes('workspace-sse-cursor:v4:')) {
+    violations.push('SSE client storage key must isolate the v4 resource watermark protocol')
   }
   for (const required of [
     'listWorkspaceResourceReplayEvents',
@@ -134,7 +132,7 @@ function runCli() {
     for (const violation of violations) console.error(`- ${violation}`)
     process.exit(1)
   }
-  console.log('[sse-durable-watermark] OK Task/Mutation/Assistant/Resource durable cursor + subscribe-before-bootstrap')
+  console.log('[sse-durable-watermark] OK Task/Assistant/Resource durable cursor + subscribe-before-bootstrap')
 }
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null

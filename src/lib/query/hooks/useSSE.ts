@@ -25,7 +25,7 @@ type UseSSEOptions = {
 }
 
 function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
-  return `workspace-sse-cursor:v3:${projectId}:${episodeId ?? 'all'}`
+  return `workspace-sse-cursor:v4:${projectId}:${episodeId ?? 'all'}`
 }
 
 function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
@@ -58,7 +58,6 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     if (episodeId) params.set('episodeId', episodeId)
     if (
       cursor.taskEventId > 0
-      || cursor.mutationEventAtMs > 0
       || cursor.agentEventId !== '0'
       || cursor.resourceEventAtMs > 0
     ) {
@@ -127,7 +126,6 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     const namedEvents = [
       TASK_SSE_EVENT_TYPE.LIFECYCLE,
       TASK_SSE_EVENT_TYPE.STREAM,
-      WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH,
       WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
       WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED,
     ] as const

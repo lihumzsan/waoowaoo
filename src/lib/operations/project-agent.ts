@@ -1,5 +1,4 @@
 import { createReadOperations } from './domains/project/read-ops'
-import { createGovernanceOperations } from './domains/governance/governance-ops'
 import { createGuiOperations } from './domains/gui/gui-ops'
 import { createConfigOperations } from './domains/config/config-ops'
 import { createProjectDataOperations } from './domains/project/project-data-ops'
@@ -165,12 +164,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createVoiceOperations(), {
       groupPath: ['media', 'voice'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack(createGovernanceOperations(), {
-      groupPath: ['governance'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

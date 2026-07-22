@@ -37,6 +37,4 @@ export interface RecentOperationResult {
   error?: RecentOperationError | null
   submittedAt: string
   completedAt?: string | null
-  mutationBatchId?: string | null
-  canUndo?: boolean
 }

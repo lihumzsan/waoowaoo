@@ -6,7 +6,6 @@ import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { readProjectEpisodeDetail } from '@/lib/projects/read-episode-detail'
@@ -61,7 +60,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        const body = input as unknown as Record<string, unknown>
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
 
@@ -496,35 +494,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
 	      },
 	    }),
-    revert_asset_render: defineOperation({
-      id: 'revert_asset_render',
-      summary: 'Revert an asset render (undo regenerate) for character/location assets.',
-      intent: 'act',
-      effects: {
-        ...EFFECTS_WRITE_DESTRUCTIVE,
-        workspaceResourceImpact: 'project_assets',
-        overwrite: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将撤回一次资产渲染选择/变更。系统会在获得明确批准后执行同一份已审核请求。',
-      },
-      inputSchema: z.object({
-        type: z.enum(['character', 'location']),
-        id: z.string().min(1),
-      }).passthrough(),
-      outputSchema: z.unknown(),
-      executeInTransaction: async (ctx, input, transaction) => revertAssetRender({
-        kind: input.type,
-        assetId: input.id,
-        body: input as unknown as Record<string, unknown>,
-        access: {
-          scope: 'project',
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-        },
-      }, transaction),
-    }),
     create_episode: defineOperation({
       id: 'create_episode',
       summary: 'Create a new episode in a project and update lastEpisodeId.',

@@ -28,7 +28,6 @@ export const TASK_SSE_EVENT_TYPE = {
 } as const
 
 export const WORKSPACE_SSE_EVENT_TYPE = {
-  MUTATION_BATCH: 'mutation.batch',
   RESOURCE_CHANGED: 'resource.changed',
   ASSISTANT_SESSION_CHANGED: 'assistant.session.changed',
 } as const
@@ -154,18 +153,6 @@ export type TaskSSEEvent = {
   }) | null
 }
 
-export type MutationBatchSSEEvent = {
-  id: string
-  type: typeof WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH
-  mutationBatchId: string
-  projectId: string
-  userId: string
-  ts: string
-  operationId: string | null
-  episodeId: string | null
-  targets: Array<{ targetType: string; targetId: string }>
-}
-
 export type WorkspaceResourceName =
   | 'editBible'
   | 'projectAssets'
@@ -204,7 +191,6 @@ export type AssistantSessionChangedSSEEvent = {
 
 export type SSEEvent =
   | TaskSSEEvent
-  | MutationBatchSSEEvent
   | ResourceChangedSSEEvent
   | AssistantSessionChangedSSEEvent
 

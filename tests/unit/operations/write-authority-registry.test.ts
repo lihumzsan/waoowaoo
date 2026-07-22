@@ -32,8 +32,6 @@ describe('Assistant Tool write authority registry', () => {
     const restricted = [
       'cancel_task',
       'delete_project',
-      'revert_mutation_batch',
-      'revert_mutation_batch_by_id',
     ]
 
     for (const operationId of restricted) {

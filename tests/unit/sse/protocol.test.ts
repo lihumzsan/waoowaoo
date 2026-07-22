@@ -11,20 +11,9 @@ import {
 import { lifecycleEvent } from './sse-test-fixtures'
 
 describe('workspace SSE protocol parsing', () => {
-  it('round-trips and advances independent Task, mutation, Assistant, and resource watermarks', () => {
+  it('round-trips and advances independent Task, Assistant, and resource watermarks', () => {
     const taskCursor = advanceWorkspaceSseCursor(EMPTY_WORKSPACE_SSE_CURSOR, lifecycleEvent('12', 10))
-    const mutationCursor = advanceWorkspaceSseCursor(taskCursor, {
-      id: 'mb:1777046400000:batch-2',
-      type: 'mutation.batch',
-      mutationBatchId: 'batch-2',
-      projectId: 'project-1',
-      userId: 'user-1',
-      ts: '2026-04-24T00:00:00.000Z',
-      operationId: null,
-      episodeId: 'episode-1',
-      targets: [],
-    })
-    const agentCursor = advanceWorkspaceSseCursor(mutationCursor, {
+    const agentCursor = advanceWorkspaceSseCursor(taskCursor, {
       id: 'agent:9007199254740993',
       type: 'assistant.session.changed',
       projectId: 'project-1',
@@ -45,7 +34,7 @@ describe('workspace SSE protocol parsing', () => {
     })
     const serialized = serializeWorkspaceSseCursor(resourceCursor)
 
-    expect(serialized).toBe('v3;t=12;m=1777046400000:batch-2;a=9007199254740993;r=1777046400001:outbox-2')
+    expect(serialized).toBe('v4;t=12;a=9007199254740993;r=1777046400001:outbox-2')
     expect(parseWorkspaceSseCursor(serialized)).toEqual(resourceCursor)
     expect(advanceWorkspaceSseCursor(resourceCursor, lifecycleEvent('11', 20))).toEqual(resourceCursor)
   })
@@ -54,6 +43,8 @@ describe('workspace SSE protocol parsing', () => {
     expect(() => parseWorkspaceSseCursor('v1;t=12;m=1777046400000:batch-2'))
       .toThrow('SSE_CURSOR_INVALID')
     expect(() => parseWorkspaceSseCursor('v2;t=12;m=1777046400000:batch-2;a=9'))
+      .toThrow('SSE_CURSOR_INVALID')
+    expect(() => parseWorkspaceSseCursor('v3;t=12;m=1777046400000:batch-2;a=9;r=0:-'))
       .toThrow('SSE_CURSOR_INVALID')
   })
 

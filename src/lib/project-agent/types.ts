@@ -167,7 +167,6 @@ export interface TaskSubmittedPartData {
   runId?: string | null
   deduped?: boolean
   billingReceipt?: BillingReceiptView | null
-  mutationBatchId?: string | null
   projectId?: string
   episodeId?: string | null
   chapterId?: string | null
@@ -192,7 +191,6 @@ export interface TaskBatchSubmittedPartData {
     billingReceipt?: BillingReceiptView | null
   }>
   billingReceipt?: BillingReceiptView | null
-  mutationBatchId?: string | null
 }
 
 export interface ProjectAssistantContextSnapshot {

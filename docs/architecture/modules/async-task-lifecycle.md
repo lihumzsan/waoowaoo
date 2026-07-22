@@ -69,6 +69,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - 旧媒体完成依赖轮询、refetch、target overlay 与 timer 接力。当前 Terminal Event 携带 registry 声明的 resource impact，SSE 可 replay，Query 只重读正式事实。
 - 旧最终混音把编码 EOF 与 `-shortest` 当作终止裁判，真实任务会在 99% 停滞。当前通用视频合并使用 canonical duration、PCM 临时原声、显式 `-t` 与 FFmpeg deadline。
 - 旧 style parent Task 及其 migration preflight 在旧表删除后仍作为治理入口存在，反而要求恢复已删除身份。当前这些专用 guard/preflight 一并删除；新 migration 的排空条件由发布流程读取通用 active Task/Run/Wait 事实，不在应用仓保留旧类型统计器。
+- MutationBatch 最初为旧 panel、voice line 和专用媒体 writer 提供整批撤销；这些 writer 删除后，生产代码已经没有创建调用，但两个撤销 Operation、独立 route、SSE event/replay/checkpoint、结果 `canUndo` 投影和 v3 游标水位仍继续声明这项能力。当前这些零 writer 运行时入口和第二状态协议已一起删除，SSE 一次切换为只包含 Task/Assistant/Resource 水位的 v4；数据库模型只为未获迁移授权的历史行暂留，不再有应用 writer、reader 或恢复入口，后续 schema/data 删除需单独迁移和排空授权。
 
 ## 修改检查表
 

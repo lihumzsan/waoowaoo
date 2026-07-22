@@ -124,10 +124,6 @@ function readProvider(model: string | null, result: Record<string, unknown> | nu
   return readString(result, 'provider') || (model?.includes('::') ? model.split('::')[0] || null : null)
 }
 
-function readMutationBatchId(payload: Record<string, unknown> | null, result: Record<string, unknown> | null): string | null {
-  return readString(result, 'mutationBatchId') || readString(payload, 'mutationBatchId')
-}
-
 export function normalizeTaskOperationResult(task: OperationResultTaskRow): RecentOperationResult | null {
   const operationId = task.operationId?.trim() || null
   if (!operationId) return null
@@ -137,7 +133,6 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
   const model = readModel(payload, result)
   const errorMessage = task.errorMessage?.trim() || readString(result, 'errorMessage')
   const errorCode = task.errorCode?.trim() || readString(result, 'errorCode')
-  const mutationBatchId = readMutationBatchId(payload, result)
 
   return {
     operationId,
@@ -163,6 +158,5 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
       : null,
     submittedAt: task.queuedAt.toISOString(),
     completedAt: task.finishedAt?.toISOString() ?? null,
-    ...(mutationBatchId ? { mutationBatchId, canUndo: true } : {}),
   }
 }

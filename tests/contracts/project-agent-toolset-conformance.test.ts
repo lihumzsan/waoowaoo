@@ -106,6 +106,9 @@ describe('project agent toolset conformance', () => {
       'update_location_image_description',
       'cleanup_unselected_images',
       'copy_asset_from_global',
+      'revert_asset_render',
+      'revert_mutation_batch',
+      'revert_mutation_batch_by_id',
     ]) {
       expect(registry[retiredOperationId]).toBeUndefined()
     }

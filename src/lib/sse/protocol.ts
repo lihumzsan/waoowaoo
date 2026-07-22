@@ -6,8 +6,6 @@ import {
 
 export type WorkspaceSseCursor = {
   taskEventId: number
-  mutationEventAtMs: number
-  mutationBatchId: string | null
   agentEventId: string
   resourceEventAtMs: number
   resourceOutboxId: string | null
@@ -15,8 +13,6 @@ export type WorkspaceSseCursor = {
 
 export const EMPTY_WORKSPACE_SSE_CURSOR: WorkspaceSseCursor = {
   taskEventId: 0,
-  mutationEventAtMs: 0,
-  mutationBatchId: null,
   agentEventId: '0',
   resourceEventAtMs: 0,
   resourceOutboxId: null,
@@ -27,15 +23,6 @@ function parsePositiveInteger(value: string): number {
   const parsed = Number.parseInt(value, 10)
   if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error('SSE_CURSOR_INTEGER_INVALID')
   return parsed
-}
-
-function parseMutationEventIdentity(value: string): { mutationEventAtMs: number; mutationBatchId: string } | null {
-  const match = /^mb:(\d+):(.+)$/.exec(value)
-  if (!match) return null
-  const mutationEventAtMs = parsePositiveInteger(match[1])
-  const mutationBatchId = match[2]
-  if (mutationEventAtMs <= 0 || !mutationBatchId) throw new Error('SSE_MUTATION_CURSOR_INVALID')
-  return { mutationEventAtMs, mutationBatchId }
 }
 
 function parseCanonicalBigInt(value: string): string {
@@ -64,26 +51,18 @@ function parseResourceEventIdentity(value: string): { resourceEventAtMs: number;
 export function parseWorkspaceSseCursor(value: string | null | undefined): WorkspaceSseCursor {
   const trimmed = value?.trim() ?? ''
   if (!trimmed) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
-  const match = /^v3;t=(\d+);m=(\d+):(.+|-);a=(\d+);r=(\d+):(.+|-)$/.exec(trimmed)
+  const match = /^v4;t=(\d+);a=(\d+);r=(\d+):(.+|-)$/.exec(trimmed)
   if (!match) throw new Error('SSE_CURSOR_INVALID')
   const taskEventId = parsePositiveInteger(match[1])
-  const mutationEventAtMs = parsePositiveInteger(match[2])
-  const encodedBatchId = match[3]
-  const mutationBatchId = encodedBatchId === '-' ? null : decodeURIComponent(encodedBatchId)
-  if ((mutationEventAtMs === 0) !== (mutationBatchId === null)) {
-    throw new Error('SSE_MUTATION_CURSOR_INVALID')
-  }
-  const resourceEventAtMs = parsePositiveInteger(match[5])
-  const encodedResourceOutboxId = match[6]
+  const resourceEventAtMs = parsePositiveInteger(match[3])
+  const encodedResourceOutboxId = match[4]
   const resourceOutboxId = encodedResourceOutboxId === '-' ? null : decodeURIComponent(encodedResourceOutboxId)
   if ((resourceEventAtMs === 0) !== (resourceOutboxId === null)) {
     throw new Error('SSE_RESOURCE_CURSOR_INVALID')
   }
   return {
     taskEventId,
-    mutationEventAtMs,
-    mutationBatchId,
-    agentEventId: parseCanonicalBigInt(match[4]),
+    agentEventId: parseCanonicalBigInt(match[2]),
     resourceEventAtMs,
     resourceOutboxId,
   }
@@ -91,23 +70,15 @@ export function parseWorkspaceSseCursor(value: string | null | undefined): Works
 
 export function serializeWorkspaceSseCursor(cursor: WorkspaceSseCursor): string {
   const normalized = parseWorkspaceSseCursor(
-    `v3;t=${String(cursor.taskEventId)};m=${String(cursor.mutationEventAtMs)}:${cursor.mutationBatchId ? encodeURIComponent(cursor.mutationBatchId) : '-'};a=${cursor.agentEventId};r=${String(cursor.resourceEventAtMs)}:${cursor.resourceOutboxId ? encodeURIComponent(cursor.resourceOutboxId) : '-'}`,
+    `v4;t=${String(cursor.taskEventId)};a=${cursor.agentEventId};r=${String(cursor.resourceEventAtMs)}:${cursor.resourceOutboxId ? encodeURIComponent(cursor.resourceOutboxId) : '-'}`,
   )
-  return `v3;t=${String(normalized.taskEventId)};m=${String(normalized.mutationEventAtMs)}:${normalized.mutationBatchId ? encodeURIComponent(normalized.mutationBatchId) : '-'};a=${normalized.agentEventId};r=${String(normalized.resourceEventAtMs)}:${normalized.resourceOutboxId ? encodeURIComponent(normalized.resourceOutboxId) : '-'}`
+  return `v4;t=${String(normalized.taskEventId)};a=${normalized.agentEventId};r=${String(normalized.resourceEventAtMs)}:${normalized.resourceOutboxId ? encodeURIComponent(normalized.resourceOutboxId) : '-'}`
 }
 
 export function advanceWorkspaceSseCursor(cursor: WorkspaceSseCursor, event: SSEEvent): WorkspaceSseCursor {
   const numericTaskEventId = /^\d+$/.test(event.id) ? parsePositiveInteger(event.id) : 0
-  const mutation = parseMutationEventIdentity(event.id)
   const agentEventId = parseAgentEventIdentity(event.id)
   const resource = parseResourceEventIdentity(event.id)
-  const shouldAdvanceMutation = Boolean(mutation) && (
-    mutation!.mutationEventAtMs > cursor.mutationEventAtMs
-    || (
-      mutation!.mutationEventAtMs === cursor.mutationEventAtMs
-      && mutation!.mutationBatchId > (cursor.mutationBatchId ?? '')
-    )
-  )
   const shouldAdvanceResource = Boolean(resource) && (
     resource!.resourceEventAtMs > cursor.resourceEventAtMs
     || (
@@ -117,8 +88,6 @@ export function advanceWorkspaceSseCursor(cursor: WorkspaceSseCursor, event: SSE
   )
   return {
     taskEventId: Math.max(cursor.taskEventId, numericTaskEventId),
-    mutationEventAtMs: shouldAdvanceMutation ? mutation!.mutationEventAtMs : cursor.mutationEventAtMs,
-    mutationBatchId: shouldAdvanceMutation ? mutation!.mutationBatchId : cursor.mutationBatchId,
     agentEventId: agentEventId
       ? maxCanonicalBigInt(cursor.agentEventId, agentEventId)
       : cursor.agentEventId,
@@ -145,9 +114,6 @@ export function isWorkspaceSseEvent(value: unknown): value is SSEEvent {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   if (!isBaseEvent(record)) return false
-  if (record.type === WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH) {
-    return typeof record.mutationBatchId === 'string' && Array.isArray(record.targets)
-  }
   if (record.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
     return Array.isArray(record.affectedResources)
   }
