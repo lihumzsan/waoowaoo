@@ -353,11 +353,11 @@ export function buildVideoSeamComposeCommand(params: {
   ]
   const audioFilters = plan.audioPolicy === 'silent' ? [] : [
     plan.input1.hasAudio
-      ? `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=duration=${formatSeconds((input1Endpoint + 1) / plan.input1.fps)},asetpts=N/SR/TB[a0]`
+      ? `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,apad,atrim=duration=${formatSeconds((input1Endpoint + 1) / plan.input1.fps)},asetpts=N/SR/TB[a0]`
       : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds((input1Endpoint + 1) / plan.outputFps)}[a0]`,
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds(plan.centralSilenceSeconds)}[ac]`,
     plan.input2.hasAudio
-      ? `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=start=${formatSeconds(input2AudioStartSeconds)}:duration=${formatSeconds(input2SourceAudioDurationSeconds)},asetpts=N/SR/TB,atempo=${formatSeconds(plan.video2AudioTempoFactor)},atrim=duration=${formatSeconds(input2OutputAudioDurationSeconds)},asetpts=N/SR/TB[a2]`
+      ? `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,apad,atrim=start=${formatSeconds(input2AudioStartSeconds)}:duration=${formatSeconds(input2SourceAudioDurationSeconds)},asetpts=N/SR/TB,atempo=${formatSeconds(plan.video2AudioTempoFactor)},atrim=duration=${formatSeconds(input2OutputAudioDurationSeconds)},asetpts=N/SR/TB[a2]`
       : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds(input2OutputAudioDurationSeconds)}[a2]`,
     '[a0][ac][a2]concat=n=3:v=0:a=1[aout]',
   ]

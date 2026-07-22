@@ -109,6 +109,30 @@ async function createAudioPolicyBridgeFixture(directory: string): Promise<string
   return outputPath
 }
 
+async function detectAudioSilenceIntervals(
+  inputPath: string,
+  minimumDurationSeconds: number,
+): Promise<Array<{ startSeconds: number; endSeconds: number }>> {
+  const { stderr } = await execFileAsync(process.env.FFMPEG_PATH || 'ffmpeg', [
+    '-v', 'info', '-hide_banner', '-nostats', '-i', inputPath,
+    '-map', '0:a:0',
+    '-af', `silencedetect=noise=-50dB:d=${minimumDurationSeconds.toFixed(9)}`,
+    '-f', 'null', '-',
+  ])
+  const intervals: Array<{ startSeconds: number; endSeconds: number }> = []
+  let startSeconds: number | null = null
+  for (const line of stderr.split(/\r?\n/)) {
+    const startMatch = /silence_start:\s*([-+\d.eE]+)/.exec(line)
+    if (startMatch) startSeconds = Number(startMatch[1])
+    const endMatch = /silence_end:\s*([-+\d.eE]+)/.exec(line)
+    if (endMatch && startSeconds !== null) {
+      intervals.push({ startSeconds, endSeconds: Number(endMatch[1]) })
+      startSeconds = null
+    }
+  }
+  return intervals
+}
+
 describe('video seam local media adapter', () => {
   it('parses counted frames, rational FPS, dimensions, duration, and audio', () => {
     expect(parseVideoSeamProbeJson(JSON.stringify({
@@ -255,6 +279,61 @@ describe('video seam local media adapter', () => {
           hasAudio: outputHasAudio,
           frameCount: plan.outputFrameCount,
         })
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true })
+      }
+    },
+    30_000,
+  )
+
+  it.each([
+    ['input 1', 0.75, 2],
+    ['input 2', 2, 0.75],
+  ] as const)(
+    'keeps the central audio interval and output duration aligned when %s audio is shorter than its video',
+    async (_shortInput, input1AudioDurationSeconds, input2AudioDurationSeconds) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-short-audio-'))
+      try {
+        const input1Path = await createAudioPolicyVideoFixture({
+          directory,
+          name: 'input-1',
+          hasAudio: true,
+          audioDurationSeconds: input1AudioDurationSeconds,
+          frequency: 440,
+        })
+        const input2Path = await createAudioPolicyVideoFixture({
+          directory,
+          name: 'input-2',
+          hasAudio: true,
+          audioDurationSeconds: input2AudioDurationSeconds,
+          frequency: 660,
+        })
+        const bridgePath = await createAudioPolicyBridgeFixture(directory)
+        const [input1, input2] = await Promise.all([
+          probeVideoSeamFile(input1Path),
+          probeVideoSeamFile(input2Path),
+        ])
+        const plan = buildVideoSeamBridgePlan({
+          input1, input2, trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+        })
+        const outputPath = path.join(directory, `output-${_shortInput.replace(' ', '-')}.mp4`)
+
+        await composeVideoSeamOutput({ input1Path, bridgePath, input2Path, outputPath, plan })
+        await expect(verifyVideoSeamOutput(outputPath, plan)).resolves.toMatchObject({
+          hasAudio: true,
+          frameCount: plan.outputFrameCount,
+        })
+
+        const expectedCentralStart = plan.retainedVideo1FrameCount / plan.outputFps
+        const expectedCentralEnd = (plan.retainedVideo1FrameCount + plan.centralFrameCount)
+          / plan.outputFps
+        const oneFrame = 1 / plan.outputFps
+        const intervals = await detectAudioSilenceIntervals(outputPath, oneFrame)
+        expect(intervals.some((interval) => (
+          interval.startSeconds <= expectedCentralStart + oneFrame
+          && interval.endSeconds >= expectedCentralEnd - oneFrame
+          && interval.endSeconds <= expectedCentralEnd + oneFrame
+        ))).toBe(true)
       } finally {
         await fs.rm(directory, { recursive: true, force: true })
       }
