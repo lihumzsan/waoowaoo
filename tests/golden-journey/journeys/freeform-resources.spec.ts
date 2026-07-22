@@ -13,6 +13,7 @@ import {
   GOLDEN_FREEFORM_AUDIO_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
   GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
@@ -299,6 +300,16 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
     operationId: 'adopt_style_bible',
   })])
+  const pendingStyleChoiceId = pendingStyleChoice?.id
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+    timeout: 60_000,
+    message: 'the same durable current Choice must recover after refresh',
+  }).toBe('request_choice')
+  const afterChoiceRefresh = await readGoldenOracleSnapshot(scope)
+  expect(afterChoiceRefresh.interruptions.filter((interruption) => (
+    interruption.type === 'choice' && interruption.status === 'pending'
+  )).map((interruption) => interruption.id)).toEqual([pendingStyleChoiceId])
   await page.getByRole('button', { name: /\u91c7\u7528\u8fd9\u4efd Style Bible/ }).click()
   await page.getByRole('button', { name: '提交本次视觉风格选择', exact: true }).click()
   await expect.poll(async () => {
@@ -374,6 +385,37 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   ])
   expect(afterChapterAdoption.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE))
     .toHaveLength(imageTaskCountBeforeCreativeJudgment)
+
+  const taskIdsBeforeChapterDelegation = new Set(afterChapterAdoption.tasks.map((task) => task.id))
+  const waitIdsBeforeChapterDelegation = new Set(afterChapterAdoption.waits.map((wait) => wait.id))
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST)
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(scope)
+    const tasks = snapshot.tasks.filter((task) => !taskIdsBeforeChapterDelegation.has(task.id))
+    return {
+      runStatus: snapshot.runs.at(-1)?.status ?? null,
+      taskCount: tasks.length,
+      completedCount: tasks.filter((task) => task.status === 'completed').length,
+    }
+  }, {
+    timeout: 120_000,
+    message: 'two adopted Chapters must compile into two independent Creative Tasks and one settled continuation',
+  }).toEqual({ runStatus: 'completed', taskCount: 2, completedCount: 2 })
+  const afterChapterDelegation = await readGoldenOracleSnapshot(scope)
+  const chapterTasks = afterChapterDelegation.tasks.filter((task) => !taskIdsBeforeChapterDelegation.has(task.id))
+  const chapterWaits = afterChapterDelegation.waits.filter((wait) => !waitIdsBeforeChapterDelegation.has(wait.id))
+  const continuityRevisions = afterChapterDelegation.resourceRevisions.filter((revision) => (
+    asRecord(revision.generationOptions)?.outputKind === 'continuity_analysis'
+  ))
+  expect(chapterTasks).toEqual([
+    expect.objectContaining({ type: TASK_TYPE.CREATIVE_WORK, operationId: 'delegate_creative_work' }),
+    expect.objectContaining({ type: TASK_TYPE.CREATIVE_WORK, operationId: 'delegate_creative_work' }),
+  ])
+  expect(new Set(chapterTasks.map((task) => task.batchKey)).size).toBe(1)
+  expect(chapterWaits).toHaveLength(1)
+  expect(Array.isArray(chapterWaits[0]?.taskIds) ? chapterWaits[0]?.taskIds : []).toHaveLength(2)
+  expect(chapterWaits[0]?.status).toBe('followed')
+  expect(continuityRevisions).toHaveLength(2)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   const finalSnapshot = await readGoldenOracleSnapshot(scope)

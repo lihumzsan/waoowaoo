@@ -6,6 +6,7 @@ import {
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_IMAGE_REQUEST,
+  GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
@@ -370,6 +371,47 @@ describe('Golden local model provider', () => {
             fingerprint: 'a'.repeat(64),
           } }] },
         }],
+      },
+    })
+  })
+
+  it('turns exact adopted Chapter identities into one parallel Creative Work delegation', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'free-composition',
+      requestOrdinal: 8,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST },
+          { role: 'assistant', tool_calls: [{ function: { name: 'get_project_context' } }] },
+          { role: 'tool', content: JSON.stringify({ ok: true, data: { chapters: [
+            { id: 'chapter-2', chapterIndex: 1, targetDurationSec: 120 },
+            { id: 'chapter-1', chapterIndex: 0, targetDurationSec: 120 },
+          ] } }) },
+        ],
+        tools: [
+          { type: 'function', function: { name: 'get_project_context', parameters: { type: 'object' } } },
+          { type: 'function', function: { name: 'delegate_creative_work', parameters: { type: 'object' } } },
+        ],
+      },
+    })
+    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'delegate_creative_work' })
+    if (decision.kind !== 'tool_call') return
+    expect(JSON.parse(decision.argumentsJson)).toEqual({
+      delegation: {
+        source: 'chapters',
+        chapters: [
+          { chapterId: 'chapter-1', requestKey: 'golden-continuity-chapter-1' },
+          { chapterId: 'chapter-2', requestKey: 'golden-continuity-chapter-2' },
+        ],
+        outputKind: 'continuity_analysis',
+        goal: 'Analyze each adopted production Chapter independently while preserving shared story continuity.',
+        userRequest: GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
+        constraints: [
+          'Use the exact server-compiled Chapter scope.',
+          'Report continuity facts and transitions without changing the Chapter boundary.',
+        ],
+        referencedAssets: [],
       },
     })
   })

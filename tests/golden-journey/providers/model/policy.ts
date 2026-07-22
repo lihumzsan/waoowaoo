@@ -20,6 +20,7 @@ export const GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST = '为当前项目设计一份�
 export const GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST = '用一张选择卡询问我是否采用刚才的 Style Bible，只处理这个当前决定'
 export const GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST = '现在为了并行制作和失败恢复，把当前剧本规划为两个可独立执行的 Chapter'
 export const GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST = '采用刚才的 Chapter 规划作为当前制作单元'
+export const GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST = '对两个当前 Chapter 并行执行连续性分析'
 export const GOLDEN_STOP_REPLY_REQUEST = '停止当前 AI 回复验证'
 export const GOLDEN_STOP_RECOVERY_REQUEST = '取消后新对话恢复验证'
 
@@ -37,6 +38,7 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
+  GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
   GOLDEN_STOP_REPLY_REQUEST,
   GOLDEN_STOP_RECOVERY_REQUEST,
 ] as const
@@ -158,6 +160,32 @@ function listedResourceRecords(request: GoldenChatCompletionRequest): readonly R
   return [...new Map(records.map((record) => [String(record.resourceId), record])).values()]
 }
 
+function collectChapterRecords(value: unknown, output: Record<string, unknown>[]): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectChapterRecords(item, output))
+    return
+  }
+  const record = asRecord(value)
+  if (!record) return
+  if (
+    typeof record.id === 'string'
+    && typeof record.chapterIndex === 'number'
+    && typeof record.targetDurationSec === 'number'
+  ) {
+    output.push(record)
+  }
+  Object.values(record).forEach((item) => collectChapterRecords(item, output))
+}
+
+function currentChapterRecords(request: GoldenChatCompletionRequest): readonly Record<string, unknown>[] {
+  const records: Record<string, unknown>[] = []
+  request.messages
+    .filter((message) => message.role === 'tool')
+    .forEach((message) => collectChapterRecords(parseMessageJson(message), records))
+  return [...new Map(records.map((record) => [String(record.id), record])).values()]
+    .sort((left, right) => Number(left.chapterIndex) - Number(right.chapterIndex))
+}
+
 function resourceReferences(
   request: GoldenChatCompletionRequest,
   mediaType: 'image' | 'video',
@@ -266,6 +294,9 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   if (instruction.text.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)) {
     return called.has('list_resources') ? choose('delegate_creative_work') : choose('list_resources')
   }
+  if (instruction.text.includes(GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST)) {
+    return called.has('get_project_context') ? choose('delegate_creative_work') : choose('get_project_context')
+  }
   if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)) {
     return called.has('list_resources') ? choose('adopt_chapters') : choose('list_resources')
   }
@@ -337,6 +368,9 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     if (instruction.includes(GOLDEN_FREEFORM_VIDEO_REQUEST)) return { mediaType: 'image', status: 'ready', limit: 6 }
     if (instruction.includes(GOLDEN_FREEFORM_AUDIO_REQUEST)) return { mediaType: 'video', status: 'ready', limit: 6 }
     if (instruction.includes(GOLDEN_FREEFORM_ADOPT_REQUEST)) return { mediaType: 'image', status: 'ready', limit: 6 }
+  }
+  if (toolName === 'get_project_context' && instruction.includes(GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST)) {
+    return { detail: 'full' }
   }
   if (toolName === 'create_video' && instruction.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) {
     return {
@@ -495,6 +529,27 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
             ],
           },
         }],
+      },
+    }
+  }
+  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST)) {
+    const chapters = currentChapterRecords(request)
+    if (chapters.length !== 2) throw new Error(`GOLDEN_PARALLEL_CHAPTERS_MISSING:${String(chapters.length)}`)
+    return {
+      delegation: {
+        source: 'chapters',
+        chapters: chapters.map((chapter) => ({
+          chapterId: String(chapter.id),
+          requestKey: `golden-continuity-chapter-${String(Number(chapter.chapterIndex) + 1)}`,
+        })),
+        outputKind: 'continuity_analysis',
+        goal: 'Analyze each adopted production Chapter independently while preserving shared story continuity.',
+        userRequest: GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
+        constraints: [
+          'Use the exact server-compiled Chapter scope.',
+          'Report continuity facts and transitions without changing the Chapter boundary.',
+        ],
+        referencedAssets: [],
       },
     }
   }
