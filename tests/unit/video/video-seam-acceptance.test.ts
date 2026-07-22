@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   assertVideoSeamSsimThresholds,
   parseFfmpegSsimStats,
@@ -246,4 +246,82 @@ describe('video seam real-media acceptance', () => {
     },
     30_000,
   )
+
+  it('preserves a primary acceptance error when temp cleanup also fails', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'video-seam-acceptance-test-'))
+    const resultPath = path.join(directory, 'task-result.json')
+    const realRm = fs.rm.bind(fs)
+    let failedCleanupPath: string | undefined
+    await fs.writeFile(resultPath, JSON.stringify({
+      id: 'task-1', status: 'completed', result: { mode: 'direct' },
+    }))
+    const rmSpy = vi.spyOn(fs, 'rm').mockImplementation(async (target, options) => {
+      if (String(target).includes('waoowaoo-video-seam-acceptance-')) {
+        failedCleanupPath = String(target)
+        throw new Error('acceptance temp cleanup failed')
+      }
+      return await realRm(target, options)
+    })
+    try {
+      await expect(verifyVideoSeamAcceptance({
+        input1Path: path.join(directory, 'input-1.mp4'),
+        input2Path: path.join(directory, 'input-2.mp4'),
+        outputPath: path.join(directory, 'output.mp4'),
+        resultPath,
+      })).rejects.toThrow('VIDEO_SEAM_ACCEPTANCE_RESULT_INVALID')
+      expect(failedCleanupPath).toContain('waoowaoo-video-seam-acceptance-')
+    } finally {
+      rmSpy.mockRestore()
+      if (failedCleanupPath) await realRm(failedCleanupPath, { recursive: true, force: true })
+      await realRm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves a successful acceptance report when temp cleanup fails', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'video-seam-acceptance-cleanup-'))
+    const originalFfmpegPath = process.env.FFMPEG_PATH
+    const originalRealFfmpeg = process.env.VIDEO_SEAM_REAL_FFMPEG
+    const originalSilenceIntervals = process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS
+    const realRm = fs.rm.bind(fs)
+    let failedCleanupPath: string | undefined
+    let rmSpy: { mockRestore: () => void } | undefined
+    try {
+      const fixture = await createAcceptanceFixture({
+        directory,
+        input1HasAudio: true,
+        input2HasAudio: true,
+      })
+      process.env.VIDEO_SEAM_REAL_FFMPEG = originalFfmpegPath || 'ffmpeg'
+      process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS = [
+        `[silencedetect] silence_start: ${fixture.centralStartSeconds.toFixed(9)}`,
+        `[silencedetect] silence_end: ${fixture.centralEndSeconds.toFixed(9)}`,
+      ].join('\n')
+      process.env.FFMPEG_PATH = await createSilenceAnalysisWrapper(directory)
+      rmSpy = vi.spyOn(fs, 'rm').mockImplementation(async (target, options) => {
+        if (String(target).includes('waoowaoo-video-seam-acceptance-')) {
+          failedCleanupPath = String(target)
+          throw new Error('acceptance temp cleanup failed')
+        }
+        return await realRm(target, options)
+      })
+
+      await expect(verifyVideoSeamAcceptance({
+        input1Path: fixture.input1Path,
+        input2Path: fixture.input2Path,
+        outputPath: fixture.outputPath,
+        resultPath: fixture.resultPath,
+      })).resolves.toMatchObject({ passed: true })
+      expect(failedCleanupPath).toContain('waoowaoo-video-seam-acceptance-')
+    } finally {
+      rmSpy?.mockRestore()
+      if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
+      else process.env.FFMPEG_PATH = originalFfmpegPath
+      if (originalRealFfmpeg === undefined) delete process.env.VIDEO_SEAM_REAL_FFMPEG
+      else process.env.VIDEO_SEAM_REAL_FFMPEG = originalRealFfmpeg
+      if (originalSilenceIntervals === undefined) delete process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS
+      else process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS = originalSilenceIntervals
+      if (failedCleanupPath) await realRm(failedCleanupPath, { recursive: true, force: true })
+      await realRm(directory, { recursive: true, force: true })
+    }
+  }, 30_000)
 })

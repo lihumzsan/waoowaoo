@@ -16,6 +16,7 @@ import {
 } from '@/lib/video-tools/seam-bridge-plan'
 
 const execFileAsync = promisify(execFile)
+const VIDEO_SEAM_DOWNLOAD_TIMEOUT_MS = 120_000
 
 export type VideoSeamWorkspace = {
   directory: string
@@ -153,11 +154,33 @@ export async function createVideoSeamWorkspace(): Promise<VideoSeamWorkspace> {
   }
 }
 
-export async function downloadVideoSeamFile(sourceUrl: string, destinationPath: string): Promise<void> {
+export async function downloadVideoSeamFile(
+  sourceUrl: string,
+  destinationPath: string,
+  options?: { signal?: AbortSignal; timeoutMs?: number },
+): Promise<void> {
   let createdDestination = false
+  const controller = new AbortController()
+  const parentSignal = options?.signal
+  const abortFromParent = () => controller.abort(parentSignal?.reason)
+  if (parentSignal?.aborted) abortFromParent()
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true })
+  const requestedTimeoutMs = options?.timeoutMs
+  const timeoutMs = typeof requestedTimeoutMs === 'number'
+    && Number.isFinite(requestedTimeoutMs)
+    && requestedTimeoutMs > 0
+    ? Math.min(requestedTimeoutMs, VIDEO_SEAM_DOWNLOAD_TIMEOUT_MS)
+    : VIDEO_SEAM_DOWNLOAD_TIMEOUT_MS
+  const timeout = setTimeout(() => {
+    controller.abort(new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_TIMEOUT'))
+  }, timeoutMs)
   try {
-    const response = await fetch(toFetchableUrl(sourceUrl))
-    if (!response.ok || !response.body) throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+    const response = await fetch(toFetchableUrl(sourceUrl), { signal: controller.signal })
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+    }
+    if (!response.body) throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
     const destination = createWriteStream(destinationPath, { flags: 'wx' })
     destination.once('open', () => { createdDestination = true })
     await pipeline(
@@ -169,6 +192,9 @@ export async function downloadVideoSeamFile(sourceUrl: string, destinationPath: 
       await fs.unlink(destinationPath).catch(() => undefined)
     }
     throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+  } finally {
+    clearTimeout(timeout)
+    parentSignal?.removeEventListener('abort', abortFromParent)
   }
 }
 

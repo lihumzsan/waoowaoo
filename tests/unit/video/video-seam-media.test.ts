@@ -550,4 +550,56 @@ describe('video seam local media adapter', () => {
       await fs.rm(directory, { recursive: true, force: true })
     }
   })
+
+  it('aborts a hanging media download after the bounded timeout', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const destinationPath = path.join(directory, 'timeout.mp4')
+    let capturedSignal: AbortSignal | undefined
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedSignal = init?.signal || undefined
+        return new Promise<Response>((_resolve, reject) => {
+          capturedSignal?.addEventListener('abort', () => reject(capturedSignal?.reason), { once: true })
+        })
+      }))
+
+      const download = downloadVideoSeamFile(
+        'https://example.test/input.mp4',
+        destinationPath,
+        { timeoutMs: 25 },
+      )
+      await Promise.resolve()
+      expect(capturedSignal).toBeInstanceOf(AbortSignal)
+      const failedDownload = expect(download).rejects.toThrow('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+      await vi.advanceTimersByTimeAsync(25)
+
+      await failedDownload
+      expect(capturedSignal?.aborted).toBe(true)
+      await expect(fs.access(destinationPath)).rejects.toThrow()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('cancels a non-success response body before reporting a download failure', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const destinationPath = path.join(directory, 'failed.mp4')
+    const cancelBody = vi.fn(async () => undefined)
+    const body = new ReadableStream<Uint8Array>({ cancel: cancelBody })
+    try {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 503 })))
+
+      await expect(downloadVideoSeamFile('https://example.test/input.mp4', destinationPath))
+        .rejects.toThrow('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+
+      expect(cancelBody).toHaveBeenCalledTimes(1)
+      await expect(fs.access(destinationPath)).rejects.toThrow()
+    } finally {
+      vi.unstubAllGlobals()
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
 })

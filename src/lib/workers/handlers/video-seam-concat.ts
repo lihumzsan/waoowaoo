@@ -239,10 +239,22 @@ async function buildAiBridgeResult({
       stage: 'probe_media',
       stageLabel: 'videoTools.status.probing',
     })
-    await Promise.all([
-      downloadVideoSeamFile(input1Url, workspace.input1Path),
-      downloadVideoSeamFile(input2Url, workspace.input2Path),
-    ])
+    const inputDownloadController = new AbortController()
+    const inputDownloads = [
+      downloadVideoSeamFile(input1Url, workspace.input1Path, {
+        signal: inputDownloadController.signal,
+      }),
+      downloadVideoSeamFile(input2Url, workspace.input2Path, {
+        signal: inputDownloadController.signal,
+      }),
+    ]
+    try {
+      await Promise.all(inputDownloads)
+    } catch (error) {
+      inputDownloadController.abort(error)
+      await Promise.allSettled(inputDownloads)
+      throw error
+    }
     const [probe1, probe2] = await Promise.all([
       probeVideoSeamFile(workspace.input1Path),
       probeVideoSeamFile(workspace.input2Path),
@@ -334,7 +346,7 @@ async function buildAiBridgeResult({
       output,
     })
   } finally {
-    await workspace.cleanup()
+    await workspace.cleanup().catch(() => undefined)
   }
 }
 

@@ -587,6 +587,6 @@ export async function verifyVideoSeamAcceptance(params: {
       detectedSilenceIntervals: audio.detectedIntervals,
     }
   } finally {
-    await fs.rm(directory, { recursive: true, force: true })
+    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined)
   }
 }

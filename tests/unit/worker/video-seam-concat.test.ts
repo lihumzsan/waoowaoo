@@ -320,11 +320,13 @@ describe('video seam concat worker handler', () => {
       1,
       'https://storage.test/one.mp4',
       workspace.input1Path,
+      { signal: expect.any(AbortSignal) },
     )
     expect(downloadFileMock).toHaveBeenNthCalledWith(
       2,
       'https://storage.test/two.mp4',
       workspace.input2Path,
+      { signal: expect.any(AbortSignal) },
     )
     expect(probeFileMock).toHaveBeenNthCalledWith(1, workspace.input1Path)
     expect(probeFileMock).toHaveBeenNthCalledWith(2, workspace.input2Path)
@@ -444,6 +446,65 @@ describe('video seam concat worker handler', () => {
     expect(verifyOutputMock).not.toHaveBeenCalled()
     expect(openOutputMock).not.toHaveBeenCalled()
     expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+  })
+
+  it('aborts and settles the peer input download before cleaning a failed AI workspace', async () => {
+    const inputFailure = new Error('input 1 download failed')
+    downloadFileMock.mockImplementation(async (...rawArgs) => {
+      const [, destinationPath, options] = rawArgs as unknown as [
+        string,
+        string,
+        { signal?: AbortSignal } | undefined,
+      ]
+      if (destinationPath === workspace.input1Path) throw inputFailure
+      await new Promise<void>((resolve) => {
+        options?.signal?.addEventListener('abort', () => {
+          operationOrder.push('peer-download-settled')
+          resolve()
+        }, { once: true })
+      })
+    })
+
+    await expect(handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))).rejects.toBe(inputFailure)
+
+    expect(operationOrder).toContain('peer-download-settled')
+    expect(operationOrder.indexOf('peer-download-settled'))
+      .toBeLessThan(operationOrder.indexOf('cleanup'))
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(probeFileMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves the primary AI failure when workspace cleanup also fails', async () => {
+    const primaryError = new Error('sentinel generation failure')
+    runMotionBridgeWorkflowMock.mockRejectedValue(primaryError)
+    workspace.cleanup.mockRejectedValue(new Error('workspace cleanup failed'))
+
+    await expect(handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))).rejects.toBe(primaryError)
+
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves a successful AI result when workspace cleanup fails', async () => {
+    workspace.cleanup.mockRejectedValue(new Error('workspace cleanup failed'))
+
+    await expect(handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))).resolves.toMatchObject({
+      videoKey: 'video-tools/user-1/outputs/result.mp4',
+      mode: 'ai_bridge',
+    })
+
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
   })
 
   it('cancels the local AI output without masking a storage upload error', async () => {
