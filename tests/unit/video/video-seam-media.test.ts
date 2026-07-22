@@ -14,6 +14,29 @@ vi.mock('@/lib/storage', () => ({
   toFetchableUrl: (value: string) => value,
 }))
 
+async function withVideoSeamProbeJson<T>(raw: string, run: (outputPath: string) => Promise<T>): Promise<T> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+  const executable = path.join(directory, 'ffprobe-fixture')
+  const originalProbePath = process.env.FFPROBE_PATH
+  const originalRaw = process.env.VIDEO_SEAM_TEST_PROBE_JSON
+  try {
+    await fs.writeFile(
+      executable,
+      '#!/usr/bin/env node\nprocess.stdout.write(process.env.VIDEO_SEAM_TEST_PROBE_JSON || \'\')\n',
+      { mode: 0o755 },
+    )
+    process.env.FFPROBE_PATH = executable
+    process.env.VIDEO_SEAM_TEST_PROBE_JSON = raw
+    return await run(path.join(directory, 'output.mp4'))
+  } finally {
+    if (originalProbePath === undefined) delete process.env.FFPROBE_PATH
+    else process.env.FFPROBE_PATH = originalProbePath
+    if (originalRaw === undefined) delete process.env.VIDEO_SEAM_TEST_PROBE_JSON
+    else process.env.VIDEO_SEAM_TEST_PROBE_JSON = originalRaw
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+}
+
 describe('video seam local media adapter', () => {
   it('parses counted frames, rational FPS, dimensions, duration, and audio', () => {
     expect(parseVideoSeamProbeJson(JSON.stringify({
@@ -70,6 +93,48 @@ describe('video seam local media adapter', () => {
     })
     expect(command.args).not.toContain('[aout]')
     expect(command.args).not.toContain('aac')
+  })
+
+  it('accepts FPS within 0.2% while keeping duration tolerance to one frame', async () => {
+    const plan = buildVideoSeamBridgePlan({
+      input1: { width: 1280, height: 720, fps: 120, frameCount: 10, durationSeconds: 1 / 12, hasAudio: false },
+      input2: { width: 1280, height: 720, fps: 120, frameCount: 10, durationSeconds: 1 / 12, hasAudio: false },
+      trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+    })
+    const measuredDuration = plan.outputDurationSeconds + 0.9 / plan.outputFps
+    const raw = JSON.stringify({
+      streams: [{
+        codec_type: 'video', width: plan.input1.width, height: plan.input1.height,
+        avg_frame_rate: '1199/10', nb_read_frames: String(plan.outputFrameCount),
+        duration: measuredDuration.toFixed(9),
+      }],
+      format: { duration: measuredDuration.toFixed(9) },
+    })
+
+    await withVideoSeamProbeJson(raw, async (outputPath) => {
+      await expect(verifyVideoSeamOutput(outputPath, plan)).resolves.toMatchObject({ fps: 119.9 })
+    })
+  })
+
+  it('rejects FPS outside 0.2% even when its numeric delta is under one frame', async () => {
+    const plan = buildVideoSeamBridgePlan({
+      input1: { width: 1280, height: 720, fps: 4, frameCount: 10, durationSeconds: 2.5, hasAudio: false },
+      input2: { width: 1280, height: 720, fps: 4, frameCount: 10, durationSeconds: 2.5, hasAudio: false },
+      trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+    })
+    const raw = JSON.stringify({
+      streams: [{
+        codec_type: 'video', width: plan.input1.width, height: plan.input1.height,
+        avg_frame_rate: '41/10', nb_read_frames: String(plan.outputFrameCount),
+        duration: plan.outputDurationSeconds.toFixed(9),
+      }],
+      format: { duration: plan.outputDurationSeconds.toFixed(9) },
+    })
+
+    await withVideoSeamProbeJson(raw, async (outputPath) => {
+      await expect(verifyVideoSeamOutput(outputPath, plan))
+        .rejects.toThrow('VIDEO_SEAM_MEDIA_PROBE_FAILED')
+    })
   })
 
   it.each([

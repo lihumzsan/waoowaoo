@@ -11,6 +11,8 @@ export type SeamProbeResult = {
 
 export type VideoSeamAudioPolicy = 'both' | 'video1_only' | 'video2_only' | 'silent'
 
+export const VIDEO_SEAM_FPS_RELATIVE_TOLERANCE = 0.002
+
 export type VideoSeamGenerationCanvas = {
   contentWidth: number
   contentHeight: number
@@ -67,8 +69,8 @@ function resolveCanvas(width: number, height: number): VideoSeamGenerationCanvas
   const scale = Math.min(1, 1280 / Math.max(width, height))
   const contentWidth = even(width * scale)
   const contentHeight = even(height * scale)
-  const canvasWidth = alignUp(contentWidth, 32)
-  const canvasHeight = alignUp(contentHeight, 32)
+  const canvasWidth = Math.max(64, alignUp(contentWidth, 32))
+  const canvasHeight = Math.max(64, alignUp(contentHeight, 32))
   const horizontal = canvasWidth - contentWidth
   const vertical = canvasHeight - contentHeight
   const padLeft = Math.floor(horizontal / 2)
@@ -91,7 +93,8 @@ export function buildVideoSeamBridgePlan(input: {
   const aspect1 = input.input1.width / input.input1.height
   const aspect2 = input.input2.width / input.input2.height
   if (Math.abs(aspect2 - aspect1) / aspect1 > 0.01) throw new Error('VIDEO_SEAM_ASPECT_RATIO_MISMATCH')
-  if (Math.abs(input.input2.fps - input.input1.fps) / input.input1.fps > 0.002) {
+  if (Math.abs(input.input2.fps - input.input1.fps) / input.input1.fps
+    > VIDEO_SEAM_FPS_RELATIVE_TOLERANCE) {
     throw new Error('VIDEO_SEAM_FPS_MISMATCH')
   }
 

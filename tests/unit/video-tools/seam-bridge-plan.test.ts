@@ -45,6 +45,18 @@ describe('motion-aware video seam bridge plan', () => {
     })
   })
 
+  it('keeps both tiny canvas axes at least 64 pixels with centered padding', () => {
+    const plan = buildVideoSeamBridgePlan({
+      input1: { ...video1, width: 32, height: 16 },
+      input2: { ...video2, width: 32, height: 16 },
+      trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+    })
+    expect(plan.generationCanvas).toEqual({
+      contentWidth: 32, contentHeight: 16, width: 64, height: 64,
+      padLeft: 16, padTop: 24, padRight: 16, padBottom: 24,
+    })
+  })
+
   it.each([
     ['VIDEO_SEAM_ASPECT_RATIO_MISMATCH', { input2: { ...video2, width: 1024, height: 768 } }],
     ['VIDEO_SEAM_FPS_MISMATCH', { input2: { ...video2, fps: 25 } }],

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import {
   buildVideoSeamBridgePlan,
+  VIDEO_SEAM_FPS_RELATIVE_TOLERANCE,
   type SeamProbeResult,
   type VideoSeamAudioPolicy,
   type VideoSeamBridgePlan,
@@ -162,13 +163,14 @@ function sameRecordNumbers(
 }
 
 function probeMatches(expected: SeamProbeResult, actual: SeamProbeResult): boolean {
-  const oneFrame = 1 / expected.fps
+  const durationToleranceSeconds = 1 / expected.fps
+  const fpsRelativeDelta = Math.abs(actual.fps - expected.fps) / expected.fps
   return actual.width === expected.width
     && actual.height === expected.height
     && actual.frameCount === expected.frameCount
     && actual.hasAudio === expected.hasAudio
-    && Math.abs(actual.fps - expected.fps) <= oneFrame
-    && Math.abs(actual.durationSeconds - expected.durationSeconds) <= oneFrame
+    && fpsRelativeDelta <= VIDEO_SEAM_FPS_RELATIVE_TOLERANCE
+    && Math.abs(actual.durationSeconds - expected.durationSeconds) <= durationToleranceSeconds
 }
 
 function validateTaskResult(parsed: unknown): ValidatedTaskResult {
@@ -452,7 +454,7 @@ export function assertVideoSeamSsimThresholds(input: {
   let staticRun = 0
   for (const score of input.adjacentBridgeScores) {
     staticRun = score > STATIC_PAIR_SSIM ? staticRun + 1 : 0
-    if (staticRun > MAXIMUM_STATIC_RUN) {
+    if (staticRun >= MAXIMUM_STATIC_RUN) {
       throw new Error('VIDEO_SEAM_ACCEPTANCE_STATIC_HOLD')
     }
   }

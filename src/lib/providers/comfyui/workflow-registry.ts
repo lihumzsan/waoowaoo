@@ -2990,7 +2990,7 @@ const GOON_FIRST_LAST_FRAME_NODE_CONTRACT = {
   output: '75',
 } as const
 
-const GOON_FIRST_LAST_FRAME_FORMULA = '1+ 8*(round(a*b)/8)'
+const GOON_FIRST_LAST_FRAME_FORMULA = '1+8*round(a*b/8)'
 
 function applyGoonFirstLastFrameWorkflowControls(
   graph: ComfyUiWorkflowGraph,

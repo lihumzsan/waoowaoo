@@ -8,7 +8,11 @@ import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import { toFetchableUrl } from '@/lib/storage'
-import type { SeamProbeResult, VideoSeamBridgePlan } from '@/lib/video-tools/seam-bridge-plan'
+import {
+  VIDEO_SEAM_FPS_RELATIVE_TOLERANCE,
+  type SeamProbeResult,
+  type VideoSeamBridgePlan,
+} from '@/lib/video-tools/seam-bridge-plan'
 
 const execFileAsync = promisify(execFile)
 
@@ -304,20 +308,21 @@ export async function composeVideoSeamOutput(
 
 export async function verifyVideoSeamOutput(filePath: string, plan: VideoSeamBridgePlan): Promise<SeamProbeResult> {
   const { probe, timing } = parseVideoSeamProbeDetails(await readVideoSeamProbeJson(filePath))
-  const maxDeviation = 1 / plan.outputFps
+  const durationToleranceSeconds = 1 / plan.outputFps
+  const fpsRelativeDelta = Math.abs(probe.fps - plan.outputFps) / plan.outputFps
   const expectedAudio = plan.audioPolicy !== 'silent'
   const measuredDurations = [timing.containerDurationSeconds, timing.videoDurationSeconds]
   if (expectedAudio) measuredDurations.push(timing.audioDurationSeconds)
   if (probe.width !== plan.input1.width || probe.height !== plan.input1.height
     || probe.frameCount !== plan.outputFrameCount || probe.hasAudio !== expectedAudio
-    || Math.abs(probe.fps - plan.outputFps) > maxDeviation
-    || Math.abs(probe.durationSeconds - plan.outputDurationSeconds) > maxDeviation
+    || fpsRelativeDelta > VIDEO_SEAM_FPS_RELATIVE_TOLERANCE
+    || Math.abs(probe.durationSeconds - plan.outputDurationSeconds) > durationToleranceSeconds
     || measuredDurations.some((duration) => duration === null
-      || Math.abs(duration - plan.outputDurationSeconds) > maxDeviation)
+      || Math.abs(duration - plan.outputDurationSeconds) > durationToleranceSeconds)
     || measuredDurations.some((duration, index) => measuredDurations
       .slice(index + 1)
       .some((otherDuration) => duration === null || otherDuration === null
-        || Math.abs(duration - otherDuration) > maxDeviation))) {
+        || Math.abs(duration - otherDuration) > durationToleranceSeconds))) {
     throw mediaProbeError()
   }
   return probe

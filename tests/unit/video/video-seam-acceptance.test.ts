@@ -24,20 +24,23 @@ describe('video seam real-media acceptance', () => {
       .toThrow('VIDEO_SEAM_ACCEPTANCE_SSIM_PARSE_FAILED')
   })
 
-  it('accepts anchors at 0.99 and fewer than six static pairs', () => {
+  it('accepts anchors at 0.99 and fewer than five static pairs', () => {
     expect(() => assertVideoSeamSsimThresholds({
       anchorScores: [0.99, 0.995, 0.999, 1],
-      adjacentBridgeScores: [0.999, 0.999, 0.999, 0.999, 0.999, 0.997],
+      adjacentBridgeScores: [0.999, 0.999, 0.999, 0.999, 0.997],
     })).not.toThrow()
   })
 
-  it('rejects a weak anchor and six nearly identical consecutive pairs', () => {
+  it('rejects a weak anchor', () => {
     expect(() => assertVideoSeamSsimThresholds({
       anchorScores: [0.9899, 1, 1, 1], adjacentBridgeScores: [],
     })).toThrow('VIDEO_SEAM_ACCEPTANCE_ANCHOR_SSIM_FAILED')
+  })
+
+  it('rejects five nearly identical consecutive pairs', () => {
     expect(() => assertVideoSeamSsimThresholds({
       anchorScores: [1, 1, 1, 1],
-      adjacentBridgeScores: [0.999, 0.999, 0.999, 0.999, 0.999, 0.999],
+      adjacentBridgeScores: [0.999, 0.999, 0.999, 0.999, 0.999],
     })).toThrow('VIDEO_SEAM_ACCEPTANCE_STATIC_HOLD')
   })
 
