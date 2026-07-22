@@ -3,9 +3,23 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import sharp from 'sharp'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { normalizeAnyError } from '@/lib/errors/normalize'
 import { CODEX_DEFAULT_MODEL_KEY } from '@/lib/providers/codex/constants'
 
 const executeAiVisionStepMock = vi.hoisted(() => vi.fn())
+const readFileMock = vi.hoisted(() => vi.fn())
+const statMock = vi.hoisted(() => vi.fn())
+
+vi.mock('node:fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+  readFileMock.mockImplementation(actual.readFile)
+  statMock.mockImplementation(actual.stat)
+  return {
+    ...actual,
+    readFile: readFileMock,
+    stat: statMock,
+  }
+})
 
 vi.mock('@/lib/ai-runtime/client', () => ({
   executeAiVisionStep: executeAiVisionStepMock,
@@ -131,6 +145,34 @@ describe('episode cover image audit', () => {
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()
   })
 
+  it('rejects an oversized local file from stat before reading its bytes', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'episode-cover-audit-'))
+    const filePath = path.join(directory, 'oversized.png')
+    await writeFile(filePath, Buffer.alloc((10 * 1024 * 1024) + 1))
+    readFileMock.mockClear()
+    statMock.mockClear()
+
+    try {
+      await expect(audit(filePath)).rejects.toThrow('EPISODE_COVER_IMAGE_TOO_LARGE')
+      expect(statMock).toHaveBeenCalledWith(filePath)
+      expect(readFileMock).not.toHaveBeenCalled()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a clearly oversized data URL before base64 decoding', async () => {
+    const payload = 'A'.repeat(Math.ceil(((10 * 1024 * 1024) + 1) / 3) * 4)
+    const bufferFromSpy = vi.spyOn(Buffer, 'from')
+
+    try {
+      await expect(audit(`data:image/png;base64,${payload}`)).rejects.toThrow('EPISODE_COVER_IMAGE_TOO_LARGE')
+      expect(bufferFromSpy).not.toHaveBeenCalledWith(payload, 'base64')
+    } finally {
+      bufferFromSpy.mockRestore()
+    }
+  })
+
   it('rejects images without readable dimensions', async () => {
     await expect(audit(Buffer.from('not an image'))).rejects.toThrow('EPISODE_COVER_IMAGE_DIMENSIONS_MISSING')
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()
@@ -140,6 +182,39 @@ describe('episode cover image audit', () => {
     const source = await imageBuffer(1000, 500)
 
     await expect(audit(source)).rejects.toThrow('EPISODE_COVER_IMAGE_ASPECT_RATIO_MISMATCH')
+    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+  })
+
+  it('uses display dimensions for a JPEG rotated by EXIF orientation 6', async () => {
+    const source = await sharp({
+      create: {
+        width: 1600,
+        height: 900,
+        channels: 3,
+        background: { r: 24, g: 48, b: 72 },
+      },
+    }).withMetadata({ orientation: 6 }).jpeg().toBuffer()
+
+    const result = await audit(source, '9:16')
+
+    expect(result.metadata).toMatchObject({
+      mimeType: 'image/jpeg',
+      width: 900,
+      height: 1600,
+    })
+  })
+
+  it('rejects the encoded dimensions when EXIF orientation 8 rotates the displayed JPEG', async () => {
+    const source = await sharp({
+      create: {
+        width: 1600,
+        height: 900,
+        channels: 3,
+        background: { r: 24, g: 48, b: 72 },
+      },
+    }).withMetadata({ orientation: 8 }).jpeg().toBuffer()
+
+    await expect(audit(source, '16:9')).rejects.toThrow('EPISODE_COVER_IMAGE_ASPECT_RATIO_MISMATCH')
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()
   })
 
@@ -179,5 +254,24 @@ describe('episode cover image audit', () => {
     executeAiVisionStepMock.mockRejectedValue(new Error('vision unavailable'))
 
     await expect(audit(await imageBuffer())).rejects.toThrow('EPISODE_COVER_IMAGE_VISION_RUNTIME_FAILED')
+  })
+
+  it('uses the existing retryable generation error contract for an audit rejection', async () => {
+    executeAiVisionStepMock.mockResolvedValue(visionResponse({
+      ...CLEAN_AUDIT,
+      hasWatermark: true,
+    }))
+
+    const error = await audit(await imageBuffer()).catch((caught) => caught)
+    const normalized = normalizeAnyError(error, { context: 'worker' })
+
+    expect(error).toMatchObject({
+      code: 'GENERATION_FAILED',
+      details: { auditCode: 'EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED' },
+    })
+    expect(normalized).toMatchObject({
+      code: 'GENERATION_FAILED',
+      retryable: true,
+    })
   })
 })

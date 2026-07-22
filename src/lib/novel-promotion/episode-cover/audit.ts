@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { executeAiVisionStep } from '@/lib/ai-runtime/client'
@@ -43,8 +43,25 @@ export type AuditedEpisodeCoverImage = {
   }
 }
 
-function auditError(code: string, detail?: string): Error {
-  return new Error(detail ? `${code}: ${detail}` : code)
+function auditError(auditCode: string, detail?: string): Error {
+  return Object.assign(
+    new Error(detail ? `${auditCode}: ${detail}` : auditCode),
+    {
+      code: 'GENERATION_FAILED' as const,
+      details: { auditCode },
+    },
+  )
+}
+
+function assertImageSize(sizeBytes: number): void {
+  if (sizeBytes > MAX_EPISODE_COVER_IMAGE_BYTES) {
+    throw auditError('EPISODE_COVER_IMAGE_TOO_LARGE')
+  }
+}
+
+function decodedBase64Size(payload: string): number {
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0
+  return Math.floor((payload.length * 3) / 4) - padding
 }
 
 function decodeDataUrl(source: string): Buffer {
@@ -54,6 +71,7 @@ function decodeDataUrl(source: string): Buffer {
   }
 
   const payload = match[2]
+  assertImageSize(decodedBase64Size(payload))
   const buffer = Buffer.from(payload, 'base64')
   if (buffer.toString('base64').replace(/=+$/, '') !== payload.replace(/=+$/, '')) {
     throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', 'invalid base64 payload')
@@ -62,7 +80,10 @@ function decodeDataUrl(source: string): Buffer {
 }
 
 async function decodeImageSource(source: string | Buffer): Promise<Buffer> {
-  if (Buffer.isBuffer(source)) return source
+  if (Buffer.isBuffer(source)) {
+    assertImageSize(source.byteLength)
+    return source
+  }
   if (/^https?:\/\//i.test(source)) {
     throw auditError('EPISODE_COVER_IMAGE_REMOTE_SOURCE')
   }
@@ -77,12 +98,27 @@ async function decodeImageSource(source: string | Buffer): Promise<Buffer> {
     }
   }
 
+  let fileStats: Awaited<ReturnType<typeof stat>>
   try {
-    return await readFile(filePath)
+    fileStats = await stat(filePath)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', message)
   }
+  if (!fileStats.isFile()) {
+    throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', 'source is not a file')
+  }
+  assertImageSize(fileStats.size)
+
+  let buffer: Buffer
+  try {
+    buffer = await readFile(filePath)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', message)
+  }
+  assertImageSize(buffer.byteLength)
+  return buffer
 }
 
 function parseAspectRatio(value: string): number {
@@ -143,9 +179,6 @@ export async function auditEpisodeCoverImage(params: {
   expectedAspectRatio: string
 }): Promise<AuditedEpisodeCoverImage> {
   const buffer = await decodeImageSource(params.imageSource)
-  if (buffer.byteLength > MAX_EPISODE_COVER_IMAGE_BYTES) {
-    throw auditError('EPISODE_COVER_IMAGE_TOO_LARGE')
-  }
 
   let imageMetadata: sharp.Metadata
   try {
@@ -157,11 +190,16 @@ export async function auditEpisodeCoverImage(params: {
   const mimeType = imageMetadata.format ? MIME_BY_SHARP_FORMAT[imageMetadata.format] : undefined
   if (!mimeType) throw auditError('EPISODE_COVER_IMAGE_UNSUPPORTED_FORMAT')
 
-  const width = imageMetadata.width
-  const height = imageMetadata.height
-  if (!width || !height || width <= 0 || height <= 0) {
+  const encodedWidth = imageMetadata.width
+  const encodedHeight = imageMetadata.height
+  if (!encodedWidth || !encodedHeight || encodedWidth <= 0 || encodedHeight <= 0) {
     throw auditError('EPISODE_COVER_IMAGE_DIMENSIONS_MISSING')
   }
+  const swapsDisplayDimensions = imageMetadata.orientation != null
+    && imageMetadata.orientation >= 5
+    && imageMetadata.orientation <= 8
+  const width = swapsDisplayDimensions ? encodedHeight : encodedWidth
+  const height = swapsDisplayDimensions ? encodedWidth : encodedHeight
 
   const expectedRatio = parseAspectRatio(params.expectedAspectRatio)
   const actualRatio = width / height

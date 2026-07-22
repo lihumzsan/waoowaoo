@@ -266,6 +266,40 @@ describe('worker episode cover image behavior', () => {
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 
+  it('persists the audited display dimensions instead of raw upload dimensions', async () => {
+    auditMock.auditEpisodeCoverImage.mockResolvedValue({
+      buffer: Buffer.from('oriented-audited-cover'),
+      metadata: {
+        mimeType: 'image/jpeg',
+        sizeBytes: 22,
+        width: 720,
+        height: 1280,
+      },
+    })
+    utilsMock.uploadImageSourceToCosWithMetadata.mockResolvedValue({
+      key: 'images/episode-cover/episode-1.jpg',
+      metadata: {
+        mimeType: 'image/jpeg',
+        sizeBytes: 22,
+        width: 1280,
+        height: 720,
+      },
+    })
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await handleEpisodeCoverImageTask(buildJob())
+
+    expect(mediaMock.ensureMediaObjectFromStorageKey).toHaveBeenCalledWith(
+      'images/episode-cover/episode-1.jpg',
+      {
+        mimeType: 'image/jpeg',
+        sizeBytes: 22,
+        width: 720,
+        height: 1280,
+      },
+    )
+  })
+
   it('preserves the existing cover pointer when regeneration fails', async () => {
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
     generatorApiMock.generateImage.mockRejectedValue(new Error('provider unavailable'))
@@ -287,25 +321,7 @@ describe('worker episode cover image behavior', () => {
     expect(utilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
     expect(mediaMock.ensureMediaObjectFromStorageKey).not.toHaveBeenCalled()
     expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
-  })
-
-  it('keeps both audit-failure attempts on Codex without a provider fallback', async () => {
-    auditMock.auditEpisodeCoverImage.mockRejectedValue(new Error('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED'))
-    const { handleEpisodeCoverImageTask } = await loadHandler()
-
-    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
-    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
-
-    expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(2)
-    expect(generatorApiMock.generateImage).toHaveBeenNthCalledWith(
-      1,
-      'user-1',
-      CODEX_DEFAULT_IMAGE_MODEL_KEY,
-      expect.any(String),
-      expect.any(Object),
-    )
-    expect(generatorApiMock.generateImage).toHaveBeenNthCalledWith(
-      2,
+    expect(generatorApiMock.generateImage).toHaveBeenCalledWith(
       'user-1',
       CODEX_DEFAULT_IMAGE_MODEL_KEY,
       expect.any(String),

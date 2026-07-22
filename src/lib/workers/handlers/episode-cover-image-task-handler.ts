@@ -149,7 +149,7 @@ export async function handleEpisodeCoverImageTask(job: Job<TaskJobData>) {
     expectedAspectRatio: aspectRatio,
   })
   const uploaded = await uploadImageSourceToCosWithMetadata(audited.buffer, 'episode-cover', episode.id)
-  const media = await ensureMediaObjectFromStorageKey(uploaded.key, uploaded.metadata)
+  const media = await ensureMediaObjectFromStorageKey(uploaded.key, audited.metadata)
 
   await reportTaskProgress(job, 94, { stage: 'persist_episode_cover' })
   await assertTaskActive(job, 'persist_episode_cover')
