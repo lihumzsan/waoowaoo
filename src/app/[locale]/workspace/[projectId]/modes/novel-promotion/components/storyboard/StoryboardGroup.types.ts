@@ -13,7 +13,8 @@ export interface StoryboardGroupProps {
   textPanels: StoryboardPanel[]
   storyboardStartIndex: number
   videoRatio: string
-  isExpanded: boolean
+  isSourceExpanded: boolean
+  isPanelListExpanded: boolean
   isSubmittingStoryboardTask: boolean
   isSelectingCandidate: boolean
   isSubmittingStoryboardTextTask: boolean
@@ -26,7 +27,8 @@ export interface StoryboardGroupProps {
   modifyingPanels: Set<string>
   submittingPanelImageIds: Set<string>
 
-  onToggleExpand: () => void
+  onToggleSource: () => void
+  onTogglePanelList: () => void
   onMoveUp: () => void
   onMoveDown: () => void
   onRegenerateText: () => void

@@ -55,7 +55,9 @@
         "dialogueComplianceNone": "No dialogue",
         "dialogueComplianceNoneTitle": "No dialogue beat is bound to this segment.",
         "addAtStart": "Add new storyboard group at the start",
-        "insertHere": "Insert new storyboard group here"
+        "insertHere": "Insert new storyboard group here",
+        "panelSummary": "{total} panels · {pending} pending · {running} running",
+        "panelListLabel": "Panel list for storyboard group {index}"
     },
     "header": {
         "title": "Storyboard Editing",

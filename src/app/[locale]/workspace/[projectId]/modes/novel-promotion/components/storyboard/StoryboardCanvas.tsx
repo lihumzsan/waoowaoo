@@ -163,7 +163,8 @@ export default function StoryboardCanvas({
               textPanels={textPanels}
               storyboardStartIndex={storyboardStartIndex[storyboard.id]}
               videoRatio={videoRatio}
-              isExpanded={expandedClips.has(storyboard.id)}
+              isSourceExpanded={expandedClips.has(storyboard.id)}
+              isPanelListExpanded={openStoryboardId === storyboard.id}
               isSubmittingStoryboardTask={isSubmittingStoryboardTask}
               isSelectingCandidate={isSelectingCandidate}
               isSubmittingStoryboardTextTask={isSubmittingStoryboardTextTask}
@@ -175,7 +176,8 @@ export default function StoryboardCanvas({
               hasUnsavedByPanel={hasUnsavedByPanel}
               modifyingPanels={modifyingPanels}
               submittingPanelImageIds={submittingPanelImageIds}
-              onToggleExpand={() => onToggleExpandedClip(storyboard.id)}
+              onToggleSource={() => onToggleExpandedClip(storyboard.id)}
+              onTogglePanelList={() => onToggleOpenStoryboard(storyboard.id)}
               onMoveUp={() => onMoveStoryboardGroup(storyboard.clipId, 'up')}
               onMoveDown={() => onMoveStoryboardGroup(storyboard.clipId, 'down')}
               onRegenerateText={() => onRegenerateStoryboardText(storyboard.id)}
