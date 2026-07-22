@@ -7,6 +7,7 @@ import { apiHandler, ApiError } from '@/lib/api-errors'
 import { attachMediaFieldsToEpisode, attachMediaFieldsToProject } from '@/lib/media/attach'
 import type { MediaRef } from '@/lib/media/types'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import {
   normalizeEpisodeDataProfile,
   type EpisodeDataProfile,
@@ -641,7 +642,7 @@ export const DELETE = apiHandler(async (
 
   const existingEpisode = await prisma.novelPromotionEpisode.findFirst({
     where: episodeProjectWhere(projectId, episodeId),
-    select: { id: true },
+    select: { id: true, coverImageMediaId: true },
   })
   if (!existingEpisode) {
     throw new ApiError('NOT_FOUND')
@@ -665,6 +666,10 @@ export const DELETE = apiHandler(async (
       where: { id: novelPromotionProject.id },
       data: { lastEpisodeId: anotherEpisode?.id || null }
     })
+  }
+
+  if (existingEpisode.coverImageMediaId) {
+    await deleteMediaObjectIfUnreferenced(existingEpisode.coverImageMediaId)
   }
 
   return NextResponse.json({ success: true })

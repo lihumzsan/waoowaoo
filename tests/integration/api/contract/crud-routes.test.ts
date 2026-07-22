@@ -16,7 +16,18 @@ const authState = vi.hoisted<AuthState>(() => ({
   authenticated: false,
 }))
 
+const deleteObjectsMock = vi.hoisted(() => vi.fn())
+const deleteMediaObjectIfUnreferencedMock = vi.hoisted(() => vi.fn())
+
 const prismaMock = vi.hoisted(() => ({
+  project: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
+  novelPromotionProject: {
+    findUnique: vi.fn(),
+  },
   globalCharacter: {
     findUnique: vi.fn(),
     update: vi.fn(),
@@ -87,11 +98,16 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/storage', () => ({
   deleteObject: vi.fn(),
+  deleteObjects: deleteObjectsMock,
   getSignedUrl: vi.fn((key: string) => `https://signed.example/${key}`),
 }))
 
 vi.mock('@/lib/media/service', () => ({
   resolveStorageKeyFromMediaValue: vi.fn(async (value: string) => value),
+}))
+
+vi.mock('@/lib/media/unreferenced-cleanup', () => ({
+  deleteMediaObjectIfUnreferenced: deleteMediaObjectIfUnreferencedMock,
 }))
 
 function toModuleImportPath(routeFile: string): string {
@@ -190,6 +206,18 @@ describe('api contract - crud routes (behavior)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.authenticated = false
+
+    prismaMock.project.findUnique.mockResolvedValue({
+      id: 'project-1',
+      name: 'Project 1',
+      userId: 'user-1',
+      user: { id: 'user-1' },
+    })
+    prismaMock.project.update.mockResolvedValue({ id: 'project-1' })
+    prismaMock.project.delete.mockResolvedValue({ id: 'project-1' })
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValue(null)
+    deleteObjectsMock.mockResolvedValue({ success: 0, failed: 0 })
+    deleteMediaObjectIfUnreferencedMock.mockResolvedValue('deleted')
 
     prismaMock.globalCharacter.findUnique.mockResolvedValue({
       id: 'character-1',
@@ -508,5 +536,60 @@ describe('api contract - crud routes (behavior)', () => {
         description: 'panel description',
       },
     })
+  })
+
+  it('DELETE /projects/[projectId] cleans Episode covers by media id after deleting the project', async () => {
+    authState.authenticated = true
+    const events: string[] = []
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [{
+        audioUrl: null,
+        coverImageMediaId: 'media-cover-1',
+        coverImageMedia: {
+          id: 'media-cover-1',
+          storageKey: 'episode-cover/project-1-episode-1.png',
+        },
+        storyboards: [],
+      }],
+    })
+    prismaMock.project.delete.mockImplementationOnce(async () => {
+      events.push('project-deleted')
+      return { id: 'project-1' }
+    })
+    deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
+      events.push('cover-cleaned')
+      return 'deleted'
+    })
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.novelPromotionProject.findUnique).toHaveBeenCalledWith({
+      where: { projectId: 'project-1' },
+      include: expect.objectContaining({
+        episodes: {
+          include: expect.objectContaining({
+            coverImageMedia: {
+              select: { id: true, storageKey: true },
+            },
+          }),
+        },
+      }),
+    })
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
+    expect(deleteObjectsMock).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['episode-cover/project-1-episode-1.png']),
+    )
+    expect(events).toEqual(['project-deleted', 'cover-cleaned'])
   })
 })

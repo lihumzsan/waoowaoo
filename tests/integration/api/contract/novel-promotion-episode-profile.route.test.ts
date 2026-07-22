@@ -14,6 +14,7 @@ const updateProjectMock = vi.hoisted(() => vi.fn())
 const findUniqueProjectMock = vi.hoisted(() => vi.fn())
 const findManyTaskMock = vi.hoisted(() => vi.fn())
 const findManyMediaObjectMock = vi.hoisted(() => vi.fn())
+const deleteMediaObjectIfUnreferencedMock = vi.hoisted(() => vi.fn())
 const attachMediaFieldsToProjectMock = vi.hoisted(() => vi.fn(async (value) => value))
 const attachMediaFieldsToEpisodeMock = vi.hoisted(() => vi.fn(async (value: Record<string, unknown>) => ({
   ...value,
@@ -74,6 +75,10 @@ vi.mock('@/lib/media/service', () => ({
   resolveMediaRefFromLegacyValue: vi.fn(async () => null),
 }))
 
+vi.mock('@/lib/media/unreferenced-cleanup', () => ({
+  deleteMediaObjectIfUnreferenced: deleteMediaObjectIfUnreferencedMock,
+}))
+
 describe('api contract - novel promotion episode profiles', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -97,6 +102,7 @@ describe('api contract - novel promotion episode profiles', () => {
       },
     ])
     findManyMediaObjectMock.mockResolvedValue([])
+    deleteMediaObjectIfUnreferencedMock.mockResolvedValue('deleted')
   })
 
   it('keeps the default full profile compatible and adds artifactReadiness', async () => {
@@ -468,7 +474,45 @@ describe('api contract - novel promotion episode profiles', () => {
         id: 'episode-project-b',
         novelPromotionProject: { projectId: 'project-a' },
       },
-      select: { id: true },
+      select: { id: true, coverImageMediaId: true },
     })
+  })
+
+  it('cleans the former cover by media id only after deleting its scoped Episode', async () => {
+    const events: string[] = []
+    findFirstMock.mockResolvedValueOnce({
+      id: 'episode-1',
+      coverImageMediaId: 'media-cover-1',
+    })
+    deleteEpisodeMock.mockImplementationOnce(async () => {
+      events.push('episode-deleted')
+      return { id: 'episode-1' }
+    })
+    deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
+      events.push('cover-cleaned')
+      return 'deleted'
+    })
+    findUniqueProjectMock.mockResolvedValueOnce(null)
+
+    const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/episodes/episode-1',
+      method: 'DELETE',
+    })
+
+    const res = await route.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1', episodeId: 'episode-1' }),
+    } as RouteContext)
+
+    expect(res.status).toBe(200)
+    expect(findFirstMock).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'episode-1',
+        novelPromotionProject: { projectId: 'project-1' },
+      },
+      select: { id: true, coverImageMediaId: true },
+    })
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
+    expect(events).toEqual(['episode-deleted', 'cover-cleaned'])
   })
 })

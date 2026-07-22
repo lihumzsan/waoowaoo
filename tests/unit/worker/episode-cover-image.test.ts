@@ -66,6 +66,27 @@ const auditMock = vi.hoisted(() => ({
   auditEpisodeCoverImage: vi.fn(),
 }))
 
+const cleanupMock = vi.hoisted(() => ({
+  deleteMediaObjectIfUnreferenced: vi.fn(),
+}))
+
+const storageMock = vi.hoisted(() => ({
+  deleteObject: vi.fn(),
+}))
+
+const loggerMock = vi.hoisted(() => {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    event: vi.fn(),
+    child: vi.fn(),
+  }
+  logger.child.mockReturnValue(logger)
+  return logger
+})
+
 const promptMock = vi.hoisted(() => ({
   buildPrompt: vi.fn(() => 'episode cover base prompt'),
 }))
@@ -86,6 +107,17 @@ vi.mock('@/lib/workers/handlers/image-task-handler-shared', () => sharedMock)
 vi.mock('@/lib/media/outbound-image', () => outboundMock)
 vi.mock('@/lib/media/service', () => mediaMock)
 vi.mock('@/lib/novel-promotion/episode-cover/audit', () => auditMock)
+vi.mock('@/lib/media/unreferenced-cleanup', () => cleanupMock)
+vi.mock('@/lib/storage', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/storage')>('@/lib/storage')
+  return {
+    ...actual,
+    deleteObject: storageMock.deleteObject,
+  }
+})
+vi.mock('@/lib/logging/core', () => ({
+  createScopedLogger: vi.fn(() => loggerMock),
+}))
 vi.mock('@/lib/prompt-i18n', () => ({
   PROMPT_IDS: { NP_EPISODE_COVER_IMAGE: 'np_episode_cover_image' },
   buildPrompt: promptMock.buildPrompt,
@@ -189,6 +221,8 @@ describe('worker episode cover image behavior', () => {
         height: 720,
       },
     })
+    cleanupMock.deleteMediaObjectIfUnreferenced.mockResolvedValue('deleted')
+    storageMock.deleteObject.mockResolvedValue(undefined)
   })
 
   it('generates one text-free Codex cover from current Episode context and selected references', async () => {
@@ -328,5 +362,110 @@ describe('worker episode cover image behavior', () => {
       expect.any(Object),
     )
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
+  })
+
+  it('keeps the previous cover linked until the audited candidate media is ready', async () => {
+    prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
+    const events: string[] = []
+    auditMock.auditEpisodeCoverImage.mockImplementation(async () => {
+      events.push('candidate-audited')
+      expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+      return {
+        buffer: Buffer.from('audited-cover-bytes'),
+        metadata: {
+          mimeType: 'image/png',
+          sizeBytes: 19,
+          width: 1280,
+          height: 720,
+        },
+      }
+    })
+    mediaMock.ensureMediaObjectFromStorageKey.mockImplementation(async () => {
+      events.push('candidate-media-ready')
+      expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+      return {
+        id: 'media-cover-1',
+        publicId: 'episode-cover-public-1',
+        url: '/m/episode-cover-public-1',
+      }
+    })
+    prismaMock.novelPromotionEpisode.update.mockImplementation(async () => {
+      events.push('pointer-swapped')
+      return { id: 'episode-1' }
+    })
+    cleanupMock.deleteMediaObjectIfUnreferenced.mockImplementation(async () => {
+      events.push('previous-cleaned')
+      return 'deleted'
+    })
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await handleEpisodeCoverImageTask(buildJob())
+
+    expect(events).toEqual([
+      'candidate-audited',
+      'candidate-media-ready',
+      'pointer-swapped',
+      'previous-cleaned',
+    ])
+    expect(cleanupMock.deleteMediaObjectIfUnreferenced).toHaveBeenCalledWith('media-old-cover')
+  })
+
+  it('does not create media, change the pointer, or run compensation when upload fails', async () => {
+    prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
+    utilsMock.uploadImageSourceToCosWithMetadata.mockRejectedValue(new Error('upload failed'))
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('upload failed')
+
+    expect(mediaMock.ensureMediaObjectFromStorageKey).not.toHaveBeenCalled()
+    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+    expect(storageMock.deleteObject).not.toHaveBeenCalled()
+    expect(cleanupMock.deleteMediaObjectIfUnreferenced).not.toHaveBeenCalled()
+  })
+
+  it('removes uploaded candidate storage and rethrows the media creation failure', async () => {
+    const mediaFailure = new Error('media creation failed')
+    mediaMock.ensureMediaObjectFromStorageKey.mockRejectedValue(mediaFailure)
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toBe(mediaFailure)
+
+    expect(storageMock.deleteObject).toHaveBeenCalledWith('images/episode-cover/episode-1.png')
+    expect(cleanupMock.deleteMediaObjectIfUnreferenced).not.toHaveBeenCalled()
+    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+  })
+
+  it('removes unreferenced candidate media and rethrows the pointer update failure', async () => {
+    const pointerFailure = new Error('pointer update failed')
+    prismaMock.novelPromotionEpisode.update.mockRejectedValue(pointerFailure)
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toBe(pointerFailure)
+
+    expect(cleanupMock.deleteMediaObjectIfUnreferenced).toHaveBeenCalledWith('media-cover-1')
+    expect(storageMock.deleteObject).not.toHaveBeenCalled()
+  })
+
+  it('publishes successfully when the superseded cover cleanup fails and emits a structured warning', async () => {
+    prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
+    cleanupMock.deleteMediaObjectIfUnreferenced.mockRejectedValue(new Error('old cleanup failed'))
+    const { handleEpisodeCoverImageTask } = await loadHandler()
+
+    await expect(handleEpisodeCoverImageTask(buildJob())).resolves.toEqual({
+      episodeId: 'episode-1',
+      coverImageMediaId: 'media-cover-1',
+      coverImageUrl: '/m/episode-cover-public-1',
+    })
+
+    expect(prismaMock.novelPromotionEpisode.update).toHaveBeenCalledTimes(1)
+    expect(loggerMock.warn).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'worker.episode-cover.cleanup_superseded_failed',
+      projectId: 'project-1',
+      taskId: 'task-cover-1',
+      details: expect.objectContaining({
+        episodeId: 'episode-1',
+        mediaId: 'media-old-cover',
+      }),
+    }))
   })
 })

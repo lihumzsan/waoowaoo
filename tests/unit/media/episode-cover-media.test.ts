@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const resolveMediaRefMock = vi.hoisted(() => vi.fn())
@@ -76,4 +78,18 @@ describe('Episode cover media attachment', () => {
       }),
     ])
   })
+
+  it.each(['schema.prisma', 'schema.sqlit.prisma'])(
+    '%s keeps the Episode cover relation visible to MediaObject reference counts',
+    (schemaName) => {
+      const schema = fs.readFileSync(path.join(process.cwd(), 'prisma', schemaName), 'utf8')
+
+      expect(schema).toContain(
+        'coverImageMedia         MediaObject?               @relation("NovelPromotionEpisodeCoverImageMedia", fields: [coverImageMediaId], references: [id], onDelete: SetNull)',
+      )
+      expect(schema).toContain(
+        'novelPromotionEpisodeCoverImages      NovelPromotionEpisode[]     @relation("NovelPromotionEpisodeCoverImageMedia")',
+      )
+    },
+  )
 })

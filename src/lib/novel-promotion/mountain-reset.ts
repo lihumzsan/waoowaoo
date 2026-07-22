@@ -249,6 +249,7 @@ export async function buildMountainResetPlan(
           description: true,
           audioUrl: true,
           audioMediaId: true,
+          coverImageMediaId: true,
           srtContent: true,
           speakerVoices: true,
         },
@@ -416,6 +417,7 @@ export async function buildMountainResetPlan(
 
   for (const episode of novelProject.episodes) {
     addMediaId(episode.audioMediaId)
+    addMediaId(episode.coverImageMediaId)
     addStorageKey(episode.audioUrl)
   }
 
@@ -627,6 +629,7 @@ export async function executeMountainReset(db: PrismaClient, plan: MountainReset
         description: null,
         audioUrl: null,
         audioMediaId: null,
+        coverImageMediaId: null,
         srtContent: null,
         speakerVoices: null,
       },
