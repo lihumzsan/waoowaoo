@@ -69,18 +69,19 @@ An interpolation model can smooth small changes but introduces a new deployment 
 
 The AI branch remains an application-orchestrated pipeline so each boundary is observable:
 
-1. The worker resolves the two owned storage objects and invokes a media-probe workflow for each input.
+1. The worker resolves the two owned storage objects, downloads them into a task-scoped temporary directory, and probes both files with local FFprobe.
 2. Application code validates the returned metadata and calculates all source and generated frame indices.
-3. An anchor workflow extracts the two calculated PNG frames from each source and returns four distinct named outputs.
+3. Local FFmpeg extracts the two calculated PNG frames from each source; Sharp applies the shared source-derived LTX canvas normalization.
 4. The ComfyUI client preflights the remote four-anchor node contract, uploads the four anchors, resolves the LTX workflow with explicit indices, and waits for the generated bridge.
-5. A dedicated composition workflow combines exact source ranges, selected AI frame ranges, source audio, and calculated silence.
-6. The worker persists the MP4 and returns the applied probe, generation, composition, and audio metadata.
+5. The worker downloads the generated bridge and local FFmpeg combines the exact seven video ranges, source audio, calculated silence, and Video 2 audio tempo correction.
+6. The worker validates and persists the MP4, returns the applied probe, generation, composition, and audio metadata, and removes only its task-scoped temporary directory in `finally`.
 
 Ownership boundaries are:
 
 - `src/lib/video-tools/` owns pure validation, frame math, compatibility rules, and result types.
+- a focused `src/lib/video/` module owns FFprobe parsing, anchor extraction, deterministic FFmpeg composition, output verification, and task-scoped media files; it follows the repository's existing `FFMPEG_PATH || "ffmpeg"` runtime pattern and adds `FFPROBE_PATH || "ffprobe"`.
 - `src/lib/providers/comfyui/workflow-registry.ts` owns graph injection and resolved-graph preflight.
-- `src/lib/providers/comfyui/client.ts` owns upload, multi-output collection, remote node-capability checks, execution, and output discovery.
+- `src/lib/providers/comfyui/client.ts` owns four-anchor upload, remote node-capability checks, LTX execution, and generated-bridge output discovery.
 - `src/lib/workers/handlers/video-seam-concat.ts` owns orchestration, progress, persistence, and final task metadata.
 - the video-tools page owns mode selection, duration selection, precise error presentation, and result diagnostics.
 
@@ -88,16 +89,16 @@ No browser request calls ComfyUI directly or receives its base URL.
 
 ## Media probe contract
 
-Each input probe produces a `SeamProbeResult` with:
+Each local FFprobe invocation uses `-count_frames` and produces a `SeamProbeResult` with:
 
 - `width` and `height` of the decoded source frames;
 - positive finite `fps` from the decoded video stream;
 - integer `frameCount` and derived `durationSeconds`;
 - `hasAudio` for a decodable audio stream.
 
-After frame math succeeds, each anchor extraction produces a `SeamAnchorResult` containing the requested zero-based indices and exactly two distinct PNG outputs. The client associates outputs by stable node identity and role (`pre`/`endpoint` or `endpoint`/`post`), not by object iteration order or whichever saved image appears first.
+After frame math succeeds, FFmpeg selects each requested zero-based frame and produces a `SeamAnchorResult` containing the requested indices and exactly two distinct PNG paths. The extractor associates files by explicit role (`pre`/`endpoint` or `endpoint`/`post`), verifies that all four files exist and are non-empty, and never relies on directory iteration order.
 
-Probe values are authoritative for server-side validation and composition. Browser `<video>` metadata is presentation-only and must not be trusted for FPS, frame count, or audio presence.
+FFprobe values are authoritative for server-side validation and composition. Browser `<video>` metadata is presentation-only and must not be trusted for FPS, frame count, or audio presence. FFprobe reads `avg_frame_rate` as a rational value, uses `nb_read_frames` as the exact decoded frame count, and detects audio from a decodable `codec_type=audio` stream.
 
 The probe fails if a source has no decodable video stream or reports non-finite metadata. Anchor extraction fails if it cannot provide every requested frame. The worker must not substitute a nearby frame without recording and validating the exact index.
 
@@ -211,7 +212,7 @@ retainedVideo2FrameCount = B - bStart
 outputFrameCount = retainedVideo1FrameCount + centralFrameCount + retainedVideo2FrameCount
 ```
 
-All image merges use Lanczos sampling. `nearest-exact` is removed from the AI composition path. The final encoder uses Video 1's exact dimensions and FPS, H.264 MP4, and `yuv420p`. Its target bitrate in Mbit/s is:
+All image scaling in the FFmpeg filter graph uses Lanczos sampling. `nearest-exact` is removed from the AI composition path. The final encoder uses Video 1's exact dimensions and FPS, `libx264` H.264 MP4, `yuv420p`, AAC audio when audio is present, and `+faststart`. Its target bitrate in Mbit/s is:
 
 ```text
 targetBitrateMbps = clamp(ceil(width1 * height1 * outputFps * 0.07 / 1_000_000), 10, 40)
@@ -233,7 +234,7 @@ The central silence length is frame-derived:
 centralSilenceSeconds = centralFrameCount / outputFps
 ```
 
-Video 1 audio is trimmed at `(aEnd + 1) / probe1.fps`. Video 2 audio starts at `bStart / probe2.fps`. When the compatible source FPS values are not equal, Video 2 audio is pitch-preservingly time-stretched with `tempoFactor = outputFps / probe2.fps` so it remains synchronized with Video 2 frames played at the output FPS.
+Video 1 audio is trimmed at `(aEnd + 1) / probe1.fps`. Video 2 audio starts at `bStart / probe2.fps`. When the compatible source FPS values are not equal, FFmpeg applies `atempo=outputFps/probe2.fps` so Video 2 audio is pitch-preservingly time-stretched and remains synchronized with Video 2 frames played at the output FPS.
 
 When only one source has audio, an exact-length silent segment is synthesized for the source segment that has no audio so the remaining audio stays aligned. When both sources have no audio, the result omits the audio track. The final audio and video durations must differ by no more than one output frame.
 
@@ -264,6 +265,8 @@ The page renders concise compatibility and capability errors and preserves both 
 
 Stable error codes for the new quality boundaries are:
 
+- `VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED` for an incomplete source or generated-bridge download;
+- `VIDEO_SEAM_FFMPEG_UNAVAILABLE` when the configured FFmpeg or FFprobe executable cannot run;
 - `VIDEO_SEAM_MEDIA_PROBE_FAILED` for undecodable or incomplete source metadata;
 - `VIDEO_SEAM_DIMENSIONS_UNSUPPORTED` for non-positive or odd decoded dimensions;
 - `VIDEO_SEAM_ASPECT_RATIO_MISMATCH` for incompatible source geometry;
@@ -289,15 +292,17 @@ Errors from ComfyUI upload, queueing, execution, output discovery, and persisten
 - aspect-ratio and FPS values immediately inside and outside both thresholds;
 - portrait, landscape, native-size, downscaled, and padded generation canvases.
 
-### Workflow and client contract tests
+### Media, workflow, and client contract tests
 
-- probe workflow returns two distinct named anchors plus complete metadata per input;
+- FFprobe command and parser return complete metadata, exact rational FPS, counted frames, and audio presence;
+- FFmpeg anchor extraction selects two distinct exact frame indices per input and rejects a missing output;
+- Sharp normalizes all four anchors through one source-derived canvas without stretching;
 - Goon workflow injects four images and four indices into both conditioning stages;
 - resolved graph uses source-derived dimensions and Video 1 FPS;
 - remote node preflight fails closed when four-image inputs are unavailable;
-- client collects every expected image/video output rather than the first arbitrary output;
-- composition selects the exact seven frame ranges in order;
-- image merges use Lanczos and the final graph includes synchronized audio;
+- FFmpeg composition selects the exact seven frame ranges in order;
+- the filter graph uses Lanczos, exact central silence, `atempo` for compatible FPS differences, and source-specific silence when one audio stream is absent;
+- output verification checks dimensions, FPS, frame count, duration, and audio presence before persistence;
 - no test uses identical base64 content for all four anchors.
 
 ### Worker, API, and UI tests
@@ -328,4 +333,4 @@ Visual playback review must additionally reject a visible jump at either handle 
 
 The implementation replaces only the explicit AI branch after targeted tests and the real-media canary pass. Direct mode remains available throughout rollout. Existing completed outputs remain valid because task result additions are backward-compatible JSON fields.
 
-Rollback restores the previous AI workflow and handler path without a data migration. If the remote four-anchor node contract is unavailable, AI mode reports the capability error and direct mode remains usable; the application does not submit an unverified two-anchor graph.
+Rollback restores the previous AI workflow and handler path without a data migration. Task-scoped local files are disposable and never become stored application state. If FFmpeg/FFprobe or the remote four-anchor node contract is unavailable, AI mode reports the corresponding capability error and direct mode remains usable; the application does not submit an unverified two-anchor graph.
