@@ -7,6 +7,7 @@ import sharp from 'sharp'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildVideoSeamComposeCommand,
+  composeVideoSeamOutput,
   downloadVideoSeamFile,
   extractVideoSeamAnchors,
   parseVideoSeamProbeJson,
@@ -68,6 +69,44 @@ async function createRotatedVideoFixture(directory: string, rotation: 90 | 270):
     '-c', 'copy', rotatedPath,
   ])
   return rotatedPath
+}
+
+async function createAudioPolicyVideoFixture(params: {
+  directory: string
+  name: string
+  hasAudio: boolean
+  audioDurationSeconds?: number
+  frequency?: number
+}): Promise<string> {
+  const outputPath = path.join(params.directory, `${params.name}.mp4`)
+  const args = [
+    '-v', 'error', '-y', '-f', 'lavfi',
+    '-i', 'testsrc2=size=96x64:rate=24:duration=2',
+  ]
+  if (params.hasAudio) {
+    args.push(
+      '-f', 'lavfi',
+      '-i', `sine=frequency=${params.frequency || 440}:sample_rate=48000:duration=${params.audioDurationSeconds || 2}`,
+      '-map', '0:v:0', '-map', '1:a:0',
+    )
+  }
+  args.push(
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    ...(params.hasAudio ? ['-c:a', 'aac'] : []),
+    outputPath,
+  )
+  await execFileAsync(process.env.FFMPEG_PATH || 'ffmpeg', args)
+  return outputPath
+}
+
+async function createAudioPolicyBridgeFixture(directory: string): Promise<string> {
+  const outputPath = path.join(directory, 'bridge.mp4')
+  await execFileAsync(process.env.FFMPEG_PATH || 'ffmpeg', [
+    '-v', 'error', '-y', '-f', 'lavfi',
+    '-i', 'testsrc2=size=96x64:rate=24',
+    '-frames:v', '97', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', outputPath,
+  ])
+  return outputPath
 }
 
 describe('video seam local media adapter', () => {
@@ -155,6 +194,137 @@ describe('video seam local media adapter', () => {
     expect(graph).toContain('atempo=' + plan.video2AudioTempoFactor.toFixed(9))
     expect(graph).toContain('atrim=duration=' + plan.centralSilenceSeconds.toFixed(9))
     expect(command.args).toEqual(expect.arrayContaining(['libx264', 'yuv420p', '+faststart']))
+  })
+
+  it('bounds Video 2 audio in source time before atempo and in output time after atempo', () => {
+    const plan = buildVideoSeamBridgePlan({
+      input1: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+      input2: { width: 96, height: 64, fps: 23.976, frameCount: 48, durationSeconds: 2.002, hasAudio: true },
+      trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+    })
+    const command = buildVideoSeamComposeCommand({
+      input1Path: '/tmp/a.mp4', bridgePath: '/tmp/g.mp4',
+      input2Path: '/tmp/b.mp4', outputPath: '/tmp/o.mp4', plan,
+    })
+    const graph = command.args[command.args.indexOf('-filter_complex') + 1]
+    const sourceStart = plan.sourceAnchors.input2Endpoint / plan.input2.fps
+    const sourceDuration = plan.retainedVideo2FrameCount / plan.input2.fps
+    const outputDuration = plan.retainedVideo2FrameCount / plan.outputFps
+    expect(graph).toContain(
+      `atrim=start=${sourceStart.toFixed(9)}:duration=${sourceDuration.toFixed(9)}`,
+    )
+    expect(graph).toMatch(new RegExp(
+      `atrim=start=${sourceStart.toFixed(9)}:duration=${sourceDuration.toFixed(9)}`
+      + `.*atempo=${plan.video2AudioTempoFactor.toFixed(9)}`
+      + `.*atrim=duration=${outputDuration.toFixed(9)}`,
+    ))
+  })
+
+  it.each([
+    ['both', true, true, true],
+    ['video1_only', true, false, true],
+    ['video2_only', false, true, true],
+    ['silent', false, false, false],
+  ] as const)(
+    'executes the %s audio policy and caps retained audio to the output timeline',
+    async (expectedPolicy, input1HasAudio, input2HasAudio, outputHasAudio) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-audio-policy-'))
+      try {
+        const input1Path = await createAudioPolicyVideoFixture({
+          directory, name: 'input-1', hasAudio: input1HasAudio, frequency: 440,
+        })
+        const input2Path = await createAudioPolicyVideoFixture({
+          directory,
+          name: 'input-2',
+          hasAudio: input2HasAudio,
+          audioDurationSeconds: input2HasAudio ? 6 : undefined,
+          frequency: 660,
+        })
+        const bridgePath = await createAudioPolicyBridgeFixture(directory)
+        const [input1, input2] = await Promise.all([
+          probeVideoSeamFile(input1Path),
+          probeVideoSeamFile(input2Path),
+        ])
+        const plan = buildVideoSeamBridgePlan({
+          input1, input2, trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+        })
+        expect(plan.audioPolicy).toBe(expectedPolicy)
+        const outputPath = path.join(directory, `output-${expectedPolicy}.mp4`)
+        await composeVideoSeamOutput({ input1Path, bridgePath, input2Path, outputPath, plan })
+        await expect(verifyVideoSeamOutput(outputPath, plan)).resolves.toMatchObject({
+          hasAudio: outputHasAudio,
+          frameCount: plan.outputFrameCount,
+        })
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true })
+      }
+    },
+    30_000,
+  )
+
+  it('maps audio filter failures to the stable audio compose code with the original cause', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-audio-error-'))
+    const executable = path.join(directory, 'ffmpeg-audio-failure')
+    const originalFfmpegPath = process.env.FFMPEG_PATH
+    try {
+      await fs.writeFile(executable, [
+        '#!/usr/bin/env node',
+        'process.stderr.write("Error applying option to filter atempo: Invalid argument\\n")',
+        'process.exit(1)',
+        '',
+      ].join('\n'), { mode: 0o755 })
+      process.env.FFMPEG_PATH = executable
+      const plan = buildVideoSeamBridgePlan({
+        input1: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+        input2: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+        trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+      })
+      let failure: unknown
+      try {
+        await composeVideoSeamOutput({
+          input1Path: '/tmp/a.mp4', bridgePath: '/tmp/g.mp4',
+          input2Path: '/tmp/b.mp4', outputPath: '/tmp/o.mp4', plan,
+        })
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toBe('VIDEO_SEAM_AUDIO_COMPOSE_FAILED')
+      expect((failure as Error).cause).toBeInstanceOf(Error)
+      expect(String((failure as Error).cause)).toContain('atempo')
+    } finally {
+      if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
+      else process.env.FFMPEG_PATH = originalFfmpegPath
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('does not misclassify a video encoder failure as audio composition', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-video-error-'))
+    const executable = path.join(directory, 'ffmpeg-video-failure')
+    const originalFfmpegPath = process.env.FFMPEG_PATH
+    try {
+      await fs.writeFile(executable, [
+        '#!/usr/bin/env node',
+        'process.stderr.write("Error while opening encoder libx264 for output stream 0:0\\n")',
+        'process.exit(1)',
+        '',
+      ].join('\n'), { mode: 0o755 })
+      process.env.FFMPEG_PATH = executable
+      const plan = buildVideoSeamBridgePlan({
+        input1: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+        input2: { width: 96, height: 64, fps: 24, frameCount: 48, durationSeconds: 2, hasAudio: true },
+        trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+      })
+      await expect(composeVideoSeamOutput({
+        input1Path: '/tmp/a.mp4', bridgePath: '/tmp/g.mp4',
+        input2Path: '/tmp/b.mp4', outputPath: '/tmp/o.mp4', plan,
+      })).rejects.not.toThrow('VIDEO_SEAM_AUDIO_COMPOSE_FAILED')
+    } finally {
+      if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
+      else process.env.FFMPEG_PATH = originalFfmpegPath
+      await fs.rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('disables implicit autorotation and explicitly orients both source videos', () => {

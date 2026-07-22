@@ -1,12 +1,137 @@
+import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import {
   assertVideoSeamSsimThresholds,
   parseFfmpegSsimStats,
   verifyVideoSeamAcceptance,
 } from '@/lib/video/video-seam-acceptance'
+import { buildVideoSeamBridgePlan } from '@/lib/video-tools/seam-bridge-plan'
+import {
+  composeVideoSeamOutput,
+  probeVideoSeamFile,
+  verifyVideoSeamOutput,
+} from '@/lib/video/video-seam-media'
+
+const execFileAsync = promisify(execFile)
+
+async function createAcceptanceSource(params: {
+  directory: string
+  name: string
+  hasAudio: boolean
+  frequency: number
+}): Promise<string> {
+  const outputPath = path.join(params.directory, `${params.name}.mp4`)
+  const args = [
+    '-v', 'error', '-y', '-f', 'lavfi',
+    '-i', 'testsrc2=size=96x64:rate=24:duration=2',
+  ]
+  if (params.hasAudio) {
+    args.push(
+      '-f', 'lavfi',
+      '-i', `sine=frequency=${params.frequency}:sample_rate=48000:duration=2`,
+      '-map', '0:v:0', '-map', '1:a:0',
+    )
+  }
+  args.push(
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    ...(params.hasAudio ? ['-c:a', 'aac'] : []),
+    outputPath,
+  )
+  await execFileAsync(process.env.FFMPEG_PATH || 'ffmpeg', args)
+  return outputPath
+}
+
+async function createAcceptanceFixture(params: {
+  directory: string
+  input1HasAudio: boolean
+  input2HasAudio: boolean
+}): Promise<{
+  input1Path: string
+  input2Path: string
+  outputPath: string
+  resultPath: string
+  centralStartSeconds: number
+  centralEndSeconds: number
+  outputDurationSeconds: number
+  audioPolicy: 'both' | 'video1_only' | 'video2_only' | 'silent'
+}> {
+  const input1Path = await createAcceptanceSource({
+    directory: params.directory, name: 'input-1', hasAudio: params.input1HasAudio, frequency: 440,
+  })
+  const input2Path = await createAcceptanceSource({
+    directory: params.directory, name: 'input-2', hasAudio: params.input2HasAudio, frequency: 660,
+  })
+  const bridgePath = path.join(params.directory, 'bridge.mp4')
+  await execFileAsync(process.env.FFMPEG_PATH || 'ffmpeg', [
+    '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=96x64:rate=24',
+    '-frames:v', '97', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', bridgePath,
+  ])
+  const [input1, input2] = await Promise.all([
+    probeVideoSeamFile(input1Path),
+    probeVideoSeamFile(input2Path),
+  ])
+  const plan = buildVideoSeamBridgePlan({
+    input1, input2, trimEndFrames: 0, trimStartFrames: 1, durationSeconds: 4,
+  })
+  const outputPath = path.join(params.directory, 'output.mp4')
+  await composeVideoSeamOutput({ input1Path, bridgePath, input2Path, outputPath, plan })
+  const output = await verifyVideoSeamOutput(outputPath, plan)
+  const resultPath = path.join(params.directory, 'task-result.json')
+  await fs.writeFile(resultPath, JSON.stringify({
+    id: 'task-1',
+    status: 'completed',
+    result: {
+      mode: 'ai_bridge',
+      probes: { input1, input2 },
+      output,
+      bridge: {
+        requestedDurationSeconds: plan.requestedDurationSeconds,
+        handleFrames: plan.handleFrames,
+        generatedFrameCount: plan.generatedFrameCount,
+        generationCanvas: plan.generationCanvas,
+        sourceAnchors: plan.sourceAnchors,
+        generatedAnchors: plan.generatedAnchors,
+        centralFrameCount: plan.centralFrameCount,
+        centralSilenceSeconds: plan.centralSilenceSeconds,
+        video2AudioTempoFactor: plan.video2AudioTempoFactor,
+        audioPolicy: plan.audioPolicy,
+        targetBitrateMbps: plan.targetBitrateMbps,
+      },
+    },
+  }))
+  return {
+    input1Path,
+    input2Path,
+    outputPath,
+    resultPath,
+    centralStartSeconds: plan.retainedVideo1FrameCount / plan.outputFps,
+    centralEndSeconds: (plan.retainedVideo1FrameCount + plan.centralFrameCount) / plan.outputFps,
+    outputDurationSeconds: plan.outputDurationSeconds,
+    audioPolicy: plan.audioPolicy,
+  }
+}
+
+async function createSilenceAnalysisWrapper(directory: string): Promise<string> {
+  const executable = path.join(directory, 'ffmpeg-silence-wrapper')
+  await fs.writeFile(executable, [
+    '#!/usr/bin/env node',
+    'const { spawnSync } = require("node:child_process")',
+    'const args = process.argv.slice(2)',
+    'if (args.some((value) => value.includes("silencedetect="))) {',
+    '  process.stderr.write(process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS || "")',
+    '  process.exit(0)',
+    '}',
+    'const result = spawnSync(process.env.VIDEO_SEAM_REAL_FFMPEG || "ffmpeg", args, { stdio: "inherit" })',
+    'if (result.error) { process.stderr.write(String(result.error)); process.exit(1) }',
+    'process.exit(result.status === null ? 1 : result.status)',
+    '',
+  ].join('\n'), { mode: 0o755 })
+  return executable
+}
 
 describe('video seam real-media acceptance', () => {
   it('parses FFmpeg per-frame All SSIM values', () => {
@@ -77,4 +202,48 @@ describe('video seam real-media acceptance', () => {
       await fs.rm(directory, { recursive: true, force: true })
     }
   })
+
+  it.each([
+    ['both', true, true],
+    ['video1_only', true, false],
+    ['video2_only', false, true],
+  ] as const)(
+    'accepts codec-scale AAC boundary drift for the %s policy without treating it as context silence',
+    async (policy, input1HasAudio, input2HasAudio) => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'video-seam-aac-boundary-'))
+      const originalFfmpegPath = process.env.FFMPEG_PATH
+      const originalRealFfmpeg = process.env.VIDEO_SEAM_REAL_FFMPEG
+      const originalSilenceIntervals = process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS
+      try {
+        const fixture = await createAcceptanceFixture({ directory, input1HasAudio, input2HasAudio })
+        expect(fixture.audioPolicy).toBe(policy)
+        const tolerance = 4 / 48_000
+        const start = input1HasAudio ? fixture.centralStartSeconds - tolerance : 0
+        const end = input2HasAudio
+          ? fixture.centralEndSeconds + tolerance
+          : fixture.outputDurationSeconds
+        process.env.VIDEO_SEAM_REAL_FFMPEG = originalFfmpegPath || 'ffmpeg'
+        process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS = [
+          `[silencedetect] silence_start: ${start.toFixed(9)}`,
+          `[silencedetect] silence_end: ${end.toFixed(9)} | silence_duration: ${(end - start).toFixed(9)}`,
+        ].join('\n')
+        process.env.FFMPEG_PATH = await createSilenceAnalysisWrapper(directory)
+        await expect(verifyVideoSeamAcceptance({
+          input1Path: fixture.input1Path,
+          input2Path: fixture.input2Path,
+          outputPath: fixture.outputPath,
+          resultPath: fixture.resultPath,
+        })).resolves.toMatchObject({ passed: true })
+      } finally {
+        if (originalFfmpegPath === undefined) delete process.env.FFMPEG_PATH
+        else process.env.FFMPEG_PATH = originalFfmpegPath
+        if (originalRealFfmpeg === undefined) delete process.env.VIDEO_SEAM_REAL_FFMPEG
+        else process.env.VIDEO_SEAM_REAL_FFMPEG = originalRealFfmpeg
+        if (originalSilenceIntervals === undefined) delete process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS
+        else process.env.VIDEO_SEAM_TEST_SILENCE_INTERVALS = originalSilenceIntervals
+        await fs.rm(directory, { recursive: true, force: true })
+      }
+    },
+    30_000,
+  )
 })

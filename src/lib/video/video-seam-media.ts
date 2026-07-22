@@ -52,6 +52,18 @@ function ffmpegUnavailable(error: unknown): Error | null {
     : null
 }
 
+function isAudioComposeFailure(error: unknown): boolean {
+  const stderr = (error as { stderr?: unknown }).stderr
+  const detail = typeof stderr === 'string'
+    ? stderr
+    : Buffer.isBuffer(stderr)
+      ? stderr.toString('utf8')
+      : ''
+  return /\b(?:aformat|atrim|asetpts|atempo|anullsrc)\b/i.test(detail)
+    || /(?:stream specifier|input pad|output pad).*(?:\baudio\b|:a\b)/i.test(detail)
+    || /\baudio\b.*(?:filter|stream|concat|merge|trim|tempo)/i.test(detail)
+}
+
 function parseRational(raw: unknown): number | null {
   if (typeof raw !== 'string') return null
   const match = /^(\d+)\/(\d+)$/.exec(raw)
@@ -295,6 +307,9 @@ export function buildVideoSeamComposeCommand(params: {
   const input2Rotation = displayRotationFilter(plan.input2.displayRotationDegrees || 0)
   const input1Filter = input1Rotation ? `${input1Rotation},` : ''
   const input2Filter = input2Rotation ? `${input2Rotation},` : ''
+  const input2AudioStartSeconds = input2Endpoint / plan.input2.fps
+  const input2SourceAudioDurationSeconds = plan.retainedVideo2FrameCount / plan.input2.fps
+  const input2OutputAudioDurationSeconds = plan.retainedVideo2FrameCount / plan.outputFps
   const bridgeFilter = [
     `crop=${canvas.contentWidth}:${canvas.contentHeight}:${canvas.padLeft}:${canvas.padTop}`,
     `scale=${outputSize}:force_original_aspect_ratio=increase:flags=lanczos`,
@@ -316,8 +331,8 @@ export function buildVideoSeamComposeCommand(params: {
       : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds((input1Endpoint + 1) / plan.outputFps)}[a0]`,
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds(plan.centralSilenceSeconds)}[ac]`,
     plan.input2.hasAudio
-      ? `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=start=${formatSeconds(input2Endpoint / plan.input2.fps)},asetpts=N/SR/TB,atempo=${formatSeconds(plan.video2AudioTempoFactor)}[a2]`
-      : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds(plan.retainedVideo2FrameCount / plan.outputFps)}[a2]`,
+      ? `[2:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=start=${formatSeconds(input2AudioStartSeconds)}:duration=${formatSeconds(input2SourceAudioDurationSeconds)},asetpts=N/SR/TB,atempo=${formatSeconds(plan.video2AudioTempoFactor)},atrim=duration=${formatSeconds(input2OutputAudioDurationSeconds)},asetpts=N/SR/TB[a2]`
+      : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${formatSeconds(input2OutputAudioDurationSeconds)}[a2]`,
     '[a0][ac][a2]concat=n=3:v=0:a=1[aout]',
   ]
   const args = [
@@ -345,7 +360,12 @@ export async function composeVideoSeamOutput(
   try {
     await execFileAsync(command.executable, command.args, { windowsHide: true, maxBuffer: 1024 * 1024 * 8 })
   } catch (error) {
-    throw ffmpegUnavailable(error) || error
+    const unavailable = ffmpegUnavailable(error)
+    if (unavailable) throw unavailable
+    if (params.plan.audioPolicy !== 'silent' && isAudioComposeFailure(error)) {
+      throw new Error('VIDEO_SEAM_AUDIO_COMPOSE_FAILED', { cause: error })
+    }
+    throw error
   }
 }
 

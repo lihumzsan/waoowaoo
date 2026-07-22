@@ -17,6 +17,8 @@ const MINIMUM_ANCHOR_SSIM = 0.99
 const STATIC_PAIR_SSIM = 0.998
 const MAXIMUM_STATIC_RUN = 5
 const OUTPUT_AUDIO_SAMPLE_RATE = 48_000
+const AAC_BOUNDARY_TOLERANCE_SAMPLES = 4
+const AUDIO_TIMESTAMP_ROUNDING_TOLERANCE_SECONDS = 1 / OUTPUT_AUDIO_SAMPLE_RATE
 const execFileAsync = promisify(execFile)
 
 type VideoSeamAnchorRole = 'input1_pre' | 'input1_endpoint' | 'input2_endpoint' | 'input2_post'
@@ -401,26 +403,31 @@ async function verifyOutputAudio(params: {
     '-f', 'null', '-',
   ], 'VIDEO_SEAM_ACCEPTANCE_AUDIO_ANALYSIS_FAILED')
   const detectedIntervals = parseSilenceIntervals(result.stderr, params.outputDurationSeconds)
-  const audioSampleTolerance = 1 / OUTPUT_AUDIO_SAMPLE_RATE
+  const audioBoundaryTolerance = Math.min(
+    AAC_BOUNDARY_TOLERANCE_SAMPLES / OUTPUT_AUDIO_SAMPLE_RATE,
+    oneFrame,
+  )
   const centralIsSilent = detectedIntervals.some((interval) => (
-    interval.startSeconds <= expectedInterval.startSeconds + audioSampleTolerance
-    && interval.endSeconds >= expectedInterval.endSeconds - audioSampleTolerance
+    interval.startSeconds <= expectedInterval.startSeconds + audioBoundaryTolerance
+    && interval.endSeconds >= expectedInterval.endSeconds - audioBoundaryTolerance
   ))
   if (!centralIsSilent) throw new Error('VIDEO_SEAM_ACCEPTANCE_CENTRAL_AUDIO_NOT_SILENT')
 
   const windows = [
     params.plan.input1.hasAudio ? {
       startSeconds: expectedInterval.startSeconds - 0.5,
-      endSeconds: expectedInterval.startSeconds,
+      endSeconds: expectedInterval.startSeconds - audioBoundaryTolerance,
     } : null,
     params.plan.input2.hasAudio ? {
-      startSeconds: expectedInterval.endSeconds,
+      startSeconds: expectedInterval.endSeconds + audioBoundaryTolerance,
       endSeconds: expectedInterval.endSeconds + 0.5,
     } : null,
   ].filter((window): window is { startSeconds: number; endSeconds: number } => window !== null)
   if (windows.some((window) => window.startSeconds < 0
     || window.endSeconds > params.outputDurationSeconds
-    || detectedIntervals.some((interval) => overlapSeconds(interval, window) > audioSampleTolerance))) {
+    || detectedIntervals.some((interval) => (
+      overlapSeconds(interval, window) > AUDIO_TIMESTAMP_ROUNDING_TOLERANCE_SECONDS
+    )))) {
     throw new Error('VIDEO_SEAM_ACCEPTANCE_AUDIO_CONTEXT_FAILED')
   }
   return { expectedInterval, detectedIntervals }
