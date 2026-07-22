@@ -11,6 +11,14 @@ if (configuredDistDir && (configuredDistDir.startsWith('/') || configuredDistDir
 }
 
 const nextDistDir = configuredDistDir || '.next'
+const configuredTypeScriptConfig = process.env.NEXT_TSCONFIG_PATH?.trim() || ''
+if (configuredTypeScriptConfig && (
+  configuredTypeScriptConfig.startsWith('/')
+  || configuredTypeScriptConfig.includes('..')
+  || !configuredTypeScriptConfig.endsWith('.json')
+)) {
+  throw new Error('NEXT_TSCONFIG_PATH must be a relative project-local JSON file')
+}
 
 function sharedDependencyTurbopackRoot(): string | null {
   const projectRoot = process.cwd()
@@ -68,6 +76,7 @@ const globalFunctionTraceExcludes = [
 
 const nextConfig: NextConfig = {
   ...(configuredDistDir ? { distDir: configuredDistDir } : {}),
+  ...(configuredTypeScriptConfig ? { typescript: { tsconfigPath: configuredTypeScriptConfig } } : {}),
   ...(turbopackRoot ? { turbopack: { root: turbopackRoot } } : {}),
   // 已删除 ignoreBuildErrors / ignoreDuringBuilds，构建保持严格门禁
   // Next 15 的 allowedDevOrigins 是顶层配置，不属于 experimental

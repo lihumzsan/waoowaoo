@@ -16,7 +16,7 @@
 - **TG-06 — 关键目标必须有组合反证。** 适用 Golden 应覆盖通用模型作者 Choice、Choice 只提交当前决定、剧本 Revision 无确认门、Style Bible 默认无预览、多 Chapter 由 Primary 自主选择、`>180s` 不触发服务端分支、Bible/continuity/Chapter 独立。
 - **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、late/replay、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam。
 - **TG-08 — Logic 与 Conformance 有边界。** Logic 只验证非平凡纯函数、parser、resolver、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，禁止维护第二份 Task/Operation/Canvas/Resource 清单。
-- **TG-09 — Harness fail closed。** runtime identity、MySQL/Redis scope、端口、Next dist、上传和报告目录必须隔离；required case 缺失、skip/todo、浏览器异常、依赖不可用、付费调用或 Oracle 写入都显式失败。
+- **TG-09 — Harness fail closed。** runtime identity、MySQL/Redis scope、端口、Next dist、Next tsconfig、上传和报告目录必须隔离；Golden 为每个 runtime 生成忽略且可清理的独立 tsconfig，Next 不得回写仓库根 `tsconfig.json`。required case 缺失、skip/todo、浏览器异常、依赖不可用、付费调用或 Oracle 写入都显式失败。
 - **TG-10 — 纠正性证据必须 fail-before。** 同一断言必须能在 pre-fix 或受控真实故障下失败；mock X 再断言 X、检查文件存在或调用次数不算行为证明。
 - **TG-11 — Journey 同步。** Golden 覆盖的入口、生命周期、终态或禁止副作用变化时，同一变更必须更新 scenario、driver、Oracle 并执行 canonical command；不能执行只能报告未验证。
 - **TG-12 — 过程材料不持久化。** 临时历史矩阵和执行记录不进入仓库；长期有效结论压缩进模块历史回归。
@@ -57,6 +57,7 @@
 - 旧测试用 stream 延迟和固定 sleep 观察 processing 卡片，机器速度变化会制造假失败。当前成功由持久 Task/Resource 终态和只读 Oracle 裁决，时间只限定等待上界。
 - 旧阶段测试数量很多，但真实组合经常在更早阶段失败，文件存在被误当作覆盖。当前 required suite 必须真实执行且无 failed/skipped/todo；未运行范围明确列为盲区。
 - Golden 生成目录曾被 lint 当成源码，导致 `test:journey → verify:push` 顺序不稳定。当前 runtime identity 隔离 `.next-golden` 与 artifacts，并由 Git/lint 排除；过期本地缓存不能作为源码类型错误。
+- Next dev 会把每个动态 `.next-golden/<runtime>/types` 追加进它使用的 tsconfig；仅隔离 distDir 仍持续污染被追踪的根配置。当前每个 Golden runtime 生成唯一且忽略的根相对 tsconfig，预先包含精确 dist types 并在停止时清理，根 `tsconfig.json` 不再承担 Harness 运行状态。
 
 ## 修改检查表
 

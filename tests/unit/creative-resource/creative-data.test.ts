@@ -20,9 +20,7 @@ describe('Creative Resource editable data', () => {
         path: ['video', 'references'],
         value: [{
           $resourceRef: {
-            resourceId: 'resource:image',
             revisionId: 'revision:image',
-            fingerprint: 'fingerprint:image',
           },
         }],
       },
@@ -35,9 +33,7 @@ describe('Creative Resource editable data', () => {
           prompt: 'new',
           references: [{
             $resourceRef: {
-              resourceId: 'resource:image',
               revisionId: 'revision:image',
-              fingerprint: 'fingerprint:image',
             },
           }],
         },

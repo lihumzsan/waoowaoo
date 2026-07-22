@@ -7,6 +7,7 @@ export interface GoldenRuntimeIdentity {
   readonly coordinatorPort: number
   readonly artifactRoot: string
   readonly distDir: string
+  readonly tsconfigPath: string
   readonly uploadDir: string
 }
 
@@ -41,6 +42,7 @@ export function resolveGoldenRuntimeIdentity(
     coordinatorPort,
     artifactRoot: `artifacts/golden-journey/runs/${runtimeId}`,
     distDir: `.next-golden/${runtimeId}`,
+    tsconfigPath: `.tsconfig-golden-${runtimeId}.json`,
     uploadDir: `artifacts/golden-journey/runs/${runtimeId}/uploads`,
   }
 }
@@ -54,6 +56,7 @@ export function applyGoldenRuntimeIdentity(
   environment.GOLDEN_COORDINATOR_PORT = String(identity.coordinatorPort)
   environment.GOLDEN_ARTIFACT_ROOT = identity.artifactRoot
   environment.NEXT_DIST_DIR = identity.distDir
+  environment.NEXT_TSCONFIG_PATH = identity.tsconfigPath
   environment.UPLOAD_DIR = identity.uploadDir
 }
 

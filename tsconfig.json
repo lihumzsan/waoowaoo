@@ -31,34 +31,14 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next-golden/03a8db0e7e424e3a/types/**/*.ts",
-    ".next-golden/1415848ca7714790/types/**/*.ts",
-    ".next-golden/1d01a6de1707480f/types/**/*.ts",
-    ".next-golden/1e23fe346751454b/types/**/*.ts",
-    ".next-golden/68fea977c3ac42f4/types/**/*.ts",
-    ".next-golden/6bb51f35df754a7e/types/**/*.ts",
-    ".next-golden/7d639cca58154103/types/**/*.ts",
-    ".next-golden/8988fb7ba3324ce0/types/**/*.ts",
-    ".next-golden/8fbead585beb4497/types/**/*.ts",
-    ".next-golden/95a18a0e83af4be7/types/**/*.ts",
-    ".next-golden/975f3d4afc894364/types/**/*.ts",
-    ".next-golden/9ed7cf498ac44a59/types/**/*.ts",
-    ".next-golden/aeb5f22fb8e04bb9/types/**/*.ts",
-    ".next-golden/aefbd2776b76465a/types/**/*.ts",
-    ".next-golden/b187bd39f6444b94/types/**/*.ts",
-    ".next-golden/bbf47781c2fe405e/types/**/*.ts",
-    ".next-golden/cdd3e190c1584a35/types/**/*.ts",
-    ".next-golden/cf06b1d742344154/types/**/*.ts",
-    ".next-golden/d634b6720a7a4036/types/**/*.ts",
-    ".next-golden/eff0845e109d4a08/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts",
-    ".next-golden/1ac8d68a1e4a4c41/types/**/*.ts"
+    "next-env.d.ts"
   ],
   "exclude": [
     "node_modules",
     ".next",
+    ".next-golden",
     "scripts",
     "tmp"
   ]

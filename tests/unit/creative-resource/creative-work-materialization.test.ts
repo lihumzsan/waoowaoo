@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { compileCanonicalScreenplay } from '@/lib/canonical-screenplay'
 import { planCreativeWorkResourceMaterialization } from '@/lib/creative-resource/creative-work-materialization'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import {
   CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkOutputSchemas,
+  type CreativeWorkRequest,
 } from '@/lib/creative-worker'
+
+type TestOutputKind = 'canonical_screenplay' | 'style_bible' | 'chapter_plan' | 'asset_manifest'
 
 const styleBible = {
   rawUserStyle: null,
@@ -13,11 +17,21 @@ const styleBible = {
   assetImageStyle: {
     lighting: 'Soft directional light',
     texture: 'Fibrous paper',
-    composition: 'Layered theatrical depth',
   },
 }
 
-function taskPayload(outputKind: 'screenplay_draft' | 'style_bible' | 'chapter_plan') {
+function taskPayload(
+  outputKind: TestOutputKind,
+  sourceMaterials: CreativeWorkRequest['context']['sourceMaterials'] = [{
+    label: 'Exact source',
+    kind: 'text',
+    content: 'source text',
+    provenance: {
+      kind: 'resource',
+      revisionId: 'source-revision',
+    },
+  }],
+) {
   return {
     protocol: CREATIVE_WORK_TASK_PROTOCOL,
     requestKey: 'request-1',
@@ -26,17 +40,7 @@ function taskPayload(outputKind: 'screenplay_draft' | 'style_bible' | 'chapter_p
       goal: 'Create the requested work.',
       context: {
         userRequest: 'Please create it.',
-        sourceMaterials: [{
-          label: 'Exact source',
-          kind: 'text',
-          content: 'source text',
-          provenance: {
-            kind: 'resource',
-            resourceId: 'source-resource',
-            revisionId: 'source-revision',
-            fingerprint: 'source-fingerprint',
-          },
-        }],
+        sourceMaterials,
         constraints: [],
       },
       productionContext: { video: null },
@@ -54,7 +58,7 @@ function taskPayload(outputKind: 'screenplay_draft' | 'style_bible' | 'chapter_p
 }
 
 function taskResult(
-  outputKind: 'screenplay_draft' | 'style_bible' | 'chapter_plan',
+  outputKind: TestOutputKind,
   output: Record<string, unknown>,
 ) {
   const lifecycleProjection = {
@@ -111,6 +115,7 @@ describe('Creative Task Resource materialization planning', () => {
       result: taskResult('style_bible', output),
     })
 
+    expect(plan.resourceScope).toBe('project')
     expect(plan.outputs).toHaveLength(4)
     expect(plan.outputs.map((candidate) => candidate.candidateKey)).toEqual([
       'ink',
@@ -143,40 +148,59 @@ describe('Creative Task Resource materialization planning', () => {
   })
 
   it('projects a screenplay as one exact source-script revision plan with Task lineage', () => {
-    const output = creativeWorkOutputSchemas.screenplay_draft.parse({
-      kind: 'screenplay_draft',
+    const screenplayText = 'INT. STATION — NIGHT\nThe doors close behind the traveler.'
+    const output = creativeWorkOutputSchemas.canonical_screenplay.parse({
+      kind: 'canonical_screenplay',
       title: 'The Station',
       logline: null,
       synopsis: 'A traveler enters an abandoned station.',
-      screenplay: 'INT. STATION — NIGHT\nThe doors close behind the traveler.',
+      screenplayText,
       estimatedDurationSeconds: 90,
+      source: { kind: 'generated', label: 'Creative Task' },
+      entities: {
+        characters: [{ canonicalName: 'Traveler', aliases: [], description: 'A traveler.' }],
+        locations: [{ canonicalName: 'Station', aliases: [], description: 'An abandoned station.' }],
+        props: [],
+      },
+      scenes: [{
+        order: 1,
+        heading: 'INT. STATION — NIGHT',
+        summary: 'The traveler enters.',
+        sourceStart: 0,
+        sourceEnd: screenplayText.length,
+        locationCanonicalName: 'Station',
+        characterCanonicalNames: ['Traveler'],
+        propCanonicalNames: [],
+      }],
       assumptions: [],
       openQuestions: [],
     })
 
     const plan = planCreativeWorkResourceMaterialization({
       taskId: 'screenplay-task',
-      payload: taskPayload('screenplay_draft'),
-      result: taskResult('screenplay_draft', output),
+      payload: taskPayload('canonical_screenplay'),
+      result: taskResult('canonical_screenplay', output),
     })
 
     expect(plan).toMatchObject({
+      resourceScope: 'project',
       inputFingerprint: 'input-fingerprint',
       modelKey: 'provider:model',
       toolCallId: 'tool-call-1',
       inputs: [{
-        resourceId: 'source-resource',
         revisionId: 'source-revision',
-        fingerprint: 'source-fingerprint',
       }],
       outputs: [{
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SOURCE_SCRIPT,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
         sourceType: 'CreativeWorkResult',
         sourceId: 'screenplay-task',
         candidateKey: null,
         content: {
-          kind: 'text',
-          text: 'INT. STATION — NIGHT\nThe doors close behind the traveler.',
+          kind: 'structured',
+          data: expect.objectContaining({
+            kind: 'canonical_screenplay',
+            screenplayText,
+          }),
         },
       }],
     })
@@ -215,10 +239,9 @@ describe('Creative Task Resource materialization planning', () => {
     })
 
     expect(plan).toMatchObject({
+      resourceScope: 'episode',
       inputs: [{
-        resourceId: 'source-resource',
         revisionId: 'source-revision',
-        fingerprint: 'source-fingerprint',
       }],
       outputs: [{
         schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
@@ -227,5 +250,89 @@ describe('Creative Task Resource materialization planning', () => {
         content: { kind: 'structured', data: output },
       }],
     })
+  })
+
+  it('materializes one exact-coverage asset manifest from canonical screenplay and Style revisions without generating images', () => {
+    const screenplayText = 'INT. STATION — NIGHT\nThe traveler holds a letter.'
+    const screenplay = compileCanonicalScreenplay({
+      kind: 'canonical_screenplay',
+      title: 'The Station',
+      logline: null,
+      synopsis: 'A traveler arrives with a letter.',
+      screenplayText,
+      estimatedDurationSeconds: 60,
+      source: { kind: 'generated', label: 'Creative Task' },
+      entities: {
+        characters: [{ canonicalName: 'Traveler', aliases: [], description: 'A tired traveler.' }],
+        locations: [{ canonicalName: 'Station', aliases: [], description: 'An abandoned station.' }],
+        props: [{ canonicalName: 'Letter', aliases: [], description: 'An unopened letter.' }],
+      },
+      scenes: [{
+        order: 1,
+        heading: 'INT. STATION — NIGHT',
+        summary: 'The traveler arrives.',
+        sourceStart: 0,
+        sourceEnd: screenplayText.length,
+        locationCanonicalName: 'Station',
+        characterCanonicalNames: ['Traveler'],
+        propCanonicalNames: ['Letter'],
+      }],
+      assumptions: [],
+      openQuestions: [],
+    })
+    const entities = [
+      ...screenplay.entities.characters,
+      ...screenplay.entities.locations,
+      ...screenplay.entities.props,
+    ]
+    const output = creativeWorkOutputSchemas.asset_manifest.parse({
+      kind: 'asset_manifest',
+      overview: 'Exact registered production assets.',
+      assets: entities.map((entity) => ({
+        canonicalEntity: { entityId: entity.entityId, kind: entity.kind },
+        title: entity.canonicalName,
+        stableDescription: entity.description,
+        generationPrompt: `Styled design for ${entity.canonicalName}`,
+        negativePrompt: null,
+        referenceRequirements: [],
+        continuityRequirements: [],
+      })),
+      assumptions: [],
+      warnings: [],
+    })
+    const plan = planCreativeWorkResourceMaterialization({
+      taskId: 'asset-manifest-task',
+      payload: taskPayload('asset_manifest', [
+        {
+          label: 'Canonical screenplay',
+          kind: 'structured',
+          content: JSON.stringify(screenplay),
+          provenance: { kind: 'resource', revisionId: 'screenplay-r1' },
+        },
+        {
+          label: 'Style Bible',
+          kind: 'structured',
+          content: JSON.stringify(styleBible),
+          provenance: { kind: 'resource', revisionId: 'style-r1' },
+        },
+      ]),
+      result: taskResult('asset_manifest', output),
+    })
+
+    expect(plan).toMatchObject({
+      resourceScope: 'project',
+      inputs: [{ revisionId: 'screenplay-r1' }, { revisionId: 'style-r1' }],
+      outputs: [{
+        schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
+        sourceType: 'CreativeWorkResult',
+        sourceId: 'asset-manifest-task',
+        content: { kind: 'structured', data: output },
+        generationOptions: {
+          canonicalScreenplayRevisionId: 'screenplay-r1',
+          styleBibleRevisionId: 'style-r1',
+        },
+      }],
+    })
+    expect(JSON.stringify(plan)).not.toContain('imageGeneration')
   })
 })

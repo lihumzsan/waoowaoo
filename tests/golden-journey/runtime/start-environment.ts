@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -64,6 +64,7 @@ function baseEnvironment(
     STORAGE_TYPE: 'local',
     UPLOAD_DIR: RUNTIME_IDENTITY.uploadDir,
     NEXT_DIST_DIR: RUNTIME_IDENTITY.distDir,
+    NEXT_TSCONFIG_PATH: RUNTIME_IDENTITY.tsconfigPath,
     NEXTAUTH_URL: `http://127.0.0.1:${APP_PORT}`,
     NEXTAUTH_SECRET: 'golden-journey-nextauth-secret',
     TRUSTED_PROXY_HOPS: '1',
@@ -88,6 +89,30 @@ function baseEnvironment(
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost',
   }
+}
+
+async function writeGoldenTypeScriptConfig(): Promise<void> {
+  await writeFile(
+    path.resolve(process.cwd(), RUNTIME_IDENTITY.tsconfigPath),
+    `${JSON.stringify({
+      extends: './tsconfig.json',
+      compilerOptions: {
+        incremental: true,
+        tsBuildInfoFile: `${RUNTIME_IDENTITY.distDir}/tsconfig.tsbuildinfo`,
+      },
+      include: [
+        'next-env.d.ts',
+        'src/**/*.ts',
+        'src/**/*.tsx',
+        `${RUNTIME_IDENTITY.distDir}/types/**/*.ts`,
+      ],
+      exclude: ['node_modules', '.next', 'scripts', 'tmp'],
+    }, null, 2)}\n`,
+  )
+}
+
+async function removeGoldenTypeScriptConfig(): Promise<void> {
+  await rm(path.resolve(process.cwd(), RUNTIME_IDENTITY.tsconfigPath), { force: true })
 }
 
 function runSetup(command: string, args: readonly string[], env: NodeJS.ProcessEnv): void {
@@ -206,6 +231,7 @@ async function startCoordinator(input: {
 
 async function startEnvironment(onShutdown: () => void): Promise<GoldenEnvironmentState> {
   await mkdir(ARTIFACT_ROOT, { recursive: true })
+  await writeGoldenTypeScriptConfig()
   const serviceScope = createGoldenTestServiceScope()
   const shutdownToken = randomUUID()
   startupServiceScope = serviceScope
@@ -283,6 +309,7 @@ async function startEnvironment(onShutdown: () => void): Promise<GoldenEnvironme
       media?.close(),
     ].filter((candidate): candidate is Promise<void> => candidate !== undefined))
     stopTestServices(testServices?.scope ?? serviceScope)
+    await removeGoldenTypeScriptConfig()
     throw error
   }
 }
@@ -304,6 +331,7 @@ async function stopEnvironment(state: GoldenEnvironmentState): Promise<void> {
   ])
   stopTestServices(state.testServices.scope)
   await new Promise<void>((resolve) => state.coordinator.close(() => resolve()))
+  await removeGoldenTypeScriptConfig()
 }
 
 async function main(): Promise<void> {

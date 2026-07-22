@@ -16,10 +16,14 @@ export const GOLDEN_FREEFORM_AUDIO_REQUEST = '根据成功视频生成一段配�
 export const GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST = '从空项目直接生成一个视频'
 export const GOLDEN_FREEFORM_ADOPT_REQUEST = '选择第二张图片作为主视觉'
 export const GOLDEN_FREEFORM_SCREENPLAY_REQUEST = '创作一部约240秒、全程保持单一连续场景的完整剧本'
+export const GOLDEN_FREEFORM_BIBLE_REQUEST = '基于当前剧本生成一份全项目可复用的 Edit Bible'
+export const GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST = '为当前 Episode 采用刚才的剧本和 Edit Bible'
 export const GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST = '为当前项目设计一份文字 Style Bible，不要生成预览图'
 export const GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST = '用一张选择卡询问我是否采用刚才的 Style Bible，只处理这个当前决定'
 export const GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST = '现在为了并行制作和失败恢复，把当前剧本规划为两个可独立执行的 Chapter'
 export const GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST = '采用刚才的 Chapter 规划作为当前制作单元'
+export const GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST = '基于同一剧本重新生成一份新的双 Chapter 规划'
+export const GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST = '采用重新规划后的双 Chapter 作为当前制作单元'
 export const GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST = '对两个当前 Chapter 并行执行连续性分析'
 export const GOLDEN_STOP_REPLY_REQUEST = '停止当前 AI 回复验证'
 export const GOLDEN_STOP_RECOVERY_REQUEST = '取消后新对话恢复验证'
@@ -34,10 +38,14 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
+  GOLDEN_FREEFORM_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
+  GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
   GOLDEN_STOP_REPLY_REQUEST,
   GOLDEN_STOP_RECOVERY_REQUEST,
@@ -193,15 +201,9 @@ function resourceReferences(
   return listedResourceRecords(request).flatMap((resource) => {
     if (resource.mediaType !== mediaType || resource.status !== 'ready') return []
     const revision = asRecord(resource.headRevision)
-    if (
-      typeof resource.resourceId !== 'string'
-      || typeof revision?.revisionId !== 'string'
-      || typeof revision.fingerprint !== 'string'
-    ) return []
+    if (typeof revision?.revisionId !== 'string') return []
     return [{
-      resourceId: resource.resourceId,
       revisionId: revision.revisionId,
-      fingerprint: revision.fingerprint,
       role: 'reference',
     }]
   })
@@ -216,33 +218,27 @@ function resourceBySchema(
   )) ?? null
 }
 
+function latestResourceBySchema(
+  request: GoldenChatCompletionRequest,
+  schemaId: string,
+): Record<string, unknown> | null {
+  return listedResourceRecords(request).filter((resource) => (
+    resource.schemaId === schemaId && resource.status === 'ready'
+  )).at(-1) ?? null
+}
+
 function exactResourceRevision(resource: Record<string, unknown> | null): {
-  resourceId: string
   revisionId: string
-  fingerprint: string
 } {
   const revision = asRecord(resource?.headRevision)
   if (
-    typeof resource?.resourceId !== 'string'
-    || typeof revision?.revisionId !== 'string'
-    || typeof revision.fingerprint !== 'string'
+    typeof revision?.revisionId !== 'string'
   ) {
     throw new Error('GOLDEN_EXACT_RESOURCE_REVISION_MISSING')
   }
   return {
-    resourceId: resource.resourceId,
     revisionId: revision.revisionId,
-    fingerprint: revision.fingerprint,
   }
-}
-
-function resourceText(resource: Record<string, unknown> | null): string {
-  const revision = asRecord(resource?.headRevision)
-  const content = asRecord(revision?.content)
-  if (content?.kind !== 'text' || typeof content.text !== 'string') {
-    throw new Error('GOLDEN_TEXT_RESOURCE_CONTENT_MISSING')
-  }
-  return content.text
 }
 
 function failedResourceIds(request: GoldenChatCompletionRequest): readonly string[] {
@@ -285,6 +281,12 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   if (instruction.text.includes(GOLDEN_FREEFORM_SCREENPLAY_REQUEST)) {
     return choose('delegate_creative_work')
   }
+  if (instruction.text.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)) {
+    return called.has('list_resources') ? choose('delegate_creative_work') : choose('list_resources')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)) {
+    return called.has('list_resources') ? choose('adopt_bible') : choose('list_resources')
+  }
   if (instruction.text.includes(GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)) {
     return choose('delegate_creative_work')
   }
@@ -298,6 +300,12 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
     return called.has('get_project_context') ? choose('delegate_creative_work') : choose('get_project_context')
   }
   if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)) {
+    return called.has('list_resources') ? choose('adopt_chapters') : choose('list_resources')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST)) {
+    return called.has('list_resources') ? choose('delegate_creative_work') : choose('list_resources')
+  }
+  if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST)) {
     return called.has('list_resources') ? choose('adopt_chapters') : choose('list_resources')
   }
   return null
@@ -425,7 +433,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
         source: 'requests',
         requests: [{
           requestKey: 'golden-screenplay-draft',
-          outputKind: 'screenplay_draft',
+          outputKind: 'canonical_screenplay',
           goal: 'Write one complete 240-second screenplay in one uninterrupted dramatic context.',
           targetDurationSeconds: 240,
           context: {
@@ -435,6 +443,28 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
               'Keep one continuous setting and dramatic context.',
               'Do not create or imply Chapter production units.',
             ],
+          },
+        }],
+      },
+    }
+  }
+  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)) {
+    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplay = exactResourceRevision(screenplayResource)
+    return {
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'golden-edit-bible',
+          outputKind: 'edit_bible_bundle',
+          goal: 'Build one production Bible whose canon can be adopted by any Episode in this Project.',
+          context: {
+            userRequest: GOLDEN_FREEFORM_BIBLE_REQUEST,
+            sourceMaterials: [{
+              kind: 'resource',
+              revisionId: screenplay.revisionId,
+            }],
+            constraints: ['Preserve exact source ranges and project-wide canon.'],
           },
         }],
       },
@@ -458,18 +488,29 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'list_resources' && (
-    instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)
+    instruction.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)
+    || instruction.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)
+    || instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)
     || instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)
     || instruction.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)
+    || instruction.includes(GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST)
+    || instruction.includes(GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST)
   )) {
     return { mediaType: 'text', status: 'ready', limit: 20 }
+  }
+  if (toolName === 'adopt_bible' && instruction.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)) {
+    return {
+      screenplay: exactResourceRevision(resourceBySchema(request, 'project.canonical_screenplay')),
+      bible: exactResourceRevision(latestResourceBySchema(request, 'project.edit_bible')),
+      expectedVersion: null,
+    }
   }
   if (toolName === 'request_choice' && instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)) {
     const style = exactResourceRevision(resourceBySchema(request, 'project.style_bible'))
     return {
       subject: {
         kind: 'resource_revisions',
-        revisions: [{ resourceId: style.resourceId, revisionId: style.revisionId }],
+        revisions: [{ revisionId: style.revisionId }],
       },
       card: {
         mode: 'select',
@@ -504,7 +545,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.source_script')
+    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
     const screenplay = exactResourceRevision(screenplayResource)
     return {
       delegation: {
@@ -517,16 +558,37 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           context: {
             userRequest: GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
             sourceMaterials: [{
-              label: 'Exact screenplay revision',
-              kind: 'text',
-              content: resourceText(screenplayResource),
-              provenance: { kind: 'resource', ...screenplay },
+              kind: 'resource',
+              revisionId: screenplay.revisionId,
             }],
             constraints: [
               'Create exactly two ordered, non-overlapping production units.',
               'Each Chapter must be at most 180 seconds.',
               'Do not reinterpret the Chapter boundary as a story discontinuity.',
             ],
+          },
+        }],
+      },
+    }
+  }
+  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST)) {
+    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplay = exactResourceRevision(screenplayResource)
+    return {
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'golden-chapter-plan-v2',
+          outputKind: 'chapter_plan',
+          goal: 'Create a replacement two-Chapter production plan with fresh narrative unit identities.',
+          targetDurationSeconds: 240,
+          context: {
+            userRequest: GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST,
+            sourceMaterials: [{
+              kind: 'resource',
+              revisionId: screenplay.revisionId,
+            }],
+            constraints: ['Create exactly two ordered units of at most 180 seconds each.'],
           },
         }],
       },
@@ -554,10 +616,16 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.source_script')
+    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
     return {
       screenplay: exactResourceRevision(screenplayResource),
       chapterPlan: exactResourceRevision(resourceBySchema(request, 'project.chapter_plan')),
+    }
+  }
+  if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST)) {
+    return {
+      screenplay: exactResourceRevision(resourceBySchema(request, 'project.canonical_screenplay')),
+      chapterPlan: exactResourceRevision(latestResourceBySchema(request, 'project.chapter_plan')),
     }
   }
   const tool = request.tools?.find((candidate) => candidate.function.name === toolName)

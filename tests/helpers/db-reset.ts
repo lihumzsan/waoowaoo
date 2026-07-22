@@ -1,9 +1,16 @@
 import { prisma } from './prisma'
 
+async function resetCreativeResourceState() {
+  await prisma.creativeResourceBinding.deleteMany()
+  await prisma.creativeResourceLineage.deleteMany()
+  await prisma.creativeResource.deleteMany()
+}
+
 export async function resetBillingState() {
   await prisma.balanceTransaction.deleteMany()
   await prisma.balanceFreeze.deleteMany()
   await prisma.usageCost.deleteMany()
+  await resetCreativeResourceState()
   await prisma.taskEvent.deleteMany()
   await prisma.task.deleteMany()
   await prisma.inviteRedemption.deleteMany()
@@ -17,6 +24,7 @@ export async function resetBillingState() {
 }
 
 export async function resetTaskState() {
+  await resetCreativeResourceState()
   await prisma.taskEvent.deleteMany()
   await prisma.task.deleteMany()
 }

@@ -22,7 +22,6 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
       result: {
         resourceId: 'resource-1',
         revisionId: 'revision-1',
-        fingerprint: 'fingerprint-1',
       },
     }],
     terminalStatus: 'completed',

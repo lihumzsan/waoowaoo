@@ -337,8 +337,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_agent_execution_handoffs WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT c.* FROM project_agent_continuation_checkpoints c JOIN project_agent_waits w ON w.id = c.waitId WHERE w.projectId = ? AND w.episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_agent_events WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM tasks WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT e.* FROM task_events e JOIN tasks t ON t.id = e.taskId WHERE t.projectId = ? AND t.episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM tasks WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT e.* FROM task_events e JOIN tasks t ON t.id = e.taskId WHERE t.projectId = ? AND (t.episodeId = ? OR t.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM approval_grants WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM operation_executions WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, `
@@ -360,7 +360,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT r.* FROM creative_resource_revisions r JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT l.* FROM creative_resource_lineage l JOIN creative_resource_revisions r ON r.id = l.outputRevisionId JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM creative_resource_bindings WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT id, episodeId, version, normalizedText, sourceResourceId, sourceRevisionId, sourceFingerprint, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
+      queryRows(connection, 'SELECT id, episodeId, version, normalizedText, sourceResourceId, sourceRevisionId, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_bibles WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
     ])

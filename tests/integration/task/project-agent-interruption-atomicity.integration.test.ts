@@ -114,15 +114,15 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     data: {
       userId: user.id,
       projectId: project.id,
-      episodeId: episode.id,
-      scopeKind: 'episode',
-      scopeId: episode.id,
+      episodeId: null,
+      scopeKind: 'project',
+      scopeId: project.id,
       mediaType: 'text',
       schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
       name: 'Restrained visual direction',
       status: 'ready',
       originKey: `${TEST_PREFIX}style-resource:${episode.id}`,
-      sourceType: 'CreativeWorkStyleBible',
+      sourceType: 'CreativeWorkResult',
       sourceId: `${task.id}:restrained`,
       candidateSetId: task.id,
       candidateIndex: 0,
@@ -132,12 +132,16 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     data: {
       resourceId: resource.id,
       revision: 1,
-      fingerprint: 'f'.repeat(64),
       contentJson: {
+        rawUserStyle: null,
         styleSummary: 'Restrained monochrome realism',
         visualStyle: 'Quiet, observational, low-saturation realism.',
+        assetImageStyle: {
+          lighting: 'Soft overcast daylight with restrained contrast.',
+          texture: 'Natural film grain and tactile practical surfaces.',
+        },
       },
-      sourceType: 'CreativeWorkStyleBible',
+      sourceType: 'CreativeWorkResult',
       sourceId: task.id,
       sourceRevision: 'restrained',
       modelKey: 'golden:creative-model',
@@ -178,9 +182,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     when: { kind: 'option' as const, groupKey: 'style', optionValue: revision.id },
     operationId: 'adopt_style_bible',
     input: {
-      resourceId: resource.id,
-      revisionId: revision.id,
-      fingerprint: params.validCommitment ? revision.fingerprint : '0'.repeat(64),
+      revisionId: params.validCommitment ? revision.id : `${revision.id}:missing`,
       expectedVersion: null,
     },
   }]
@@ -190,7 +192,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     userId: user.id,
     request: {
       kind: 'resource_revisions',
-      revisions: [{ resourceId: resource.id, revisionId: revision.id }],
+      revisions: [{ revisionId: revision.id }],
     },
     card,
     commitments,

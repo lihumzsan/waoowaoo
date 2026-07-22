@@ -184,12 +184,12 @@ describe('project agent toolset conformance', () => {
     })
     expect(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).toEqual([
       'generic.text',
-      'project.source_script',
+      'project.canonical_screenplay',
       'project.edit_bible',
       'project.chapter_plan',
       'project.continuity_analysis',
       'project.style_bible',
-      'project.asset_prompt_set',
+      'project.asset_manifest',
       'project.video_prompt_set',
       'project.music_direction',
       'project.creative_review',
@@ -241,7 +241,7 @@ describe('project agent toolset conformance', () => {
       content: { kind: 'single', text: 'One line.' },
     }).success).toBe(true)
     expect(registry.create_text.inputSchema.safeParse({
-      schemaId: 'project.source_script',
+      schemaId: 'project.canonical_screenplay',
       prompt: 'Write a screenplay.',
       content: { kind: 'single', text: 'INT. ROOM - DAY' },
     }).success).toBe(false)
@@ -310,27 +310,22 @@ describe('project agent toolset conformance', () => {
     ])
     expect(registry.adopt_bible.inputSchema.safeParse({
       screenplay: {
-        resourceId: 'resource:screenplay',
         revisionId: 'revision:screenplay',
-        fingerprint: 'fingerprint:screenplay',
       },
       bible: {
-        resourceId: 'resource:bible',
         revisionId: 'revision:bible',
-        fingerprint: 'fingerprint:bible',
       },
       expectedVersion: null,
     }).success).toBe(true)
 
     expect(registry.adopt_style_bible.inputSchema.safeParse({
-      resourceId: 'resource:style',
       revisionId: 'revision:style',
-      fingerprint: 'fingerprint:style',
       expectedVersion: null,
     }).success).toBe(true)
     expect(registry.adopt_style_bible.inputSchema.safeParse({
       resourceId: 'resource:style',
       revisionId: 'revision:style',
+      expectedVersion: null,
     }).success).toBe(false)
   })
 
@@ -409,6 +404,39 @@ describe('project agent toolset conformance', () => {
     expect(operation.inputSchema.safeParse({
       delegation: { source: 'requests', requests: [] },
     }).success).toBe(false)
+    const exactResourceRequest = {
+      delegation: {
+        source: 'requests' as const,
+        requests: [{
+          requestKey: 'canonicalize-provided-script',
+          outputKind: 'canonical_screenplay' as const,
+          goal: 'Canonicalize the supplied screenplay.',
+          context: {
+            userRequest: 'Use my screenplay.',
+            sourceMaterials: [{ kind: 'resource' as const, revisionId: 'revision:provided-script' }],
+            constraints: [],
+          },
+        }],
+      },
+    }
+    expect(operation.inputSchema.safeParse(exactResourceRequest).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      ...exactResourceRequest,
+      delegation: {
+        ...exactResourceRequest.delegation,
+        requests: [{
+          ...exactResourceRequest.delegation.requests[0],
+          context: {
+            ...exactResourceRequest.delegation.requests[0]?.context,
+            sourceMaterials: [{
+              kind: 'resource',
+              revisionId: 'revision:provided-script',
+              content: 'Caller-authored content must not be accepted for a Resource source.',
+            }],
+          },
+        }],
+      },
+    }).success).toBe(false)
     expect(operation.inputSchema.safeParse({
       delegation: {
         source: 'chapters',
@@ -471,6 +499,19 @@ describe('project agent toolset conformance', () => {
     expect(Object.values(creativeWorkOutputRegistry).every((definition) => (
       !('requiredSkillIds' in definition)
     ))).toBe(true)
+    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
+      [kind, definition.resourceScope]
+    )))).toEqual({
+      canonical_screenplay: 'project',
+      edit_bible_bundle: 'project',
+      chapter_plan: 'episode',
+      continuity_analysis: 'episode',
+      style_bible: 'project',
+      asset_manifest: 'project',
+      video_prompt_set: 'episode',
+      music_direction: 'episode',
+      creative_review: 'episode',
+    })
 
     const videoOutput = {
       kind: 'video_prompt_set',

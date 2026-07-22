@@ -31,14 +31,33 @@ const GOLDEN_SCREENPLAY = [
   'She closes the dome, breaks the recording mechanism, and remains in the same room until dawn.',
 ].join('')
 
-function buildGoldenScreenplayDraft(): unknown {
+function buildGoldenCanonicalScreenplay(): unknown {
   return {
-    kind: 'screenplay_draft',
+    kind: 'canonical_screenplay',
     title: 'The Red Observatory',
     logline: 'A lone astronomer confronts her moving reflection during one uninterrupted night.',
     synopsis: 'One continuous observatory scene resolves a supernatural warning without a location change.',
-    screenplay: GOLDEN_SCREENPLAY,
+    screenplayText: GOLDEN_SCREENPLAY,
     estimatedDurationSeconds: 240,
+    source: { kind: 'generated', label: 'Golden Journey request' },
+    entities: {
+      characters: [{ canonicalName: 'Mara', aliases: [], description: 'A lone astronomer.' }],
+      locations: [{ canonicalName: 'Observatory', aliases: [], description: 'A circular observatory.' }],
+      props: [
+        { canonicalName: 'Telescope', aliases: [], description: 'A brass telescope.' },
+        { canonicalName: 'Warning', aliases: [], description: 'A handwritten warning.' },
+      ],
+    },
+    scenes: [{
+      order: 1,
+      heading: 'INT. OBSERVATORY - NIGHT',
+      summary: 'Mara confronts the observatory recording.',
+      sourceStart: 0,
+      sourceEnd: GOLDEN_SCREENPLAY.length,
+      locationCanonicalName: 'Observatory',
+      characterCanonicalNames: ['Mara'],
+      propCanonicalNames: ['Telescope', 'Warning'],
+    }],
     assumptions: ['The requested 240 seconds remain one continuous dramatic context.'],
     openQuestions: [],
   }
@@ -56,7 +75,6 @@ function buildGoldenStyleBible(): unknown {
         assetImageStyle: {
           lighting: 'Low-key moonlight with a single controlled red practical accent.',
           texture: 'Visible cold-press paper grain and dry-brush shadow edges.',
-          composition: 'Architectural wide frames with the protagonist isolated near the optical axis.',
         },
       },
     },
@@ -90,6 +108,35 @@ function buildGoldenChapterPlan(): unknown {
     assumptions: ['Chapter boundaries are production units, not a change to story continuity.'],
     warnings: [],
   }
+}
+
+function buildGoldenEditBible(schema: unknown): unknown {
+  const output = generateGoldenStructuredValue(schema)
+  const outputRecord = asRecord(output)
+  const bundle = asRecord(outputRecord?.bundle)
+  if (!bundle) return output
+
+  const sourceAnchor = {
+    startBlockId: 'p0001',
+    startQuote: 'INT. OBSERVATORY - NIGHT',
+    endBlockId: 'p0001',
+    endQuote: 'Mara crosses the silent circular room',
+  }
+  const beatSheet = asRecord(bundle.beatSheet)
+  if (Array.isArray(beatSheet?.beats)) {
+    for (const beat of beatSheet.beats) {
+      const beatRecord = asRecord(beat)
+      if (beatRecord) beatRecord.sourceAnchor = sourceAnchor
+    }
+  }
+  const emotionalCurve = asRecord(bundle.emotionalCurve)
+  if (Array.isArray(emotionalCurve?.cues)) {
+    for (const cue of emotionalCurve.cues) {
+      const cueRecord = asRecord(cue)
+      if (cueRecord) cueRecord.sourceAnchor = sourceAnchor
+    }
+  }
+  return output
 }
 
 function selectSchemaBranch(schema: Record<string, unknown>): unknown {
@@ -154,7 +201,8 @@ export function generateGoldenStructuredValue(schemaValue: unknown): unknown {
 export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
   const schema = readSchemaFromResponseFormat(responseFormat)
   if (!schema) return null
-  if (schemaContainsConst(schema, 'screenplay_draft')) return JSON.stringify(buildGoldenScreenplayDraft())
+  if (schemaContainsConst(schema, 'canonical_screenplay')) return JSON.stringify(buildGoldenCanonicalScreenplay())
+  if (schemaContainsConst(schema, 'edit_bible_bundle')) return JSON.stringify(buildGoldenEditBible(schema))
   if (schemaContainsConst(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
   if (schemaContainsConst(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))

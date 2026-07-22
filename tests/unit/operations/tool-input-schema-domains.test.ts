@@ -12,22 +12,16 @@ describe('tool input schema domain conformance', () => {
 
     expect(operation.inputSchema.safeParse({
       screenplay: {
-        resourceId: 'screenplay-resource-1',
         revisionId: 'screenplay-revision-1',
-        fingerprint: 'screenplay-fingerprint-1',
       },
       bible: {
-        resourceId: 'bible-resource-1',
         revisionId: 'bible-revision-1',
-        fingerprint: 'bible-fingerprint-1',
       },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation.inputSchema.safeParse({
       bible: {
-        resourceId: 'bible-resource-1',
         revisionId: 'bible-revision-1',
-        fingerprint: 'bible-fingerprint-1',
       },
     }).success).toBe(false)
   })
@@ -37,14 +31,10 @@ describe('tool input schema domain conformance', () => {
 
     expect(operation.inputSchema.safeParse({
       screenplay: {
-        resourceId: 'screenplay-resource-1',
         revisionId: 'screenplay-revision-1',
-        fingerprint: 'screenplay-fingerprint-1',
       },
       chapterPlan: {
-        resourceId: 'chapter-plan-resource-1',
         revisionId: 'chapter-plan-revision-1',
-        fingerprint: 'chapter-plan-fingerprint-1',
       },
     }).success).toBe(true)
     expect(operation.inputSchema.safeParse({}).success).toBe(false)

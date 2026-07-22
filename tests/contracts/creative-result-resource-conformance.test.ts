@@ -1,16 +1,32 @@
 import { describe, expect, it } from 'vitest'
+import { createAssistantCreativeAssetOperations } from '@/lib/operations/domains/assistant/creative-asset-ops'
 import { createAssistantCreativeBibleOperations } from '@/lib/operations/domains/assistant/creative-bible-ops'
 import { createAssistantCreativeStyleOperations } from '@/lib/operations/domains/assistant/creative-style-ops'
 import { createCreativeResourceOperations } from '@/lib/operations/domains/creative-resource/resource-ops'
 
 describe('creative result Resource conformance', () => {
+  it('adopts an asset manifest by one exact revision without accepting caller-supplied content identity', () => {
+    const operation = createAssistantCreativeAssetOperations().adopt_asset_manifest
+    expect(operation).toBeDefined()
+    expect(operation?.inputSchema.safeParse({
+      revisionId: 'asset-manifest-r1',
+      expectedVersion: null,
+    }).success).toBe(true)
+    expect(operation?.inputSchema.safeParse({
+      resourceId: 'asset-manifest-resource',
+      revisionId: 'asset-manifest-r1',
+      fingerprint: 'caller-supplied-fingerprint',
+      content: { assets: [] },
+      expectedVersion: null,
+    }).success).toBe(false)
+    expect(operation?.choiceCommit).toBeUndefined()
+  })
+
   it('adopts an exact materialized Style Bible revision instead of copying a Task candidate', () => {
     const operation = createAssistantCreativeStyleOperations().adopt_style_bible
     expect(operation).toBeDefined()
     expect(operation?.inputSchema.safeParse({
-      resourceId: 'style-resource',
       revisionId: 'style-revision',
-      fingerprint: 'style-fingerprint',
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation?.inputSchema.safeParse({
@@ -27,14 +43,14 @@ describe('creative result Resource conformance', () => {
     expect(Object.keys(operations).sort()).toEqual(['adopt_bible', 'adopt_chapters'])
     expect(operations.adopt_bible?.choiceCommit).toEqual({ enabled: true })
     expect(operations.adopt_bible?.inputSchema.safeParse({
-      screenplay: { resourceId: 'screenplay', revisionId: 'screenplay-r1', fingerprint: 'screenplay-fp' },
-      bible: { resourceId: 'bible', revisionId: 'bible-r1', fingerprint: 'bible-fp' },
+      screenplay: { revisionId: 'screenplay-r1' },
+      bible: { revisionId: 'bible-r1' },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operations.adopt_chapters?.choiceCommit).toEqual({ enabled: true })
     expect(operations.adopt_chapters?.inputSchema.safeParse({
-      screenplay: { resourceId: 'screenplay', revisionId: 'screenplay-r1', fingerprint: 'screenplay-fp' },
-      chapterPlan: { resourceId: 'chapter-plan', revisionId: 'chapter-plan-r1', fingerprint: 'chapter-plan-fp' },
+      screenplay: { revisionId: 'screenplay-r1' },
+      chapterPlan: { revisionId: 'chapter-plan-r1' },
     }).success).toBe(true)
     expect(operations.adopt_chapters?.inputSchema.safeParse({
       episodeId: 'episode',

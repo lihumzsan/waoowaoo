@@ -186,7 +186,7 @@ describe('Golden local model provider', () => {
     expect(JSON.parse(screenplay.argumentsJson)).toMatchObject({
       delegation: {
         source: 'requests',
-        requests: [{ outputKind: 'screenplay_draft', targetDurationSeconds: 240 }],
+        requests: [{ outputKind: 'canonical_screenplay', targetDurationSeconds: 240 }],
       },
     })
   })
@@ -198,7 +198,7 @@ describe('Golden local model provider', () => {
         schema: {
           type: 'object',
           required: ['kind'],
-          properties: { kind: { type: 'string', const: 'screenplay_draft' } },
+          properties: { kind: { type: 'string', const: 'canonical_screenplay' } },
         },
       },
     }
@@ -207,7 +207,7 @@ describe('Golden local model provider', () => {
       requestOrdinal: 4,
       request: {
         model: 'golden-model',
-        messages: [{ role: 'user', content: '{"requestedOutputKind":"screenplay_draft"}' }],
+        messages: [{ role: 'user', content: '{"requestedOutputKind":"canonical_screenplay"}' }],
         responseFormat,
         tools: [{ type: 'function', function: { name: 'read_skill', parameters: { type: 'object' } } }],
       },
@@ -224,7 +224,7 @@ describe('Golden local model provider', () => {
       request: {
         model: 'golden-model',
         messages: [
-          { role: 'user', content: '{"requestedOutputKind":"screenplay_draft"}' },
+          { role: 'user', content: '{"requestedOutputKind":"canonical_screenplay"}' },
           { role: 'assistant', tool_calls: [{ function: { name: 'read_skill' } }] },
           { role: 'tool', content: '{"content":"story skill"}' },
         ],
@@ -235,7 +235,7 @@ describe('Golden local model provider', () => {
     expect(afterSkillRead.kind).toBe('text')
     if (afterSkillRead.kind !== 'text') return
     expect(JSON.parse(afterSkillRead.text)).toMatchObject({
-      kind: 'screenplay_draft',
+      kind: 'canonical_screenplay',
       estimatedDurationSeconds: 240,
     })
   })
@@ -251,7 +251,7 @@ describe('Golden local model provider', () => {
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
             resourceId: 'style-resource', schemaId: 'project.style_bible', status: 'ready',
-            headRevision: { revisionId: 'style-revision', fingerprint: 'f'.repeat(64) },
+            headRevision: { revisionId: 'style-revision' },
           } }] }) },
         ],
         tools: [
@@ -265,7 +265,7 @@ describe('Golden local model provider', () => {
     expect(JSON.parse(decision.argumentsJson)).toMatchObject({
       subject: {
         kind: 'resource_revisions',
-        revisions: [{ resourceId: 'style-resource', revisionId: 'style-revision' }],
+        revisions: [{ revisionId: 'style-revision' }],
       },
       card: { title: '是否采用当前 Style Bible？' },
       commitments: [{ operationId: 'adopt_style_bible' }],
@@ -344,11 +344,13 @@ describe('Golden local model provider', () => {
           { role: 'user', content: GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST },
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
-            resourceId: 'screenplay-resource', schemaId: 'project.source_script', status: 'ready',
+            resourceId: 'screenplay-resource', schemaId: 'project.canonical_screenplay', status: 'ready',
             headRevision: {
               revisionId: 'screenplay-revision',
-              fingerprint: 'a'.repeat(64),
-              content: { kind: 'text', text: 'A sufficiently long screenplay source.' },
+              content: {
+                kind: 'structured',
+                data: { screenplayText: 'A sufficiently long screenplay source.' },
+              },
             },
           } }] }) },
         ],
@@ -364,12 +366,10 @@ describe('Golden local model provider', () => {
       delegation: {
         requests: [{
           outputKind: 'chapter_plan',
-          context: { sourceMaterials: [{ provenance: {
+          context: { sourceMaterials: [{
             kind: 'resource',
-            resourceId: 'screenplay-resource',
             revisionId: 'screenplay-revision',
-            fingerprint: 'a'.repeat(64),
-          } }] },
+          }] },
         }],
       },
     })
@@ -427,14 +427,14 @@ describe('Golden local model provider', () => {
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [
             { resource: {
-              resourceId: 'screenplay-resource', schemaId: 'project.source_script', status: 'ready',
+              resourceId: 'screenplay-resource', schemaId: 'project.canonical_screenplay', status: 'ready',
               scope: { episodeId: 'episode-1' },
-              headRevision: { revisionId: 'screenplay-revision', fingerprint: 'a'.repeat(64) },
+              headRevision: { revisionId: 'screenplay-revision' },
             } },
             { resource: {
               resourceId: 'chapter-resource', schemaId: 'project.chapter_plan', status: 'ready',
               scope: { episodeId: 'episode-1' },
-              headRevision: { revisionId: 'chapter-revision', fingerprint: 'b'.repeat(64) },
+              headRevision: { revisionId: 'chapter-revision' },
             } },
           ] }) },
         ],
@@ -448,14 +448,10 @@ describe('Golden local model provider', () => {
     if (decision.kind !== 'tool_call') return
     expect(JSON.parse(decision.argumentsJson)).toEqual({
       screenplay: {
-        resourceId: 'screenplay-resource',
         revisionId: 'screenplay-revision',
-        fingerprint: 'a'.repeat(64),
       },
       chapterPlan: {
-        resourceId: 'chapter-resource',
         revisionId: 'chapter-revision',
-        fingerprint: 'b'.repeat(64),
       },
     })
   })
@@ -556,7 +552,7 @@ describe('Golden local model provider', () => {
             role: 'tool',
             content: JSON.stringify({ success: true, resources: [{ resource: {
               resourceId: 'image-resource-1', mediaType: 'image', status: 'ready',
-              headRevision: { revisionId: 'image-revision-1', fingerprint: 'f'.repeat(64) },
+              headRevision: { revisionId: 'image-revision-1' },
             } }] }),
           },
         ],
@@ -573,9 +569,8 @@ describe('Golden local model provider', () => {
         kind: 'new',
         count: 2,
         mediaReferences: [{
-          resourceId: 'image-resource-1',
           revisionId: 'image-revision-1',
-          fingerprint: 'f'.repeat(64),
+          role: 'reference',
         }],
       },
     })

@@ -17,6 +17,7 @@ import {
 } from '@/lib/project-agent/waits'
 import type { ProjectAgentOperationTaskBatchBinding, ProjectAgentTaskSubmissionReceipt } from '@/lib/operations/types'
 import { createProjectAgentOperationBatchCoordinator } from '@/lib/project-agent/operation-batch'
+import { freezeProjectVideoRatioIntoPlan } from '@/lib/operations/project-video-ratio-policy'
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
@@ -33,11 +34,15 @@ function billingInfo(id: string): TaskBillingInfo {
 async function seedExecution(balance: number) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { videoRatio: '16:9' },
+  })
   const episode = await prisma.projectEpisode.create({
     data: { projectId: project.id, episodeNumber: 1, name: 'Approved Resource episode' },
   })
   await seedBalance(user.id, balance)
-  const plan: OperationPlan = {
+  const plan = await freezeProjectVideoRatioIntoPlan({
     kind: 'task_submission',
     operationId: 'create_image',
     projectId: project.id,
@@ -52,7 +57,7 @@ async function seedExecution(balance: number) {
       dedupeKey: `resource-image:${id}`,
       priority: 0,
     })),
-  }
+  } satisfies OperationPlan)
   const quote = await quoteOperationPlan(plan)
   const snapshot = await persistOperationPlanSnapshot({
     plan,

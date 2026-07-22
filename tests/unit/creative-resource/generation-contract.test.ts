@@ -52,16 +52,12 @@ describe('creative resource generation task contract', () => {
         ...payload.resource,
         inputs: [
           {
-            resourceId: 'resource:style',
             revisionId: 'revision:style',
-            fingerprint: 'a'.repeat(64),
             role: 'style_context',
             position: 0,
           },
           {
-            resourceId: 'resource:image',
             revisionId: 'revision:image',
-            fingerprint: 'b'.repeat(64),
             role: 'reference',
             position: 1,
           },
@@ -98,16 +94,12 @@ describe('creative resource generation task contract', () => {
         modelKey: 'openrouter::bytedance/seedance-2.0-fast',
         inputs: [
           {
-            resourceId: 'resource:character-image',
             revisionId: 'revision:character-image',
-            fingerprint: 'a'.repeat(64),
             role: 'character',
             position: 0,
           },
           {
-            resourceId: 'resource:character-voice',
             revisionId: 'revision:character-voice',
-            fingerprint: 'b'.repeat(64),
             role: 'character_voice',
             position: 1,
           },
@@ -140,9 +132,7 @@ describe('creative resource generation task contract', () => {
         modelKey: 'fal::video-model',
         inputHash: 'frozen-input-hash',
         inputs: [{
-          resourceId: 'resource:image-1',
           revisionId: 'revision:image-1',
-          fingerprint: 'a'.repeat(64),
           role: 'reference',
           position: 0,
         }],

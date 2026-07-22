@@ -14,6 +14,7 @@ import { submitOperationTaskBatch } from '@/lib/operations/submit-operation-task
 import type { ProjectAgentOperationTaskBatchBinding, ProjectAgentTaskSubmissionReceipt } from '@/lib/operations/types'
 import { createProjectAgentOperationBatchCoordinator } from '@/lib/project-agent/operation-batch'
 import { TASK_TYPE } from '@/lib/task/types'
+import { CREATIVE_WORK_TASK_PROTOCOL } from '@/lib/creative-worker'
 
 describe('Project Agent non-billable Task batch to Wait DB integration', () => {
   beforeEach(async () => {
@@ -88,21 +89,47 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
       runFence,
       signal: new AbortController().signal,
       taskBatchBinding: binding,
-    }, async () => await submitOperationTaskBatch([1, 2].map((index) => ({
-      request,
-      userId: user.id,
-      projectId: project.id,
-      episodeId: episode.id,
-      type: TASK_TYPE.CREATIVE_WORK,
-      targetType: 'CreativeWork',
-      targetId: `creative-work-${index}`,
-      operationId: 'delegate_creative_work',
-      source: 'assistant-panel',
-      payload: { requestKey: `creative-review-${index}` },
-      dedupeKey: `assistant-nonbillable-batch:${index}`,
-      locale: 'en' as const,
-      billingInfo: null,
-    }))))
+    }, async () => await submitOperationTaskBatch([1, 2].map((index) => {
+      const requestKey = `creative-review-${index}`
+      const goal = `Review creative work item ${index}.`
+      return {
+        request,
+        userId: user.id,
+        projectId: project.id,
+        episodeId: episode.id,
+        type: TASK_TYPE.CREATIVE_WORK,
+        targetType: 'CreativeWork',
+        targetId: `creative-work-${index}`,
+        operationId: 'delegate_creative_work',
+        source: 'assistant-panel',
+        payload: {
+          protocol: CREATIVE_WORK_TASK_PROTOCOL,
+          requestKey,
+          request: {
+            outputKind: 'creative_review',
+            goal,
+            context: {
+              userRequest: 'Review these independent creative work items.',
+              sourceMaterials: [],
+              constraints: [],
+            },
+            productionContext: { video: null },
+          },
+          modelKey: 'test:creative-model',
+          inputFingerprint: `${index}`.repeat(64),
+          origin: { runId: run.id, toolCallId },
+          lifecycleProjection: {
+            requestKey,
+            outputKind: 'creative_review',
+            goal,
+            events: [],
+          },
+        },
+        dedupeKey: `assistant-nonbillable-batch:${index}`,
+        locale: 'en' as const,
+        billingInfo: null,
+      }
+    })))
 
     const members = coordinator.readMembers()
     const firstMember = members[0]
