@@ -59,6 +59,7 @@ const parseVoiceLinesJsonMock = vi.hoisted(() => vi.fn())
 const persistStoryboardOutputsMock = vi.hoisted(() => vi.fn())
 const parseStoryboardRetryTargetMock = vi.hoisted(() => vi.fn())
 const runScriptToStoryboardAtomicRetryMock = vi.hoisted(() => vi.fn())
+const submitEpisodeCoverTaskMock = vi.hoisted(() => vi.fn())
 const workflowLeaseMock = vi.hoisted(() => ({
   assertWorkflowRunActive: vi.fn(async () => undefined),
   withWorkflowRunLease: vi.fn(async (params: { run: () => Promise<unknown> }) => ({
@@ -185,6 +186,9 @@ vi.mock('@/lib/workers/handlers/script-to-storyboard-atomic-retry', () => ({
   runScriptToStoryboardAtomicRetry: runScriptToStoryboardAtomicRetryMock,
 }))
 vi.mock('@/lib/run-runtime/workflow-lease', () => workflowLeaseMock)
+vi.mock('@/lib/novel-promotion/episode-cover/task', () => ({
+  submitEpisodeCoverTask: submitEpisodeCoverTaskMock,
+}))
 
 import { handleScriptToStoryboardTask } from '@/lib/workers/handlers/script-to-storyboard'
 
@@ -238,6 +242,11 @@ describe('worker script-to-storyboard behavior', () => {
     txState.deletedWhereClauses = []
     parseStoryboardRetryTargetMock.mockReturnValue(null)
     runScriptToStoryboardAtomicRetryMock.mockReset()
+    submitEpisodeCoverTaskMock.mockResolvedValue({
+      success: true,
+      async: true,
+      taskId: 'task-cover-1',
+    })
 
     prismaMock.project.findUnique.mockResolvedValue({
       id: 'project-1',
@@ -339,6 +348,82 @@ describe('worker script-to-storyboard behavior', () => {
         notIn: [1],
       },
     })
+    expect(submitEpisodeCoverTaskMock).toHaveBeenCalledWith({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      mode: 'auto',
+      requestId: null,
+    })
+  })
+
+  it('submits automatic cover after storyboard persistence and before completing workflow lease', async () => {
+    const events: string[] = []
+    persistStoryboardOutputsMock.mockImplementationOnce(async () => {
+      events.push('storyboard-persisted')
+      return {
+        persistedStoryboards: [
+          {
+            storyboardId: 'storyboard-1',
+            clipId: 'clip-1',
+            panels: [{ id: 'panel-1', panelIndex: 1 }],
+          },
+        ],
+        voiceLineCount: 1,
+      }
+    })
+    submitEpisodeCoverTaskMock.mockImplementationOnce(async () => {
+      events.push('cover-submit-attempted')
+      return {
+        success: true,
+        async: true,
+        taskId: 'task-cover-1',
+      }
+    })
+    workflowLeaseMock.withWorkflowRunLease.mockImplementationOnce(async (params: { run: () => Promise<unknown> }) => {
+      const result = await params.run()
+      events.push('lease-completed')
+      return { claimed: true, result }
+    })
+
+    await handleScriptToStoryboardTask(buildJob({ episodeId: 'episode-1' }))
+
+    expect(events).toEqual([
+      'storyboard-persisted',
+      'cover-submit-attempted',
+      'lease-completed',
+    ])
+  })
+
+  it('does not submit automatic cover when workflow lease is not claimed', async () => {
+    workflowLeaseMock.withWorkflowRunLease.mockResolvedValueOnce({
+      claimed: false,
+      result: null,
+    })
+
+    const result = await handleScriptToStoryboardTask(buildJob({ episodeId: 'episode-1' }))
+
+    expect(result).toEqual({
+      runId: 'run-test-storyboard',
+      skipped: true,
+      episodeId: 'episode-1',
+    })
+    expect(submitEpisodeCoverTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps storyboard success when automatic cover task submission records a queue failure', async () => {
+    submitEpisodeCoverTaskMock.mockRejectedValueOnce(new Error('cover queue unavailable'))
+
+    const result = await handleScriptToStoryboardTask(buildJob({ episodeId: 'episode-1' }))
+
+    expect(result).toEqual({
+      episodeId: 'episode-1',
+      storyboardCount: 1,
+      panelCount: 1,
+      voiceLineCount: 1,
+    })
+    expect(submitEpisodeCoverTaskMock).toHaveBeenCalledTimes(1)
   })
 
   it('dialogue beats 存在时直接生成 voice line，不再重新做全文台词分析', async () => {
