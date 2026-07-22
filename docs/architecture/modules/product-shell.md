@@ -16,7 +16,7 @@
 - **PS-06 — 一个用户动作只有一个页面后继。** 创建或保存成功后若必须导航到另一产品表面，不得同时启动只服务于当前页面的 refetch；留在当前页时才由当前页刷新自己的 View。
 - **PS-07 — 权威父资源成功后才可初始化子资源。** 空数组、缺失 View 或 loading 结束不能证明用户拥有父资源。自动创建默认剧集等 setup 写入必须先取得成功且已鉴权的 Project；父资源 401/403/404 或读取错误后必须停止全部派生写入。
 - **PS-08 — 浏览器会话是用户 API 的唯一身份来源。** 受保护 HTTP route 只接受 NextAuth session 中的持久 user id；固定内部 token、调用方提供的 user id、用户名或邮箱不得成为并行身份入口。日志下载和其他运维数据还必须经过显式管理员授权，不能由 deployment feature visibility 代替鉴权。
-- **PS-09 — 认证防线与部署配置失败关闭。** 登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后从右侧可信代理链解析客户端 IP；无法验证来源使用共享桶，Redis 不可用时拒绝认证尝试。cloud preflight 必须显式区分本地开发与正式部署：本地只允许 loopback HTTP、无代理或明确的非负代理跳数，以及仅 loopback 暴露的无认证 Bull Board；正式部署必须拒绝缺失、弱密钥、非 HTTPS 公网地址和未知代理拓扑。Compose 不得提供可用的默认密码或把基础设施默认绑定到公网。
+- **PS-09 — 认证防线与部署配置失败关闭。** 注册、初次设置和修改密码必须共同复用唯一密码策略，当前最小长度为 8 位；不得由页面、route 或运维写入绕过。登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后从右侧可信代理链解析客户端 IP；无法验证来源使用共享桶，Redis 不可用时拒绝认证尝试。cloud preflight 必须显式区分本地开发与正式部署：本地只允许 loopback HTTP、无代理或明确的非负代理跳数，以及仅 loopback 暴露的无认证 Bull Board；正式部署必须拒绝缺失、弱密钥、非 HTTPS 公网地址和未知代理拓扑。Compose 不得提供可用的默认密码或把基础设施默认绑定到公网。
 - **PS-10 — 首页初始化是一个原子构造。** 首页已展示并保存的画面比例不再触发模型 Choice；“开始创作”只能通过 `create_project` 的一个事务创建 Project、写入该显式比例并创建首 Episode。任一步失败必须全部回滚，浏览器不得用 create → config PATCH → episode POST 拼出半初始化项目。其他没有比例的合法入口仍保留 `videoRatio=null`，真正需要媒体执行时由 Primary 发起通用 Choice，并且只提交当前比例决定。
 
 ## 权威入口

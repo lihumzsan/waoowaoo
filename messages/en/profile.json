@@ -134,7 +134,7 @@
     "currentPassword": "Current password",
     "currentPasswordPlaceholder": "Enter current password",
     "newPassword": "New password",
-    "newPasswordPlaceholder": "Enter at least 12 characters",
+    "newPasswordPlaceholder": "Enter at least 8 characters",
     "confirmPassword": "Confirm password",
     "confirmPasswordPlaceholder": "Re-enter password",
     "setPassword": "Set password",
@@ -142,7 +142,7 @@
     "passwordSet": "Password set",
     "passwordChanged": "Password changed",
     "passwordSetFailed": "Failed to set password",
-    "passwordTooShort": "Password must be at least 12 characters",
+    "passwordTooShort": "Password must be at least 8 characters",
     "currentPasswordRequired": "Enter current password",
     "passwordMismatch": "Passwords do not match"
   },
