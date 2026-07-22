@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-22
 
-**Status:** Awaiting review
+**Status:** Approved
 
 **Scope:** Novel-promotion storyboard stage UI
 
