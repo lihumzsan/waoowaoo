@@ -1,12 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { submitOpenRouterVideoTask } from '@/lib/ai-providers/openrouter/video'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  executeOpenRouterVideoGeneration,
+  submitOpenRouterVideoTask,
+} from '@/lib/ai-providers/openrouter/video'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
+
+const getProviderConfigMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/user-api/runtime-config', () => ({
+  getProviderConfig: getProviderConfigMock,
+}))
 
 describe('provider contract - OpenRouter video', () => {
   let server: Awaited<ReturnType<typeof startScenarioServer>> | null = null
 
   beforeEach(async () => {
     server = await startScenarioServer()
+    getProviderConfigMock.mockResolvedValue({
+      id: 'openrouter',
+      name: 'openrouter',
+      apiKey: 'openrouter-video-key',
+      baseUrl: `${server.baseUrl}/openrouter`,
+    })
   })
 
   afterEach(async () => {
@@ -140,5 +155,51 @@ describe('provider contract - OpenRouter video', () => {
     })
 
     expect(server!.getRequests('POST', '/openrouter/videos')).toHaveLength(1)
+  })
+
+  it('serializes Seedance image and voice references through one multimodal input list', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/videos',
+      mode: 'success',
+      submitResponse: {
+        status: 202,
+        body: {
+          id: 'seedance-audio-reference-job',
+          status: 'pending',
+          polling_url: '/openrouter/videos/seedance-audio-reference-job',
+        },
+      },
+    })
+
+    await expect(executeOpenRouterVideoGeneration({
+      userId: 'user-1',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'bytedance/seedance-2.0-fast',
+        modelKey: 'openrouter::bytedance/seedance-2.0-fast',
+        variantSubKind: 'official',
+      },
+      imageUrl: 'https://example.com/character.png',
+      options: {
+        prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
+        referenceAudios: ['https://example.com/locked-voice.wav'],
+        duration: 6,
+        resolution: '720p',
+        aspectRatio: '16:9',
+        generateAudio: true,
+      },
+    })).resolves.toMatchObject({
+      externalId: 'OPENROUTER:VIDEO:seedance-audio-reference-job',
+    })
+
+    const requests = server!.getRequests('POST', '/openrouter/videos')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toMatchObject({
+      input_references: [
+        { type: 'image_url', image_url: { url: 'https://example.com/character.png' } },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/locked-voice.wav' } },
+      ],
+    })
   })
 })

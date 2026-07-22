@@ -117,7 +117,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 5. `20260711030000` 会删除 `operationConfirmed`；因此 migration 与新应用必须作为同一维护窗口切换，禁止旧应用实例继续写入。
 6. `20260712233000` 会删除 Outbox、provider checkpoint、审批链和持久 JSON 中没有分流语义的固定标记；旧代码仍会写这些字段，新代码会 strict-reject 旧 JSON，因此必须在同一维护窗口先排空、迁移，再一次性切换全部应用与 worker。
 7. `20260715160000_unify_audio_design` 新增统一 `ProjectEditAudioDesign`，并把 BGM 生成资源切换到 `designSignature`；它不再尝试改造即将删除、且历史物理表名不一致的环境音表。`20260715190000_remove_ambient_sound` 删除两种历史环境音表名和 sound-effect 配置列，把唯一规划表切换为 `project_edit_bgm_designs`，并将不兼容的旧设计失效为 `pending`，强制经唯一 BGM planner 重新规划。应用本次迁移前必须排空旧 BGM/环境音规划、两类生成 Task 与 final render；本仓只创建 migration，未授权也未执行任何共享数据迁移。
-8. `creative_work` payload 从 nullable `single/batch/chapter_batch` 与服务端指定 Skill 切换为严格 `delegation.source=requests|chapters` 和 Worker 自主 Skill catalog；Creative Resource 媒体 payload 又把旧 `references` 切换为 `contextReferences + imageReferences`。两项都是 strict parser 不兼容变化：部署前必须排空旧版本 queued/processing 的 `creative_work` 与 Creative Resource 媒体 Task，再一次性切换应用和 worker；禁止双读旧 payload、默认空引用或从媒体类型猜旧字段。
+8. `creative_work` payload 从 nullable `single/batch/chapter_batch` 与服务端指定 Skill 切换为严格 `delegation.source=requests|chapters` 和 Worker 自主 Skill catalog；Creative Resource 媒体 payload 先把旧 `references` 切换为 `contextReferences + imageReferences`，随后视频输入收敛为 `mediaReferences`，Task 必填并分别冻结 `imageInputPositions + audioInputPositions`。这些都是 strict parser 不兼容变化：部署前必须排空旧版本 queued/processing 的 `creative_work` 与 Creative Resource 媒体 Task，再一次性切换应用和 worker；禁止双读旧 payload、默认空位置、兼容旧视频 `imageReferences` 或从媒体类型猜旧字段。
 8. `20260717120000_add_creative_resource_spine` 只新增 Resource/Revision/Lineage/Binding 表与引用，不删除或改写既有专业领域表；本仓只创建并验证 migration 文件，没有授权执行任何共享或生产数据 migration。
 
 ## 历史回归

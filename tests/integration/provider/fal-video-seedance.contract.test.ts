@@ -209,6 +209,49 @@ describe('provider contract - fal video', () => {
     })
   })
 
+  it('submits Seedance 2.0 character voice references with independently numbered images and audios', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/fal/bytedance/seedance-2.0/reference-to-video',
+      mode: 'success',
+      submitResponse: {
+        status: 200,
+        body: { request_id: 'req_seedance_voice_ref_1' },
+      },
+    })
+
+    await executeFalVideoGeneration({
+      userId: 'user-1',
+      selection: {
+        provider: 'fal',
+        modelId: 'bytedance/seedance-2.0',
+        modelKey: 'fal::bytedance/seedance-2.0',
+        variantSubKind: 'official',
+      },
+      imageUrl: 'https://example.com/character.png',
+      options: {
+        prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
+        referenceAudios: ['https://example.com/locked-voice.wav'],
+        resolution: '720p',
+        duration: 6,
+        aspectRatio: '16:9',
+        generateAudio: true,
+      },
+    })
+
+    const requests = server!.getRequests('POST', '/fal/bytedance/seedance-2.0/reference-to-video')
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
+      prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
+      image_urls: ['https://example.com/character.png'],
+      audio_urls: ['https://example.com/locked-voice.wav'],
+      resolution: '720p',
+      duration: '6',
+      aspect_ratio: '16:9',
+      generate_audio: true,
+    })
+  })
+
   it('submits Seedance 2.0 prompt-only requests to text-to-video', async () => {
     server!.defineScenario({
       method: 'POST',

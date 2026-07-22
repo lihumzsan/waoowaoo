@@ -49,6 +49,15 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
           })
         }
       }),
+    audioInputPositions: z.array(z.number().int().min(0)).max(3)
+      .superRefine((positions, context) => {
+        if (new Set(positions).size !== positions.length) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'audioInputPositions must contain unique Resource input positions.',
+          })
+        }
+      }),
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
@@ -72,6 +81,25 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
           code: z.ZodIssueCode.custom,
           path: ['imageInputPositions'],
           message: `imageInputPositions contains unknown Resource input position ${String(position)}.`,
+        })
+      }
+    }
+    for (const position of resource.audioInputPositions) {
+      if (!inputPositions.has(position)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['audioInputPositions'],
+          message: `audioInputPositions contains unknown Resource input position ${String(position)}.`,
+        })
+      }
+    }
+    const imagePositions = new Set(resource.imageInputPositions)
+    for (const position of resource.audioInputPositions) {
+      if (imagePositions.has(position)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['audioInputPositions'],
+          message: `Resource input position ${String(position)} cannot be both an image and audio reference.`,
         })
       }
     }

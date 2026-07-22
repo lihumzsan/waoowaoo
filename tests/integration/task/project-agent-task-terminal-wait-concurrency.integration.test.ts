@@ -98,6 +98,7 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
             inputHash: `${index + 1}`.repeat(64),
             inputs: [],
             imageInputPositions: [],
+            audioInputPositions: [],
             generationOptions: {},
             executionSegmentId: null,
             toolCallId: `assistant-operation-batch-tool-call-${index + 1}`,

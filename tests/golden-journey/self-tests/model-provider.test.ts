@@ -766,7 +766,7 @@ describe('Golden local model provider', () => {
       request: {
         kind: 'new',
         count: 2,
-        imageReferences: [{
+        mediaReferences: [{
           resourceId: 'image-resource-1',
           revisionId: 'image-revision-1',
           fingerprint: 'f'.repeat(64),

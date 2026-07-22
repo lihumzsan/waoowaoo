@@ -77,6 +77,7 @@ Use actually visible evidence to evaluate story, visual assets, video segments, 
 ## Sound and music review
 
 - Is dialogue verbatim, attributed to the correct speaker, stable in intrinsic voice, and synchronized with mouth and action?
+- Does each speaking character with a bound voice cite the exact corresponding audio asset and `@AudioN`? Check for a missing, swapped, or cross-bound voice and for preview words incorrectly treated as story dialogue.
 - Do steps, doors, impacts, cloth, machinery, and environmental sound correspond to visible events, with continuing sound sustained where needed?
 - Is a key synchronized sound missing, or is there duplicated effect, unrelated narration, abnormal level, or abrupt sound cut?
 - Does BGM support the true narrative emotion rather than mechanically mirror surface action, use silence where useful, and leave spectral room for dialogue?
@@ -121,6 +122,7 @@ Do not hide a reusable root cause behind one long story-specific prohibition. Ex
 - Does every issue map to a real root cause and minimum correction scope?
 - Are all successful, approved, and unaffected resources preserved?
 - Is unavailable visual or audio content honestly marked unverified?
+- Does every `referenceKeys` label resolve to the exact image or audio revision actually used by the prompt, with no second voice-reference field?
 
 ## Boundary
 

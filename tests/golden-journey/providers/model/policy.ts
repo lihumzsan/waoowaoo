@@ -188,7 +188,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
         kind: 'new',
         count: 2,
         prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
-        imageReferences: resourceReferences(request, 'image').slice(0, 1),
+        mediaReferences: resourceReferences(request, 'image').slice(0, 1),
         durationSeconds: 15,
       },
     }

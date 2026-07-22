@@ -223,6 +223,7 @@ async function planGenerateVoice(
     inputHash,
     inputs: [],
     imageInputPositions: [],
+    audioInputPositions: [],
     generationOptions,
     executionSegmentId: null,
     toolCallId: ctx.toolCallId?.trim() || null,

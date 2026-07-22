@@ -60,6 +60,7 @@ export type AiVideoExecutionOptions = {
   generateAudio?: boolean
   lastFrameImageUrl?: string
   referenceImages?: string[]
+  referenceAudios?: string[]
   [key: string]: string | number | boolean | string[] | undefined
 }
 

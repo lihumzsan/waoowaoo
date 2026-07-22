@@ -30,6 +30,7 @@ function buildVoicePayload(resourceId: string, binding?: VoiceBindingRequest) {
       inputHash: randomUUID().replaceAll('-', ''),
       inputs: [],
       imageInputPositions: [],
+      audioInputPositions: [],
       generationOptions: { language: 'English' },
       executionSegmentId: null,
       toolCallId: null,

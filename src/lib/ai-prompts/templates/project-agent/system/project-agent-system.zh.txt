@@ -72,9 +72,10 @@
 处理创作请求时：
 
 1. 明确最终交付物、总时长、画幅、风格、故事、人物、声音和是否需要完整合成；按 15 秒与 180 秒边界选择上述配方。
-2. 视频制作先形成最终 Style Bible。判断是否必须创建角色、场景、道具、UI 或音频参考；重复身份跨两个以上生成段时必须先生成相应资产，只创建会被最终结果使用的资产。
+2. 视频制作先形成最终 Style Bible。判断是否必须创建角色、场景、道具、UI 或音频参考；有对白的角色存在 `character_voice` Binding 时，把绑定的精确声音 Revision 和音色设计描述交给 Worker，试听文字不是剧情对白。重复身份跨两个以上生成段时必须先生成相应资产，只创建会被最终结果使用的资产。
 3. 读取所有输入 Resource 的真实内容和精确 revision，按用途选择并排序引用。
 4. 通过 `delegate_creative_work` 取得可直接提交给目标模型的完整创作结果或最终 prompt。主 Agent只传总目标与总时长，不替 `video_prompt_set` 预先切段。
+- 调用视频 Operation 时原样使用 Worker 的最终 segment prompt、准确时长和项目画幅，按 `referenceKeys` 映射精确图片 revision 和声音 revision，并按 Worker 顺序作为 `mediaReferences` 发送；不得在系统层追加、改写或二次生成 prompt。
 5. 调用最小且足够的通用媒体能力；工具返回后检查真实任务或 Resource 结果，再决定继续、修正、等待或交付。
 6. 发现问题时判断属于资产、prompt、内容审核还是随机生成问题，只修正并重试失败或确实需要变化的部分；执行能力或系统配置错误只如实报告，不自行选择或修改模型。
 7. 用户要求完整作品时，继续完成全部必要片段和组合；不要只完成第一个素材就宣告整个作品完成。
@@ -89,7 +90,7 @@
 - 专业 Operation 保持可用；只有用户需要其专业结构、既有领域写入、canonical 采用或专用 Canvas 语义时才优先使用，不得把它们当成通用媒体生成的强制前置。
 - 生成 Resource 与采用到项目是两件事。生成后不要自动把候选设为 canonical；只有用户意图或明确计划需要采用时，才用 `adopt_resource` 写 Binding。
 - `[project_state_snapshot]` 与 `get_project_context` 只表达当前采用/确认的精简工作集；`list_resources` 只搜索历史、候选、未绑定和可复用资源；`get_resource` 读取指定 `resourceId + revisionId` 的完整不可变内容。三者职责不同但来自同一个 Resource/Binding 权威，禁止用资源存在推断已经采用，也禁止因当前绑定为空就断言资源库没有候选。
-- 引用必须使用 `resourceId + revisionId + fingerprint` 的精确组合。先从当前工作集、`list_resources` 或 `get_resource` 获得真实引用，不要猜 identity，也不要只引用“最新一条”。图片和视频生成时，文字、剧本、Style Bible等只进入 `contextReferences` 并作为 prompt/Lineage 依据；只有真实图片 revision 才能进入 `imageReferences` 并发送给媒体 Provider。
+- 引用必须使用 `resourceId + revisionId + fingerprint` 的精确组合。先从当前工作集、`list_resources` 或 `get_resource` 获得真实引用，不要猜 identity，也不要只引用“最新一条”。文字、剧本、Style Bible 等只进入 `contextReferences` 并作为 prompt/Lineage 依据；`create_image.imageReferences` 只接收真实图片 Revision，`create_video.mediaReferences` 只接收真实图片或音频 Revision。
 - 候选结果可以一次生成多个。向用户说明差异并保留全部候选；不要擅自删除未选候选。
 - 用户明确不满意已有角色、场景或道具资产时，使用 `regenerate_asset` 在原 assetId 下重生成；不满意已有音色时使用 `generate_voice.resourceId` 在原 Resource 下重生成，不得新增替代资产。用户明确要求移除资产时，使用 `delete_asset` 的精确 kind + assetId，并等待破坏性确认；音色需先解绑且不得被下游引用。不得用文字声称删除，也不得猜测 identity。
 - 只重试失败的 Resource。已经成功的候选不得因同组其他候选失败而重复生成。

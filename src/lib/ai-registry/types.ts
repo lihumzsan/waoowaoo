@@ -252,6 +252,7 @@ export interface VideoCapabilities {
   supportGenerateAudio?: boolean
   assetReferenceMultiReference?: boolean
   maxReferenceImages?: number
+  maxReferenceAudios?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -312,6 +313,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'supportGenerateAudio',
   'assetReferenceMultiReference',
   'maxReferenceImages',
+  'maxReferenceAudios',
   'fieldI18n',
 ])
 
@@ -640,6 +642,17 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.maxReferenceImages',
       message: 'maxReferenceImages must be a positive integer',
+    })
+  }
+
+  if (
+    raw.maxReferenceAudios !== undefined
+    && (!Number.isInteger(raw.maxReferenceAudios) || (raw.maxReferenceAudios as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.maxReferenceAudios',
+      message: 'maxReferenceAudios must be a positive integer',
     })
   }
 

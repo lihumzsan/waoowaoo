@@ -165,6 +165,7 @@ type ArkVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']> &
   watermark?: boolean
   frames?: number
   referenceImages?: string[]
+  referenceAudios?: string[]
 }
 
 function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
@@ -188,6 +189,7 @@ function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
     'prompt',
     'fps',
     'referenceImages',
+    'referenceAudios',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue
@@ -427,6 +429,25 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   const referenceImageUrls = Array.isArray(input.options?.referenceImages)
     ? input.options.referenceImages.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
+  const referenceAudioUrls = Array.isArray(input.options?.referenceAudios)
+    ? Array.from(new Set(input.options.referenceAudios.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    )))
+    : []
+  if (referenceAudioUrls.length > 0) {
+    if (referenceAudioUrls.length > 3) {
+      throw new Error('ARK_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
+    }
+    if (realModel !== 'doubao-seedance-2-0-260128' && realModel !== 'doubao-seedance-2-0-fast-260128') {
+      throw new Error(`ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${realModel}`)
+    }
+    if (!imageBase64 && referenceImageUrls.length === 0) {
+      throw new Error('ARK_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+    }
+    if (lastFrameImageUrl) {
+      throw new Error('ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
+    }
+  }
   const content: ArkVideoTaskRequest['content'] = []
   const trimmedPrompt = typeof prompt === 'string' ? prompt.trim() : ''
   if (trimmedPrompt) {
@@ -457,6 +478,13 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
       ...(imageBase64 ? [{ url: imageBase64, role: 'reference' as const, order: 1 }] : []),
       ...normalizedReferenceImages.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
     ]).map((image) => image.url))
+    for (const referenceAudioUrl of referenceAudioUrls) {
+      content.push({
+        type: 'audio_url',
+        audio_url: { url: referenceAudioUrl },
+        role: 'reference_audio',
+      })
+    }
   }
 
   const requestBody: ArkVideoTaskRequest = {

@@ -260,6 +260,16 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.create_audio.toolInputSchema.properties)).toContain('request')
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('contextReferences')
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).not.toContain('imageReferences')
+    const videoNewBranch = (Array.isArray(readRecord(registry.create_video.toolInputSchema.properties.request).oneOf)
+      ? readRecord(registry.create_video.toolInputSchema.properties.request).oneOf as unknown[]
+      : [])
+      .map(readRecord)
+      .find((branch) => readRecord(readRecord(branch.properties).kind).const === 'new')
+    const videoNewProperties = readRecord(readRecord(videoNewBranch).properties)
+    expect(Object.keys(videoNewProperties)).toContain('mediaReferences')
+    expect(Object.keys(videoNewProperties)).not.toContain('imageReferences')
+    expect(Object.keys(videoNewProperties)).not.toContain('voiceReferenceKeys')
+
 
     expect(registry.create_text.inputSchema.safeParse({
       prompt: 'Write one line.',
@@ -287,7 +297,7 @@ describe('project agent toolset conformance', () => {
         kind: 'retry',
         resourceIds: ['failed-video-resource'],
         prompt: 'This must never replace the frozen video prompt.',
-        imageReferences: [],
+        mediaReferences: [],
       },
     }).success).toBe(false)
     expect(registry.create_video.inputSchema.safeParse({

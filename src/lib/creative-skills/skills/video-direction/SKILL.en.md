@@ -18,7 +18,8 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 
 ## Reference media
 
-- Use an explicitly ordered reference manifest and refer to it in the final prompt as “the character in image 1,” “the location in image 2,” or “the prop in image 3.” Do not make the model guess from asset names, filenames, internal IDs, or chat nicknames.
+- Use an explicitly ordered reference manifest for media. Number images and audios independently, and refer to them as “the character in image 1 (@Image1)” or “the locked voice in audio 1 (@Audio1).” Do not make the model guess from asset names, filenames, internal IDs, or chat nicknames.
+- `referenceKeys` contains only the exact source-material labels actually used by this Segment, in provider-media order. Images map to `@ImageN` within the image sequence and audios map to `@AudioN` within the audio sequence; never create a second field such as `voiceReferenceKeys`.
 - Order references by narrative importance and first use. Identity-critical characters normally come first, then key props or required UI, then locations in order of appearance; the current story's actual emphasis outranks a fixed template.
 - Give each image one clear primary responsibility. Supply only media used in the current segment and respect the target model's real reference limit; never silently truncate, substitute, or reorder user-locked references.
 - Preserve approved identity, wardrobe, silhouette, environment structure, and prop design, while preventing incidental source pose, lighting, noise, or composition from overriding the current video requirements.
@@ -95,6 +96,8 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 
 - Native audio is enabled by default for video generation. Every final prompt should include the dialogue, synchronized effects, and ambience genuinely needed by the visible action; when there is no dialogue, still design sound that fits the action and space instead of outputting a separate audio switch or intent field.
 - Keep dialogue verbatim and identify the speaker and stable intrinsic voice. Never replace dialogue with narration.
+- When a speaking character has an exact bound voice, include that audio in the reference manifest and cite both the character image and its `@AudioN` in the speaking instruction. A bound voice defines only that character's intrinsic timbre and voice identity. Ignore words spoken in the preview audio and never repeat them as story dialogue; the only spoken content comes from `{spoken line}`.
+- Use this fixed structure: first write `Voice reference manifest: audio 1 (@Audio1) — the locked voice for “Character”; use only its intrinsic timbre and voice identity, and ignore the preview words.` Then write within the time range: `Character preserves identity from image N (@ImageN), uses audio 1 (@Audio1), and says with … delivery: {verbatim line}.` Give different speaking characters their own bound audio numbers; never cross-bind voices or share an unconfirmed voice.
 - Use `{spoken line}` for exact dialogue and `<sound description>` for short synchronized sounds. Add relevant steps, cloth, doors, impacts, machinery, ambience, or object sound to action shots.
 - Express continued sound as a fact such as “the alarm continues” or “the undersea rumble intensifies,” not through J-cut or L-cut terminology.
 - **Sound relationship choice:** Before writing the final prompt for every Segment, actively decide whether it uses only sound synchronized to the current image, sound that leads its visual source, sound that carries across a Shot boundary, offscreen dialogue that reveals a character before the image does, or no special sound relationship.
@@ -130,12 +133,13 @@ These are two separate, self-sufficient prompts. The seam changes from medium-wi
 
 ## Final segment review
 
-- Does every reference number point exactly to its intended character, location, prop, or UI?
+- Does every image and audio reference number point exactly to its intended character, location, prop, UI, or locked character voice?
 - Can every shot finish within its allocated time, with a clear entry, action order, and landing state?
 - Was transition necessity judged first? Are ordinary connections simple, and does every creative transition have a clear motivation, visible endpoint and starting state without deforming the subject?
 - Does every multi-Shot prompt explicitly prohibit dissolves, cross-dissolves, fade-ins, and fade-outs, with no transparent overlap between outgoing and incoming images?
 - Are identity, wardrobe, physical state, props, movement, emotion, environment, and sound continuous where required?
 - Is dialogue verbatim with a clear speaker, and is sound synchronized, leading, or carrying only when useful, without redundant external layers?
+- Does every speaking character with a bound voice cite the correct `@AudioN`, with no preview words leaking into `{spoken line}`?
 - Was every adjacent independent-segment pair checked in order, with a genuinely visible scale change between the outgoing final shot and incoming first shot rather than only a new angle or renamed near-identical composition?
 - Do first and last frames that require placement use stable physical anchors, frame region or depth, body orientation, and prop relationships? Does every position change have a visible starting point, path, and landing position?
 - Does the prompt include only information needed by this video, without irrelevant references or internal explanation?

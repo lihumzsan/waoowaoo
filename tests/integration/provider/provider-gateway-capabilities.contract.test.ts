@@ -676,6 +676,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         && candidate.modelId === 'bytedance/seedance-2.0-fast'
       ))
       expect(entry?.capabilities?.video?.maxReferenceImages).toBe(8)
+      expect(entry?.capabilities?.video?.maxReferenceAudios).toBe(3)
     })
 
     it('declares all Ark video models as multi-reference capable', () => {
@@ -700,7 +701,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     })
 
     it('rejects undeclared providers, unknown models, and bare model ids', () => {
-      expect(supportsAssetReferenceMultiReferenceVideoModel('openrouter::bytedance/seedance-2.0')).toBe(false)
+      expect(supportsAssetReferenceMultiReferenceVideoModel('openrouter::bytedance/seedance-2.0')).toBe(true)
       expect(supportsAssetReferenceMultiReferenceVideoModel('ark::no-such-model')).toBe(false)
       expect(supportsAssetReferenceMultiReferenceVideoModel('doubao-seedance-2-0-260128')).toBe(false)
     })

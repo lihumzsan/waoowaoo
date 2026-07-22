@@ -6,7 +6,7 @@
 
 配乐生产阶段只生成 BGM。锁定脚本和章节成片的 identity、顺序、时长与镜头映射先被转换成一份整集 `BgmDesign`，再由 MusicScore 生成与最终混音消费同一冻结事实。视频模型自己的对白、Shot 同期声和 Segment 内可选的声音先行/延续 cue 都属于原生片段音轨并继续保留；系统不再规划、生成、持久化、计费或混合独立环境音层，也不观看/听取最终视频来生成第二份语义判断。
 
-角色音色是与配乐、对白成片链路解耦的可复用 `project.voice_reference` 音频 Resource：它只保存一次自然语言 Voice Design 的试听音频及不可变 Revision，可以独立存在，也可以通过保留的 `character_voice` Binding 绑定到一个项目角色。本阶段不把它自动拼接进视频提示词、对白生成或最终混音。
+角色音色是与配乐、对白成片链路解耦的可复用 `project.voice_reference` 音频 Resource：它只保存一次自然语言 Voice Design 的试听音频及不可变 Revision，可以独立存在，也可以通过保留的 `character_voice` Binding 绑定到一个项目角色。系统不自动把它拼接进视频提示词、对白生成或最终混音；只有 Primary 解析精确 Binding、Creative Worker 在唯一最终视频 Prompt 中显式引用且 `create_video.mediaReferences` 冻结该声音 Revision 时，才作为视频模型的参考音色。
 
 ## 不变量
 
@@ -22,6 +22,7 @@
 - **AP-10 — 音色生成只有一个入口和固定模型。** `generate_voice` 是新建与原位重生成音色的唯一执行入口；Agent 只提交音色描述、试听文字、语言、可选原 Resource identity 与绑定目标，不能提交 provider、model 或采样参数。服务端固定解析 `fal::fal-ai/qwen-3-tts/voice-design/1.7b`，FAL adapter 只发送 `text + prompt + language`，报价和结算按 Unicode 字符数使用同一冻结试听文字。
 - **AP-11 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于项目级 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)` 的不可变 Revision；角色表不新增音频字段。`bind_voice` 是绑定、换绑、解绑的唯一产品入口，并复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。`generate_voice target=character` 只携带规划时冻结的 Binding version；完成前用户已经换绑时保留新 Revision并返回显式 conflict，绝不覆盖较新选择。
 - **AP-12 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未在生成中、未绑定且未被 Lineage 引用的音色 Resource；共享 `MediaObject` 继续由独立生命周期拥有。删除角色时通过 Binding service 同事务清除该角色的 `character_voice` 插槽，不能留下以字符串 slotKey 孤立的绑定。
+- **AP-13 — 绑定音色只作为显式视频参考。** 有对白的角色存在 `character_voice` Binding 时，Primary 读取该 Binding 的精确 Revision 并作为 Worker source material；Worker 用 `@AudioN` 把音色身份写入唯一最终 Prompt，试听音频文字不得成为剧情对白。执行层只负责校验、冻结和传输 exact Revision，不自动追加 Prompt，也不从角色名、最新音色或试听内容推断引用。
 
 ## 权威入口
 

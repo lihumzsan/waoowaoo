@@ -13,6 +13,7 @@ function imagePayload() {
       inputHash: 'input-hash',
       inputs: [],
       imageInputPositions: [],
+      audioInputPositions: [],
       generationOptions: {
         aspectRatio: '9:16',
         resolution: '1K',
@@ -66,6 +67,7 @@ describe('creative resource generation task contract', () => {
           },
         ],
         imageInputPositions: [1],
+        audioInputPositions: [],
       },
     })
 
@@ -80,6 +82,50 @@ describe('creative resource generation task contract', () => {
       resource: {
         ...payload.resource,
         imageInputPositions: [3],
+      },
+    })).toThrow()
+  })
+
+  it('freezes image and audio provider inputs as disjoint ordered position sets', () => {
+    const payload = imagePayload()
+    const parsed = parseCreativeResourceGenerationTaskPayload({
+      ...payload,
+      resource: {
+        ...payload.resource,
+        resourceId: 'resource:video-voice-1',
+        mediaType: 'video',
+        schemaId: 'generic.video',
+        modelKey: 'openrouter::bytedance/seedance-2.0-fast',
+        inputs: [
+          {
+            resourceId: 'resource:character-image',
+            revisionId: 'revision:character-image',
+            fingerprint: 'a'.repeat(64),
+            role: 'character',
+            position: 0,
+          },
+          {
+            resourceId: 'resource:character-voice',
+            revisionId: 'revision:character-voice',
+            fingerprint: 'b'.repeat(64),
+            role: 'character_voice',
+            position: 1,
+          },
+        ],
+        imageInputPositions: [0],
+        audioInputPositions: [1],
+      },
+      imageModel: undefined,
+      videoModel: 'openrouter::bytedance/seedance-2.0-fast',
+    })
+
+    expect(parsed.resource.imageInputPositions).toEqual([0])
+    expect(parsed.resource.audioInputPositions).toEqual([1])
+    expect(() => parseCreativeResourceGenerationTaskPayload({
+      ...parsed,
+      resource: {
+        ...parsed.resource,
+        audioInputPositions: [0],
       },
     })).toThrow()
   })
@@ -101,6 +147,7 @@ describe('creative resource generation task contract', () => {
           position: 0,
         }],
         imageInputPositions: [0],
+        audioInputPositions: [],
         generationOptions: {
           duration: 15,
           aspectRatio: '16:9',

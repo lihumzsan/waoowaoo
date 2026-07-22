@@ -5,6 +5,7 @@ import {
   buildMediaOptionSchema,
   enumValidator,
   integerRangeValidator,
+  stringArrayValidator,
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
 import { buildGptImage2OptionSchema } from '@/lib/ai-providers/shared/gpt-image-2'
@@ -224,6 +225,9 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: [...OPENROUTER_SEEDANCE_2_RESOLUTION_OPTIONS],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
+        maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -242,6 +246,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
         maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -310,7 +315,7 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
   }
   if (modality === 'video') {
     return buildMediaOptionSchema('video', {
-      allowedKeys: ['referenceImages'],
+      allowedKeys: ['referenceImages', 'referenceAudios'],
       validators: {
         duration: integerRangeValidator({ min: 4, max: 15 }),
         aspectRatio: enumValidator(OPENROUTER_SEEDANCE_2_ASPECT_RATIO_OPTIONS),
@@ -320,6 +325,7 @@ export function resolveOpenRouterOptionSchema(modality: MediaModality, modelId?:
             : OPENROUTER_SEEDANCE_2_RESOLUTION_OPTIONS,
         ),
         generateAudio: booleanValidator(),
+        referenceAudios: stringArrayValidator(),
       },
     })
   }

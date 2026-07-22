@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
+import { resolveReferenceAudioUrl } from '@/lib/ai-providers/shared/audio-utils'
 import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
@@ -64,6 +65,46 @@ async function loadVideoImageReferences(
   }))
 }
 
+async function loadVideoAudioReferences(
+  job: Job<TaskJobData>,
+  input: CreativeResourceGenerationTaskPayload,
+): Promise<string[]> {
+  const inputByPosition = new Map(input.resource.inputs.map((reference) => [reference.position, reference]))
+  const audioInputs = input.resource.audioInputPositions.map((position) => {
+    const reference = inputByPosition.get(position)
+    if (!reference) throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_INPUT_POSITION_INVALID:${String(position)}`)
+    return reference
+  })
+  if (audioInputs.length === 0) return []
+  const revisions = await prisma.creativeResourceRevision.findMany({
+    where: { id: { in: audioInputs.map((reference) => reference.revisionId) } },
+    select: {
+      id: true,
+      resourceId: true,
+      fingerprint: true,
+      media: { select: { storageKey: true } },
+      resource: { select: { userId: true, mediaType: true, status: true } },
+    },
+  })
+  const byId = new Map(revisions.map((revision) => [revision.id, revision]))
+  return await Promise.all(audioInputs.map(async (reference) => {
+    const revision = byId.get(reference.revisionId)
+    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
+    if (
+      revision.resourceId !== reference.resourceId
+      || revision.fingerprint !== reference.fingerprint
+      || revision.resource.userId !== job.data.userId
+      || revision.resource.status !== 'ready'
+    ) {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+    }
+    if (revision.resource.mediaType !== 'audio' || !revision.media?.storageKey) {
+      throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.revisionId}`)
+    }
+    return await resolveReferenceAudioUrl(revision.media.storageKey)
+  }))
+}
+
 export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
   if (job.data.targetType !== 'CreativeResource') {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${job.data.targetType}`)
@@ -78,6 +119,16 @@ export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
   }
   await reportTaskProgress(job, 20, { stage: 'creative_resource_prepare' })
   const referenceImages = await loadVideoImageReferences(job, payload)
+  const referenceAudios = await loadVideoAudioReferences(job, payload)
+  if (referenceAudios.length > 0 && referenceImages.length === 0) {
+    throw new Error(`VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE:${payload.resource.modelKey}`)
+  }
+  if (
+    referenceAudios.length > 0
+    && referenceImages.some((reference) => reference.role === 'first_frame' || reference.role === 'last_frame')
+  ) {
+    throw new Error(`VIDEO_MODEL_REFERENCE_AUDIO_FRAME_ROLE_CONFLICT:${payload.resource.modelKey}`)
+  }
   if (referenceImages.length === 0 && !supportsTextToVideoModel(payload.resource.modelKey)) {
     throw new Error(`VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED:${payload.resource.modelKey}`)
   }
@@ -88,12 +139,20 @@ export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
       `VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(referenceImages.length)}:${String(maxReferences)}`,
     )
   }
+  const maxReferenceAudios = resolveBuiltinCapabilitiesByModelKey('video', payload.resource.modelKey)
+    ?.video?.maxReferenceAudios
+  if (referenceAudios.length > 0 && (!maxReferenceAudios || referenceAudios.length > maxReferenceAudios)) {
+    throw new Error(
+      `VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(referenceAudios.length)}:${String(maxReferenceAudios ?? 0)}`,
+    )
+  }
   const options = payload.generationOptions
   await reportTaskProgress(job, 45, { stage: 'creative_resource_generate' })
   const generated = await resolveVideoSourceFromGeneration(job, {
     userId: job.data.userId,
     modelId: payload.resource.modelKey,
     referenceImages,
+    referenceAudios,
     allowTextOnly: referenceImages.length === 0,
     options: {
       prompt: payload.resource.prompt,

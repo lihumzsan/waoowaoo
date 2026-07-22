@@ -94,6 +94,7 @@ export type AiProviderVideoExecutionContext = {
     generateAudio?: boolean
     lastFrameImageUrl?: string
     referenceImages?: string[]
+    referenceAudios?: string[]
     [key: string]: unknown
   }
 }

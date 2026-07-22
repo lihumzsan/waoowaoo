@@ -128,6 +128,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
         maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -146,6 +147,7 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
         maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -451,11 +453,12 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
     if (modelId === FAL_SEEDANCE_2_VIDEO_MODEL_ID || modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID) {
       return buildMediaOptionSchema('video', {
         ...FAL_VIDEO_OPTION_SCHEMA_CONFIG,
-        allowedKeys: ['referenceImages'],
+        allowedKeys: ['referenceImages', 'referenceAudios'],
         validators: {
           duration: integerRangeValidator({ min: 4, max: 15 }),
           aspectRatio: enumValidator(['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']),
           resolution: enumValidator(modelId === FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID ? ['480p', '720p'] : ['480p', '720p', '1080p']),
+          referenceAudios: stringArrayValidator(),
         },
         objectValidators: [createFalVideoObjectValidator(modelId, FAL_VIDEO_MODEL_IDS)],
       })

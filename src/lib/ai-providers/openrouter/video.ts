@@ -98,6 +98,7 @@ function assertAllowedOpenRouterVideoOptions(options: OpenRouterVideoOptions) {
     'generateAudio',
     'lastFrameImageUrl',
     'referenceImages',
+    'referenceAudios',
   ])
 
   for (const [key, value] of Object.entries(options)) {
@@ -160,6 +161,14 @@ function buildOpenRouterSeedance2Payload(input: {
     imageUrl: input.imageUrl,
     referenceImages: input.options.referenceImages,
   })
+  const referenceAudios = Array.from(new Set(filterStringUrls(input.options.referenceAudios)))
+
+  if (referenceAudios.length > 3) {
+    throw new Error('OPENROUTER_VIDEO_OPTION_VALUE_UNSUPPORTED: referenceAudios>3')
+  }
+  if (referenceAudios.length > 0 && references.length === 0) {
+    throw new Error('OPENROUTER_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
+  }
 
   if (input.options.lastFrameImageUrl) {
     const firstFrameUrl = references[0]
@@ -168,6 +177,9 @@ function buildOpenRouterSeedance2Payload(input: {
     }
     if (filterStringUrls(input.options.referenceImages).length > 0) {
       throw new Error('OPENROUTER_VIDEO_OPTION_UNSUPPORTED: referenceImages_with_lastFrameImageUrl')
+    }
+    if (referenceAudios.length > 0) {
+      throw new Error('OPENROUTER_VIDEO_OPTION_UNSUPPORTED: referenceAudios_with_lastFrameImageUrl')
     }
     return {
       ...shared,
@@ -178,13 +190,19 @@ function buildOpenRouterSeedance2Payload(input: {
     }
   }
 
-  if (references.length > 1) {
+  if (references.length > 1 || referenceAudios.length > 0) {
     return {
       ...shared,
-      inputReferences: references.map((url) => ({
-        type: 'image_url',
-        imageUrl: { url },
-      })),
+      inputReferences: [
+        ...references.map((url) => ({
+          type: 'image_url' as const,
+          imageUrl: { url },
+        })),
+        ...referenceAudios.map((url) => ({
+          type: 'audio_url' as const,
+          audioUrl: { url },
+        })),
+      ],
     }
   }
 

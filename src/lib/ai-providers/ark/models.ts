@@ -6,6 +6,7 @@ import {
   enumValidator,
   integerRangeValidator,
   nonEmptyStringValidator,
+  stringArrayValidator,
   type MediaModality,
 } from '@/lib/ai-providers/shared/option-schema'
 
@@ -41,6 +42,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
         maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -59,6 +61,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         supportGenerateAudio: true,
         assetReferenceMultiReference: true,
         maxReferenceImages: 8,
+        maxReferenceAudios: 3,
       },
     },
   },
@@ -382,7 +385,9 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
     const spec = ARK_VIDEO_SPECS[modelId]
     return buildMediaOptionSchema('video', {
       ...ARK_VIDEO_OPTION_SCHEMA_CONFIG,
-      allowedKeys: ['referenceImages'],
+      allowedKeys: modelId === 'doubao-seedance-2-0-260128' || modelId === 'doubao-seedance-2-0-fast-260128'
+        ? ['referenceImages', 'referenceAudios']
+        : ['referenceImages'],
       validators: {
         aspectRatio: enumValidator(ARK_VIDEO_RATIOS),
         resolution: enumValidator(spec?.resolutions || ['480p', '720p', '1080p']),
@@ -395,6 +400,7 @@ export function resolveArkOptionSchema(modality: MediaModality, modelId: string)
         seed: integerRangeValidator({ min: 0 }),
         serviceTier: enumValidator(ARK_VIDEO_SERVICE_TIERS),
         executionExpiresAfter: integerRangeValidator({ min: 1 }),
+        referenceAudios: stringArrayValidator(),
       },
     })
   }

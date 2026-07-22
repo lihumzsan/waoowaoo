@@ -522,6 +522,7 @@ export async function resolveVideoSourceFromGeneration(
     modelId: string
     imageUrl?: string
     referenceImages?: readonly VideoReferenceImageInput[]
+    referenceAudios?: readonly string[]
     allowTextOnly?: boolean
     options?: {
       prompt?: string
@@ -632,6 +633,9 @@ export async function resolveVideoSourceFromGeneration(
       {
         ...providerRequestOptions,
         ...providerReferencePayload.options,
+        ...(params.referenceAudios && params.referenceAudios.length > 0
+          ? { referenceAudios: [...params.referenceAudios] }
+          : {}),
         ...providerCapabilityOptions,
       },
       { key: 'media:video:primary' },
