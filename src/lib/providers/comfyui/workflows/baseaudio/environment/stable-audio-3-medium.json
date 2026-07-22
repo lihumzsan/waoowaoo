@@ -1,0 +1,79 @@
+{
+  "78": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": ["80", 0],
+      "filename_prefix": "audio/stable_audio_3",
+      "quality": "V0"
+    }
+  },
+  "80": {
+    "class_type": "easy cleanGpuUsed",
+    "inputs": {
+      "anything": ["82", 0]
+    }
+  },
+  "81": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["100", 0],
+      "text": "music, melody, speech, dialogue, vocals, narration"
+    },
+    "_meta": {
+      "title": "Environment sound negative prompt"
+    }
+  },
+  "82": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": ["84", 0],
+      "vae": ["99", 2]
+    }
+  },
+  "83": {
+    "class_type": "EmptyLatentAudio",
+    "inputs": {
+      "seconds": 150,
+      "batch_size": 1
+    }
+  },
+  "84": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["99", 0],
+      "positive": ["86", 0],
+      "negative": ["81", 0],
+      "latent_image": ["83", 0],
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "lcm",
+      "scheduler": "simple",
+      "denoise": 1
+    }
+  },
+  "86": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["100", 0],
+      "text": "Continuous realistic environmental ambience, no music or voices."
+    },
+    "_meta": {
+      "title": "Environment sound positive prompt"
+    }
+  },
+  "99": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "stable_audio_3_medium.safetensors"
+    }
+  },
+  "100": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "t5gemma_b_b_ul2.safetensors",
+      "type": "stable_audio",
+      "device": "default"
+    }
+  }
+}

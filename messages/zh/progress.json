@@ -48,6 +48,9 @@
     "imageLocation": "场景图片",
     "videoPanel": "视频生成",
     "videoSeamConcat": "视频无缝拼接",
+    "environmentSoundAnalyze": "环境音分析",
+    "environmentSoundGenerate": "环境音生成",
+    "environmentSoundCleanup": "环境音临时文件清理",
     "lipSync": "口型同步",
     "voiceLine": "配音生成",
     "freeVoice": "自由配音",
@@ -123,7 +126,13 @@
     "llmProxyPersist": "保存 LLM 结果",
     "firstLastFramePromptPrepare": "检查已链接画面",
     "firstLastFramePromptGenerate": "生成转场提示词",
-    "firstLastFramePromptPersist": "保存转场提示词"
+    "firstLastFramePromptPersist": "保存转场提示词",
+    "environmentSoundPrepare": "准备视频与配音",
+    "environmentSoundAnalyze": "分析连续声场",
+    "environmentSoundPlanReady": "环境音方案已就绪",
+    "environmentSoundGenerate": "生成环境音片段",
+    "environmentSoundCompose": "合成独立 MP3",
+    "environmentSoundPersist": "保存环境音结果"
   },
   "runConsole": {
     "storyToScript": "内容到剧本",

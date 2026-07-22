@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { useRouter } from '@/i18n/navigation'
 import FreeVoiceToolCard from './FreeVoiceToolCard'
+import EnvironmentSoundToolCard from './EnvironmentSoundToolCard'
 import VideoUploadCard from './VideoUploadCard'
 import {
   canSubmitVideoSeamConcat,
@@ -172,6 +173,9 @@ export default function VideoToolsPage() {
     input2TrimStartFrames,
   ) && !submitting && !uploadingSlot
   const phaseLabel = t(`status.${taskView.phase}`)
+  const stitchedEnvironmentVideo = taskView.videoKey && taskView.videoUrl
+    ? { key: taskView.videoKey, url: taskView.videoUrl, name: t('environmentSound.video.stitchedResult') }
+    : null
 
   return (
     <div className="glass-page min-h-screen">
@@ -333,6 +337,8 @@ export default function VideoToolsPage() {
               </section>
             </div>
           </section>
+
+          <EnvironmentSoundToolCard initialVideo={stitchedEnvironmentVideo} />
         </div>
       </main>
     </div>

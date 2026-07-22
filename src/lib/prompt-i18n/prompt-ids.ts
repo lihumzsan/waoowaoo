@@ -4,6 +4,8 @@ export const PROMPT_IDS = {
   FISH_AUDIO_S2_LINE_RENDER: 'fish_audio_s2_line_render',
   FISH_AUDIO_S2_VOICE_DESIGN: 'fish_audio_s2_voice_design',
   LTX23_VIDEO_PROMPT_ENHANCE: 'ltx23_video_prompt_enhance',
+  VIDEO_TOOLS_ENVIRONMENT_SOUND_ANALYSIS: 'video_tools_environment_sound_analysis',
+  VIDEO_TOOLS_ENVIRONMENT_SOUND_PROMPT_SYNC: 'video_tools_environment_sound_prompt_sync',
   NP_AGENT_ACTING_DIRECTION: 'np_agent_acting_direction',
   NP_AGENT_CHARACTER_PROFILE: 'np_agent_character_profile',
   NP_AGENT_CHARACTER_VISUAL: 'np_agent_character_visual',

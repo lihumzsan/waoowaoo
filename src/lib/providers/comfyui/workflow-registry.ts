@@ -96,6 +96,7 @@ export type ComfyUiWorkflowInject = {
   durationSeconds?: number
   targetFrameCount?: number
   motionStrength?: number
+  seed?: number
 }
 
 export type ComfyUiWorkflowLlmApiInject = {
@@ -3198,6 +3199,35 @@ function assignRandomSeedValues(graph: ComfyUiWorkflowGraph): void {
   }
 }
 
+const STABLE_AUDIO_3_MEDIUM_WORKFLOW_KEY = 'baseaudio/environment/stable-audio-3-medium'
+
+function applyStableAudio3MediumControls(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  inject: ComfyUiWorkflowInject,
+): void {
+  if (workflowKey.trim().replace(/\\/g, '/') !== STABLE_AUDIO_3_MEDIUM_WORKFLOW_KEY) return
+
+  const prompt = readTrimmedString(inject.prompt)
+  const negativePrompt = readTrimmedString(inject.negativePrompt)
+  if (prompt) graph['86']!.inputs.text = prompt
+  if (negativePrompt) graph['81']!.inputs.text = negativePrompt
+
+  if (typeof inject.durationSeconds === 'number' && Number.isFinite(inject.durationSeconds)) {
+    if (inject.durationSeconds <= 0 || inject.durationSeconds > 150) {
+      throw new Error('COMFYUI_STABLE_AUDIO_DURATION_INVALID')
+    }
+    graph['83']!.inputs.seconds = Math.round(inject.durationSeconds * 1000) / 1000
+  }
+
+  if (inject.seed !== undefined) {
+    if (!Number.isSafeInteger(inject.seed) || inject.seed < 0) {
+      throw new Error('COMFYUI_STABLE_AUDIO_SEED_INVALID')
+    }
+    graph['84']!.inputs.seed = inject.seed
+  }
+}
+
 function isQwenStoryboardWorkflowKey(workflowKey: string): boolean {
   const normalized = workflowKey.trim().replace(/\\/g, '/')
   return normalized.includes('baseimage/')
@@ -3442,6 +3472,7 @@ export function resolveComfyUiWorkflow(
   removeDisabledVideoOutputNodes(graph)
   pruneUnreachableFromMediaOutputs(graph)
   assignRandomSeedValues(graph)
+  applyStableAudio3MediumControls(graph, workflowKey, inject)
   return graph
 }
 

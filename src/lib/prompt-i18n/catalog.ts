@@ -36,6 +36,21 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
       'generation_context',
     ],
   },
+  [PROMPT_IDS.VIDEO_TOOLS_ENVIRONMENT_SOUND_ANALYSIS]: {
+    pathStem: 'video-tools/environment_sound_analysis',
+    variableKeys: [
+      'video_duration',
+      'frame_timestamps',
+      'has_source_audio',
+      'source_audio_activity',
+      'script_dialogue',
+      'voice_activity',
+    ],
+  },
+  [PROMPT_IDS.VIDEO_TOOLS_ENVIRONMENT_SOUND_PROMPT_SYNC]: {
+    pathStem: 'video-tools/environment_sound_prompt_sync',
+    variableKeys: ['edited_plan'],
+  },
   [PROMPT_IDS.NP_AGENT_ACTING_DIRECTION]: {
     pathStem: 'novel-promotion/agent_acting_direction',
     variableKeys: ['panels_json', 'panel_count', 'characters_info'],

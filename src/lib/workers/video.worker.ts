@@ -6,6 +6,11 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { handleVideoSeamConcatTask } from './handlers/video-seam-concat'
+import {
+  handleEnvironmentSoundAnalyzeTask,
+  handleEnvironmentSoundCleanupTask,
+  handleEnvironmentSoundGenerateTask,
+} from './handlers/environment-sound'
 import { withUserConcurrencyGate } from './user-concurrency-gate'
 import {
   assertTaskActive,
@@ -983,6 +988,12 @@ async function processVideoTask(job: Job<TaskJobData>) {
       return await handleVideoPanelTask(job)
     case TASK_TYPE.VIDEO_SEAM_CONCAT:
       return await handleVideoSeamConcatTask(job)
+    case TASK_TYPE.ENVIRONMENT_SOUND_ANALYZE:
+      return await handleEnvironmentSoundAnalyzeTask(job)
+    case TASK_TYPE.ENVIRONMENT_SOUND_GENERATE:
+      return await handleEnvironmentSoundGenerateTask(job)
+    case TASK_TYPE.ENVIRONMENT_SOUND_CLEANUP:
+      return await handleEnvironmentSoundCleanupTask(job)
     case TASK_TYPE.LIP_SYNC:
       return await handleLipSyncTask(job)
     default:

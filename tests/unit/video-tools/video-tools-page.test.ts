@@ -23,6 +23,9 @@ vi.mock('@/app/[locale]/workspace/video-tools/VideoUploadCard', () => ({
 vi.mock('@/app/[locale]/workspace/video-tools/FreeVoiceToolCard', () => ({
   default: () => createElement('section', { 'data-free-voice-tool': true }, 'freeVoice.title'),
 }))
+vi.mock('@/app/[locale]/workspace/video-tools/EnvironmentSoundToolCard', () => ({
+  default: () => createElement('section', { 'data-environment-sound-tool': true }, 'environmentSound.title'),
+}))
 
 import VideoToolsPage from '@/app/[locale]/workspace/video-tools/page'
 
@@ -42,6 +45,16 @@ describe('video tools page', () => {
 
     expect(html).toContain('data-free-voice-tool')
     expect(html).toContain('freeVoice.title')
+  })
+
+  it('renders one environment-sound tool fed by the stitched result', () => {
+    const html = renderToStaticMarkup(createElement(VideoToolsPage))
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(html).toContain('data-environment-sound-tool')
+    expect(html).toContain('environmentSound.title')
+    expect(source).toContain('initialVideo={stitchedEnvironmentVideo}')
+    expect(source.indexOf('<EnvironmentSoundToolCard')).toBeGreaterThan(source.indexOf("t('result.title')"))
   })
 
   it('keeps result download on the native video controls only', () => {

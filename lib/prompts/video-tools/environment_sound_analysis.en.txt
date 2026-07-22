@@ -1,0 +1,33 @@
+Act as a film sound designer. Use the chronologically ordered representative video frames and the facts below to plan one standalone environmental-sound track for the entire video.
+
+Video duration in seconds: {video_duration}
+Frame timestamps in image order: {frame_timestamps}
+Source video has audio: {has_source_audio}
+Source-audio activity summary (signal/silence timing and density only, not semantic audio recognition): {source_audio_activity}
+Script or current dialogue: {script_dialogue}
+Voice analysis: {voice_activity}
+
+Rules:
+- Divide by continuous acoustic environment, not by every edit or storyboard panel.
+- Merge shots while location, room acoustics, and ambient bed remain continuous. Start a new zone only for a material sound-source or acoustic-space change.
+- Script and voice activity provide context and dialogue density only. They must never enter the generated environmental track. Only treat activeRanges as video timestamps when timelineAligned is true; otherwise use activeRatio only and do not guess dialogue placement.
+- Source-audio activeRanges are aligned to the video timeline and may prevent stacking event sounds over already active sections. They contain no sound category or semantic identity, so never infer a specific source from them.
+- Plan only realistic ambient beds and visually justified event sounds. Do not add music, melody, speech, dialogue, narration, vocals, or whispers.
+- Do not assume that every visible object produces sound.
+- Each zone must be at least one second. Zones start at zero, are contiguous without overlap, and end exactly at the supplied video duration.
+
+Return one JSON object only, without a code fence or explanation. Required top-level keys:
+- durationSeconds: numeric value equal to the supplied video duration.
+- summaryZh: concise Simplified Chinese overall sound assessment.
+- zones: time-ordered array.
+
+Every zone must contain:
+- id: short stable identifier.
+- startSeconds and endSeconds: numbers.
+- sceneZh: Simplified Chinese scene assessment.
+- ambienceZh: Simplified Chinese continuous ambient bed.
+- eventSoundsZh: array of Simplified Chinese strings for visually justified events only.
+- avoidSoundsZh: array of Simplified Chinese strings.
+- promptEn: English generation prompt for continuous realistic stereo film ambience with spatial depth, explicitly stating no music and no voices.
+- negativePromptEn: English negative prompt containing at least music, melody, speech, dialogue, vocals, narration.
+- transitionToNext: smooth for acoustic continuity or hard for a material space change.

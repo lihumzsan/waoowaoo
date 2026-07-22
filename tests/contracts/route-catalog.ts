@@ -176,6 +176,8 @@ const ROUTE_FILES = [
   'src/app/api/user/transactions/route.ts',
   'src/app/api/video-tools/free-voice/[recordId]/audio/route.ts',
   'src/app/api/video-tools/free-voice/route.ts',
+  'src/app/api/video-tools/environment-sound/route.ts',
+  'src/app/api/video-tools/environment-sound/voice-upload/route.ts',
   'src/app/api/video-tools/seam-concat/route.ts',
   'src/app/api/video-tools/uploads/route.ts',
 ] as const

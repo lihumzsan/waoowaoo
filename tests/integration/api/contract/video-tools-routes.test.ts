@@ -3,6 +3,10 @@ import { NextRequest } from 'next/server'
 import { POST as uploadVideo } from '@/app/api/video-tools/uploads/route'
 import { POST as submitSeamConcat } from '@/app/api/video-tools/seam-concat/route'
 import * as seamConcatRoute from '@/app/api/video-tools/seam-concat/route'
+import { POST as uploadEnvironmentSoundVoice } from '@/app/api/video-tools/environment-sound/voice-upload/route'
+import * as environmentSoundVoiceRoute from '@/app/api/video-tools/environment-sound/voice-upload/route'
+import { POST as submitEnvironmentSound } from '@/app/api/video-tools/environment-sound/route'
+import * as environmentSoundRoute from '@/app/api/video-tools/environment-sound/route'
 import { POST as submitFreeVoice } from '@/app/api/video-tools/free-voice/route'
 import { buildMockRequest } from '../../../helpers/request'
 
@@ -23,6 +27,7 @@ const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
   deduped: false,
 })))
 const addTaskJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'job-1' })))
+const deleteObjectMock = vi.hoisted(() => vi.fn(async () => undefined))
 const queueState = vi.hoisted(() => ({ job: null as null | Record<string, unknown> }))
 const getVideoJobMock = vi.hoisted(() => vi.fn(async () => queueState.job))
 const createVideoToolFreeVoiceTaskMock = vi.hoisted(() => vi.fn(async () => ({
@@ -54,6 +59,7 @@ vi.mock('@/lib/api-auth', () => ({
 
 vi.mock('@/lib/storage', () => ({
   uploadObjectStream: uploadObjectStreamMock,
+  deleteObject: deleteObjectMock,
   getSignedUrl: vi.fn((key: string) => `/api/storage/sign?key=${encodeURIComponent(key)}`),
 }))
 
@@ -72,7 +78,9 @@ describe('video tools routes', () => {
     authState.authenticated = true
     uploadObjectStreamMock.mockClear()
     submitTaskMock.mockClear()
-    addTaskJobMock.mockClear()
+    addTaskJobMock.mockReset()
+    addTaskJobMock.mockResolvedValue({ id: 'job-1' })
+    deleteObjectMock.mockClear()
     getVideoJobMock.mockClear()
     createVideoToolFreeVoiceTaskMock.mockClear()
     queueState.job = null
@@ -249,6 +257,196 @@ describe('video tools routes', () => {
       }),
     }), expect.objectContaining({ attempts: 1 }))
     expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('streams an optional voice reference to a user-scoped audio key', async () => {
+    const request = new NextRequest('http://localhost:3000/api/video-tools/environment-sound/voice-upload', {
+      method: 'POST',
+      headers: {
+        'content-length': '3',
+        'content-type': 'audio/mpeg',
+        'x-file-name': encodeURIComponent('dialogue.mp3'),
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+
+    const response = await uploadEnvironmentSoundVoice(request, { params: Promise.resolve({}) })
+    const body = await response.json() as { success: boolean; key: string; mimeType: string }
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ success: true, mimeType: 'audio/mpeg' })
+    expect(body.key).toMatch(/^video-tools\/user-1\/voice-inputs\/.+\.mp3$/)
+    expect(uploadObjectStreamMock).toHaveBeenCalledWith(
+      expect.any(ReadableStream),
+      body.key,
+      3,
+      'audio/mpeg',
+    )
+    expect(addTaskJobMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'environment_sound_cleanup',
+      userId: 'user-1',
+      payload: { objectKey: body.key },
+    }), expect.objectContaining({ delay: 86_400_000 }))
+  })
+
+  it('compensates a voice upload when delayed cleanup cannot be scheduled', async () => {
+    addTaskJobMock.mockRejectedValueOnce(new Error('redis unavailable'))
+    const request = new NextRequest('http://localhost:3000/api/video-tools/environment-sound/voice-upload', {
+      method: 'POST',
+      headers: {
+        'content-length': '3',
+        'content-type': 'audio/mpeg',
+        'x-file-name': encodeURIComponent('dialogue.mp3'),
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+
+    const response = await uploadEnvironmentSoundVoice(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(502)
+    expect(deleteObjectMock).toHaveBeenCalledWith(expect.stringMatching(/^video-tools\/user-1\/voice-inputs\/.+\.mp3$/))
+  })
+
+  it('deletes only the authenticated user owned temporary voice object', async () => {
+    const deleteVoice = (environmentSoundVoiceRoute as { DELETE?: typeof uploadEnvironmentSoundVoice }).DELETE
+    expect(deleteVoice).toBeTypeOf('function')
+    const request = buildMockRequest({
+      path: '/api/video-tools/environment-sound/voice-upload',
+      method: 'DELETE',
+      body: { key: 'video-tools/user-1/voice-inputs/dialogue.mp3' },
+    })
+
+    const response = await deleteVoice!(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(200)
+    expect(deleteObjectMock).toHaveBeenCalledWith('video-tools/user-1/voice-inputs/dialogue.mp3')
+  })
+
+  it('rejects unsupported optional voice uploads before consuming bytes', async () => {
+    const request = new NextRequest('http://localhost:3000/api/video-tools/environment-sound/voice-upload', {
+      method: 'POST',
+      headers: {
+        'content-length': '3',
+        'content-type': 'text/plain',
+        'x-file-name': encodeURIComponent('dialogue.txt'),
+      },
+      body: new Uint8Array([1, 2, 3]),
+    })
+
+    const response = await uploadEnvironmentSoundVoice(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(400)
+    expect(uploadObjectStreamMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['analyze', 'environment_sound_analyze'],
+    ['generate', 'environment_sound_generate'],
+  ])('queues environment sound %s as a transient owned job', async (action, taskType) => {
+    const plan = {
+      durationSeconds: 10,
+      summaryZh: '雨夜街道的连续环境音',
+      zones: [{
+        id: 'zone-1',
+        startSeconds: 0,
+        endSeconds: 10,
+        sceneZh: '雨夜街道',
+        ambienceZh: '稳定的雨声和远处交通声',
+        eventSoundsZh: ['偶尔车辆驶过'],
+        avoidSoundsZh: ['人声', '音乐'],
+        promptEn: 'steady nighttime rain ambience with distant urban traffic and occasional passing cars',
+        negativePromptEn: 'music, melody, speech, dialogue, vocals, narration',
+        transitionToNext: 'smooth',
+      }],
+    }
+    const request = buildMockRequest({
+      path: '/api/video-tools/environment-sound',
+      method: 'POST',
+      body: action === 'analyze'
+        ? {
+            action,
+            videoKey: 'video-tools/user-1/outputs/stitched.mp4',
+            videoName: 'stitched.mp4',
+            scriptDialogue: '他走进雨里。',
+            voiceKey: 'video-tools/user-1/voice-inputs/dialogue.mp3',
+            meta: { locale: 'zh' },
+          }
+        : {
+            action,
+            videoKey: 'video-tools/user-1/outputs/stitched.mp4',
+            videoName: 'stitched.mp4',
+            plan,
+            meta: { locale: 'zh' },
+          },
+    })
+
+    const response = await submitEnvironmentSound(request, { params: Promise.resolve({}) })
+    const body = await response.json() as { taskId: string; status: string }
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ status: 'queued' })
+    expect(addTaskJobMock).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: body.taskId,
+      persistence: 'transient',
+      userId: 'user-1',
+      projectId: 'video-tools',
+      type: taskType,
+      targetType: action === 'analyze' ? 'EnvironmentSoundAnalyze' : 'EnvironmentSoundGenerate',
+      payload: expect.objectContaining({ action, videoKey: 'video-tools/user-1/outputs/stitched.mp4' }),
+    }), expect.objectContaining({
+      attempts: 1,
+      removeOnComplete: expect.objectContaining({ age: 86_400 }),
+      removeOnFail: expect.objectContaining({ age: 86_400 }),
+    }))
+  })
+
+  it('rejects an environment sound submission that references another user video', async () => {
+    const request = buildMockRequest({
+      path: '/api/video-tools/environment-sound',
+      method: 'POST',
+      body: {
+        action: 'analyze',
+        videoKey: 'video-tools/user-2/outputs/stitched.mp4',
+        videoName: 'stitched.mp4',
+      },
+    })
+
+    const response = await submitEnvironmentSound(request, { params: Promise.resolve({}) })
+
+    expect(response.status).toBe(400)
+    expect(addTaskJobMock).not.toHaveBeenCalled()
+  })
+
+  it('returns only an owned environment sound job status and result', async () => {
+    queueState.job = {
+      data: {
+        taskId: 'environment-job-1',
+        persistence: 'transient',
+        type: 'environment_sound_generate',
+        userId: 'user-1',
+      },
+      progress: { progress: 95, stage: 'persist_output' },
+      returnvalue: { audioKey: 'output.mp3', audioUrl: '/api/storage/sign?key=output.mp3' },
+      failedReason: null,
+      getState: vi.fn(async () => 'completed'),
+    }
+    const request = buildMockRequest({
+      path: '/api/video-tools/environment-sound?taskId=environment-job-1',
+      method: 'GET',
+    })
+    const getStatus = (environmentSoundRoute as { GET: typeof submitEnvironmentSound }).GET
+
+    const response = await getStatus(request, { params: Promise.resolve({}) })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({
+      id: 'environment-job-1',
+      status: 'completed',
+      progress: 100,
+      result: { audioKey: 'output.mp3', audioUrl: '/api/storage/sign?key=output.mp3' },
+      error: null,
+    })
   })
 
   it('exposes a transient job status endpoint instead of task history', () => {

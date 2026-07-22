@@ -45,6 +45,9 @@ const BERNINI_AUDIO_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio
 
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const videoSeamConcatHandlerMock = vi.hoisted(() => vi.fn(async () => ({ videoKey: 'output.mp4' })))
+const environmentSoundAnalyzeHandlerMock = vi.hoisted(() => vi.fn(async () => ({ plan: { zones: [] } })))
+const environmentSoundGenerateHandlerMock = vi.hoisted(() => vi.fn(async () => ({ audioKey: 'output.mp3' })))
+const environmentSoundCleanupHandlerMock = vi.hoisted(() => vi.fn(async () => ({ deleted: true })))
 const withTaskLifecycleMock = vi.hoisted(() =>
   vi.fn(async (job: Job<TaskJobData>, handler: WorkerProcessor) => await handler(job)),
 )
@@ -152,6 +155,11 @@ vi.mock('bullmq', () => ({
 vi.mock('@/lib/redis', () => ({ queueRedis: {} }))
 vi.mock('@/lib/workers/handlers/video-seam-concat', () => ({
   handleVideoSeamConcatTask: videoSeamConcatHandlerMock,
+}))
+vi.mock('@/lib/workers/handlers/environment-sound', () => ({
+  handleEnvironmentSoundAnalyzeTask: environmentSoundAnalyzeHandlerMock,
+  handleEnvironmentSoundGenerateTask: environmentSoundGenerateHandlerMock,
+  handleEnvironmentSoundCleanupTask: environmentSoundCleanupHandlerMock,
 }))
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: reportTaskProgressMock,
@@ -1335,5 +1343,18 @@ describe('worker video processor behavior', () => {
 
     await expect(processor!(job)).resolves.toEqual({ videoKey: 'output.mp4' })
     expect(videoSeamConcatHandlerMock).toHaveBeenCalledWith(job)
+  })
+
+  it.each([
+    [TASK_TYPE.ENVIRONMENT_SOUND_ANALYZE, environmentSoundAnalyzeHandlerMock, { plan: { zones: [] } }],
+    [TASK_TYPE.ENVIRONMENT_SOUND_GENERATE, environmentSoundGenerateHandlerMock, { audioKey: 'output.mp3' }],
+    [(TASK_TYPE as Record<string, string>).ENVIRONMENT_SOUND_CLEANUP as TaskJobData['type'], environmentSoundCleanupHandlerMock, { deleted: true }],
+  ])('%s: routes environment sound tasks to the focused handler', async (type, handler, expected) => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+    const job = buildJob({ type, targetType: 'EnvironmentSound', targetId: 'target-1' })
+
+    await expect(processor!(job)).resolves.toEqual(expected)
+    expect(handler).toHaveBeenCalledWith(job)
   })
 })

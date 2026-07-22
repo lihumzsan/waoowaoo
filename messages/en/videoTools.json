@@ -51,6 +51,76 @@
     "emptyHint": "Upload two videos and start concatenation. The result will appear here.",
     "processingHint": "ComfyUI is processing the videos. Keep this page open to preview and download the result."
   },
+  "environmentSound": {
+    "title": "Standalone Environment Sound",
+    "description": "Analyze the final stitched video, representative frames, source-audio activity, script, and optional voice density; plan continuous acoustic zones; and output one exact-duration MP3.",
+    "status": {
+      "idle": "Waiting for video",
+      "queued": "Queued",
+      "analyzing": "Analyzing soundscape",
+      "planReady": "Plan ready to edit",
+      "generating": "Generating ambience",
+      "persisting": "Composing MP3",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "video": {
+      "title": "Final stitched video",
+      "hint": "The latest result above is adopted automatically, or upload a separate complete video.",
+      "select": "Select complete video",
+      "replace": "Replace video",
+      "stitchedResult": "final-stitched-video.mp4"
+    },
+    "script": {
+      "title": "Current script / dialogue (optional)",
+      "placeholder": "Paste the script and dialogue matching this complete video. Video-only analysis also works."
+    },
+    "voice": {
+      "title": "Matching voice track (optional)",
+      "hint": "Used only to estimate dialogue density. Similar duration never implies timeline alignment, and the voice is never mixed into the result. MP3, WAV, M4A, FLAC, or OGG up to 64 MB.",
+      "select": "Select voice track",
+      "replace": "Replace voice track",
+      "remove": "Remove"
+    },
+    "analysis": {
+      "note": "Whole-video frame coverage, script context, source signal/silence intervals, and voice density are combined into continuous acoustic zones. The system does not pretend to identify the semantic content of source audio.",
+      "start": "Analyze needed environment sound",
+      "running": "Analyzing soundscape"
+    },
+    "plan": {
+      "title": "Environment sound plan",
+      "hint": "{duration} seconds across {count} continuous sound zones. Video-derived timing stays fixed while the content remains editable.",
+      "summary": "Overall direction",
+      "zone": "Sound zone {index}",
+      "scene": "Scene reading",
+      "ambience": "Continuous ambience",
+      "events": "Event sounds (one per line)",
+      "avoid": "Avoid (one per line)",
+      "prompt": "Stable Audio English prompt (auto-synced from edited facts before generation)",
+      "negative": "Negative prompt",
+      "transition": "Transition to next zone",
+      "smooth": "Smooth crossfade",
+      "hard": "Quick switch"
+    },
+    "generation": {
+      "note": "Zones are split only when the model duration limit requires it, generated sequentially, then crossfaded into one exact-duration MP3. The source video is never modified.",
+      "start": "Generate standalone MP3",
+      "running": "Generating and composing"
+    },
+    "result": {
+      "title": "Environment sound MP3",
+      "hint": "About {duration} seconds. Preview it here or download it for your own video mix.",
+      "ttl": "Tasks, temporary voice uploads, and results expire after 24 hours. The latest task is restored after a page reload.",
+      "download": "Download MP3"
+    },
+    "errors": {
+      "videoUploadFailed": "Complete video upload failed",
+      "voiceUploadFailed": "Voice track upload failed",
+      "analyzeFailed": "Environment sound analysis failed",
+      "generateFailed": "Environment sound generation failed",
+      "statusFailed": "Could not load the environment sound task"
+    }
+  },
   "freeVoice": {
     "title": "Free Voice",
     "description": "A project and its character reference voice are required to generate one temporary voice clip.",

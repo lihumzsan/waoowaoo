@@ -6,6 +6,7 @@ import {
   loadComfyUiWorkflowJsonFile,
   resolveComfyUiWorkflow,
 } from '@/lib/providers/comfyui/workflow-registry'
+import { STABLE_AUDIO_3_MEDIUM_WORKFLOW_KEY } from '@/lib/video-tools/environment-sound'
 
 function createWorkflowRoot() {
   return mkdtempSync(join(tmpdir(), 'waoowaoo-comfyui-'))
@@ -33,6 +34,32 @@ describe('comfyui workflow registry prompt injection', () => {
       rmSync(workflowRoot, { recursive: true, force: true })
       workflowRoot = null
     }
+  })
+
+  it('injects Stable Audio environment prompts, duration, and seed without Qwen reprompting', () => {
+    const graph = resolveComfyUiWorkflow(STABLE_AUDIO_3_MEDIUM_WORKFLOW_KEY, {
+      prompt: 'Night forest ambience with soft wind.',
+      negativePrompt: 'music, speech',
+      durationSeconds: 42.5,
+      seed: 1234,
+    })
+
+    expect(graph['99']?.inputs.ckpt_name).toBe('stable_audio_3_medium.safetensors')
+    expect(graph['100']?.inputs.clip_name).toBe('t5gemma_b_b_ul2.safetensors')
+    expect(graph['86']?.inputs.text).toBe('Night forest ambience with soft wind.')
+    expect(graph['81']?.inputs.text).toBe('music, speech')
+    expect(graph['83']?.inputs).toMatchObject({ seconds: 42.5, batch_size: 1 })
+    expect(graph['84']?.inputs).toMatchObject({
+      seed: 1234,
+      steps: 8,
+      cfg: 1,
+      sampler_name: 'lcm',
+      scheduler: 'simple',
+      denoise: 1,
+    })
+    expect(graph['78']?.inputs).toMatchObject({ filename_prefix: 'audio/stable_audio_3', quality: 'V0' })
+    expect(Object.values(graph).some((node) => node.class_type === 'TextGenerate')).toBe(false)
+    expect(Object.values(graph).some((node) => node.inputs.clip_name === 'qwen3.5_2b_bf16.safetensors')).toBe(false)
   })
 
   it('adapts the bundled Goon first-last-frame workflow through its exact node contract', () => {

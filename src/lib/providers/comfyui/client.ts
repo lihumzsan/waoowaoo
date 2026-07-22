@@ -1331,6 +1331,9 @@ export async function runComfyUiAudioWorkflow(params: {
   baseUrl: string
   workflowKey: string
   prompt: string
+  negativePrompt?: string
+  durationSeconds?: number
+  seed?: number
   referenceAudioUrls?: string[]
   llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ audioBase64: string; mimeType: string }> {
@@ -1339,6 +1342,9 @@ export async function runComfyUiAudioWorkflow(params: {
     const audioFilenames = await uploadComfyUiAudios(base, params.referenceAudioUrls || [])
     const workflow = resolveComfyUiWorkflow(params.workflowKey.trim(), {
       prompt: params.prompt,
+      negativePrompt: params.negativePrompt,
+      durationSeconds: params.durationSeconds,
+      seed: params.seed,
       audioFilenames,
       llmApi: params.llmApi,
     })

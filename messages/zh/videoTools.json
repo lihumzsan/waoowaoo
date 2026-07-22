@@ -51,6 +51,76 @@
     "emptyHint": "上传两个视频并开始拼接，结果将在这里显示。",
     "processingHint": "ComfyUI 正在处理视频，请保持当前页面打开，完成后可预览和下载。"
   },
+  "environmentSound": {
+    "title": "独立环境音",
+    "description": "分析最终拼接视频、代表画面、原视频有声区间、剧本和可选配音密度，按连续声场规划环境音，最终只输出一条与视频等长的 MP3。",
+    "status": {
+      "idle": "等待视频",
+      "queued": "排队中",
+      "analyzing": "分析声场",
+      "planReady": "方案可编辑",
+      "generating": "生成环境音",
+      "persisting": "合成 MP3",
+      "completed": "已完成",
+      "failed": "处理失败"
+    },
+    "video": {
+      "title": "最终拼接视频",
+      "hint": "优先自动使用上方刚完成的拼接结果，也可以单独上传完整视频。",
+      "select": "选择完整视频",
+      "replace": "替换视频",
+      "stitchedResult": "最终拼接视频.mp4"
+    },
+    "script": {
+      "title": "当前剧本 / 台词（可选）",
+      "placeholder": "粘贴与这个完整视频对应的剧本和台词。没有也可以直接分析视频。"
+    },
+    "voice": {
+      "title": "对应配音（可选）",
+      "hint": "只用于估计对白密度，不会靠音频时长猜测它已和视频时间轴对齐，也不会混进环境音。支持 MP3、WAV、M4A、FLAC、OGG，最大 64 MB。",
+      "select": "选择配音",
+      "replace": "替换配音",
+      "remove": "移除"
+    },
+    "analysis": {
+      "note": "系统会均匀覆盖完整视频抽取代表画面，并结合剧本、原视频有声/静音区间和配音密度，按连续声场而不是分镜切点规划环境音；不会冒充识别原音轨里的具体声音。",
+      "start": "分析需要什么环境音",
+      "running": "正在分析声场"
+    },
+    "plan": {
+      "title": "环境音方案",
+      "hint": "视频时长 {duration} 秒，共 {count} 个连续声场。时间边界由视频决定，内容可直接修改。",
+      "summary": "整体说明",
+      "zone": "声场 {index}",
+      "scene": "场景判断",
+      "ambience": "持续底噪",
+      "events": "事件音（每行一个）",
+      "avoid": "不要出现（每行一个）",
+      "prompt": "Stable Audio 英文提示词（生成前按中文方案自动同步）",
+      "negative": "负面提示词",
+      "transition": "转入下一声场",
+      "smooth": "平滑过渡",
+      "hard": "快速切换"
+    },
+    "generation": {
+      "note": "生成会按声场和模型时长上限自动拆片、顺序执行，再交叉淡化成一条与视频等长的 MP3；不会写回或改动视频。",
+      "start": "生成独立环境音 MP3",
+      "running": "正在生成并合成"
+    },
+    "result": {
+      "title": "环境音 MP3",
+      "hint": "成品时长约 {duration} 秒，可试听或下载后自行与视频合成。",
+      "ttl": "任务、临时配音和成品保留 24 小时；刷新页面可恢复最近一次任务。",
+      "download": "下载 MP3"
+    },
+    "errors": {
+      "videoUploadFailed": "完整视频上传失败",
+      "voiceUploadFailed": "配音上传失败",
+      "analyzeFailed": "环境音分析失败",
+      "generateFailed": "环境音生成失败",
+      "statusFailed": "无法读取环境音任务状态"
+    }
+  },
   "freeVoice": {
     "title": "自由配音",
     "description": "必须选择项目及其角色参考音色，输入文本后生成一段临时配音。",

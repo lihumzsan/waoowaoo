@@ -48,6 +48,9 @@
     "imageLocation": "Location image",
     "videoPanel": "Video generation",
     "videoSeamConcat": "Video seam concat",
+    "environmentSoundAnalyze": "Environment sound analysis",
+    "environmentSoundGenerate": "Environment sound generation",
+    "environmentSoundCleanup": "Environment sound temporary-file cleanup",
     "lipSync": "Lip sync",
     "voiceLine": "Voice generation",
     "freeVoice": "Free voice",
@@ -123,7 +126,13 @@
     "llmProxyPersist": "Persist LLM result",
     "firstLastFramePromptPrepare": "Check linked frames",
     "firstLastFramePromptGenerate": "Write transition prompt",
-    "firstLastFramePromptPersist": "Save transition prompt"
+    "firstLastFramePromptPersist": "Save transition prompt",
+    "environmentSoundPrepare": "Prepare video and voice track",
+    "environmentSoundAnalyze": "Analyze continuous sound zones",
+    "environmentSoundPlanReady": "Environment sound plan ready",
+    "environmentSoundGenerate": "Generate ambience pieces",
+    "environmentSoundCompose": "Compose standalone MP3",
+    "environmentSoundPersist": "Save environment sound result"
   },
   "runConsole": {
     "storyToScript": "Story to Script",

@@ -1,0 +1,15 @@
+Act as a film sound designer. Synchronize the user's final edited environment-sound plan into English prompts for Stable Audio.
+
+Final edited plan JSON: {edited_plan}
+
+Rules:
+- The edited sceneZh, ambienceZh, eventSoundsZh, and avoidSoundsZh fields are authoritative facts. currentPromptEn and currentNegativePromptEn are only an English baseline worth preserving when consistent.
+- Do not change IDs, timing, zone count, or transitions.
+- promptEn must be natural, specific English describing continuous realistic stereo film ambience, spatial depth, and only the event sounds explicitly present in the edited plan.
+- Do not invent unsupported sound sources or assume that every visible stationary object makes sound.
+- promptEn must explicitly state no music and no voices.
+- negativePromptEn must contain music, melody, speech, dialogue, vocals, narration and translate the meaning of avoidSoundsZh into English negative constraints.
+
+Return one JSON object only, without a code fence or explanation:
+{"zones":[{"id":"original id","promptEn":"English positive prompt","negativePromptEn":"English negative prompt"}]}
+Zones must correspond one-to-one with the input in the same order, with none missing or added.
