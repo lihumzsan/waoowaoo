@@ -9,9 +9,12 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { useRouter } from '@/i18n/navigation'
 import FreeVoiceToolCard from './FreeVoiceToolCard'
+import VideoSeamDiagnostics from './VideoSeamDiagnostics'
 import VideoUploadCard from './VideoUploadCard'
 import {
   canSubmitVideoSeamConcat,
+  resolveVideoSeamDiagnostics,
+  resolveVideoSeamErrorTranslationKey,
   resolveVideoToolTaskView,
   type UploadedVideo,
   type VideoToolTask,
@@ -34,7 +37,7 @@ export default function VideoToolsPage() {
   const [input1TrimEndFrames, setInput1TrimEndFrames] = useState<number | ''>(0)
   const [input2TrimStartFrames, setInput2TrimStartFrames] = useState<number | ''>(1)
   const [seamMode, setSeamMode] = useState<'direct' | 'ai_bridge'>('direct')
-  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<4 | 6 | 8>(6)
+  const [bridgeDurationSeconds, setBridgeDurationSeconds] = useState<4 | 6 | 8>(4)
   const [bridgePrompt, setBridgePrompt] = useState('')
   const [uploadingSlot, setUploadingSlot] = useState<UploadSlot | null>(null)
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<UploadSlot, string>>>({})
@@ -56,6 +59,7 @@ export default function VideoToolsPage() {
   }, [t])
 
   const taskView = resolveVideoToolTaskView(currentTask)
+  const diagnostics = resolveVideoSeamDiagnostics(currentTask?.result || null)
 
   useEffect(() => {
     if (!session || !currentTask || !taskView.active) return
@@ -274,6 +278,9 @@ export default function VideoToolsPage() {
                         <option value={6}>6 s</option>
                         <option value={8}>8 s</option>
                       </select>
+                      <span className="mt-1 block font-normal leading-5 text-[var(--glass-text-tertiary)]">
+                        {t('bridge.durationHelp')}
+                      </span>
                     </label>
                     <label className="block text-xs font-medium text-[var(--glass-text-secondary)]">
                       {t('bridge.prompt')}
@@ -318,6 +325,7 @@ export default function VideoToolsPage() {
                     <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-[var(--glass-stroke-base)] bg-black">
                       <video key={taskView.videoUrl} src={taskView.videoUrl} controls preload="metadata" className="aspect-video w-full object-contain" />
                     </div>
+                    {diagnostics ? <VideoSeamDiagnostics diagnostics={diagnostics} /> : null}
                   </div>
                 ) : (
                   <div className="flex min-h-80 flex-col items-center justify-center px-6 py-12 text-center">
@@ -326,7 +334,9 @@ export default function VideoToolsPage() {
                     </span>
                     <p className="text-sm font-semibold text-[var(--glass-text-primary)]">{phaseLabel}</p>
                     <p className="mt-2 max-w-md text-xs leading-5 text-[var(--glass-text-tertiary)]">
-                      {taskView.errorMessage || (taskView.active ? t('result.processingHint') : t('result.emptyHint'))}
+                      {taskView.phase === 'failed'
+                        ? t(resolveVideoSeamErrorTranslationKey(taskView.errorMessage))
+                        : taskView.active ? t('result.processingHint') : t('result.emptyHint')}
                     </p>
                   </div>
                 )}

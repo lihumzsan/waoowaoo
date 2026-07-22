@@ -50,4 +50,13 @@ describe('video tools page', () => {
     expect(source).toContain('controls preload="metadata"')
     expect(source).not.toContain("t('actions.download')")
   })
+
+  it('keeps direct mode as the default and renders only validated AI diagnostics', () => {
+    const source = readFileSync('src/app/[locale]/workspace/video-tools/page.tsx', 'utf8')
+
+    expect(source).toContain("useState<'direct' | 'ai_bridge'>('direct')")
+    expect(source).toContain('useState<4 | 6 | 8>(4)')
+    expect(source).toContain('resolveVideoSeamDiagnostics(currentTask?.result || null)')
+    expect(source).toContain('<VideoSeamDiagnostics diagnostics={diagnostics}')
+  })
 })

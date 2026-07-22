@@ -10,12 +10,13 @@
     "label": "Transition method",
     "direct": "Direct join",
     "ai": "Natural AI bridge",
-    "description": "Extracts the actual retained endpoint frames, generates only the motion between them with LTX 2.3, then locks the final output back to the original endpoints. This is not a fade or overlay.",
+    "description": "Extracts four motion anchors from the two videos, generates continuous motion between them, and locks the final output back to the original endpoints. This is not a fade or overlay.",
     "duration": "Bridge duration",
+    "durationHelp": "Four motion anchors constrain the bridge. Only the calculated central interval adds to the final duration.",
     "prompt": "Motion instruction (optional)",
     "promptPlaceholder": "For example: the camera continues a slow push-in while the subject turns naturally"
   },
-  "workflowNote": "Output is fixed to NVENC H.264 MP4, yuv420p, and 10 Mbit/s. No workflow tuning is required.",
+  "workflowNote": "Output uses local H.264 MP4 with the source geometry and frame rate, adaptive bitrate, and retained audio when available.",
   "input1": {
     "title": "Video 1",
     "description": "The first part of the result and the source of the output frame rate.",
@@ -40,6 +41,9 @@
     "uploading": "Uploading",
     "queued": "Queued",
     "preparing": "Preparing videos",
+    "probing": "Inspecting media",
+    "generating": "Generating bridge motion",
+    "composing": "Composing video",
     "processing": "Concatenating",
     "persisting": "Saving result",
     "completed": "Completed",
@@ -49,7 +53,32 @@
     "title": "Concatenated Result",
     "description": "Preview and download the output when the task completes.",
     "emptyHint": "Upload two videos and start concatenation. The result will appear here.",
-    "processingHint": "ComfyUI is processing the videos. Keep this page open to preview and download the result."
+    "processingHint": "The videos are being processed. Keep this page open to preview and download the result."
+  },
+  "diagnostics": {
+    "title": "AI bridge diagnostics",
+    "output": "Output geometry / FPS",
+    "outputFrames": "Output frames",
+    "outputAudio": "Output audio",
+    "audioPresent": "Audio present",
+    "audioAbsent": "No audio",
+    "requestedDuration": "Requested generation duration",
+    "generatedFrames": "Generated frames",
+    "handleFrames": "Handle frames per side",
+    "centralFrames": "Central added frames",
+    "centralSilence": "Central silence",
+    "motionAnchors": "Motion anchors",
+    "sourceAnchors": "Source videos",
+    "generatedAnchors": "Generated video",
+    "generationCanvas": "Generation canvas / content",
+    "canvasPadding": "Left, top, right, bottom padding",
+    "targetBitrate": "Adaptive target bitrate",
+    "audioPolicy": "Audio policy",
+    "audioBoth": "Retain audio from both videos",
+    "audioVideo1Only": "Retain Video 1 audio only",
+    "audioVideo2Only": "Retain Video 2 audio only",
+    "audioSilent": "Silent output",
+    "video2Tempo": "Video 2 audio tempo factor"
   },
   "freeVoice": {
     "title": "Free Voice",
@@ -88,6 +117,18 @@
   "errors": {
     "uploadFailed": "Video upload failed",
     "submitFailed": "Could not submit the concatenation task",
-    "statusFailed": "Could not load the current concatenation status"
+    "statusFailed": "Could not load the current concatenation status",
+    "mediaDownloadFailed": "The source videos could not be downloaded. Check that the uploads are still available and try again.",
+    "ffmpegUnavailable": "Local video encoding is unavailable in the processing environment.",
+    "mediaProbeFailed": "The video media information could not be read.",
+    "dimensionsUnsupported": "The video dimensions are unsupported.",
+    "aspectRatioMismatch": "The two videos have different aspect ratios.",
+    "fpsMismatch": "The two videos have incompatible frame rates.",
+    "contextTooShort": "The trimmed videos are too short to extract the bridge motion anchors.",
+    "anchorMissing": "The generated result is missing a required motion anchor.",
+    "fourAnchorUnsupported": "The current generation capability does not support a four-anchor bridge.",
+    "generatedRangeInvalid": "The generated result does not contain a complete bridge interval.",
+    "audioComposeFailed": "The video was generated, but its audio could not be composed.",
+    "processingFailed": "Video processing failed. Please try again later."
   }
 }

@@ -256,6 +256,64 @@ describe('video tools routes', () => {
   })
 
   it('returns the completed result from the authenticated user transient job', async () => {
+    const completedResult = {
+      videoKey: 'output.mp4',
+      videoUrl: '/api/storage/sign?key=output.mp4',
+      mode: 'ai_bridge',
+      probes: {
+        input1: {
+          width: 1920,
+          height: 1080,
+          fps: 24,
+          frameCount: 240,
+          durationSeconds: 10,
+          hasAudio: true,
+        },
+        input2: {
+          width: 1920,
+          height: 1080,
+          fps: 24,
+          frameCount: 288,
+          durationSeconds: 12,
+          hasAudio: true,
+        },
+      },
+      output: {
+        width: 1920,
+        height: 1080,
+        fps: 24,
+        frameCount: 610,
+        durationSeconds: 610 / 24,
+        hasAudio: true,
+      },
+      bridge: {
+        requestedDurationSeconds: 4,
+        handleFrames: 6,
+        generatedFrameCount: 97,
+        centralFrameCount: 83,
+        centralSilenceSeconds: 83 / 24,
+        sourceAnchors: {
+          input1Pre: 233,
+          input1Endpoint: 239,
+          input2Endpoint: 1,
+          input2Post: 7,
+        },
+        generatedAnchors: [0, 6, 90, 96],
+        generationCanvas: {
+          contentWidth: 1280,
+          contentHeight: 720,
+          width: 1280,
+          height: 736,
+          padLeft: 0,
+          padTop: 8,
+          padRight: 0,
+          padBottom: 8,
+        },
+        video2AudioTempoFactor: 1,
+        audioPolicy: 'both',
+        targetBitrateMbps: 10,
+      },
+    }
     queueState.job = {
       data: {
         taskId: 'job-1',
@@ -264,7 +322,7 @@ describe('video tools routes', () => {
         userId: 'user-1',
       },
       progress: { progress: 90, stage: 'persist_output' },
-      returnvalue: { videoKey: 'output.mp4', videoUrl: '/api/storage/sign?key=output.mp4' },
+      returnvalue: completedResult,
       failedReason: null,
       getState: vi.fn(async () => 'completed'),
     }
@@ -285,6 +343,7 @@ describe('video tools routes', () => {
       result: { videoKey: 'output.mp4', videoUrl: '/api/storage/sign?key=output.mp4' },
       error: null,
     })
+    expect(body.result).toEqual(completedResult)
   })
 
   it('does not expose another user transient job', async () => {
