@@ -4,7 +4,7 @@ import path from 'node:path'
 // Architecture contract: docs/architecture/modules/provider-gateway.md.
 
  const CATALOG_DIR = path.resolve(process.cwd(), 'standards/capabilities')
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music', 'voice'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
   image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
@@ -20,6 +20,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'fieldI18n',
   ]),
   music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
+  voice: new Set(['languageOptions', 'fieldI18n']),
 }
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
   llm: { reasoningEffort: 'reasoningEffortOptions' },
@@ -38,8 +39,9 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
   },
+  voice: { language: 'languageOptions' },
 }
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music', 'voice'])
 
 function isRecord(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -262,6 +264,19 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
     }
   }
 
+  const voice = capabilities.voice
+  if (voice !== undefined) {
+    if (!isRecord(voice)) {
+      pushIssue(issues, file, index, 'capabilities.voice', 'voice capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, file, index, 'voice', voice)
+      if (voice.languageOptions !== undefined && !isStringArray(voice.languageOptions)) {
+        pushIssue(issues, file, index, 'capabilities.voice.languageOptions', 'must be string array')
+      }
+      validateFieldI18nMap(issues, file, index, 'voice', voice)
+    }
+  }
+
 }
 
 async function listCatalogFiles() {
@@ -297,7 +312,7 @@ async function main() {
       }
 
       if (!isNonEmptyString(item.modelType) || !MODEL_TYPES.has(item.modelType)) {
-        pushIssue(issues, filePath, index, 'modelType', 'modelType must be llm/image/video/music')
+        pushIssue(issues, filePath, index, 'modelType', 'modelType must be llm/image/video/music/voice')
         continue
       }
 

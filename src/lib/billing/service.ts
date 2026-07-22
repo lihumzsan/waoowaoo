@@ -12,6 +12,7 @@ import {
   calcTextWithCache,
   calcVideo,
   calcVideoByTokens,
+  calcVoice,
 } from './cost'
 import {
   confirmChargeWithRecord,
@@ -139,6 +140,8 @@ function resolveCost(input: CostInput) {
     }
     case 'music':
       return asMoney(calcMusic(input.model, input.quantity, input.metadata))
+    case 'voice':
+      return asMoney(calcVoice(input.model, input.quantity))
     default:
       throw new BillingOperationError('BILLING_INVALID_API_TYPE', `Unsupported billing apiType: ${String(input.apiType)}`, {
         apiType: input.apiType,

@@ -13,8 +13,8 @@ const USER_MODEL_FIELDS = [
   ...PROJECT_MODEL_FIELDS,
 ]
 const MAX_SAMPLES = 200
-const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
-const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music'])
+const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music', 'voice'])
+const MODEL_TYPES = new Set(['llm', 'image', 'video', 'music', 'voice'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
   llm: new Set(['reasoningEffortOptions', 'fieldI18n']),
   image: new Set(['resolutionOptions', 'qualityOptions', 'fieldI18n']),
@@ -27,6 +27,7 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'fieldI18n',
   ]),
   music: new Set(['durationSecondsOptions', 'vocalModeOptions', 'outputFormatOptions', 'bpmOptions', 'fieldI18n']),
+  voice: new Set(['languageOptions', 'fieldI18n']),
 }
 
 const CAPABILITY_NAMESPACE_I18N_FIELDS = {
@@ -48,6 +49,7 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     outputFormat: 'outputFormatOptions',
     bpm: 'bpmOptions',
   },
+  voice: { language: 'languageOptions' },
 }
 
 function isRecord(value) {
@@ -187,7 +189,7 @@ function validateFieldI18nMap(issues, namespace, namespaceValue) {
 function validateCapabilities(modelType, capabilities) {
   const issues = []
   if (!MODEL_TYPES.has(modelType)) {
-    pushIssue(issues, 'type', 'type must be llm/image/video/music')
+    pushIssue(issues, 'type', 'type must be llm/image/video/music/voice')
     return issues
   }
   if (capabilities === undefined || capabilities === null) return issues
@@ -279,6 +281,19 @@ function validateCapabilities(modelType, capabilities) {
         pushIssue(issues, 'capabilities.music.bpmOptions', 'must be number array')
       }
       validateFieldI18nMap(issues, 'music', music)
+    }
+  }
+
+  const voice = capabilities.voice
+  if (voice !== undefined) {
+    if (!isRecord(voice)) {
+      pushIssue(issues, 'capabilities.voice', 'voice capabilities must be an object')
+    } else {
+      validateAllowedFields(issues, 'voice', voice)
+      if (voice.languageOptions !== undefined && !isStringArray(voice.languageOptions)) {
+        pushIssue(issues, 'capabilities.voice.languageOptions', 'must be string array')
+      }
+      validateFieldI18nMap(issues, 'voice', voice)
     }
   }
 

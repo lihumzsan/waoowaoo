@@ -45,6 +45,10 @@ import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
 import { HiddenWorkspaceAssistantReasoning, WorkspaceAssistantPendingReasoningStatus, WorkspaceAssistantRunReasoningStatus } from './WorkspaceAssistantReasoning'
+import {
+  summarizeBillingActionItems,
+  type BillingActionItemSummary,
+} from './billing-action-items'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -58,18 +62,6 @@ function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
 
 type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
-type BillingQuoteItemView = OperationPlanView['quote']['items'][number]
-type BillingActionItemKey =
-  | 'image'
-  | 'video'
-  | 'music'
-  | 'musicSeconds'
-  | 'videoSeconds'
-
-interface BillingActionItemSummary {
-  readonly key: BillingActionItemKey
-  readonly quantity: number
-}
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-base leading-6 text-[var(--glass-text-primary)]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex flex-col gap-3 px-1 py-1 text-base leading-6 text-[var(--glass-text-primary)]'
@@ -118,33 +110,6 @@ export function HiddenRuntimeContextDataCard() {
   return null
 }
 
-function toPositiveBillingQuantity(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 0
-  return value
-}
-
-function resolveBillingActionItemKey(item: BillingQuoteItemView): BillingActionItemKey | null {
-  if (item.unit === 'image') return 'image'
-  if (item.unit === 'video') return 'video'
-  if (item.unit === 'music') return 'music'
-  if (item.unit === 'second' && item.apiType === 'music') return 'musicSeconds'
-  if (item.unit === 'second' && item.apiType === 'video') return 'videoSeconds'
-  if (item.unit === 'call' && item.apiType === 'music') return 'music'
-  return null
-}
-
-function summarizeBillingActionItems(items: readonly BillingQuoteItemView[]): BillingActionItemSummary[] {
-  const totals = new Map<BillingActionItemKey, number>()
-  for (const item of items) {
-    const key = resolveBillingActionItemKey(item)
-    if (!key) continue
-    const quantity = toPositiveBillingQuantity(item.quantity)
-    if (quantity <= 0) continue
-    totals.set(key, (totals.get(key) ?? 0) + quantity)
-  }
-  return Array.from(totals.entries()).map(([key, quantity]) => ({ key, quantity }))
-}
-
 function translateBillingActionItemSummary(
   item: BillingActionItemSummary,
   t: AssistantAgentTranslator,
@@ -156,6 +121,8 @@ function translateBillingActionItemSummary(
       return t('cards.billingActionVideoItems', { count: item.quantity })
     case 'music':
       return t('cards.billingActionMusicItems', { count: item.quantity })
+    case 'voiceCharacters':
+      return t('cards.billingActionVoiceCharacterItems', { count: item.quantity })
     case 'musicSeconds':
       return t('cards.billingActionMusicSecondItems', { count: item.quantity })
     case 'videoSeconds':

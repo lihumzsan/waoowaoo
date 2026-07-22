@@ -18,6 +18,8 @@ export const CREATIVE_RESOURCE_CANONICAL_BINDINGS = {
   },
 } as const
 
+export const CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE = 'character_voice'
+
 export type CreativeResourceCanonicalBinding = typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS[
   keyof typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS
 ]

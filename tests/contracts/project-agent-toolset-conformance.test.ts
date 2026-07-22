@@ -113,7 +113,12 @@ describe('project agent toolset conformance', () => {
     const registry = createProjectAgentOperationRegistry()
     const toolset = resolveProjectAgentToolset({ registry })
 
-    expect(toolset.operationIds).toEqual(expect.arrayContaining(['delete_asset', 'regenerate_asset']))
+    expect(toolset.operationIds).toEqual(expect.arrayContaining([
+      'delete_asset',
+      'regenerate_asset',
+      'generate_voice',
+      'bind_voice',
+    ]))
     for (const removedOperationId of [
       'delete_character',
       'delete_location',
@@ -122,6 +127,8 @@ describe('project agent toolset conformance', () => {
       'asset_hub_delete_location',
       'regenerate_group',
       'regenerate_single_image',
+      'delete_voice',
+      'regenerate_voice',
     ]) {
       expect(registry).not.toHaveProperty(removedOperationId)
     }
@@ -139,6 +146,9 @@ describe('project agent toolset conformance', () => {
       target: { kind: 'location', assetId: 'location-1' },
       scope: 'global',
     }).success).toBe(true)
+    expect(registry.delete_asset.inputSchema.safeParse({
+      target: { kind: 'voice', assetId: 'voice-resource-1' },
+    }).success).toBe(true)
 
     expect(registry.regenerate_asset).toMatchObject({
       channels: { tool: true, api: true },
@@ -152,6 +162,62 @@ describe('project agent toolset conformance', () => {
     expect(registry.regenerate_asset.inputSchema.safeParse({
       target: { kind: 'prop', assetId: 'prop-1' },
       count: 3,
+    }).success).toBe(true)
+  })
+
+  it('exposes voice generation and binding without model or provider knobs', () => {
+    const registry = createProjectAgentOperationRegistry()
+    expect(registry.generate_voice).toMatchObject({
+      channels: { tool: true, api: true },
+      effects: { billable: true, longRunning: true },
+      confirmation: { kind: 'billable_media', required: true },
+    })
+    const generateProperties = registry.generate_voice.toolInputSchema.properties
+    expect(Object.keys(generateProperties).sort()).toEqual([
+      'description',
+      'language',
+      'name',
+      'previewText',
+      'resourceId',
+      'target',
+    ])
+    expect(Object.keys(generateProperties)).not.toEqual(expect.arrayContaining([
+      'model',
+      'modelKey',
+      'provider',
+      'temperature',
+      'seed',
+    ]))
+    expect(registry.generate_voice.inputSchema.safeParse({
+      description: 'Warm, mature, low register, calm and precise.',
+      previewText: '欢迎回来。',
+      language: 'Chinese',
+      target: { kind: 'character', characterId: 'character-1' },
+    }).success).toBe(true)
+    expect(registry.generate_voice.inputSchema.safeParse({
+      description: 'Warm voice',
+      previewText: 'Hello.',
+      language: 'English',
+      modelKey: 'fal::other-model',
+      target: { kind: 'standalone' },
+    }).success).toBe(false)
+
+    expect(registry.bind_voice).toMatchObject({
+      channels: { tool: true, api: true },
+      effects: { billable: false, overwrite: true },
+      confirmation: { kind: 'none', required: false },
+    })
+    expect(registry.bind_voice.inputSchema.safeParse({
+      characterId: 'character-1',
+      selection: {
+        kind: 'voice',
+        resourceId: 'voice-resource-1',
+        revisionId: 'voice-revision-1',
+      },
+    }).success).toBe(true)
+    expect(registry.bind_voice.inputSchema.safeParse({
+      characterId: 'character-1',
+      selection: { kind: 'none' },
     }).success).toBe(true)
   })
 

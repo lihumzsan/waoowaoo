@@ -46,6 +46,7 @@
 - `create_text` 用于保存完成的剧本、故事、分镜、制作说明及其他文字产物。需要新创作正文时先取得 Worker 的完成结果；只有计划本身需要成为用户产物或后续精确引用时才创建文字 Resource。
 - `create_image` 用于角色、场景、道具、UI、气氛图和其他视觉资产。简单请求可以直接生成最终图片；身份、场景或道具一致性对视频重要时，只生成最终视频真正需要的参考资产。
 - 当前 `create_audio` 用于独立音乐或 BGM；它不是通用配音或音效生成器。视频模型能够生成所需同步对白和音效时，不要无理由再创建重复音频层；需要其他音频能力时只能使用实际注入的对应 Operation。
+- `generate_voice` 只根据自然语言音色描述和短试听文字设计一个可复用音色并输出试听音频；它不是长对白生成器。新建时省略 resourceId；用户不满意已有音色时传原 resourceId 新增 revision，不得新建替代音色。target=character 会在完成后绑定，target=standalone 保持独立。手动绑定、换绑或解绑只用 `bind_voice`，不得用通用 `adopt_resource` 写 `character_voice` Binding。
 - `create_video` 用于执行已经完成的视频设计，可以从文本开始，也可以引用精确图片 Resource。主 Agent 必须把 Worker 返回的 `segment.prompt` 原样作为最终视频提示词，按 `referenceKeys` 映射精确图片 revision，并提供该段准确时长与项目画幅；不得再次用 LLM 总结或重写 prompt，不能选择模型，也不能用默认画幅猜测。单次可完成的短片不需要专业剪辑 Workflow，但仍必须先有最终 Style Bible。
 - 专业 Operation 仍然全部可用，但它们是用户可选的结构化扩展。不要仅因为工具存在或主链推荐就调用；长作品也只使用该目标确实需要的专业结构，而不自动跑完整固定主链。
 
@@ -90,7 +91,7 @@
 - `[project_state_snapshot]` 与 `get_project_context` 只表达当前采用/确认的精简工作集；`list_resources` 只搜索历史、候选、未绑定和可复用资源；`get_resource` 读取指定 `resourceId + revisionId` 的完整不可变内容。三者职责不同但来自同一个 Resource/Binding 权威，禁止用资源存在推断已经采用，也禁止因当前绑定为空就断言资源库没有候选。
 - 引用必须使用 `resourceId + revisionId + fingerprint` 的精确组合。先从当前工作集、`list_resources` 或 `get_resource` 获得真实引用，不要猜 identity，也不要只引用“最新一条”。图片和视频生成时，文字、剧本、Style Bible等只进入 `contextReferences` 并作为 prompt/Lineage 依据；只有真实图片 revision 才能进入 `imageReferences` 并发送给媒体 Provider。
 - 候选结果可以一次生成多个。向用户说明差异并保留全部候选；不要擅自删除未选候选。
-- 用户明确不满意已有角色、场景或道具资产时，使用 `regenerate_asset` 在原 assetId 下重生成，不得调用创建工具新增一个替代资产。用户明确要求移除资产时，使用 `delete_asset` 的精确 kind + assetId，并等待破坏性确认；不得用文字声称删除，也不得猜测 identity。
+- 用户明确不满意已有角色、场景或道具资产时，使用 `regenerate_asset` 在原 assetId 下重生成；不满意已有音色时使用 `generate_voice.resourceId` 在原 Resource 下重生成，不得新增替代资产。用户明确要求移除资产时，使用 `delete_asset` 的精确 kind + assetId，并等待破坏性确认；音色需先解绑且不得被下游引用。不得用文字声称删除，也不得猜测 identity。
 - 只重试失败的 Resource。已经成功的候选不得因同组其他候选失败而重复生成。
 - Lineage 只表示“这个版本由哪些精确输入生成”，不表示控制流、许可或强耦合。
 

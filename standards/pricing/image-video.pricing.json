@@ -1384,5 +1384,14 @@
         }
       ]
     }
+  },
+  {
+    "apiType": "voice",
+    "provider": "fal",
+    "modelId": "fal-ai/qwen-3-tts/voice-design/1.7b",
+    "pricing": {
+      "mode": "flat",
+      "flatAmount": 0.000648
+    }
   }
 ]

@@ -16,11 +16,18 @@ import {
   IMAGE_OUTPUT_FORMAT_OPTIONS,
 } from '@/lib/ai-providers/shared/gpt-image-2'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
+import {
+  PLATFORM_VOICE_DESIGN_MODEL_KEY,
+  QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+  VOICE_DESIGN_LANGUAGE_OPTIONS,
+} from '@/lib/ai-registry/voice-design-contract'
 
 export const FAL_GPT_IMAGE_2_MODEL_ID = 'gpt-image-2'
 export const FAL_LYRIA_3_PRO_MODEL_ID = 'fal-ai/lyria3/pro'
+export const FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID = QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID
 export const FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY = `fal::${FAL_GPT_IMAGE_2_MODEL_ID}`
 export const FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY = `fal::${FAL_LYRIA_3_PRO_MODEL_ID}`
+export const FAL_PLATFORM_DEFAULT_VOICE_MODEL_KEY = PLATFORM_VOICE_DESIGN_MODEL_KEY
 export const FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID = 'alibaba/happy-horse/image-to-video'
 export const FAL_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const FAL_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0/fast'
@@ -30,6 +37,7 @@ export const FAL_KLING_V3_STANDARD_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video
 export const FAL_KLING_V3_PRO_IMAGE_TO_VIDEO_MODEL_ID = 'fal-ai/kling-video/v3/pro/image-to-video'
 export const FAL_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const
 export const FAL_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as const
+export const FAL_QWEN_3_TTS_LANGUAGE_OPTIONS = VOICE_DESIGN_LANGUAGE_OPTIONS
 
 export const FAL_PLATFORM_MODEL_PRESETS = [
   { provider: 'fal', modelId: 'banana-2', name: 'Banana 2', type: 'image' },
@@ -77,6 +85,16 @@ export const FAL_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         durationSecondsRange: { min: 120, max: 180 },
         vocalModeOptions: ['instrumental', 'vocal'],
         outputFormatOptions: ['mp3'],
+      },
+    },
+  },
+  {
+    modelType: 'voice',
+    provider: 'fal',
+    modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+    capabilities: {
+      voice: {
+        languageOptions: [...FAL_QWEN_3_TTS_LANGUAGE_OPTIONS],
       },
     },
   },
@@ -269,6 +287,12 @@ export const FAL_BUILTIN_PRICING_CATALOG_ENTRIES = [
   },
   { apiType: 'image', provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, pricing: falGptImage2Pricing() },
   { apiType: 'music', provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, pricing: falFlatPricing(usdToCredits(0.08)) },
+  {
+    apiType: 'voice',
+    provider: 'fal',
+    modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+    pricing: falFlatPricing(usdToCredits(0.09 / 1_000)),
+  },
   { apiType: 'video', provider: 'fal', modelId: 'fal-wan25', pricing: falFlatPricing(1.8) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-veo31', pricing: falFlatPricing(2.88) },
   { apiType: 'video', provider: 'fal', modelId: 'fal-kling25', pricing: falFlatPricing(2.16) },
@@ -396,6 +420,20 @@ export function resolveFalOptionSchema(modality: MediaModality, modelId: string)
       })
     }
     return buildMediaOptionSchema('music')
+  }
+  if (modality === 'voice') {
+    if (modelId !== FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID) {
+      throw new Error(`FAL_VOICE_MODEL_UNSUPPORTED:${modelId}`)
+    }
+    return buildMediaOptionSchema('voice', {
+      validators: {
+        language: enumValidator(FAL_QWEN_3_TTS_LANGUAGE_OPTIONS),
+      },
+      normalize: (options) => ({
+        ...options,
+        language: options.language ?? 'Auto',
+      }),
+    })
   }
   if (modality === 'video') {
     if (modelId === FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID) {

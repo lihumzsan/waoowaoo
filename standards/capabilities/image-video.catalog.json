@@ -863,5 +863,27 @@
         "supportGenerateAudio": false
       }
     }
+  },
+  {
+    "modelType": "voice",
+    "provider": "fal",
+    "modelId": "fal-ai/qwen-3-tts/voice-design/1.7b",
+    "capabilities": {
+      "voice": {
+        "languageOptions": [
+          "Auto",
+          "English",
+          "Chinese",
+          "Spanish",
+          "French",
+          "German",
+          "Italian",
+          "Japanese",
+          "Korean",
+          "Portuguese",
+          "Russian"
+        ]
+      }
+    }
   }
 ]

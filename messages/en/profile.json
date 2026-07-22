@@ -59,6 +59,7 @@
     "tokens": "{count} tokens",
     "seconds": "{count}s",
     "calls": "{count} calls",
+    "characters": "{count} characters",
     "audioIncluded": "Audio included"
   },
   "transactionTargets": {
@@ -157,6 +158,7 @@
     "music": "Music Generation"
   },
   "actionTypes": {
+    "creative_resource_voice": "Voice Design",
     "edit_style_preview_options_generate": "Generate Visual Style Directions",
     "edit_style_preview_image": "Style Preview Image",
     "image_character": "Character Image",

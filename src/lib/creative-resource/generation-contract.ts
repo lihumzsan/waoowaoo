@@ -52,6 +52,11 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
+    binding: z.object({
+      kind: z.literal('character_voice'),
+      characterId: z.string().trim().min(1),
+      expectedVersion: z.number().int().min(0).nullable(),
+    }).strict().optional(),
   }).strict().superRefine((resource, context) => {
     const inputPositions = new Set(resource.inputs.map((input) => input.position))
     if (inputPositions.size !== resource.inputs.length) {
@@ -74,7 +79,10 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
   imageModel: z.string().trim().min(1).optional(),
   videoModel: z.string().trim().min(1).optional(),
   musicModel: z.string().trim().min(1).optional(),
+  voiceModel: z.string().trim().min(1).optional(),
   prompt: z.string().trim().min(1).optional(),
+  previewText: z.string().trim().min(1).optional(),
+  language: z.string().trim().min(1).optional(),
   durationSeconds: z.number().int().positive().optional(),
   vocalMode: z.enum(['instrumental', 'vocal']).optional(),
   genre: z.string().trim().min(1).optional(),
@@ -107,7 +115,10 @@ export function parseCreativeResourceGenerationTaskPayload(
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,
     musicModel: parsed.musicModel,
+    voiceModel: parsed.voiceModel,
     prompt: parsed.prompt,
+    previewText: parsed.previewText,
+    language: parsed.language,
     durationSeconds: parsed.durationSeconds,
     vocalMode: parsed.vocalMode,
     genre: parsed.genre,

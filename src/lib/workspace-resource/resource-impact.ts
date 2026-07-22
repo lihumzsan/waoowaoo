@@ -24,6 +24,7 @@ export const WORKSPACE_RESOURCE_IMPACT = {
   EDIT_STYLE_PREVIEW: 'edit_style_preview',
   PROJECT_ASSETS: 'project_assets',
   SCOPED_ASSETS: 'scoped_assets',
+  SCOPED_ASSETS_AND_CREATIVE_RESOURCES: 'scoped_assets_and_creative_resources',
   GLOBAL_ASSETS: 'global_assets',
   VIDEO_SEGMENTS: 'video_segments',
   EPISODE: 'episode',
@@ -177,6 +178,13 @@ export function resolveWorkspaceResourceRefs(params: {
       return projectId === GLOBAL_ASSET_PROJECT_ID
         ? [resourceRef(WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS, projectId)]
         : projectAssetRefs(projectId, episodeId)
+    case WORKSPACE_RESOURCE_IMPACT.SCOPED_ASSETS_AND_CREATIVE_RESOURCES:
+      return dedupeWorkspaceResourceRefs([
+        ...(projectId === GLOBAL_ASSET_PROJECT_ID
+          ? [resourceRef(WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS, projectId)]
+          : projectAssetRefs(projectId, episodeId)),
+        resourceRef(WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES, projectId, episodeId),
+      ])
     case WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS:
       return [resourceRef(WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS, projectId)]
     case WORKSPACE_RESOURCE_IMPACT.VIDEO_SEGMENTS:

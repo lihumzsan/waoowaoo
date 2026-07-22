@@ -42,6 +42,7 @@
   },
   "taskType": {
     "creativeWork": "Creative Subagent",
+    "creativeResourceVoice": "Voice design",
     "generic": "Task",
     "editStylePreviewOptionsGenerate": "Visual style directions",
     "editStylePreviewImage": "Edit style preview grid",
@@ -96,6 +97,8 @@
     "videoSegmentPersist": "Persist video segment result",
     "generateMusicSubmit": "Submit music generation task",
     "persistMusic": "Persist music result",
+    "generateVoiceSubmit": "Submit voice design task",
+    "persistVoice": "Persist voice preview",
     "finalRenderPrepare": "Prepare edit media",
     "finalRenderMusic": "Load generated music",
     "finalRenderCompose": "Compose final video",

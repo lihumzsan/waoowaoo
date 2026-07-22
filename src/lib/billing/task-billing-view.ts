@@ -8,10 +8,10 @@ export interface BillingReceiptView {
   billingMode: BillingMode | null
   billable: boolean
   taskType?: TaskType
-  apiType?: 'image' | 'video' | 'music' | 'text'
+  apiType?: 'image' | 'video' | 'music' | 'voice' | 'text'
   model?: string
   quantity?: number
-  unit?: 'token' | 'image' | 'video' | 'second' | 'call'
+  unit?: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
   maxFrozenCost?: number
   chargedCost?: number
   status?: 'skipped' | 'quoted' | 'frozen' | 'settled' | 'rolled_back' | 'failed'

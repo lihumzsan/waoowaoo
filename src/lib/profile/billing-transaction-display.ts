@@ -15,6 +15,7 @@ export type ProfileBillingDetailTranslationKey =
   | 'billingDetail.tokensWithBreakdown'
   | 'billingDetail.seconds'
   | 'billingDetail.calls'
+  | 'billingDetail.characters'
   | 'billingDetail.audioIncluded'
 
 export type ProfileBillingDetailPart =
@@ -175,6 +176,10 @@ export function buildProfileBillingDetailParts(meta: Record<string, unknown> | n
 
   if (unit === 'call' && quantity !== null) {
     parts.push({ kind: 'translation', key: 'billingDetail.calls', params: { count: quantity } })
+  }
+
+  if (unit === 'character' && quantity !== null) {
+    parts.push({ kind: 'translation', key: 'billingDetail.characters', params: { count: quantity } })
   }
 
   if (readBoolean(meta.generateAudio) === true) {

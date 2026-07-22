@@ -5,6 +5,7 @@ import { installYunwuFetchTraceIfEnabled } from '@/lib/http/fetch-trace'
 import type { TaskJobData } from '@/lib/task/types'
 import { createImageWorker } from './image.worker'
 import { createMusicWorker } from './music.worker'
+import { createVoiceWorker } from './voice.worker'
 import { createVideoWorker } from './video.worker'
 import { createTextWorker } from './text.worker'
 import { createOutboxWorker } from './outbox.worker'
@@ -66,7 +67,13 @@ function jobDetails(job: Job<TaskJobData> | undefined | null, extra?: Record<str
   }
 }
 
-const workers: Worker<TaskJobData>[] = [createImageWorker(), createVideoWorker(), createMusicWorker(), createTextWorker()]
+const workers: Worker<TaskJobData>[] = [
+  createImageWorker(),
+  createVideoWorker(),
+  createMusicWorker(),
+  createVoiceWorker(),
+  createTextWorker(),
+]
 const outboxWorker = createOutboxWorker()
 startOutboxDispatcher()
 

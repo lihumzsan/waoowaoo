@@ -52,6 +52,10 @@ const MUSIC_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.MUSIC_SCORE_GENERATE,
 ])
 
+const VOICE_PROGRESS_TASK_TYPES = new Set<string>([
+  TASK_TYPE.CREATIVE_RESOURCE_VOICE,
+])
+
 function normalizePhase(phase: string | null | undefined): EstimatedTaskProgressPhase {
   if (phase === 'queued' || phase === 'processing' || phase === 'completed' || phase === 'failed') return phase
   return 'idle'
@@ -83,6 +87,7 @@ export function getEstimatedTaskProgressTiming(taskType: string | null | undefin
   if (IMAGE_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(IMAGE_EXPECTED_SECONDS)
   if (VIDEO_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(VIDEO_EXPECTED_SECONDS)
   if (MUSIC_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(MUSIC_EXPECTED_SECONDS)
+  if (VOICE_PROGRESS_TASK_TYPES.has(taskType)) return buildTiming(MUSIC_EXPECTED_SECONDS)
   if (taskType === TASK_TYPE.FINAL_VIDEO_RENDER) return buildTiming(FINAL_RENDER_EXPECTED_SECONDS)
   return null
 }

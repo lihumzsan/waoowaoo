@@ -30,6 +30,7 @@
 - **CR-17 — 读取工具各自只有一种职责。** `get_project_context` 返回当前项目/剧集的紧凑工作集，包含保留 Binding 指向的确认剧本、正式 Style Bible 及必要 fingerprint/version；`list_resources` 用一次有界查询浏览当前剧集、当前项目和用户级通用资产中的候选、历史与可复用资源，按持久 `createdAt,id` 稳定排序并在全局 limit 内返回，同一 Resource identity 只出现一次，并且只暴露 `creativeData` 的版本与顶层键，不能把开放文档批量塞入模型上下文；`get_resource` 按 `resourceId + revisionId` 返回一个精确不可变 Revision 的完整内容，并返回该 Resource 当前完整 `creativeData + creativeDataVersion` 供显式编辑。三者共同消费 Resource/Binding View service，不得各自推断“当前剧本”或“当前风格”。
 - **CR-18 — Revision 记录实际执行路由。** Agent 和业务 Operation 不选择 provider/model，但每个成功媒体 Revision 的 provenance 必须保存本次 Task invocation 最终实际使用的 `modelKey`。当 Provider Gateway 在同一等价 route set 内进行受控 pre-accept 路由切换时，materializer 只能读取 durable invocation route checkpoint，不能继续记录初始配置、当前配置或模型事后文字。
 - **CR-19 — Resource 提供开放但隔离的创作文档。** 每个 Resource 可以持有一份 schema-open、版本化的 `creativeData` JSON 文档，供用户和 Agent 保存任意当前创作资料；新增创作概念不要求新增数据库字段或 Operation 分支。它只由 `edit_resource` 以 `creativeDataVersion` CAS 和最小 object-path Patch 写入，嵌入的 `$resourceRef` 必须验证精确 Revision owner 与 fingerprint。`creativeData` 不是 Revision、provenance、Lineage、Binding、Task 或生命周期事实，任何消费者不得据此宣称媒体已生成、采用或完成，也不得用它覆盖实际生成来源。Tool 必须明确要求先读、少改、保留无关字段，并禁止为总结、润色或推测而写入。
+- **CR-20 — 角色音色使用保留动态 Binding。** `project.voice_reference` 是项目级 audio Resource；新建与原位重生成只由 `generate_voice` 追加 Revision。角色当前音色只由 Binding service 写入 `scope=project + role=character_voice + slotKey=characterId`，产品入口只有 `bind_voice` 以及 `generate_voice target=character` 的 Task 终态 CAS。通用 `adopt_resource` 必须拒绝该 role。绑定冻结精确 Revision；生成期间发生的较新绑定造成显式冲突但不丢弃已生成音频。删除音色必须拒绝 active Task、任意 Binding 和下游 Lineage，且不删除共享 MediaObject。
 
 ## 状态所有权
 
@@ -45,6 +46,7 @@
 | finalized Style Bible revision | `adopt_style_bible` transactional Operation | Asset/video Worker input、Chapter Context、Canvas |
 | 当前确认剧本 Binding | `confirm_script_resource` transactional Operation | Project Context、Primary、Creative Worker inputs |
 | 当前正式风格 Binding | `adopt_style_bible` transactional Operation | Project Context、资产/视频 Worker、Chapter Context |
+| 当前角色音色 Binding | Binding service；产品入口 `bind_voice` 或 `generate_voice` 终态 CAS | Project Context、Agent、Resource View |
 | Resource 当前开放创作文档 | `CreativeResource.creativeData` / `edit_resource` CAS transaction | Agent、Resource View、通用或专业 renderer |
 | ResourceCard 最终 View | `view-service.ts` 从上述持久事实纯投影 | API、React Query、Canvas renderer |
 
@@ -60,6 +62,7 @@
 - 失败 Resource 的精确重试输入解析：`src/lib/creative-resource/generation-retry.ts`；它只按 target Resource、Task type/operation 与持久 OperationPlan 的 `request.kind=new` 选择唯一原始失败 Task，不按最近记录或历史消息猜测。
 - Style Bible 专业采用：`src/lib/operations/domains/assistant/creative-style-ops.ts`；它是 `project.style_bible` 的唯一 writer，并复用 Resource persistence，不建立领域旁路。
 - Resource-native 剧本确认与保留角色约束：`src/lib/operations/domains/creative-resource/resource-ops.ts`、`src/lib/creative-resource/contracts.ts`；通用采用入口不能写保留角色。
+- 角色音色生成、绑定与删除策略：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts`；全部关系写入仍复用 `binding-service.ts`。
 - Resource 开放创作文档的唯一写入入口：`src/lib/creative-resource/creative-data.ts` 与 `edit_resource`；任意键只存在于隔离的 `creativeData`，系统字段不进入 Patch namespace。
 - 当前工作集与精确 Revision 查询：`src/lib/creative-resource/view-service.ts`；`get_project_context`、`list_resources`、`get_resource` 只投影该唯一服务的不同 View。
 - Canvas Resource 投影和 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；专业 renderer 仍由 Canvas registry 选择。
@@ -100,3 +103,4 @@
 7. 当前剧本/风格是否只来自保留 Binding，确认/采用是否没有复制 Resource 或第二 writer？
 8. `contextReferences` 与 `imageReferences` 是否在 Task、provider 输入、lineage 和 provenance 中保持各自语义？
 9. 成功 Revision 是否记录 durable invocation 的实际 provider route，而不是初始或当前配置？
+10. `character_voice` 是否只经保留入口写入，自动绑定是否用冻结 version 拒绝旧覆盖，删除是否拒绝 Binding/Lineage/active Task？

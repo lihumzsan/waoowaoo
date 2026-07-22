@@ -14,7 +14,7 @@ describe('TaskDefinition conformance', () => {
       expect(getQueueTypeByTaskType(taskType)).toBe(definition.queue)
       expect(getTaskMaxAttempts(taskType)).toBe(definition.maxAttempts)
       expect(definition.workerHandler.length).toBeGreaterThan(0)
-      expect(['none', 'text', 'image', 'video', 'music']).toContain(definition.billingPolicy)
+      expect(['none', 'text', 'image', 'video', 'music', 'voice']).toContain(definition.billingPolicy)
       expect(isBillableTaskType(taskType)).toBe(definition.billingPolicy !== 'none')
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')

@@ -339,6 +339,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
       'CreativeResource',
       TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+      TASK_TYPE.CREATIVE_RESOURCE_VOICE,
       TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
     ),
     stream: notApplicable('Creative Resource Tasks expose terminal media or text facts, not structured streams.'),

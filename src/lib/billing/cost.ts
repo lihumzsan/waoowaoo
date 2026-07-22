@@ -7,8 +7,8 @@ import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { resolveImageSizeFromGenerationOptions } from '@/lib/image-generation/runtime-options'
 import { BillingOperationError } from './errors'
 
-export type ApiType = 'text' | 'image' | 'video' | 'music'
-export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call'
+export type ApiType = 'text' | 'image' | 'video' | 'music' | 'voice'
+export type UsageUnit = 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
 
 type BillingMetadata = { [field: string]: unknown }
 type TextCacheCostMetadata = {
@@ -265,6 +265,15 @@ export function calcMusic(
     apiType: 'music',
     model,
     selections: toCapabilitySelections(metadata),
+  })
+  return roundCredits(units * pricing.amount)
+}
+
+export function calcVoice(model: string, characters: number): number {
+  const units = Math.max(1, normalizePositiveInteger(characters))
+  const pricing = resolveCatalogPricing({
+    apiType: 'voice',
+    model,
   })
   return roundCredits(units * pricing.amount)
 }

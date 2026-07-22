@@ -38,6 +38,7 @@
 - **BA-23A — 等价 Provider 路由不产生第二次计费。** Provider Gateway 只有在生产 registry 证明 route set 成员使用同一产品 capability、同一 canonical options 与同一冻结价格时，才可在 typed pre-accept rejection 后推进路由。推进继续消费原 `OperationPlanSnapshot → ApprovalGrant → OperationExecution → Task`，不得重新报价、重新申请 Approval、再次冻结 credits 或创建第二 Execution；任何价格不等价必须在 registry 构造时 fail closed，而不是运行时补差价。
 - **BA-24 — 外部支付终态必须进入同一账本。** Stripe Checkout 充值以 `payment_intent` 作为 canonical external identity，并把 credits、最小货币单位金额与币种冻结在充值流水；refund 以及 `charge.dispute.funds_withdrawn` 只能由已验签 webhook 通过 ledger 的唯一 adjustment writer 按精确比例扣回。退款失败或 `charge.dispute.funds_reinstated` 只恢复此前同一 Stripe object 的实际 debit；`dispute.created/closed` 不解释资金事实。事件乱序、重复、跨币种、超额或找不到原充值必须 fail closed，禁止按用户最近充值猜测。
 - **BA-25 — Stripe SDK 只拥有外部协议，不拥有账本事实。** Checkout Session HTTP、参数编码、响应类型、Webhook HMAC 与 Event union 必须由官方 `stripe` SDK 处理；Checkout client 必须关闭 SDK 网络重试，Webhook 必须从 route 提供的受限 raw body 一次性 `constructEvent`，禁止 SDK 验签后再手写 JSON parser。项目继续唯一拥有 recharge quote、metadata policy、`payment_intent` identity、refund/dispute 解释、幂等键和 ledger transaction；SDK Event 不得直接写余额或建立第二 writer。
+- **BA-26 — Voice Design 按冻结字符数计费。** `CREATIVE_RESOURCE_VOICE` 只能使用 `apiType=voice + unit=character`；plan 从冻结 `previewText` 以 Unicode code point 数计算 quantity，FAL Qwen Voice Design 1.7B 的 production pricing catalog 以每字符 credits 声明 `$0.09 / 1000 characters` 的换算价。Task 终态只可用同一 payload 返回的 `actualCharacters` 结算，不能按音频时长、字节数、Agent 估算或 provider 文案重算。
 
 ## 权威入口
 

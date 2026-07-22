@@ -7,7 +7,7 @@ export type AsyncExternalIdProvider =
   | 'GOOGLE'
   | 'OPENROUTER'
 
-export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'BATCH'
+export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
 
 export interface AsyncDownloadHeaders {
   [name: string]: string

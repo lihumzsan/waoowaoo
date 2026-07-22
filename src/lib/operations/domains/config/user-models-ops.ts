@@ -47,7 +47,9 @@ interface UserModelsPayload {
   music: UserModelOption[]
 }
 
-function isUnifiedModelType(type: unknown): type is UnifiedModelType {
+type SelectableUserModelType = Exclude<UnifiedModelType, 'voice'>
+
+function isSelectableUserModelType(type: unknown): type is SelectableUserModelType {
   return (
     type === 'llm'
     || type === 'image'
@@ -211,7 +213,7 @@ export function createUserModelsOperations(): ProjectAgentOperationRegistryDraft
         }
 
         for (const model of modelSource.models) {
-          if (!isUnifiedModelType(model.type)) continue
+          if (!isSelectableUserModelType(model.type)) continue
 
           const modelType = model.type
           const modelKey = toModelKey(model)

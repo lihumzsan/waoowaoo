@@ -1,6 +1,6 @@
 import { resolvePositiveIntegerConfig } from '@/lib/runtime-config/positive-integer'
 
-export type WorkerRuntimeTarget = 'image' | 'video' | 'music' | 'text' | 'outbox'
+export type WorkerRuntimeTarget = 'image' | 'video' | 'music' | 'voice' | 'text' | 'outbox'
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 
 export { resolvePositiveIntegerConfig } from '@/lib/runtime-config/positive-integer'
@@ -9,6 +9,7 @@ const WORKER_CONCURRENCY_CONFIG = {
   image: { env: 'QUEUE_CONCURRENCY_IMAGE', defaultValue: 20 },
   video: { env: 'QUEUE_CONCURRENCY_VIDEO', defaultValue: 4 },
   music: { env: 'QUEUE_CONCURRENCY_MUSIC', defaultValue: 3 },
+  voice: { env: 'QUEUE_CONCURRENCY_VOICE', defaultValue: 3 },
   text: { env: 'QUEUE_CONCURRENCY_TEXT', defaultValue: 10 },
   outbox: { env: 'QUEUE_CONCURRENCY_OUTBOX', defaultValue: 10 },
 } as const satisfies Record<WorkerRuntimeTarget, {

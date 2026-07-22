@@ -4,6 +4,7 @@ export const BILLABLE_MEDIA_API_TYPES = [
   'image',
   'video',
   'music',
+  'voice',
 ] as const
 
 export type BillableMediaApiType = (typeof BILLABLE_MEDIA_API_TYPES)[number]

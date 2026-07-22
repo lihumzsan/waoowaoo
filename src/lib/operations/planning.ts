@@ -68,10 +68,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video' | 'music'
+  apiType: 'image' | 'video' | 'music' | 'voice'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'music' | 'second' | 'call'
+  unit: 'image' | 'video' | 'music' | 'voice' | 'second' | 'call' | 'character'
   maxFrozenCost?: number
 }
 
@@ -207,7 +207,11 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
         apiType: info.apiType,
         model: info.model,
         quantity: info.quantity,
-        unit: info.unit === 'second' || info.unit === 'call' || info.unit === 'video' || info.unit === 'image'
+        unit: info.unit === 'second'
+          || info.unit === 'call'
+          || info.unit === 'video'
+          || info.unit === 'image'
+          || info.unit === 'character'
           ? info.unit
           : info.apiType,
         ...(showCredits ? { maxFrozenCost: info.maxFrozenCost } : {}),

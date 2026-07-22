@@ -3,6 +3,7 @@ import {
   calcMusic,
   calcText,
   calcVideo,
+  calcVoice,
 } from './cost'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
@@ -173,6 +174,31 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   }
 }
 
+function buildVoiceTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
+  const model = pickFirstString([payload?.voiceModel, payload?.modelId, payload?.model])
+  const previewText = readString(payload?.previewText)
+  if (!model || !previewText) return null
+  const characters = Math.max(1, Array.from(previewText).length)
+  const language = readString(payload?.language)
+  return {
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'voice',
+    model,
+    quantity: characters,
+    unit: 'character',
+    maxFrozenCost: calcVoice(model, characters),
+    pricingVersion: BUILTIN_PRICING_VERSION,
+    action: String(taskType),
+    metadata: {
+      characters,
+      ...(language ? { language } : {}),
+    },
+    status: 'quoted',
+  }
+}
+
 export function isBillableTaskType(taskType: TaskType) {
   return getTaskDefinition(taskType).billingPolicy !== 'none'
 }
@@ -188,6 +214,8 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
       return buildVideoTaskInfo(taskType, payload)
     case 'music':
       return buildMusicTaskInfo(taskType, payload)
+    case 'voice':
+      return buildVoiceTaskInfo(taskType, payload)
     case 'text':
       return buildTextTaskInfo(taskType, payload)
   }

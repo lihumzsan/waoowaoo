@@ -1,6 +1,7 @@
 import type { CapabilitySelections, CapabilityValue } from '@/lib/ai-registry/types'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
+import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
 
 export type PlatformRuntimePurpose = SystemModelPurpose
 
@@ -78,6 +79,8 @@ function resolveModelKey(purpose: PlatformRuntimePurpose): string {
       return defaults.videoModel
     case 'music':
       return defaults.musicModel
+    case 'voice-design':
+      return PLATFORM_VOICE_DESIGN_MODEL_KEY
   }
 }
 
@@ -92,6 +95,7 @@ function resolveGenerationOptions(purpose: PlatformRuntimePurpose): Record<strin
     case 'music':
       return getPlatformMusicGenerationOptions()
     case 'analysis':
+    case 'voice-design':
       return {}
   }
 }

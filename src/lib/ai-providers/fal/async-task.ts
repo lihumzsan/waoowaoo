@@ -9,7 +9,7 @@ import { queryFalStatus } from './queue'
 function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
   const parts = externalId.split(':')
   const type = parts[1]
-  if (type === 'VIDEO' || type === 'IMAGE' || type === 'MUSIC') {
+  if (type === 'VIDEO' || type === 'IMAGE' || type === 'MUSIC' || type === 'VOICE') {
     if (parts.length < 4) {
       throw new Error(`无效 FAL externalId: "${externalId}"，应为 FAL:TYPE:endpoint:requestId`)
     }
@@ -25,7 +25,7 @@ function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
       requestId,
     }
   }
-  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE/MUSIC`)
+  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE/MUSIC/VOICE`)
 }
 
 function formatFalExternalId(input: FormatAsyncExternalIdInput): string {

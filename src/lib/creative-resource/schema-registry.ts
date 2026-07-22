@@ -18,6 +18,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   CHAPTER_VIDEO: 'project.chapter_video',
   BGM_DESIGN: 'project.bgm_design',
   BGM_AUDIO: 'project.bgm_audio',
+  VOICE_REFERENCE: 'project.voice_reference',
   RENDERED_VIDEO: 'project.rendered_video',
 } as const
 
@@ -49,6 +50,7 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   audio: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
     CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO,
+    CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
   ],
   video: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,

@@ -31,6 +31,94 @@ function bindingView(row: LockedBindingRow, scope: CreativeResourceScopeRef, rol
   }
 }
 
+async function lockBinding(
+  tx: CreativeResourcePersistenceClient,
+  input: {
+    readonly scope: CreativeResourceScopeRef
+    readonly role: string
+    readonly slotKey: string
+  },
+): Promise<LockedBindingRow | null> {
+  const rows = await tx.$queryRaw<LockedBindingRow[]>(Prisma.sql`
+    SELECT id, userId, resourceId, revisionId, source, version
+    FROM creative_resource_bindings
+    WHERE scopeKind = ${input.scope.kind}
+      AND scopeId = ${input.scope.id}
+      AND role = ${input.role}
+      AND slotKey = ${input.slotKey}
+    FOR UPDATE
+  `)
+  const existing = rows[0] ?? null
+  if (existing && existing.userId !== input.scope.userId) {
+    throw new Error('CREATIVE_RESOURCE_BINDING_NOT_OWNED')
+  }
+  return existing
+}
+
+export async function getCreativeResourceBindingInTransaction(
+  tx: CreativeResourcePersistenceClient,
+  input: {
+    readonly scope: CreativeResourceScopeRef
+    readonly role: string
+    readonly slotKey: string
+  },
+): Promise<CreativeResourceBindingView | null> {
+  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
+  const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
+  return existing ? bindingView(existing, input.scope, role, slotKey) : null
+}
+
+export async function unbindCreativeResourceInTransaction(
+  tx: CreativeResourcePersistenceClient,
+  input: {
+    readonly scope: CreativeResourceScopeRef
+    readonly role: string
+    readonly slotKey: string
+    readonly expectedVersion: number | null
+  },
+): Promise<CreativeResourceBindingView | null> {
+  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
+  const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
+  if (!existing) {
+    if (input.expectedVersion !== null) {
+      throw new Error(`CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:missing:${String(input.expectedVersion)}`)
+    }
+    return null
+  }
+  if (input.expectedVersion === null || existing.version !== input.expectedVersion) {
+    throw new Error(`CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:${String(existing.version)}:${String(input.expectedVersion)}`)
+  }
+  const deleted = await tx.creativeResourceBinding.deleteMany({
+    where: { id: existing.id, version: input.expectedVersion },
+  })
+  if (deleted.count !== 1) throw new Error('CREATIVE_RESOURCE_BINDING_CAS_FAILED')
+  return bindingView(existing, input.scope, role, slotKey)
+}
+
+export async function deleteCreativeResourceBindingSlotInTransaction(
+  tx: CreativeResourcePersistenceClient,
+  input: {
+    readonly scope: CreativeResourceScopeRef
+    readonly role: string
+    readonly slotKey: string
+  },
+): Promise<number> {
+  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
+  const deleted = await tx.creativeResourceBinding.deleteMany({
+    where: {
+      userId: input.scope.userId,
+      scopeKind: input.scope.kind,
+      scopeId: input.scope.id,
+      role,
+      slotKey,
+    },
+  })
+  return deleted.count
+}
+
 export async function bindCreativeResourceRevisionInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
@@ -101,16 +189,7 @@ export async function bindCreativeResourceRevisionInTransaction(
     select: { id: true },
   })
   if (!revision) throw new Error('CREATIVE_RESOURCE_BINDING_REVISION_NOT_OWNED')
-  const rows = await tx.$queryRaw<LockedBindingRow[]>(Prisma.sql`
-    SELECT id, userId, resourceId, revisionId, source, version
-    FROM creative_resource_bindings
-    WHERE scopeKind = ${input.scope.kind}
-      AND scopeId = ${input.scope.id}
-      AND role = ${role}
-      AND slotKey = ${slotKey}
-    FOR UPDATE
-  `)
-  const existing = rows[0] ?? null
+  const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
   if (!existing) {
     if (input.expectedVersion !== null) {
       throw new Error(`CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:missing:${String(input.expectedVersion)}`)
@@ -133,7 +212,6 @@ export async function bindCreativeResourceRevisionInTransaction(
     })
     return bindingView(created, input.scope, role, slotKey)
   }
-  if (existing.userId !== input.scope.userId) throw new Error('CREATIVE_RESOURCE_BINDING_NOT_OWNED')
   if (input.expectedVersion === null || existing.version !== input.expectedVersion) {
     throw new Error(`CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:${String(existing.version)}:${String(input.expectedVersion)}`)
   }

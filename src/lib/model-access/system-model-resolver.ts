@@ -2,6 +2,7 @@ import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
+import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
 
 export type SystemModelPurpose =
   | 'analysis'
@@ -10,6 +11,7 @@ export type SystemModelPurpose =
   | 'edit-image'
   | 'video'
   | 'music'
+  | 'voice-design'
 
 function requireModel(modelKey: string | null | undefined, purpose: SystemModelPurpose): string {
   if (typeof modelKey === 'string' && modelKey.trim()) return modelKey.trim()
@@ -28,6 +30,7 @@ export async function resolveSystemModelKey(input: {
   projectId?: string | null
   purpose: SystemModelPurpose
 }): Promise<string> {
+  if (input.purpose === 'voice-design') return PLATFORM_VOICE_DESIGN_MODEL_KEY
   const deployment = getDeploymentConfig()
   if (isPlatformProviderCredentialMode(deployment)) {
     return resolvePlatformModel(input.purpose)

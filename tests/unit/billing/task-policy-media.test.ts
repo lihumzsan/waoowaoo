@@ -68,4 +68,17 @@ describe('billing/task-policy', () => {
     expect(info.unit).toBe('call')
   })
 
+  it('bills voice design by Unicode character count', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_VOICE, {
+      voiceModel: 'fal::fal-ai/qwen-3-tts/voice-design/1.7b',
+      previewText: '你好 A',
+      language: 'Chinese',
+    }))
+    expect(info.apiType).toBe('voice')
+    expect(info.model).toBe('fal::fal-ai/qwen-3-tts/voice-design/1.7b')
+    expect(info.quantity).toBe(4)
+    expect(info.unit).toBe('character')
+    expect(info.maxFrozenCost).toBeCloseTo(0.002592, 8)
+  })
+
 })

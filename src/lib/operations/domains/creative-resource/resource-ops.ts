@@ -8,6 +8,7 @@ import {
 } from '@/lib/creative-resource/creative-data'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
+  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
   CREATIVE_RESOURCE_MEDIA_TYPES,
   CREATIVE_RESOURCE_STATUSES,
 } from '@/lib/creative-resource/contracts'
@@ -31,6 +32,7 @@ function isReservedCreativeResourceBinding(input: {
 }): boolean {
   const role = input.role.trim()
   const slotKey = input.slotKey.trim()
+  if (role === CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE) return true
   return Object.values(CREATIVE_RESOURCE_CANONICAL_BINDINGS).some(
     (binding) => binding.role === role && binding.slotKey === slotKey,
   )
@@ -334,7 +336,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
             code: 'CREATIVE_RESOURCE_RESERVED_BINDING_OPERATION_REQUIRED',
             field: 'role',
             requestedValue: `${input.role}:${input.slotKey}`,
-            allowedValues: ['confirm_script_resource', 'adopt_style_bible'],
+            allowedValues: ['confirm_script_resource', 'adopt_style_bible', 'bind_voice'],
             agentRetryableAfterCorrection: true,
           })
         }

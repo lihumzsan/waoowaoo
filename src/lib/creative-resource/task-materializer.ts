@@ -3,11 +3,14 @@ import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { getTaskDefinition } from '@/lib/task/definition'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type {
+  CreativeResourceBindingView,
   CreativeResourceInputRef,
   CreativeResourceJsonValue,
   CreativeResourceMediaType,
   CreativeResourceRevisionContent,
 } from './contracts'
+import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from './contracts'
+import { bindCreativeResourceRevisionInTransaction } from './binding-service'
 import {
   parseCreativeResourceGenerationTaskPayload,
   toCreativeResourceJsonValue,
@@ -78,7 +81,7 @@ function promptFromPayload(payload: Record<string, unknown>): string | null {
 }
 
 function modelFromPayload(payload: Record<string, unknown>): string | null {
-  for (const key of ['imageModel', 'videoModel', 'musicModel', 'analysisModel', 'editModel', 'model']) {
+  for (const key of ['imageModel', 'videoModel', 'musicModel', 'voiceModel', 'analysisModel', 'editModel', 'model']) {
     const value = readString(payload, key)
     if (value) return value
   }
@@ -407,10 +410,52 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
       generationOptions: toCreativeResourceJsonValue(payload.resource.generationOptions),
     },
   })
+  let bindingResult: {
+    status: 'bound' | 'conflict' | 'target_missing'
+    binding: CreativeResourceBindingView | null
+  } | null = null
+  const requestedBinding = 'binding' in payload.resource ? payload.resource.binding : undefined
+  if (requestedBinding?.kind === 'character_voice') {
+    const character = await tx.projectCharacter.findFirst({
+      where: {
+        id: requestedBinding.characterId,
+        projectId: input.task.projectId,
+        project: { userId: input.task.userId },
+      },
+      select: { id: true },
+    })
+    if (!character) {
+      bindingResult = { status: 'target_missing', binding: null }
+    } else {
+      try {
+        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
+          scope: resolveProjectCreativeResourceScope({
+            userId: input.task.userId,
+            projectId: input.task.projectId,
+            episodeId: null,
+          }),
+          role: CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
+          slotKey: requestedBinding.characterId,
+          resourceId: revision.resourceId,
+          revisionId: revision.revisionId,
+          source: 'generate_voice',
+          expectedVersion: requestedBinding.expectedVersion,
+        })
+        bindingResult = { status: 'bound', binding }
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('CREATIVE_RESOURCE_BINDING_VERSION_CONFLICT:')) {
+          bindingResult = { status: 'conflict', binding: null }
+        } else {
+          throw error
+        }
+      }
+    }
+  }
   return {
     resourceId: revision.resourceId,
     revisionId: revision.revisionId,
     fingerprint: revision.fingerprint,
     resourceStatus: 'ready',
+    ...(bindingResult ? { bindingResult } : {}),
   }
 }

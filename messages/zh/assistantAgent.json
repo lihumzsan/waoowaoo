@@ -211,6 +211,7 @@
     "billingActionImageItems": "{count} 张图片",
     "billingActionVideoItems": "{count} 个视频",
     "billingActionMusicItems": "{count} 段音乐",
+    "billingActionVoiceCharacterItems": "{count} 个音色试听字符",
     "billingActionMusicSecondItems": "{count} 秒音乐",
     "billingActionVideoSecondItems": "{count} 秒视频",
     "billingActionListSeparator": "、",

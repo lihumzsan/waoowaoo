@@ -35,7 +35,7 @@ import {
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import type { AiResolvedSelection } from '@/lib/ai-registry/types'
 
-export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music'>
+export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'voice'>
 
 export type AiImageExecutionOptions = {
   referenceImages?: string[]
@@ -71,6 +71,10 @@ export type AiMusicExecutionOptions = {
   mood?: string
   bpm?: number
   outputFormat?: 'mp3' | 'wav'
+}
+
+export type AiVoiceExecutionOptions = {
+  language?: string
 }
 
 export type AiLlmExecutionInput = {
@@ -119,6 +123,14 @@ export type AiMediaExecutionInput =
     modelKey: string
     prompt: string
     options?: AiMusicExecutionOptions
+  }
+  | {
+    modality: 'voice'
+    userId: string
+    modelKey: string
+    description: string
+    text: string
+    options?: AiVoiceExecutionOptions
   }
 
 export async function executeMediaGeneration(
@@ -205,6 +217,32 @@ export async function executeMediaGeneration(
         },
       }
     }
+    case 'voice': {
+      const modalityAdapter = adapter[input.modality]
+      if (!modalityAdapter) {
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
+      }
+      return {
+        provider: routeSelection.provider,
+        modelKey: routeSelection.modelKey,
+        request: { ...input, modelKey: routeSelection.modelKey },
+        execute: async () => {
+          const descriptor = modalityAdapter.describe(routeSelection)
+          const options = normalizeAiOptions({
+            schema: descriptor.optionSchema,
+            options: input.options,
+            context: `${input.modality}:${routeSelection.modelKey}`,
+          }) as AiVoiceExecutionOptions | undefined
+          return await modalityAdapter.execute({
+            userId: input.userId,
+            selection: routeSelection,
+            description: input.description,
+            text: input.text,
+            options,
+          })
+        },
+      }
+    }
     }
   }
   const taskId = getLogContext().taskId
@@ -230,9 +268,9 @@ export async function executeMediaGeneration(
     })
   }
 
-  if (input.modality !== 'music' || !result.async) return result
+  if ((input.modality !== 'music' && input.modality !== 'voice') || !result.async) return result
   const externalId = result.externalId?.trim()
-  if (!externalId) throw new Error('ASYNC_MUSIC_EXTERNAL_ID_MISSING')
+  if (!externalId) throw new Error(`ASYNC_${input.modality.toUpperCase()}_EXTERNAL_ID_MISSING`)
   try {
     const completed = await waitForAsyncProviderResult({
       externalId,
@@ -338,6 +376,24 @@ export async function generateMusic(
     userId,
     modelKey,
     prompt,
+    options,
+  }, invocation)
+}
+
+export async function generateVoice(
+  userId: string,
+  modelKey: string,
+  description: string,
+  text: string,
+  options?: AiVoiceExecutionOptions,
+  invocation?: TaskProviderInvocation,
+): Promise<GenerateResult> {
+  return await executeMediaGeneration({
+    modality: 'voice',
+    userId,
+    modelKey,
+    description,
+    text,
     options,
   }, invocation)
 }

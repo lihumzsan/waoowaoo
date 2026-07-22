@@ -211,6 +211,7 @@
     "billingActionImageItems": "{count, plural, one {1 image} other {# images}}",
     "billingActionVideoItems": "{count, plural, one {1 video} other {# videos}}",
     "billingActionMusicItems": "{count, plural, one {1 music track} other {# music tracks}}",
+    "billingActionVoiceCharacterItems": "{count, plural, one {1 voice character} other {# voice characters}}",
     "billingActionMusicSecondItems": "{count, plural, one {1 second of music} other {# seconds of music}}",
     "billingActionVideoSecondItems": "{count, plural, one {1 second of video} other {# seconds of video}}",
     "billingActionListSeparator": ", ",

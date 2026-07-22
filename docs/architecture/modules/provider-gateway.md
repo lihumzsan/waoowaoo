@@ -28,12 +28,13 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-13 — 普通 LLM/Vision 只有一套 SDK 执行与结果协议。** 每个 LLM 模型必须在生产 capability registry 穷尽声明 `openai-responses | openai-compatible-chat | openrouter-chat | google-generative-ai` 传输协议；`ai-exec` 只通过一个 AI SDK `LanguageModel` runner 执行 `generateText/streamText`，并只通过一个 versioned、可序列化的项目 result projector 生成 durable result。Provider adapter 只拥有模型 factory、消息准备、专属 option/header、proxy、metadata/error 校验，禁止返回私有 completion shape、直用原生 Chat Completions、手写 Responses HTTP/SSE parser 或另建 LLM/Vision 执行链。Video 的 submit/status/result durable lifecycle 不属于该同步结果协议；会在进程内自动 poll/download 的高层 Video SDK 不得替换现有 durable handoff。
 - **PG-14 — Provider 先按生命周期分类，再选择传输实现。** Runtime 只有 `sync final result` 与 `async durable job` 两种执行语义，图片、视频或 provider 名称不得代替该分类。同步接口优先由能保留参数 policy、proxy、安全上限、错误语义且可关闭提交重试的高层 SDK 执行；异步接口必须让项目分别调用 `submit/status/result`、在 submit 后立即持久化 canonical external id，并由 worker/reconciler 拥有恢复和终态。任何 SDK 若隐藏进程内 polling/download、自动 fallback，或无法关闭不确定 POST 的重试，均不得接管该边界；保留项目低层 transport 不构成第二生命周期。OpenRouter Image 使用 AI SDK `generateImage`；OpenRouter Video 使用官方低层 SDK 的独立 `generate/getGeneration`；FAL Queue 因官方客户端当前固定重试 submit，继续使用零自动重提的项目 transport。
 - **PG-15 — 模型 option 只规范化一次。** `AiOptionSchema` 同时拥有允许字段、必填/冲突、值域和 canonical normalize；`ai-exec` 必须把其结果交给 provider adapter。adapter 只能把 canonical option 映射为 provider SDK/wire 字段，不得再次维护同义 allowed-key、枚举、默认值或跨字段裁决。跨 provider 的同模型族规则必须由共享 policy builder 生成，各 provider 只声明自身 capability/policy 差异；把重复解释移动到 shared wrapper 但保留第二裁判不算收敛。
+- **PG-16 — Voice Design 是独立固定模态。** `voice` 不能伪装成 music 或 video audio。Qwen Voice Design 1.7B 的模型 identity、多语言枚举和按字符价格由 FAL production catalog 唯一声明；Agent-facing `generate_voice` 不接受 provider/model/temperature/seed 等参数。adapter 只映射 canonical `description + text + language` 为 FAL `prompt + text + language`，通过共享 FAL external id/poll 协议恢复，完成后仍进入共享音频字节上限和稳定 Task artifact 持久化。
 
 ## 权威入口
 
 - Provider adapter、媒体/LLM 实现与异步注册：`src/lib/ai-providers/`。
 - 同步 OpenRouter Image 的唯一外部协议入口：`src/lib/ai-providers/openrouter/image.ts` 的 AI SDK `generateImage`；OpenRouter Video 的唯一 submit/status 入口：`src/lib/ai-providers/openrouter/video.ts` 的官方低层 SDK。两者继续由同一 OpenRouter adapter 暴露，不允许业务调用方直连 SDK。
-- 执行引擎、结果归一化与异步轮询：`src/lib/ai-exec/engine.ts`、`src/lib/ai-exec/async-poll.ts`、`src/lib/ai-exec/async-wait.ts`；FAL image/video/music 共用标准 external id 与这一等待入口，provider adapter 不在提交函数内隐藏第二套轮询循环。
+- 执行引擎、结果归一化与异步轮询：`src/lib/ai-exec/engine.ts`、`src/lib/ai-exec/async-poll.ts`、`src/lib/ai-exec/async-wait.ts`；FAL image/video/music/voice 共用标准 external id 与这一等待入口，provider adapter 不在提交函数内隐藏第二套轮询循环。
 - 普通 LLM/Vision 的唯一外部执行与结果投影：`src/lib/ai-exec/llm/sdk-runner.ts`、`src/lib/ai-exec/llm/result-projector.ts`；模型传输协议的唯一声明与解析：各 provider `models.ts` 的 capability catalog、`src/lib/ai-registry/llm-protocol.ts`。
 - Task 媒体/LLM/vision 提交围栏与结果重放：`src/lib/task/provider-invocation.ts`；稳定产物身份：`src/lib/task/artifact-storage.ts`。
 - 模型目录、价格、能力和运行时选择：`src/lib/ai-registry/`。
@@ -52,6 +53,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `tests/integration/provider/openrouter-image.contract.test.ts` 还从生产 schema 取得 canonical GPT Image 2 option，反证默认值、alias conflict、压缩格式和禁用字段重新落入 adapter 私有解释；`tests/integration/provider/provider-gateway-capabilities.contract.test.ts` 验证 FAL 与 OpenRouter 共享模型族 normalizer、但继续遵守各自 capability。
 - 上述两组 contract 还从生产 route registry 验证 OpenRouter/FAL GPT Image 2 的等价 route set；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 DB 反证 pre-accept 之外的跨路由重提、并发 route advance、重放回到首路由和实际 provenance 丢失。数据库不可用时该项只能报告未验证。
 - `tests/integration/provider/fal-music-capability.contract.test.ts` 从生产 registry 验证 Lyria 连续 `120–180` 秒能力、范围外请求在 HTTP 前失败，以及 `duration_seconds` 与 `negative_prompt` 的真实 FAL wire contract。
+- `tests/integration/provider/fal-voice-capability.contract.test.ts` 从生产 registry 验证 Voice Design 多语言枚举、未知/采样 option 在 HTTP 前失败，以及 FAL 只收到 `text/prompt/language`。
 - `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 与 `message-content.contract.test.ts` 验证生产 registry capability、connection 和消息协议。
 - `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level streaming 协议；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、成功兄弟重放、失败 invocation/external job 仅由更高 attempt 重取，以及 `outcome_unknown` 与永久拒绝零重提。
 - `tests/unit/task/async-poll-external-id.test.ts` 只验证纯 external identity 解析。

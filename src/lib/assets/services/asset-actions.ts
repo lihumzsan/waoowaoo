@@ -45,6 +45,9 @@ import {
 } from '@/lib/assets/services/location-backed-assets'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 import { confirmProjectLocationBackedSelection } from '@/lib/assets/services/project-location-backed-selection'
+import { deleteCreativeResourceBindingSlotInTransaction } from '@/lib/creative-resource/binding-service'
+import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from '@/lib/creative-resource/contracts'
+import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
 import {
   requireAssetBodyVariantOwnership,
   requireAssetProjectId,
@@ -1297,6 +1300,15 @@ export async function removeAsset(input: AssetRemoveInput, transaction: Prisma.T
       await transaction.globalCharacter.delete({ where: { id: input.assetId } })
       return { success: true }
     }
+    await deleteCreativeResourceBindingSlotInTransaction(transaction, {
+      scope: resolveProjectCreativeResourceScope({
+        userId: input.access.userId,
+        projectId: requireAssetProjectId(input.access),
+        episodeId: null,
+      }),
+      role: CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
+      slotKey: input.assetId,
+    })
     await transaction.projectCharacter.delete({ where: { id: input.assetId } })
     return { success: true }
   }

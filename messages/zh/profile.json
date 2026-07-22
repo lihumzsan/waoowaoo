@@ -59,6 +59,7 @@
     "tokens": "{count} tokens",
     "seconds": "{count}秒",
     "calls": "{count}次",
+    "characters": "{count}个字符",
     "audioIncluded": "含音频"
   },
   "transactionTargets": {
@@ -157,6 +158,7 @@
     "music": "音乐生成"
   },
   "actionTypes": {
+    "creative_resource_voice": "角色音色设计",
     "edit_style_preview_options_generate": "生成视觉风格方案",
     "edit_style_preview_image": "风格预览图生成",
     "image_character": "角色生图",

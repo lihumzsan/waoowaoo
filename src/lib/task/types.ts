@@ -65,6 +65,7 @@ export const TASK_TYPE = {
   CREATIVE_WORK: 'creative_work',
   CREATIVE_RESOURCE_IMAGE: 'creative_resource_image',
   CREATIVE_RESOURCE_AUDIO: 'creative_resource_audio',
+  CREATIVE_RESOURCE_VOICE: 'creative_resource_voice',
   CREATIVE_RESOURCE_VIDEO: 'creative_resource_video',
   CREATIVE_RESOURCE_VIDEO_MERGE: 'creative_resource_video_merge',
   EDIT_STYLE_PREVIEW_OPTIONS_GENERATE: 'edit_style_preview_options_generate',
@@ -109,7 +110,7 @@ export function isTaskType(value: unknown): value is TaskType {
   return typeof value === 'string' && TASK_TYPE_VALUES.has(value)
 }
 
-export type QueueType = 'image' | 'video' | 'music' | 'text'
+export type QueueType = 'image' | 'video' | 'music' | 'voice' | 'text'
 
 export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'
 
@@ -123,10 +124,10 @@ export type TaskBillingInfo =
     billable: true
     source: 'task'
     taskType: TaskType
-    apiType: 'text' | 'image' | 'video' | 'music'
+    apiType: 'text' | 'image' | 'video' | 'music' | 'voice'
     model: string
     quantity: number
-    unit: 'token' | 'image' | 'video' | 'second' | 'call'
+    unit: 'token' | 'image' | 'video' | 'second' | 'call' | 'character'
     maxFrozenCost: number
     pricingVersion?: string
     action: string

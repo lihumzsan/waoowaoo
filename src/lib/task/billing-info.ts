@@ -1,8 +1,8 @@
 import { TASK_TYPE, type TaskBillingInfo, type TaskType } from './types'
 
 const TASK_TYPES: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
-const API_TYPES: ReadonlySet<string> = new Set(['text', 'image', 'video', 'music'])
-const UNITS: ReadonlySet<string> = new Set(['token', 'image', 'video', 'second', 'call'])
+const API_TYPES: ReadonlySet<string> = new Set(['text', 'image', 'video', 'music', 'voice'])
+const UNITS: ReadonlySet<string> = new Set(['token', 'image', 'video', 'second', 'call', 'character'])
 const MODES: ReadonlySet<string> = new Set(['OFF', 'SHADOW', 'ENFORCE'])
 const STATUSES: ReadonlySet<string> = new Set([
   'skipped', 'quoted', 'frozen', 'settled', 'rolled_back', 'failed',

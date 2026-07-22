@@ -1,10 +1,12 @@
 <!-- architecture-module: audio-production -->
 
-# BGM 规划、生成与最终混音
+# BGM 规划、生成、最终混音与角色音色资产
 
 ## 设计理念
 
-声音阶段只生成 BGM。锁定脚本和章节成片的 identity、顺序、时长与镜头映射先被转换成一份整集 `BgmDesign`，再由 MusicScore 生成与最终混音消费同一冻结事实。视频模型自己的对白、Shot 同期声和 Segment 内可选的声音先行/延续 cue 都属于原生片段音轨并继续保留；系统不再规划、生成、持久化、计费或混合独立环境音层，也不观看/听取最终视频来生成第二份语义判断。
+配乐生产阶段只生成 BGM。锁定脚本和章节成片的 identity、顺序、时长与镜头映射先被转换成一份整集 `BgmDesign`，再由 MusicScore 生成与最终混音消费同一冻结事实。视频模型自己的对白、Shot 同期声和 Segment 内可选的声音先行/延续 cue 都属于原生片段音轨并继续保留；系统不再规划、生成、持久化、计费或混合独立环境音层，也不观看/听取最终视频来生成第二份语义判断。
+
+角色音色是与配乐、对白成片链路解耦的可复用 `project.voice_reference` 音频 Resource：它只保存一次自然语言 Voice Design 的试听音频及不可变 Revision，可以独立存在，也可以通过保留的 `character_voice` Binding 绑定到一个项目角色。本阶段不把它自动拼接进视频提示词、对白生成或最终混音。
 
 ## 不变量
 
@@ -17,6 +19,9 @@
 - **AP-07 — 两个候选、技术裁决。** 每次 BGM 生成必须产生恰好两个候选，只能从通过时长、音量、削波、静音、瞬态、重复和结构技术检查的候选中选一个。该 QC 只读取新生成候选 PCM，不分析原生音轨、视频帧或最终成片内容。
 - **AP-08 — 最终混音只有两类输入。** 最终混音只接受原生片段音轨与自动化后的 BGM，并以 stitched video duration 为权威，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。FFmpeg 技术分析只用于 loudness 与时长，不得从内容猜测业务状态。
 - **AP-09 — 被删除能力不得残留入口。** 生产 registry、provider adapter、模型配置、计费类型、Operation、TaskType、worker、数据库模型、Query、Canvas、文案和最终混音均不得声明环境音或音效生成能力。历史字段只能出现在迁移删除语句或明确的拒绝性测试中。
+- **AP-10 — 音色生成只有一个入口和固定模型。** `generate_voice` 是新建与原位重生成音色的唯一执行入口；Agent 只提交音色描述、试听文字、语言、可选原 Resource identity 与绑定目标，不能提交 provider、model 或采样参数。服务端固定解析 `fal::fal-ai/qwen-3-tts/voice-design/1.7b`，FAL adapter 只发送 `text + prompt + language`，报价和结算按 Unicode 字符数使用同一冻结试听文字。
+- **AP-11 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于项目级 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)` 的不可变 Revision；角色表不新增音频字段。`bind_voice` 是绑定、换绑、解绑的唯一产品入口，并复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。`generate_voice target=character` 只携带规划时冻结的 Binding version；完成前用户已经换绑时保留新 Revision并返回显式 conflict，绝不覆盖较新选择。
+- **AP-12 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未在生成中、未绑定且未被 Lineage 引用的音色 Resource；共享 `MediaObject` 继续由独立生命周期拥有。删除角色时通过 Binding service 同事务清除该角色的 `character_voice` 插槽，不能留下以字符串 slotKey 孤立的绑定。
 
 ## 权威入口
 
@@ -27,14 +32,20 @@
 - 配乐能力、prompt 与候选质量：`score-duration.ts`、`lyria-prompt.ts`、`score-quality.ts`；模型能力声明：`src/lib/ai-providers/fal/models.ts`。
 - 收费生成入口：`src/lib/operations/domains/music/generation/music-generation-ops.ts`；生成 worker：`src/lib/bgm-score/generate.ts`。
 - 最终混音：`src/lib/workers/final-video-render.ts`、`src/lib/video-compose/final-render-audio.ts`。
+- 角色音色 Operation：`src/lib/operations/domains/voice/voice-ops.ts`；Resource/Binding 规则：`src/lib/voice/voice-resource-service.ts`、`src/lib/creative-resource/{binding-service,task-materializer,schema-registry}.ts`。
+- 音色 Provider 与异步执行：`src/lib/ai-providers/fal/voice.ts`、`src/lib/workers/voice.worker.ts`；固定模型/语言/价格仍从生产 capability/pricing registry 解析。
 
 写入者/入口变化：生成声音规划 writer 从历史 BGM plan 与环境音 plan 两个，先收敛为仍含两类生成事实的 AudioDesign 一个，本次再切换为只含 BGM 的 BgmDesign 一个；规划 Operation/Task 保持一个但更名为 BGM 契约；收费声音生成入口从两个降为一个；生成音频持久表从两个降为一个；最终生成音频 bus 从两个降为一个。不存在残余环境音 writer、执行入口或状态解释器。
+
+角色音色是新增的独立 Resource 能力，不恢复历史 `global_voices/voice_presets/project_voice_lines` 表。修改前音色生成入口、角色音色 Binding writer、音色删除入口均为 0；修改后分别为 `generate_voice`、Binding service（由 `bind_voice` 或生成终态调用）和既有 `delete_asset` 各 1 个，没有第二状态机或第二持久事实。
 
 ## 验证
 
 - `tests/unit/bgm-design/bgm-design-acceptance.test.ts` 验证 strict BGM timeline、旧环境音字段 fail-closed、单 score lane、music-theory prompt 与 120–180 秒连续能力。
 - `tests/unit/bgm-design/bgm-candidate-quality.test.ts` 验证恰好两个 BGM 候选以及纯技术 PCM oracle。
 - `tests/integration/provider/fal-music-capability.contract.test.ts` 验证 registry 连续范围、fractional option 与 provider wire contract。
+- `tests/integration/provider/fal-voice-capability.contract.test.ts` 验证多语言枚举、禁止采样参数和 FAL 的精确三字段 wire contract；`tests/unit/billing/task-policy-media.test.ts` 验证按字符冻结报价。
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 反证多余 `delete_voice/regenerate_voice` 工具、Agent 选择模型以及通用 `adopt_resource` 写角色音色 Binding。
 - `tests/integration/task/bgm-design-owner-fence.integration.test.ts`、`task-target-terminal-projectors.integration.test.ts` 验证真实 DB 当前 owner、late completion、失败和取消。
 - `tests/integration/task/final-render-ffmpeg.integration.test.ts` 使用真实 FFmpeg 验证短原生音轨、BGM 与 canonical duration 的两路组合。
 - `tests/contracts/task-definition-conformance.test.ts` 从生产 Task registry 穷尽验证没有第二类声音任务/projector。
@@ -56,3 +67,4 @@
 4. 音乐时长是否只读取 registry 的连续 120–180 range，且 >180 秒显式失败？
 5. provider/config/billing/Task/DB/Query/Canvas/i18n/mix 中是否仍有环境音能力声明？
 6. 适用 Logic、Critical、Conformance 与主 Golden 是否实际执行，未执行范围是否明确报告？
+7. 音色是否仍只由 `generate_voice` 生成/重生成、只由 Binding service 写角色关系，并且没有进入视频或最终混音链路？

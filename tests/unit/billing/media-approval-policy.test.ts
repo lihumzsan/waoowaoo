@@ -22,8 +22,8 @@ function buildBillingInfo(apiType: Extract<TaskBillingInfo, { billable: true }>[
 }
 
 describe('billable media approval policy', () => {
-  it('classifies image, video, and music as the complete media approval set', () => {
-    expect(BILLABLE_MEDIA_API_TYPES).toEqual(['image', 'video', 'music'])
+  it('classifies every billable media type as the complete media approval set', () => {
+    expect(BILLABLE_MEDIA_API_TYPES).toEqual(['image', 'video', 'music', 'voice'])
     for (const apiType of BILLABLE_MEDIA_API_TYPES) {
       expect(isBillableMediaApiType(apiType), apiType).toBe(true)
       expect(requiresBillableMediaApproval(buildBillingInfo(apiType)), apiType).toBe(true)

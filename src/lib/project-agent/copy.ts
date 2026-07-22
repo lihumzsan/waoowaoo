@@ -32,8 +32,16 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Persist the final-output aspect ratio explicitly present and confirmed in the current user text, producing a new confirmation version. Never treat the Agent\'s own recommendation as confirmation. This tool owns only videoRatio, not model, provider, resolution, or other execution configuration.',
   },
   delete_asset: {
-    zh: '删除一个精确的现有角色、场景或道具资产。必须使用真实 assetId；该操作需要破坏性确认，只删除资产记录及其变体关系，不负责物理清理共享媒体对象。',
-    en: 'Delete one exact existing character, location, or prop asset by real assetId. This requires destructive confirmation and removes only the asset record and variant relationships, not shared media objects.',
+    zh: '删除一个精确的现有角色、场景、道具或未绑定音色资产。必须使用真实 assetId；音色仍被角色绑定或下游引用时会明确拒绝。该操作需要破坏性确认，不负责物理清理共享媒体对象。',
+    en: 'Delete one exact existing character, location, prop, or unbound voice asset by real assetId. A bound or downstream-referenced voice is rejected explicitly. This requires destructive confirmation and never physically cleans shared media objects.',
+  },
+  generate_voice: {
+    zh: '用自然语言描述设计一个可复用音色，并生成一段短试听音频。省略 resourceId 时新建；传现有音色 Resource ID 时在同一 identity 下新增 revision。target=character 会在完成后安全绑定，target=standalone 则保持独立。模型和采样参数由服务端固定。',
+    en: 'Design one reusable voice from a natural-language description and render a short preview. Omit resourceId to create; pass an existing voice Resource ID to append a revision under the same identity. target=character binds safely after completion, while target=standalone stays independent. The server fixes model and sampling parameters.',
+  },
+  bind_voice: {
+    zh: '把一个精确音色 Resource revision 绑定、换绑或解绑到一个项目角色。该操作不生成音频、不收费，也不创建新音色。',
+    en: 'Bind, replace, or unbind one exact voice Resource revision for a project character. This generates no audio, costs no credits, and creates no new voice.',
   },
   regenerate_asset: {
     zh: '在一个精确的现有角色、场景或道具资产 identity 下重新生成图片。资产不满意时使用本工具，不要新建替代资产；可用 imageIndex 只重生成一张，省略时重生成该资产组。',
@@ -257,6 +265,14 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   create_audio: {
     zh: '生成音频资源',
     en: 'Generate audio resource',
+  },
+  generate_voice: {
+    zh: '设计角色音色',
+    en: 'Design voice',
+  },
+  bind_voice: {
+    zh: '绑定角色音色',
+    en: 'Bind voice',
   },
   create_video: {
     zh: '生成视频资源',

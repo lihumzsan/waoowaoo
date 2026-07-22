@@ -16,6 +16,8 @@ describe('billing/task-policy', () => {
     imageModel: 'fal::gpt-image-2',
     videoModel: 'openrouter::bytedance/seedance-2.0-fast',
     musicModel: 'google::lyria-3-pro-preview',
+    voiceModel: 'fal::fal-ai/qwen-3-tts/voice-design/1.7b',
+    previewText: 'Hello, world.',
     durationSeconds: 30,
     duration: 4,
     resolution: '720p',
@@ -98,6 +100,7 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.BGM_DESIGN_PLAN, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.CREATIVE_RESOURCE_VOICE, {})).toBeNull()
   })
 
   it('builds music billing info for built-in Lyria models', () => {

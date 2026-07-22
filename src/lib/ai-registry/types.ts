@@ -3,7 +3,7 @@ import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
 import { isReasoningEffort, type ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
-export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
+export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'voice'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
 export type AiLlmProtocol =
@@ -202,7 +202,7 @@ export type AiLlmExecutionResult = {
   providerMetadata?: AiUnknownObject
 }
 
-export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music'
+export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music' | 'voice'
 export type CapabilityValue = string | number | boolean
 export type CapabilityOptionValue = CapabilityValue
 export type CapabilitySelections = Record<string, Record<string, CapabilityValue>>
@@ -267,11 +267,17 @@ export interface MusicCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
+export interface VoiceCapabilities {
+  languageOptions?: string[]
+  fieldI18n?: CapabilityFieldI18nMap
+}
+
 export interface ModelCapabilities {
   llm?: LLMCapabilities
   image?: ImageCapabilities
   video?: VideoCapabilities
   music?: MusicCapabilities
+  voice?: VoiceCapabilities
 }
 
 const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
@@ -279,6 +285,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
   'image',
   'video',
   'music',
+  'voice',
 ])
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
@@ -314,6 +321,11 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
+  'fieldI18n',
+])
+
+const VOICE_ALLOWED_FIELDS = new Set<keyof VoiceCapabilities>([
+  'languageOptions',
   'fieldI18n',
 ])
 
@@ -705,6 +717,23 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
   })
 }
 
+function validateVoiceCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
+  if (!isRecord(raw)) return
+
+  const languageOptions = raw.languageOptions
+  if (languageOptions !== undefined && !isStringArray(languageOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.voice.languageOptions',
+      message: 'languageOptions must be a non-empty string array',
+    })
+  }
+
+  validateFieldI18nMap(issues, 'voice', raw.fieldI18n, {
+    language: isStringArray(languageOptions) ? languageOptions : undefined,
+  })
+}
+
 function validateOptionFieldValue(
   fieldPath: string,
   value: unknown,
@@ -766,16 +795,19 @@ export function validateModelCapabilities(
   validateNamespaceShape(issues, 'image', (capabilities as ModelCapabilities).image)
   validateNamespaceShape(issues, 'video', (capabilities as ModelCapabilities).video)
   validateNamespaceShape(issues, 'music', (capabilities as ModelCapabilities).music)
+  validateNamespaceShape(issues, 'voice', (capabilities as ModelCapabilities).voice)
 
   validateNamespaceAllowedFields(issues, 'llm', (capabilities as ModelCapabilities).llm, LLM_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'image', (capabilities as ModelCapabilities).image, IMAGE_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'video', (capabilities as ModelCapabilities).video, VIDEO_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'music', (capabilities as ModelCapabilities).music, MUSIC_ALLOWED_FIELDS)
+  validateNamespaceAllowedFields(issues, 'voice', (capabilities as ModelCapabilities).voice, VOICE_ALLOWED_FIELDS)
 
   validateLLMCapabilities(issues, (capabilities as ModelCapabilities).llm)
   validateImageCapabilities(issues, (capabilities as ModelCapabilities).image)
   validateVideoCapabilities(issues, (capabilities as ModelCapabilities).video)
   validateMusicCapabilities(issues, (capabilities as ModelCapabilities).music)
+  validateVoiceCapabilities(issues, (capabilities as ModelCapabilities).voice)
 
   return issues
 }

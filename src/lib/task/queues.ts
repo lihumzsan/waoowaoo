@@ -9,6 +9,7 @@ export const QUEUE_NAME = {
   IMAGE: 'waoowaoo-image',
   VIDEO: 'waoowaoo-video',
   MUSIC: 'waoowaoo-music',
+  VOICE: 'waoowaoo-voice',
   TEXT: 'waoowaoo-text',
 } as const
 
@@ -54,12 +55,16 @@ export function getMusicQueue() {
   return getOrCreateQueue('music', QUEUE_NAME.MUSIC)
 }
 
+export function getVoiceQueue() {
+  return getOrCreateQueue('voice', QUEUE_NAME.VOICE)
+}
+
 export function getTextQueue() {
   return getOrCreateQueue('text', QUEUE_NAME.TEXT)
 }
 
 export function getAllQueues() {
-  return [getImageQueue(), getVideoQueue(), getMusicQueue(), getTextQueue()]
+  return [getImageQueue(), getVideoQueue(), getMusicQueue(), getVoiceQueue(), getTextQueue()]
 }
 
 export function getQueueTypeByTaskType(type: TaskType): QueueType {
@@ -74,6 +79,8 @@ export function getQueueByType(type: QueueType) {
       return getVideoQueue()
     case 'music':
       return getMusicQueue()
+    case 'voice':
+      return getVoiceQueue()
     case 'text':
       return getTextQueue()
   }

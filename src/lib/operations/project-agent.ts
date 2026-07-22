@@ -34,6 +34,7 @@ import { createCreativeResourceOperations } from './domains/creative-resource/re
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
+import { createVoiceOperations } from './domains/voice/voice-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -166,6 +167,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createMusicGenerationOperations(), {
       groupPath: ['media', 'music'],
+      channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createVoiceOperations(), {
+      groupPath: ['media', 'voice'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

@@ -161,6 +161,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
           types: [
             TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
             TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+            TASK_TYPE.CREATIVE_RESOURCE_VOICE,
             TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
             TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
           ],

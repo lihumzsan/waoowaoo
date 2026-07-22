@@ -12,6 +12,7 @@ const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type
   image: 'image',
   video: 'video',
   music: 'music',
+  voice: 'voice',
 }
 
 export function withBuiltinCapabilities(model: StoredModel): StoredModel {

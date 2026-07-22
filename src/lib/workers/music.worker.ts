@@ -2,7 +2,7 @@ import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { generateMusic } from '@/lib/ai-exec/engine'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import { toFetchableUrl, uploadObject } from '@/lib/storage'
+import { uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
@@ -10,7 +10,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { handleBgmScoreGenerateTask } from '@/lib/bgm-score/generate'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
-import { decodeBase64WithLimit, MAX_AUDIO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { extensionFromAudioMimeType, loadGeneratedAudio } from './audio-artifact'
 
 type MusicPayload = {
   musicModel?: unknown
@@ -50,49 +50,6 @@ function readOptionalEnum<T extends string>(value: unknown, allowed: readonly T[
   return value as T
 }
 
-function extensionFromMimeType(mimeType: string): string {
-  if (mimeType.includes('wav')) return 'wav'
-  if (mimeType.includes('ogg')) return 'ogg'
-  if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'm4a'
-  return 'mp3'
-}
-
-function decodeAudioDataUrl(dataUrl: string): { buffer: Buffer; mimeType: string } | null {
-  const match = /^data:(audio\/[^;]+);base64,(.+)$/i.exec(dataUrl.trim())
-  if (!match) return null
-  return {
-    mimeType: match[1],
-    buffer: decodeBase64WithLimit(match[2], MAX_AUDIO_BYTES, 'generated music'),
-  }
-}
-
-async function loadAudioBuffer(input: { audioBase64?: string; audioUrl?: string; mimeType?: string }): Promise<{ buffer: Buffer; mimeType: string }> {
-  const explicitMimeType = readString(input.mimeType) || 'audio/mpeg'
-  if (input.audioBase64) {
-    return {
-      buffer: decodeBase64WithLimit(input.audioBase64, MAX_AUDIO_BYTES, 'generated music'),
-      mimeType: explicitMimeType,
-    }
-  }
-
-  const dataUrl = readString(input.audioUrl)
-  if (!dataUrl) {
-    throw new Error('MUSIC_GENERATE_EMPTY_AUDIO_RESULT')
-  }
-  const decoded = decodeAudioDataUrl(dataUrl)
-  if (decoded) return decoded
-
-  const response = await fetch(toFetchableUrl(dataUrl))
-  if (!response.ok) {
-    throw new Error(`MUSIC_GENERATE_AUDIO_DOWNLOAD_FAILED:${response.status}`)
-  }
-  const contentType = response.headers.get('content-type') || explicitMimeType
-  return {
-    buffer: await readResponseBufferWithLimit(response, MAX_AUDIO_BYTES, 'generated music'),
-    mimeType: contentType,
-  }
-}
-
 export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as MusicPayload
   const musicModel = readString(payload.musicModel)
@@ -123,17 +80,19 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
 
   await reportTaskProgress(job, 85, { stage: 'persist_music' })
 
-  const audio = await loadAudioBuffer({
+  const audio = await loadGeneratedAudio({
     audioBase64: generated.audioBase64,
     audioUrl: generated.audioUrl,
     mimeType: generated.audioMimeType,
+    label: 'generated music',
+    errorPrefix: 'MUSIC_GENERATE',
   })
   const storageKey = await uploadObject(
     audio.buffer,
     buildTaskArtifactStorageKey({
       taskId: job.data.taskId,
       artifact: 'music:primary',
-      extension: extensionFromMimeType(audio.mimeType),
+      extension: extensionFromAudioMimeType(audio.mimeType),
     }),
     1,
     audio.mimeType,

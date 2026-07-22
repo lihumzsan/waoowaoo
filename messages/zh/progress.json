@@ -42,6 +42,7 @@
   },
   "taskType": {
     "creativeWork": "专业创作 Subagent",
+    "creativeResourceVoice": "角色音色设计",
     "generic": "任务",
     "editStylePreviewOptionsGenerate": "视觉风格方案",
     "editStylePreviewImage": "剪辑风格九宫格",
@@ -96,6 +97,8 @@
     "videoSegmentPersist": "保存视频片段结果",
     "generateMusicSubmit": "提交音乐生成任务",
     "persistMusic": "保存音乐结果",
+    "generateVoiceSubmit": "提交音色设计任务",
+    "persistVoice": "保存音色试听",
     "finalRenderPrepare": "准备剪辑素材",
     "finalRenderMusic": "读取已生成配乐",
     "finalRenderCompose": "合成最终视频",
