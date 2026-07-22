@@ -218,6 +218,24 @@ async function persistLocalAiOutput({
   }
 }
 
+async function settleConcurrentWork<T>(operations: Array<Promise<T>>): Promise<T[]> {
+  let primaryError: unknown
+  let failed = false
+  const trackedOperations = operations.map((operation) => operation.catch((error) => {
+    if (!failed) {
+      failed = true
+      primaryError = error
+    }
+    throw error
+  }))
+  const results = await Promise.allSettled(trackedOperations)
+  if (failed) throw primaryError
+  return results.map((result) => {
+    if (result.status === 'rejected') throw result.reason
+    return result.value
+  })
+}
+
 async function buildAiBridgeResult({
   job,
   baseUrl,
@@ -255,7 +273,7 @@ async function buildAiBridgeResult({
       await Promise.allSettled(inputDownloads)
       throw error
     }
-    const [probe1, probe2] = await Promise.all([
+    const [probe1, probe2] = await settleConcurrentWork([
       probeVideoSeamFile(workspace.input1Path),
       probeVideoSeamFile(workspace.input2Path),
     ])
@@ -271,7 +289,7 @@ async function buildAiBridgeResult({
       stage: 'extract_anchors',
       stageLabel: 'videoTools.status.probing',
     })
-    await Promise.all([
+    await settleConcurrentWork([
       extractVideoSeamAnchors({
         inputPath: workspace.input1Path,
         indices: [plan.sourceAnchors.input1Pre, plan.sourceAnchors.input1Endpoint],

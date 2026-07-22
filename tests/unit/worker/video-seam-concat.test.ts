@@ -123,6 +123,16 @@ const operationOrder: string[] = []
 const persistedBytes: number[][] = []
 let responseBodyCancelCount = 0
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     data: {
@@ -476,6 +486,74 @@ describe('video seam concat worker handler', () => {
       .toBeLessThan(operationOrder.indexOf('cleanup'))
     expect(workspace.cleanup).toHaveBeenCalledTimes(1)
     expect(probeFileMock).not.toHaveBeenCalled()
+  })
+
+  it('settles the peer input probe before cleaning while preserving the primary probe error', async () => {
+    const primaryError = new Error('input 1 probe failed')
+    const peerError = new Error('input 2 probe failed later')
+    const peerProbe = createDeferred<typeof probe2>()
+    probeFileMock
+      .mockRejectedValueOnce(primaryError)
+      .mockImplementationOnce(async () => {
+        try {
+          return await peerProbe.promise
+        } finally {
+          operationOrder.push('peer-probe-settled')
+        }
+      })
+
+    const task = handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))
+    let taskError: unknown
+    const observedTask = task.catch((error) => { taskError = error })
+    await vi.waitFor(() => expect(probeFileMock).toHaveBeenCalledTimes(2))
+    expect(workspace.cleanup).not.toHaveBeenCalled()
+
+    peerProbe.reject(peerError)
+
+    await observedTask
+    expect(taskError).toBe(primaryError)
+    expect(operationOrder.indexOf('peer-probe-settled'))
+      .toBeLessThan(operationOrder.indexOf('cleanup'))
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(extractAnchorsMock).not.toHaveBeenCalled()
+  })
+
+  it('settles the peer anchor extraction before cleaning while preserving the primary extraction error', async () => {
+    const primaryError = new Error('input 1 anchor extraction failed')
+    const peerError = new Error('input 2 anchor extraction failed later')
+    const peerExtraction = createDeferred<void>()
+    extractAnchorsMock
+      .mockRejectedValueOnce(primaryError)
+      .mockImplementationOnce(async () => {
+        try {
+          await peerExtraction.promise
+        } finally {
+          operationOrder.push('peer-extraction-settled')
+        }
+      })
+
+    const task = handleVideoSeamConcatTask(buildJob({
+      ...validPayload,
+      mode: 'ai_bridge',
+      bridge: { durationSeconds: 4 },
+    }))
+    let taskError: unknown
+    const observedTask = task.catch((error) => { taskError = error })
+    await vi.waitFor(() => expect(extractAnchorsMock).toHaveBeenCalledTimes(2))
+    expect(workspace.cleanup).not.toHaveBeenCalled()
+
+    peerExtraction.reject(peerError)
+
+    await observedTask
+    expect(taskError).toBe(primaryError)
+    expect(operationOrder.indexOf('peer-extraction-settled'))
+      .toBeLessThan(operationOrder.indexOf('cleanup'))
+    expect(workspace.cleanup).toHaveBeenCalledTimes(1)
+    expect(readAnchorMock).not.toHaveBeenCalled()
   })
 
   it('preserves the primary AI failure when workspace cleanup also fails', async () => {

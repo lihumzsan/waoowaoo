@@ -632,6 +632,69 @@ describe('video seam local media adapter', () => {
     }
   })
 
+  it.each([
+    { name: 'empty body', chunks: [] as number[][], contentLength: undefined },
+    { name: 'body longer than declared', chunks: [[1, 2], [3]], contentLength: '2' },
+    { name: 'truncated body', chunks: [[1, 2], [3]], contentLength: '4' },
+    { name: 'non-numeric declared length', chunks: [[1, 2], [3]], contentLength: 'invalid' },
+    { name: 'multiple declared lengths', chunks: [[1, 2], [3]], contentLength: '3, 3' },
+  ])('rejects a successful response with an invalid $name', async ({ chunks, contentLength }) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const destinationPath = path.join(directory, 'invalid.mp4')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(new Uint8Array(chunk))
+        controller.close()
+      },
+    })
+    let capturedSignal: AbortSignal | undefined
+    try {
+      vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedSignal = init?.signal || undefined
+        return new Response(body, {
+          status: 200,
+          headers: contentLength === undefined ? undefined : { 'Content-Length': contentLength },
+        })
+      }))
+
+      await expect(downloadVideoSeamFile('https://example.test/input.mp4', destinationPath))
+        .rejects.toThrow('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+
+      expect(capturedSignal?.aborted).toBe(true)
+      await expect(fs.access(destinationPath)).rejects.toThrow()
+    } finally {
+      vi.unstubAllGlobals()
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    { name: 'an exact declared length', chunks: [[1], [2, 3]], contentLength: '3' },
+    { name: 'a nonempty chunked body', chunks: [[4, 5], [6]], contentLength: undefined },
+  ])('downloads $name', async ({ chunks, contentLength }) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
+    const destinationPath = path.join(directory, 'valid.mp4')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(new Uint8Array(chunk))
+        controller.close()
+      },
+    })
+    try {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(body, {
+        status: 200,
+        headers: contentLength === undefined ? undefined : { 'Content-Length': contentLength },
+      })))
+
+      await downloadVideoSeamFile('https://example.test/input.mp4', destinationPath)
+
+      await expect(fs.readFile(destinationPath)).resolves.toEqual(Buffer.from(chunks.flat()))
+    } finally {
+      vi.unstubAllGlobals()
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('aborts a hanging media download after the bounded timeout', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'waoowaoo-video-seam-test-'))
     const destinationPath = path.join(directory, 'timeout.mp4')

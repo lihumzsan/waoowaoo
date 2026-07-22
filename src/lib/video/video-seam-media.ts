@@ -3,7 +3,7 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
@@ -181,12 +181,37 @@ export async function downloadVideoSeamFile(
       throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
     }
     if (!response.body) throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+    const rawContentLength = response.headers.get('content-length')
+    let declaredContentLength: number | null = null
+    if (rawContentLength !== null) {
+      declaredContentLength = /^\d+$/.test(rawContentLength) ? Number(rawContentLength) : Number.NaN
+      if (!Number.isSafeInteger(declaredContentLength) || declaredContentLength < 0) {
+        await response.body.cancel().catch(() => undefined)
+        controller.abort(new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED'))
+        throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+      }
+    }
+    let downloadedBytes = 0
+    const byteCounter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        downloadedBytes += chunk.length
+        callback(null, chunk)
+      },
+    })
     const destination = createWriteStream(destinationPath, { flags: 'wx' })
     destination.once('open', () => { createdDestination = true })
     await pipeline(
       Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream),
+      byteCounter,
       destination,
     )
+    if (
+      downloadedBytes === 0
+      || (declaredContentLength !== null && downloadedBytes !== declaredContentLength)
+    ) {
+      controller.abort(new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED'))
+      throw new Error('VIDEO_SEAM_MEDIA_DOWNLOAD_FAILED')
+    }
   } catch {
     if (createdDestination) {
       await fs.unlink(destinationPath).catch(() => undefined)
