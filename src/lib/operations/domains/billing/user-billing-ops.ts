@@ -38,6 +38,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
       id: 'list_user_transactions',
       summary: 'List balance transactions for the current user with filters and pagination.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,
@@ -196,6 +197,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_user_costs',
       summary: 'Get current user cost summary by project.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,

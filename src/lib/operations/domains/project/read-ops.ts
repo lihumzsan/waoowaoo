@@ -5,7 +5,6 @@ import { assembleProjectContext } from '@/lib/project-context/assembler'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
 import { buildAssistantProjectContextSnapshot } from '@/lib/project-agent/presentation'
-import { listTaskBatchFailures, readTaskBatchStatus } from '@/lib/task/batch'
 import type {
   ProjectContextPartData,
 } from '@/lib/project-agent/types'
@@ -18,11 +17,6 @@ const taskTargetSchema = z.object({
   targetType: z.string().min(1),
   targetId: z.string().min(1),
   types: z.array(z.string().min(1)).optional(),
-})
-
-const taskBatchSchema = z.object({
-  batchKey: z.string().trim().min(1),
-  includeFailures: z.boolean().optional(),
 })
 
 const EFFECTS_NONE = {
@@ -112,6 +106,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Query task target states for one or more project targets.',
       intent: 'query',
       effects: EFFECTS_NONE,
+      channels: { tool: false, api: true },
       inputSchema: z.object({
         targets: z.array(taskTargetSchema).min(1).max(500),
       }),
@@ -127,23 +122,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           }),
         }),
       }),
-    }),
-    get_task_batch: defineOperation({
-      id: 'get_task_batch',
-      summary: 'Read aggregate status for a submitted task batch by batchKey, optionally including failed task details.',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: taskBatchSchema,
-      outputSchema: z.unknown(),
-      execute: async (_ctx, input) => {
-        const status = await readTaskBatchStatus(input.batchKey)
-        return {
-          status,
-          failures: input.includeFailures === true
-            ? await listTaskBatchFailures(input.batchKey)
-            : [],
-        }
-      },
     }),
   }
 }

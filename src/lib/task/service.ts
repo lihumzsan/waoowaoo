@@ -309,22 +309,3 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
     cancelled,
   }
 }
-
-export async function dismissFailedTasks(
-  taskIds: string[],
-  userId: string,
-  client: Pick<Prisma.TransactionClient, 'task'> = prisma,
-) {
-  if (taskIds.length === 0) return 0
-  const result = await client.task.updateMany({
-    where: {
-      id: { in: taskIds },
-      userId,
-      status: TASK_STATUS.FAILED,
-    },
-    data: {
-      status: TASK_STATUS.DISMISSED,
-    },
-  })
-  return result.count
-}

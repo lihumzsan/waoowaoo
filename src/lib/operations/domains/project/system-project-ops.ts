@@ -58,6 +58,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       id: 'list_projects',
       summary: 'List user projects with pagination, cost and basic stats.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: EFFECTS_QUERY,
       inputSchema: z.object({
         page: z.number().int().positive().max(10000).optional(),
@@ -204,6 +205,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
       id: 'create_project',
       summary: 'Create a new project for the current user.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: EFFECTS_WRITE,
       inputSchema: z.object({
         name: z.string().min(1),

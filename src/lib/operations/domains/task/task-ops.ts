@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
-import { cancelTask, dismissFailedTasks, getTaskById, queryTasks } from '@/lib/task/service'
+import { cancelTask, getTaskById, queryTasks } from '@/lib/task/service'
 import { TASK_STATUS, TASK_TYPE, type TaskStatus, type TaskType } from '@/lib/task/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -23,11 +23,6 @@ const listTasksInputSchema = z.object({
     .describe('Filter by one or more exact task types.'),
   limit: z.number().int().min(1).max(200).optional()
     .describe('Maximum tasks to return. Defaults to 50.'),
-}).strict()
-
-const dismissFailedTasksInputSchema = z.object({
-  taskIds: z.array(z.string().trim().min(1)).min(1).max(200)
-    .describe('Exact failed task IDs to dismiss.'),
 }).strict()
 
 const getTaskInputSchema = z.object({
@@ -77,32 +72,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           .filter((task) => task.userId === ctx.userId)
           .map(withTaskError)
         return { tasks: filtered }
-      },
-    }),
-
-    dismiss_failed_tasks: defineOperation({
-      id: 'dismiss_failed_tasks',
-      summary: 'Dismiss failed tasks in bulk for the current user.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'none',
-        billable: false,
-        destructive: true,
-        overwrite: false,
-        bulk: true,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      confirmation: {
-        required: true,
-        summary: '将批量 dismiss 失败任务（不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
-      },
-      inputSchema: dismissFailedTasksInputSchema,
-      outputSchema: z.unknown(),
-      executeInTransaction: async (ctx, input, transaction) => {
-        const count = await dismissFailedTasks(input.taskIds, ctx.userId, transaction)
-        return { success: true, dismissed: count }
       },
     }),
 

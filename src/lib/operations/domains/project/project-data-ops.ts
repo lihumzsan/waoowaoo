@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { copyAssetFromGlobal } from '@/lib/assets/services/asset-actions'
 import { getProjectCostDetails } from '@/lib/billing'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
@@ -71,38 +70,6 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       },
     }),
 
-    copy_asset_from_global: defineOperation({
-      id: 'copy_asset_from_global',
-      summary: 'Copy a global asset into the current project asset record.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'project_assets',
-        billable: false,
-        destructive: false,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      inputSchema: z.object({
-        type: z.enum(['character', 'location']),
-        targetId: z.string().min(1),
-        globalAssetId: z.string().min(1),
-      }),
-      outputSchema: z.unknown(),
-      executeInTransaction: async (ctx, input, transaction) =>
-        copyAssetFromGlobal({
-          kind: input.type,
-          targetId: input.targetId,
-          globalAssetId: input.globalAssetId,
-          access: {
-            userId: ctx.userId,
-            projectId: ctx.projectId,
-          },
-        }, transaction),
-    }),
-
     get_project_costs: defineOperation({
       id: 'get_project_costs',
       summary: 'Load project cost breakdown for the project owner.',
@@ -147,6 +114,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_project_data',
       summary: 'Load unified project data payload for the project owner (includes workflow and assets).',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,

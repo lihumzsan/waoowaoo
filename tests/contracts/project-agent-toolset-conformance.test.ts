@@ -76,6 +76,13 @@ describe('project agent toolset conformance', () => {
     expect(toolset.operationIds).not.toContain('update_user_preference')
     expect(toolset.operationIds).not.toContain('list_user_models')
     expect(toolset.operationIds).not.toContain('get_project_config')
+    expect(toolset.operationIds).not.toContain('list_projects')
+    expect(toolset.operationIds).not.toContain('create_project')
+    expect(toolset.operationIds).not.toContain('get_project_basic')
+    expect(toolset.operationIds).not.toContain('get_project_data')
+    expect(toolset.operationIds).not.toContain('get_task_status')
+    expect(toolset.operationIds).not.toContain('list_user_transactions')
+    expect(toolset.operationIds).not.toContain('get_user_costs')
     expect(toolset.operationIds).toContain('update_project_config')
     expect(registry.get_user_api_config.channels).toEqual({ tool: false, api: true })
     expect(registry.put_user_api_config.channels).toEqual({ tool: false, api: true })
@@ -83,6 +90,25 @@ describe('project agent toolset conformance', () => {
     expect(registry.update_user_preference.channels).toEqual({ tool: false, api: true })
     expect(registry.list_user_models.channels).toEqual({ tool: false, api: true })
     expect(registry.get_project_config.channels).toEqual({ tool: false, api: true })
+    expect(registry.list_projects.channels).toEqual({ tool: false, api: true })
+    expect(registry.create_project.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_project_basic.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_project_data.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_task_status.channels).toEqual({ tool: false, api: true })
+    expect(registry.list_user_transactions.channels).toEqual({ tool: false, api: true })
+    expect(registry.get_user_costs.channels).toEqual({ tool: false, api: true })
+    for (const retiredOperationId of [
+      'dismiss_failed_tasks',
+      'get_task_batch',
+      'list_recent_mutation_batches',
+      'select_asset_render',
+      'update_character_appearance_description',
+      'update_location_image_description',
+      'cleanup_unselected_images',
+      'copy_asset_from_global',
+    ]) {
+      expect(registry[retiredOperationId]).toBeUndefined()
+    }
     expect(registry.update_project_config.channels).toEqual({ tool: true, api: true })
     expect(registry.update_project_config.choiceCommit).toEqual({ enabled: true })
     expect(Object.keys(registry.update_project_config.toolInputSchema.properties)).toEqual(['videoRatio'])

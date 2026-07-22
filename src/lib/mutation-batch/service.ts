@@ -165,23 +165,6 @@ export async function createMutationBatch(params: CreateMutationBatchParams) {
   return batch
 }
 
-export async function listRecentMutationBatches(params: { projectId: string; userId: string; limit?: number }) {
-  const limit = Math.max(1, Math.min(20, params.limit ?? 10))
-  return prisma.mutationBatch.findMany({
-    where: {
-      projectId: params.projectId,
-      userId: params.userId,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    include: {
-      entries: {
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  })
-}
-
 export async function markMutationBatchReverted(params: { batchId: string; status: MutationBatchStatus; revertError?: string | null }) {
   return prisma.mutationBatch.update({
     where: { id: params.batchId },

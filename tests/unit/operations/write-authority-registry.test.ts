@@ -30,7 +30,6 @@ describe('Assistant Tool write authority registry', () => {
   it('keeps non-transactional destructive legacy paths fail-closed outside Tool channel', () => {
     const registry = createProjectAgentOperationRegistry()
     const restricted = [
-      'cleanup_unselected_images',
       'cancel_task',
       'delete_project',
       'revert_mutation_batch',

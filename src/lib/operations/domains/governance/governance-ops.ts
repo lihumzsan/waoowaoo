@@ -1,54 +1,11 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { listRecentMutationBatches } from '@/lib/mutation-batch/service'
 import { revertMutationBatch } from '@/lib/mutation-batch/revert'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    list_recent_mutation_batches: defineOperation({
-      id: 'list_recent_mutation_batches',
-      summary: 'List recent mutation batches that can be reverted (undo).',
-      intent: 'query',
-      effects: {
-        writes: false,
-        billable: false,
-        destructive: false,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      inputSchema: z.object({
-        limit: z.number().int().positive().max(20).optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const batches = await listRecentMutationBatches({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          limit: input.limit || 10,
-        })
-        return batches.map((batch) => ({
-          id: batch.id,
-          status: batch.status,
-          source: batch.source,
-          operationId: batch.operationId,
-          summary: batch.summary,
-          createdAt: batch.createdAt.toISOString(),
-          revertedAt: batch.revertedAt ? batch.revertedAt.toISOString() : null,
-          entryCount: batch.entries.length,
-          entries: batch.entries.map((entry) => ({
-            id: entry.id,
-            kind: entry.kind,
-            targetType: entry.targetType,
-            targetId: entry.targetId,
-            createdAt: entry.createdAt.toISOString(),
-          })),
-        }))
-      },
-    }),
     revert_mutation_batch: defineOperation({
       id: 'revert_mutation_batch',
       summary: 'Revert (undo) a mutation batch by id.',

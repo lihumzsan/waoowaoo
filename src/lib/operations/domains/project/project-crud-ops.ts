@@ -46,6 +46,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       id: 'get_project_basic',
       summary: 'Load base project info.',
       intent: 'query',
+      channels: { tool: false, api: true },
       effects: {
         writes: false,
         billable: false,

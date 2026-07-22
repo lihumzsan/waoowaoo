@@ -61,6 +61,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 
 ## 历史回归
 
+- 最初分镜页面把“用户关闭失败提示”实现为 Task `failed → dismissed` 持久状态写入；页面移除后，route、React mutation、Operation 与 service writer 仍保留，并在 Agent 工具面全开后让模型能够改写真实失败终态。该动作不删除或修复 Task，只让 resolver 把失败投影成取消，因此形成了第二种失败解释。当前 `dismiss_failed_tasks` 的 Tool/API/前端入口和唯一 writer 已删除，失败 Task 保持 `failed` 并由 Agent 如实解释或在输入修正后精确重试。数据库枚举与 reader 暂时只为读取既有 `dismissed` 历史行而保留；本次未获数据迁移授权，未回填或删除这些行，彻底移除该状态仍需单独迁移与排空。
 - 旧 edit-first 为每个剧本、风格预览、镜头、BGM、视频段和最终渲染各建 TaskType、target 状态与 terminal projector，形成多套 writer。只删除 UI 卡片无法阻止 worker、投影与 guard 继续解释旧状态。当前整条专用链、表、writer、测试和治理入口一次删除，创作结果统一为 Resource，执行统一为六类通用 Task。
 - 旧 `generationTaskId/renderTaskId` owner fence 把 Task 生命周期复制到每个领域表，随后 target projector 与 reconciler 同时解释失败。当前 Task 是运行事实，Resource status/Revision 是领域事实，终态只由 Terminal Service 交接；不再存在专用 target ownership registry。
 - Creative Worker 初版在同步 Tool call 内返回完整结果，刷新后无法恢复且长片上下文膨胀。当前一个创作请求对应一个 `creative_work` Task，完整结果留在 Task.result，终态只向 continuation 投影引用并物化正式 Revision。

@@ -1,6 +1,5 @@
 import { createReadOperations } from './domains/project/read-ops'
 import { createGovernanceOperations } from './domains/governance/governance-ops'
-import { createEditOperations } from './domains/assets/edit-ops'
 import { createGuiOperations } from './domains/gui/gui-ops'
 import { createConfigOperations } from './domains/config/config-ops'
 import { createProjectDataOperations } from './domains/project/project-data-ops'
@@ -172,14 +171,6 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createGovernanceOperations(), {
       groupPath: ['governance'],
-      channels: CHANNELS_TOOL_API,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
-    ...withOperationPack({
-      ...createEditOperations(),
-    }, {
-      groupPath: ['asset', 'edit'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

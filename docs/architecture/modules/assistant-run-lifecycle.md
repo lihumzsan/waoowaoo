@@ -152,6 +152,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 历史回归
 
+- 旧 Project Agent 先用手写 core/workflow allowlist 选择 Tool，Operation pack 因此长期把页面 API 标成 `tool=true` 而没有暴露；自由组合改为“生产 registry 中所有 tool channel 都可用”后，`dismiss_failed_tasks`、批次轮询、旧资产编辑、跨项目创建与用户账单读取等遗留 API 一次性泄漏给模型。真实失败任务触发模型先 `list_tasks` 再请求不可逆 dismiss，UI 随即显示与用户目标无关的破坏性确认。当前仍由 `Operation.channels` 作为唯一工具面权威：旧 dismiss、批次读取、mutation batch 列表、重复资产写入口已删除；当前页面仍调用的 project/task/billing read/create Operation 显式改为 API-only；conformance 从生产 registry 反证这些 identity 不再进入 Toolset，不新增第二 allowlist。
 - 自由视频生成上线后，Main Agent 同时拥有 `list_user_models`、项目/用户配置工具和 `create_video.modelKey`，系统 Prompt 又要求先查看并选择模型；真实模型因此读取配置并把另一个 provider 的 modelKey 复制到六个并行视频调用，服务端固定模型门禁逐项拒绝。OperationBatch 已把六个调用定义为同一模型 step，但 stop controller 仍按六条 Tool output 消耗六次错误预算，导致模型没有一次修正机会就 Run failed；同一 Creative Task 又同时投影成普通运行卡与 Subagent，Reasoning part 还直接显示内部英文思考。当前 Main Agent 的模型列表、用户偏好、Provider 和项目配置读取入口全部改为 API-only，`update_project_config` 仅投影画幅写入；所有 Agent 媒体 schema 删除 model 字段并只由服务端解析；同 step 并行失败只算一次纠错机会，fatal 仍立即停止；Session 把 `creative_work` 只投影到 `subagents`，产品 UI 隐藏 Reasoning。真实付费六段生成按用户要求留待手工复验。
 - 上述模型职责收敛后，`create_project` 仍把用户偏好 9:16 复制到每个新 Project，config service 与 project policy 又各自用 9:16 fallback；首次纠正删除默认并允许 nullable，却新增 `videoRatioConfirmedAt/version`、用户文案 substring 匹配和专用 planning gate，形成通用 Choice 之外的第二确认协议。当前 `create_project` 保持 null，`Project.videoRatio` 是唯一事实，`update_project_config` 是唯一 writer 并可由通用 Choice 对当前选择原子调用；plan 只冻结 ratio 与内容 fingerprint，不再保存确认状态或猜测用户原文。migration 仍只由部署流程应用，不在运行时执行共享数据迁移。
 
