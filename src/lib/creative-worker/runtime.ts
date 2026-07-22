@@ -22,6 +22,10 @@ import {
 } from './skill-access'
 import { buildCreativeWorkerSystemPrompt } from './system-prompt'
 import { createCreativeWorkerTools } from './tools'
+import {
+  buildCreativeWorkerOutputTransportSchema,
+  normalizeCreativeWorkerOutputFromTransport,
+} from './output-transport-schema'
 import { CREATIVE_WORK_REASONING_MAX_CHARS } from './trace-contract'
 import {
   creativeWorkRequestSchema,
@@ -196,7 +200,10 @@ function parseFinalOutput(input: {
     })
   }
   const definition = readCreativeWorkOutputDefinition(input.request.outputKind)
-  const parsed = definition.schema.safeParse(input.raw)
+  const parsed = definition.schema.safeParse(normalizeCreativeWorkerOutputFromTransport({
+    schema: definition.schema,
+    value: input.raw,
+  }))
   if (!parsed.success) {
     throw new CreativeWorkerError('CREATIVE_WORK_OUTPUT_INVALID', {
       outputKind: input.request.outputKind,
@@ -308,14 +315,19 @@ export async function runCreativeWorker(
     })
     assertInputBudget(workerInput, budgets)
 
-    const agent = new Agent<CreativeWorkerRunContext, typeof definition.schema>({
+    const outputTransportSchema = buildCreativeWorkerOutputTransportSchema({
+      kind: request.outputKind,
+      schema: definition.schema,
+    })
+
+    const agent = new Agent<CreativeWorkerRunContext, typeof outputTransportSchema>({
       name: 'Creative Worker',
       instructions: buildCreativeWorkerSystemPrompt(input.locale),
       model: input.model,
       modelSettings: {
         parallelToolCalls: false,
       },
-      outputType: definition.schema,
+      outputType: outputTransportSchema,
       tools: [...createCreativeWorkerTools()],
     })
     const result = await run(agent, workerInput, {

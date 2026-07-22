@@ -11,12 +11,13 @@ function readSchemaFromResponseFormat(value: unknown): unknown {
   return jsonSchema?.schema ?? null
 }
 
-function schemaContainsConst(value: unknown, expected: string): boolean {
-  if (Array.isArray(value)) return value.some((item) => schemaContainsConst(item, expected))
+function schemaContainsLiteral(value: unknown, expected: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => schemaContainsLiteral(item, expected))
   const record = asRecord(value)
   if (!record) return false
   if (record.const === expected) return true
-  return Object.values(record).some((item) => schemaContainsConst(item, expected))
+  if (Array.isArray(record.enum) && record.enum.includes(expected)) return true
+  return Object.values(record).some((item) => schemaContainsLiteral(item, expected))
 }
 
 const GOLDEN_SCREENPLAY = [
@@ -201,9 +202,9 @@ export function generateGoldenStructuredValue(schemaValue: unknown): unknown {
 export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
   const schema = readSchemaFromResponseFormat(responseFormat)
   if (!schema) return null
-  if (schemaContainsConst(schema, 'canonical_screenplay')) return JSON.stringify(buildGoldenCanonicalScreenplay())
-  if (schemaContainsConst(schema, 'edit_bible_bundle')) return JSON.stringify(buildGoldenEditBible(schema))
-  if (schemaContainsConst(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
-  if (schemaContainsConst(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
+  if (schemaContainsLiteral(schema, 'canonical_screenplay')) return JSON.stringify(buildGoldenCanonicalScreenplay())
+  if (schemaContainsLiteral(schema, 'edit_bible_bundle')) return JSON.stringify(buildGoldenEditBible(schema))
+  if (schemaContainsLiteral(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
+  if (schemaContainsLiteral(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))
 }

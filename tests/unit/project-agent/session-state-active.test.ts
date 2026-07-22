@@ -134,6 +134,80 @@ describe('project agent session-state', () => {
     }))
   })
 
+  it('projects a project-scoped Creative Task through its episode-scoped origin Run', async () => {
+    mockSessionTaskRows([], [{
+      id: 'creative-task-project-scope',
+      status: 'failed',
+      payload: {
+        protocol: 'creative_work_v4',
+        requestKey: 'screenplay-normalization',
+        request: {
+          outputKind: 'canonical_screenplay',
+          goal: 'Normalize the supplied screenplay.',
+          context: {
+            userRequest: 'Produce this screenplay.',
+            sourceMaterials: [],
+            constraints: [],
+          },
+          productionContext: { video: null },
+        },
+        modelKey: 'openrouter::anthropic/claude-fable-5',
+        inputFingerprint: 'fingerprint-1',
+        origin: { runId: 'run-1', toolCallId: 'tool-creative-1' },
+        lifecycleProjection: {
+          requestKey: 'screenplay-normalization',
+          outputKind: 'canonical_screenplay',
+          goal: 'Normalize the supplied screenplay.',
+          events: [{
+            sequence: 1,
+            occurredAt: '2026-07-23T00:00:00.000Z',
+            event: {
+              kind: 'started',
+              outputKind: 'canonical_screenplay',
+              goal: 'Normalize the supplied screenplay.',
+            },
+          }],
+        },
+      },
+      result: null,
+      errorCode: 'INTERNAL_ERROR',
+      finishedAt: new Date('2026-07-23T00:00:01.000Z'),
+    }])
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.subagents).toEqual([expect.objectContaining({
+      taskId: 'creative-task-project-scope',
+      runId: 'run-1',
+      status: 'failed',
+      outputKind: 'canonical_screenplay',
+      errorCode: 'INTERNAL_ERROR',
+    })])
+    const creativeTaskQuery = (prismaMock.task.findMany.mock.calls
+      .map(([query]) => query)
+      .find((query) => (
+        query
+        && typeof query === 'object'
+        && 'where' in query
+        && query.where
+        && typeof query.where === 'object'
+        && 'type' in query.where
+        && query.where.type === TASK_TYPE.CREATIVE_WORK
+      ))) as { where?: Record<string, unknown> } | undefined
+    expect(creativeTaskQuery).toEqual(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: [{ payload: { path: '$.origin.runId', equals: 'run-1' } }],
+      }),
+    }))
+    expect(creativeTaskQuery?.where).not.toHaveProperty('episodeId')
+  })
+
   it('fails explicitly instead of choosing one of multiple active Runs', async () => {
     prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([
       {

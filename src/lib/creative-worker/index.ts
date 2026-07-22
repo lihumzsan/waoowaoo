@@ -14,6 +14,10 @@ export {
   readCreativeWorkOutputDefinition,
 } from './output-registry'
 export { runCreativeWorker } from './runtime'
+export {
+  buildCreativeWorkerOutputTransportSchema,
+  normalizeCreativeWorkerOutputFromTransport,
+} from './output-transport-schema'
 export { buildCreativeWorkerSystemPrompt } from './system-prompt'
 export {
   CREATIVE_CONTEXT_COMPILER_ERROR_CODES,

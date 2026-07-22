@@ -396,14 +396,33 @@ async function listCreativeSubagents(params: {
   projectId: string
   userId: string
   episodeId?: string | null
+  assistantId: ProjectAssistantId
 }): Promise<ProjectAgentSubagentView[]> {
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: params.projectId,
+    episodeId: params.episodeId ?? null,
+  })
+  const originRuns = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: params.assistantId,
+      scopeRef,
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 24,
+    select: { id: true },
+  })
+  if (originRuns.length === 0) return []
   const tasks = await prisma.task.findMany({
     where: {
       projectId: params.projectId,
       userId: params.userId,
-      episodeId: params.episodeId ?? null,
       type: TASK_TYPE.CREATIVE_WORK,
       payload: { path: '$.protocol', equals: CREATIVE_WORK_TASK_PROTOCOL },
+      OR: originRuns.map((run) => ({
+        payload: { path: '$.origin.runId', equals: run.id },
+      })),
       status: {
         in: [
           TASK_STATUS.QUEUED,
@@ -549,6 +568,7 @@ async function buildProjectAgentSessionState(
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
+      assistantId,
     }),
   ])
   const currentRun: ProjectAgentSessionRun | null = run

@@ -37,6 +37,15 @@ type MockSessionTaskRow = {
   status: string
 }
 
+type MockCreativeTaskRow = {
+  id: string
+  status: string
+  payload: Record<string, unknown>
+  result: Record<string, unknown> | null
+  errorCode: string | null
+  finishedAt: Date | null
+}
+
 const prismaMock = vi.hoisted(() => ({
   $queryRaw: vi.fn(async () => [
     { kind: 'WAIT', id: 'wait-1', runId: 'run-1' },
@@ -53,7 +62,7 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(async (): Promise<unknown> => null),
   },
   task: {
-    findMany: vi.fn(async (args?: unknown) => {
+    findMany: vi.fn(async (args?: unknown): Promise<unknown[]> => {
       if (
         args
         && typeof args === 'object'
@@ -84,7 +93,10 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-function mockSessionTaskRows(rows: readonly MockSessionTaskRow[]): void {
+function mockSessionTaskRows(
+  rows: readonly MockSessionTaskRow[],
+  creativeRows: readonly MockCreativeTaskRow[] = [],
+): void {
   prismaMock.task.findMany.mockImplementation(async (args?: unknown) => (
     args
     && typeof args === 'object'
@@ -93,7 +105,7 @@ function mockSessionTaskRows(rows: readonly MockSessionTaskRow[]): void {
     && typeof args.where === 'object'
     && 'type' in args.where
     && args.where.type === TASK_TYPE.CREATIVE_WORK
-      ? []
+      ? [...creativeRows]
       : [...rows]
   ))
 }
