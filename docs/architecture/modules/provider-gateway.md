@@ -11,6 +11,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 ## 不变量
 
 - **PG-01 — 服务端显式选择。** provider 与 model 必须由统一 registry/selection 或 registry 声明的等价 route set 解析；Agent-facing 媒体工具不得接收 provider/model。禁止按模型名、媒体类型、错误文本或临时可用性猜测 provider。
+- **PG-01B — OpenRouter LLM 一次声明。** OpenRouter 普通 LLM 共用同一 adapter 和 `openrouter-chat` 协议，但每个具体 model identity 的名称、价格、公开 reasoning 模式、推理强度集合与平台可见性必须在 provider-owned definition registry 声明一次，再自动派生 capability、pricing、API config 与 platform catalog。未知 model id 必须显式失败；不得把任意字符串直通 provider，也不得为同一 LLM 手工维护四份平行数组。图片、视频等媒体能力继续按具体模型显式声明。
 - **PG-01A — 公共生成参数服从所选模型能力。** Agent/业务 Operation 只接收稳定产品字段和精确 `provider::modelId`；允许字段、枚举、范围与默认值只从该模型的生产 capability registry 解析。动态默认/覆盖通过显式 `modelKey + field + value` command 进入同一 validator。`durationSeconds` 等公共字段到 provider `duration`/wire option 的转换只发生在统一内部 mapper/adapter，报价、Task payload 与 provenance 冻结映射后的执行快照；不得把 provider 原始 object 暴露给模型、猜 provider、静默丢字段或用另一模型的允许值通过校验。
 - **PG-02 — 单一网关。** route、worker 和业务 operation 不得直连 provider SDK、旧入口或 generator factory；调用必须经由 `ai-exec` 与 provider adapter。
 - **PG-03 — Provider 隔离。** provider 专属模型常量、option 和条件分支只能留在自身 `ai-providers/<provider>/` 实现内；跨 provider 分支属于 registry/engine 的职责。
@@ -65,6 +66,8 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `npm run check:capability-catalog` 与 `npm run check:pricing-catalog` 验证 standards 文件自身及 tier/capability 字段关系；它们不证明 standards 与运行时代码 catalog 值一致。
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 反证用户 API 配置重新进入主 Agent；`tests/unit/deployment/config.test.ts` 验证 `platform-key/user-key` 的唯一部署能力投影；`tests/unit/http/body-limits.test.ts` 继续反证超限 chunk 与 base64。
 ## 历史回归
+
+- OpenRouter LLM 曾要求同一 model id 分别手工加入 pricing、capability、API config 与 platform preset 四张数组；GPT-5.6 Sol 已接齐四处，而环境切换到真实存在的 Claude Fable 5 时只有配置值、没有 catalog 声明，启动因此报 `PLATFORM_DEFAULT_MODEL_NOT_FOUND`。直接允许任意 OpenRouter 字符串虽然能通过统一 HTTP transport，却会丢失价格、reasoning 与类型裁决。当前 provider-owned LLM definition registry 是唯一声明源，四个 catalog 全部派生；未知模型仍 fail closed。
 
 - `ccdd10be6` 修复 FAL 异步失败未被 surface 的问题：provider 的失败终态必须进入统一任务失败边界，不能留在 polling 中静默消失。
 - `9207d119` 修复视频生成的项目模型 fallback：模型不可用应显式失败，不得改用另一个模型或 provider。

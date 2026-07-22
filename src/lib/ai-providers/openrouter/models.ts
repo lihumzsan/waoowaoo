@@ -1,4 +1,4 @@
-import type { AiOptionSchema } from '@/lib/ai-registry/types'
+import type { AiOptionSchema, AiPublicReasoningMode } from '@/lib/ai-registry/types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 import {
   booleanValidator,
@@ -20,6 +20,7 @@ export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0
 export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'
 export const OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID = 'anthropic/claude-sonnet-4.6'
 export const OPENROUTER_CLAUDE_SONNET_5_MODEL_ID = 'anthropic/claude-sonnet-5'
+export const OPENROUTER_CLAUDE_FABLE_5_MODEL_ID = 'anthropic/claude-fable-5'
 export const OPENROUTER_GPT_5_5_MODEL_ID = 'openai/gpt-5.5'
 export const OPENROUTER_GPT_5_6_LUNA_MODEL_ID = 'openai/gpt-5.6-luna'
 export const OPENROUTER_GPT_5_6_TERRA_MODEL_ID = 'openai/gpt-5.6-terra'
@@ -49,6 +50,154 @@ export const OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS = [
   'none',
 ] as const satisfies readonly ReasoningEffort[]
 
+type OpenRouterLlmModelDefinition = {
+  modelId: string
+  name: string
+  pricingUsdPerMillion: readonly [input: number, output: number] | null
+  publicReasoningMode: AiPublicReasoningMode
+  reasoningEffortOptions: readonly ReasoningEffort[] | null
+  showInApiConfig: boolean
+  showInPlatform: boolean
+}
+
+export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
+  {
+    modelId: OPENROUTER_PROVIDER_TEST_LLM_MODEL_ID,
+    name: 'GPT-4o Mini',
+    pricingUsdPerMillion: null,
+    publicReasoningMode: 'none',
+    reasoningEffortOptions: null,
+    showInApiConfig: false,
+    showInPlatform: false,
+  },
+  {
+    modelId: 'google/gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro',
+    pricingUsdPerMillion: [1.25, 10],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+  {
+    modelId: 'google/gemini-3-pro-preview',
+    name: 'Gemini 3 Pro',
+    pricingUsdPerMillion: [1.25, 10],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+  {
+    modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
+    name: 'Gemini 3.5 Flash',
+    pricingUsdPerMillion: [1.5, 9],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: 'google/gemini-3.1-flash-lite-preview',
+    name: 'Gemini 3.1 Flash Lite',
+    pricingUsdPerMillion: null,
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+  {
+    modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID,
+    name: 'Claude Sonnet 4.6',
+    pricingUsdPerMillion: [3, 15],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+    name: 'Claude Sonnet 5',
+    pricingUsdPerMillion: [2, 10],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
+    name: 'Claude Fable 5',
+    pricingUsdPerMillion: [10, 50],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: 'anthropic/claude-sonnet-4.5',
+    name: 'Claude Sonnet 4.5',
+    pricingUsdPerMillion: [3, 15],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+  {
+    modelId: 'anthropic/claude-sonnet-4',
+    name: 'Claude Sonnet 4',
+    pricingUsdPerMillion: [3, 15],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+  {
+    modelId: OPENROUTER_GPT_5_5_MODEL_ID,
+    name: 'GPT-5.5',
+    pricingUsdPerMillion: [5, 30],
+    publicReasoningMode: 'summary_auto',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
+    name: 'GPT-5.6 Luna',
+    pricingUsdPerMillion: [1, 6],
+    publicReasoningMode: 'summary_auto',
+    reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID,
+    name: 'GPT-5.6 Terra',
+    pricingUsdPerMillion: [2.5, 15],
+    publicReasoningMode: 'summary_auto',
+    reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_GPT_5_6_SOL_MODEL_ID,
+    name: 'GPT-5.6 Sol',
+    pricingUsdPerMillion: [5, 30],
+    publicReasoningMode: 'summary_auto',
+    reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: 'openai/gpt-5.4',
+    name: 'GPT-5.4',
+    pricingUsdPerMillion: null,
+    publicReasoningMode: 'summary_auto',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    showInApiConfig: true,
+    showInPlatform: false,
+  },
+] as const satisfies readonly OpenRouterLlmModelDefinition[]
+
 function openrouterTokenPricing(inputUsdPerMillion: number, outputUsdPerMillion: number) {
   return {
     mode: 'capability' as const,
@@ -58,6 +207,52 @@ function openrouterTokenPricing(inputUsdPerMillion: number, outputUsdPerMillion:
     ],
   }
 }
+
+const OPENROUTER_LLM_PRICING_CATALOG_ENTRIES = OPENROUTER_LLM_MODEL_DEFINITIONS.flatMap((model) => {
+  if (!model.pricingUsdPerMillion) return []
+  const [inputUsdPerMillion, outputUsdPerMillion] = model.pricingUsdPerMillion
+  return [{
+    apiType: 'text' as const,
+    provider: 'openrouter',
+    modelId: model.modelId,
+    pricing: openrouterTokenPricing(inputUsdPerMillion, outputUsdPerMillion),
+  }]
+})
+
+const OPENROUTER_LLM_CAPABILITY_CATALOG_ENTRIES = OPENROUTER_LLM_MODEL_DEFINITIONS.map((model) => ({
+  modelType: 'llm' as const,
+  provider: 'openrouter',
+  modelId: model.modelId,
+  capabilities: {
+    llm: {
+      protocol: 'openrouter-chat' as const,
+      ...(model.publicReasoningMode === 'none'
+        ? {}
+        : { publicReasoningMode: model.publicReasoningMode }),
+      ...(model.reasoningEffortOptions
+        ? { reasoningEffortOptions: [...model.reasoningEffortOptions] }
+        : {}),
+    },
+  },
+}))
+
+const OPENROUTER_LLM_API_CONFIG_CATALOG_MODELS = OPENROUTER_LLM_MODEL_DEFINITIONS
+  .filter((model) => model.showInApiConfig)
+  .map((model) => ({
+    modelId: model.modelId,
+    name: model.name,
+    type: 'llm' as const,
+    provider: 'openrouter',
+  }))
+
+const OPENROUTER_LLM_PLATFORM_MODEL_PRESETS: PlatformModelPreset[] = OPENROUTER_LLM_MODEL_DEFINITIONS
+  .filter((model) => model.showInPlatform)
+  .map((model) => ({
+    provider: 'openrouter',
+    modelId: model.modelId,
+    name: model.name,
+    type: 'llm',
+  }))
 
 function openrouterVideoSecondPricing(tiers: ReadonlyArray<readonly [resolution: string, amountUsdPerSecond: number]>) {
   return {
@@ -94,72 +289,7 @@ export const OPENROUTER_BUILTIN_PRICING_CATALOG_ENTRIES = [
     modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID,
     pricing: openrouterGptImage2Pricing(),
   },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: 'google/gemini-3.1-pro-preview',
-    pricing: openrouterTokenPricing(1.25, 10),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: 'google/gemini-3-pro-preview',
-    pricing: openrouterTokenPricing(1.25, 10),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
-    pricing: openrouterTokenPricing(1.5, 9),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID,
-    pricing: openrouterTokenPricing(3, 15),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
-    pricing: openrouterTokenPricing(2, 10),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: 'anthropic/claude-sonnet-4.5',
-    pricing: openrouterTokenPricing(3, 15),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: 'anthropic/claude-sonnet-4',
-    pricing: openrouterTokenPricing(3, 15),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_GPT_5_5_MODEL_ID,
-    pricing: openrouterTokenPricing(5, 30),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
-    pricing: openrouterTokenPricing(1, 6),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID,
-    pricing: openrouterTokenPricing(2.5, 15),
-  },
-  {
-    apiType: 'text',
-    provider: 'openrouter',
-    modelId: OPENROUTER_GPT_5_6_SOL_MODEL_ID,
-    pricing: openrouterTokenPricing(5, 30),
-  },
+  ...OPENROUTER_LLM_PRICING_CATALOG_ENTRIES,
   {
     apiType: 'video',
     provider: 'openrouter',
@@ -198,20 +328,7 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
       },
     },
   },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_PROVIDER_TEST_LLM_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat' } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'google/gemini-3.1-pro-preview', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'google/gemini-3-pro-preview', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'google/gemini-3.1-flash-lite-preview', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4.5', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'native', reasoningEffortOptions: ['low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GPT_5_5_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'summary_auto', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'summary_auto', reasoningEffortOptions: [...OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'summary_auto', reasoningEffortOptions: [...OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_SOL_MODEL_ID, capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'summary_auto', reasoningEffortOptions: [...OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS] } } },
-  { modelType: 'llm', provider: 'openrouter', modelId: 'openai/gpt-5.4', capabilities: { llm: { protocol: 'openrouter-chat', publicReasoningMode: 'summary_auto', reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'] } } },
+  ...OPENROUTER_LLM_CAPABILITY_CATALOG_ENTRIES,
   {
     modelType: 'video',
     provider: 'openrouter',
@@ -254,32 +371,14 @@ export const OPENROUTER_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
 
 export const OPENROUTER_API_CONFIG_CATALOG_MODELS = [
   { modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image', provider: 'openrouter' },
-  { modelId: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', type: 'llm', provider: 'openrouter' },
-  { modelId: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm', provider: 'openrouter' },
-  { modelId: 'google/gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, name: 'Claude Sonnet 4.6', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, name: 'Claude Sonnet 5', type: 'llm', provider: 'openrouter' },
-  { modelId: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', type: 'llm', provider: 'openrouter' },
-  { modelId: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_GPT_5_5_MODEL_ID, name: 'GPT-5.5', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID, name: 'GPT-5.6 Luna', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID, name: 'GPT-5.6 Terra', type: 'llm', provider: 'openrouter' },
-  { modelId: OPENROUTER_GPT_5_6_SOL_MODEL_ID, name: 'GPT-5.6 Sol', type: 'llm', provider: 'openrouter' },
-  { modelId: 'openai/gpt-5.4', name: 'GPT-5.4', type: 'llm', provider: 'openrouter' },
+  ...OPENROUTER_LLM_API_CONFIG_CATALOG_MODELS,
   { modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video', provider: 'openrouter' },
   { modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video', provider: 'openrouter' },
 ] as const
 
 export const OPENROUTER_PLATFORM_MODEL_PRESETS = [
   { provider: 'openrouter', modelId: OPENROUTER_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
-  { provider: 'openrouter', modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID, name: 'Gemini 3.5 Flash', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID, name: 'Claude Sonnet 4.6', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID, name: 'Claude Sonnet 5', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_GPT_5_5_MODEL_ID, name: 'GPT-5.5', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_LUNA_MODEL_ID, name: 'GPT-5.6 Luna', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_TERRA_MODEL_ID, name: 'GPT-5.6 Terra', type: 'llm' },
-  { provider: 'openrouter', modelId: OPENROUTER_GPT_5_6_SOL_MODEL_ID, name: 'GPT-5.6 Sol', type: 'llm' },
+  ...OPENROUTER_LLM_PLATFORM_MODEL_PRESETS,
   { provider: 'openrouter', modelId: OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID, name: 'Seedance 2.0', type: 'video' },
   { provider: 'openrouter', modelId: OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID, name: 'Seedance 2.0 Fast', type: 'video' },
 ] as const satisfies ReadonlyArray<PlatformModelPreset>

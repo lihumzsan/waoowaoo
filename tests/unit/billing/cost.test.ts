@@ -28,6 +28,11 @@ describe('billing/cost provider catalog pricing', () => {
       .toBeCloseTo(252, 8)
   })
 
+  it('charges Claude Fable 5 from its OpenRouter token tiers', () => {
+    expect(calcText('openrouter::anthropic/claude-fable-5', 1_000_000, 1_000_000))
+      .toBeCloseTo(432, 8)
+  })
+
   it('discounts Google implicit cache hit input tokens', () => {
     const cost = calcTextWithCache('google::gemini-3.5-flash', 1_000_000, 0, {
       cachedInputTokens: 400_000,

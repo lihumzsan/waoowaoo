@@ -530,6 +530,8 @@
         "tests/unit/provider/llm-stream-finalization.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts",
         "tests/contracts/project-agent-toolset-conformance.test.ts",
+        "tests/unit/platform-models/catalog.test.ts",
+        "tests/unit/billing/cost.test.ts",
         "tests/unit/deployment/config.test.ts",
         "tests/unit/http/body-limits.test.ts",
         "tests/golden-journey/self-tests/media-provider.test.ts"

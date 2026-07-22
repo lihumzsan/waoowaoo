@@ -33,6 +33,7 @@ describe('platform model catalog', () => {
     expect(modelKeys).toContain('fal::fal-ai/lyria3/pro')
     expect(modelKeys).toContain('ark::doubao-seedance-2-0-260128')
     expect(modelKeys).toContain('openrouter::anthropic/claude-sonnet-4.6')
+    expect(modelKeys).toContain('openrouter::anthropic/claude-fable-5')
     expect(modelKeys).toContain('openrouter::openai/gpt-5.5')
     expect(modelKeys).toContain('openrouter::openai/gpt-5.6-luna')
     expect(modelKeys).toContain('openrouter::openai/gpt-5.6-terra')
@@ -57,11 +58,11 @@ describe('platform model catalog', () => {
     expect(() => getPlatformDefaultModels()).toThrow('PLATFORM_DEFAULT_MODEL_NOT_FOUND')
   })
 
-  it('accepts GPT-5.6 Luna and Sol as separate platform model overrides', () => {
-    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = 'openrouter::openai/gpt-5.6-sol'
-    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = 'openrouter::openai/gpt-5.6-luna'
+  it('accepts Claude Fable 5 and GPT-5.6 Sol as separate platform model overrides', () => {
+    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = 'openrouter::anthropic/claude-fable-5'
+    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = 'openrouter::openai/gpt-5.6-sol'
 
-    expect(getPlatformDefaultModels().assistantModel).toBe('openrouter::openai/gpt-5.6-sol')
-    expect(getPlatformDefaultModels().analysisModel).toBe('openrouter::openai/gpt-5.6-luna')
+    expect(getPlatformDefaultModels().assistantModel).toBe('openrouter::anthropic/claude-fable-5')
+    expect(getPlatformDefaultModels().analysisModel).toBe('openrouter::openai/gpt-5.6-sol')
   })
 })

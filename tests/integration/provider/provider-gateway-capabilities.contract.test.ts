@@ -28,11 +28,13 @@ import { afterEach } from 'vitest'
 import { generateText, streamText } from 'ai'
 import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-catalog'
 import {
+  OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
   OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
   OPENROUTER_GPT_5_6_SOL_MODEL_ID,
   OPENROUTER_GPT_5_6_TERRA_MODEL_ID,
+  OPENROUTER_LLM_MODEL_DEFINITIONS,
 } from '@/lib/ai-providers/openrouter/models'
 import {
   FAL_GPT_IMAGE_2_MODEL_ID,
@@ -48,6 +50,8 @@ import {
   resolveRegisteredPublicReasoningMode,
 } from '@/lib/ai-registry/llm-protocol'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
+import { listBuiltinPricingCatalog } from '@/lib/ai-registry/pricing-catalog'
+import { getPlatformModels } from '@/lib/platform-models/catalog'
 
 const ORIGINAL_REASONING_ENV = {
   PROVIDER_CREDENTIAL_MODE: process.env.PROVIDER_CREDENTIAL_MODE,
@@ -152,12 +156,37 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
     }
   })
 
+  it('derives every OpenRouter LLM catalog surface from one provider definition', () => {
+    const capabilities = new Set(listBuiltinCapabilityCatalog()
+      .filter((entry) => entry.provider === 'openrouter' && entry.modelType === 'llm')
+      .map((entry) => entry.modelId))
+    const pricing = new Set(listBuiltinPricingCatalog()
+      .filter((entry) => entry.provider === 'openrouter' && entry.apiType === 'text')
+      .map((entry) => entry.modelId))
+    const apiConfig = new Set(listApiConfigCatalogModels()
+      .filter((model) => model.provider === 'openrouter' && model.type === 'llm')
+      .map((model) => model.modelId))
+    const platform = new Set(getPlatformModels()
+      .filter((model) => model.provider === 'openrouter' && model.type === 'llm')
+      .map((model) => model.modelId))
+
+    for (const model of OPENROUTER_LLM_MODEL_DEFINITIONS) {
+      expect(capabilities.has(model.modelId)).toBe(true)
+      expect(pricing.has(model.modelId)).toBe(model.pricingUsdPerMillion !== null)
+      expect(apiConfig.has(model.modelId)).toBe(model.showInApiConfig)
+      expect(platform.has(model.modelId)).toBe(model.showInPlatform)
+    }
+  })
+
   it('derives public reasoning behavior from the production model registry', () => {
     expect(resolveRegisteredPublicReasoningMode(
       `openrouter::${OPENROUTER_GPT_5_6_TERRA_MODEL_ID}`,
     )).toBe('summary_auto')
     expect(resolveRegisteredPublicReasoningMode('openrouter::anthropic/claude-sonnet-4.5'))
       .toBe('native')
+    expect(resolveRegisteredPublicReasoningMode(
+      `openrouter::${OPENROUTER_CLAUDE_FABLE_5_MODEL_ID}`,
+    )).toBe('native')
     expect(resolveRegisteredPublicReasoningMode('google::gemini-3.5-flash'))
       .toBe('native')
   })
