@@ -271,6 +271,68 @@ describe('Golden local model provider', () => {
     })
   })
 
+  it('authors one current ratio Choice and resumes the original media request from the committed fact', () => {
+    const tools = [
+      { type: 'function' as const, function: { name: 'request_choice', parameters: { type: 'object' } } },
+      { type: 'function' as const, function: { name: 'create_image', parameters: { type: 'object' } } },
+    ]
+    const awaitingRatio = decideGoldenModelResponse({
+      scenarioId: 'free-composition',
+      requestOrdinal: 7,
+      request: {
+        model: 'golden-model',
+        messages: [
+          {
+            role: 'system',
+            content: [{
+              type: 'text',
+              text: '[project_state_snapshot]\nconfig.videoRatio=none\n[/project_state_snapshot]',
+            }],
+          },
+          { role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST },
+        ],
+        tools,
+      },
+    })
+    expect(awaitingRatio).toMatchObject({ kind: 'tool_call', toolName: 'request_choice' })
+    if (awaitingRatio.kind !== 'tool_call') return
+    expect(JSON.parse(awaitingRatio.argumentsJson)).toMatchObject({
+      subject: { kind: 'none' },
+      card: {
+        title: '请选择当前项目的画面比例',
+        groups: [{ key: 'videoRatio', presentation: 'aspect_ratio' }],
+        submitLabel: '保存本次画面比例',
+      },
+      commitments: [
+        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '16:9' }) },
+        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '9:16' }) },
+        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '21:9' }) },
+      ],
+    })
+
+    const afterRatio = decideGoldenModelResponse({
+      scenarioId: 'free-composition',
+      requestOrdinal: 8,
+      request: {
+        model: 'golden-model',
+        messages: [
+          {
+            role: 'system',
+            content: [{
+              type: 'text',
+              text: '[project_state_snapshot]\nconfig.videoRatio=16:9\n[/project_state_snapshot]',
+            }],
+          },
+          { role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST },
+          { role: 'assistant', tool_calls: [{ function: { name: 'request_choice' } }] },
+          { role: 'tool', content: JSON.stringify({ ok: true, data: { emitted: true } }) },
+        ],
+        tools,
+      },
+    })
+    expect(afterRatio).toMatchObject({ kind: 'tool_call', toolName: 'create_image' })
+  })
+
   it('passes the exact screenplay revision into chapter_plan Creative Work', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'free-composition',

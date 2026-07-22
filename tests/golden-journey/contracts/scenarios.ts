@@ -4,7 +4,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-FREEFORM-RESOURCE-CREATION',
     kind: 'freeform',
-    title: 'natural language composes independent media and Creative Work Resources, one current Choice commitment, and an explicitly adopted optional Chapter projection',
+    title: 'natural language composes independent Resources, model-authored current Choice commitments, and an explicitly adopted optional Chapter projection',
     startState: 'empty_project',
     expectedTerminal: 'independent_resources_and_explicit_optional_projections_ready',
     requiresWorkers: true,
@@ -13,7 +13,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-PARALLEL-OPERATION-BATCH',
     kind: 'freeform',
-    title: 'one model step requests three independent images, receives one exact quote, and runs one non-blocking background batch',
+    title: 'the model resolves a missing ratio with one current Choice, then one step requests three independent images under one exact quote and background batch',
     startState: 'empty_project',
     expectedTerminal: 'parallel_resources_ready',
     requiresWorkers: true,
@@ -22,7 +22,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-FREEFORM-ZERO-VIDEO',
     kind: 'freeform',
-    title: 'an empty project submits text-to-video without creating workflow artifacts',
+    title: 'the model resolves a missing ratio with one current Choice, then an empty project submits text-to-video without workflow artifacts',
     startState: 'empty_project',
     expectedTerminal: 'independent_video_ready',
     requiresWorkers: true,

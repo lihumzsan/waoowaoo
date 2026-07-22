@@ -7,7 +7,8 @@ language; no fixed stage sequence or recommended next action is part of the
 test oracle. The primary free-composition Journey also proves that a Creative
 Worker result materializes as an immutable Resource, one model-authored Choice
 can commit only its current decision, Style Bible creation does not imply an
-image preview, and Chapters appear only after explicit planning and adoption.
+image preview, a missing frame ratio is resolved through that same Choice
+protocol, and Chapters appear only after explicit planning and adoption.
 
 Only paid or uncontrollable external model and media providers are replaced.
 The application being tested is never mocked. Playwright uses stable product

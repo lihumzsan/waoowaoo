@@ -54,6 +54,66 @@ async function approveOperation(
   await submitGoldenApproval(page)
 }
 
+async function resolveInitialVideoRatioChoice(
+  page: import('@playwright/test').Page,
+  scope: GoldenWorkspaceScope,
+): Promise<void> {
+  const initial = await readGoldenOracleSnapshot(scope)
+  if (asRecord(initial.project)?.videoRatio !== null) return
+
+  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+    timeout: 60_000,
+    message: 'the model must use the generic Choice boundary for the missing project video ratio',
+  }).toBe('request_choice')
+
+  const awaitingChoice = await readGoldenOracleSnapshot(scope)
+  const pendingChoice = awaitingChoice.interruptions.find((interruption) => (
+    interruption.type === 'choice' && interruption.status === 'pending'
+  ))
+  const offer = asRecord(pendingChoice?.payload)
+  const card = asRecord(offer?.card)
+  const groups = Array.isArray(card?.groups) ? card.groups.map(asRecord) : []
+  const commitments = Array.isArray(offer?.commitments) ? offer.commitments.map(asRecord) : []
+  expect(offer?.subject).toMatchObject({ kind: 'none' })
+  expect(card).toMatchObject({
+    mode: 'select',
+    title: '请选择当前项目的画面比例',
+    description: '这个选择只会保存当前项目的画面比例。',
+    submitLabel: '保存本次画面比例',
+  })
+  expect(groups).toEqual([expect.objectContaining({
+    key: 'videoRatio',
+    required: true,
+    presentation: 'aspect_ratio',
+  })])
+  expect(commitments).toEqual([
+    expect.objectContaining({
+      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '16:9' },
+      operationId: 'update_project_config',
+      input: { videoRatio: '16:9' },
+    }),
+    expect.objectContaining({
+      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '9:16' },
+      operationId: 'update_project_config',
+      input: { videoRatio: '9:16' },
+    }),
+    expect.objectContaining({
+      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '21:9' },
+      operationId: 'update_project_config',
+      input: { videoRatio: '21:9' },
+    }),
+  ])
+  expect(awaitingChoice.tasks).toHaveLength(0)
+  expect(awaitingChoice.resources).toHaveLength(0)
+
+  await page.getByRole('button', { name: /16:9 横屏/ }).filter({ visible: true }).last().click()
+  await page.getByRole('button', { name: '保存本次画面比例', exact: true }).filter({ visible: true }).click()
+  await expect.poll(async () => asRecord((await readGoldenOracleSnapshot(scope)).project)?.videoRatio, {
+    timeout: 60_000,
+    message: 'the selected ratio must be written only by the Choice commitment',
+  }).toBe('16:9')
+}
+
 async function waitForResources(
   scope: GoldenWorkspaceScope,
   mediaType: 'text' | 'image' | 'audio' | 'video',
@@ -111,6 +171,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
 
   await failNextGoldenFalRequests(2)
   const scope = await launchGoldenStoryFromHome(page, GOLDEN_FREEFORM_IMAGE_REQUEST)
+  await resolveInitialVideoRatioChoice(page, scope)
   await approveOperation(page, scope, 'create_image')
 
   let initialImageResources: readonly Record<string, unknown>[] = []
@@ -369,6 +430,7 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
     password: 'golden-zero-video-password',
   })
   const scope = await launchGoldenStoryFromHome(page, GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)
+  await resolveInitialVideoRatioChoice(page, scope)
   await approveOperation(page, scope, 'create_video')
   await waitForResources(scope, 'video', 1)
   const snapshot = await readGoldenOracleSnapshot(scope)
@@ -438,6 +500,7 @@ test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote a
     password: 'golden-parallel-batch-password',
   })
   const scope = await launchGoldenStoryFromHome(page, GOLDEN_PARALLEL_IMAGE_REQUEST)
+  await resolveInitialVideoRatioChoice(page, scope)
 
   await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
     timeout: 60_000,

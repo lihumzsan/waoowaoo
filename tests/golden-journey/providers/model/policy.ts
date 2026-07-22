@@ -48,12 +48,40 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function messageContentText(message: GoldenChatCompletionRequest['messages'][number]): string {
-  if (typeof message.content === 'string') return message.content
-  return message.content === undefined ? '' : JSON.stringify(message.content)
+  const content = message.content
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === 'string') return part
+      const record = asRecord(part)
+      if (typeof record?.text === 'string') return record.text
+      return JSON.stringify(part) ?? ''
+    }).join('\n')
+  }
+  const record = asRecord(content)
+  if (typeof record?.text === 'string') return record.text
+  return content == null ? '' : JSON.stringify(content) ?? ''
 }
 
 function messageText(request: GoldenChatCompletionRequest): string {
   return request.messages.map(messageContentText).join('\n')
+}
+
+function currentProjectVideoRatio(request: GoldenChatCompletionRequest): string | null | undefined {
+  const matches = [...messageText(request).matchAll(/^config\.videoRatio=([^\n]+)$/gm)]
+  const value = matches.at(-1)?.[1]?.trim()
+  if (!value) return undefined
+  return value === 'none' ? null : value
+}
+
+function instructionRequiresVideoRatio(instruction: string): boolean {
+  return [
+    GOLDEN_FREEFORM_IMAGE_REQUEST,
+    GOLDEN_PARALLEL_IMAGE_REQUEST,
+    GOLDEN_FREEFORM_RETRY_REQUEST,
+    GOLDEN_FREEFORM_VIDEO_REQUEST,
+    GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
+  ].some((marker) => instruction.includes(marker))
 }
 
 function latestFreeformInstruction(
@@ -208,6 +236,9 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   const available = availableToolNames(request)
   const called = calledToolsAfter(request, instruction.index)
   const choose = (toolName: string): string | null => available.has(toolName) && !called.has(toolName) ? toolName : null
+  if (instructionRequiresVideoRatio(instruction.text) && currentProjectVideoRatio(request) === null) {
+    return choose('request_choice')
+  }
   if (instruction.text.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) return choose('create_text')
   if (instruction.text.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) return choose('create_image')
   if (instruction.text.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) return choose('create_video')
@@ -243,6 +274,39 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
 
 function buildToolArguments(request: GoldenChatCompletionRequest, toolName: string): unknown {
   const instruction = latestFreeformInstruction(request)?.text ?? ''
+  if (
+    toolName === 'request_choice'
+    && instructionRequiresVideoRatio(instruction)
+    && currentProjectVideoRatio(request) === null
+  ) {
+    const ratios = [
+      { value: '16:9', label: '16:9 横屏', description: '适合常规视频与宽幅叙事。' },
+      { value: '9:16', label: '9:16 竖屏', description: '适合手机短视频。' },
+      { value: '21:9', label: '21:9 宽银幕', description: '适合强调电影宽银幕构图。' },
+    ] as const
+    return {
+      subject: { kind: 'none' },
+      card: {
+        mode: 'select',
+        replyMode: 'none',
+        title: '请选择当前项目的画面比例',
+        description: '这个选择只会保存当前项目的画面比例。',
+        groups: [{
+          key: 'videoRatio',
+          label: '画面比例',
+          required: true,
+          presentation: 'aspect_ratio',
+          options: ratios,
+        }],
+        submitLabel: '保存本次画面比例',
+      },
+      commitments: ratios.map((ratio) => ({
+        when: { kind: 'option', groupKey: 'videoRatio', optionValue: ratio.value },
+        operationId: 'update_project_config',
+        inputJson: JSON.stringify({ videoRatio: ratio.value }),
+      })),
+    }
+  }
   if (toolName === 'create_text' && instruction.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) {
     return {
       prompt: 'Create three distinct short story concepts.',
@@ -489,7 +553,16 @@ export function decideGoldenModelResponse(input: {
     return { kind: 'text', text: 'STOP_REPLY_RECOVERY_COMPLETED' }
   }
   if (instruction?.text.includes(GOLDEN_PARALLEL_IMAGE_REQUEST)) {
-    const alreadyCalled = calledToolsAfter(input.request, instruction.index).has('create_image')
+    const called = calledToolsAfter(input.request, instruction.index)
+    if (currentProjectVideoRatio(input.request) === null && !called.has('request_choice')) {
+      return {
+        kind: 'tool_call',
+        toolCallId: `golden_call_${input.requestOrdinal}_request_choice`,
+        toolName: 'request_choice',
+        argumentsJson: JSON.stringify(buildToolArguments(input.request, 'request_choice')),
+      }
+    }
+    const alreadyCalled = called.has('create_image')
     const isTaskContinuation = messageText(input.request).includes('[task_update]')
     if (isTaskContinuation || alreadyCalled || !availableToolNames(input.request).has('create_image')) {
       return { kind: 'text', text: 'The three image submissions are accepted.' }
