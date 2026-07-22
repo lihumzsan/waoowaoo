@@ -9,6 +9,8 @@ import {
   GOLDEN_FREEFORM_PARALLEL_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
+  GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
+  GOLDEN_PROVIDED_SCREENPLAY_TEXT,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
   GOLDEN_PARALLEL_IMAGE_REQUEST,
@@ -187,6 +189,31 @@ describe('Golden local model provider', () => {
       delegation: {
         source: 'requests',
         requests: [{ outputKind: 'canonical_screenplay', targetDurationSeconds: 240 }],
+      },
+    })
+  })
+
+  it('stores a supplied screenplay as exact current-user text without Creative Work delegation', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'free-composition',
+      requestOrdinal: 4,
+      request: {
+        model: 'golden-model',
+        messages: [{ role: 'user', content: GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST }],
+        tools: [
+          { type: 'function', function: { name: 'create_text', parameters: { type: 'object' } } },
+          { type: 'function', function: { name: 'delegate_creative_work', parameters: { type: 'object' } } },
+        ],
+      },
+    })
+
+    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_text' })
+    if (decision.kind !== 'tool_call') return
+    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+      content: {
+        kind: 'current_user_text',
+        scope: 'project',
+        text: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
       },
     })
   })

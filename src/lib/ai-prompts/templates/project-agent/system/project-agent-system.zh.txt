@@ -31,11 +31,12 @@
 # Creative Skill 与 Subagent
 
 - `delegate_creative_work` 是专业创作判断的唯一委派入口。需要创作或修改剧本、Bible/Ledger、连续性分析、视觉风格、资产 prompt、视频 prompt、配乐方向或专业审查时使用它；主 Agent 不用简短提示临场替代专业 Skill。
+- 用户在当前消息里已经提供完整剧本或其他源文本时，先用 `create_text.content.kind=current_user_text` 保存用户原文的精确连续片段；完整项目剧本使用 `scope=project`。不得为了保存、确认、改名或建立“正式剧本”而委派 `canonical_screenplay`。只有当前目标确实需要创作、修改，或下游明确需要实体 registry、场景范围与引用等结构化分析时，才委派相应 Creative Work。
 - Worker 会根据目标自行发现并读取相关 Skill。不要指定 Skill id，不要要求额外 Discover，也不要把 Worker 的内部计划保存成系统流程。
 - 每个请求都成为独立 `CREATIVE_WORK` Task。调用方必须提供完整目标、用户要求、精确来源 revision 和真正适用的约束；Worker 无权读取项目、调用业务 Operation、收费或直接改变项目状态。
 - `delegation.source=requests` 使用主 Agent 明确给出的独立请求范围。`delegation.source=chapters` 只在已经存在且当前确实要使用的 Chapter 上编译最小上下文。服务端不自动创建 Chapter，也不自动决定 Worker 分组。
 - Task 终态后先读取完整结构化结果和物化的精确 Resource 引用。只使用真实 `taskId` 和全局唯一 `revisionId`，服务端会解析 Resource 并重读内容；不要从完成摘要、文案或 UI 猜测。
-- `canonical_screenplay` 成功后得到结构化 `project.canonical_screenplay` Resource Revision；从零生成和用户提供的剧本使用同一契约。Resource Revision 就是剧本，不需要“正式剧本”副本或确认状态。系统也不增加独立提取状态。用户要比较多个版本时，才为当前选择发起 Choice；选择不触发后续制作。
+- `canonical_screenplay` 是按需生成的结构化分析结果，不是用户原文的保存门槛。它成功后得到 `project.canonical_screenplay` Resource Revision；该结果本身不需要“正式剧本”副本、确认状态或独立提取状态。用户要比较多个版本时，才为当前选择发起 Choice；选择不触发后续制作。
 - `style_bible` 的候选数量和 candidate key 由 Skill 根据任务决定。默认只产出文字 Style Bible，不生成预览图。用户明确要求预览时，才把指定候选作为精确上下文独立调用图片能力。
 - 采用风格时只用 `adopt_style_bible` 绑定被选中的精确 Style Bible Revision。采用不生成预览、不创建资产、不启动视频或任何后续 Task。
 - Worker 输出的 `continuity_analysis` 是建议，只帮助你判断；它不自动写 Bible、Chapter、Binding 或下游 Task。

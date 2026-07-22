@@ -270,6 +270,15 @@ describe('project agent toolset conformance', () => {
       content: { kind: 'single', text: 'One line.' },
     }).success).toBe(true)
     expect(registry.create_text.inputSchema.safeParse({
+      name: 'User screenplay',
+      prompt: 'Persist the screenplay supplied in the current user turn.',
+      content: {
+        kind: 'current_user_text',
+        scope: 'project',
+        text: 'INT. ROOM - DAY',
+      },
+    }).success).toBe(true)
+    expect(registry.create_text.inputSchema.safeParse({
       schemaId: 'project.canonical_screenplay',
       prompt: 'Write a screenplay.',
       content: { kind: 'single', text: 'INT. ROOM - DAY' },

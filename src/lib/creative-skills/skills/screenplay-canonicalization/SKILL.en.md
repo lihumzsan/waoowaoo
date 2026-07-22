@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Normalize newly generated, pasted, imported, or revised screenplays into the same `canonical_screenplay` semantics. Source differences belong only in `source`; they must not create alternative entity, scene, reference, confirmation, or extraction states.
+When the current goal explicitly needs structured screenplay analysis, normalize newly generated, pasted, imported, or revised screenplays into the same `canonical_screenplay` semantics. User-authored source text may already be stored as an ordinary text Resource; this Skill is not a storage, confirmation, or "formal screenplay" gate. Source differences belong only in `source`; they must not create alternative entity, scene, reference, confirmation, or extraction states.
 
 ## Entity registry
 
@@ -22,7 +22,7 @@ Normalize newly generated, pasted, imported, or revised screenplays into the sam
 ## Two inputs, one output
 
 - For creation from zero, finish the screenplay with story-development methods, then perform this registry and reference pass in the same Creative Task.
-- For a user-provided screenplay, preserve its creative choices and normalize the text, entities, scene ranges, and references directly. Put only genuinely ambiguous facts in `openQuestions`.
+- When Primary explicitly requests this structured analysis for a user-provided screenplay, preserve its creative choices and normalize the exact source Revision's text, entities, scene ranges, and references. Put only genuinely ambiguous facts in `openQuestions`.
 - Both paths must return the same `canonical_screenplay` contract without an extra state or second screenplay copy.
 
 ## Boundary

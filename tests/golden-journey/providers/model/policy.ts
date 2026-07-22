@@ -16,6 +16,8 @@ export const GOLDEN_FREEFORM_AUDIO_REQUEST = '根据成功视频生成一段配�
 export const GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST = '从空项目直接生成一个视频'
 export const GOLDEN_FREEFORM_ADOPT_REQUEST = '选择第二张图片作为主视觉'
 export const GOLDEN_FREEFORM_SCREENPLAY_REQUEST = '创作一部约240秒、全程保持单一连续场景的完整剧本'
+export const GOLDEN_PROVIDED_SCREENPLAY_TEXT = '场景一：夜，山门。守灯人推开生锈的门，风吹灭最后一盏灯。'
+export const GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST = `这是我已经写好的完整剧本，请直接保存并继续按需制作，不要先规范化：\n${GOLDEN_PROVIDED_SCREENPLAY_TEXT}`
 export const GOLDEN_FREEFORM_BIBLE_REQUEST = '基于当前剧本生成一份全项目可复用的 Edit Bible'
 export const GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST = '为当前 Episode 采用刚才的剧本和 Edit Bible'
 export const GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST = '为当前项目设计一份文字 Style Bible，不要生成预览图'
@@ -38,6 +40,7 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST,
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
+  GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
   GOLDEN_FREEFORM_BIBLE_REQUEST,
   GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
@@ -264,6 +267,7 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
     return choose('request_choice')
   }
   if (instruction.text.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) return choose('create_text')
+  if (instruction.text.includes(GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST)) return choose('create_text')
   if (instruction.text.includes(GOLDEN_FREEFORM_IMAGE_REQUEST)) return choose('create_image')
   if (instruction.text.includes(GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)) return choose('create_video')
   if (instruction.text.includes(GOLDEN_FREEFORM_RETRY_REQUEST)) {
@@ -356,6 +360,17 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           { name: 'Concept 2', text: 'A paper city wakes whenever its maker falls asleep.' },
           { name: 'Concept 3', text: 'A train crosses one impossible station each midnight.' },
         ],
+      },
+    }
+  }
+  if (toolName === 'create_text' && instruction.includes(GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST)) {
+    return {
+      name: '用户提供的完整剧本',
+      prompt: 'Persist the complete screenplay supplied in the current user turn without rewriting it.',
+      content: {
+        kind: 'current_user_text',
+        scope: 'project',
+        text: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
       },
     }
   }

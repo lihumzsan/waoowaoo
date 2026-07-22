@@ -24,6 +24,8 @@ import {
   GOLDEN_PARALLEL_IMAGE_REQUEST,
   GOLDEN_FREEFORM_RETRY_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
+  GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
+  GOLDEN_PROVIDED_SCREENPLAY_TEXT,
   GOLDEN_FREEFORM_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
@@ -275,6 +277,9 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(afterScreenplay.domain.sourceDocuments).toHaveLength(0)
   expect(afterScreenplay.domain.bibles).toHaveLength(0)
   expect(afterScreenplay.domain.chapters).toHaveLength(0)
+  await expect(page.getByRole('tab', { name: '规范剧本', exact: true })).toBeVisible({
+    timeout: 60_000,
+  })
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_BIBLE_REQUEST)
   const bibleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE)
@@ -598,6 +603,42 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   expect(snapshot.domain.chapters).toHaveLength(0)
   expect(snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toHaveLength(1)
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)
+  browserObservations.assertClean()
+})
+
+test('[GJ-PROVIDED-SCREENPLAY] supplied screenplay text is persisted directly without a screenplay Subagent', async ({
+  page,
+  browserObservations,
+}) => {
+  test.setTimeout(5 * 60_000)
+  await registerGoldenUser(page, {
+    username: `golden-provided-screenplay-${String(Date.now())}`,
+    password: 'golden-provided-screenplay-password',
+  })
+  const scope = await launchGoldenStoryFromHome(page, GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST)
+  const resources = await waitForResources(scope, 'text', 1)
+  await expect.poll(async () => (await readGoldenOracleSnapshot(scope)).runs.at(-1)?.status ?? null, {
+    timeout: 60_000,
+    message: 'the direct supplied-text write must settle in the initiating user Run',
+  }).toBe('completed')
+
+  const snapshot = await readGoldenOracleSnapshot(scope)
+  const resource = resources[0]
+  const revision = snapshot.resourceRevisions.find((candidate) => candidate.resourceId === resource?.id)
+  expect(resource).toMatchObject({
+    schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
+    episodeId: null,
+    scopeKind: 'project',
+    scopeId: scope.projectId,
+  })
+  expect(revision).toMatchObject({
+    contentText: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
+    contentJson: null,
+    generationOptions: { source: 'current_user_turn' },
+    taskId: null,
+  })
+  expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)
+  expect(snapshot.waits).toHaveLength(0)
   browserObservations.assertClean()
 })
 

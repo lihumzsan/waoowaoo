@@ -9,7 +9,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 不变量
 
 - **AP-01 — Primary 没有固定主链。** 系统 Prompt 不包含 stage、next action、剧本确认、风格专用卡、短/中/长视频配方或固定工具顺序。Primary 根据目标与当前 Resource 自由组合能力。
-- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay、Bible、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。通用 `create_text` 只写 `generic.text`，不能成为第二专业 writer。
+- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Bible、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。通用 `create_text` 只写 `generic.text`；其中 `current_user_text` 分支只允许保存当前用户消息的精确连续原文，是来源捕获而不是第二专业 writer。用户已提供剧本时不得为了保存、确认或建立正式副本自动委派 canonicalization；只有当前消费者明确需要实体、场景范围与引用等结构化分析时才请求 `canonical_screenplay`。
 - **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、适用 Skill 与 Resource schema；未知字段、缺失字段或错误引用原地失败，不容忍兼容 JSON。
 - **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；Task terminal 的 strict result 才能物化正式 Revision。UI 不从 reasoning、markdown 标题或文案推断完成状态。
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。

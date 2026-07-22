@@ -41,6 +41,7 @@ import {
   CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
+import { matchCurrentUserText } from '@/lib/creative-resource/current-user-text'
 import { resolveSystemModelKey, type SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -117,6 +118,13 @@ const createTextInputSchema = z.object({
           .describe('Completed candidate text.'),
       }).strict()).min(2).max(6)
         .describe('Two to six independently selectable completed text candidates.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('current_user_text'),
+      scope: z.enum(['project', 'current_episode'])
+        .describe('Persist the exact current-user text at project scope or the currently selected Episode scope.'),
+      text: z.string().trim().min(1)
+        .describe('An exact contiguous excerpt of the visible user message that started this turn. Do not rewrite, summarize, normalize, or copy text from an earlier turn.'),
     }).strict(),
   ]).describe('Choose one completed result or a selectable candidate set.'),
   contextReferences: contextReferenceSchema,
@@ -437,7 +445,32 @@ async function createTextResources(
   tx: Parameters<NonNullable<ReturnType<typeof defineOperation>['executeInTransaction']>>[2],
 ) {
   const schemaId = CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT
-  const episodeId = resolveEpisodeId(input, ctx)
+  const currentUserTextMatch = input.content.kind === 'current_user_text'
+    ? matchCurrentUserText({
+        currentUserTurnText: ctx.context.userTurnText,
+        requestedText: input.content.text,
+      })
+    : null
+  if (currentUserTextMatch && !currentUserTextMatch.ok) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: currentUserTextMatch.code,
+      field: 'content.text',
+      agentRetryableAfterCorrection: currentUserTextMatch.code === 'CURRENT_USER_TEXT_NOT_EXACT',
+    })
+  }
+  const episodeId = input.content.kind === 'current_user_text'
+    ? input.content.scope === 'project'
+      ? null
+      : ctx.context.episodeId?.trim() || null
+    : resolveEpisodeId(input, ctx)
+  if (input.content.kind === 'current_user_text' && input.content.scope === 'current_episode' && !episodeId) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CURRENT_USER_TEXT_EPISODE_SCOPE_UNAVAILABLE',
+      field: 'content.scope',
+      allowedValues: ['project'],
+      agentRetryableAfterCorrection: true,
+    })
+  }
   const scope = resolveProjectCreativeResourceScope({
     userId: ctx.userId,
     projectId: ctx.projectId,
@@ -449,7 +482,10 @@ async function createTextResources(
   })
   const candidates = input.content.kind === 'candidates'
     ? input.content.candidates
-    : [{ name: input.name, text: input.content.text }]
+    : [{
+        name: input.name,
+        text: currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text,
+      }]
   const candidateSetId = candidates.length > 1 ? randomUUID() : null
   const requestId = ctx.toolCallId?.trim()
     ? `${ctx.context.runId ?? 'run'}:${ctx.toolCallId.trim()}`
@@ -487,7 +523,9 @@ async function createTextResources(
         toolCallId: ctx.toolCallId ?? null,
         prompt: input.prompt,
         modelKey: null,
-        generationOptions: null,
+        generationOptions: input.content.kind === 'current_user_text'
+          ? { source: 'current_user_turn' }
+          : null,
       },
     })
     resources.push({ ...revision, candidateIndex })
@@ -1243,7 +1281,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more generic text Resources authored in this Agent turn. Professional screenplay, Bible, continuity, style, prompt-set, music-direction, review, and chapter-planning outputs must be delegated to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. A complete screenplay supplied by the user should be stored verbatim through current_user_text without delegating Creative Work merely to save or confirm it. Creative authoring, revision, and structured professional analysis still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,

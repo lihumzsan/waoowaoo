@@ -158,6 +158,7 @@
         "tests/contracts/task-definition-conformance.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/creative-resource/creative-data.test.ts",
+        "tests/unit/creative-resource/current-user-text.test.ts",
         "tests/unit/creative-resource/creative-work-materialization.test.ts",
         "tests/unit/canonical-screenplay/contracts.test.ts",
         "tests/unit/asset-generation/asset-image-format.test.ts",
@@ -470,6 +471,7 @@
       "testPaths": [
       "tests/contracts/project-agent-toolset-conformance.test.ts",
       "tests/unit/ai-exec/agents-public-reasoning.test.ts",
+      "tests/unit/creative-worker/output-transport-schema.test.ts",
       "tests/unit/project-agent/workspace-assistant-subagent-stream.test.ts",
       "tests/unit/creative-resource/creative-work-materialization.test.ts",
       "tests/contracts/creative-result-resource-conformance.test.ts"
