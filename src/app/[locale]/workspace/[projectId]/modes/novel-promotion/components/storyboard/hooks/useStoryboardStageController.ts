@@ -62,7 +62,7 @@ export function useStoryboardStageController({
   const storyboardWorkflowOptions = useMemo(() => userModelsQuery.data?.image ?? [], [userModelsQuery.data?.image])
   const defaultStoryboardWorkflow = project?.novelPromotionData?.storyboardModel ?? ''
 
-  const { taskAwareStoryboards } = useStoryboardTaskAwareStoryboards({
+  const { taskAwareStoryboards, isInitialTaskStatePending } = useStoryboardTaskAwareStoryboards({
     projectId,
     initialStoryboards,
     isRunningPhase,
@@ -73,6 +73,7 @@ export function useStoryboardStageController({
     episodeId,
     initialStoryboards: taskAwareStoryboards,
     clips,
+    isInitialTaskStatePending,
   })
 
   const {

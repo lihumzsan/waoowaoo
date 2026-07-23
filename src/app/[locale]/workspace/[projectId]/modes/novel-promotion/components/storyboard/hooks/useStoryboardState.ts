@@ -14,9 +14,9 @@ import {
   sortStoryboardsByClipOrder,
 } from './storyboard-state-utils'
 import {
-  reconcileOpenStoryboardId,
-  resolveDefaultOpenStoryboardId,
-  toggleOpenStoryboardId,
+  createUninitializedOpenStoryboardState,
+  reconcileOpenStoryboardState,
+  toggleOpenStoryboardState,
 } from './storyboard-group-visibility'
 
 export interface StoryboardPanel {
@@ -49,6 +49,7 @@ interface UseStoryboardStateProps {
   episodeId: string
   initialStoryboards: NovelPromotionStoryboard[]
   clips: NovelPromotionClip[]
+  isInitialTaskStatePending: boolean
 }
 
 export function useStoryboardState({
@@ -56,41 +57,34 @@ export function useStoryboardState({
   episodeId,
   initialStoryboards,
   clips,
+  isInitialTaskStatePending,
 }: UseStoryboardStateProps) {
   const queryClient = useQueryClient()
   const localStoryboards = useMemo(
     () => sortStoryboardsByClipOrder(initialStoryboards, clips),
     [clips, initialStoryboards],
   )
-  const [openStoryboardState, setOpenStoryboardState] = useState<{
-    episodeId: string
-    storyboardId: string | null
-  }>(() => ({
-    episodeId,
-    storyboardId: resolveDefaultOpenStoryboardId(localStoryboards),
-  }))
+  const [openStoryboardState, setOpenStoryboardState] = useState(() => (
+    reconcileOpenStoryboardState(
+      createUninitializedOpenStoryboardState(episodeId),
+      episodeId,
+      localStoryboards,
+      isInitialTaskStatePending,
+    )
+  ))
 
   useEffect(() => {
-    setOpenStoryboardState((previous) => {
-      const storyboardId = previous.episodeId === episodeId
-        ? reconcileOpenStoryboardId(previous.storyboardId, localStoryboards)
-        : resolveDefaultOpenStoryboardId(localStoryboards)
-      if (previous.episodeId === episodeId && previous.storyboardId === storyboardId) return previous
-      return { episodeId, storyboardId }
-    })
-  }, [episodeId, localStoryboards])
+    setOpenStoryboardState((previous) => reconcileOpenStoryboardState(
+      previous,
+      episodeId,
+      localStoryboards,
+      isInitialTaskStatePending,
+    ))
+  }, [episodeId, isInitialTaskStatePending, localStoryboards])
 
   const toggleOpenStoryboard = useCallback((storyboardId: string) => {
-    setOpenStoryboardState((previous) => ({
-      episodeId,
-      storyboardId: toggleOpenStoryboardId(
-        previous.episodeId === episodeId
-          ? previous.storyboardId
-          : resolveDefaultOpenStoryboardId(localStoryboards),
-        storyboardId,
-      ),
-    }))
-  }, [episodeId, localStoryboards])
+    setOpenStoryboardState((previous) => toggleOpenStoryboardState(previous, episodeId, storyboardId))
+  }, [episodeId])
 
   const setLocalStoryboards = useCallback<React.Dispatch<React.SetStateAction<NovelPromotionStoryboard[]>>>(
     (nextStoryboardsOrUpdater) => {
