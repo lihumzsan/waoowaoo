@@ -45,10 +45,17 @@ const hasOutputMock = vi.hoisted(() => ({
   hasLocationImageOutput: vi.fn(async () => false),
 }))
 
+const prismaMock = vi.hoisted(() => ({
+  task: {
+    findMany: vi.fn(async () => []),
+  },
+}))
+
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/has-output', () => hasOutputMock)
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))
@@ -98,7 +105,7 @@ describe('api specific - novel promotion generate image art style', () => {
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
-  it('forwards requested count into task payload and dedupe key', async () => {
+  it('fans the requested count out into independently deduped child tasks', async () => {
     const mod = await import('@/app/api/novel-promotion/[projectId]/generate-image/route')
     const req = buildMockRequest({
       path: '/api/novel-promotion/project-1/generate-image',
@@ -114,11 +121,27 @@ describe('api specific - novel promotion generate image art style', () => {
     const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
     expect(res.status).toBe(200)
 
-    const submitArg = submitTaskMock.mock.calls[0]?.[0] as {
-      payload?: Record<string, unknown>
+    const submitArgs = submitTaskMock.mock.calls.map(([input]) => input as {
+      payload?: {
+        count?: number
+        imageIndex?: number
+        batch?: { id?: string; index?: number; total?: number }
+      }
       dedupeKey?: string
-    } | undefined
-    expect(submitArg?.payload?.count).toBe(6)
-    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:6')
+    })
+    expect(submitArgs).toHaveLength(6)
+
+    const batchId = submitArgs[0]?.payload?.batch?.id
+    expect(batchId).toMatch(/^batch-[a-f0-9]{32}$/)
+    for (let index = 0; index < 6; index += 1) {
+      expect(submitArgs[index]).toEqual(expect.objectContaining({
+        payload: expect.objectContaining({
+          count: 1,
+          imageIndex: index,
+          batch: { id: batchId, index, total: 6 },
+        }),
+        dedupeKey: `image_character:appearance-1:batch:${batchId}:single:${index}`,
+      }))
+    }
   })
 })

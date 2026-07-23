@@ -79,6 +79,9 @@ describe('video tools free voice project-character source', () => {
       projectId: 'project-1',
       payload: expect.objectContaining({ referenceAudioUrl: '/voice/hero.wav' }),
     }), expect.any(Object))
+    const queuedTask = addTaskJobMock.mock.calls[0]?.[0]
+    expect(queuedTask?.taskId).toMatch(/^free_voice-/)
+    expect(queuedTask?.taskId).not.toContain(':')
     expect(result.record).toMatchObject({
       projectId: 'project-1', projectName: 'Project One',
       characterId: 'character-1', characterName: 'Hero', voiceName: 'Hero',

@@ -861,24 +861,32 @@ async function fetchComfyUiObjectInfo(base: string, classType: string): Promise<
   }
 }
 
-function readComfyUiNumericInputMax(
+function supportsComfyUiNumericInputValue(
   payload: unknown,
   classType: string,
   field: string,
-): number | null {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  value: number,
+): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
   const classInfo = (payload as Record<string, unknown>)[classType]
-  if (!classInfo || typeof classInfo !== 'object' || Array.isArray(classInfo)) return null
+  if (!classInfo || typeof classInfo !== 'object' || Array.isArray(classInfo)) return false
   const input = (classInfo as Record<string, unknown>).input
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false
   const required = (input as Record<string, unknown>).required
-  if (!required || typeof required !== 'object' || Array.isArray(required)) return null
+  if (!required || typeof required !== 'object' || Array.isArray(required)) return false
   const inputDefinition = (required as Record<string, unknown>)[field]
-  if (!Array.isArray(inputDefinition)) return null
+  if (!Array.isArray(inputDefinition)) return false
   const options = inputDefinition[1]
-  if (!options || typeof options !== 'object' || Array.isArray(options)) return null
-  const max = (options as Record<string, unknown>).max
-  return typeof max === 'number' && Number.isFinite(max) ? max : null
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return false
+  const metadata = options as Record<string, unknown>
+  const max = metadata.max
+  if (typeof max === 'number' && Number.isFinite(max)) return max >= value
+  const dynamicOptions = metadata.options
+  if (!Array.isArray(dynamicOptions)) return false
+  return dynamicOptions.some((option) => {
+    if (!option || typeof option !== 'object' || Array.isArray(option)) return false
+    return (option as Record<string, unknown>).key === String(value)
+  })
 }
 
 async function normalizeWorkflowModelInputsForServer(
@@ -1235,8 +1243,7 @@ export async function runComfyUiVideoSeamMotionBridgeWorkflow(params: {
   const base = normalizeComfyBaseUrl(params.baseUrl)
   const conditioningClassType = 'LTXVImgToVideoInplaceKJ'
   const objectInfo = await fetchComfyUiObjectInfo(base, conditioningClassType)
-  const maxImages = readComfyUiNumericInputMax(objectInfo, conditioningClassType, 'num_images')
-  if (maxImages === null || maxImages < 4) {
+  if (!supportsComfyUiNumericInputValue(objectInfo, conditioningClassType, 'num_images', 4)) {
     throw new Error('VIDEO_SEAM_FOUR_ANCHOR_UNSUPPORTED')
   }
 

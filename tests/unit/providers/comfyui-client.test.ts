@@ -1033,7 +1033,16 @@ describe('comfyui client media refs', () => {
           LTXVImgToVideoInplaceKJ: {
             input: {
               required: {
-                num_images: ['INT', { default: 2, min: 1, max: 4 }],
+                num_images: ['COMFY_DYNAMICCOMBO_V3', {
+                  display_name: 'Number of Images',
+                  tooltip: 'Select how many images to insert',
+                  options: [
+                    { key: '1', inputs: { required: {}, optional: {} } },
+                    { key: '2', inputs: { required: {}, optional: {} } },
+                    { key: '3', inputs: { required: {}, optional: {} } },
+                    { key: '4', inputs: { required: {}, optional: {} } },
+                  ],
+                }],
               },
             },
           },
@@ -1179,6 +1188,25 @@ describe('comfyui client media refs', () => {
           input: {
             required: {
               num_images: ['INT', { default: 2, min: 1, max: 2 }],
+            },
+          },
+        },
+      },
+    },
+    {
+      name: 'dynamic num_images options without four',
+      status: 200,
+      objectInfo: {
+        LTXVImgToVideoInplaceKJ: {
+          input: {
+            required: {
+              num_images: ['COMFY_DYNAMICCOMBO_V3', {
+                options: [
+                  { key: '1', inputs: { required: {}, optional: {} } },
+                  { key: '2', inputs: { required: {}, optional: {} } },
+                  { key: '3', inputs: { required: {}, optional: {} } },
+                ],
+              }],
             },
           },
         },

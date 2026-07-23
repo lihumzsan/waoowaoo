@@ -209,7 +209,7 @@ export async function createVideoToolFreeVoiceTask(params: {
 
   const { selection } = await resolveVideoToolFreeVoiceModel(params.userId, project.novelPromotionData.audioModel)
   const recordId = randomUUID()
-  const taskId = `free_voice:${recordId}`
+  const taskId = `free_voice-${recordId}`
   const now = new Date().toISOString()
   const record: VideoToolFreeVoiceRecord = {
     id: recordId,
