@@ -149,6 +149,8 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     'sealProjectAgentOperationBatchWait',
     'PROJECT_AGENT_OPERATION_BATCH_OUTCOME_MISSING',
     'submittedTaskReceiptsByToolCall',
+    "toolNotFoundBehavior: 'return_error_to_model'",
+    'formatProjectAgentToolNotFound',
   ]) {
     if (!runtime.includes(required)) {
       violations.push(`${runtimePath} is missing non-blocking OperationBatch authority ${required}`)
@@ -161,6 +163,7 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     'members.length !== 1',
     'PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH',
     'PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH',
+    "toolNotFoundBehavior: 'raise_error'",
   ]) {
     if (runtime.includes(forbidden)) {
       violations.push(`${runtimePath} restores retired single-Operation step authority ${forbidden}`)

@@ -7,6 +7,7 @@ import {
   createProjectAgentToolCatalog,
   createProjectAgentToolDiscoveryState,
   createProjectAgentToolDiscoveryTool,
+  formatProjectAgentToolNotFound,
 } from '@/lib/project-agent/tool-discovery'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 
@@ -97,5 +98,27 @@ describe('project agent tool discovery', () => {
     expect(() => state.load(
       catalog.slice(0, PROJECT_AGENT_TOOL_LOAD_LIMIT + 1).map((entry) => entry.operationId),
     )).toThrow(`PROJECT_AGENT_TOOL_LOAD_COUNT_INVALID:${PROJECT_AGENT_TOOL_LOAD_LIMIT + 1}`)
+  })
+
+  it('returns a model-visible correction for unloaded or invented tool calls', () => {
+    const { catalog } = createFixture()
+    const operationId = catalog[0]?.operationId
+    if (!operationId) throw new Error('TOOL_OPERATION_REQUIRED')
+
+    expect(formatProjectAgentToolNotFound({
+      toolName: operationId,
+      catalog,
+      locale: 'en',
+    })).toContain(`Load this exact id with load_tools`)
+    expect(formatProjectAgentToolNotFound({
+      toolName: operationId,
+      catalog,
+      locale: 'zh',
+    })).toContain('等待下一模型步骤出现完整 Schema')
+    expect(formatProjectAgentToolNotFound({
+      toolName: 'invented_operation',
+      catalog,
+      locale: 'en',
+    })).toContain('is not registered')
   })
 })

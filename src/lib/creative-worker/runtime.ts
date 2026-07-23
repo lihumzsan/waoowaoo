@@ -21,6 +21,10 @@ import {
   loadPreloadedCreativeSkills,
 } from './skill-access'
 import { buildCreativeWorkerSystemPrompt } from './system-prompt'
+import {
+  CreativeWorkerToolLifecycle,
+  type CreativeWorkerReadSkillToolCall,
+} from './tool-lifecycle'
 import { createCreativeWorkerTools } from './tools'
 import {
   buildCreativeWorkerOutputTransportSchema,
@@ -83,7 +87,6 @@ function createRunContext(
       skillContentChars: 0,
     },
     skillTrace: [],
-    activeToolCall: null,
     ...(input.onEvent ? { onEvent: input.onEvent } : {}),
   }
 }
@@ -94,7 +97,7 @@ function readRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function parseReadSkillToolCall(item: unknown): CreativeWorkerRunContext['activeToolCall'] {
+function parseReadSkillToolCall(item: unknown): CreativeWorkerReadSkillToolCall | null {
   const itemRecord = readRecord(item)
   const rawItem = readRecord(itemRecord?.rawItem)
   if (rawItem?.type !== 'function_call' || rawItem.name !== 'read_skill') return null
@@ -278,6 +281,7 @@ export async function runCreativeWorker(
   const request = parseCreativeWorkRequest(input.request)
   const budgets = resolveCreativeWorkerBudgets(input.budgets)
   const context = createRunContext(input, budgets)
+  const toolLifecycle = new CreativeWorkerToolLifecycle()
   const definition = readCreativeWorkOutputDefinition(request.outputKind)
   let eventDeliveryFailed = false
 
@@ -325,7 +329,7 @@ export async function runCreativeWorker(
       instructions: buildCreativeWorkerSystemPrompt(input.locale),
       model: input.model,
       modelSettings: {
-        parallelToolCalls: false,
+        parallelToolCalls: true,
       },
       outputType: outputTransportSchema,
       tools: [...createCreativeWorkerTools()],
@@ -336,7 +340,7 @@ export async function runCreativeWorker(
       signal: input.signal,
       stream: true,
       toolNotFoundBehavior: 'raise_error',
-      toolExecution: { maxFunctionToolConcurrency: 1 },
+      toolExecution: { maxFunctionToolConcurrency: budgets.maxReadCalls },
     })
     const publicReasoning = createAgentsPublicReasoningNormalizer()
     const reasoningStates = new Map<string, VisibleReasoningState>()
@@ -413,39 +417,30 @@ export async function runCreativeWorker(
             reason: 'creative worker emitted an unsupported tool call',
           })
         }
-        if (context.activeToolCall) {
-          throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
-            reason: 'parallel creative worker tool calls are forbidden',
-          })
-        }
-        context.activeToolCall = toolCall
+        toolLifecycle.begin(toolCall)
         await emitEvent({ kind: 'tool_called', ...toolCall })
         continue
       }
       if (event.name === 'tool_output') {
         const callId = readToolOutputCallId(event.item)
-        const activeToolCall = context.activeToolCall
-        if (!activeToolCall || !callId || activeToolCall.toolCallId !== callId) {
+        if (!callId) {
           throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
-            reason: 'creative worker tool output identity does not match the active tool call',
+            reason: 'creative worker tool output identity is missing',
           })
         }
-        const trace = [...context.skillTrace].reverse().find((entry) => (
-          entry.source === 'tool' && entry.skillId === activeToolCall.skillId
-        ))
-        if (!trace) {
-          throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
-            reason: 'read_skill completed without a trace entry',
-          })
-        }
-        await emitEvent({ kind: 'tool_completed', ...activeToolCall, trace })
-        context.activeToolCall = null
+        const completedToolCall = toolLifecycle.complete(callId, context.skillTrace)
+        await emitEvent({
+          kind: 'tool_completed',
+          ...completedToolCall.toolCall,
+          trace: completedToolCall.trace,
+        })
       }
     }
     for (const reasoningEvent of publicReasoning.finish()) {
       await applyReasoningEvent(reasoningEvent)
     }
     await result.completed
+    toolLifecycle.assertSettled()
     assertNotAborted(input.signal)
     assertProfessionalSkillRead(context)
     const output = parseFinalOutput({
@@ -475,13 +470,12 @@ export async function runCreativeWorker(
             }, { cause: error })
           : new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
     if (!eventDeliveryFailed) {
-      if (context.activeToolCall) {
+      for (const activeToolCall of toolLifecycle.drainActive()) {
         await emitEvent({
           kind: 'tool_failed',
-          ...context.activeToolCall,
+          ...activeToolCall,
           code: normalizedError.code,
         })
-        context.activeToolCall = null
       }
       await emitEvent(normalizedError.code === 'CREATIVE_WORK_ABORTED'
         ? {

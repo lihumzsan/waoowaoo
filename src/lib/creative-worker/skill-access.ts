@@ -80,12 +80,15 @@ export async function readCreativeWorkerSkillResource(input: {
   skillId: CreativeSkillId
   source: CreativeSkillReadTraceEntry['source']
 }): Promise<CreativeSkillResource> {
-  assertReadBudget(input.context)
   const definition = getCreativeSkillDefinition(input.skillId)
   const resource = await readCreativeSkillResource({
     locale: input.context.locale,
     uri: definition.entryUri,
   })
+  // Parallel reads may all begin before the first filesystem read settles.
+  // Reserve both budgets only after content is known and immediately before
+  // recordRead synchronously increments the shared counters.
+  assertReadBudget(input.context)
   assertResourceBudget(input.context, resource)
   await recordRead(input.context, resource, input.source)
   return resource

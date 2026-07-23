@@ -18,7 +18,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 revisionId 及显式用途；服务端回库解析 Resource、schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。
 - **AP-09 — Provider 约束不升级为创作流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此写固定产品阶段。
 - **AP-10 — 双语语义一致。** System Prompt 与每个 Skill 的中英文版本必须具有相同契约变量、输出语义与禁止项；用户可见内容走 i18n。
-- **AP-11 — Tool discovery 只发现能力。** Primary 初始只看到从完整 Operation registry 投影的 `load_tools` 简短目录，按精确 id 加载当前目标的最小充分集合；目录简介不能充当参数契约、eligibility、工作流或调用顺序，加载不代表执行。加载后出现的完整 strict Schema 才是唯一调用契约，工具选择仍由 Primary 根据用户目标与当前事实判断。
+- **AP-11 — Tool discovery 只发现能力。** Primary 初始只看到从完整 Operation registry 投影的 `load_tools` 简短目录，按精确 id 加载当前目标的最小充分集合；目录简介不能充当参数契约、eligibility、工作流或调用顺序，加载不代表执行。加载与调用必须分属两个模型步骤；下一步出现的完整 strict Schema 才是唯一调用契约。未加载/未知工具错误是可恢复纠正，不授权猜测参数或执行；Primary 必须先加载已注册精确 id，再按新 Schema 重构。Task 提交回执不是终态，当前回合不得立即 `get_task` 或轮询；只在终态 continuation 后按需加载并读取精确 taskId。工具选择仍由 Primary 根据用户目标与当前事实判断。
 
 ## 权威入口
 
@@ -46,6 +46,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - 风格选择曾默认生成九宫格预览并进入专用 Choice；当前 Style Bible 是普通 Resource，预览图是用户明确要求时的独立图片 Operation。
 - 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。当前时长只作为用户目标与 Primary 判断输入，模型必须从真实对白/动作/停顿估算，服务端不建立时长状态机；真实模型服从度仍需 Golden/抽样验证。
 - 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。当前 Prompt 只说明模型如何使用 registry 派生的简短目录；目录不拥有业务判断，完整 Schema 仍由原 Operation registry 提供。
+- 按需 Tool discovery 首版只说“调用前加载”，没有说明加载后的 Schema 只会在下一模型步骤出现，也没有把 Task 回执与终态结果分开。真实 Claude 因而跳过 loader 直接调用 `get_task`，SDK 又把缺失工具升级为 Run 失败。当前双语 Prompt、loader 描述与模型可见纠正统一要求“加载 → 等待下一模型步骤 → 按 Schema 调用”，并禁止在 Task 提交同回合读取或轮询。
 
 ## 修改检查表
 

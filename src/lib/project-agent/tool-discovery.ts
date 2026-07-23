@@ -25,6 +25,24 @@ export interface ProjectAgentToolDiscoveryState {
   loadedOperationIds: () => readonly string[]
 }
 
+export function formatProjectAgentToolNotFound(params: {
+  readonly toolName: string
+  readonly catalog: readonly ProjectAgentToolCatalogEntry[]
+  readonly locale: ProjectAgentLocale
+}): string {
+  const isRegisteredOperation = params.catalog.some((entry) => (
+    entry.operationId === params.toolName
+  ))
+  if (isRegisteredOperation) {
+    return params.locale === 'zh'
+      ? `Operation "${params.toolName}" 已注册，但在发出本次调用的模型步骤中尚未加载。先用 load_tools 加载这个精确 id，等待下一模型步骤出现完整 Schema，再按该 Schema 重新调用；不要猜测参数，也不要在同一回复里同时加载并调用。`
+      : `Operation "${params.toolName}" is registered but was not loaded in the model step that emitted this call. Load this exact id with load_tools, wait for its full Schema in the next model step, then call it again from that Schema. Do not guess arguments or load and invoke it in the same response.`
+  }
+  return params.locale === 'zh'
+    ? `工具 "${params.toolName}" 未注册。只使用 load_tools 目录中的精确 id；不要发明工具或参数。`
+    : `Tool "${params.toolName}" is not registered. Use only exact ids from the load_tools catalog; do not invent tools or arguments.`
+}
+
 function compactCatalogDescription(value: string): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (!normalized) throw new Error('PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_EMPTY')
@@ -145,8 +163,8 @@ function buildDiscoveryDescription(
     `[${entry.groupPath.join('/')}] ${entry.operationId} — ${entry.description}`
   ))
   const introduction = locale === 'zh'
-    ? `按需载入完成当前目标所需 Operation 的完整调用定义。下面目录只用于发现能力（精确 id + 简介），不是工作流或调用顺序。调用 Operation 前，先按精确 id 加载最小充分集合；每次最多 ${PROJECT_AGENT_TOOL_LOAD_LIMIT} 个。已加载项在当前执行段内持续可用。`
-    : `Load the full invocation definitions for the Operations needed by the current goal. The catalog below is capability discovery only (exact id plus summary), never a workflow or call order. Before calling an Operation, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call. Loaded Operations remain available for the current execution segment.`
+    ? `按需载入完成当前目标所需 Operation 的完整调用定义。下面目录只用于发现能力（精确 id + 简介），不是参数契约、工作流或调用顺序。调用 Operation 前，先按精确 id 加载最小充分集合；每次最多 ${PROJECT_AGENT_TOOL_LOAD_LIMIT} 个。必须等待下一模型步骤看到完整 Schema 后再调用，不能在同一回复里同时加载并猜测调用。已加载项在当前执行段内持续可用。`
+    : `Load the full invocation definitions for the Operations needed by the current goal. The catalog below is capability discovery only (exact id plus summary), never an argument contract, workflow, or call order. Before calling an Operation, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call. Wait until the next model step exposes the full Schema before invoking it; never load and guess the invocation in the same response. Loaded Operations remain available for the current execution segment.`
   const catalogLabel = locale === 'zh' ? '能力目录：' : 'Capability catalog:'
   return [introduction, catalogLabel, ...catalogLines].join('\n')
 }

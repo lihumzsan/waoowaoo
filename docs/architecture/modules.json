@@ -478,6 +478,7 @@
       "tests/contracts/project-agent-toolset-conformance.test.ts",
       "tests/unit/ai-exec/agents-public-reasoning.test.ts",
       "tests/unit/creative-worker/output-transport-schema.test.ts",
+      "tests/unit/creative-worker/tool-lifecycle.test.ts",
       "tests/unit/project-agent/workspace-assistant-subagent-stream.test.ts",
       "tests/unit/creative-resource/creative-work-materialization.test.ts",
       "tests/contracts/creative-result-resource-conformance.test.ts"

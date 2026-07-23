@@ -1,6 +1,6 @@
 import type { Model } from '@openai/agents'
 import { z } from 'zod'
-import type { CreativeSkillId, CreativeSkillLocale } from '@/lib/creative-skills'
+import type { CreativeSkillLocale } from '@/lib/creative-skills'
 import {
   CREATIVE_WORK_OUTPUT_KINDS,
   DEFAULT_CREATIVE_WORKER_BUDGETS,
@@ -186,11 +186,6 @@ export interface CreativeWorkerRunContext {
     skillContentChars: number
   }
   skillTrace: CreativeSkillReadTraceEntry[]
-  activeToolCall: {
-    toolCallId: string
-    toolName: 'read_skill'
-    skillId: CreativeSkillId
-  } | null
   onEvent?: CreativeWorkerEventListener
 }
 

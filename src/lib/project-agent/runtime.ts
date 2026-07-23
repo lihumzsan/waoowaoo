@@ -97,6 +97,7 @@ import {
   createProjectAgentToolCatalog,
   createProjectAgentToolDiscoveryState,
   createProjectAgentToolDiscoveryTool,
+  formatProjectAgentToolNotFound,
 } from './tool-discovery'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
@@ -1337,7 +1338,16 @@ export async function createProjectAgentChatResponse(input: {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
-      toolNotFoundBehavior: 'raise_error',
+      toolNotFoundBehavior: 'return_error_to_model',
+      toolErrorFormatter: ({ kind, toolName }) => (
+        kind === 'tool_not_found'
+          ? formatProjectAgentToolNotFound({
+              toolName,
+              catalog: toolCatalog,
+              locale,
+            })
+          : undefined
+      ),
       toolExecution: { maxFunctionToolConcurrency: 1 },
       signal: runAbortController.signal,
     })
