@@ -9,7 +9,18 @@ const mediaObjectMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: { mediaObject: mediaObjectMock } }))
-vi.mock('@/lib/storage', () => ({ extractStorageKey: (value: string) => value }))
+vi.mock('@/lib/storage', () => ({
+  extractStorageKey: (value: string) => {
+    if (value.startsWith('/api/files/')) {
+      return decodeURIComponent(value.replace('/api/files/', ''))
+    }
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      const parsed = new URL(value)
+      return parsed.pathname.replace(/^\/media-bucket\//, '')
+    }
+    return value
+  },
+}))
 
 const coverMedia = {
   id: 'media-cover-1',
@@ -55,10 +66,30 @@ const legacyAudioMedia = {
   storageKey: 'episode-audio/legacy.mp3',
 }
 
+const missingLegacyAudioMedia = {
+  ...audioMedia,
+  id: 'media-missing-legacy-audio',
+  publicId: 'episode-audio/missing-legacy',
+  url: '/m/episode-audio%2Fmissing-legacy',
+  storageKey: 'episode-audio/missing-legacy.mp3',
+}
+
 describe('Episode cover media attachment', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mediaObjectMock.findMany.mockResolvedValue([coverMedia, audioMedia, secondCoverMedia])
+    mediaObjectMock.findMany.mockImplementation(async (args: {
+      where?: {
+        id?: { in?: string[] }
+        storageKey?: { in?: string[] }
+      }
+    }) => {
+      const ids = args.where?.id?.in || []
+      if (ids.length > 0) {
+        return [coverMedia, audioMedia, secondCoverMedia].filter((media) => ids.includes(media.id))
+      }
+      const storageKeys = args.where?.storageKey?.in || []
+      return storageKeys.includes(legacyAudioMedia.storageKey) ? [legacyAudioMedia] : []
+    })
     mediaObjectMock.findUnique.mockImplementation(async (args: { where?: { id?: string; storageKey?: string } }) => {
       if (args.where?.id === coverMedia.id) return coverMedia
       if (args.where?.id === audioMedia.id) return audioMedia
@@ -66,6 +97,7 @@ describe('Episode cover media attachment', () => {
       if (args.where?.storageKey === legacyAudioMedia.storageKey) return legacyAudioMedia
       return null
     })
+    mediaObjectMock.upsert.mockResolvedValue(missingLegacyAudioMedia)
   })
 
   it('attaches an Episode cover media object and URL from coverImageMediaId', async () => {
@@ -91,7 +123,7 @@ describe('Episode cover media attachment', () => {
     })
   })
 
-  it('attaches covers for Episodes nested in a project payload', async () => {
+  it('batches duplicate modern Episode media IDs nested in a project payload', async () => {
     const { attachMediaFieldsToProject } = await import('@/lib/media/attach')
 
     const result = await attachMediaFieldsToProject({
@@ -100,23 +132,33 @@ describe('Episode cover media attachment', () => {
         {
           id: 'episode-1',
           coverImageMediaId: coverMedia.id,
-          audioMediaId: null,
-          audioUrl: null,
+          audioMediaId: audioMedia.id,
+          audioUrl: 'episode-audio/legacy-should-not-win.mp3',
+        },
+        {
+          id: 'episode-2',
+          coverImageMediaId: coverMedia.id,
+          audioMediaId: audioMedia.id,
+          audioUrl: 'episode-audio/legacy-should-not-win.mp3',
         },
       ],
     })
 
-    expect(result.episodes).toEqual([
-      expect.objectContaining({
-        id: 'episode-1',
-        coverImageMediaId: coverMedia.id,
-        coverImageMedia: coverMedia,
-        coverImageUrl: coverMedia.url,
-      }),
-    ])
+    expect(mediaObjectMock.findMany).toHaveBeenCalledTimes(1)
+    expect(mediaObjectMock.findMany).toHaveBeenCalledWith({
+      where: { id: { in: [audioMedia.id, coverMedia.id] } },
+    })
+    expect(mediaObjectMock.findUnique).not.toHaveBeenCalled()
+    expect(result.episodes).toHaveLength(2)
+    expect(result.episodes[0]).toMatchObject({
+      audioMedia: expect.objectContaining({ id: audioMedia.id }),
+      audioUrl: audioMedia.url,
+      coverImageMedia: expect.objectContaining({ id: coverMedia.id }),
+      coverImageUrl: coverMedia.url,
+    })
   })
 
-  it('loads unique Episode audio and cover media in one batch while preserving unresolved legacy audio fallback', async () => {
+  it('batches modern IDs and normalized existing legacy audio keys while preserving fallbacks', async () => {
     const mediaModule = await import('@/lib/media/attach')
     const attachMediaFieldsToEpisodes = (
       mediaModule as unknown as {
@@ -139,31 +181,54 @@ describe('Episode cover media attachment', () => {
       },
       {
         id: 'episode-3',
-        audioMediaId: null,
+        audioMediaId: 'missing-modern-audio',
         audioUrl: legacyAudioMedia.storageKey,
         coverImageMediaId: secondCoverMedia.id,
       },
       {
         id: 'episode-4',
         audioMediaId: null,
-        audioUrl: null,
+        audioUrl: '/api/files/%2Fepisode-audio%2Flegacy.mp3',
+        coverImageMediaId: null,
+      },
+      {
+        id: 'episode-5',
+        audioMediaId: null,
+        audioUrl: 'https://storage.example/media-bucket/episode-audio/legacy.mp3?signature=abc',
+        coverImageMediaId: null,
+      },
+      {
+        id: 'episode-6',
+        audioMediaId: null,
+        audioUrl: '/legacy/local-only.mp3',
         coverImageMediaId: 'missing-cover-media',
         coverImageUrl: 'https://legacy.example/cover.png',
       },
     ])
 
-    expect(mediaObjectMock.findMany).toHaveBeenCalledTimes(1)
-    expect(mediaObjectMock.findMany).toHaveBeenCalledWith({
+    expect(mediaObjectMock.findMany).toHaveBeenCalledTimes(2)
+    expect(mediaObjectMock.findMany).toHaveBeenNthCalledWith(1, {
       where: {
         id: {
-          in: [audioMedia.id, coverMedia.id, secondCoverMedia.id, 'missing-cover-media'],
+          in: [
+            audioMedia.id,
+            coverMedia.id,
+            'missing-modern-audio',
+            secondCoverMedia.id,
+            'missing-cover-media',
+          ],
         },
       },
     })
-    expect(mediaObjectMock.findUnique).toHaveBeenCalledTimes(1)
-    expect(mediaObjectMock.findUnique).toHaveBeenCalledWith({
-      where: { storageKey: legacyAudioMedia.storageKey },
+    expect(mediaObjectMock.findMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        storageKey: {
+          in: [legacyAudioMedia.storageKey],
+        },
+      },
     })
+    expect(mediaObjectMock.findUnique).not.toHaveBeenCalled()
+    expect(mediaObjectMock.upsert).not.toHaveBeenCalled()
     expect(result).toEqual([
       expect.objectContaining({
         id: 'episode-1',
@@ -186,10 +251,70 @@ describe('Episode cover media attachment', () => {
       }),
       expect.objectContaining({
         id: 'episode-4',
-        audioMedia: null,
-        audioUrl: null,
+        audioMedia: expect.objectContaining({ id: legacyAudioMedia.id, url: legacyAudioMedia.url }),
+        audioUrl: legacyAudioMedia.url,
         coverImageMedia: null,
         coverImageUrl: null,
+      }),
+      expect.objectContaining({
+        id: 'episode-5',
+        audioMedia: expect.objectContaining({ id: legacyAudioMedia.id, url: legacyAudioMedia.url }),
+        audioUrl: legacyAudioMedia.url,
+        coverImageMedia: null,
+        coverImageUrl: null,
+      }),
+      expect.objectContaining({
+        id: 'episode-6',
+        audioMedia: null,
+        audioUrl: '/legacy/local-only.mp3',
+        coverImageMedia: null,
+        coverImageUrl: null,
+      }),
+    ])
+  })
+
+  it('ensures one missing legacy audio object per normalized key and reuses it', async () => {
+    const { attachMediaFieldsToEpisodes } = await import('@/lib/media/attach')
+
+    const result = await attachMediaFieldsToEpisodes([
+      {
+        id: 'episode-1',
+        audioMediaId: null,
+        audioUrl: missingLegacyAudioMedia.storageKey,
+        coverImageMediaId: null,
+      },
+      {
+        id: 'episode-2',
+        audioMediaId: null,
+        audioUrl: '/api/files/%2Fepisode-audio%2Fmissing-legacy.mp3',
+        coverImageMediaId: null,
+      },
+    ])
+
+    expect(mediaObjectMock.findMany).toHaveBeenCalledTimes(1)
+    expect(mediaObjectMock.findMany).toHaveBeenCalledWith({
+      where: {
+        storageKey: {
+          in: [missingLegacyAudioMedia.storageKey],
+        },
+      },
+    })
+    expect(mediaObjectMock.findUnique).toHaveBeenCalledTimes(1)
+    expect(mediaObjectMock.findUnique).toHaveBeenCalledWith({
+      where: { storageKey: missingLegacyAudioMedia.storageKey },
+    })
+    expect(mediaObjectMock.upsert).toHaveBeenCalledTimes(1)
+    expect(result[0]?.audioMedia).toEqual(result[1]?.audioMedia)
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'episode-1',
+        audioMedia: expect.objectContaining({ id: missingLegacyAudioMedia.id }),
+        audioUrl: missingLegacyAudioMedia.url,
+      }),
+      expect.objectContaining({
+        id: 'episode-2',
+        audioMedia: expect.objectContaining({ id: missingLegacyAudioMedia.id }),
+        audioUrl: missingLegacyAudioMedia.url,
       }),
     ])
   })

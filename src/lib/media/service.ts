@@ -159,6 +159,17 @@ export async function getMediaObjectsByIds(ids: string[]): Promise<Map<string, M
   return new Map(rows.map((row) => [row.id, mapMediaObjectToRef(row)]))
 }
 
+export async function getMediaObjectsByStorageKeys(storageKeys: string[]): Promise<Map<string, MediaRef>> {
+  const uniqueStorageKeys = [...new Set(storageKeys.map(normalizeStorageKey).filter(Boolean))]
+  if (uniqueStorageKeys.length === 0) return new Map<string, MediaRef>()
+
+  const rows = (await mediaModel.findMany({
+    where: { storageKey: { in: uniqueStorageKeys } },
+  })) as MediaObjectRow[]
+
+  return new Map(rows.map((row) => [normalizeStorageKey(row.storageKey), mapMediaObjectToRef(row)]))
+}
+
 /**
  * 将任意媒体值（COS key / 签名URL / /m/publicId / 对象形态）归一化为 storageKey。
  * 这是服务端写路径（保存、比较、删除）应使用的唯一入口。
@@ -190,7 +201,8 @@ export function extractStorageKeyFromLegacyValue(value: unknown): string | null 
 
   // Keep external URLs that are actually COS object URLs (path -> key).
   if (isLikelyExternalUrl(value) || value.startsWith('/api/files/') || !value.startsWith('/')) {
-    return extractStorageKey(value)
+    const storageKey = extractStorageKey(value)
+    return storageKey ? normalizeStorageKey(storageKey) || null : null
   }
 
   return null

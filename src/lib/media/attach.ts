@@ -1,5 +1,12 @@
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { getMediaObjectsByIds, resolveMediaRef, resolveMediaRefFromLegacyValue } from './service'
+import {
+  ensureMediaObjectFromStorageKey,
+  extractStorageKeyFromLegacyValue,
+  getMediaObjectsByIds,
+  getMediaObjectsByStorageKeys,
+  resolveMediaRef,
+  resolveMediaRefFromLegacyValue,
+} from './service'
 import type { MediaRef } from './types'
 
 function parseStringArray(value: unknown): string[] {
@@ -231,16 +238,36 @@ export async function attachMediaFieldsToEpisodes<T extends Record<string, unkno
   }
 
   const mediaById = await getMediaObjectsByIds(ids)
+  const legacyAudioStorageKeyByEpisode = new Map<T, string>()
+  const legacyAudioStorageKeys: string[] = []
 
-  return await Promise.all(episodes.map(async (episode) => {
+  for (const episode of episodes) {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    if (audioMediaId && mediaById.has(audioMediaId)) continue
+
+    const storageKey = extractStorageKeyFromLegacyValue(episode.audioUrl)
+    if (!storageKey) continue
+    legacyAudioStorageKeyByEpisode.set(episode, storageKey)
+    legacyAudioStorageKeys.push(storageKey)
+  }
+
+  const mediaByStorageKey = await getMediaObjectsByStorageKeys(legacyAudioStorageKeys)
+  const missingStorageKeys = [...new Set(legacyAudioStorageKeys)]
+    .filter((storageKey) => !mediaByStorageKey.has(storageKey))
+  const ensuredMedia = await Promise.all(
+    missingStorageKeys.map((storageKey) => ensureMediaObjectFromStorageKey(storageKey)),
+  )
+  missingStorageKeys.forEach((storageKey, index) => {
+    mediaByStorageKey.set(storageKey, ensuredMedia[index])
+  })
+
+  return episodes.map((episode) => {
     const audioMediaId = episodeMediaId(episode.audioMediaId)
     const coverImageMediaId = episodeMediaId(episode.coverImageMediaId)
     const resolvedAudioMedia = audioMediaId ? mediaById.get(audioMediaId) || null : null
-    const audioMedia = resolvedAudioMedia || (
-      typeof episode.audioUrl === 'string' && episode.audioUrl.trim()
-        ? await resolveMediaRefFromLegacyValue(episode.audioUrl)
-        : null
-    )
+    const legacyAudioStorageKey = legacyAudioStorageKeyByEpisode.get(episode)
+    const audioMedia = resolvedAudioMedia
+      || (legacyAudioStorageKey ? mediaByStorageKey.get(legacyAudioStorageKey) || null : null)
     const coverImageMedia = coverImageMediaId ? mediaById.get(coverImageMediaId) || null : null
 
     return {
@@ -251,7 +278,7 @@ export async function attachMediaFieldsToEpisodes<T extends Record<string, unkno
       coverImageMedia,
       coverImageUrl: coverImageMedia?.url || null,
     }
-  }))
+  })
 }
 
 export async function attachMediaFieldsToProject<T extends Record<string, unknown>>(projectLike: T) {
@@ -274,8 +301,8 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
   const voiceLines = await Promise.all(
     ((projectLike.voiceLines as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVoiceLine),
   )
-  const episodes = await Promise.all(
-    ((projectLike.episodes as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToEpisode),
+  const episodes = await attachMediaFieldsToEpisodes(
+    (projectLike.episodes as Array<Record<string, unknown>>) || [],
   )
 
   return {
