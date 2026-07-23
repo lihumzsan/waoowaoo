@@ -195,12 +195,6 @@ export const DELETE = apiHandler(async (
   _ulogInfo(`[DELETE] deleting project ${project.name} (${projectId})`)
   const { keys: cosKeys } = await collectProjectCOSKeys(projectId)
 
-  let cosResult = { success: 0, failed: 0 }
-  if (cosKeys.length > 0) {
-    _ulogInfo(`[DELETE] deleting ${cosKeys.length} COS objects`)
-    cosResult = await deleteObjects(cosKeys)
-  }
-
   const coverMedia = await prisma.$transaction(async (tx) => {
     const episodes = await tx.novelPromotionEpisode.findMany({
       where: { novelPromotionProject: { projectId } },
@@ -229,6 +223,27 @@ export const DELETE = apiHandler(async (
     })
     return [...coversById.values()]
   }, { isolationLevel: 'Serializable' })
+
+  const coverStorageKeys = new Set(
+    coverMedia
+      .map((media) => media.storageKey)
+      .filter((storageKey): storageKey is string => !!storageKey),
+  )
+  const unguardedCosKeys = cosKeys.filter((key) => !coverStorageKeys.has(key))
+  let cosResult = { success: 0, failed: 0 }
+  if (unguardedCosKeys.length > 0) {
+    _ulogInfo(`[DELETE] deleting ${unguardedCosKeys.length} COS objects`)
+    try {
+      cosResult = await deleteObjects(unguardedCosKeys)
+    } catch (error) {
+      cosResult.failed += unguardedCosKeys.length
+      _ulogError('Project storage cleanup failed after project deletion', {
+        projectId,
+        storageKeyCount: unguardedCosKeys.length,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 
   for (const media of coverMedia) {
     try {

@@ -564,9 +564,17 @@ describe('api contract - crud routes (behavior)', () => {
       freeVoiceRecords: [],
       episodes: [{
         audioUrl: null,
-        coverImageMediaId: 'media-cover-m0',
-        coverImageMedia: { storageKey: 'episode-cover/stale-m0.png' },
-        storyboards: [],
+        storyboards: [{
+          storyboardImageUrl: null,
+          candidateImages: JSON.stringify([
+            'episode-cover/project-1-episode-1.png',
+            'storyboards/project-1/legacy-candidate.png',
+          ]),
+          panels: [{
+            imageUrl: 'episode-cover/project-1-episode-1.png',
+            videoUrl: null,
+          }],
+        }],
       }],
     })
     prismaMock.novelPromotionEpisode.findMany.mockImplementationOnce(async () => {
@@ -596,9 +604,13 @@ describe('api contract - crud routes (behavior)', () => {
       events.push('delete-transaction-committed')
       return result
     })
+    deleteObjectsMock.mockImplementationOnce(async (keys: string[]) => {
+      events.push('bulk-storage-deleted')
+      return { success: keys.length, failed: 0 }
+    })
     deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
       events.push('cover-cleaned')
-      return 'deleted'
+      return 'referenced'
     })
     const mod = await import('@/app/api/projects/[projectId]/route')
     const req = buildMockRequest({
@@ -635,15 +647,15 @@ describe('api contract - crud routes (behavior)', () => {
       isolationLevel: 'Serializable',
     })
     expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
-    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalledWith('media-cover-m0')
     expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledTimes(1)
-    expect(deleteObjectsMock).not.toHaveBeenCalledWith(
-      expect.arrayContaining(['episode-cover/project-1-episode-1.png']),
-    )
+    expect(deleteObjectsMock).toHaveBeenCalledWith([
+      'storyboards/project-1/legacy-candidate.png',
+    ])
     expect(events).toEqual([
       'current-covers-read',
       'project-deleted',
       'delete-transaction-committed',
+      'bulk-storage-deleted',
       'cover-cleaned',
     ])
   })
@@ -700,5 +712,66 @@ describe('api contract - crud routes (behavior)', () => {
         storageKey: 'episode-cover/one.png',
       }),
     )
+  })
+
+  it('logs a bulk storage cleanup error after commit and still returns project deletion success', async () => {
+    authState.authenticated = true
+    const events: string[] = []
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [{
+        appearances: [{ imageUrl: 'characters/project-1/portrait.png' }],
+      }],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [],
+    })
+    prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([])
+    prismaMock.project.delete.mockImplementationOnce(async () => {
+      events.push('project-deleted')
+      return { id: 'project-1' }
+    })
+    transactionMock.mockImplementationOnce(async (callback) => {
+      const result = await callback({
+        project: { delete: prismaMock.project.delete },
+        novelPromotionEpisode: { findMany: prismaMock.novelPromotionEpisode.findMany },
+      })
+      events.push('delete-transaction-committed')
+      return result
+    })
+    deleteObjectsMock.mockImplementationOnce(async () => {
+      events.push('bulk-storage-cleanup-attempted')
+      throw new Error('storage unavailable')
+    })
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      cosFilesDeleted: 0,
+      cosFilesFailed: 1,
+    })
+    expect(logErrorMock).toHaveBeenCalledWith(
+      'Project storage cleanup failed after project deletion',
+      expect.objectContaining({
+        projectId: 'project-1',
+        storageKeyCount: 1,
+        error: 'storage unavailable',
+      }),
+    )
+    expect(events).toEqual([
+      'project-deleted',
+      'delete-transaction-committed',
+      'bulk-storage-cleanup-attempted',
+    ])
   })
 })

@@ -1,11 +1,13 @@
 import type { Locale } from '@/i18n/routing'
 import { getProviderConfig, getProviderKey, resolveModelSelectionOrSingle } from '@/lib/api-config'
 import { ApiError } from '@/lib/api-errors'
+import { logError as _ulogError } from '@/lib/logging/core'
 import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import { resolveMediaContentType, resolveMediaExt } from '@/lib/media-process'
 import { prisma } from '@/lib/prisma'
 import { runComfyUiAudioWorkflow } from '@/lib/providers/comfyui/client'
-import { deleteObjects, extractStorageKey, getSignedUrl, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { extractStorageKey, getSignedUrl, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { submitTask } from '@/lib/task/submitter'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
@@ -387,56 +389,37 @@ async function assertNoActiveFreeVoiceTasks(recordId: string) {
   if (active) throw new ApiError('INVALID_PARAMS', { message: 'FREE_VOICE_TASK_ACTIVE' })
 }
 
-async function deleteVersionStorage(versions: Array<{ audioUrl: string | null }>) {
-  const keys = (await Promise.all(
-    versions.map((version) => resolveStorageKeyFromMediaValue(version.audioUrl)),
-  )).filter((key): key is string => !!key)
-  if (keys.length === 0) return
-  const result = await deleteObjects([...new Set(keys)])
-  if (result.failed > 0) {
-    throw new ApiError('INTERNAL_ERROR', { message: 'FREE_VOICE_STORAGE_DELETE_FAILED' })
+async function cleanupFreeVoiceMediaAfterRelationDeletion(params: {
+  projectId: string
+  recordId: string
+  media: Array<{ mediaId: string | null; versionId: string }>
+}) {
+  const uniqueMedia = new Map<string, { mediaId: string; versionId: string }>()
+  for (const candidate of params.media) {
+    if (!candidate.mediaId || uniqueMedia.has(candidate.mediaId)) continue
+    uniqueMedia.set(candidate.mediaId, {
+      mediaId: candidate.mediaId,
+      versionId: candidate.versionId,
+    })
   }
-}
 
-async function cleanupUnreferencedFreeVoiceMedia(mediaIds: Array<string | null>) {
-  const uniqueIds = [...new Set(mediaIds.filter((id): id is string => !!id))]
-  if (uniqueIds.length === 0) return
-  const candidates = await prisma.mediaObject.findMany({
-    where: { id: { in: uniqueIds } },
-    select: {
-      id: true,
-      _count: {
-        select: {
-          characterAppearanceImages: true,
-          locationImages: true,
-          novelPromotionCharacterVoices: true,
-          novelPromotionEpisodeAudios: true,
-          novelPromotionPanelImages: true,
-          novelPromotionPanelVideos: true,
-          novelPromotionPanelLipSyncVideos: true,
-          novelPromotionPanelSketchImages: true,
-          novelPromotionPanelPreviousImages: true,
-          novelPromotionShotImages: true,
-          supplementaryPanelImages: true,
-          novelPromotionVoiceLineAudios: true,
-          novelPromotionFreeVoiceReferenceAudios: true,
-          novelPromotionFreeVoiceVersionAudios: true,
-          voicePresetAudios: true,
-          globalCharacterVoices: true,
-          globalCharacterAppearanceImages: true,
-          globalCharacterAppearancePreviousImgs: true,
-          globalLocationImageImages: true,
-          globalLocationImagePreviousImages: true,
-          globalVoiceCustomVoices: true,
-        },
-      },
-    },
-  })
-  const unreferencedIds = candidates
-    .filter((media) => Object.values(media._count).every((count) => count === 0))
-    .map((media) => media.id)
-  if (unreferencedIds.length > 0) {
-    await prisma.mediaObject.deleteMany({ where: { id: { in: unreferencedIds } } })
+  for (const candidate of uniqueMedia.values()) {
+    try {
+      await deleteMediaObjectIfUnreferenced(candidate.mediaId)
+    } catch (error) {
+      const storageKey = error && typeof error === 'object' && 'storageKey' in error
+        && typeof error.storageKey === 'string'
+        ? error.storageKey
+        : undefined
+      _ulogError('Free Voice media cleanup failed after relation deletion', {
+        projectId: params.projectId,
+        recordId: params.recordId,
+        versionId: candidate.versionId,
+        mediaId: candidate.mediaId,
+        storageKey,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 }
 
@@ -455,11 +438,17 @@ export async function keepOnlyFreeVoiceVersion(params: {
   await assertNoActiveFreeVoiceTasks(record.id)
 
   const removed = record.versions.filter((version) => version.id !== kept.id)
-  await deleteVersionStorage(removed)
   await prisma.novelPromotionFreeVoiceVersion.deleteMany({
     where: { recordId: record.id, id: { not: kept.id } },
   })
-  await cleanupUnreferencedFreeVoiceMedia(removed.map((version) => version.audioMediaId))
+  await cleanupFreeVoiceMediaAfterRelationDeletion({
+    projectId: params.projectId,
+    recordId: record.id,
+    media: removed.map((version) => ({
+      mediaId: version.audioMediaId,
+      versionId: version.id,
+    })),
+  })
   return prisma.novelPromotionFreeVoiceRecord.findUnique({
     where: { id: record.id },
     include: { versions: { orderBy: { versionNumber: 'desc' } } },
@@ -473,9 +462,14 @@ export async function deleteFreeVoiceRecord(params: { projectId: string; recordI
   })
   if (!record) return { deleted: false }
   await assertNoActiveFreeVoiceTasks(record.id)
-  await deleteVersionStorage(record.versions)
-  const audioMediaIds = record.versions.map((version) => version.audioMediaId)
   await prisma.novelPromotionFreeVoiceRecord.delete({ where: { id: record.id } })
-  await cleanupUnreferencedFreeVoiceMedia(audioMediaIds)
+  await cleanupFreeVoiceMediaAfterRelationDeletion({
+    projectId: params.projectId,
+    recordId: record.id,
+    media: record.versions.map((version) => ({
+      mediaId: version.audioMediaId,
+      versionId: version.id,
+    })),
+  })
   return { deleted: true }
 }
