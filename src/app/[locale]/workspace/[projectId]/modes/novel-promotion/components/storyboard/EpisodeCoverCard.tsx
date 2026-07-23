@@ -1,13 +1,16 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { AppIcon } from '@/components/ui/icons'
 import { GlassButton, GlassSurface } from '@/components/ui/primitives'
 import { useGenerateEpisodeCover } from '@/lib/query/hooks'
-import { useStoryboardTaskPresentation } from '@/lib/query/hooks/useTaskPresentation'
-import type { TaskPresentationState } from '@/lib/task/presentation'
+import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
+import { invalidateEpisodeQueries } from '@/lib/query/episode-cache'
+import { queryKeys } from '@/lib/query/keys'
+import { resolveTaskPresentationState, type TaskPresentationState } from '@/lib/task/presentation'
 import { TASK_TYPE } from '@/lib/task/types'
 
 interface EpisodeCoverCardProps {
@@ -149,18 +152,39 @@ export function EpisodeCoverSection({
   coverImageUrl,
   videoRatio,
 }: EpisodeCoverSectionProps) {
-  const generateCover = useGenerateEpisodeCover(projectId, episodeId)
+  const queryClient = useQueryClient()
+  const generateCover = useGenerateEpisodeCover(projectId)
   const targets = useMemo(() => [{
-    key: 'episode-cover',
     targetType: 'NovelPromotionEpisode',
     targetId: episodeId,
     types: [TASK_TYPE.IMAGE_EPISODE_COVER],
     resource: 'image' as const,
     hasOutput: !!coverImageUrl,
   }], [coverImageUrl, episodeId])
-  const presentation = useStoryboardTaskPresentation(projectId, targets)
-  const taskPresentation = presentation.getState('episode-cover')
-  const taskState = presentation.getTaskState('episode-cover')
+  const taskStates = useTaskTargetStateMap(projectId, targets, { enabled: targets.length > 0 })
+  const taskState = taskStates.getState('NovelPromotionEpisode', episodeId)
+  const taskPresentation = useMemo(() => taskState
+    ? resolveTaskPresentationState({
+      phase: taskState.phase,
+      intent: taskState.intent,
+      resource: 'image',
+      hasOutput: !!coverImageUrl || !!taskState.hasOutputAtStart,
+    })
+    : null, [coverImageUrl, taskState])
+  const terminalSignature = taskState && (taskState.phase === 'completed' || taskState.phase === 'failed')
+    ? `${taskState.phase}:${taskState.updatedAt || ''}`
+    : ''
+  const lastTerminalSignatureRef = useRef('')
+
+  useEffect(() => {
+    if (!terminalSignature || terminalSignature === lastTerminalSignatureRef.current) return
+    lastTerminalSignatureRef.current = terminalSignature
+    void Promise.all([
+      invalidateEpisodeQueries(queryClient, projectId, episodeId),
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+    ])
+  }, [episodeId, projectId, queryClient, terminalSignature])
+
   const mutationError = generateCover.error instanceof Error ? generateCover.error.message : null
   const errorMessage = mutationError || taskState?.lastError?.message || null
 
@@ -171,7 +195,7 @@ export function EpisodeCoverSection({
       taskState={taskPresentation}
       errorMessage={errorMessage}
       isSubmitting={generateCover.isPending}
-      onGenerate={() => generateCover.mutate({ hasOutput: !!coverImageUrl })}
+      onGenerate={() => generateCover.mutate({ episodeId, hasOutput: !!coverImageUrl })}
     />
   )
 }

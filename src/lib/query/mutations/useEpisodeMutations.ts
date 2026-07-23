@@ -123,21 +123,21 @@ export function useSaveProjectEpisodesBatch(projectId: string) {
 /**
  * 为单集生成一张独立封面图。任务入队后由统一任务状态与 SSE 驱动界面刷新。
  */
-export function useGenerateEpisodeCover(projectId: string, episodeId: string) {
+export function useGenerateEpisodeCover(projectId: string) {
   const queryClient = useQueryClient()
 
   return useMutation<{
     success?: boolean
     async?: boolean
     taskId?: string
-  }, Error, { hasOutput: boolean }>({
-    mutationFn: async () =>
+  }, Error, { episodeId: string; hasOutput: boolean }>({
+    mutationFn: async (variables) =>
       await requestJsonWithError<{
         success?: boolean
         async?: boolean
         taskId?: string
       }>(
-        `/api/novel-promotion/${projectId}/episodes/${episodeId}/cover`,
+        `/api/novel-promotion/${projectId}/episodes/${variables.episodeId}/cover`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -145,37 +145,43 @@ export function useGenerateEpisodeCover(projectId: string, episodeId: string) {
         },
         'Failed to generate episode cover',
       ),
-    onMutate: async ({ hasOutput }) => {
+    onMutate: async (variables) => {
       upsertTaskTargetOverlay(queryClient, {
         projectId,
         targetType: 'NovelPromotionEpisode',
-        targetId: episodeId,
+        targetId: variables.episodeId,
         runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
-        intent: hasOutput ? 'regenerate' : 'generate',
-        hasOutputAtStart: hasOutput,
+        intent: variables.hasOutput ? 'regenerate' : 'generate',
+        hasOutputAtStart: variables.hasOutput,
       })
     },
-    onSuccess: (data, { hasOutput }) => {
+    onSuccess: (data, variables) => {
       upsertTaskTargetOverlay(queryClient, {
         projectId,
         targetType: 'NovelPromotionEpisode',
-        targetId: episodeId,
+        targetId: variables.episodeId,
         runningTaskId: data.taskId || null,
         runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
-        intent: hasOutput ? 'regenerate' : 'generate',
-        hasOutputAtStart: hasOutput,
+        intent: variables.hasOutput ? 'regenerate' : 'generate',
+        hasOutputAtStart: variables.hasOutput,
       })
       void queryClient.invalidateQueries({
         queryKey: queryKeys.tasks.targetStatesAll(projectId),
         exact: false,
       })
     },
-    onError: () => {
+    onError: (_error, variables) => {
       clearTaskTargetOverlay(queryClient, {
         projectId,
         targetType: 'NovelPromotionEpisode',
-        targetId: episodeId,
+        targetId: variables.episodeId,
       })
+    },
+    onSettled: async (_data, _error, variables) => {
+      await Promise.all([
+        invalidateEpisodeQueries(queryClient, projectId, variables.episodeId),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+      ])
     },
   })
 }

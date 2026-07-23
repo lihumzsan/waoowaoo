@@ -173,6 +173,7 @@ export default function StoryboardStage({
         />
 
         <EpisodeCoverSection
+          key={episodeId}
           projectId={projectId}
           episodeId={episodeId}
           coverImageUrl={coverImageUrl}
