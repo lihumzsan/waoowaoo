@@ -131,6 +131,40 @@ describe('POST /novel-promotion/[projectId]/episodes/batch replace_all', () => {
     expect(transactionMock).not.toHaveBeenCalled()
   })
 
+  it('rejects an unconfirmed cover published after the outer precheck but before replacement writes', async () => {
+    prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([])
+    episodeFindManyMock.mockResolvedValueOnce([{
+      id: 'episode-1',
+      coverImageMediaId: 'media-cover-current',
+      coverImageMedia: { storageKey: 'episode-cover/current.png' },
+    }])
+
+    const { POST } = await import('@/app/api/novel-promotion/[projectId]/episodes/batch/route')
+    const response = await POST(request(false), {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        details: {
+          message: 'replace_all would delete existing generated content; confirmCascadeDelete=true is required',
+          mode: 'replace_all',
+          dependents: {
+            covers: 1,
+          },
+        },
+      },
+    })
+    expect(transactionMock).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    })
+    expect(episodeDeleteManyMock).not.toHaveBeenCalled()
+    expect(episodeCreateMock).not.toHaveBeenCalled()
+    expect(projectUpdateMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+  })
+
   it('captures transaction-current covers, deduplicates them, and cleans only after commit', async () => {
     const events: string[] = []
     episodeFindManyMock.mockImplementationOnce(async () => {

@@ -725,7 +725,11 @@ describe('api contract - crud routes (behavior)', () => {
       freeVoiceRecords: [],
       episodes: [],
     })
-    prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([])
+    prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([{
+      id: 'episode-1',
+      coverImageMediaId: 'media-cover-current',
+      coverImageMedia: { storageKey: 'episode-cover/current.png' },
+    }])
     prismaMock.project.delete.mockImplementationOnce(async () => {
       events.push('project-deleted')
       return { id: 'project-1' }
@@ -741,6 +745,10 @@ describe('api contract - crud routes (behavior)', () => {
     deleteObjectsMock.mockImplementationOnce(async () => {
       events.push('bulk-storage-cleanup-attempted')
       throw new Error('storage unavailable')
+    })
+    deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
+      events.push('cover-cleaned')
+      return 'referenced'
     })
 
     const mod = await import('@/app/api/projects/[projectId]/route')
@@ -760,6 +768,7 @@ describe('api contract - crud routes (behavior)', () => {
       cosFilesDeleted: 0,
       cosFilesFailed: 1,
     })
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-current')
     expect(logErrorMock).toHaveBeenCalledWith(
       'Project storage cleanup failed after project deletion',
       expect.objectContaining({
@@ -772,6 +781,7 @@ describe('api contract - crud routes (behavior)', () => {
       'project-deleted',
       'delete-transaction-committed',
       'bulk-storage-cleanup-attempted',
+      'cover-cleaned',
     ])
   })
 })

@@ -216,6 +216,14 @@ export const POST = apiHandler(async (
         })
       }
 
+      if (!confirmCascadeDelete && coversById.size > 0) {
+        throw new ApiError('INVALID_PARAMS', {
+          message: 'replace_all would delete existing generated content; confirmCascadeDelete=true is required',
+          mode,
+          dependents: { covers: coversById.size },
+        })
+      }
+
       await tx.novelPromotionEpisode.deleteMany({
         where: { novelPromotionProjectId: project.id },
       })
