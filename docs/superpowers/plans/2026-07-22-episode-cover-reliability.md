@@ -715,7 +715,7 @@ git commit -m "test: verify episode cover reliability"
 
 ## Delivery Metadata
 
-- Plan status: Implemented and locally verified
+- Plan status: Implemented and locally verified with fail-safe project-delete retention
 - Evidence profile: Standard
 - Story ID: None
 - Task IDs: None
@@ -732,21 +732,22 @@ git commit -m "test: verify episode cover reliability"
 - Complete for the code paths in this plan. Episode cover generation is pinned to `codex::gpt-image-2`, remains on the image queue, and keeps Codex image generation enabled with `danger-full-access`.
 - Episode read/write/delete paths are project-scoped. Automatic cover submission occurs inside the storyboard workflow lease.
 - Candidate images are fully decoded and audited as a single pure image. Forbidden text, marks, borders, collages, animation, malformed/empty data, and bad aspect ratios are rejected with a two-attempt bound.
-- Replacement, reset, Episode deletion, batch replacement, and project deletion retain current covers until commit and reclaim storage/media only after a transaction-current shared-reference check.
+- Replacement, reset, Episode deletion, and batch replacement retain current covers until commit and reclaim storage/media only after a transaction-current shared-reference check. Project deletion captures current covers transactionally but deliberately retains all media/storage because legacy string references cannot yet be proven globally complete.
 - Frontend mutation state remains bound to the initiating Episode. Episode cards opt into active-task polling; terminal responses remain visible immediately even when an optimistic overlay has expired.
 - The Episodes route and the main project-data bootstrap batch modern audio/cover IDs. The project-data path also normalizes and deduplicates legacy audio storage keys before a single batch read and at-most-once ensure per missing key.
 
 ### Verification evidence
 
-- `npx vitest run` across 16 cover, lifecycle, media, authorization, polling, worker, queue, prompt, and chain files: 16 files and 202 tests passed.
+- The Task 13 lifecycle/media regression passed 18 files and 225 tests; the final whole-branch reviewer suite passed 18 files and 229 tests.
 - Task 12 RED evidence: the old nested project path made 8 media queries for 4 Episodes. GREEN route evidence: 4 and 40 Episodes both make exactly two `mediaObject.findMany` calls and no per-Episode `findUnique`/`upsert`.
+- Task 13 RED evidence first reproduced unguarded project storage deletion, then proved that even a matched `MediaObject` or a transaction-current typed cover can still be referenced only through another project's legacy string. Final GREEN evidence: Project DELETE makes no media/storage deletion or storage-key-to-`MediaObject` batch lookup, reports deduplicated skipped storage/media counts, and keeps response deletion/failure counts at zero. Legacy values are still normalized individually for safe skip accounting.
 - `npm run typecheck`: passed.
 - `npm run check:test-coverage-guards`: all five behavior/route/task-type guards passed.
 - `npm run check:task-target-states-no-polling`: passed; polling remains opt-in only for the Episode cover card.
 - Prisma validation passed for `prisma/schema.prisma` with a non-secret validation URL and for `prisma/schema.sqlit.prisma` with a temporary SQLite URL.
 - `npm run build`: passed with a non-secret validation `DATABASE_URL`. Redis connection attempts were denied by the desktop sandbox during page collection, but the production build completed successfully.
 - Earlier database-independent full-unit evidence was 1,664 of 1,665 tests passed; the sole `MINIO_ENDPOINT` environment failure was reproduced on the branch baseline and is unrelated to this delivery.
-- Independent reviews for the cleanup, full-decode, polling, and main project-data batching follow-ups reported no Critical, Important, or Minor findings.
+- Independent reviews for cleanup, full-decode, polling, main project-data batching, and final project-delete retention reported no remaining Critical, Important, or Minor findings.
 
 ### Real Codex acceptance evidence
 
@@ -761,17 +762,19 @@ git commit -m "test: verify episode cover reliability"
 ### Deviations
 
 - Final branch review added four follow-up scopes beyond the original eight tasks: remaining destructive cleanup paths, full image decode, real active-task polling, and batching on the main project-data path.
+- Project DELETE physical media/storage reclamation is intentionally deferred. Typed relation counts cannot prove that no other project holds the same key in a legacy string/JSON field, so the request now retains all candidate objects and logs skipped counts. This is a deliberate safety deviation from AC7's project-delete reclamation clause; reset, Episode deletion, and batch replacement cleanup remain implemented.
 - Real Codex verification used the locally configured CLI and exact production prompt/arguments rather than the full application worker path because the required local services were unavailable.
 - No ZenTao or external delivery record was written; this repository plan remains the only delivery record.
 
 ### Commits
 
 - Foundation and planned implementation: `da1143f0`, `7acf7c1d`, `a0e0b7bf`, `29fbcd7b`, `8312d610`, `c1c4ffe8`, `1b5e20d3`, `44f96082`, `2a9c2460`, `8a54a3ac`, `ef605fba`, `bbe6844c`, `a9545097`, `84b3dbc8`.
-- Review follow-ups: `1ded7a44`, `1b56abca`, `a16ba48b`, `28ff6957`, `f57fc8b2`, `e5a44e00`, `02e48d65`, `06c73481`.
+- Review follow-ups: `1ded7a44`, `1b56abca`, `a16ba48b`, `28ff6957`, `f57fc8b2`, `e5a44e00`, `02e48d65`, `06c73481`, `caa7f719`.
 - The first Codex pin and project-ownership commits are already present on remote `main` at `d4e7d073`; the remaining commits are linear descendants of that base.
 
 ### Rollback or follow-up items
 
 - When MySQL, Redis, storage, and the application worker are available, run the full end-to-end acceptance steps from Task 8 and record task IDs plus media/storage before-and-after counts.
+- Before restoring Project DELETE physical cleanup, backfill legacy media references into typed relations or a reference table, prevent new legacy-only writes, and reclaim through a concurrency-safe garbage collector or equivalent invariant. A one-time string scan is not sufficient.
 - Observe audit rejection categories, retry counts, cleanup warnings, and `image_episode_cover` completion/failure rates after rollout.
 - Do not treat missing live-service evidence as authorization to weaken the Codex-only model, audit, ownership, or cleanup boundaries.
