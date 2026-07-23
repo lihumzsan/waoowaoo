@@ -17,7 +17,9 @@ const authState = vi.hoisted<AuthState>(() => ({
 }))
 
 const deleteObjectsMock = vi.hoisted(() => vi.fn())
+const getMediaObjectsByStorageKeysMock = vi.hoisted(() => vi.fn())
 const deleteMediaObjectIfUnreferencedMock = vi.hoisted(() => vi.fn())
+const logInfoMock = vi.hoisted(() => vi.fn())
 const logErrorMock = vi.hoisted(() => vi.fn())
 const transactionMock = vi.hoisted(() => vi.fn())
 
@@ -104,7 +106,7 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/logging/core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/logging/core')>(),
-  logInfo: vi.fn(),
+  logInfo: logInfoMock,
   logError: logErrorMock,
 }))
 
@@ -115,6 +117,7 @@ vi.mock('@/lib/storage', () => ({
 }))
 
 vi.mock('@/lib/media/service', () => ({
+  getMediaObjectsByStorageKeys: getMediaObjectsByStorageKeysMock,
   resolveStorageKeyFromMediaValue: vi.fn(async (value: string) => value),
 }))
 
@@ -234,6 +237,7 @@ describe('api contract - crud routes (behavior)', () => {
       novelPromotionEpisode: { findMany: prismaMock.novelPromotionEpisode.findMany },
     }))
     deleteObjectsMock.mockResolvedValue({ success: 0, failed: 0 })
+    getMediaObjectsByStorageKeysMock.mockResolvedValue(new Map())
     deleteMediaObjectIfUnreferencedMock.mockResolvedValue('deleted')
 
     prismaMock.globalCharacter.findUnique.mockResolvedValue({
@@ -555,7 +559,7 @@ describe('api contract - crud routes (behavior)', () => {
     })
   })
 
-  it('DELETE /projects/[projectId] reads current Episode covers and deletes the project in one transaction', async () => {
+  it('retains current cover media when the same ID is derived from a legacy key', async () => {
     authState.authenticated = true
     const events: string[] = []
     prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
@@ -576,6 +580,16 @@ describe('api contract - crud routes (behavior)', () => {
           }],
         }],
       }],
+    })
+    getMediaObjectsByStorageKeysMock.mockImplementationOnce(async () => {
+      events.push('outer-media-read')
+      return new Map([[
+        'episode-cover/project-1-episode-1.png',
+        {
+          id: 'media-cover-1',
+          storageKey: 'episode-cover/project-1-episode-1.png',
+        },
+      ]])
     })
     prismaMock.novelPromotionEpisode.findMany.mockImplementationOnce(async () => {
       events.push('current-covers-read')
@@ -603,14 +617,6 @@ describe('api contract - crud routes (behavior)', () => {
       })
       events.push('delete-transaction-committed')
       return result
-    })
-    deleteObjectsMock.mockImplementationOnce(async (keys: string[]) => {
-      events.push('bulk-storage-deleted')
-      return { success: keys.length, failed: 0 }
-    })
-    deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
-      events.push('cover-cleaned')
-      return 'referenced'
     })
     const mod = await import('@/app/api/projects/[projectId]/route')
     const req = buildMockRequest({
@@ -646,21 +652,273 @@ describe('api contract - crud routes (behavior)', () => {
     expect(transactionMock).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'Serializable',
     })
-    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-1')
-    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledTimes(1)
-    expect(deleteObjectsMock).toHaveBeenCalledWith([
-      'storyboards/project-1/legacy-candidate.png',
-    ])
+    expect(getMediaObjectsByStorageKeysMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId: 'project-1',
+        skippedStorageKeyCount: 2,
+        skippedMediaCount: 1,
+      },
+    )
     expect(events).toEqual([
       'current-covers-read',
       'project-deleted',
       'delete-transaction-committed',
-      'bulk-storage-deleted',
-      'cover-cleaned',
     ])
   })
 
-  it('continues Project cover cleanup after any error and returns success with failure counts', async () => {
+  it('retains a legacy key even when it is backed by media with no typed references', async () => {
+    authState.authenticated = true
+    const sharedKey = 'characters/shared/portrait.png'
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [{
+        appearances: [{ imageUrl: sharedKey }],
+      }],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [],
+    })
+    getMediaObjectsByStorageKeysMock.mockResolvedValueOnce(new Map([[
+      sharedKey,
+      {
+        id: 'media-shared-by-project-b',
+        storageKey: sharedKey,
+      },
+    ]]))
+    deleteMediaObjectIfUnreferencedMock.mockResolvedValueOnce('deleted')
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      cosFilesDeleted: 0,
+      cosFilesFailed: 0,
+    })
+    expect(getMediaObjectsByStorageKeysMock).not.toHaveBeenCalled()
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId: 'project-1',
+        skippedStorageKeyCount: 1,
+        skippedMediaCount: 0,
+      },
+    )
+  })
+
+  it('retains both legacy-derived M0 and transaction-current typed M1 after commit', async () => {
+    authState.authenticated = true
+    const events: string[] = []
+    const m0StorageKey = 'episode-cover/project-1/m0.png'
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [{
+        audioUrl: null,
+        storyboards: [{
+          storyboardImageUrl: null,
+          candidateImages: JSON.stringify([m0StorageKey, m0StorageKey]),
+          panels: [{
+            imageUrl: m0StorageKey,
+            videoUrl: null,
+          }],
+        }],
+      }],
+    })
+    getMediaObjectsByStorageKeysMock.mockImplementationOnce(async () => {
+      events.push('outer-m0-read')
+      return new Map([[
+        m0StorageKey,
+        {
+          id: 'media-cover-m0',
+          storageKey: m0StorageKey,
+        },
+      ]])
+    })
+    prismaMock.novelPromotionEpisode.findMany.mockImplementationOnce(async () => {
+      events.push('transaction-m1-read')
+      return [{
+        id: 'episode-1',
+        coverImageMediaId: 'media-cover-m1',
+        coverImageMedia: { storageKey: 'episode-cover/project-1/m1.png' },
+      }]
+    })
+    prismaMock.project.delete.mockImplementationOnce(async () => {
+      events.push('project-deleted')
+      return { id: 'project-1' }
+    })
+    transactionMock.mockImplementationOnce(async (callback) => {
+      const result = await callback({
+        project: { delete: prismaMock.project.delete },
+        novelPromotionEpisode: { findMany: prismaMock.novelPromotionEpisode.findMany },
+      })
+      events.push('delete-transaction-committed')
+      return result
+    })
+    deleteMediaObjectIfUnreferencedMock.mockImplementation(async (mediaId: string) => {
+      events.push(`guarded-${mediaId}`)
+      return 'referenced'
+    })
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(getMediaObjectsByStorageKeysMock).not.toHaveBeenCalled()
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId: 'project-1',
+        skippedStorageKeyCount: 2,
+        skippedMediaCount: 1,
+      },
+    )
+    expect(events).toEqual([
+      'transaction-m1-read',
+      'project-deleted',
+      'delete-transaction-committed',
+    ])
+  })
+
+  it('retains unmatched pure-legacy keys when cross-project reference inventory is incomplete', async () => {
+    authState.authenticated = true
+    const sharedLegacyKey = 'legacy/shared-by-project-b.png'
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [{
+        appearances: [
+          { imageUrl: sharedLegacyKey },
+          { imageUrl: sharedLegacyKey },
+        ],
+      }],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [],
+    })
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body).toMatchObject({
+      success: true,
+      cosFilesDeleted: 0,
+      cosFilesFailed: 0,
+    })
+    expect(getMediaObjectsByStorageKeysMock).not.toHaveBeenCalled()
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId: 'project-1',
+        skippedStorageKeyCount: 1,
+        skippedMediaCount: 0,
+      },
+    )
+  })
+
+  it('deduplicates a retained current cover media ID in skipped cleanup counts', async () => {
+    authState.authenticated = true
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [],
+    })
+    prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([
+      {
+        id: 'episode-1',
+        coverImageMediaId: 'media-cover-shared',
+        coverImageMedia: { storageKey: 'episode-cover/project-1/shared.png' },
+      },
+      {
+        id: 'episode-2',
+        coverImageMediaId: 'media-cover-shared',
+        coverImageMedia: { storageKey: 'episode-cover/project-1/shared.png' },
+      },
+    ])
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId: 'project-1',
+        skippedStorageKeyCount: 1,
+        skippedMediaCount: 1,
+      },
+    )
+  })
+
+  it('does not start post-commit cleanup when the project delete transaction fails', async () => {
+    authState.authenticated = true
+    prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
+      characters: [],
+      locations: [],
+      freeVoiceRecords: [],
+      episodes: [],
+    })
+    transactionMock.mockRejectedValueOnce(new Error('delete transaction failed'))
+
+    const mod = await import('@/app/api/projects/[projectId]/route')
+    const req = buildMockRequest({
+      path: '/api/projects/project-1',
+      method: 'DELETE',
+    })
+
+    const res = await mod.DELETE(req, {
+      params: Promise.resolve({ projectId: 'project-1' }),
+    })
+
+    expect(res.status).toBe(500)
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+  })
+
+  it('retains multiple current covers and preserves zero cleanup counts', async () => {
     authState.authenticated = true
     prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
       characters: [],
@@ -698,37 +956,33 @@ describe('api contract - crud routes (behavior)', () => {
     expect(res.status).toBe(200)
     expect(body).toMatchObject({
       success: true,
-      cosFilesDeleted: 1,
-      cosFilesFailed: 1,
+      cosFilesDeleted: 0,
+      cosFilesFailed: 0,
     })
-    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(1, 'media-cover-1')
-    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(2, 'media-cover-2')
-    expect(logErrorMock).toHaveBeenCalledWith(
-      'Episode cover cleanup failed after project deletion',
-      expect.objectContaining({
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
         projectId: 'project-1',
-        episodeId: 'episode-1',
-        mediaId: 'media-cover-1',
-        storageKey: 'episode-cover/one.png',
-      }),
+        skippedStorageKeyCount: 2,
+        skippedMediaCount: 2,
+      },
     )
   })
 
-  it('logs a bulk storage cleanup error after commit and still returns project deletion success', async () => {
+  it('retains a current typed cover when another project may have only a legacy string reference', async () => {
     authState.authenticated = true
     const events: string[] = []
     prismaMock.novelPromotionProject.findUnique.mockResolvedValueOnce({
-      characters: [{
-        appearances: [{ imageUrl: 'characters/project-1/portrait.png' }],
-      }],
+      characters: [],
       locations: [],
       freeVoiceRecords: [],
       episodes: [],
     })
     prismaMock.novelPromotionEpisode.findMany.mockResolvedValueOnce([{
-      id: 'episode-1',
+      id: 'episode-current',
       coverImageMediaId: 'media-cover-current',
-      coverImageMedia: { storageKey: 'episode-cover/current.png' },
+      coverImageMedia: { storageKey: 'episode-cover/project-1/current.png' },
     }])
     prismaMock.project.delete.mockImplementationOnce(async () => {
       events.push('project-deleted')
@@ -747,8 +1001,10 @@ describe('api contract - crud routes (behavior)', () => {
       throw new Error('storage unavailable')
     })
     deleteMediaObjectIfUnreferencedMock.mockImplementationOnce(async () => {
-      events.push('cover-cleaned')
-      return 'referenced'
+      events.push('guarded-media-cleanup-attempted')
+      const error = new Error('storage unavailable') as Error & { storageKey: string }
+      error.storageKey = 'episode-cover/project-1/current.png'
+      throw error
     })
 
     const mod = await import('@/app/api/projects/[projectId]/route')
@@ -766,22 +1022,21 @@ describe('api contract - crud routes (behavior)', () => {
     expect(body).toMatchObject({
       success: true,
       cosFilesDeleted: 0,
-      cosFilesFailed: 1,
+      cosFilesFailed: 0,
     })
-    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenCalledWith('media-cover-current')
-    expect(logErrorMock).toHaveBeenCalledWith(
-      'Project storage cleanup failed after project deletion',
-      expect.objectContaining({
+    expect(deleteObjectsMock).not.toHaveBeenCalled()
+    expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(logInfoMock).toHaveBeenCalledWith(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
         projectId: 'project-1',
-        storageKeyCount: 1,
-        error: 'storage unavailable',
-      }),
+        skippedStorageKeyCount: 1,
+        skippedMediaCount: 1,
+      },
     )
     expect(events).toEqual([
       'project-deleted',
       'delete-transaction-committed',
-      'bulk-storage-cleanup-attempted',
-      'cover-cleaned',
     ])
   })
 })

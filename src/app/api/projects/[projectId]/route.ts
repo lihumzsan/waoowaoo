@@ -1,9 +1,8 @@
 ﻿import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
+import { addSignedUrlsToProject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
-import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
@@ -164,12 +163,12 @@ async function collectProjectCOSKeys(projectId: string): Promise<{
   }
 
   _ulogInfo(
-    `[Project ${projectId}] collected ${keys.length} COS object keys for deletion`,
+    `[Project ${projectId}] collected ${keys.length} COS object keys for cleanup review`,
   )
   return { keys }
 }
 
-// DELETE - remove project data and related COS objects.
+// DELETE - remove project data and retain media while legacy references are incomplete.
 export const DELETE = apiHandler(async (
   _request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -194,6 +193,7 @@ export const DELETE = apiHandler(async (
 
   _ulogInfo(`[DELETE] deleting project ${project.name} (${projectId})`)
   const { keys: cosKeys } = await collectProjectCOSKeys(projectId)
+  const uniqueCosKeys = [...new Set(cosKeys)]
 
   const coverMedia = await prisma.$transaction(async (tx) => {
     const episodes = await tx.novelPromotionEpisode.findMany({
@@ -224,46 +224,22 @@ export const DELETE = apiHandler(async (
     return [...coversById.values()]
   }, { isolationLevel: 'Serializable' })
 
-  const coverStorageKeys = new Set(
-    coverMedia
-      .map((media) => media.storageKey)
-      .filter((storageKey): storageKey is string => !!storageKey),
-  )
-  const unguardedCosKeys = cosKeys.filter((key) => !coverStorageKeys.has(key))
-  let cosResult = { success: 0, failed: 0 }
-  if (unguardedCosKeys.length > 0) {
-    _ulogInfo(`[DELETE] deleting ${unguardedCosKeys.length} COS objects`)
-    try {
-      cosResult = await deleteObjects(unguardedCosKeys)
-    } catch (error) {
-      cosResult.failed += unguardedCosKeys.length
-      _ulogError('Project storage cleanup failed after project deletion', {
+  const skippedStorageKeys = new Set(uniqueCosKeys)
+  for (const media of coverMedia) {
+    if (media.storageKey) skippedStorageKeys.add(media.storageKey)
+  }
+  if (skippedStorageKeys.size > 0 || coverMedia.length > 0) {
+    _ulogInfo(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
         projectId,
-        storageKeyCount: unguardedCosKeys.length,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+        skippedStorageKeyCount: skippedStorageKeys.size,
+        skippedMediaCount: coverMedia.length,
+      },
+    )
   }
 
-  for (const media of coverMedia) {
-    try {
-      const cleanupResult = await deleteMediaObjectIfUnreferenced(media.id)
-      if (cleanupResult === 'deleted') cosResult.success += 1
-    } catch (error) {
-      cosResult.failed += 1
-      const cleanupStorageKey = error && typeof error === 'object' && 'storageKey' in error
-        && typeof error.storageKey === 'string'
-        ? error.storageKey
-        : media.storageKey
-      _ulogError('Episode cover cleanup failed after project deletion', {
-        projectId,
-        episodeId: media.episodeId,
-        mediaId: media.id,
-        storageKey: cleanupStorageKey,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
+  const cosResult = { success: 0, failed: 0 }
 
   logProjectAction(
     'DELETE',
