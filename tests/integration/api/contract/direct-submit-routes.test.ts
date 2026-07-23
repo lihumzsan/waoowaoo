@@ -202,6 +202,9 @@ const prismaMock = vi.hoisted(() => ({
       content: 'hello world voice line',
     })),
   },
+  task: {
+    findMany: vi.fn(async () => []),
+  },
   $transaction: vi.fn(async (fn: (tx: {
     novelPromotionPanel: {
       findMany: (args: unknown) => Promise<Array<{ id: string; panelIndex: number }>>

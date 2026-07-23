@@ -396,6 +396,83 @@ describe('worker script-to-storyboard behavior', () => {
     ])
   })
 
+  it('submits automatic cover after final persistence progress in the skip-voice branch', async () => {
+    const events: string[] = []
+    parseStoryboardRetryTargetMock.mockReturnValueOnce({
+      stepKey: 'clip_clip-1_phase3_detail',
+      clipId: 'clip-1',
+      phase: 'phase3_detail',
+    })
+    runScriptToStoryboardAtomicRetryMock.mockResolvedValueOnce({
+      clipPanels: [
+        {
+          clipId: 'clip-1',
+          clipIndex: 0,
+          finalPanels: [
+            {
+              panel_number: 1,
+              description: 'phase3 retry panel',
+              location: 'Office',
+            },
+          ],
+        },
+      ],
+      phase1PanelsByClipId: {},
+      phase2CinematographyByClipId: {},
+      phase2ActingByClipId: {},
+      phase3PanelsByClipId: {},
+      totalPanelCount: 1,
+      totalStepCount: 6,
+    })
+    reportTaskProgressMock.mockImplementation(async (...args: unknown[]) => {
+      const details = args[2] as { stage?: string } | undefined
+      if (details?.stage === 'script_to_storyboard_persist_done') {
+        events.push('persist-done-reported')
+      }
+      return undefined
+    })
+    persistStoryboardOutputsMock.mockImplementationOnce(async () => {
+      events.push('storyboard-persisted')
+      return {
+        persistedStoryboards: [
+          {
+            storyboardId: 'storyboard-1',
+            clipId: 'clip-1',
+            panels: [{ id: 'panel-1', panelIndex: 1 }],
+          },
+        ],
+        voiceLineCount: 0,
+      }
+    })
+    submitEpisodeCoverTaskMock.mockImplementationOnce(async () => {
+      events.push('cover-submit-attempted')
+      return {
+        success: true,
+        async: true,
+        taskId: 'task-cover-1',
+      }
+    })
+    workflowLeaseMock.withWorkflowRunLease.mockImplementationOnce(async (params: { run: () => Promise<unknown> }) => {
+      const result = await params.run()
+      events.push('lease-completed')
+      return { claimed: true, result }
+    })
+
+    await handleScriptToStoryboardTask(buildJob({
+      episodeId: 'episode-1',
+      retryStepKey: 'clip_clip-1_phase3_detail',
+      retryStepAttempt: 2,
+    }))
+    reportTaskProgressMock.mockResolvedValue(undefined)
+
+    expect(events).toEqual([
+      'storyboard-persisted',
+      'persist-done-reported',
+      'cover-submit-attempted',
+      'lease-completed',
+    ])
+  })
+
   it('does not submit automatic cover when workflow lease is not claimed', async () => {
     workflowLeaseMock.withWorkflowRunLease.mockResolvedValueOnce({
       claimed: false,
