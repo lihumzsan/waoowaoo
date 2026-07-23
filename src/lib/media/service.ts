@@ -18,6 +18,7 @@ type MediaObjectRow = {
 }
 
 type MediaModel = {
+  findMany: (args: unknown) => Promise<unknown>
   findUnique: (args: unknown) => Promise<unknown>
   upsert: (args: unknown) => Promise<unknown>
 }
@@ -145,6 +146,17 @@ export async function getMediaObjectById(id: string) {
   const row = (await mediaModel.findUnique({ where: { id } })) as MediaObjectRow | null
   if (!row) return null
   return mapMediaObjectToRef(row)
+}
+
+export async function getMediaObjectsByIds(ids: string[]): Promise<Map<string, MediaRef>> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))]
+  if (uniqueIds.length === 0) return new Map<string, MediaRef>()
+
+  const rows = (await mediaModel.findMany({
+    where: { id: { in: uniqueIds } },
+  })) as MediaObjectRow[]
+
+  return new Map(rows.map((row) => [row.id, mapMediaObjectToRef(row)]))
 }
 
 /**

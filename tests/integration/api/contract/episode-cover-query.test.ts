@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMockRequest } from '../../../helpers/request'
 
 const findManyMock = vi.hoisted(() => vi.fn())
-const attachEpisodeMock = vi.hoisted(() => vi.fn(async (episode: Record<string, unknown>) => ({
-  ...episode,
-  coverImageMedia: { id: episode.coverImageMediaId, url: '/m/episode-cover-1' },
-  coverImageUrl: '/m/episode-cover-1',
-})))
+const attachEpisodesMock = vi.hoisted(() => vi.fn(async (episodes: Array<Record<string, unknown>>) => (
+  episodes.map((episode) => ({
+    ...episode,
+    coverImageMedia: {
+      id: episode.coverImageMediaId,
+      url: `/m/episode-cover-${String(episode.coverImageMediaId).replace('media-cover-', '')}`,
+    },
+    coverImageUrl: `/m/episode-cover-${String(episode.coverImageMediaId).replace('media-cover-', '')}`,
+  }))
+)))
 
 vi.mock('@/lib/api-auth', () => ({
   isErrorResponse: (value: unknown) => value instanceof Response,
@@ -25,7 +30,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('@/lib/media/attach', () => ({
-  attachMediaFieldsToEpisode: attachEpisodeMock,
+  attachMediaFieldsToEpisodes: attachEpisodesMock,
 }))
 
 describe('Episode cover query contract', () => {
@@ -37,6 +42,12 @@ describe('Episode cover query contract', () => {
         episodeNumber: 1,
         name: 'Episode 1',
         coverImageMediaId: 'media-cover-1',
+      },
+      {
+        id: 'episode-2',
+        episodeNumber: 2,
+        name: 'Episode 2',
+        coverImageMediaId: 'media-cover-2',
       },
     ])
   })
@@ -54,7 +65,11 @@ describe('Episode cover query contract', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(attachEpisodeMock).toHaveBeenCalledTimes(1)
+    expect(attachEpisodesMock).toHaveBeenCalledTimes(1)
+    expect(attachEpisodesMock).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'episode-1', coverImageMediaId: 'media-cover-1' }),
+      expect.objectContaining({ id: 'episode-2', coverImageMediaId: 'media-cover-2' }),
+    ])
     expect(findManyMock).toHaveBeenCalledWith({
       where: { novelPromotionProjectId: 'novel-data-1' },
       orderBy: { episodeNumber: 'asc' },
@@ -63,6 +78,11 @@ describe('Episode cover query contract', () => {
       coverImageMediaId: 'media-cover-1',
       coverImageMedia: { id: 'media-cover-1', url: '/m/episode-cover-1' },
       coverImageUrl: '/m/episode-cover-1',
+    })
+    expect(body.episodes[1]).toMatchObject({
+      coverImageMediaId: 'media-cover-2',
+      coverImageMedia: { id: 'media-cover-2', url: '/m/episode-cover-2' },
+      coverImageUrl: '/m/episode-cover-2',
     })
   })
 })

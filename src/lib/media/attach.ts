@@ -1,5 +1,5 @@
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { resolveMediaRef, resolveMediaRefFromLegacyValue } from './service'
+import { getMediaObjectsByIds, resolveMediaRef, resolveMediaRefFromLegacyValue } from './service'
 import type { MediaRef } from './types'
 
 function parseStringArray(value: unknown): string[] {
@@ -215,6 +215,43 @@ export async function attachMediaFieldsToEpisode<T extends Record<string, unknow
     coverImageMedia,
     coverImageUrl: coverImageMedia?.url || null,
   }
+}
+
+function episodeMediaId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+export async function attachMediaFieldsToEpisodes<T extends Record<string, unknown>>(episodes: T[]) {
+  const ids: string[] = []
+  for (const episode of episodes) {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    const coverImageMediaId = episodeMediaId(episode.coverImageMediaId)
+    if (audioMediaId) ids.push(audioMediaId)
+    if (coverImageMediaId) ids.push(coverImageMediaId)
+  }
+
+  const mediaById = await getMediaObjectsByIds(ids)
+
+  return await Promise.all(episodes.map(async (episode) => {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    const coverImageMediaId = episodeMediaId(episode.coverImageMediaId)
+    const resolvedAudioMedia = audioMediaId ? mediaById.get(audioMediaId) || null : null
+    const audioMedia = resolvedAudioMedia || (
+      typeof episode.audioUrl === 'string' && episode.audioUrl.trim()
+        ? await resolveMediaRefFromLegacyValue(episode.audioUrl)
+        : null
+    )
+    const coverImageMedia = coverImageMediaId ? mediaById.get(coverImageMediaId) || null : null
+
+    return {
+      ...episode,
+      media: audioMedia,
+      audioMedia,
+      audioUrl: audioMedia?.url || episode.audioUrl || null,
+      coverImageMedia,
+      coverImageUrl: coverImageMedia?.url || null,
+    }
+  }))
 }
 
 export async function attachMediaFieldsToProject<T extends Record<string, unknown>>(projectLike: T) {
