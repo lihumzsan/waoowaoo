@@ -1,9 +1,13 @@
 import { tool, type Tool } from '@openai/agents'
-import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
+import type {
+  ProjectAgentOperationRegistry,
+  ProjectAgentToolInputSchema,
+} from '@/lib/operations/types'
 import type { ProjectAgentLocale } from './locale'
 import type { ProjectAgentToolset } from './toolset'
 
 export const PROJECT_AGENT_TOOL_DISCOVERY_NAME = 'load_tools'
+export const PROJECT_AGENT_OPERATION_GATEWAY_NAME = 'execute_operation'
 export const PROJECT_AGENT_TOOL_LOAD_LIMIT = 4
 export const PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT = 160
 
@@ -11,11 +15,26 @@ export interface ProjectAgentToolCatalogEntry {
   readonly operationId: string
   readonly groupPath: readonly string[]
   readonly description: string
+  readonly parameters: ProjectAgentToolInputSchema
+}
+
+export interface ProjectAgentLoadedOperationDefinition {
+  readonly operationId: string
+  readonly description: string
+  readonly parameters: ProjectAgentToolInputSchema
 }
 
 export interface ProjectAgentToolLoadResult {
   readonly newlyLoadedOperationIds: readonly string[]
   readonly loadedOperationIds: readonly string[]
+  readonly operations: readonly ProjectAgentLoadedOperationDefinition[]
+  readonly executeWith: {
+    readonly toolName: typeof PROJECT_AGENT_OPERATION_GATEWAY_NAME
+    readonly arguments: {
+      readonly operationId: 'Copy operations[].operationId exactly'
+      readonly argumentsJson: 'JSON object matching operations[].parameters'
+    }
+  }
 }
 
 export interface ProjectAgentToolDiscoveryState {
@@ -35,12 +54,12 @@ export function formatProjectAgentToolNotFound(params: {
   ))
   if (isRegisteredOperation) {
     return params.locale === 'zh'
-      ? `Operation "${params.toolName}" 已注册，但在发出本次调用的模型步骤中尚未加载。先用 load_tools 加载这个精确 id，等待下一模型步骤出现完整 Schema，再按该 Schema 重新调用；不要猜测参数，也不要在同一回复里同时加载并调用。`
-      : `Operation "${params.toolName}" is registered but was not loaded in the model step that emitted this call. Load this exact id with load_tools, wait for its full Schema in the next model step, then call it again from that Schema. Do not guess arguments or load and invoke it in the same response.`
+      ? `Operation "${params.toolName}" 已注册，但不能直接作为工具名调用。先用 load_tools 加载这个精确 id，读取返回的完整 parameters，再调用 execute_operation；不要猜测参数。`
+      : `Operation "${params.toolName}" is registered but cannot be called as a tool name. Load this exact id with load_tools, read the returned parameters, then call execute_operation. Do not guess arguments.`
   }
   return params.locale === 'zh'
-    ? `工具 "${params.toolName}" 未注册。只使用 load_tools 目录中的精确 id；不要发明工具或参数。`
-    : `Tool "${params.toolName}" is not registered. Use only exact ids from the load_tools catalog; do not invent tools or arguments.`
+    ? `工具 "${params.toolName}" 未注册。只调用 load_tools 或 execute_operation，并只使用目录中的精确 Operation id。`
+    : `Tool "${params.toolName}" is not registered. Call only load_tools or execute_operation, using exact Operation ids from the catalog.`
 }
 
 function compactCatalogDescription(value: string): string {
@@ -62,7 +81,10 @@ export function createProjectAgentToolCatalog(params: {
   readonly describeOperation?: (operationId: string, fallback: string) => string
 }): readonly ProjectAgentToolCatalogEntry[] {
   return params.toolset.operationIds.map((operationId) => {
-    if (operationId === PROJECT_AGENT_TOOL_DISCOVERY_NAME) {
+    if (
+      operationId === PROJECT_AGENT_TOOL_DISCOVERY_NAME
+      || operationId === PROJECT_AGENT_OPERATION_GATEWAY_NAME
+    ) {
       throw new Error(`PROJECT_AGENT_TOOL_CATALOG_ID_RESERVED:${operationId}`)
     }
     const operation = params.registry[operationId]
@@ -75,6 +97,7 @@ export function createProjectAgentToolCatalog(params: {
       description: compactCatalogDescription(
         params.describeOperation?.(operationId, operation.summary) ?? operation.summary,
       ),
+      parameters: operation.toolInputSchema,
     }
   })
 }
@@ -138,6 +161,22 @@ export function createProjectAgentToolDiscoveryState(params: {
           .filter((entry) => newlyLoaded.has(entry.operationId))
           .map((entry) => entry.operationId),
         loadedOperationIds: listLoaded(),
+        operations: normalized.map((operationId) => {
+          const entry = catalog.find((candidate) => candidate.operationId === operationId)
+          if (!entry) throw new Error(`PROJECT_AGENT_TOOL_LOAD_ID_UNKNOWN:${operationId}`)
+          return {
+            operationId: entry.operationId,
+            description: entry.description,
+            parameters: entry.parameters,
+          }
+        }),
+        executeWith: {
+          toolName: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
+          arguments: {
+            operationId: 'Copy operations[].operationId exactly',
+            argumentsJson: 'JSON object matching operations[].parameters',
+          },
+        },
       }
     },
     loadedOperationIds: listLoaded,
@@ -163,10 +202,18 @@ function buildDiscoveryDescription(
     `[${entry.groupPath.join('/')}] ${entry.operationId} — ${entry.description}`
   ))
   const introduction = locale === 'zh'
-    ? `按需载入完成当前目标所需 Operation 的完整调用定义。下面目录只用于发现能力（精确 id + 简介），不是参数契约、工作流或调用顺序。调用 Operation 前，先按精确 id 加载最小充分集合；每次最多 ${PROJECT_AGENT_TOOL_LOAD_LIMIT} 个。必须等待下一模型步骤看到完整 Schema 后再调用，不能在同一回复里同时加载并猜测调用。已加载项在当前执行段内持续可用。`
-    : `Load the full invocation definitions for the Operations needed by the current goal. The catalog below is capability discovery only (exact id plus summary), never an argument contract, workflow, or call order. Before calling an Operation, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call. Wait until the next model step exposes the full Schema before invoking it; never load and guess the invocation in the same response. Loaded Operations remain available for the current execution segment.`
+    ? `按需读取完成当前目标所需 Operation 的完整参数定义。下面目录只用于发现能力（精确 id + 简介），不是参数契约、工作流或调用顺序。执行前先按精确 id 加载最小充分集合，每次最多 ${PROJECT_AGENT_TOOL_LOAD_LIMIT} 个；读取返回的 parameters 后，在后续模型步骤调用 execute_operation。不得猜测参数，也不得直接把 Operation id 当工具名。已加载项在当前执行段内持续可用。`
+    : `Read the full parameter definitions for the Operations needed by the current goal. The catalog below is capability discovery only (exact id plus summary), never an argument contract, workflow, or call order. Before execution, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call; after reading the returned parameters, call execute_operation in a later model step. Never guess arguments or call an Operation id as a tool name. Loaded Operations remain available for the current execution segment.`
   const catalogLabel = locale === 'zh' ? '能力目录：' : 'Capability catalog:'
   return [introduction, catalogLabel, ...catalogLines].join('\n')
+}
+
+export function buildProjectAgentOperationGatewayDescription(
+  locale: ProjectAgentLocale,
+): string {
+  return locale === 'zh'
+    ? '执行一个已通过 load_tools 加载的 Operation。operationId 必须精确复制加载结果；argumentsJson 必须是符合返回 parameters 的 JSON 对象字符串。服务端会用权威 Operation registry 再次解析和校验。'
+    : 'Execute one Operation already loaded through load_tools. Copy operationId exactly from the load result and pass argumentsJson as a JSON object string matching the returned parameters. The server parses and validates it again with the authoritative Operation registry.'
 }
 
 export function createProjectAgentToolDiscoveryTool<Context>(params: {

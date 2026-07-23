@@ -93,13 +93,19 @@ import {
   resolveProjectAgentToolset,
 } from './toolset'
 import {
+  PROJECT_AGENT_OPERATION_GATEWAY_NAME,
   PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+  buildProjectAgentOperationGatewayDescription,
   createProjectAgentToolCatalog,
   createProjectAgentToolDiscoveryState,
   createProjectAgentToolDiscoveryTool,
   formatProjectAgentToolNotFound,
 } from './tool-discovery'
-import { createProjectAgentOperationTool } from './agents-tool-adapter'
+import {
+  createProjectAgentOperationGatewayTool,
+  readProjectAgentOperationGatewayInput,
+  readProjectAgentOperationGatewayOperationId,
+} from './agents-tool-adapter'
 import {
   PROJECT_AGENT_MAX_TURNS,
   createProjectAgentStopController,
@@ -568,6 +574,7 @@ function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
 function collectFunctionToolOutputs(
   toolResults: FunctionToolResult[],
   outcomesByToolCall: Map<string, ProjectAgentOperationOutcome>,
+  operationIdByToolCallId: ReadonlyMap<string, string>,
 ): Array<{ toolCallId: string; toolName: string; outcome: ProjectAgentOperationOutcome }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
@@ -581,10 +588,14 @@ function collectFunctionToolOutputs(
     if (!outcome) {
       throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_MISSING:${result.tool.name}:${toolCallId}`)
     }
+    const operationId = operationIdByToolCallId.get(toolCallId)
+    if (!operationId) {
+      throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_MISSING:${toolCallId}`)
+    }
     outcomesByToolCall.delete(toolCallId)
     return [{
       toolCallId,
-      toolName: result.tool.name,
+      toolName: operationId,
       outcome,
     }]
   })
@@ -681,17 +692,16 @@ function readApprovalGroupItems(value: unknown): readonly PersistedApprovalGroup
 }
 
 async function buildApprovalOperationPlanView(params: {
-  item: RunToolApprovalItem
   operation: ProjectAgentOperationRegistry[string] | undefined
   toolCallId: string | null
+  input: unknown
   approvalPreflightStore: ProjectAgentApprovalPreflightStore
 }): Promise<OperationPlanView | null> {
   if (!params.operation?.plan) return null
-  const rawInput = readApprovalInput(params.item)
   const operationPlan = params.approvalPreflightStore.getPlanned({
     operationId: params.operation.id,
     toolCallId: params.toolCallId,
-    input: rawInput,
+    input: params.input,
   })
   if (!operationPlan) {
     throw new Error(`PROJECT_AGENT_APPROVAL_PREFLIGHT_PLAN_MISSING:${params.operation.id}`)
@@ -1203,68 +1213,66 @@ export async function createProjectAgentChatResponse(input: {
   }
   const stopController = createProjectAgentStopController()
   const sideChannel = createProjectAgentSideChannel()
-  const operationTools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
-    createProjectAgentOperationTool({
-      request: input.request,
-      operation: item.operation,
-      description: item.description,
-      projectId: input.projectId,
-      userId: input.userId,
-      context,
-      runFence,
-      operationSignal: runAbortController.signal,
-      continuationClaim: input.continuationClaim ?? null,
-      billingConfirmationRequired,
-      operationBatch,
-      writer: {
-        write: (chunk) => {
-          sideChannel.write({
-            kind: 'chunk',
-            chunk: chunk as unknown as ProjectAgentUiChunk,
-          })
-        },
-        merge: () => {
-          throw new Error('PROJECT_AGENT_TOOL_WRITER_MERGE_UNSUPPORTED')
-        },
-        onError: (error) => (error instanceof Error ? error.message : String(error)),
+  const operationGatewayTool = createProjectAgentOperationGatewayTool({
+    request: input.request,
+    registry: operations,
+    discoveryState: toolDiscoveryState,
+    description: buildProjectAgentOperationGatewayDescription(locale),
+    projectId: input.projectId,
+    userId: input.userId,
+    context,
+    runFence,
+    operationSignal: runAbortController.signal,
+    continuationClaim: input.continuationClaim ?? null,
+    billingConfirmationRequired,
+    operationBatch,
+    writer: {
+      write: (chunk) => {
+        sideChannel.write({
+          kind: 'chunk',
+          chunk: chunk as unknown as ProjectAgentUiChunk,
+        })
       },
-      onExecutionSettled: ({ toolCallId, outcome }) => {
-        if (!toolCallId) {
-          throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_CALL_ID_MISSING:${item.operation.id}`)
-        }
-        if (outcomesByToolCall.has(toolCallId)) {
-          throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_DUPLICATE:${item.operation.id}:${toolCallId}`)
-        }
-        outcomesByToolCall.set(toolCallId, outcome)
-        if (outcome.kind === 'submitted_tasks') {
-          submittedTaskReceiptsByToolCall.set(toolCallId, outcome)
-        }
-        if (outcome.kind === 'wait_choice') {
-          const choiceHandoff = outcome.choiceHandoff
-          const existing = preparedChoiceHandoffs.get(choiceHandoff.operationId)
-          if (
-            existing
-            && (
-              existing.handoffId !== choiceHandoff.handoffId
-              || existing.executionSegmentId !== choiceHandoff.executionSegmentId
-            )
-          ) {
-            throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_DUPLICATE:${choiceHandoff.operationId}`)
-          }
-          preparedChoiceHandoffs.set(choiceHandoff.operationId, choiceHandoff)
-        }
+      merge: () => {
+        throw new Error('PROJECT_AGENT_TOOL_WRITER_MERGE_UNSUPPORTED')
       },
-      onToolCallIdentified: registerToolCallIdentity,
-      approvalPreflightStore,
-      isEnabled: () => toolDiscoveryState.isLoaded(item.operation.id),
-    }) as Tool<ProjectAgentAgentsRunContext>
-  ))
+      onError: (error) => (error instanceof Error ? error.message : String(error)),
+    },
+    onExecutionSettled: ({ toolCallId, operationId, outcome }) => {
+      if (!toolCallId) {
+        throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_CALL_ID_MISSING:${operationId}`)
+      }
+      if (outcomesByToolCall.has(toolCallId)) {
+        throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_DUPLICATE:${operationId}:${toolCallId}`)
+      }
+      outcomesByToolCall.set(toolCallId, outcome)
+      if (outcome.kind === 'submitted_tasks') {
+        submittedTaskReceiptsByToolCall.set(toolCallId, outcome)
+      }
+      if (outcome.kind === 'wait_choice') {
+        const choiceHandoff = outcome.choiceHandoff
+        const existing = preparedChoiceHandoffs.get(choiceHandoff.operationId)
+        if (
+          existing
+          && (
+            existing.handoffId !== choiceHandoff.handoffId
+            || existing.executionSegmentId !== choiceHandoff.executionSegmentId
+          )
+        ) {
+          throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_DUPLICATE:${choiceHandoff.operationId}`)
+        }
+        preparedChoiceHandoffs.set(choiceHandoff.operationId, choiceHandoff)
+      }
+    },
+    onToolCallIdentified: registerToolCallIdentity,
+    approvalPreflightStore,
+  }) as Tool<ProjectAgentAgentsRunContext>
   const tools: Tool<ProjectAgentAgentsRunContext>[] = [
     createProjectAgentToolDiscoveryTool<ProjectAgentAgentsRunContext>({
       state: toolDiscoveryState,
       locale,
     }),
-    ...operationTools,
+    operationGatewayTool,
   ]
 
   const systemPrompt = buildProjectAgentSystemPrompt({
@@ -1281,7 +1289,11 @@ export async function createProjectAgentChatResponse(input: {
     },
     tools,
     toolUseBehavior: async (_runContext, toolResults) => {
-      const outcomes = collectFunctionToolOutputs(toolResults, outcomesByToolCall)
+      const outcomes = collectFunctionToolOutputs(
+        toolResults,
+        outcomesByToolCall,
+        operationIdByToolCallId,
+      )
       await sealActiveOperationBatch()
       const stopPart = stopController.evaluateStep(outcomes)
       if (!stopPart) {
@@ -1394,6 +1406,21 @@ export async function createProjectAgentChatResponse(input: {
     const observedRunSource = (async function* (): AsyncGenerator<RunStreamEvent> {
       try {
         for await (const event of result) {
+          if (
+            event.type === 'run_item_stream_event'
+            && event.name === 'tool_called'
+            && event.item.type === 'tool_call_item'
+            && event.item.rawItem.type === 'function_call'
+            && event.item.rawItem.name === PROJECT_AGENT_OPERATION_GATEWAY_NAME
+          ) {
+            const operationId = readProjectAgentOperationGatewayOperationId(
+              JSON.parse(event.item.rawItem.arguments) as unknown,
+            )
+            registerToolCallIdentity({
+              toolCallId: event.item.rawItem.callId,
+              operationId,
+            })
+          }
           for (const reasoningEvent of publicReasoning.accept(event)) {
             writePublicReasoning(reasoningEvent)
           }
@@ -1512,6 +1539,7 @@ export async function createProjectAgentChatResponse(input: {
       initialChunks,
       resolveToolName: (toolCallId) => operationIdByToolCallId.get(toolCallId) ?? null,
       hiddenToolNames: [PROJECT_AGENT_TOOL_DISCOVERY_NAME],
+      aliasedToolNames: [PROJECT_AGENT_OPERATION_GATEWAY_NAME],
       sideChannel,
       onChunk: recordAssistantChunk,
       beforeFinish: async () => {
@@ -1531,19 +1559,28 @@ export async function createProjectAgentChatResponse(input: {
           ? await (async () => {
             const members = await Promise.all(approvalItems.map(async (approvalItem) => {
               const approvalId = readApprovalId(approvalItem)
-              const operationId = approvalItem.name ?? 'unknown_operation'
               const toolCallId = readApprovalToolCallId(approvalItem)
+              const invocation = readProjectAgentOperationGatewayInput(readApprovalInput(approvalItem))
+              const operationId = invocation.operationId
+              const identifiedOperationId = toolCallId
+                ? operationIdByToolCallId.get(toolCallId) ?? null
+                : null
+              if (identifiedOperationId && identifiedOperationId !== operationId) {
+                throw new Error(
+                  `PROJECT_AGENT_APPROVAL_OPERATION_IDENTITY_CONFLICT:${toolCallId}:${identifiedOperationId}:${operationId}`,
+                )
+              }
               const operationPlan = await buildApprovalOperationPlanView({
-                item: approvalItem,
                 operation: operations[operationId],
                 toolCallId,
+                input: invocation.arguments,
                 approvalPreflightStore,
               })
               return {
                 approvalId,
                 operationId,
                 toolCallId,
-                inputHash: operationPlan?.inputHash ?? stableArgsHash(readApprovalInput(approvalItem)),
+                inputHash: operationPlan?.inputHash ?? stableArgsHash(invocation.arguments),
                 operationPlan,
               }
             }))

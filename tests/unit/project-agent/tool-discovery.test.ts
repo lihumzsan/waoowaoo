@@ -2,6 +2,12 @@ import { Agent, RunContext, tool, type Tool } from '@openai/agents'
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {
+  PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA,
+  readProjectAgentOperationGatewayInput,
+  readProjectAgentOperationGatewayOperationId,
+} from '@/lib/project-agent/agents-tool-adapter'
+import {
+  PROJECT_AGENT_OPERATION_GATEWAY_NAME,
   PROJECT_AGENT_TOOL_DISCOVERY_NAME,
   PROJECT_AGENT_TOOL_LOAD_LIMIT,
   createProjectAgentToolCatalog,
@@ -19,16 +25,16 @@ function createFixture() {
 }
 
 describe('project agent tool discovery', () => {
-  it('exposes only the loader, then accumulates exact requested schemas between model steps', async () => {
+  it('keeps the model-visible tool list fixed while returning exact registry schemas as results', async () => {
     const { catalog } = createFixture()
     const state = createProjectAgentToolDiscoveryState({ catalog })
     const loader = createProjectAgentToolDiscoveryTool<Record<string, never>>({
       state,
       locale: 'en',
     })
-    const operationTools = catalog.slice(0, 3).map((entry) => tool({
-      name: entry.operationId,
-      description: entry.description,
+    const gateway = tool({
+      name: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
+      description: 'test gateway',
       parameters: {
         type: 'object',
         properties: {},
@@ -36,18 +42,18 @@ describe('project agent tool discovery', () => {
         additionalProperties: false,
       } as never,
       strict: true,
-      isEnabled: () => state.isLoaded(entry.operationId),
       execute: () => ({ ok: true }),
-    }) as Tool<Record<string, never>>)
+    }) as Tool<Record<string, never>>
     const agent = new Agent<Record<string, never>>({
       name: 'tool-discovery-test',
       instructions: 'test',
-      tools: [loader, ...operationTools],
+      tools: [loader, gateway],
     })
     const runContext = new RunContext<Record<string, never>>({})
 
     expect((await agent.getAllTools(runContext)).map((candidate) => candidate.name)).toEqual([
       PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+      PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     ])
 
     if (loader.type !== 'function') throw new Error('FUNCTION_TOOL_REQUIRED')
@@ -56,17 +62,22 @@ describe('project agent tool discovery', () => {
     }))
     expect((await agent.getAllTools(runContext)).map((candidate) => candidate.name)).toEqual([
       PROJECT_AGENT_TOOL_DISCOVERY_NAME,
-      catalog[0]?.operationId,
-      catalog[1]?.operationId,
+      PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     ])
 
-    await loader.invoke(runContext, JSON.stringify({ toolIds: [catalog[2]?.operationId] }))
+    const thirdOperationId = catalog[2]?.operationId
+    if (!thirdOperationId) throw new Error('TOOL_OPERATION_REQUIRED')
+    const result = state.load([thirdOperationId])
     expect((await agent.getAllTools(runContext)).map((candidate) => candidate.name)).toEqual([
       PROJECT_AGENT_TOOL_DISCOVERY_NAME,
-      catalog[0]?.operationId,
-      catalog[1]?.operationId,
-      catalog[2]?.operationId,
+      PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     ])
+    expect(result.operations).toEqual([{
+      operationId: thirdOperationId,
+      description: catalog[2]?.description,
+      parameters: catalog[2]?.parameters,
+    }])
+    expect(result.executeWith.toolName).toBe(PROJECT_AGENT_OPERATION_GATEWAY_NAME)
   })
 
   it('preloads exact approval-resume operations without opening the rest of the catalog', () => {
@@ -100,6 +111,38 @@ describe('project agent tool discovery', () => {
     )).toThrow(`PROJECT_AGENT_TOOL_LOAD_COUNT_INVALID:${PROJECT_AGENT_TOOL_LOAD_LIMIT + 1}`)
   })
 
+  it('keeps the execution envelope provider-safe and parses only JSON objects', () => {
+    expect(PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA).toEqual({
+      type: 'object',
+      properties: {
+        operationId: expect.objectContaining({ type: 'string' }),
+        argumentsJson: expect.objectContaining({ type: 'string' }),
+      },
+      required: ['operationId', 'argumentsJson'],
+      additionalProperties: false,
+    })
+    expect(JSON.stringify(PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA)).not.toContain('"oneOf"')
+    expect(readProjectAgentOperationGatewayInput({
+      operationId: 'get_project_context',
+      argumentsJson: '{"scope":"project"}',
+    })).toEqual({
+      operationId: 'get_project_context',
+      arguments: { scope: 'project' },
+    })
+    expect(() => readProjectAgentOperationGatewayInput({
+      operationId: 'get_project_context',
+      argumentsJson: '[]',
+    })).toThrow('PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_OBJECT_REQUIRED:get_project_context')
+    expect(() => readProjectAgentOperationGatewayInput({
+      operationId: 'get_project_context',
+      argumentsJson: '{',
+    })).toThrow('PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_JSON_INVALID:get_project_context')
+    expect(readProjectAgentOperationGatewayOperationId({
+      operationId: 'get_project_context',
+      argumentsJson: '{',
+    })).toBe('get_project_context')
+  })
+
   it('returns a model-visible correction for unloaded or invented tool calls', () => {
     const { catalog } = createFixture()
     const operationId = catalog[0]?.operationId
@@ -109,12 +152,12 @@ describe('project agent tool discovery', () => {
       toolName: operationId,
       catalog,
       locale: 'en',
-    })).toContain(`Load this exact id with load_tools`)
+    })).toContain('then call execute_operation')
     expect(formatProjectAgentToolNotFound({
       toolName: operationId,
       catalog,
       locale: 'zh',
-    })).toContain('等待下一模型步骤出现完整 Schema')
+    })).toContain('读取返回的完整 parameters')
     expect(formatProjectAgentToolNotFound({
       toolName: 'invented_operation',
       catalog,

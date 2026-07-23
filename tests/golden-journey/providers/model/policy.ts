@@ -115,7 +115,18 @@ function calledToolsAfter(request: GoldenChatCompletionRequest, messageIndex: nu
     if (!Array.isArray(message.tool_calls)) return
     message.tool_calls.forEach((toolCall) => {
       const fn = asRecord(asRecord(toolCall)?.function)
-      if (typeof fn?.name === 'string') called.add(fn.name)
+      if (typeof fn?.name !== 'string' || fn.name === 'load_tools') return
+      if (fn.name !== 'execute_operation') {
+        called.add(fn.name)
+        return
+      }
+      if (typeof fn.arguments !== 'string') return
+      try {
+        const envelope = asRecord(JSON.parse(fn.arguments))
+        if (typeof envelope?.operationId === 'string') called.add(envelope.operationId)
+      } catch {
+        return
+      }
     })
   })
   return called
@@ -132,6 +143,35 @@ function parseMessageJson(message: GoldenChatCompletionRequest['messages'][numbe
   } catch {
     return null
   }
+}
+
+function collectLoadedOperationDefinitions(
+  value: unknown,
+  output: Map<string, Record<string, unknown>>,
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectLoadedOperationDefinitions(item, output))
+    return
+  }
+  const record = asRecord(value)
+  if (!record) return
+  if (
+    typeof record.operationId === 'string'
+    && asRecord(record.parameters)
+  ) {
+    output.set(record.operationId, record)
+  }
+  Object.values(record).forEach((item) => collectLoadedOperationDefinitions(item, output))
+}
+
+function loadedOperationDefinitions(
+  request: GoldenChatCompletionRequest,
+): ReadonlyMap<string, Record<string, unknown>> {
+  const definitions = new Map<string, Record<string, unknown>>()
+  request.messages
+    .filter((message) => message.role === 'tool')
+    .forEach((message) => collectLoadedOperationDefinitions(parseMessageJson(message), definitions))
+  return definitions
 }
 
 function containsSubmittedTaskReceipt(value: unknown): boolean {
@@ -262,7 +302,8 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   }
   const available = availableToolNames(request)
   const called = calledToolsAfter(request, instruction.index)
-  const choose = (toolName: string): string | null => available.has(toolName) && !called.has(toolName) ? toolName : null
+  const gatewayAvailable = available.has('load_tools') && available.has('execute_operation')
+  const choose = (toolName: string): string | null => gatewayAvailable && !called.has(toolName) ? toolName : null
   if (instructionRequiresVideoRatio(instruction.text) && currentProjectVideoRatio(request) === null) {
     return choose('request_choice')
   }
@@ -643,22 +684,44 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       chapterPlan: exactResourceRevision(latestResourceBySchema(request, 'project.chapter_plan')),
     }
   }
-  const tool = request.tools?.find((candidate) => candidate.function.name === toolName)
-  return generateGoldenStructuredValue(asRecord(tool?.function.parameters))
+  const parameters = asRecord(
+    loadedOperationDefinitions(request).get(toolName)?.parameters,
+  )
+  return generateGoldenStructuredValue(parameters)
 }
 
 function selectGenericTool(request: GoldenChatCompletionRequest): string | null {
   const available = availableToolNames(request)
-  const alreadyCalled = new Set<string>()
-  request.messages.forEach((message) => {
-    if (!Array.isArray(message.tool_calls)) return
-    message.tool_calls.forEach((toolCall) => {
-      const name = asRecord(asRecord(toolCall)?.function)?.name
-      if (typeof name === 'string') alreadyCalled.add(name)
-    })
-  })
+  if (!available.has('load_tools') || !available.has('execute_operation')) return null
+  const alreadyCalled = allCalledTools(request)
+  const loaded = loadedOperationDefinitions(request)
   return ['request_choice', 'delegate_creative_work', 'create_text', 'create_image', 'create_video', 'create_audio']
-    .find((toolName) => available.has(toolName) && !alreadyCalled.has(toolName)) ?? null
+    .find((toolName) => loaded.has(toolName) && !alreadyCalled.has(toolName)) ?? null
+}
+
+function buildGatewayToolDecision(input: {
+  readonly request: GoldenChatCompletionRequest
+  readonly requestOrdinal: number
+  readonly operationId: string
+  readonly operationArguments: unknown
+}): GoldenModelDecision {
+  if (!loadedOperationDefinitions(input.request).has(input.operationId)) {
+    return {
+      kind: 'tool_call',
+      toolCallId: `golden_call_${input.requestOrdinal}_load_${input.operationId}`,
+      toolName: 'load_tools',
+      argumentsJson: JSON.stringify({ toolIds: [input.operationId] }),
+    }
+  }
+  return {
+    kind: 'tool_call',
+    toolCallId: `golden_call_${input.requestOrdinal}_${input.operationId}`,
+    toolName: 'execute_operation',
+    argumentsJson: JSON.stringify({
+      operationId: input.operationId,
+      argumentsJson: JSON.stringify(input.operationArguments),
+    }),
+  }
 }
 
 export function decideGoldenModelResponse(input: {
@@ -693,17 +756,27 @@ export function decideGoldenModelResponse(input: {
   if (instruction?.text.includes(GOLDEN_PARALLEL_IMAGE_REQUEST)) {
     const called = calledToolsAfter(input.request, instruction.index)
     if (currentProjectVideoRatio(input.request) === null && !called.has('request_choice')) {
-      return {
-        kind: 'tool_call',
-        toolCallId: `golden_call_${input.requestOrdinal}_request_choice`,
-        toolName: 'request_choice',
-        argumentsJson: JSON.stringify(buildToolArguments(input.request, 'request_choice')),
-      }
+      return buildGatewayToolDecision({
+        request: input.request,
+        requestOrdinal: input.requestOrdinal,
+        operationId: 'request_choice',
+        operationArguments: buildToolArguments(input.request, 'request_choice'),
+      })
     }
     const alreadyCalled = called.has('create_image')
-    const isTaskContinuation = messageText(input.request).includes('[task_update]')
-    if (isTaskContinuation || alreadyCalled || !availableToolNames(input.request).has('create_image')) {
+    const isTaskContinuation = input.request.messages
+      .slice(instruction.index + 1)
+      .some((message) => messageContentText(message).includes('[task_update]'))
+    if (isTaskContinuation || alreadyCalled) {
       return { kind: 'text', text: 'The three image submissions are accepted.' }
+    }
+    if (!loadedOperationDefinitions(input.request).has('create_image')) {
+      return buildGatewayToolDecision({
+        request: input.request,
+        requestOrdinal: input.requestOrdinal,
+        operationId: 'create_image',
+        operationArguments: {},
+      })
     }
     const prompts = [
       'A single stylized folk-horror guardian character on a plain dark background.',
@@ -714,9 +787,12 @@ export function decideGoldenModelResponse(input: {
       kind: 'tool_calls',
       calls: prompts.map((prompt, index) => ({
         toolCallId: `golden_call_${input.requestOrdinal}_create_image_${String(index + 1)}`,
-        toolName: 'create_image',
+        toolName: 'execute_operation',
         argumentsJson: JSON.stringify({
-          request: { kind: 'new', count: 1, prompt },
+          operationId: 'create_image',
+          argumentsJson: JSON.stringify({
+            request: { kind: 'new', count: 1, prompt },
+          }),
         }),
       })),
     }
@@ -727,10 +803,10 @@ export function decideGoldenModelResponse(input: {
   const selected = selectFreeformTool(input.request)
   const toolName = selected === undefined ? selectGenericTool(input.request) : selected
   if (!toolName) return { kind: 'text', text: 'The deterministic test model reached a stable boundary.' }
-  return {
-    kind: 'tool_call',
-    toolCallId: `golden_call_${input.requestOrdinal}_${toolName}`,
-    toolName,
-    argumentsJson: JSON.stringify(buildToolArguments(input.request, toolName)),
-  }
+  return buildGatewayToolDecision({
+    request: input.request,
+    requestOrdinal: input.requestOrdinal,
+    operationId: toolName,
+    operationArguments: buildToolArguments(input.request, toolName),
+  })
 }

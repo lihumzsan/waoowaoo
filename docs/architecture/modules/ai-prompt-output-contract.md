@@ -18,7 +18,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 revisionId 及显式用途；服务端回库解析 Resource、schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。
 - **AP-09 — Provider 约束不升级为创作流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此写固定产品阶段。
 - **AP-10 — 双语语义一致。** System Prompt 与每个 Skill 的中英文版本必须具有相同契约变量、输出语义与禁止项；用户可见内容走 i18n。
-- **AP-11 — Tool discovery 只发现能力。** Primary 初始只看到从完整 Operation registry 投影的 `load_tools` 简短目录，按精确 id 加载当前目标的最小充分集合；目录简介不能充当参数契约、eligibility、工作流或调用顺序，加载不代表执行。加载与调用必须分属两个模型步骤；下一步出现的完整 strict Schema 才是唯一调用契约。未加载/未知工具错误是可恢复纠正，不授权猜测参数或执行；Primary 必须先加载已注册精确 id，再按新 Schema 重构。Task 提交回执不是终态，当前回合不得立即 `get_task` 或轮询；只在终态 continuation 后按需加载并读取精确 taskId。工具选择仍由 Primary 根据用户目标与当前事实判断。
+- **AP-11 — Tool discovery 只发现能力，固定 gateway 只传输调用。** Primary 的每个模型步骤都只看到 `load_tools` 与 `execute_operation` 两个稳定 SDK tools。`load_tools` 的 registry 派生目录只帮助选择能力；模型按精确 id 加载当前目标的最小充分集合，loader 返回的 canonical `parameters` 才是参数契约，目录简介不能充当 eligibility、工作流、调用顺序或参数说明。加载不代表执行；后续步骤必须精确复制 `operationId`，只按返回 Schema 构造 `argumentsJson` 调用固定 gateway，不得把 Operation id 当工具名或猜测参数。Gateway envelope 不解释业务参数，服务端仍用同一 runtime schema 校验。未加载/未知 id 是可恢复纠正且绝不执行。Task 提交回执不是终态，当前回合不得立即 `get_task` 或轮询；只在终态 continuation 后按需加载并读取精确 taskId。工具选择仍由 Primary 根据用户目标与当前事实判断。
 
 ## 权威入口
 
@@ -33,7 +33,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 验证
 
 - `scripts/guards/prompt-i18n-guard.mjs` 验证 catalog、locale 与变量；`prompt-semantic-regression.mjs` 拒绝固定 mainline、确认剧本、时长配方和专用 Style Choice 回流。
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registry 验证 Primary 完整 capability toolset 与无 Schema 简短目录；`tests/unit/project-agent/tool-discovery.test.ts` 验证精确加载后才暴露完整工具定义。
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registry 验证 Primary 完整 capability toolset、简短目录与 canonical load definitions；`tests/unit/project-agent/tool-discovery.test.ts` 反证加载前后顶层 tools 数组变化，并验证精确加载结果携带 registry Schema。
 - `tests/contracts/creative-result-resource-conformance.test.ts`、`tests/unit/creative-resource/creative-work-materialization.test.ts` 验证 strict outputKind 到 Resource 的唯一映射。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 验证模型替身协议 fail closed；`freeform-resources.spec.ts` 通过自然语言目标验证真实 Tool/Task/Resource 组合。
 
@@ -45,8 +45,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - 旧 source script/Bible schema 要求模型回传系统 identity、版本标记或重复 persistent facts，服务端再用启发式校验，形成第二事实来源。当前 identity/fingerprint/lineage 由服务端构造，模型只输出创作内容。
 - 风格选择曾默认生成九宫格预览并进入专用 Choice；当前 Style Bible 是普通 Resource，预览图是用户明确要求时的独立图片 Operation。
 - 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。当前时长只作为用户目标与 Primary 判断输入，模型必须从真实对白/动作/停顿估算，服务端不建立时长状态机；真实模型服从度仍需 Golden/抽样验证。
-- 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。当前 Prompt 只说明模型如何使用 registry 派生的简短目录；目录不拥有业务判断，完整 Schema 仍由原 Operation registry 提供。
-- 按需 Tool discovery 首版只说“调用前加载”，没有说明加载后的 Schema 只会在下一模型步骤出现，也没有把 Task 回执与终态结果分开。真实 Claude 因而跳过 loader 直接调用 `get_task`，SDK 又把缺失工具升级为 Run 失败。当前双语 Prompt、loader 描述与模型可见纠正统一要求“加载 → 等待下一模型步骤 → 按 Schema 调用”，并禁止在 Task 提交同回合读取或轮询。
+- 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。首次按需加载又把“下一步新增具体 Operation tool”当作 Schema 交付方式：虽然减少首步 token，却改变多轮 tools 前缀并破坏缓存，且把所有加载后的复杂 schema 重新交给不同 Provider 的 function validator。旧 Prompt/单测只约束“加载与执行分步”，没有约束顶层工具定义稳定。当前双语 Prompt 统一为“`load_tools` 返回 canonical parameters → 后续调用固定 `execute_operation`”，具体 Schema 只追加在消息尾部；Task 回执与终态读取规则保持不变。
 
 ## 修改检查表
 

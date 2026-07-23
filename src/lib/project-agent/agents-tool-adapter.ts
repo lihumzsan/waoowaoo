@@ -11,12 +11,18 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
 import type {
   OperationAgentFlow,
+  ProjectAgentOperationRegistry,
   ProjectAgentOperationTaskBatchBinding,
   ProjectAgentOperationDefinition,
   ProjectAgentOperationOutcome,
   ProjectAgentTaskSubmissionReceipt,
+  ProjectAgentToolInputSchema,
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
+import {
+  PROJECT_AGENT_OPERATION_GATEWAY_NAME,
+  type ProjectAgentToolDiscoveryState,
+} from './tool-discovery'
 import { shouldRequireInteractiveToolApproval } from './tool-approval-policy'
 import {
   authorizeProjectAgentToolAutomatically,
@@ -73,9 +79,10 @@ function isSuspendingOperation(agentFlow: OperationAgentFlow | undefined): boole
   return agentFlow?.suspendsFor === 'choice'
 }
 
-export interface CreateProjectAgentOperationToolParams {
+export interface CreateProjectAgentOperationGatewayToolParams {
   request: NextRequest
-  operation: ProjectAgentOperationDefinition
+  registry: ProjectAgentOperationRegistry
+  discoveryState: ProjectAgentToolDiscoveryState
   description: string
   projectId: string
   userId: string
@@ -89,6 +96,7 @@ export interface CreateProjectAgentOperationToolParams {
   /** Called exactly once after an execution attempt with its typed outcome. */
   onExecutionSettled?: (settlement: {
     toolCallId: string | null
+    operationId: string
     outcome: ProjectAgentOperationOutcome
   }) => void
   onToolCallIdentified?: (identity: {
@@ -96,101 +104,203 @@ export interface CreateProjectAgentOperationToolParams {
     operationId: string
   }) => void
   approvalPreflightStore?: ProjectAgentApprovalPreflightStore
-  /** Re-evaluated by the Agent SDK before every model step. */
-  isEnabled?: () => boolean | Promise<boolean>
 }
 
-export function createProjectAgentOperationTool(
-  params: CreateProjectAgentOperationToolParams,
+export interface ProjectAgentOperationGatewayInput {
+  readonly operationId: string
+  readonly arguments: Record<string, unknown>
+}
+
+export const PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    operationId: {
+      type: 'string',
+      description: 'Exact loaded Operation id returned by load_tools.',
+    },
+    argumentsJson: {
+      type: 'string',
+      description: 'A JSON object serialized as a string and matching the loaded Operation parameters exactly.',
+    },
+  },
+  required: ['operationId', 'argumentsJson'],
+  additionalProperties: false,
+}
+
+export function readProjectAgentOperationGatewayOperationId(input: unknown): string {
+  if (!isRecord(input)) {
+    throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_INPUT_INVALID')
+  }
+  const operationId = typeof input.operationId === 'string' ? input.operationId.trim() : ''
+  if (!operationId) {
+    throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_ID_REQUIRED')
+  }
+  return operationId
+}
+
+export function readProjectAgentOperationGatewayInput(
+  input: unknown,
+): ProjectAgentOperationGatewayInput {
+  const operationId = readProjectAgentOperationGatewayOperationId(input)
+  if (!isRecord(input)) throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_INPUT_INVALID')
+  if (typeof input.argumentsJson !== 'string' || !input.argumentsJson.trim()) {
+    throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_REQUIRED:${operationId}`)
+  }
+  let parsedArguments: unknown
+  try {
+    parsedArguments = JSON.parse(input.argumentsJson)
+  } catch {
+    throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_JSON_INVALID:${operationId}`)
+  }
+  if (!isRecord(parsedArguments)) {
+    throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_OBJECT_REQUIRED:${operationId}`)
+  }
+  return {
+    operationId,
+    arguments: parsedArguments,
+  }
+}
+
+export function createProjectAgentOperationGatewayTool(
+  params: CreateProjectAgentOperationGatewayToolParams,
 ): Tool {
-  const requiresApproval = shouldRequireInteractiveToolApproval({
-    operation: params.operation,
-    billingConfirmationRequired: params.billingConfirmationRequired,
-  })
-  const isEnabled = params.isEnabled
-  const automaticallyAuthorizeBilling = params.operation.confirmation.kind === 'billable_media'
-    && !params.billingConfirmationRequired
-  const identifyToolCall = (toolCallId: string | null | undefined): string | null => {
+  const identifyToolCall = (
+    toolCallId: string | null | undefined,
+    operationId: string,
+  ): string | null => {
     const normalizedToolCallId = toolCallId?.trim() || null
     if (normalizedToolCallId) {
       params.onToolCallIdentified?.({
         toolCallId: normalizedToolCallId,
-        operationId: params.operation.id,
+        operationId,
       })
     }
     return normalizedToolCallId
   }
+  const resolveOperation = (
+    input: unknown,
+  ): {
+    invocation: ProjectAgentOperationGatewayInput
+    operation: ProjectAgentOperationDefinition
+  } => {
+    const invocation = readProjectAgentOperationGatewayInput(input)
+    const operation = params.registry[invocation.operationId]
+    if (!operation?.channels.tool) {
+      throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_UNKNOWN:${invocation.operationId}`)
+    }
+    if (!params.discoveryState.isLoaded(invocation.operationId)) {
+      throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_NOT_LOADED:${invocation.operationId}`)
+    }
+    return { invocation, operation }
+  }
   const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
+    let resolved: ReturnType<typeof resolveOperation>
+    try {
+      resolved = resolveOperation(toolInput)
+    } catch {
+      return false
+    }
+    const { invocation, operation } = resolved
+    const requiresApproval = shouldRequireInteractiveToolApproval({
+      operation,
+      billingConfirmationRequired: params.billingConfirmationRequired,
+    })
+    const identifiedToolCallId = identifyToolCall(toolCallId, operation.id)
     if (!requiresApproval) return false
-    const identifiedToolCallId = identifyToolCall(toolCallId)
     if (!identifiedToolCallId) {
-      throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${params.operation.id}`)
+      throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)
     }
     if (!params.approvalPreflightStore) return true
     return await preflightProjectAgentToolApproval({
       request: params.request,
-      operation: params.operation,
+      operation,
       projectId: params.projectId,
       userId: params.userId,
       context: params.context,
       source: 'assistant-panel',
-      input: toolInput,
+      input: invocation.arguments,
       toolCallId: identifiedToolCallId,
       store: params.approvalPreflightStore,
     })
   }
 
   return tool({
-    name: params.operation.id,
+    name: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     description: params.description,
-    parameters: params.operation.toolInputSchema as never,
+    parameters: PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA as never,
     strict: true,
-    ...(isEnabled ? { isEnabled: () => isEnabled() } : {}),
-    ...(requiresApproval ? { needsApproval } : {}),
+    needsApproval,
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
+      const rawToolCallId = readToolCallId(details)
+      let resolved: ReturnType<typeof resolveOperation>
+      try {
+        resolved = resolveOperation(toolInput)
+      } catch (error) {
+        const operationId = (() => {
+          try {
+            return readProjectAgentOperationGatewayInput(toolInput).operationId
+          } catch {
+            return PROJECT_AGENT_OPERATION_GATEWAY_NAME
+          }
+        })()
+        const toolCallId = identifyToolCall(rawToolCallId, operationId)
+        const outcome: ProjectAgentOperationOutcome = {
+          kind: 'failed',
+          error: buildToolError({
+            code: 'OPERATION_INPUT_INVALID',
+            message: error instanceof Error ? error.message : String(error),
+            operationId,
+          }),
+        }
+        params.onExecutionSettled?.({ toolCallId, operationId, outcome })
+        return { ok: false, error: outcome.error }
+      }
+      const { invocation, operation } = resolved
+      const automaticallyAuthorizeBilling = operation.confirmation.kind === 'billable_media'
+        && !params.billingConfirmationRequired
       let executionSettlementReported = false
       const reportExecutionSettled = (outcome: ProjectAgentOperationOutcome): void => {
         if (executionSettlementReported) return
         executionSettlementReported = true
-        params.onExecutionSettled?.({ toolCallId, outcome })
+        params.onExecutionSettled?.({ toolCallId, operationId: operation.id, outcome })
       }
-      const toolCallId = identifyToolCall(readToolCallId(details))
+      const toolCallId = identifyToolCall(rawToolCallId, operation.id)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
       const normalizedInput = normalizeProjectAgentToolInput({
-        input: toolInput,
-        inputSchema: params.operation.inputSchema,
-        toolInputSchema: params.operation.toolInputSchema,
+        input: invocation.arguments,
+        inputSchema: operation.inputSchema,
+        toolInputSchema: operation.toolInputSchema,
       })
       const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
-        operationId: params.operation.id,
+        operationId: operation.id,
         toolCallId,
         input: normalizedInput,
       }) ?? null
       if (approvalPreflightFailure) {
         if (approvalPreflightFailure.ok) {
-          throw new Error(`PROJECT_AGENT_APPROVAL_PREFLIGHT_FAILURE_INVALID:${params.operation.id}`)
+          throw new Error(`PROJECT_AGENT_APPROVAL_PREFLIGHT_FAILURE_INVALID:${operation.id}`)
         }
         reportExecutionSettled({ kind: 'failed', error: approvalPreflightFailure.error })
         return approvalPreflightFailure
       }
       const operationTargetKey = buildProjectAgentOperationTargetKey({
-        operationId: params.operation.id,
+        operationId: operation.id,
         projectId: params.projectId,
         context: params.context,
         toolInput: normalizedInput,
       })
-      if (params.operation.intent === 'act' && !isSuspendingOperation(params.operation.agentFlow)) {
+      if (operation.intent === 'act' && !isSuspendingOperation(operation.agentFlow)) {
         const budgetFailure = await enforceProjectAgentOperationRunBudget({
           projectId: params.projectId,
           userId: params.userId,
           runId,
-          operationId: params.operation.id,
+          operationId: operation.id,
           targetKey: operationTargetKey,
         })
         if (budgetFailure) {
           if (budgetFailure.ok) {
-            throw new Error(`PROJECT_AGENT_OPERATION_BUDGET_FAILURE_INVALID:${params.operation.id}`)
+            throw new Error(`PROJECT_AGENT_OPERATION_BUDGET_FAILURE_INVALID:${operation.id}`)
           }
           reportExecutionSettled({ kind: 'failed', error: budgetFailure.error })
           return budgetFailure
@@ -202,12 +312,12 @@ export function createProjectAgentOperationTool(
         : null
       if (automaticallyAuthorizeBilling && !persistedApprovedInvocation) {
         if (!toolCallId) {
-          throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${params.operation.id}`)
+          throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)
         }
         try {
           automaticApprovedInvocation = await authorizeProjectAgentToolAutomatically({
             request: params.request,
-            operation: params.operation,
+            operation,
             projectId: params.projectId,
             userId: params.userId,
             context: params.context,
@@ -218,8 +328,8 @@ export function createProjectAgentOperationTool(
         } catch (error) {
           const toolError = normalizeOperationExecutionToolError({
             error,
-            operation: params.operation,
-            operationId: params.operation.id,
+            operation,
+            operationId: operation.id,
           })
           reportExecutionSettled({ kind: 'failed', error: toolError })
           return { ok: false, error: toolError }
@@ -237,14 +347,14 @@ export function createProjectAgentOperationTool(
         } | null = null
         return {
           async bindInTransaction(transaction, batch) {
-            if (bound) throw new Error(`PROJECT_AGENT_TASK_BATCH_ALREADY_BOUND:${params.operation.id}`)
-            if (batch.operationId !== params.operation.id) {
-              throw new Error(`PROJECT_AGENT_TASK_BATCH_OPERATION_MISMATCH:${batch.operationId}:${params.operation.id}`)
+            if (bound) throw new Error(`PROJECT_AGENT_TASK_BATCH_ALREADY_BOUND:${operation.id}`)
+            if (batch.operationId !== operation.id) {
+              throw new Error(`PROJECT_AGENT_TASK_BATCH_OPERATION_MISMATCH:${batch.operationId}:${operation.id}`)
             }
-            if (!toolCallId) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TOOL_CALL_REQUIRED:${params.operation.id}`)
+            if (!toolCallId) throw new Error(`PROJECT_AGENT_OPERATION_BATCH_TOOL_CALL_REQUIRED:${operation.id}`)
             const taskIds = Array.from(new Set(batch.taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
-            if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_BATCH_EMPTY:${params.operation.id}`)
-            const operationBatch = params.operationBatch.claim(params.operation.id)
+            if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_BATCH_EMPTY:${operation.id}`)
+            const operationBatch = params.operationBatch.claim(operation.id)
             const backgroundRunFence = params.operationBatch.readRunFence()
             const result = await bindProjectAgentOperationBatchWaitMemberInTransaction(transaction, {
               batch: operationBatch,
@@ -254,14 +364,14 @@ export function createProjectAgentOperationTool(
               episodeId: params.context.episodeId ?? null,
               locale: params.context.locale ?? null,
               assistantId: 'workspace-command',
-              operationId: params.operation.id,
+              operationId: operation.id,
               toolCallId,
               taskIds,
             })
             bound = true
             boundBatch = {
               toolCallId,
-              operationId: params.operation.id,
+              operationId: operation.id,
               taskIds,
               receipt: result.receipt,
               backgroundRunFence: result.backgroundRunFence,
@@ -287,7 +397,7 @@ export function createProjectAgentOperationTool(
           },
         }
       }
-      if (isSuspendingOperation(params.operation.agentFlow)) {
+      if (isSuspendingOperation(operation.agentFlow)) {
         const taskBatchBinding = createTaskBatchBinding()
         const executionFence: ProjectAgentOperationExecutionFence = {
           runFence: params.runFence,
@@ -299,7 +409,7 @@ export function createProjectAgentOperationTool(
         try {
           const execution = await executeProjectAgentOperationFromTool({
             request: params.request,
-            operationId: params.operation.id,
+            operationId: operation.id,
             projectId: params.projectId,
             userId: params.userId,
             context: params.context,
@@ -319,7 +429,7 @@ export function createProjectAgentOperationTool(
             error: buildToolError({
               code: 'OPERATION_EXECUTION_FAILED',
               message: error instanceof Error ? error.message : String(error),
-              operationId: params.operation.id,
+              operationId: operation.id,
             }),
           })
           throw error
@@ -350,7 +460,7 @@ export function createProjectAgentOperationTool(
               runId,
               activityId: operationActivityId,
               type: 'operation',
-              operationId: params.operation.id,
+              operationId: operation.id,
               targetKey: operationTargetKey,
               ...(toolCallId ? { toolCallId } : {}),
             },
@@ -358,17 +468,17 @@ export function createProjectAgentOperationTool(
         ],
       }) : null
       if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
-      if (params.operation.intent === 'act') {
+      if (operation.intent === 'act') {
         writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
           runId,
-          operationId: params.operation.id,
+          operationId: operation.id,
           ...(toolCallId ? { toolCallId } : {}),
         })
       }
       try {
         const execution = await executeProjectAgentOperationFromTool({
           request: params.request,
-          operationId: params.operation.id,
+          operationId: operation.id,
           projectId: params.projectId,
           userId: params.userId,
           context: params.context,
@@ -439,7 +549,7 @@ export function createProjectAgentOperationTool(
           error: buildToolError({
             code: 'OPERATION_EXECUTION_FAILED',
             message: errorMessage,
-            operationId: params.operation.id,
+            operationId: operation.id,
           }),
         })
         throw error

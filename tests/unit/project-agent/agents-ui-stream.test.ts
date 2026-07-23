@@ -34,13 +34,16 @@ describe('Project Agent UI stream arbiter', () => {
       yield new RunItemStreamEvent('tool_called', new RunToolCallItem({
         type: 'function_call',
         callId: 'operation-call',
-        name: 'get_project_context',
-        arguments: '{}',
+        name: 'execute_operation',
+        arguments: JSON.stringify({
+          operationId: 'get_project_context',
+          argumentsJson: '{}',
+        }),
       }, agent))
       yield new RunItemStreamEvent('tool_output', new RunToolCallOutputItem({
         type: 'function_call_result',
         callId: 'operation-call',
-        name: 'get_project_context',
+        name: 'execute_operation',
         status: 'completed',
         output: { type: 'text', text: '{"ok":true}' },
       }, agent, { ok: true }))
@@ -48,8 +51,11 @@ describe('Project Agent UI stream arbiter', () => {
     const stream = createProjectAgentUiMessageStream({
       source,
       initialChunks: [],
-      resolveToolName: () => null,
+      resolveToolName: (toolCallId) => (
+        toolCallId === 'operation-call' ? 'get_project_context' : null
+      ),
       hiddenToolNames: ['load_tools'],
+      aliasedToolNames: ['execute_operation'],
       sideChannel: createProjectAgentSideChannel(),
       beforeFinish: async () => [],
       onSettled: async () => undefined,
@@ -67,6 +73,15 @@ describe('Project Agent UI stream arbiter', () => {
       'tool-input-available',
       'tool-output-available',
     ])
+    expect(chunks.filter((chunk) => (
+      (chunk as { toolCallId?: unknown }).toolCallId === 'operation-call'
+      && (
+        (chunk as { type?: unknown }).type === 'tool-input-start'
+        || (chunk as { type?: unknown }).type === 'tool-input-available'
+      )
+    )).every((chunk) => (
+      (chunk as { toolName?: unknown }).toolName === 'get_project_context'
+    ))).toBe(true)
   })
 
   it('wakes for reasoning while the upstream UI converter is waiting for answer text', async () => {

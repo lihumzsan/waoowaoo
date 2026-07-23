@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GoldenModelServer } from '../providers/model/server'
 import { startGoldenModelServer } from '../providers/model/server'
+import type {
+  GoldenChatCompletionRequest,
+  GoldenChatTool,
+  GoldenModelDecision,
+} from '../providers/model/protocol'
 import {
   decideGoldenModelResponse,
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
@@ -28,6 +33,122 @@ let runningServer: GoldenModelServer | null = null
 let mediaServer: GoldenMediaServer | null = null
 let gateway: GoldenProviderGateway | null = null
 
+const GOLDEN_FIXED_OPERATION_TOOLS: readonly GoldenChatTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'load_tools',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['toolIds'],
+        properties: {
+          toolIds: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'execute_operation',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['operationId', 'argumentsJson'],
+        properties: {
+          operationId: { type: 'string' },
+          argumentsJson: { type: 'string' },
+        },
+      },
+    },
+  },
+]
+
+function withFixedOperationTools(
+  request: GoldenChatCompletionRequest,
+): GoldenChatCompletionRequest {
+  return {
+    ...request,
+    tools: GOLDEN_FIXED_OPERATION_TOOLS,
+  }
+}
+
+function withLoadedOperationSchemas(
+  request: GoldenChatCompletionRequest,
+): GoldenChatCompletionRequest {
+  const operationTools = (request.tools ?? []).filter((tool) => (
+    tool.function.name !== 'read_skill'
+    && tool.function.name !== 'load_tools'
+    && tool.function.name !== 'execute_operation'
+  ))
+  if (operationTools.length === 0) return request
+
+  const toolCallId = 'golden_preloaded_operations'
+  const operationIds = operationTools.map((tool) => tool.function.name)
+  return {
+    ...request,
+    messages: [
+      ...request.messages,
+      {
+        role: 'assistant',
+        tool_calls: [{
+          id: toolCallId,
+          type: 'function',
+          function: {
+            name: 'load_tools',
+            arguments: JSON.stringify({ toolIds: operationIds }),
+          },
+        }],
+      },
+      {
+        role: 'tool',
+        tool_call_id: toolCallId,
+        content: JSON.stringify({
+          loadedOperationIds: operationIds,
+          operations: operationTools.map((tool) => ({
+            operationId: tool.function.name,
+            parameters: tool.function.parameters ?? { type: 'object' },
+          })),
+        }),
+      },
+    ],
+    tools: GOLDEN_FIXED_OPERATION_TOOLS,
+  }
+}
+
+function decideWithLoadedOperationSchemas(
+  input: Parameters<typeof decideGoldenModelResponse>[0],
+): GoldenModelDecision {
+  return decideGoldenModelResponse({
+    ...input,
+    request: withLoadedOperationSchemas(input.request),
+  })
+}
+
+function readOperationArguments(
+  decision: GoldenModelDecision,
+  expectedOperationId: string,
+): unknown {
+  if (decision.kind !== 'tool_call') {
+    throw new Error(`GOLDEN_EXPECTED_SINGLE_OPERATION_CALL:${decision.kind}`)
+  }
+  expect(decision.toolName).toBe('execute_operation')
+  const envelope = JSON.parse(decision.argumentsJson) as {
+    operationId?: unknown
+    argumentsJson?: unknown
+  }
+  expect(envelope.operationId).toBe(expectedOperationId)
+  if (typeof envelope.argumentsJson !== 'string') {
+    throw new Error('GOLDEN_OPERATION_ARGUMENTS_JSON_REQUIRED')
+  }
+  return JSON.parse(envelope.argumentsJson) as unknown
+}
+
 afterEach(async () => {
   await runningServer?.close()
   await gateway?.close()
@@ -48,53 +169,55 @@ describe('Golden local model provider', () => {
     expect(first.appPort).not.toBe(first.coordinatorPort)
   })
 
-  it('serves a streamed generic Choice tool call over HTTP', async () => {
+  it('serves a streamed generic Choice through the fixed Operation gateway over HTTP', async () => {
     runningServer = await startGoldenModelServer()
+    const request = withLoadedOperationSchemas({
+      model: 'golden-model',
+      stream: true,
+      messages: [{ role: 'user', content: 'Ask one current question.' }],
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'request_choice',
+          parameters: {
+            type: 'object',
+            required: ['subject', 'card', 'commitments'],
+            properties: {
+              subject: {
+                type: 'object',
+                required: ['kind'],
+                properties: { kind: { type: 'string', enum: ['none'] } },
+              },
+              card: {
+                type: 'object',
+                required: ['mode', 'replyMode', 'title', 'groups', 'submitLabel'],
+                properties: {
+                  mode: { type: 'string', enum: ['confirm'] },
+                  replyMode: { type: 'string', enum: ['none'] },
+                  title: { type: 'string' },
+                  groups: { type: 'array', items: { type: 'object' } },
+                  submitLabel: { type: 'string' },
+                },
+              },
+              commitments: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      }],
+    })
     const response = await fetch(`${runningServer.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         authorization: 'Bearer golden-scenario:free-composition',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'golden-model',
-        stream: true,
-        messages: [{ role: 'user', content: 'Ask one current question.' }],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'request_choice',
-            parameters: {
-              type: 'object',
-              required: ['subject', 'card', 'commitments'],
-              properties: {
-                subject: {
-                  type: 'object',
-                  required: ['kind'],
-                  properties: { kind: { type: 'string', enum: ['none'] } },
-                },
-                card: {
-                  type: 'object',
-                  required: ['mode', 'replyMode', 'title', 'groups', 'submitLabel'],
-                  properties: {
-                    mode: { type: 'string', enum: ['confirm'] },
-                    replyMode: { type: 'string', enum: ['none'] },
-                    title: { type: 'string' },
-                    groups: { type: 'array', items: { type: 'object' } },
-                    submitLabel: { type: 'string' },
-                  },
-                },
-                commitments: { type: 'array', items: { type: 'object' } },
-              },
-            },
-          },
-        }],
-      }),
+      body: JSON.stringify(request),
     })
     const body = await response.text()
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/event-stream')
+    expect(body).toContain('execute_operation')
     expect(body).toContain('request_choice')
     expect(body).toContain('finish_reason')
     expect(body).toContain('data: [DONE]')
@@ -139,31 +262,39 @@ describe('Golden local model provider', () => {
     expect(await response.text()).toContain('stable boundary')
   })
 
-  it('routes a free-composition image request directly to create_image', () => {
-    const decision = decideGoldenModelResponse({
+  it('discovers create_image once and then routes it through the fixed Operation gateway', () => {
+    const request: GoldenChatCompletionRequest = {
+      model: 'golden-model',
+      messages: [{ role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST }],
+      tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
+    }
+    const discovery = decideGoldenModelResponse({
       scenarioId: 'free-composition',
       requestOrdinal: 1,
-      request: {
-        model: 'golden-model',
-        messages: [{ role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST }],
-        tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
-      },
+      request: withFixedOperationTools(request),
     })
-    expect(decision).toMatchObject({
+    expect(discovery).toMatchObject({
       kind: 'tool_call',
-      toolName: 'create_image',
-      argumentsJson: JSON.stringify({
-        request: {
-          kind: 'new',
-          count: 3,
-          prompt: 'A cinematic midnight shrine in mist, wide composition.',
-        },
-      }),
+      toolName: 'load_tools',
+      argumentsJson: JSON.stringify({ toolIds: ['create_image'] }),
+    })
+
+    const decision = decideWithLoadedOperationSchemas({
+      scenarioId: 'free-composition',
+      requestOrdinal: 2,
+      request,
+    })
+    expect(readOperationArguments(decision, 'create_image')).toEqual({
+      request: {
+        kind: 'new',
+        count: 3,
+        prompt: 'A cinematic midnight shrine in mist, wide composition.',
+      },
     })
   })
 
-  it('uses the registered delegate_creative_work name for generic and screenplay delegation', () => {
-    const generic = decideGoldenModelResponse({
+  it('uses the registered delegate_creative_work identity through the fixed gateway', () => {
+    const generic = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 2,
       request: {
@@ -172,9 +303,9 @@ describe('Golden local model provider', () => {
         tools: [{ type: 'function', function: { name: 'delegate_creative_work', parameters: { type: 'object' } } }],
       },
     })
-    expect(generic).toMatchObject({ kind: 'tool_call', toolName: 'delegate_creative_work' })
+    readOperationArguments(generic, 'delegate_creative_work')
 
-    const screenplay = decideGoldenModelResponse({
+    const screenplay = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 3,
       request: {
@@ -183,9 +314,7 @@ describe('Golden local model provider', () => {
         tools: [{ type: 'function', function: { name: 'delegate_creative_work', parameters: { type: 'object' } } }],
       },
     })
-    expect(screenplay).toMatchObject({ kind: 'tool_call', toolName: 'delegate_creative_work' })
-    if (screenplay.kind !== 'tool_call') return
-    expect(JSON.parse(screenplay.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(screenplay, 'delegate_creative_work')).toMatchObject({
       delegation: {
         source: 'requests',
         requests: [{ outputKind: 'canonical_screenplay', targetDurationSeconds: 240 }],
@@ -194,7 +323,7 @@ describe('Golden local model provider', () => {
   })
 
   it('stores a supplied screenplay as exact current-user text without Creative Work delegation', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 4,
       request: {
@@ -207,9 +336,7 @@ describe('Golden local model provider', () => {
       },
     })
 
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_text' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(decision, 'create_text')).toMatchObject({
       content: {
         kind: 'current_user_text',
         scope: 'project',
@@ -268,7 +395,7 @@ describe('Golden local model provider', () => {
   })
 
   it('authors one current Style Bible Choice with one optional current commitment', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 6,
       request: {
@@ -287,9 +414,7 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'request_choice' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(decision, 'request_choice')).toMatchObject({
       subject: {
         kind: 'resource_revisions',
         revisions: [{ revisionId: 'style-revision' }],
@@ -304,7 +429,7 @@ describe('Golden local model provider', () => {
       { type: 'function' as const, function: { name: 'request_choice', parameters: { type: 'object' } } },
       { type: 'function' as const, function: { name: 'create_image', parameters: { type: 'object' } } },
     ]
-    const awaitingRatio = decideGoldenModelResponse({
+    const awaitingRatio = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 7,
       request: {
@@ -322,9 +447,7 @@ describe('Golden local model provider', () => {
         tools,
       },
     })
-    expect(awaitingRatio).toMatchObject({ kind: 'tool_call', toolName: 'request_choice' })
-    if (awaitingRatio.kind !== 'tool_call') return
-    expect(JSON.parse(awaitingRatio.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(awaitingRatio, 'request_choice')).toMatchObject({
       subject: { kind: 'none' },
       card: {
         title: '请选择当前项目的画面比例',
@@ -338,7 +461,7 @@ describe('Golden local model provider', () => {
       ],
     })
 
-    const afterRatio = decideGoldenModelResponse({
+    const afterRatio = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 8,
       request: {
@@ -358,11 +481,11 @@ describe('Golden local model provider', () => {
         tools,
       },
     })
-    expect(afterRatio).toMatchObject({ kind: 'tool_call', toolName: 'create_image' })
+    readOperationArguments(afterRatio, 'create_image')
   })
 
   it('passes the exact screenplay revision into chapter_plan Creative Work', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 7,
       request: {
@@ -387,9 +510,7 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'delegate_creative_work' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(decision, 'delegate_creative_work')).toMatchObject({
       delegation: {
         requests: [{
           outputKind: 'chapter_plan',
@@ -403,7 +524,7 @@ describe('Golden local model provider', () => {
   })
 
   it('turns exact adopted Chapter identities into one parallel Creative Work delegation', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 8,
       request: {
@@ -422,9 +543,7 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'delegate_creative_work' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toEqual({
+    expect(readOperationArguments(decision, 'delegate_creative_work')).toEqual({
       delegation: {
         source: 'chapters',
         chapters: [
@@ -444,7 +563,7 @@ describe('Golden local model provider', () => {
   })
 
   it('adopts exact screenplay and chapter_plan revisions without a workflow stage', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 8,
       request: {
@@ -471,9 +590,7 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'adopt_chapters' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toEqual({
+    expect(readOperationArguments(decision, 'adopt_chapters')).toEqual({
       screenplay: {
         revisionId: 'screenplay-revision',
       },
@@ -484,12 +601,15 @@ describe('Golden local model provider', () => {
   })
 
   it('emits three distinct calls to the same independent Operation for a parallel request', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'parallel-operation-batch',
       requestOrdinal: 2,
       request: {
         model: 'golden-model',
-        messages: [{ role: 'user', content: GOLDEN_PARALLEL_IMAGE_REQUEST }],
+        messages: [
+          { role: 'system', content: 'Protocol documentation may mention `[task_update]` without reporting a Task.' },
+          { role: 'user', content: GOLDEN_PARALLEL_IMAGE_REQUEST },
+        ],
         tools: [{ type: 'function', function: { name: 'create_image', parameters: { type: 'object' } } }],
       },
     })
@@ -497,14 +617,24 @@ describe('Golden local model provider', () => {
     if (decision.kind !== 'tool_calls') return
     expect(decision.calls).toHaveLength(3)
     expect(new Set(decision.calls.map((call) => call.toolCallId)).size).toBe(3)
-    expect(decision.calls.every((call) => call.toolName === 'create_image')).toBe(true)
-    expect(decision.calls.map((call) => JSON.parse(call.argumentsJson))).toEqual([
+    expect(decision.calls.every((call) => call.toolName === 'execute_operation')).toBe(true)
+    expect(decision.calls.map((call) => {
+      const envelope = JSON.parse(call.argumentsJson) as {
+        operationId?: unknown
+        argumentsJson?: unknown
+      }
+      expect(envelope.operationId).toBe('create_image')
+      if (typeof envelope.argumentsJson !== 'string') {
+        throw new Error('GOLDEN_OPERATION_ARGUMENTS_JSON_REQUIRED')
+      }
+      return JSON.parse(envelope.argumentsJson) as unknown
+    })).toEqual([
       expect.objectContaining({ request: expect.not.objectContaining({ schemaId: expect.anything() }) }),
       expect.objectContaining({ request: expect.not.objectContaining({ schemaId: expect.anything() }) }),
       expect.objectContaining({ request: expect.not.objectContaining({ schemaId: expect.anything() }) }),
     ])
 
-    const continuationDecision = decideGoldenModelResponse({
+    const continuationDecision = decideWithLoadedOperationSchemas({
       scenarioId: 'parallel-operation-batch',
       requestOrdinal: 3,
       request: {
@@ -520,7 +650,7 @@ describe('Golden local model provider', () => {
   })
 
   it('reports a Task continuation without repeating the original tool', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 4,
       request: {
@@ -536,7 +666,7 @@ describe('Golden local model provider', () => {
   })
 
   it('retries only Resource identities returned as failed by list_resources', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 5,
       request: {
@@ -557,17 +687,13 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({
-      kind: 'tool_call',
-      toolName: 'create_image',
-      argumentsJson: JSON.stringify({
-        request: { kind: 'retry', resourceIds: ['failed-resource-1'] },
-      }),
+    expect(readOperationArguments(decision, 'create_image')).toEqual({
+      request: { kind: 'retry', resourceIds: ['failed-resource-1'] },
     })
   })
 
   it('passes exact listed image revisions into video generation', () => {
-    const decision = decideGoldenModelResponse({
+    const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 6,
       request: {
@@ -589,9 +715,7 @@ describe('Golden local model provider', () => {
         ],
       },
     })
-    expect(decision).toMatchObject({ kind: 'tool_call', toolName: 'create_video' })
-    if (decision.kind !== 'tool_call') return
-    expect(JSON.parse(decision.argumentsJson)).toMatchObject({
+    expect(readOperationArguments(decision, 'create_video')).toMatchObject({
       request: {
         kind: 'new',
         count: 2,

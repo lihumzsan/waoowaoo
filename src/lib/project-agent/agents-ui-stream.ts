@@ -170,8 +170,11 @@ function createTextProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
   }
 }
 
-function isGenericToolName(toolName: string | null): boolean {
-  return toolName === 'call' || toolName === 'tool'
+function isGenericToolName(
+  toolName: string | null,
+  aliasedToolNames: ReadonlySet<string>,
+): boolean {
+  return toolName === 'call' || toolName === 'tool' || (toolName ? aliasedToolNames.has(toolName) : false)
 }
 
 function replaceChunkToolName(chunk: ProjectAgentUiChunk, toolName: string): ProjectAgentUiChunk {
@@ -212,6 +215,7 @@ export function createProjectAgentUiMessageStream(params: {
   initialChunks: ProjectAgentUiChunk[]
   resolveToolName: (toolCallId: string) => string | null
   hiddenToolNames?: readonly string[]
+  aliasedToolNames?: readonly string[]
   sideChannel: ProjectAgentSideChannel
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onChunk?: (chunk: ProjectAgentUiChunk) => void
@@ -238,6 +242,9 @@ export function createProjectAgentUiMessageStream(params: {
       const startedToolCallIds = new Set<string>()
       const hiddenToolNames = new Set(
         (params.hiddenToolNames ?? []).map((toolName) => toolName.trim()).filter(Boolean),
+      )
+      const aliasedToolNames = new Set(
+        (params.aliasedToolNames ?? []).map((toolName) => toolName.trim()).filter(Boolean),
       )
       const hiddenToolCallIds = new Set<string>()
       const completedLiveReasoning: Array<{ reasoningId: string; text: string }> = []
@@ -269,13 +276,30 @@ export function createProjectAgentUiMessageStream(params: {
         if (toolCallId && isToolInputChunk(chunk)) {
           const incomingToolName = readChunkString(chunk, 'toolName')
           const mappedToolName = params.resolveToolName(toolCallId)?.trim() || null
-          if (mappedToolName && incomingToolName && !isGenericToolName(incomingToolName) && mappedToolName !== incomingToolName) {
+          if (
+            mappedToolName
+            && incomingToolName
+            && !isGenericToolName(incomingToolName, aliasedToolNames)
+            && mappedToolName !== incomingToolName
+          ) {
             throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_CONFLICT:${toolCallId}:${mappedToolName}:${incomingToolName}`)
           }
-          const toolName = mappedToolName ?? (isGenericToolName(incomingToolName) ? null : incomingToolName)
+          const toolName = mappedToolName
+            ?? (isGenericToolName(incomingToolName, aliasedToolNames) ? null : incomingToolName)
           if (!toolName) throw new Error(`PROJECT_AGENT_TOOL_IDENTITY_MISSING:${toolCallId}`)
           if (incomingToolName !== toolName) chunk = replaceChunkToolName(chunk, toolName)
           startedToolCallIds.add(toolCallId)
+        }
+        if (toolCallId && isToolChunk(chunk) && !isToolInputChunk(chunk)) {
+          const incomingToolName = readChunkString(chunk, 'toolName')
+          const mappedToolName = params.resolveToolName(toolCallId)?.trim() || null
+          if (
+            mappedToolName
+            && incomingToolName
+            && isGenericToolName(incomingToolName, aliasedToolNames)
+          ) {
+            chunk = replaceChunkToolName(chunk, mappedToolName)
+          }
         }
         if (toolCallId && (isToolApprovalRequestChunk(chunk) || isToolOutputChunk(chunk)) && !startedToolCallIds.has(toolCallId)) {
           const toolName = params.resolveToolName(toolCallId)?.trim() || null

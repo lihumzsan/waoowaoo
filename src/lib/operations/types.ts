@@ -236,9 +236,10 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
   agentFlow?: OperationAgentFlow
   choiceCommit?: OperationChoiceCommit
   /**
-   * Model-facing OpenAI Agents SDK tool input schema.
+   * Model-facing Operation input schema returned by the fixed Agent gateway.
    * This schema must never expose internal execution fields such as
-   * `confirmed`, and must be strict structured-output compatible.
+   * `confirmed`. The gateway transports it as data and the canonical runtime
+   * schema still validates every invocation.
    */
   toolInputSchema?: ProjectAgentToolInputSchema
   inputSchema: RuntimeSchema<Input>

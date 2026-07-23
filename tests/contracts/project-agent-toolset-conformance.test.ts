@@ -127,17 +127,18 @@ describe('project agent toolset conformance', () => {
     expect(registry.update_project_config.inputSchema.safeParse({ videoRatio: null }).success).toBe(false)
   })
 
-  it('projects the exhaustive registry into a compact schema-free discovery catalog', () => {
+  it('projects the exhaustive registry into compact discovery text and canonical load definitions', () => {
     const registry = createProjectAgentOperationRegistry()
     const toolset = resolveProjectAgentToolset({ registry })
     const catalog = createProjectAgentToolCatalog({ registry, toolset })
 
     expect(catalog.map((entry) => entry.operationId)).toEqual(toolset.operationIds)
     for (const entry of catalog) {
-      expect(Object.keys(entry).sort()).toEqual(['description', 'groupPath', 'operationId'])
+      expect(Object.keys(entry).sort()).toEqual(['description', 'groupPath', 'operationId', 'parameters'])
       expect(entry.groupPath.length).toBeGreaterThan(0)
       expect(entry.description.length).toBeGreaterThan(0)
       expect(entry.description.length).toBeLessThanOrEqual(PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT)
+      expect(entry.parameters).toBe(registry[entry.operationId]?.toolInputSchema)
     }
   })
 
