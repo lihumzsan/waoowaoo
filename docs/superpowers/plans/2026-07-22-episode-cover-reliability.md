@@ -715,7 +715,7 @@ git commit -m "test: verify episode cover reliability"
 
 ## Delivery Metadata
 
-- Plan status: Proposed
+- Plan status: Implemented and locally verified
 - Evidence profile: Standard
 - Story ID: None
 - Task IDs: None
@@ -723,30 +723,55 @@ git commit -m "test: verify episode cover reliability"
 - ZenTao sync status: not-synced; no write authorization was provided
 - ZenTao readback: None
 - OpenSpec/taskID artifact: None present in this repository
-- Last updated: 2026-07-22
+- Last updated: 2026-07-23
 
 ## Delivery Record
 
 ### Implementation status
 
-- Not started. This document is the unique implementation plan; no business code is changed by plan creation.
+- Complete for the code paths in this plan. Episode cover generation is pinned to `codex::gpt-image-2`, remains on the image queue, and keeps Codex image generation enabled with `danger-full-access`.
+- Episode read/write/delete paths are project-scoped. Automatic cover submission occurs inside the storyboard workflow lease.
+- Candidate images are fully decoded and audited as a single pure image. Forbidden text, marks, borders, collages, animation, malformed/empty data, and bad aspect ratios are rejected with a two-attempt bound.
+- Replacement, reset, Episode deletion, batch replacement, and project deletion retain current covers until commit and reclaim storage/media only after a transaction-current shared-reference check.
+- Frontend mutation state remains bound to the initiating Episode. Episode cards opt into active-task polling; terminal responses remain visible immediately even when an optimistic overlay has expired.
+- The Episodes route and the main project-data bootstrap batch modern audio/cover IDs. The project-data path also normalizes and deduplicates legacy audio storage keys before a single batch read and at-most-once ensure per missing key.
 
 ### Verification evidence
 
-- Not started. Record exact commands, exit status, and any base-branch comparison here during execution.
+- `npx vitest run` across 16 cover, lifecycle, media, authorization, polling, worker, queue, prompt, and chain files: 16 files and 202 tests passed.
+- Task 12 RED evidence: the old nested project path made 8 media queries for 4 Episodes. GREEN route evidence: 4 and 40 Episodes both make exactly two `mediaObject.findMany` calls and no per-Episode `findUnique`/`upsert`.
+- `npm run typecheck`: passed.
+- `npm run check:test-coverage-guards`: all five behavior/route/task-type guards passed.
+- `npm run check:task-target-states-no-polling`: passed; polling remains opt-in only for the Episode cover card.
+- Prisma validation passed for `prisma/schema.prisma` with a non-secret validation URL and for `prisma/schema.sqlit.prisma` with a temporary SQLite URL.
+- `npm run build`: passed with a non-secret validation `DATABASE_URL`. Redis connection attempts were denied by the desktop sandbox during page collection, but the production build completed successfully.
+- Earlier database-independent full-unit evidence was 1,664 of 1,665 tests passed; the sole `MINIO_ENDPOINT` environment failure was reproduced on the branch baseline and is unrelated to this delivery.
+- Independent reviews for the cleanup, full-decode, polling, and main project-data batching follow-ups reported no Critical, Important, or Minor findings.
 
 ### Real Codex acceptance evidence
 
-- Not started. Record task IDs, fixed model ID, permission evidence, screenshots, and media/storage before-and-after counts here.
+- Local Codex CLI `0.145.0-alpha.27` was exercised using the production arguments `--enable image_generation --sandbox danger-full-access`.
+- Two distinct 16:9 Episode cover candidates were generated and visually inspected:
+  - `episode-a.png`: 1672x941, 2,084,066 bytes, SHA-256 `cb53f3a9a5bb960d20ef6096dc08e3c1e1357be0abf46bf4b421bc089d4de967`.
+  - `episode-b.png`: 1664x936, 2,197,775 bytes, SHA-256 `eb130be31e90b5268bc8542514bad8b214541540d4196bc6ecda6a2dd5c69dfe`.
+- Both images were distinct single continuous scenes within 2% of 16:9 and contained no readable title, Episode number, logo, watermark, border, or collage.
+- The production audit prompt was run through local Codex vision for both images and returned the required structured result with every forbidden flag false, `isSingleContinuousScene: true`, and no issues.
+- This is partial runtime evidence only. No application task IDs, database media-pointer counts, storage before/after counts, worker logs, or browser screenshots are claimed because local MySQL, Redis, MinIO/storage, and Docker services were unavailable.
 
 ### Deviations
 
-- None recorded.
+- Final branch review added four follow-up scopes beyond the original eight tasks: remaining destructive cleanup paths, full image decode, real active-task polling, and batching on the main project-data path.
+- Real Codex verification used the locally configured CLI and exact production prompt/arguments rather than the full application worker path because the required local services were unavailable.
+- No ZenTao or external delivery record was written; this repository plan remains the only delivery record.
 
 ### Commits
 
-- None recorded.
+- Foundation and planned implementation: `da1143f0`, `7acf7c1d`, `a0e0b7bf`, `29fbcd7b`, `8312d610`, `c1c4ffe8`, `1b5e20d3`, `44f96082`, `2a9c2460`, `8a54a3ac`, `ef605fba`, `bbe6844c`, `a9545097`, `84b3dbc8`.
+- Review follow-ups: `1ded7a44`, `1b56abca`, `a16ba48b`, `28ff6957`, `f57fc8b2`, `e5a44e00`, `02e48d65`, `06c73481`.
+- The first Codex pin and project-ownership commits are already present on remote `main` at `d4e7d073`; the remaining commits are linear descendants of that base.
 
 ### Rollback or follow-up items
 
-- None recorded.
+- When MySQL, Redis, storage, and the application worker are available, run the full end-to-end acceptance steps from Task 8 and record task IDs plus media/storage before-and-after counts.
+- Observe audit rejection categories, retry counts, cleanup warnings, and `image_episode_cover` completion/failure rates after rollout.
+- Do not treat missing live-service evidence as authorization to weaken the Codex-only model, audit, ownership, or cleanup boundaries.
