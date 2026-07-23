@@ -49,18 +49,18 @@ async function main(): Promise<void> {
 
   const result = await executeMountainReset(prisma, plan)
   let storageDeletion = {
-    attempted: plan.deleteStorage ? plan.storageKeys.length : 0,
+    attempted: result.plan.deleteStorage ? result.plan.storageKeys.length : 0,
     success: 0,
     failed: 0,
-    skipped: !plan.deleteStorage,
+    skipped: !result.plan.deleteStorage,
     error: undefined as string | undefined,
   }
 
-  if (plan.deleteStorage && plan.storageKeys.length > 0) {
+  if (result.plan.deleteStorage && result.plan.storageKeys.length > 0) {
     try {
-      const deleted = await deleteObjects(plan.storageKeys)
+      const deleted = await deleteObjects(result.plan.storageKeys)
       storageDeletion = {
-        attempted: plan.storageKeys.length,
+        attempted: result.plan.storageKeys.length,
         success: deleted.success,
         failed: deleted.failed,
         skipped: false,
@@ -68,9 +68,9 @@ async function main(): Promise<void> {
       }
     } catch (error) {
       storageDeletion = {
-        attempted: plan.storageKeys.length,
+        attempted: result.plan.storageKeys.length,
         success: 0,
-        failed: plan.storageKeys.length,
+        failed: result.plan.storageKeys.length,
         skipped: false,
         error: error instanceof Error ? error.message : String(error),
       }

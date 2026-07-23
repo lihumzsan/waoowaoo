@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import {
   MOUNTAIN_RESET_CONFIRMATION,
   assertMountainResetCanExecute,
@@ -298,6 +299,7 @@ describe('mountain reset planning helpers', () => {
       },
       locationImage: deleteModel(),
       novelPromotionEpisode: {
+        findMany: vi.fn(async () => []),
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
     }
@@ -341,6 +343,101 @@ describe('mountain reset planning helpers', () => {
     })
   })
 
+  it('guards a cover published after planning but before reset execution', async () => {
+    deleteMediaObjectIfUnreferencedMock.mockReset()
+    const events: string[] = []
+    deleteMediaObjectIfUnreferencedMock.mockImplementation(async (mediaId: string) => {
+      events.push(`guarded-cover-checked:${mediaId}`)
+      return 'deleted'
+    })
+    const deleteModel = () => ({ deleteMany: vi.fn(async () => ({ count: 0 })) })
+    const tx = {
+      graphArtifact: deleteModel(),
+      graphCheckpoint: deleteModel(),
+      graphStepAttempt: deleteModel(),
+      graphStep: deleteModel(),
+      graphEvent: deleteModel(),
+      graphRun: deleteModel(),
+      taskEvent: deleteModel(),
+      task: {
+        deleteMany: vi.fn(async () => {
+          events.push('project-tasks-deleted')
+          return { count: 1 }
+        }),
+      },
+      videoEditorProject: deleteModel(),
+      novelPromotionVoiceLine: deleteModel(),
+      supplementaryPanel: deleteModel(),
+      novelPromotionPanel: deleteModel(),
+      novelPromotionShot: deleteModel(),
+      novelPromotionStoryboard: deleteModel(),
+      novelPromotionClip: deleteModel(),
+      characterAppearance: deleteModel(),
+      novelPromotionCharacter: deleteModel(),
+      novelPromotionLocation: {
+        ...deleteModel(),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+      locationImage: deleteModel(),
+      novelPromotionEpisode: {
+        findMany: vi.fn(async () => {
+          events.push('current-cover-read')
+          return [{
+            coverImageMediaId: 'media-cover-m1',
+            coverImageMedia: { storageKey: 'episode-cover/m1.png' },
+          }]
+        }),
+        updateMany: vi.fn(async () => {
+          events.push('cover-pointer-cleared')
+          return { count: 1 }
+        }),
+      },
+    }
+    const deleteMediaRows = vi.fn(async () => ({ count: 1 }))
+    const db = {
+      $transaction: vi.fn(async (callback) => {
+        const result = await callback(tx)
+        events.push('reset-transaction-committed')
+        return result
+      }),
+      mediaObject: { deleteMany: deleteMediaRows },
+    }
+    const plan = makePlan({
+      ids: {
+        ...makePlan().ids,
+        mediaObjectIds: ['media-cover-m1'],
+        guardedCoverMediaObjectIds: ['media-cover-m0'],
+      },
+      guardedCoverMedia: [{
+        id: 'media-cover-m0',
+        storageKey: 'episode-cover/m0.png',
+      }],
+      storageKeys: ['episode-cover/m1.png', 'other/reset-object.png'],
+    })
+
+    const result = await executeMountainReset(db as never, plan)
+
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(1, 'media-cover-m0')
+    expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(2, 'media-cover-m1')
+    expect(deleteMediaRows).not.toHaveBeenCalled()
+    expect(result.plan.ids.mediaObjectIds).not.toContain('media-cover-m1')
+    expect(result.plan.storageKeys).toEqual(['other/reset-object.png'])
+    expect(events).toEqual([
+      'project-tasks-deleted',
+      'current-cover-read',
+      'cover-pointer-cleared',
+      'reset-transaction-committed',
+      'guarded-cover-checked:media-cover-m0',
+      'guarded-cover-checked:media-cover-m1',
+    ])
+    expect(result.coverMediaObjects).toMatchObject({
+      attempted: 2,
+      deleted: 2,
+      failed: 0,
+      skipped: 0,
+    })
+  })
+
   it('preserves guarded cover rows and storage when storage deletion is disabled', async () => {
     deleteMediaObjectIfUnreferencedMock.mockReset()
     const deleteModel = () => ({ deleteMany: vi.fn(async () => ({ count: 0 })) })
@@ -368,6 +465,10 @@ describe('mountain reset planning helpers', () => {
       },
       locationImage: deleteModel(),
       novelPromotionEpisode: {
+        findMany: vi.fn(async () => [{
+          coverImageMediaId: 'media-cover-m1',
+          coverImageMedia: { storageKey: 'episode-cover/m1.png' },
+        }]),
         updateMany: vi.fn(async () => ({ count: 1 })),
       },
     }
@@ -380,27 +481,40 @@ describe('mountain reset planning helpers', () => {
       deleteStorage: false,
       ids: {
         ...makePlan().ids,
-        mediaObjectIds: [],
-        guardedCoverMediaObjectIds: ['media-cover-1'],
+        mediaObjectIds: ['media-cover-m1'],
+        guardedCoverMediaObjectIds: ['media-cover-m0'],
       },
       guardedCoverMedia: [{
-        id: 'media-cover-1',
-        storageKey: 'episode-cover/episode-1.png',
+        id: 'media-cover-m0',
+        storageKey: 'episode-cover/m0.png',
       }],
-      storageKeys: [],
+      storageKeys: ['episode-cover/m1.png', 'other/reset-object.png'],
     })
 
     const result = await executeMountainReset(db as never, plan)
 
     expect(deleteMediaRows).not.toHaveBeenCalled()
     expect(deleteMediaObjectIfUnreferencedMock).not.toHaveBeenCalled()
+    expect(result.plan.ids.mediaObjectIds).not.toContain('media-cover-m1')
+    expect(result.plan.ids.guardedCoverMediaObjectIds).toEqual([
+      'media-cover-m0',
+      'media-cover-m1',
+    ])
+    expect(result.plan.storageKeys).toEqual(['other/reset-object.png'])
     expect(result.coverMediaObjects).toMatchObject({
-      attempted: 1,
+      attempted: 2,
       deleted: 0,
       referenced: 0,
       missing: 0,
       failed: 0,
-      skipped: 1,
+      skipped: 2,
     })
+  })
+
+  it('uses the execution-time effective plan for script bulk storage deletion', () => {
+    const script = readFileSync('scripts/reset-mountain-pipeline.ts', 'utf8')
+
+    expect(script).toContain('deleteObjects(result.plan.storageKeys)')
+    expect(script).not.toContain('deleteObjects(plan.storageKeys)')
   })
 })
