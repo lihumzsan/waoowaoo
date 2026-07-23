@@ -680,7 +680,7 @@ export async function executeMountainReset(db: PrismaClient, plan: MountainReset
     })).count
 
     return { counts, currentCoverMedia }
-  })
+  }, { isolationLevel: 'Serializable' })
 
   const guardedCoverMediaById = new Map(
     plan.guardedCoverMedia.map((media) => [media.id, media]),

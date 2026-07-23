@@ -417,6 +417,9 @@ describe('mountain reset planning helpers', () => {
 
     const result = await executeMountainReset(db as never, plan)
 
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'Serializable',
+    })
     expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(1, 'media-cover-m0')
     expect(deleteMediaObjectIfUnreferencedMock).toHaveBeenNthCalledWith(2, 'media-cover-m1')
     expect(deleteMediaRows).not.toHaveBeenCalled()
