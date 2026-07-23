@@ -18,8 +18,20 @@ declare global {
 vi.stubGlobal('React', React)
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+const apiFetchMock = vi.hoisted(() => {
+  vi.stubGlobal('window', {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })
+  return vi.fn()
+})
+
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
+}))
+
+vi.mock('@/lib/api-fetch', () => ({
+  apiFetch: apiFetchMock,
 }))
 
 vi.mock('@/components/ui/icons', () => ({
@@ -44,12 +56,13 @@ function createQueryClient() {
 }
 
 function taskState(episodeId: string, phase: TaskTargetState['phase'], updatedAt: string | null): TaskTargetState {
+  const isActive = phase === 'queued' || phase === 'processing'
   return {
     targetType: 'NovelPromotionEpisode',
     targetId: episodeId,
     phase,
-    runningTaskId: null,
-    runningTaskType: null,
+    runningTaskId: isActive ? `task-${episodeId}` : null,
+    runningTaskType: isActive ? TASK_TYPE.IMAGE_EPISODE_COVER : null,
     intent: 'generate',
     hasOutputAtStart: false,
     progress: phase === 'completed' ? 100 : null,
@@ -58,6 +71,37 @@ function taskState(episodeId: string, phase: TaskTargetState['phase'], updatedAt
     lastError: phase === 'failed' ? { code: 'FAILED', message: 'provider failed' } : null,
     updatedAt,
   }
+}
+
+function targetStatesResponse(states: TaskTargetState[]) {
+  return {
+    ok: true,
+    json: async () => ({ states }),
+  } as Response
+}
+
+function requestedEpisodeId(callIndex: number): string | null {
+  const init = apiFetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined
+  if (typeof init?.body !== 'string') return null
+  const payload = JSON.parse(init.body) as {
+    targets?: Array<{ targetId?: string }>
+  }
+  return payload.targets?.[0]?.targetId ?? null
+}
+
+function countInvalidations(
+  calls: readonly (readonly unknown[])[],
+  filters: Record<string, unknown>,
+) {
+  return calls.filter(([actualFilters]) =>
+    JSON.stringify(actualFilters) === JSON.stringify(filters),
+  ).length
+}
+
+async function advancePollingTimers(milliseconds: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds)
+  })
 }
 
 function targetStatesKey(projectId: string, episodeId: string) {
@@ -88,6 +132,8 @@ afterEach(async () => {
   await act(async () => {
     for (const renderer of renderers.splice(0)) renderer.unmount()
   })
+  apiFetchMock.mockReset()
+  vi.useRealTimers()
 })
 
 describe('EpisodeCoverCard', () => {
@@ -237,5 +283,174 @@ describe('EpisodeCoverCard', () => {
       queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-b'),
       exact: false,
     })
+  })
+
+  it('polls a server-discovered processing task without an overlay and stops after terminal recovery', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))
+    const projectId = 'project-1'
+    const episodeId = 'episode-a'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    const completed = taskState(episodeId, 'completed', '2026-07-23T00:00:05.000Z')
+    apiFetchMock
+      .mockResolvedValueOnce(targetStatesResponse([
+        taskState(episodeId, 'processing', '2026-07-23T00:00:00.000Z'),
+      ]))
+      .mockResolvedValueOnce(targetStatesResponse([completed]))
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    renderers.push(renderer!)
+    await advancePollingTimers(120)
+    await advancePollingTimers(1)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1)
+    expect(requestedEpisodeId(0)).toBe(episodeId)
+
+    await advancePollingTimers(5_120)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(2)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, episodeId),
+        exact: false,
+      },
+    )).toBe(1)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+
+    await act(async () => {
+      queryClient.setQueryData(targetStatesKey(projectId, episodeId), [completed])
+      renderer!.update(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    await advancePollingTimers(15_000)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(2)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+  })
+
+  it('keeps server-active polling after the optimistic overlay TTL and stops on unmount', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))
+    const projectId = 'project-1'
+    const episodeId = 'episode-a'
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(queryKeys.tasks.targetStateOverlay(projectId), {
+      [`NovelPromotionEpisode:${episodeId}`]: {
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+        phase: 'queued',
+        runningTaskId: `task-${episodeId}`,
+        runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+        intent: 'generate',
+        hasOutputAtStart: false,
+        progress: null,
+        stage: null,
+        stageLabel: null,
+        updatedAt: '2026-07-23T00:00:00.000Z',
+        lastError: null,
+        expiresAt: Date.now() + 30_000,
+      },
+    })
+    apiFetchMock.mockImplementation(async () => targetStatesResponse([
+      taskState(episodeId, 'processing', new Date().toISOString()),
+    ]))
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    renderers.push(renderer!)
+    await advancePollingTimers(30_500)
+    await advancePollingTimers(1)
+
+    const callsAfterOverlayTtl = apiFetchMock.mock.calls.length
+    expect(callsAfterOverlayTtl).toBe(6)
+
+    await act(async () => {
+      queryClient.setQueryData(queryKeys.tasks.targetStateOverlay(projectId), {})
+    })
+    await advancePollingTimers(5_120)
+    expect(apiFetchMock).toHaveBeenCalledTimes(callsAfterOverlayTtl + 1)
+
+    await act(async () => {
+      renderer!.unmount()
+    })
+    renderers.splice(renderers.indexOf(renderer!), 1)
+    const callsAtUnmount = apiFetchMock.mock.calls.length
+
+    await advancePollingTimers(15_000)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(callsAtUnmount)
+  })
+
+  it('switches polling from episode A to B without cross-episode recovery', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))
+    const projectId = 'project-1'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    apiFetchMock.mockImplementation(async (_input: unknown, init: RequestInit) => {
+      const payload = JSON.parse(String(init.body)) as {
+        targets: Array<{ targetId: string }>
+      }
+      const episodeId = payload.targets[0].targetId
+      return targetStatesResponse([
+        taskState(
+          episodeId,
+          episodeId === 'episode-a' ? 'processing' : 'failed',
+          '2026-07-23T00:00:00.000Z',
+        ),
+      ])
+    })
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, 'episode-a'))
+    })
+    renderers.push(renderer!)
+    await advancePollingTimers(120)
+    await advancePollingTimers(1)
+
+    await act(async () => {
+      renderer!.update(renderCoverSection(queryClient, projectId, 'episode-b'))
+    })
+    await advancePollingTimers(120)
+    await advancePollingTimers(1)
+    await advancePollingTimers(10_000)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(2)
+    expect(queryClient.getQueryData<TaskTargetState[]>(
+      targetStatesKey(projectId, 'episode-b'),
+    )?.[0]?.phase).toBe('failed')
+    expect(requestedEpisodeId(0)).toBe('episode-a')
+    expect(requestedEpisodeId(1)).toBe('episode-b')
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-a'),
+        exact: false,
+      },
+    )).toBe(0)
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-b'),
+      exact: false,
+    })
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-b'),
+        exact: false,
+      },
+    )).toBe(1)
   })
 })

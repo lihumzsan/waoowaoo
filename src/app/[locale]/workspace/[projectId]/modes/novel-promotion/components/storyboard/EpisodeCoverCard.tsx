@@ -29,6 +29,8 @@ interface EpisodeCoverSectionProps {
   videoRatio: string
 }
 
+const EPISODE_COVER_ACTIVE_POLLING_INTERVAL_MS = 5_000
+
 function parseRatio(value: string): { width: number; height: number } | null {
   const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/)
   if (!match) return null
@@ -161,7 +163,10 @@ export function EpisodeCoverSection({
     resource: 'image' as const,
     hasOutput: !!coverImageUrl,
   }], [coverImageUrl, episodeId])
-  const taskStates = useTaskTargetStateMap(projectId, targets, { enabled: targets.length > 0 })
+  const taskStates = useTaskTargetStateMap(projectId, targets, {
+    enabled: targets.length > 0,
+    activePollingInterval: EPISODE_COVER_ACTIVE_POLLING_INTERVAL_MS,
+  })
   const taskState = taskStates.getState('NovelPromotionEpisode', episodeId)
   const taskPresentation = useMemo(() => taskState
     ? resolveTaskPresentationState({
