@@ -42,10 +42,10 @@
   },
   "reasoning": {
     "running": "Thinking",
-    "completed": "Reasoning",
-    "completedWithoutDetails": "Thinking complete",
-    "preparing": "Analyzing the request and preparing a response…",
-    "unavailable": "This run completed, but the model did not provide a displayable reasoning summary."
+    "completed": "Thinking complete",
+    "itemLabel": "Thinking",
+    "executionRunning": "Working · {count, plural, one {# tool called} other {# tools called}}",
+    "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}"
   },
   "subagents": {
     "label": "Subagent",

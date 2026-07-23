@@ -6,7 +6,6 @@ import {
   MessagePrimitive,
   useMessage,
   type DataMessagePartProps,
-  type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
@@ -42,13 +41,23 @@ import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
-import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
-import { HiddenWorkspaceAssistantReasoning, WorkspaceAssistantPendingReasoningStatus, WorkspaceAssistantRunReasoningStatus } from './WorkspaceAssistantReasoning'
+import {
+  HiddenWorkspaceAssistantReasoning,
+  WorkspaceAssistantReasoningPart,
+  WorkspaceAssistantRunReasoningStatus,
+  WorkspaceAssistantRunTraceGroup,
+  WorkspaceAssistantWaitDots,
+} from './WorkspaceAssistantReasoning'
+import {
+  groupWorkspaceAssistantMessageParts,
+  WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES,
+} from './workspace-assistant-run-trace'
 import {
   summarizeBillingActionItems,
   type BillingActionItemSummary,
 } from './billing-action-items'
+import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -60,7 +69,12 @@ function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
   return isRecord(custom) && custom.workspaceAssistantHidden === true
 }
 
-type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
+type StandardMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
+type GroupedMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Unstable_PartsGrouped>['components']>
+type WorkspaceAssistantMessagePartComponents = {
+  readonly assistant: GroupedMessagePartComponents
+  readonly standard: StandardMessagePartComponents
+}
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-base leading-6 text-[var(--glass-text-primary)]'
@@ -592,61 +606,6 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
 }
 
 
-function readToolResultFailureMessage(result: unknown): string | null {
-  if (!isRecord(result) || result.ok !== false) return null
-  const error = isRecord(result.error) ? result.error : null
-  const message = typeof error?.message === 'string' && error.message.trim() ? error.message.trim() : ''
-  if (message) return message
-  const code = typeof error?.code === 'string' && error.code.trim() ? error.code.trim() : ''
-  return code || null
-}
-
-function readOperationSubmissionState(result: unknown): OperationSubmissionState | null {
-  if (!isRecord(result) || result.ok !== true || !isRecord(result.data) || result.data.async !== true) return null
-  const taskIds = typeof result.data.taskId === 'string'
-    ? [result.data.taskId]
-    : Array.isArray(result.data.taskIds)
-      ? result.data.taskIds
-      : []
-  const taskRefs = taskIds.flatMap((taskId) => (
-    typeof taskId === 'string' && taskId.trim() ? [{ taskId: taskId.trim() }] : []
-  ))
-  return taskRefs.length > 0 ? { phase: 'submitted', taskRefs } : null
-}
-
-export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
-  const t = useTranslations('assistantAgent')
-  const locale = normalizeProjectAgentLocale(useLocale())
-  const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
-  const toolStatus = props.status.type
-  const failureMessage = readToolResultFailureMessage(props.result)
-  const submissionState = toolStatus === 'complete' ? readOperationSubmissionState(props.result) : null
-  const summaryText = toolStatus === 'complete'
-    ? failureMessage ? t('toolCall.failed') : submissionState?.phase === 'submitted' ? t('toolCall.submitted') : t('toolCall.success')
-    : toolStatus === 'requires-action'
-      ? t('toolCall.needsAction')
-      : t('toolCall.running')
-  const iconName = toolStatus === 'incomplete'
-    ? 'loader'
-    : failureMessage
-      ? 'alert'
-      : 'settingsHex'
-
-  return (
-    <div className={`text-sm leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
-      <div className="flex items-center gap-2">
-        <AppIcon name={iconName} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
-        <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
-      </div>
-      {failureMessage ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-xs leading-4">
-          {t('toolCall.failedDetail')}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 interface WorkspaceAssistantMessagePartComponentsOptions {
   hideChoiceCards?: boolean
   onSubmitChoiceResponse: (params: {
@@ -662,13 +621,18 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
 export function useWorkspaceAssistantMessagePartComponents({
   hideChoiceCards = false,
   onSubmitChoiceResponse,
-}: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
-  return useMemo<MessagePartComponents>(() => ({
-    Text: MarkdownTextPart,
-    Reasoning: HiddenWorkspaceAssistantReasoning,
-    ReasoningGroup: HiddenWorkspaceAssistantReasoning,
-    tools: { Fallback: WorkspaceAssistantToolCallCard, by_name: { update_plan: HiddenRuntimeContextDataCard } },
-    data: {
+}: WorkspaceAssistantMessagePartComponentsOptions): WorkspaceAssistantMessagePartComponents {
+  return useMemo<WorkspaceAssistantMessagePartComponents>(() => {
+    const tools = {
+      Fallback: WorkspaceAssistantToolCallCard,
+      by_name: Object.fromEntries(
+        WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES.map((toolName) => [
+          toolName,
+          HiddenRuntimeContextDataCard,
+        ]),
+      ),
+    }
+    const data = {
       by_name: {
         'agent-run': WorkspaceAssistantRunReasoningStatus,
         'agent-operation-start': HiddenRuntimeContextDataCard,
@@ -678,7 +642,7 @@ export function useWorkspaceAssistantMessagePartComponents({
         'agent-runtime-context': HiddenRuntimeContextDataCard,
         'assistant-choice-card': hideChoiceCards
           ? HiddenRuntimeContextDataCard
-          : (props) => (
+          : (props: DataMessagePartProps<ProjectAgentChoiceCardPartData>) => (
               <AssistantChoiceCardView
                 data={props.data}
                 onSubmitChoiceResponse={onSubmitChoiceResponse}
@@ -690,8 +654,24 @@ export function useWorkspaceAssistantMessagePartComponents({
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         'project-context': ProjectContextDataCard,
       },
-    },
-  }), [
+    }
+    return {
+      assistant: {
+        Text: MarkdownTextPart,
+        Reasoning: WorkspaceAssistantReasoningPart,
+        tools,
+        data,
+        Group: WorkspaceAssistantRunTraceGroup,
+      },
+      standard: {
+        Text: MarkdownTextPart,
+        Reasoning: HiddenWorkspaceAssistantReasoning,
+        ReasoningGroup: HiddenWorkspaceAssistantReasoning,
+        tools,
+        data,
+      },
+    }
+  }, [
     hideChoiceCards,
     onSubmitChoiceResponse,
   ])
@@ -712,7 +692,7 @@ function WorkspaceAssistantUserTextAttachments() {
   return <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
 }
 
-export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: MessagePartComponents; subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']; onSelectSubagent: (subagentId: string) => void }) {
+export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: WorkspaceAssistantMessagePartComponents; subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']; onSelectSubagent: (subagentId: string) => void }) {
   return (
     <>
       <MessagePrimitive.If user>
@@ -729,7 +709,10 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-            <MessagePrimitive.Parts components={props.messagePartComponents} />
+            <MessagePrimitive.Unstable_PartsGrouped
+              groupingFunction={groupWorkspaceAssistantMessageParts}
+              components={props.messagePartComponents.assistant}
+            />
             <WorkspaceAssistantSubagentRecordsForMessage subagents={props.subagents} onSelect={props.onSelectSubagent} />
           </MessagePrimitive.Root>
         </div>
@@ -739,7 +722,7 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
         <HiddenConversationSummaryMessage>
           <div className="space-y-1">
             <MessagePrimitive.Root className="space-y-2 px-1 py-1 text-sm leading-5 text-[var(--glass-text-tertiary)]">
-              <MessagePrimitive.Parts components={props.messagePartComponents} />
+              <MessagePrimitive.Parts components={props.messagePartComponents.standard} />
             </MessagePrimitive.Root>
           </div>
         </HiddenConversationSummaryMessage>
@@ -749,5 +732,5 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
 }
 
 export function WorkspaceAssistantPendingTurnPlaceholder() {
-  return <div className="space-y-1"><div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}><WorkspaceAssistantPendingReasoningStatus /></div></div>
+  return <div className="space-y-1"><div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}><WorkspaceAssistantWaitDots /></div></div>
 }

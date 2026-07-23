@@ -366,6 +366,9 @@
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSettings.tsx",
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSettings.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantReasoning.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantToolCall.tsx",
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-run-trace.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantActiveRunCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantPlanCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
@@ -402,6 +405,7 @@
       "testPaths": [
       "tests/unit/project-agent/tool-approval-policy.test.ts",
       "tests/unit/project-agent/agents-ui-stream.test.ts",
+      "tests/unit/project-agent/workspace-assistant-run-trace.test.ts",
       "tests/unit/project-agent/tool-discovery.test.ts",
       "tests/contracts/project-agent-toolset-conformance.test.ts",
       "tests/unit/project-agent/workspace-assistant-subagent-stream.test.ts",
