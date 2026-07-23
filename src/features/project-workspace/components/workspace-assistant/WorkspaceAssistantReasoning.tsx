@@ -185,7 +185,10 @@ export function WorkspaceAssistantRunReasoningStatus({
   data,
 }: DataMessagePartProps<ProjectAgentRunPartData>) {
   const running = useMessage((state) => state.status?.type === 'running')
-  const view = useMessage((state) => resolveWorkspaceAssistantRunTraceView(state.content))
+  const hasVisibleRunContent = useMessage((state) => {
+    const view = resolveWorkspaceAssistantRunTraceView(state.content)
+    return view.hasPublicReasoning || view.hasVisibleContent
+  })
   const isFirstRunPart = useMessage((state) => {
     const firstRunPart = state.content.find((part) => (
       part.type === 'data'
@@ -205,8 +208,7 @@ export function WorkspaceAssistantRunReasoningStatus({
     !isFirstRunPart
     || data.status !== 'running'
     || !running
-    || view.hasPublicReasoning
-    || view.hasVisibleContent
+    || hasVisibleRunContent
   ) return null
 
   return <WorkspaceAssistantWaitDots />
