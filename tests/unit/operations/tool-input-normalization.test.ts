@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
+import {
+  createProjectAgentToolInputSchema,
+  normalizeProjectAgentToolInput,
+} from '@/lib/operations/tool-input-schema'
 
 describe('project agent tool-input null normalization', () => {
   it('maps strict-model null for an optional field to absence before canonical Zod validation', () => {
@@ -92,6 +95,56 @@ describe('project agent tool-input null normalization', () => {
     })
 
     expect(result).toEqual({ request: { kind: 'new' } })
+    expect(inputSchema.safeParse(result).success).toBe(true)
+  })
+
+  it('omits optional nulls while preserving a required canonical null in the same branch', () => {
+    const inputSchema = z.object({
+      request: z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('asset'),
+          contextReferences: z.array(z.string()).optional(),
+          imageReferences: z.array(z.string()).optional(),
+          assetBinding: z.object({
+            assetId: z.string().min(1),
+            expectedVersion: z.number().int().nonnegative().nullable(),
+          }).strict(),
+        }).strict(),
+        z.object({
+          kind: z.literal('retry'),
+          resourceIds: z.array(z.string()).min(1),
+        }).strict(),
+      ]),
+    }).strict()
+    const toolInputSchema = createProjectAgentToolInputSchema({
+      operationId: 'test_mixed_nullable_input',
+      inputSchema,
+    })
+    const result = normalizeProjectAgentToolInput({
+      input: {
+        request: {
+          kind: 'asset',
+          contextReferences: null,
+          imageReferences: null,
+          assetBinding: {
+            assetId: 'asset-1',
+            expectedVersion: null,
+          },
+        },
+      },
+      inputSchema,
+      toolInputSchema,
+    })
+
+    expect(result).toEqual({
+      request: {
+        kind: 'asset',
+        assetBinding: {
+          assetId: 'asset-1',
+          expectedVersion: null,
+        },
+      },
+    })
     expect(inputSchema.safeParse(result).success).toBe(true)
   })
 })

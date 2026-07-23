@@ -98,6 +98,12 @@ const retryMediaGenerationRequestSchema = z.object({
     .describe('Exact failed Resource IDs whose original frozen generation inputs must be retried.'),
 }).strict()
 
+const independentImageSchemaIds = CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image
+  .filter((schemaId) => resolveAssetImageKindForSchemaId(schemaId) === null)
+if (independentImageSchemaIds.length === 0) {
+  throw new Error('CREATIVE_RESOURCE_INDEPENDENT_IMAGE_SCHEMA_REQUIRED')
+}
+
 const createTextInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).max(200).optional()
@@ -133,15 +139,8 @@ const createTextInputSchema = z.object({
 const createImageNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   imageReferences: imageReferenceSchema,
-  assetBinding: z.object({
-    assetKind: z.enum(['character', 'location', 'prop']),
-    assetId: z.string().trim().min(1),
-    variantId: z.string().trim().min(1),
-    expectedVersion: z.number().int().nonnegative().nullable(),
-  }).strict().optional()
-    .describe('Optional exact Project asset variant that receives the completed image Resource binding. It never changes the asset design.'),
-  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image).optional()
-    .describe('Professional meaning of the image Resource. Omit to use generic.image.'),
+  schemaId: z.enum(independentImageSchemaIds as [string, ...string[]]).optional()
+    .describe('Professional meaning of an independent image Resource. Omit to use generic.image.'),
   aspectRatio: z.string().trim().min(1).optional()
     .describe('Requested output aspect ratio such as 9:16 or 16:9. Omit to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
@@ -152,9 +151,27 @@ const createImageNewRequestSchema = z.object({
     .describe('Optional provider-independent image size supported by the configured image generation capability.'),
 }).strict()
 
+const createAssetImageRequestSchema = z.object({
+  kind: z.literal('asset'),
+  name: z.string().trim().min(1).max(200).optional()
+    .describe('Optional display name for the generated asset image Resource.'),
+  prompt: z.string().trim().min(1)
+    .describe('Complete visual design instruction for this exact Project asset.'),
+  contextReferences: contextReferenceSchema,
+  imageReferences: imageReferenceSchema,
+  assetBinding: z.object({
+    assetKind: z.enum(['character', 'location', 'prop']),
+    assetId: z.string().trim().min(1),
+    variantId: z.string().trim().min(1),
+    expectedVersion: z.number().int().nonnegative().nullable(),
+  }).strict()
+    .describe('Exact Project asset variant that receives the completed image Resource binding. It never changes the asset design.'),
+}).strict()
+
 const createImageInputSchema = z.object({
   request: z.discriminatedUnion('kind', [
     createImageNewRequestSchema,
+    createAssetImageRequestSchema,
     retryMediaGenerationRequestSchema,
   ]),
 }).strict()
@@ -213,11 +230,13 @@ type CreateImageInput = z.infer<typeof createImageInputSchema>
 type CreateAudioInput = z.infer<typeof createAudioInputSchema>
 type CreateVideoInput = z.infer<typeof createVideoInputSchema>
 type CreateImageNewRequest = z.infer<typeof createImageNewRequestSchema>
+type CreateAssetImageRequest = z.infer<typeof createAssetImageRequestSchema>
 type CreateAudioNewRequest = z.infer<typeof createAudioNewRequestSchema>
 type CreateVideoNewRequest = z.infer<typeof createVideoNewRequestSchema>
 type RetryMediaGenerationRequest = z.infer<typeof retryMediaGenerationRequestSchema>
 type MediaGenerationInput = CreateImageInput | CreateAudioInput | CreateVideoInput
-type NewMediaGenerationRequest = CreateImageNewRequest | CreateAudioNewRequest | CreateVideoNewRequest
+type CreateImageGenerationRequest = CreateImageNewRequest | CreateAssetImageRequest
+type NewMediaGenerationRequest = CreateImageGenerationRequest | CreateAudioNewRequest | CreateVideoNewRequest
 
 const resourceRefOutputSchema = z.object({
   resourceId: z.string().min(1),
@@ -601,16 +620,18 @@ async function resolveFrozenGenerationOptions(input: {
   const explicitSelections: Record<string, CapabilityValue> = {}
 
   if (input.config.mediaType === 'image') {
-    const publicInput = input.publicInput as CreateImageNewRequest
-    for (const field of ['resolution', 'quality', 'size'] as const) {
-      requireCapabilityField({
-        field,
-        value: publicInput[field],
-        capabilitiesKnown: capabilities !== undefined,
-        optionFields,
-        modelKey: input.modelKey,
-      })
-      if (publicInput[field] !== undefined) explicitSelections[field] = publicInput[field]
+    const publicInput = input.publicInput as CreateImageGenerationRequest
+    if (publicInput.kind === 'new') {
+      for (const field of ['resolution', 'quality', 'size'] as const) {
+        requireCapabilityField({
+          field,
+          value: publicInput[field],
+          capabilitiesKnown: capabilities !== undefined,
+          optionFields,
+          modelKey: input.modelKey,
+        })
+        if (publicInput[field] !== undefined) explicitSelections[field] = publicInput[field]
+      }
     }
   } else if (input.config.mediaType === 'video') {
     const publicInput = input.publicInput as CreateVideoNewRequest
@@ -683,7 +704,11 @@ async function resolveFrozenGenerationOptions(input: {
 
   const frozen: Record<string, string | number | boolean> = { ...resolved.options }
   const requestedAspectRatio = input.config.mediaType === 'image'
-    ? (input.publicInput as CreateImageNewRequest).aspectRatio?.trim()
+    ? (
+        (input.publicInput as CreateImageGenerationRequest).kind === 'new'
+          ? (input.publicInput as CreateImageNewRequest).aspectRatio?.trim()
+          : undefined
+      )
     : input.config.mediaType === 'video'
       ? (input.publicInput as CreateVideoNewRequest).aspectRatio?.trim()
       : undefined
@@ -709,9 +734,9 @@ async function resolveFrozenGenerationOptions(input: {
   }
   const resolvedAspectRatio = requiredAspectRatio
   if (input.config.mediaType === 'image') {
-    const publicInput = input.publicInput as CreateImageNewRequest
+    const publicInput = input.publicInput as CreateImageGenerationRequest
     frozen.aspectRatio = resolvedAspectRatio as string
-    if (publicInput.size) frozen.size = publicInput.size
+    if (publicInput.kind === 'new' && publicInput.size) frozen.size = publicInput.size
   } else if (input.config.mediaType === 'video') {
     const publicInput = input.publicInput as CreateVideoNewRequest
     frozen.aspectRatio = resolvedAspectRatio as string
@@ -730,30 +755,19 @@ async function planNewMediaGeneration(
   input: NewMediaGenerationRequest,
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
-  const schemaId = requireSchemaForMedia(input.schemaId ?? config.schemaId, config.mediaType)
-  const requestedAssetBinding = config.mediaType === 'image'
-    ? (input as CreateImageNewRequest).assetBinding
-    : undefined
-  const episodeId = requestedAssetBinding ? null : resolveEpisodeId(input, ctx)
+  const assetImageRequest = input.kind === 'asset' ? input : null
+  if (assetImageRequest && config.mediaType !== 'image') {
+    throw new Error(`CREATIVE_RESOURCE_ASSET_IMAGE_MEDIA_INVALID:${config.mediaType}`)
+  }
+  const schemaId = input.kind === 'asset'
+    ? getAssetImageFormatPolicy(input.assetBinding.assetKind).schemaId
+    : requireSchemaForMedia(input.schemaId ?? config.schemaId, config.mediaType)
+  const requestedAssetBinding = assetImageRequest?.assetBinding
+  const episodeId = input.kind === 'asset' ? null : resolveEpisodeId(input, ctx)
   const assetImageKind = config.mediaType === 'image'
     ? resolveAssetImageKindForSchemaId(schemaId)
     : null
   if (requestedAssetBinding) {
-    if (!assetImageKind || requestedAssetBinding.assetKind !== assetImageKind) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'ASSET_IMAGE_BINDING_SCHEMA_MISMATCH',
-        field: 'assetBinding.assetKind',
-        schemaId,
-        agentRetryableAfterCorrection: true,
-      })
-    }
-    if ((input.count ?? 1) !== 1) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'ASSET_IMAGE_BINDING_SINGLE_CANDIDATE_REQUIRED',
-        field: 'count',
-        agentRetryableAfterCorrection: true,
-      })
-    }
     const targetExists = requestedAssetBinding.assetKind === 'character'
       ? await prisma.characterAppearance.count({
           where: {
@@ -897,7 +911,8 @@ async function planNewMediaGeneration(
     ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
-  const resources = Array.from({ length: input.count ?? 1 }, (_, candidateIndex) => ({
+  const count = input.kind === 'asset' ? 1 : input.count ?? 1
+  const resources = Array.from({ length: count }, (_, candidateIndex) => ({
     resourceId: buildCreativeResourceOriginKey({
       operationId: config.operationId,
       requestId,
@@ -1307,7 +1322,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_image: defineOperation({
       id: 'create_image',
-      summary: 'Generate independent image Resources. For new generation, provide the complete prompt and references inside request.kind=new. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate image Resources. Use request.kind=new for independent images. Use request.kind=asset with the exact assetBinding for one Project asset reference image; the server derives its schema, count, fixed format, ratio, and generation defaults. To retry, use request.kind=retry with only exact failed Resource IDs.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {

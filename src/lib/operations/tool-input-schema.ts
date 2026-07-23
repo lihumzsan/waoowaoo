@@ -97,10 +97,10 @@ const OMIT_NULLISH_MODEL_VALUE = Symbol('omit-nullish-model-value')
 function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean {
   if (!isRecord(schema)) return true
   if (Object.prototype.hasOwnProperty.call(schema, 'const')) return value === schema.const
-  if (Array.isArray(schema.enum)) return schema.enum.some((candidate) => candidate === value)
   if (!isRecord(value)) return true
   const properties = readProperties(schema)
   for (const [key, propertySchema] of Object.entries(properties)) {
+    if (!isRecord(propertySchema) || !Object.prototype.hasOwnProperty.call(propertySchema, 'const')) continue
     if (!Object.prototype.hasOwnProperty.call(value, key)) continue
     if (!schemaMatchesDiscriminator(value[key], propertySchema)) return false
   }
@@ -118,21 +118,46 @@ function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null
   return matches.length === 1 ? toJsonValue(matches[0]) : null
 }
 
-function normalizeNullableModelValue(value: unknown, schema: JsonValue): unknown | typeof OMIT_NULLISH_MODEL_VALUE {
+function normalizeNullableModelValue(
+  value: unknown,
+  toolSchema: JsonValue,
+  runtimeSchema: JsonValue | undefined,
+): unknown | typeof OMIT_NULLISH_MODEL_VALUE {
   if (value === null) {
-    return schemaAllowsNull(schema) ? OMIT_NULLISH_MODEL_VALUE : value
+    return schemaAllowsNull(toolSchema)
+      && runtimeSchema !== undefined
+      && !schemaAllowsNull(runtimeSchema)
+      ? OMIT_NULLISH_MODEL_VALUE
+      : value
   }
   if (Array.isArray(value)) {
     return value.map((item) => {
-      if (!isRecord(schema) || schema.items === undefined) return item
-      const normalized = normalizeNullableModelValue(item, toJsonValue(schema.items))
+      if (!isRecord(toolSchema) || toolSchema.items === undefined) return item
+      const runtimeItems = isRecord(runtimeSchema) && runtimeSchema.items !== undefined
+        ? toJsonValue(runtimeSchema.items)
+        : undefined
+      const normalized = normalizeNullableModelValue(
+        item,
+        toJsonValue(toolSchema.items),
+        runtimeItems,
+      )
       return normalized === OMIT_NULLISH_MODEL_VALUE ? item : normalized
     })
   }
-  if (!isRecord(value) || !isRecord(schema)) return value
-  const selectedBranch = selectUnionBranch(value, schema)
-  if (selectedBranch) return normalizeNullableModelValue(value, selectedBranch)
-  const properties = readProperties(schema)
+  if (!isRecord(value) || !isRecord(toolSchema)) return value
+  const selectedToolBranch = selectUnionBranch(value, toolSchema)
+  const selectedRuntimeBranch = isRecord(runtimeSchema)
+    ? selectUnionBranch(value, runtimeSchema)
+    : null
+  if (selectedToolBranch || selectedRuntimeBranch) {
+    return normalizeNullableModelValue(
+      value,
+      selectedToolBranch ?? toolSchema,
+      selectedRuntimeBranch ?? runtimeSchema,
+    )
+  }
+  const properties = readProperties(toolSchema)
+  const runtimeProperties = isRecord(runtimeSchema) ? readProperties(runtimeSchema) : {}
   const normalized: UnknownRecord = {}
   for (const [key, child] of Object.entries(value)) {
     const propertySchema = properties[key]
@@ -140,7 +165,7 @@ function normalizeNullableModelValue(value: unknown, schema: JsonValue): unknown
       normalized[key] = child
       continue
     }
-    const next = normalizeNullableModelValue(child, propertySchema)
+    const next = normalizeNullableModelValue(child, propertySchema, runtimeProperties[key])
     if (next !== OMIT_NULLISH_MODEL_VALUE) normalized[key] = next
   }
   return normalized
@@ -160,12 +185,15 @@ export function normalizeProjectAgentToolInput(params: {
   toolInputSchema: ProjectAgentToolInputSchema
 }): unknown {
   if (params.inputSchema.safeParse(params.input).success) return params.input
+  const rawRuntimeSchema = asSchema(params.inputSchema).jsonSchema
+  if (isPromiseLike(rawRuntimeSchema)) return params.input
+  const runtimeSchema = toJsonObject(rawRuntimeSchema, 'runtime-normalization')
   const normalized = normalizeNullableModelValue(params.input, {
     type: params.toolInputSchema.type,
     properties: params.toolInputSchema.properties,
     required: params.toolInputSchema.required,
     additionalProperties: params.toolInputSchema.additionalProperties,
-  })
+  }, runtimeSchema)
   if (normalized === OMIT_NULLISH_MODEL_VALUE) return params.input
   return params.inputSchema.safeParse(normalized).success ? normalized : params.input
 }

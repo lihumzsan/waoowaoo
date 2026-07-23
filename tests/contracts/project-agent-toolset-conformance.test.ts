@@ -22,6 +22,7 @@ import {
   createProjectAgentToolCatalog,
 } from '@/lib/project-agent/tool-discovery'
 import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
+import { resolveAssetImageKindForSchemaId } from '@/lib/asset-generation'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -260,8 +261,13 @@ describe('project agent toolset conformance', () => {
       const retryBranch = branches.find((branch) => (
         readRecord(readRecord(branch.properties).kind).const === 'retry'
       ))
+      const modelSelectedSchemaIds = mediaType === 'image'
+        ? CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image.filter(
+            (schemaId) => resolveAssetImageKindForSchemaId(schemaId) === null,
+          )
+        : CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType]
       expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
-        enum: [...CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType], null],
+        enum: [...modelSelectedSchemaIds, null],
       })
       expect(Object.keys(readRecord(readRecord(retryBranch).properties))).toEqual(['kind', 'resourceIds'])
       expect(Object.keys(readRecord(readRecord(newBranch).properties))).not.toEqual(expect.arrayContaining([
@@ -305,6 +311,55 @@ describe('project agent toolset conformance', () => {
     expect(registry.create_image.inputSchema.safeParse({
       request: { kind: 'new', count: 2, prompt: 'A paper lantern in fog.' },
     }).success).toBe(true)
+    const imageRequestSchema = readRecord(registry.create_image.toolInputSchema.properties.request)
+    const imageRequestBranches = (Array.isArray(imageRequestSchema.oneOf) ? imageRequestSchema.oneOf : [])
+      .map(readRecord)
+    const imageAssetBranch = imageRequestBranches.find((branch) => (
+      readRecord(readRecord(branch.properties).kind).const === 'asset'
+    ))
+    const imageAssetProperties = readRecord(readRecord(imageAssetBranch).properties)
+    expect(Object.keys(imageAssetProperties)).toEqual([
+      'kind',
+      'name',
+      'prompt',
+      'contextReferences',
+      'imageReferences',
+      'assetBinding',
+    ])
+    expect(Object.keys(imageAssetProperties)).not.toEqual(expect.arrayContaining([
+      'episodeId',
+      'count',
+      'schemaId',
+      'aspectRatio',
+      'resolution',
+      'quality',
+      'size',
+    ]))
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'asset',
+        prompt: 'A precise reference portrait.',
+        assetBinding: {
+          assetKind: 'character',
+          assetId: 'character-1',
+          variantId: 'appearance-1',
+          expectedVersion: null,
+        },
+      },
+    }).success).toBe(true)
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'asset',
+        prompt: 'A precise reference portrait.',
+        aspectRatio: '16:9',
+        assetBinding: {
+          assetKind: 'character',
+          assetId: 'character-1',
+          variantId: 'appearance-1',
+          expectedVersion: null,
+        },
+      },
+    }).success).toBe(false)
     expect(registry.create_audio.inputSchema.safeParse({
       request: { kind: 'new', count: 1, prompt: 'Sparse ritual drums.', durationSeconds: 15 },
     }).success).toBe(true)
