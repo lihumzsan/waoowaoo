@@ -97,6 +97,7 @@ const ROUTE_FILES = [
   'src/app/api/novel-promotion/[projectId]/free-voices/[recordId]/versions/route.ts',
   'src/app/api/novel-promotion/[projectId]/free-voices/route.ts',
   'src/app/api/novel-promotion/[projectId]/editor/route.ts',
+  'src/app/api/novel-promotion/[projectId]/episodes/[episodeId]/cover/route.ts',
   'src/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route.ts',
   'src/app/api/novel-promotion/[projectId]/episodes/batch/route.ts',
   'src/app/api/novel-promotion/[projectId]/episodes/route.ts',
@@ -233,6 +234,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/regenerate-single-image/route.ts')
     || routeFile.endsWith('/regenerate-storyboard-text/route.ts')
     || routeFile.endsWith('/voice-generate/route.ts')
+    || routeFile.endsWith('/cover/route.ts')
   ) {
     return 'direct-submit-routes'
   }

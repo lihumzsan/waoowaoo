@@ -146,6 +146,10 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
     pathStem: 'novel-promotion/episode_split',
     variableKeys: ['CONTENT'],
   },
+  [PROMPT_IDS.NP_EPISODE_COVER_IMAGE]: {
+    pathStem: 'novel-promotion/episode_cover_image',
+    variableKeys: ['episode_context', 'aspect_ratio', 'style'],
+  },
   [PROMPT_IDS.NP_IMAGE_PROMPT_MODIFY]: {
     pathStem: 'novel-promotion/image_prompt_modify',
     variableKeys: ['prompt_input', 'user_input', 'video_prompt_input'],

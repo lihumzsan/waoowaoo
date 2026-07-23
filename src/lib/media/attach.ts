@@ -1,5 +1,12 @@
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { resolveMediaRef, resolveMediaRefFromLegacyValue } from './service'
+import {
+  ensureMediaObjectFromStorageKey,
+  extractStorageKeyFromLegacyValue,
+  getMediaObjectsByIds,
+  getMediaObjectsByStorageKeys,
+  resolveMediaRef,
+  resolveMediaRefFromLegacyValue,
+} from './service'
 import type { MediaRef } from './types'
 
 function parseStringArray(value: unknown): string[] {
@@ -203,8 +210,79 @@ async function attachMediaFieldsToVoiceLine<T extends Record<string, unknown>>(l
   }
 }
 
+export async function attachMediaFieldsToEpisode<T extends Record<string, unknown>>(episode: T) {
+  const audioMedia = await resolveMediaRef(episode.audioMediaId, episode.audioUrl)
+  const coverImageMedia = await resolveMediaRef(episode.coverImageMediaId, null)
+
+  return {
+    ...episode,
+    media: audioMedia,
+    audioMedia,
+    audioUrl: audioMedia?.url || episode.audioUrl || null,
+    coverImageMedia,
+    coverImageUrl: coverImageMedia?.url || null,
+  }
+}
+
+function episodeMediaId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+export async function attachMediaFieldsToEpisodes<T extends Record<string, unknown>>(episodes: T[]) {
+  const ids: string[] = []
+  for (const episode of episodes) {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    const coverImageMediaId = episodeMediaId(episode.coverImageMediaId)
+    if (audioMediaId) ids.push(audioMediaId)
+    if (coverImageMediaId) ids.push(coverImageMediaId)
+  }
+
+  const mediaById = await getMediaObjectsByIds(ids)
+  const legacyAudioStorageKeyByEpisode = new Map<T, string>()
+  const legacyAudioStorageKeys: string[] = []
+
+  for (const episode of episodes) {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    if (audioMediaId && mediaById.has(audioMediaId)) continue
+
+    const storageKey = extractStorageKeyFromLegacyValue(episode.audioUrl)
+    if (!storageKey) continue
+    legacyAudioStorageKeyByEpisode.set(episode, storageKey)
+    legacyAudioStorageKeys.push(storageKey)
+  }
+
+  const mediaByStorageKey = await getMediaObjectsByStorageKeys(legacyAudioStorageKeys)
+  const missingStorageKeys = [...new Set(legacyAudioStorageKeys)]
+    .filter((storageKey) => !mediaByStorageKey.has(storageKey))
+  const ensuredMedia = await Promise.all(
+    missingStorageKeys.map((storageKey) => ensureMediaObjectFromStorageKey(storageKey)),
+  )
+  missingStorageKeys.forEach((storageKey, index) => {
+    mediaByStorageKey.set(storageKey, ensuredMedia[index])
+  })
+
+  return episodes.map((episode) => {
+    const audioMediaId = episodeMediaId(episode.audioMediaId)
+    const coverImageMediaId = episodeMediaId(episode.coverImageMediaId)
+    const resolvedAudioMedia = audioMediaId ? mediaById.get(audioMediaId) || null : null
+    const legacyAudioStorageKey = legacyAudioStorageKeyByEpisode.get(episode)
+    const audioMedia = resolvedAudioMedia
+      || (legacyAudioStorageKey ? mediaByStorageKey.get(legacyAudioStorageKey) || null : null)
+    const coverImageMedia = coverImageMediaId ? mediaById.get(coverImageMediaId) || null : null
+
+    return {
+      ...episode,
+      media: audioMedia,
+      audioMedia,
+      audioUrl: audioMedia?.url || episode.audioUrl || null,
+      coverImageMedia,
+      coverImageUrl: coverImageMedia?.url || null,
+    }
+  })
+}
+
 export async function attachMediaFieldsToProject<T extends Record<string, unknown>>(projectLike: T) {
-  const audioMedia = await resolveMediaRef(projectLike.audioMediaId, projectLike.audioUrl)
+  const projectWithEpisodeMedia = await attachMediaFieldsToEpisode(projectLike)
   const characters = await Promise.all(
     ((projectLike.characters as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToProjectCharacter),
   )
@@ -223,18 +301,19 @@ export async function attachMediaFieldsToProject<T extends Record<string, unknow
   const voiceLines = await Promise.all(
     ((projectLike.voiceLines as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToVoiceLine),
   )
+  const episodes = await attachMediaFieldsToEpisodes(
+    (projectLike.episodes as Array<Record<string, unknown>>) || [],
+  )
 
   return {
-    ...projectLike,
-    media: audioMedia,
-    audioMedia,
-    audioUrl: audioMedia?.url || projectLike.audioUrl || null,
+    ...projectWithEpisodeMedia,
     characters,
     locations,
     props,
     shots,
     storyboards,
     voiceLines,
+    episodes,
   }
 }
 

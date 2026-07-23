@@ -1,14 +1,18 @@
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { getArtStylePrompt } from '@/lib/constants'
+import { createScopedLogger } from '@/lib/logging/core'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
+import { auditEpisodeCoverImage } from '@/lib/novel-promotion/episode-cover/audit'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { CODEX_DEFAULT_IMAGE_MODEL_KEY } from '@/lib/providers/codex/constants'
-import type { TaskJobData } from '@/lib/task/types'
+import { TaskTerminatedError } from '@/lib/task/errors'
+import { TASK_STATUS, type TaskJobData } from '@/lib/task/types'
+import { deleteObject } from '@/lib/storage'
 import { reportTaskProgress } from '../shared'
 import {
-  assertTaskActive,
   getProjectModels,
   resolveImageSourceFromGeneration,
   uploadImageSourceToCosWithMetadata,
@@ -19,6 +23,7 @@ import {
 } from './image-task-handler-shared'
 
 const MAX_COVER_REFERENCE_IMAGES = 3
+const logger = createScopedLogger({ module: 'worker.episode-cover' })
 
 type EpisodeCoverPanel = {
   id: string
@@ -141,15 +146,83 @@ export async function handleEpisodeCoverImageTask(job: Job<TaskJobData>) {
     pollProgress: { start: 30, end: 88 },
   })
 
-  const uploaded = await uploadImageSourceToCosWithMetadata(source, 'episode-cover', episode.id)
-  const media = await ensureMediaObjectFromStorageKey(uploaded.key, uploaded.metadata)
-
-  await reportTaskProgress(job, 94, { stage: 'persist_episode_cover' })
-  await assertTaskActive(job, 'persist_episode_cover')
-  await prisma.novelPromotionEpisode.update({
-    where: { id: episode.id },
-    data: { coverImageMediaId: media.id },
+  const audited = await auditEpisodeCoverImage({
+    userId: job.data.userId,
+    projectId: job.data.projectId,
+    imageSource: source,
+    expectedAspectRatio: aspectRatio,
   })
+  const media = await (async () => {
+    let uploadedKey: string | null = null
+    let candidateMedia: Awaited<ReturnType<typeof ensureMediaObjectFromStorageKey>> | null = null
+
+    try {
+      const uploaded = await uploadImageSourceToCosWithMetadata(audited.buffer, 'episode-cover', episode.id)
+      uploadedKey = uploaded.key
+      const candidate = await ensureMediaObjectFromStorageKey(uploaded.key, audited.metadata)
+      candidateMedia = candidate
+
+      await reportTaskProgress(job, 94, { stage: 'persist_episode_cover' })
+      await prisma.$transaction(async (tx) => {
+        const activeTask = await tx.task.findFirst({
+          where: {
+            id: job.data.taskId,
+            projectId: job.data.projectId,
+            status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+          },
+          select: { id: true },
+        })
+        if (!activeTask) {
+          throw new TaskTerminatedError(job.data.taskId)
+        }
+        await tx.novelPromotionEpisode.update({
+          where: { id: episode.id },
+          data: { coverImageMediaId: candidate.id },
+        })
+      }, { isolationLevel: 'Serializable' })
+      return candidate
+    } catch (taskError) {
+      try {
+        if (candidateMedia) {
+          await deleteMediaObjectIfUnreferenced(candidateMedia.id)
+        } else if (uploadedKey) {
+          await deleteObject(uploadedKey)
+        }
+      } catch (cleanupError) {
+        logger.warn({
+          message: 'Failed to compensate Episode cover candidate',
+          action: 'worker.episode-cover.cleanup_candidate_failed',
+          projectId: job.data.projectId,
+          taskId: job.data.taskId,
+          details: {
+            episodeId: episode.id,
+            mediaId: candidateMedia?.id ?? null,
+            storageKey: uploadedKey,
+            cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          },
+        })
+      }
+      throw taskError
+    }
+  })()
+
+  if (episode.coverImageMediaId && episode.coverImageMediaId !== media.id) {
+    try {
+      await deleteMediaObjectIfUnreferenced(episode.coverImageMediaId)
+    } catch (cleanupError) {
+      logger.warn({
+        message: 'Failed to clean superseded Episode cover',
+        action: 'worker.episode-cover.cleanup_superseded_failed',
+        projectId: job.data.projectId,
+        taskId: job.data.taskId,
+        details: {
+          episodeId: episode.id,
+          mediaId: episode.coverImageMediaId,
+          cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        },
+      })
+    }
+  }
 
   return {
     episodeId: episode.id,

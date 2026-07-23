@@ -70,8 +70,30 @@ if (voiceStageText.includes('setInterval(')) {
 
 const targetStateMapPath = 'src/lib/query/hooks/useTaskTargetStateMap.ts'
 const targetStateMapText = readFile(targetStateMapPath)
-if (!/refetchInterval:\s*false/.test(targetStateMapText)) {
-  fail('useTaskTargetStateMap must keep refetchInterval disabled', [targetStateMapPath])
+const defaultPollingDisabledPattern =
+  /\.\.\.\(\s*options\.activePollingInterval\s*===\s*undefined\s*\?\s*\{\s*refetchInterval:\s*false\b/
+if (!defaultPollingDisabledPattern.test(targetStateMapText)) {
+  fail('activePollingInterval must default to disabled', [targetStateMapPath])
+}
+
+const episodeCoverCardPath =
+  'src/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/storyboard/EpisodeCoverCard.tsx'
+const activePollingHits = collectPattern(/\bactivePollingInterval\b/)
+  .filter((hit) => !hit.startsWith(`${targetStateMapPath}:`))
+const unexpectedActivePollingHits = activePollingHits
+  .filter((hit) => !hit.startsWith(`${episodeCoverCardPath}:`))
+if (unexpectedActivePollingHits.length > 0) {
+  fail(
+    'Only EpisodeCoverCard may opt in to active task-target polling',
+    unexpectedActivePollingHits,
+  )
+}
+const episodeCoverActivePollingHits = activePollingHits
+  .filter((hit) => hit.startsWith(`${episodeCoverCardPath}:`))
+if (episodeCoverActivePollingHits.length !== 1) {
+  fail('EpisodeCoverCard must opt in exactly once', [
+    `${episodeCoverCardPath}: found ${episodeCoverActivePollingHits.length}`,
+  ])
 }
 
 const ssePath = 'src/lib/query/hooks/useSSE.ts'

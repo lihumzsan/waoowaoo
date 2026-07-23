@@ -1,4 +1,5 @@
 export { handleCharacterImageTask } from './character-image-task-handler'
+export { handleEpisodeCoverImageTask } from './episode-cover-image-task-handler'
 export { handleLocationImageTask } from './location-image-task-handler'
 export { handlePanelImageTask } from './panel-image-task-handler'
 export { handleModifyAssetImageTask } from './modify-asset-image-task-handler'

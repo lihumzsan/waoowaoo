@@ -7,6 +7,8 @@ import { useWorkspaceProvider } from '../WorkspaceProvider'
 
 interface EpisodeStagePayload {
   name?: string
+  coverImageMediaId?: string | null
+  coverImageUrl?: string | null
   novelText?: string | null
   clips?: NovelPromotionClip[]
   storyboards?: NovelPromotionStoryboard[]
@@ -19,6 +21,8 @@ export function useWorkspaceEpisodeStageData(profile: EpisodeDataProfile) {
 
   return {
     episodeName: payload?.name,
+    coverImageMediaId: payload?.coverImageMediaId || null,
+    coverImageUrl: payload?.coverImageUrl || null,
     novelText: payload?.novelText || '',
     clips: payload?.clips || [],
     storyboards: payload?.storyboards || [],

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient, type Query } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import type { TaskIntent } from '@/lib/task/intent'
 import type { TaskTargetOverlayMap } from '../task-target-overlay'
@@ -137,6 +137,10 @@ function parseTimestampMs(value: string | null | undefined): number | null {
 
 function isTerminalPhase(phase: string | null | undefined) {
   return phase === 'completed' || phase === 'failed'
+}
+
+function isActivePhase(phase: string | null | undefined) {
+  return phase === 'queued' || phase === 'processing'
 }
 
 function isServerTerminalNewerOrSame(
@@ -310,9 +314,11 @@ export function useTaskTargetStateMap(
   options: {
     enabled?: boolean
     staleTime?: number
+    activePollingInterval?: number
   } = {},
 ) {
   const queryClient = useQueryClient()
+  const [overlayClockMs, setOverlayClockMs] = useState(() => Date.now())
   const normalizedTargets = useMemo(() => normalizeTargets(targets), [targets])
   const serializedTargets = useMemo(
     () => JSON.stringify(normalizedTargets),
@@ -328,7 +334,16 @@ export function useTaskTargetStateMap(
     queryKey: targetStatesQueryKey,
     enabled,
     staleTime: options.staleTime ?? 15000,
-    refetchInterval: false,
+    ...(options.activePollingInterval === undefined
+      ? { refetchInterval: false as const }
+      : {
+          refetchInterval: (activeQuery: Query<TaskTargetState[]>) => {
+            const states = activeQuery.state.data
+            return states?.some((state) => isActivePhase(state.phase))
+              ? options.activePollingInterval
+              : false
+          },
+        }),
     refetchOnMount: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -343,26 +358,23 @@ export function useTaskTargetStateMap(
     initialData: {},
     queryFn: async () => ({}),
   })
+  const overlayMergeClockMs = Math.max(overlayClockMs, query.dataUpdatedAt || 0)
 
   const hasActiveOverlay = useMemo(() => {
     const overlay = overlayQuery.data || {}
-    const now = Date.now()
     return normalizedTargets.some((target) => {
       const runtime = overlay[stateKey(target.targetType, target.targetId)]
       if (!runtime) return false
-      if (runtime.expiresAt && runtime.expiresAt <= now) return false
+      if (runtime.expiresAt && runtime.expiresAt <= overlayMergeClockMs) return false
       if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
       return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
     })
-  }, [normalizedTargets, overlayQuery.data])
+  }, [normalizedTargets, overlayMergeClockMs, overlayQuery.data])
 
-  useEffect(() => {
-    if (!enabled || !projectId || !hasActiveOverlay) return
-    const timer = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: targetStatesQueryKey })
-    }, ACTIVE_OVERLAY_REFRESH_MS)
-    return () => clearInterval(timer)
-  }, [enabled, hasActiveOverlay, projectId, queryClient, targetStatesQueryKey])
+  const hasActiveServerState = useMemo(
+    () => (query.data || []).some((state) => isActivePhase(state.phase)),
+    [query.data],
+  )
 
   const mergedByKey = useMemo(() => {
     const map = new Map<string, TaskTargetState>()
@@ -371,12 +383,11 @@ export function useTaskTargetStateMap(
     }
 
     const overlay = overlayQuery.data || {}
-    const now = Date.now()
     for (const target of normalizedTargets) {
       const key = stateKey(target.targetType, target.targetId)
       const runtime = overlay[key]
       if (!runtime) continue
-      if (runtime.expiresAt && runtime.expiresAt <= now) {
+      if (runtime.expiresAt && runtime.expiresAt <= overlayMergeClockMs) {
         if (shouldTraceMergeTarget(target.targetType)) {
           logMergeDecision({
             projectId,
@@ -481,13 +492,41 @@ export function useTaskTargetStateMap(
       }
     }
     return map
-  }, [normalizedTargets, overlayQuery.data, projectId, query.data])
+  }, [normalizedTargets, overlayMergeClockMs, overlayQuery.data, projectId, query.data])
 
   const mergedData = useMemo(() => {
     return normalizedTargets.map((target) =>
       mergedByKey.get(stateKey(target.targetType, target.targetId)) || buildIdleState(target),
     )
   }, [mergedByKey, normalizedTargets])
+
+  const hasActiveMergedState = useMemo(
+    () => mergedData.some((state) => isActivePhase(state.phase)),
+    [mergedData],
+  )
+  const serverActivePollingEnabled = options.activePollingInterval !== undefined
+
+  useEffect(() => {
+    const shouldRefreshActiveOverlay = hasActiveOverlay && (
+      !serverActivePollingEnabled ||
+      (!hasActiveServerState && hasActiveMergedState)
+    )
+    if (!enabled || !projectId || !shouldRefreshActiveOverlay) return
+    const timer = setInterval(() => {
+      setOverlayClockMs(Date.now())
+      queryClient.invalidateQueries({ queryKey: targetStatesQueryKey })
+    }, ACTIVE_OVERLAY_REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [
+    enabled,
+    hasActiveMergedState,
+    hasActiveOverlay,
+    hasActiveServerState,
+    projectId,
+    queryClient,
+    serverActivePollingEnabled,
+    targetStatesQueryKey,
+  ])
 
   const byKey = useMemo(() => {
     const map = new Map<string, TaskTargetState>()

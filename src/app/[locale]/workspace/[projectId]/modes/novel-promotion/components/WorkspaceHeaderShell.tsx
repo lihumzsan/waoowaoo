@@ -13,6 +13,7 @@ interface EpisodeSummary {
   name: string
   episodeNumber?: number
   description?: string | null
+  coverImageUrl?: string | null
   artifactReadiness?: StageArtifactReadiness
   clips?: unknown[]
   storyboards?: Array<{
@@ -180,6 +181,7 @@ export default function WorkspaceHeaderShell({
                 return {
                   id: ep.id,
                   title: ep.name,
+                  thumbnailUrl: ep.coverImageUrl,
                   summary: ep.description ?? undefined,
                   status: {
                     script: stageArtifacts.hasScript ? 'ready' as const : 'empty' as const,

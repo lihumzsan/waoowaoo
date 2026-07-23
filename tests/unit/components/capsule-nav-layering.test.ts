@@ -13,6 +13,11 @@ vi.mock('@/components/ui/icons', () => ({
     createElement('span', { 'data-icon': name, className }),
 }))
 
+vi.mock('@/components/media/MediaImageWithLoading', () => ({
+  MediaImageWithLoading: ({ src, alt }: { src: string; alt: string }) =>
+    createElement('img', { src, alt }),
+}))
+
 describe('CapsuleNav layering', () => {
   it('keeps fixed workspace navigation below modal overlays', () => {
     Reflect.set(globalThis, 'React', React)
@@ -29,7 +34,7 @@ describe('CapsuleNav layering', () => {
         }),
         createElement(EpisodeSelector, {
           episodes: [
-            { id: 'episode-1', title: '剧集 1' },
+            { id: 'episode-1', title: '剧集 1', thumbnailUrl: '/m/episode-cover.webp' },
           ],
           currentId: 'episode-1',
           onSelect: () => undefined,
@@ -45,6 +50,7 @@ describe('CapsuleNav layering', () => {
     expect(html).toContain('sm:px-6')
     expect(html).toContain('hidden text-sm font-semibold sm:inline sm:text-base')
     expect(html).toContain('relative z-40')
+    expect(html).toContain('src="/m/episode-cover.webp"')
     expect(html).not.toContain('z-50 animate-fadeInDown')
     expect(html).not.toContain('z-[60]')
   })

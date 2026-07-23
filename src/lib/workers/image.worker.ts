@@ -9,6 +9,7 @@ import {
   handleAssetHubImageTask,
   handleAssetHubModifyTask,
   handleCharacterImageTask,
+  handleEpisodeCoverImageTask,
   handleLocationImageTask,
   handleModifyAssetImageTask,
   handlePanelImageTask,
@@ -21,6 +22,8 @@ async function processImageTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
 
   switch (job.data.type) {
+    case TASK_TYPE.IMAGE_EPISODE_COVER:
+      return await handleEpisodeCoverImageTask(job)
     case TASK_TYPE.IMAGE_CHARACTER:
       return await handleCharacterImageTask(job)
     case TASK_TYPE.IMAGE_LOCATION:

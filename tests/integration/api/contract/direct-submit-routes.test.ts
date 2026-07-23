@@ -202,6 +202,9 @@ const prismaMock = vi.hoisted(() => ({
       content: 'hello world voice line',
     })),
   },
+  task: {
+    findMany: vi.fn(async () => []),
+  },
   $transaction: vi.fn(async (fn: (tx: {
     novelPromotionPanel: {
       findMany: (args: unknown) => Promise<Array<{ id: string; panelIndex: number }>>
@@ -351,6 +354,7 @@ function toApiPath(routeFile: string, params?: Record<string, string>): string {
     .replace(/^src\/app/, '')
     .replace(/\/route\.ts$/, '')
     .replace('[projectId]', params?.projectId || 'project-1')
+    .replace('[episodeId]', params?.episodeId || 'episode-1')
     .replace('[assetId]', params?.assetId || 'asset-1')
 }
 
@@ -450,6 +454,15 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedTaskType: TASK_TYPE.IMAGE_CHARACTER,
     expectedTargetType: 'CharacterAppearance',
     expectedProjectId: 'project-1',
+  },
+  {
+    routeFile: 'src/app/api/novel-promotion/[projectId]/episodes/[episodeId]/cover/route.ts',
+    body: { locale: 'zh' },
+    params: { projectId: 'project-1', episodeId: 'episode-1' },
+    expectedTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+    expectedTargetType: 'NovelPromotionEpisode',
+    expectedProjectId: 'project-1',
+    expectedSubmitEpisodeId: 'episode-1',
   },
   {
     routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
@@ -627,7 +640,7 @@ describe('api contract - direct submit routes (behavior)', () => {
   })
 
   it('keeps expected coverage size', () => {
-    expect(DIRECT_CASES.length).toBe(20)
+    expect(DIRECT_CASES.length).toBe(21)
   })
 
   for (const routeCase of DIRECT_CASES) {

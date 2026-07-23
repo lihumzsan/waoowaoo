@@ -58,6 +58,9 @@ export interface Episode {
   description?: string | null
   novelText?: string | null
   audioUrl?: string | null
+  coverImageMediaId?: string | null
+  coverImageMedia?: MediaRef | null
+  coverImageUrl?: string | null
   media?: MediaRef | null
   srtContent?: string | null
   createdAt: string

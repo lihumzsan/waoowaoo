@@ -50,6 +50,7 @@ const ALL_QUEUES = [imageQueue, videoQueue, voiceQueue, textQueue]
 
 const IMAGE_TYPES = new Set<TaskType>([
   TASK_TYPE.IMAGE_PANEL,
+  TASK_TYPE.IMAGE_EPISODE_COVER,
   TASK_TYPE.IMAGE_CHARACTER,
   TASK_TYPE.IMAGE_LOCATION,
   TASK_TYPE.PANEL_VARIANT,
@@ -82,6 +83,10 @@ const SINGLE_ATTEMPT_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.ENVIRONMENT_SOUND_GENERATE,
 ])
 
+const TASK_TYPE_ATTEMPTS = new Map<TaskType, number>([
+  [TASK_TYPE.IMAGE_EPISODE_COVER, 2],
+])
+
 export function getQueueTypeByTaskType(type: TaskType): QueueType {
   if (IMAGE_TYPES.has(type)) return 'image'
   if (VIDEO_TYPES.has(type)) return 'video'
@@ -109,7 +114,7 @@ export async function addTaskJob(data: TaskJobData, opts?: JobsOptions) {
   const priority = typeof opts?.priority === 'number' ? opts.priority : 0
   const attempts = SINGLE_ATTEMPT_TASK_TYPES.has(data.type)
     ? 1
-    : (typeof opts?.attempts === 'number' ? opts.attempts : undefined)
+    : (TASK_TYPE_ATTEMPTS.get(data.type) ?? opts?.attempts)
   return await queue.add(data.type, data, {
     jobId: data.taskId,
     priority,

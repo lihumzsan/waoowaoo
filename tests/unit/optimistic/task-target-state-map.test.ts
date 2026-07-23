@@ -35,6 +35,12 @@ vi.mock('react', async () => {
     useEffect: (effect: () => (() => void) | void) => {
       runtime.effectCleanups.push(effect())
     },
+    useState: <T,>(initialValue: T | (() => T)) => {
+      const value = typeof initialValue === 'function'
+        ? (initialValue as () => T)()
+        : initialValue
+      return [value, vi.fn()] as const
+    },
   }
 })
 
