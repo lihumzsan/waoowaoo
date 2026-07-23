@@ -393,6 +393,102 @@ describe('EpisodeCoverCard', () => {
     expect(apiFetchMock).toHaveBeenCalledTimes(callsAtUnmount)
   })
 
+  it.each([
+    {
+      label: 'completed with a null timestamp',
+      phase: 'completed' as const,
+      updatedAt: null,
+    },
+    {
+      label: 'failed with an older timestamp',
+      phase: 'failed' as const,
+      updatedAt: '2026-07-22T23:59:59.000Z',
+    },
+  ])('expires an active overlay over identical $label responses and stops the fallback timer', async ({
+    phase,
+    updatedAt,
+  }) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))
+    const projectId = 'project-1'
+    const episodeId = 'episode-a'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    const terminal = taskState(episodeId, phase, updatedAt)
+    queryClient.setQueryData(queryKeys.tasks.targetStateOverlay(projectId), {
+      [`NovelPromotionEpisode:${episodeId}`]: {
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+        phase: 'queued',
+        runningTaskId: `task-${episodeId}`,
+        runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+        intent: 'generate',
+        hasOutputAtStart: false,
+        progress: null,
+        stage: null,
+        stageLabel: null,
+        updatedAt: '2026-07-23T00:00:00.000Z',
+        lastError: null,
+        expiresAt: Date.now() + 30_000,
+      },
+    })
+    apiFetchMock.mockImplementation(async () => targetStatesResponse([terminal]))
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    renderers.push(renderer!)
+    await advancePollingTimers(121)
+    await advancePollingTimers(29_878)
+
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, episodeId),
+        exact: false,
+      },
+    )).toBe(0)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(0)
+
+    await advancePollingTimers(1)
+    await advancePollingTimers(120)
+
+    expect(queryClient.getQueryData<TaskTargetState[]>(
+      targetStatesKey(projectId, episodeId),
+    )?.[0]).toEqual(terminal)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, episodeId),
+        exact: false,
+      },
+    )).toBe(1)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+
+    const callsAfterExpiry = apiFetchMock.mock.calls.length
+    await advancePollingTimers(15_000)
+    expect(apiFetchMock).toHaveBeenCalledTimes(callsAfterExpiry)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+
+    await act(async () => {
+      renderer!.unmount()
+    })
+    renderers.splice(renderers.indexOf(renderer!), 1)
+    await advancePollingTimers(15_000)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(callsAfterExpiry)
+  })
+
   it('switches polling from episode A to B without cross-episode recovery', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))

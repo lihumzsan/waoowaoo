@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient, type Query } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import type { TaskIntent } from '@/lib/task/intent'
@@ -318,6 +318,7 @@ export function useTaskTargetStateMap(
   } = {},
 ) {
   const queryClient = useQueryClient()
+  const [overlayClockMs, setOverlayClockMs] = useState(() => Date.now())
   const normalizedTargets = useMemo(() => normalizeTargets(targets), [targets])
   const serializedTargets = useMemo(
     () => JSON.stringify(normalizedTargets),
@@ -360,15 +361,14 @@ export function useTaskTargetStateMap(
 
   const hasActiveOverlay = useMemo(() => {
     const overlay = overlayQuery.data || {}
-    const now = Date.now()
     return normalizedTargets.some((target) => {
       const runtime = overlay[stateKey(target.targetType, target.targetId)]
       if (!runtime) return false
-      if (runtime.expiresAt && runtime.expiresAt <= now) return false
+      if (runtime.expiresAt && runtime.expiresAt <= overlayClockMs) return false
       if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
       return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
     })
-  }, [normalizedTargets, overlayQuery.data])
+  }, [normalizedTargets, overlayClockMs, overlayQuery.data])
 
   const hasActiveServerState = useMemo(
     () => (query.data || []).some((state) => isActivePhase(state.phase)),
@@ -382,12 +382,11 @@ export function useTaskTargetStateMap(
     }
 
     const overlay = overlayQuery.data || {}
-    const now = Date.now()
     for (const target of normalizedTargets) {
       const key = stateKey(target.targetType, target.targetId)
       const runtime = overlay[key]
       if (!runtime) continue
-      if (runtime.expiresAt && runtime.expiresAt <= now) {
+      if (runtime.expiresAt && runtime.expiresAt <= overlayClockMs) {
         if (shouldTraceMergeTarget(target.targetType)) {
           logMergeDecision({
             projectId,
@@ -492,7 +491,7 @@ export function useTaskTargetStateMap(
       }
     }
     return map
-  }, [normalizedTargets, overlayQuery.data, projectId, query.data])
+  }, [normalizedTargets, overlayClockMs, overlayQuery.data, projectId, query.data])
 
   const mergedData = useMemo(() => {
     return normalizedTargets.map((target) =>
@@ -513,6 +512,7 @@ export function useTaskTargetStateMap(
     )
     if (!enabled || !projectId || !shouldRefreshActiveOverlay) return
     const timer = setInterval(() => {
+      setOverlayClockMs(Date.now())
       queryClient.invalidateQueries({ queryKey: targetStatesQueryKey })
     }, ACTIVE_OVERLAY_REFRESH_MS)
     return () => clearInterval(timer)
