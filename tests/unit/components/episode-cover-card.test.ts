@@ -404,6 +404,93 @@ describe('EpisodeCoverCard', () => {
       phase: 'failed' as const,
       updatedAt: '2026-07-22T23:59:59.000Z',
     },
+  ])('reveals $label immediately when polling finishes after the overlay TTL', async ({
+    phase,
+    updatedAt,
+  }) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-23T00:00:00.000Z'))
+    const projectId = 'project-1'
+    const episodeId = 'episode-a'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    const processing = taskState(episodeId, 'processing', '2026-07-23T00:00:00.000Z')
+    const terminal = taskState(episodeId, phase, updatedAt)
+    queryClient.setQueryData(queryKeys.tasks.targetStateOverlay(projectId), {
+      [`NovelPromotionEpisode:${episodeId}`]: {
+        targetType: 'NovelPromotionEpisode',
+        targetId: episodeId,
+        phase: 'queued',
+        runningTaskId: `task-${episodeId}`,
+        runningTaskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+        intent: 'generate',
+        hasOutputAtStart: false,
+        progress: null,
+        stage: null,
+        stageLabel: null,
+        updatedAt: '2026-07-23T00:00:00.000Z',
+        lastError: null,
+        expiresAt: Date.now() + 30_000,
+      },
+    })
+    apiFetchMock.mockImplementation(async () => targetStatesResponse([
+      apiFetchMock.mock.calls.length <= 6 ? processing : terminal,
+    ]))
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    renderers.push(renderer!)
+    await advancePollingTimers(121)
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      await advancePollingTimers(5_120)
+    }
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(6)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(0)
+
+    await advancePollingTimers(5_120)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(7)
+    expect(queryClient.getQueryData<TaskTargetState[]>(
+      targetStatesKey(projectId, episodeId),
+    )?.[0]).toEqual(terminal)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      {
+        queryKey: queryKeys.episodeDataPrefix(projectId, episodeId),
+        exact: false,
+      },
+    )).toBe(1)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+
+    await advancePollingTimers(15_000)
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(7)
+    expect(countInvalidations(
+      invalidateQueries.mock.calls,
+      { queryKey: queryKeys.projectData(projectId) },
+    )).toBe(1)
+  })
+
+  it.each([
+    {
+      label: 'completed with a null timestamp',
+      phase: 'completed' as const,
+      updatedAt: null,
+    },
+    {
+      label: 'failed with an older timestamp',
+      phase: 'failed' as const,
+      updatedAt: '2026-07-22T23:59:59.000Z',
+    },
   ])('expires an active overlay over identical $label responses and stops the fallback timer', async ({
     phase,
     updatedAt,

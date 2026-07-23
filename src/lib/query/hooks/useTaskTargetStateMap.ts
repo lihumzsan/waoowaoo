@@ -358,17 +358,18 @@ export function useTaskTargetStateMap(
     initialData: {},
     queryFn: async () => ({}),
   })
+  const overlayMergeClockMs = Math.max(overlayClockMs, query.dataUpdatedAt || 0)
 
   const hasActiveOverlay = useMemo(() => {
     const overlay = overlayQuery.data || {}
     return normalizedTargets.some((target) => {
       const runtime = overlay[stateKey(target.targetType, target.targetId)]
       if (!runtime) return false
-      if (runtime.expiresAt && runtime.expiresAt <= overlayClockMs) return false
+      if (runtime.expiresAt && runtime.expiresAt <= overlayMergeClockMs) return false
       if (runtime.phase !== 'queued' && runtime.phase !== 'processing') return false
       return matchesTaskTypeWhitelist(target.types, runtime.runningTaskType)
     })
-  }, [normalizedTargets, overlayClockMs, overlayQuery.data])
+  }, [normalizedTargets, overlayMergeClockMs, overlayQuery.data])
 
   const hasActiveServerState = useMemo(
     () => (query.data || []).some((state) => isActivePhase(state.phase)),
@@ -386,7 +387,7 @@ export function useTaskTargetStateMap(
       const key = stateKey(target.targetType, target.targetId)
       const runtime = overlay[key]
       if (!runtime) continue
-      if (runtime.expiresAt && runtime.expiresAt <= overlayClockMs) {
+      if (runtime.expiresAt && runtime.expiresAt <= overlayMergeClockMs) {
         if (shouldTraceMergeTarget(target.targetType)) {
           logMergeDecision({
             projectId,
@@ -491,7 +492,7 @@ export function useTaskTargetStateMap(
       }
     }
     return map
-  }, [normalizedTargets, overlayClockMs, overlayQuery.data, projectId, query.data])
+  }, [normalizedTargets, overlayMergeClockMs, overlayQuery.data, projectId, query.data])
 
   const mergedData = useMemo(() => {
     return normalizedTargets.map((target) =>
