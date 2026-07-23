@@ -177,7 +177,11 @@ export function EpisodeCoverSection({
   const lastTerminalSignatureRef = useRef('')
 
   useEffect(() => {
-    if (!terminalSignature || terminalSignature === lastTerminalSignatureRef.current) return
+    if (!terminalSignature) {
+      lastTerminalSignatureRef.current = ''
+      return
+    }
+    if (terminalSignature === lastTerminalSignatureRef.current) return
     lastTerminalSignatureRef.current = terminalSignature
     void Promise.all([
       invalidateEpisodeQueries(queryClient, projectId, episodeId),

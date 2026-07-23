@@ -1,182 +1,241 @@
 import * as React from 'react'
 import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, create, type ReactTestRenderer } from 'react-test-renderer'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import EpisodeCoverCard, {
   EpisodeCoverSection,
   resolveEpisodeCoverAspectRatio,
 } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/storyboard/EpisodeCoverCard'
-import { resolveTaskPresentationState } from '@/lib/task/presentation'
+import { queryKeys } from '@/lib/query/keys'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
+import { TASK_TYPE } from '@/lib/task/types'
 
-const runtime = vi.hoisted(() => ({
-  taskState: null as TaskTargetState | null,
-  terminalSignatureRef: { current: '' },
-  invalidateQueries: vi.fn(async () => undefined),
-  generateCover: {
-    error: null,
-    isPending: false,
-    mutate: vi.fn(),
-  },
-}))
-const invalidateEpisodeQueriesMock = vi.hoisted(() => vi.fn(async () => undefined))
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean
+}
+
+vi.stubGlobal('React', React)
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }))
 
-vi.mock('react', async () => {
-  const actual = await vi.importActual<typeof import('react')>('react')
-  return {
-    ...actual,
-    useEffect: (effect: () => void | (() => void)) => {
-      effect()
-    },
-    useRef: () => runtime.terminalSignatureRef,
-  }
-})
-
-vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({
-    invalidateQueries: runtime.invalidateQueries,
-  }),
-}))
-
-vi.mock('@/lib/query/hooks', () => ({
-  useGenerateEpisodeCover: () => runtime.generateCover,
-}))
-
-vi.mock('@/lib/query/hooks/useTaskTargetStateMap', () => ({
-  useTaskTargetStateMap: () => ({
-    getState: () => runtime.taskState,
-  }),
-}))
-
-vi.mock('@/lib/query/episode-cache', () => ({
-  invalidateEpisodeQueries: invalidateEpisodeQueriesMock,
-}))
-
 vi.mock('@/components/ui/icons', () => ({
-  AppIcon: ({ name, className }: { name: string; className?: string }) =>
-    createElement('span', { 'data-icon': name, className }),
+  AppIcon: ({ name, className }: { name: string; className?: string }) => (
+    createElement('span', { 'data-icon': name, className })
+  ),
 }))
 
 vi.mock('@/components/media/MediaImageWithLoading', () => ({
-  MediaImageWithLoading: ({ src, alt, className }: { src: string; alt: string; className?: string }) =>
-    createElement('img', { src, alt, className }),
+  MediaImageWithLoading: ({ src, alt, className }: { src: string; alt: string; className?: string }) => (
+    createElement('img', { src, alt, className })
+  ),
 }))
 
-vi.stubGlobal('React', React)
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+}
+
+function taskState(episodeId: string, phase: TaskTargetState['phase'], updatedAt: string | null): TaskTargetState {
+  return {
+    targetType: 'NovelPromotionEpisode',
+    targetId: episodeId,
+    phase,
+    runningTaskId: null,
+    runningTaskType: null,
+    intent: 'generate',
+    hasOutputAtStart: false,
+    progress: phase === 'completed' ? 100 : null,
+    stage: null,
+    stageLabel: null,
+    lastError: phase === 'failed' ? { code: 'FAILED', message: 'provider failed' } : null,
+    updatedAt,
+  }
+}
+
+function targetStatesKey(projectId: string, episodeId: string) {
+  return queryKeys.tasks.targetStates(projectId, JSON.stringify([{
+    targetType: 'NovelPromotionEpisode',
+    targetId: episodeId,
+    types: [TASK_TYPE.IMAGE_EPISODE_COVER],
+  }]))
+}
+
+function renderCoverSection(queryClient: QueryClient, projectId: string, episodeId: string) {
+  return createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    createElement(EpisodeCoverSection, {
+      key: episodeId,
+      projectId,
+      episodeId,
+      coverImageUrl: null,
+      videoRatio: '16:9',
+    }),
+  )
+}
+
+const renderers: ReactTestRenderer[] = []
+
+afterEach(async () => {
+  await act(async () => {
+    for (const renderer of renderers.splice(0)) renderer.unmount()
+  })
+})
 
 describe('EpisodeCoverCard', () => {
-  beforeEach(() => {
-    runtime.taskState = null
-    runtime.terminalSignatureRef.current = ''
-    runtime.invalidateQueries.mockClear()
-    runtime.generateCover.mutate.mockClear()
-    invalidateEpisodeQueriesMock.mockClear()
-  })
-
-  it('renders an existing pure-image cover with a regenerate action', () => {
-    const html = renderToStaticMarkup(
-      createElement(EpisodeCoverCard, {
-        coverImageUrl: '/m/episode-cover.webp',
-        videoRatio: '16:9',
-        taskState: null,
-        errorMessage: null,
-        onGenerate: () => undefined,
-      }),
-    )
-
-    expect(html).toContain('src="/m/episode-cover.webp"')
-    expect(html).toContain('episodeCover.regenerate')
-    expect(html).toContain('aspect-ratio:16 / 9')
-  })
-
-  it('shows generation progress and disables duplicate submission', () => {
-    const taskState = resolveTaskPresentationState({
-      phase: 'processing',
-      intent: 'generate',
-      resource: 'image',
-      hasOutput: false,
+  it('renders an existing pure-image cover with a regenerate action', async () => {
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(
+        createElement(EpisodeCoverCard, {
+          coverImageUrl: '/m/episode-cover.webp',
+          videoRatio: '16:9',
+          taskState: null,
+          errorMessage: null,
+          onGenerate: () => undefined,
+        }),
+      )
     })
-    const html = renderToStaticMarkup(
-      createElement(EpisodeCoverCard, {
-        coverImageUrl: null,
-        videoRatio: '9:16',
-        taskState,
-        errorMessage: null,
-        onGenerate: () => undefined,
-      }),
-    )
+    renderers.push(renderer!)
 
-    expect(html).toContain('disabled=""')
-    expect(html).toContain('episodeCover.generating')
-    expect(html).toContain('aspect-ratio:9 / 16')
+    expect(JSON.stringify(renderer!.toJSON())).toContain('episodeCover.regenerate')
+    expect(JSON.stringify(renderer!.toJSON())).toContain('/m/episode-cover.webp')
+    expect(resolveEpisodeCoverAspectRatio('16:9')).toBe('16 / 9')
   })
 
-  it('shows a retry action after failure', () => {
-    const taskState = resolveTaskPresentationState({
-      phase: 'failed',
-      intent: 'generate',
-      resource: 'image',
-      hasOutput: false,
+  it('shows generation progress and disables duplicate submission', async () => {
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(
+        createElement(EpisodeCoverCard, {
+          coverImageUrl: null,
+          videoRatio: '9:16',
+          taskState: {
+            isRunning: true,
+            isError: false,
+            phase: 'processing',
+            intent: 'generate',
+            resource: 'image',
+            hasOutput: false,
+            mode: 'placeholder',
+            labelKey: 'taskStatus.intent.generate.running.image',
+          },
+          errorMessage: null,
+          onGenerate: () => undefined,
+        }),
+      )
     })
-    const html = renderToStaticMarkup(
-      createElement(EpisodeCoverCard, {
-        coverImageUrl: null,
-        videoRatio: 'invalid',
-        taskState,
-        errorMessage: 'provider failed',
-        onGenerate: () => undefined,
-      }),
-    )
+    renderers.push(renderer!)
 
-    expect(html).toContain('provider failed')
-    expect(html).toContain('episodeCover.retry')
+    const button = renderer!.root.findByType('button')
+    expect(button.props.disabled).toBe(true)
+    expect(JSON.stringify(renderer!.toJSON())).toContain('episodeCover.generating')
+  })
+
+  it('shows a retry action after failure', async () => {
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(
+        createElement(EpisodeCoverCard, {
+          coverImageUrl: null,
+          videoRatio: 'invalid',
+          taskState: {
+            isRunning: false,
+            isError: true,
+            phase: 'failed',
+            intent: 'generate',
+            resource: 'image',
+            hasOutput: false,
+            mode: 'placeholder',
+            labelKey: 'taskStatus.failed.image',
+          },
+          errorMessage: 'provider failed',
+          onGenerate: () => undefined,
+        }),
+      )
+    })
+    renderers.push(renderer!)
+
+    expect(JSON.stringify(renderer!.toJSON())).toContain('provider failed')
+    expect(JSON.stringify(renderer!.toJSON())).toContain('episodeCover.retry')
     expect(resolveEpisodeCoverAspectRatio('invalid')).toBe('16 / 9')
   })
 
-  it('recovers each polling-discovered terminal episode-cover state exactly once', () => {
-    runtime.taskState = {
-      targetType: 'NovelPromotionEpisode',
-      targetId: 'episode-a',
-      phase: 'completed',
-      runningTaskId: null,
-      runningTaskType: null,
-      intent: 'generate',
-      hasOutputAtStart: false,
-      progress: 100,
-      stage: null,
-      stageLabel: null,
-      lastError: null,
-      updatedAt: '2026-07-23T01:00:00.000Z',
-    }
+  it('refreshes repeated null-timestamp terminal generations after a processing transition', async () => {
+    const projectId = 'project-1'
+    const episodeId = 'episode-a'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    queryClient.setQueryData(targetStatesKey(projectId, episodeId), [taskState(episodeId, 'completed', null)])
 
-    const props = {
-      projectId: 'project-1',
-      episodeId: 'episode-a',
-      coverImageUrl: null,
-      videoRatio: '16:9',
-    }
-    renderToStaticMarkup(createElement(EpisodeCoverSection, props))
-    renderToStaticMarkup(createElement(EpisodeCoverSection, props))
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    renderers.push(renderer!)
 
-    expect(invalidateEpisodeQueriesMock).toHaveBeenCalledTimes(1)
-    expect(invalidateEpisodeQueriesMock).toHaveBeenCalledWith(expect.any(Object), 'project-1', 'episode-a')
-    expect(runtime.invalidateQueries).toHaveBeenCalledTimes(1)
-    expect(runtime.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['project-data', 'project-1'],
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.episodeDataPrefix(projectId, episodeId),
+      exact: false,
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.projectData(projectId) })
+
+    await act(async () => {
+      renderer!.update(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    expect(invalidateQueries.mock.calls.filter(([filters]) =>
+      JSON.stringify(filters) === JSON.stringify({ queryKey: queryKeys.projectData(projectId) }),
+    )).toHaveLength(1)
+
+    await act(async () => {
+      queryClient.setQueryData(targetStatesKey(projectId, episodeId), [taskState(episodeId, 'processing', null)])
+      renderer!.update(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    await act(async () => {
+      queryClient.setQueryData(targetStatesKey(projectId, episodeId), [taskState(episodeId, 'completed', null)])
+      renderer!.update(renderCoverSection(queryClient, projectId, episodeId))
+    })
+    await act(async () => {
+      queryClient.setQueryData(targetStatesKey(projectId, episodeId), [taskState(episodeId, 'failed', null)])
+      renderer!.update(renderCoverSection(queryClient, projectId, episodeId))
     })
 
-    runtime.taskState = {
-      ...runtime.taskState,
-      phase: 'failed',
-      updatedAt: '2026-07-23T01:00:01.000Z',
-    }
-    renderToStaticMarkup(createElement(EpisodeCoverSection, props))
+    expect(invalidateQueries.mock.calls.filter(([filters]) =>
+      JSON.stringify(filters) === JSON.stringify({ queryKey: queryKeys.projectData(projectId) }),
+    )).toHaveLength(3)
+  })
 
-    expect(invalidateEpisodeQueriesMock).toHaveBeenCalledTimes(2)
-    expect(runtime.invalidateQueries).toHaveBeenCalledTimes(2)
+  it('remounts the terminal signature ref when the selected episode changes', async () => {
+    const projectId = 'project-1'
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    queryClient.setQueryData(targetStatesKey(projectId, 'episode-a'), [taskState('episode-a', 'completed', null)])
+    queryClient.setQueryData(targetStatesKey(projectId, 'episode-b'), [taskState('episode-b', 'completed', null)])
+
+    let renderer: ReactTestRenderer
+    await act(async () => {
+      renderer = create(renderCoverSection(queryClient, projectId, 'episode-a'))
+    })
+    renderers.push(renderer!)
+    await act(async () => {
+      renderer!.update(renderCoverSection(queryClient, projectId, 'episode-b'))
+    })
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-a'),
+      exact: false,
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.episodeDataPrefix(projectId, 'episode-b'),
+      exact: false,
+    })
   })
 })
