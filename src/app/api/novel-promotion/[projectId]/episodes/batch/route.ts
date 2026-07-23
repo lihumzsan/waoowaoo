@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { logError as _ulogError } from '@/lib/logging/core'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 
 type BatchSaveMode = 'append' | 'update_current' | 'replace_all'
 
@@ -57,11 +59,12 @@ function mapEpisodeResponse(ep: { id: string; episodeNumber: number; name: strin
 async function countEpisodeDependents(novelPromotionProjectId: string) {
   const existingEpisodes = await prisma.novelPromotionEpisode.findMany({
     where: { novelPromotionProjectId },
-    select: { id: true },
+    select: { id: true, coverImageMediaId: true },
   })
   const episodeIds = existingEpisodes.map((episode) => episode.id)
   if (episodeIds.length === 0) {
     return {
+      covers: 0,
       clips: 0,
       shots: 0,
       storyboards: 0,
@@ -85,6 +88,7 @@ async function countEpisodeDependents(novelPromotionProjectId: string) {
   ])
 
   return {
+    covers: existingEpisodes.filter((episode) => !!episode.coverImageMediaId).length,
     clips,
     shots,
     storyboards,
@@ -190,9 +194,35 @@ export const POST = apiHandler(async (
 
   if (mode === 'replace_all') {
     const result = await prisma.$transaction(async (tx) => {
-      const replacedCount = await tx.novelPromotionEpisode.count({
+      const replacedEpisodes = await tx.novelPromotionEpisode.findMany({
         where: { novelPromotionProjectId: project.id },
+        select: {
+          id: true,
+          coverImageMediaId: true,
+          coverImageMedia: { select: { storageKey: true } },
+        },
       })
+      const coversById = new Map<string, {
+        id: string
+        episodeId: string
+        storageKey?: string
+      }>()
+      for (const episode of replacedEpisodes) {
+        if (!episode.coverImageMediaId || coversById.has(episode.coverImageMediaId)) continue
+        coversById.set(episode.coverImageMediaId, {
+          id: episode.coverImageMediaId,
+          episodeId: episode.id,
+          storageKey: episode.coverImageMedia?.storageKey,
+        })
+      }
+
+      if (!confirmCascadeDelete && coversById.size > 0) {
+        throw new ApiError('INVALID_PARAMS', {
+          message: 'replace_all would delete existing generated content; confirmCascadeDelete=true is required',
+          mode,
+          dependents: { covers: coversById.size },
+        })
+      }
 
       await tx.novelPromotionEpisode.deleteMany({
         where: { novelPromotionProjectId: project.id },
@@ -220,8 +250,30 @@ export const POST = apiHandler(async (
         },
       })
 
-      return { createdEpisodes, replacedCount }
-    })
+      return {
+        createdEpisodes,
+        replacedCount: replacedEpisodes.length,
+        formerCoverMedia: [...coversById.values()],
+      }
+    }, { isolationLevel: 'Serializable' })
+
+    for (const media of result.formerCoverMedia) {
+      try {
+        await deleteMediaObjectIfUnreferenced(media.id)
+      } catch (error) {
+        const cleanupStorageKey = error && typeof error === 'object' && 'storageKey' in error
+          && typeof error.storageKey === 'string'
+          ? error.storageKey
+          : media.storageKey
+        _ulogError('Episode cover cleanup failed after batch replacement', {
+          projectId,
+          episodeId: media.episodeId,
+          mediaId: media.id,
+          storageKey: cleanupStorageKey,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 
 export const MOUNTAIN_RESET_CONFIRMATION = 'mountain'
 
@@ -79,7 +80,12 @@ export type MountainResetPlan = {
     locationIds: string[]
     graphRunIds: string[]
     mediaObjectIds: string[]
+    guardedCoverMediaObjectIds: string[]
   }
+  guardedCoverMedia: Array<{
+    id: string
+    storageKey: string
+  }>
   storageKeys: string[]
 }
 
@@ -90,6 +96,19 @@ export type MountainResetResult = {
     attempted: number
     deleted: number
     error?: string
+  }
+  coverMediaObjects: {
+    attempted: number
+    deleted: number
+    referenced: number
+    missing: number
+    failed: number
+    skipped: number
+    errors?: Array<{
+      mediaId: string
+      storageKey?: string
+      error: string
+    }>
   }
 }
 
@@ -181,6 +200,7 @@ export function createMountainResetSnapshot(plan: MountainResetPlan): Record<str
     counts: plan.counts,
     activeTasks: plan.activeTasks,
     mediaObjectIds: plan.ids.mediaObjectIds,
+    guardedCoverMediaObjectIds: plan.ids.guardedCoverMediaObjectIds,
     storageKeys: plan.storageKeys,
   }
 }
@@ -249,6 +269,7 @@ export async function buildMountainResetPlan(
           description: true,
           audioUrl: true,
           audioMediaId: true,
+          coverImageMediaId: true,
           srtContent: true,
           speakerVoices: true,
         },
@@ -395,6 +416,7 @@ export async function buildMountainResetPlan(
   const locationIds = locations.map((location) => location.id)
   const graphRunIds = graphRuns.map((run) => run.id)
   const mediaIds = new Set<string>()
+  const guardedCoverMediaIds = new Set<string>()
   const storageKeys = new Set<string>()
 
   const addMediaId = (id: string | null | undefined) => {
@@ -416,6 +438,7 @@ export async function buildMountainResetPlan(
 
   for (const episode of novelProject.episodes) {
     addMediaId(episode.audioMediaId)
+    if (episode.coverImageMediaId) guardedCoverMediaIds.add(episode.coverImageMediaId)
     addStorageKey(episode.audioUrl)
   }
 
@@ -479,9 +502,14 @@ export async function buildMountainResetPlan(
     }
   }
 
-  const mediaObjects = mediaIds.size > 0
+  for (const coverMediaId of guardedCoverMediaIds) {
+    mediaIds.delete(coverMediaId)
+  }
+
+  const allMediaIds = [...new Set([...mediaIds, ...guardedCoverMediaIds])]
+  const allMediaObjects = allMediaIds.length > 0
     ? await db.mediaObject.findMany({
-      where: { id: { in: [...mediaIds] } },
+      where: { id: { in: allMediaIds } },
       select: {
         id: true,
         storageKey: true,
@@ -489,8 +517,16 @@ export async function buildMountainResetPlan(
     })
     : []
 
+  const guardedCoverMedia = allMediaObjects.filter((mediaObject) => (
+    guardedCoverMediaIds.has(mediaObject.id)
+  ))
+  const mediaObjects = allMediaObjects.filter((mediaObject) => !guardedCoverMediaIds.has(mediaObject.id))
+
   for (const mediaObject of mediaObjects) {
     storageKeys.add(mediaObject.storageKey)
+  }
+  for (const coverMedia of guardedCoverMedia) {
+    storageKeys.delete(coverMedia.storageKey)
   }
 
   const activeStatuses = new Set<string>(MOUNTAIN_RESET_ACTIVE_TASK_STATUSES)
@@ -560,7 +596,7 @@ export async function buildMountainResetPlan(
       taskEvents: taskEventsCount,
       graphRuns: graphRuns.length,
       graphEvents: graphEventsCount,
-      mediaObjects: mediaObjects.length,
+      mediaObjects: allMediaObjects.length,
       storageKeys: storageKeys.size,
       activeTasks: activeTasks.length,
     },
@@ -571,13 +607,15 @@ export async function buildMountainResetPlan(
       locationIds,
       graphRunIds,
       mediaObjectIds: mediaObjects.map((mediaObject) => mediaObject.id),
+      guardedCoverMediaObjectIds: [...guardedCoverMediaIds],
     },
+    guardedCoverMedia,
     storageKeys: [...storageKeys].sort(),
   }
 }
 
 export async function executeMountainReset(db: PrismaClient, plan: MountainResetPlan): Promise<MountainResetResult> {
-  const deletedCounts = await db.$transaction(async (tx: Prisma.TransactionClient) => {
+  const resetResult = await db.$transaction(async (tx: Prisma.TransactionClient) => {
     const counts: MountainResetCounts = {}
     const episodeWhere = { episodeId: { in: plan.ids.episodeIds } }
     const storyboardWhere = { storyboardId: { in: plan.ids.storyboardIds } }
@@ -592,6 +630,14 @@ export async function executeMountainReset(db: PrismaClient, plan: MountainReset
 
     counts.taskEvents = (await tx.taskEvent.deleteMany({ where: { projectId: plan.projectId } })).count
     counts.tasks = (await tx.task.deleteMany({ where: { projectId: plan.projectId } })).count
+
+    const currentCoverMedia = await tx.novelPromotionEpisode.findMany({
+      where: { id: { in: plan.ids.episodeIds } },
+      select: {
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
+    })
 
     counts.videoEditorProjects = (await tx.videoEditorProject.deleteMany({
       where: { episodeId: { in: plan.ids.episodeIds } },
@@ -627,41 +673,100 @@ export async function executeMountainReset(db: PrismaClient, plan: MountainReset
         description: null,
         audioUrl: null,
         audioMediaId: null,
+        coverImageMediaId: null,
         srtContent: null,
         speakerVoices: null,
       },
     })).count
 
-    return counts
-  })
+    return { counts, currentCoverMedia }
+  }, { isolationLevel: 'Serializable' })
+
+  const guardedCoverMediaById = new Map(
+    plan.guardedCoverMedia.map((media) => [media.id, media]),
+  )
+  const guardedCoverMediaObjectIds = new Set(plan.ids.guardedCoverMediaObjectIds)
+  for (const currentCover of resetResult.currentCoverMedia) {
+    if (!currentCover.coverImageMediaId) continue
+    guardedCoverMediaObjectIds.add(currentCover.coverImageMediaId)
+    if (currentCover.coverImageMedia) {
+      guardedCoverMediaById.set(currentCover.coverImageMediaId, {
+        id: currentCover.coverImageMediaId,
+        storageKey: currentCover.coverImageMedia.storageKey,
+      })
+    }
+  }
+  const guardedStorageKeys = new Set(
+    [...guardedCoverMediaById.values()].map((media) => media.storageKey),
+  )
+  const effectivePlan: MountainResetPlan = {
+    ...plan,
+    ids: {
+      ...plan.ids,
+      mediaObjectIds: plan.ids.mediaObjectIds.filter((id) => !guardedCoverMediaObjectIds.has(id)),
+      guardedCoverMediaObjectIds: [...guardedCoverMediaObjectIds],
+    },
+    guardedCoverMedia: [...guardedCoverMediaById.values()],
+    storageKeys: plan.storageKeys.filter((key) => !guardedStorageKeys.has(key)),
+  }
+  const deletedCounts = resetResult.counts
 
   let mediaObjects: MountainResetResult['mediaObjects'] = {
-    attempted: plan.ids.mediaObjectIds.length,
+    attempted: effectivePlan.ids.mediaObjectIds.length,
     deleted: 0,
   }
 
-  if (plan.ids.mediaObjectIds.length > 0) {
+  if (effectivePlan.ids.mediaObjectIds.length > 0) {
     try {
       const result = await db.mediaObject.deleteMany({
-        where: { id: { in: plan.ids.mediaObjectIds } },
+        where: { id: { in: effectivePlan.ids.mediaObjectIds } },
       })
       mediaObjects = {
-        attempted: plan.ids.mediaObjectIds.length,
+        attempted: effectivePlan.ids.mediaObjectIds.length,
         deleted: result.count,
       }
     } catch (error) {
       mediaObjects = {
-        attempted: plan.ids.mediaObjectIds.length,
+        attempted: effectivePlan.ids.mediaObjectIds.length,
         deleted: 0,
         error: error instanceof Error ? error.message : String(error),
       }
     }
   }
 
+  const coverMediaObjects: MountainResetResult['coverMediaObjects'] = {
+    attempted: effectivePlan.ids.guardedCoverMediaObjectIds.length,
+    deleted: 0,
+    referenced: 0,
+    missing: 0,
+    failed: 0,
+    skipped: effectivePlan.deleteStorage ? 0 : effectivePlan.ids.guardedCoverMediaObjectIds.length,
+  }
+
+  if (effectivePlan.deleteStorage) {
+    const storageKeysById = new Map(effectivePlan.guardedCoverMedia.map((media) => [media.id, media.storageKey]))
+    const errors: NonNullable<MountainResetResult['coverMediaObjects']['errors']> = []
+    for (const mediaId of effectivePlan.ids.guardedCoverMediaObjectIds) {
+      try {
+        const result = await deleteMediaObjectIfUnreferenced(mediaId)
+        coverMediaObjects[result] += 1
+      } catch (error) {
+        coverMediaObjects.failed += 1
+        errors.push({
+          mediaId,
+          storageKey: storageKeysById.get(mediaId),
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    if (errors.length > 0) coverMediaObjects.errors = errors
+  }
+
   return {
-    plan,
+    plan: effectivePlan,
     deletedCounts,
     mediaObjects,
+    coverMediaObjects,
   }
 }
 

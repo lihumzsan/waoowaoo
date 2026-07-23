@@ -5,6 +5,18 @@
         "acting": "设计演技",
         "detail": "补充细节"
     },
+    "episodeCover": {
+        "title": "本集封面",
+        "description": "根据本集剧情、角色和场景生成一张独立封面图，画面比例跟随项目设置。",
+        "pureImageHint": "仅生成纯画面，不添加标题、集数、字幕、标识或水印。",
+        "imageAlt": "本集封面图",
+        "empty": "尚未生成封面",
+        "generate": "生成封面",
+        "regenerate": "重新生成",
+        "generating": "封面生成中",
+        "retry": "重试生成",
+        "failed": "封面生成失败，请重试"
+    },
     "prompts": {
         "imagePrompt": "图片提示词",
         "aiInstruction": "AI修改指令",
@@ -55,7 +67,9 @@
         "dialogueComplianceNone": "无对白",
         "dialogueComplianceNoneTitle": "该片段没有绑定对白节拍。",
         "addAtStart": "在开头添加新分镜组",
-        "insertHere": "在此插入新分镜组"
+        "insertHere": "在此插入新分镜组",
+        "panelSummary": "共 {total} 个镜头 · 待生成 {pending} · 生成中 {running}",
+        "panelListLabel": "第 {index} 个分镜组的镜头列表"
     },
     "header": {
         "title": "分镜编辑",

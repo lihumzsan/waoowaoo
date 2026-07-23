@@ -7,6 +7,7 @@ import {
 } from '@/lib/config-service'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { logAIAnalysis } from '@/lib/logging/semantic'
+import { createScopedLogger } from '@/lib/logging/core'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import { buildCharactersIntroduction } from '@/lib/constants'
 import { TaskTerminatedError } from '@/lib/task/errors'
@@ -38,6 +39,7 @@ import {
 } from './script-to-storyboard-atomic-retry'
 import { buildVoiceLineRowsFromDialogueBeats } from '@/lib/novel-promotion/dialogue-beats'
 import { resolveWorkflowRunId } from './workflow-run-id'
+import { submitEpisodeCoverTask } from '@/lib/novel-promotion/episode-cover/task'
 
 type AnyObj = Record<string, unknown>
 const MAX_VOICE_ANALYZE_ATTEMPTS = 2
@@ -436,6 +438,33 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
       })
       await assertRunActive('script_to_storyboard_persist')
 
+      const submitAutomaticEpisodeCover = async () => {
+        try {
+          await submitEpisodeCoverTask({
+            userId: job.data.userId,
+            locale: job.data.locale,
+            projectId,
+            episodeId,
+            mode: 'auto',
+            requestId: job.data.trace?.requestId || null,
+          })
+        } catch (error) {
+          const logger = createScopedLogger({
+            module: 'worker.script-to-storyboard',
+            action: 'episode_cover_auto_submit',
+            requestId: job.data.trace?.requestId || undefined,
+            taskId: job.data.taskId,
+            projectId,
+            userId: job.data.userId,
+          })
+          logger.warn({
+            message: 'automatic Episode cover submission failed after storyboard persistence',
+            error,
+            details: { episodeId },
+          })
+        }
+      }
+
       if (skipVoiceAnalyze) {
         const persisted = await persistStoryboardOutputs({
           episodeId,
@@ -453,6 +482,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
               ? Math.max(1, Math.floor(payload.retryStepAttempt))
               : undefined,
         })
+        await submitAutomaticEpisodeCover()
         return {
           episodeId,
           storyboardCount: persisted.persistedStoryboards.length,
@@ -567,6 +597,7 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
         displayMode: 'detail',
       })
 
+      await submitAutomaticEpisodeCover()
       return {
         episodeId,
         storyboardCount: persisted.persistedStoryboards.length,

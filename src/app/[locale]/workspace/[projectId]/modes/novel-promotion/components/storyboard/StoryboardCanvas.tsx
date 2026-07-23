@@ -15,6 +15,7 @@ interface StoryboardCanvasProps {
   sortedStoryboards: NovelPromotionStoryboard[]
   videoRatio: string
   expandedClips: Set<string>
+  openStoryboardId: string | null
   submittingStoryboardIds: Set<string>
   selectingCandidateIds: Set<string>
   submittingStoryboardTextIds: Set<string>
@@ -37,6 +38,7 @@ interface StoryboardCanvasProps {
   defaultStoryboardWorkflow: string
   formatClipTitle: (clip: NovelPromotionClip | undefined) => string
   onToggleExpandedClip: (storyboardId: string) => void
+  onToggleOpenStoryboard: (storyboardId: string) => void
   onMoveStoryboardGroup: (clipId: string, direction: 'up' | 'down') => Promise<void>
   onRegenerateStoryboardText: (storyboardId: string) => Promise<void>
   onAddPanel: (storyboardId: string) => Promise<void>
@@ -79,6 +81,7 @@ export default function StoryboardCanvas({
   sortedStoryboards,
   videoRatio,
   expandedClips,
+  openStoryboardId,
   submittingStoryboardIds,
   selectingCandidateIds,
   submittingStoryboardTextIds,
@@ -101,6 +104,7 @@ export default function StoryboardCanvas({
   defaultStoryboardWorkflow,
   formatClipTitle,
   onToggleExpandedClip,
+  onToggleOpenStoryboard,
   onMoveStoryboardGroup,
   onRegenerateStoryboardText,
   onAddPanel,
@@ -159,7 +163,8 @@ export default function StoryboardCanvas({
               textPanels={textPanels}
               storyboardStartIndex={storyboardStartIndex[storyboard.id]}
               videoRatio={videoRatio}
-              isExpanded={expandedClips.has(storyboard.id)}
+              isSourceExpanded={expandedClips.has(storyboard.id)}
+              isPanelListExpanded={openStoryboardId === storyboard.id}
               isSubmittingStoryboardTask={isSubmittingStoryboardTask}
               isSelectingCandidate={isSelectingCandidate}
               isSubmittingStoryboardTextTask={isSubmittingStoryboardTextTask}
@@ -171,7 +176,8 @@ export default function StoryboardCanvas({
               hasUnsavedByPanel={hasUnsavedByPanel}
               modifyingPanels={modifyingPanels}
               submittingPanelImageIds={submittingPanelImageIds}
-              onToggleExpand={() => onToggleExpandedClip(storyboard.id)}
+              onToggleSource={() => onToggleExpandedClip(storyboard.id)}
+              onTogglePanelList={() => onToggleOpenStoryboard(storyboard.id)}
               onMoveUp={() => onMoveStoryboardGroup(storyboard.clipId, 'up')}
               onMoveDown={() => onMoveStoryboardGroup(storyboard.clipId, 'down')}
               onRegenerateText={() => onRegenerateStoryboardText(storyboard.id)}

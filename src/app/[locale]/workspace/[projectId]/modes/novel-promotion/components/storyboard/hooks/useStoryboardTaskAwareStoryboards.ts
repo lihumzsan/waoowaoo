@@ -88,6 +88,7 @@ export function useStoryboardTaskAwareStoryboards({
     taskTargets,
     !!projectId && taskTargets.length > 0,
   )
+  const isInitialTaskStatePending = taskTargets.length > 0 && taskStates.isPending
 
   const taskAwareStoryboards = useMemo(() => {
     return initialStoryboards.map((storyboard) => ({
@@ -113,5 +114,6 @@ export function useStoryboardTaskAwareStoryboards({
 
   return {
     taskAwareStoryboards,
+    isInitialTaskStatePending,
   }
 }

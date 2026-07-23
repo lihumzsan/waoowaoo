@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { setEpisodeQueriesData } from '@/lib/query/episode-cache'
 import { queryKeys } from '@/lib/query/keys'
@@ -13,6 +13,11 @@ import {
   getStoryboardPanels,
   sortStoryboardsByClipOrder,
 } from './storyboard-state-utils'
+import {
+  createUninitializedOpenStoryboardState,
+  reconcileOpenStoryboardState,
+  toggleOpenStoryboardState,
+} from './storyboard-group-visibility'
 
 export interface StoryboardPanel {
   id: string
@@ -44,6 +49,7 @@ interface UseStoryboardStateProps {
   episodeId: string
   initialStoryboards: NovelPromotionStoryboard[]
   clips: NovelPromotionClip[]
+  isInitialTaskStatePending: boolean
 }
 
 export function useStoryboardState({
@@ -51,12 +57,34 @@ export function useStoryboardState({
   episodeId,
   initialStoryboards,
   clips,
+  isInitialTaskStatePending,
 }: UseStoryboardStateProps) {
   const queryClient = useQueryClient()
   const localStoryboards = useMemo(
     () => sortStoryboardsByClipOrder(initialStoryboards, clips),
     [clips, initialStoryboards],
   )
+  const [openStoryboardState, setOpenStoryboardState] = useState(() => (
+    reconcileOpenStoryboardState(
+      createUninitializedOpenStoryboardState(episodeId),
+      episodeId,
+      localStoryboards,
+      isInitialTaskStatePending,
+    )
+  ))
+
+  useEffect(() => {
+    setOpenStoryboardState((previous) => reconcileOpenStoryboardState(
+      previous,
+      episodeId,
+      localStoryboards,
+      isInitialTaskStatePending,
+    ))
+  }, [episodeId, isInitialTaskStatePending, localStoryboards])
+
+  const toggleOpenStoryboard = useCallback((storyboardId: string) => {
+    setOpenStoryboardState((previous) => toggleOpenStoryboardState(previous, episodeId, storyboardId))
+  }, [episodeId])
 
   const setLocalStoryboards = useCallback<React.Dispatch<React.SetStateAction<NovelPromotionStoryboard[]>>>(
     (nextStoryboardsOrUpdater) => {
@@ -242,6 +270,8 @@ export function useStoryboardState({
     sortedStoryboards,
     expandedClips,
     toggleExpandedClip,
+    openStoryboardId: openStoryboardState.storyboardId,
+    toggleOpenStoryboard,
     panelEdits,
     setPanelEdits,
     panelEditsRef,

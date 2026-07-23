@@ -4,9 +4,10 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
-import { attachMediaFieldsToProject } from '@/lib/media/attach'
+import { attachMediaFieldsToEpisode, attachMediaFieldsToProject } from '@/lib/media/attach'
 import type { MediaRef } from '@/lib/media/types'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
+import { deleteMediaObjectIfUnreferenced } from '@/lib/media/unreferenced-cleanup'
 import {
   normalizeEpisodeDataProfile,
   type EpisodeDataProfile,
@@ -66,6 +67,16 @@ type EpisodeWithPanelMediaFields = {
 
 function mediaUrl(publicId: string): string {
   return `/m/${encodeURIComponent(publicId)}`
+}
+
+function episodeProjectWhere(
+  projectId: string,
+  episodeId: string,
+): Prisma.NovelPromotionEpisodeWhereInput {
+  return {
+    id: episodeId,
+    novelPromotionProject: { projectId },
+  }
 }
 
 function mapMediaObjectToRef(row: MediaObjectRow): MediaRef {
@@ -250,13 +261,14 @@ async function attachPreviousVideoVersionFlags<T extends EpisodeWithStoryboardPa
   }
 }
 
-async function loadConfigEpisode(episodeId: string) {
-  const episode = await prisma.novelPromotionEpisode.findUnique({
-    where: { id: episodeId },
+async function loadConfigEpisode(projectId: string, episodeId: string) {
+  const episode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
     select: {
       id: true,
       episodeNumber: true,
       name: true,
+      coverImageMediaId: true,
       novelText: true,
       createdAt: true,
       clips: {
@@ -309,25 +321,29 @@ async function loadConfigEpisode(episodeId: string) {
 
   const readiness = resolveEpisodeStageArtifacts(episode as ConfigEpisodePayload)
 
-  return {
+  const episodeWithCover = await attachMediaFieldsToEpisode({
     id: episode.id,
     episodeNumber: episode.episodeNumber,
     name: episode.name,
+    coverImageMediaId: episode.coverImageMediaId,
     novelText: episode.novelText,
     createdAt: episode.createdAt,
+  })
+  return {
+    ...episodeWithCover,
     artifactReadiness: readiness,
   }
 }
 
 async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) {
-  void projectId
-  const episode = await prisma.novelPromotionEpisode.findUnique({
-    where: { id: episodeId },
+  const episode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
     select: {
       id: true,
       episodeNumber: true,
       name: true,
       description: true,
+      coverImageMediaId: true,
       createdAt: true,
       updatedAt: true,
       novelText: true,
@@ -381,7 +397,8 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
   }
 
   const readiness = resolveEpisodeStageArtifacts(episode)
-  const episodeWithSignedUrls = await attachSelectedPanelMediaFields(episode)
+  const episodeWithPanelMedia = await attachSelectedPanelMediaFields(episode)
+  const episodeWithSignedUrls = await attachMediaFieldsToEpisode(episodeWithPanelMedia)
   const { novelText, ...visualEpisode } = episodeWithSignedUrls
   void novelText
   return {
@@ -391,13 +408,14 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
 }
 
 async function loadVideosEpisode(projectId: string, episodeId: string) {
-  const episode = await prisma.novelPromotionEpisode.findUnique({
-    where: { id: episodeId },
+  const episode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
     select: {
       id: true,
       episodeNumber: true,
       name: true,
       description: true,
+      coverImageMediaId: true,
       createdAt: true,
       updatedAt: true,
       clips: {
@@ -419,21 +437,23 @@ async function loadVideosEpisode(projectId: string, episodeId: string) {
 
   const readiness = resolveEpisodeStageArtifacts(episode)
   const episodeWithHistoryFlags = await attachPreviousVideoVersionFlags(projectId, episode)
-  const episodeWithSignedUrls = await attachSelectedPanelMediaFields(episodeWithHistoryFlags)
+  const episodeWithPanelMedia = await attachSelectedPanelMediaFields(episodeWithHistoryFlags)
+  const episodeWithSignedUrls = await attachMediaFieldsToEpisode(episodeWithPanelMedia)
   return {
     ...episodeWithSignedUrls,
     artifactReadiness: readiness,
   }
 }
 
-async function loadVoiceEpisode(episodeId: string) {
-  const episode = await prisma.novelPromotionEpisode.findUnique({
-    where: { id: episodeId },
+async function loadVoiceEpisode(projectId: string, episodeId: string) {
+  const episode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
     select: {
       id: true,
       episodeNumber: true,
       name: true,
       description: true,
+      coverImageMediaId: true,
       createdAt: true,
       updatedAt: true,
       clips: {
@@ -485,15 +505,16 @@ async function loadVoiceEpisode(episodeId: string) {
     throw new ApiError('NOT_FOUND')
   }
 
+  const episodeWithCover = await attachMediaFieldsToEpisode(episode)
   return {
-    ...episode,
+    ...episodeWithCover,
     artifactReadiness: resolveEpisodeStageArtifacts(episode),
   }
 }
 
 async function loadFullEpisode(projectId: string, episodeId: string) {
-  const episode = await prisma.novelPromotionEpisode.findUnique({
-    where: { id: episodeId },
+  const episode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
     include: {
       clips: {
         orderBy: { createdAt: 'asc' }
@@ -528,7 +549,7 @@ async function loadFullEpisode(projectId: string, episodeId: string) {
 
 async function loadEpisodeByProfile(projectId: string, episodeId: string, profile: EpisodeDataProfile) {
   if (profile === 'config') {
-    return await loadConfigEpisode(episodeId)
+    return await loadConfigEpisode(projectId, episodeId)
   }
   if (profile === 'workspace-visual' || profile === 'storyboard') {
     return await loadWorkspaceVisualEpisode(projectId, episodeId)
@@ -537,7 +558,7 @@ async function loadEpisodeByProfile(projectId: string, episodeId: string, profil
     return await loadVideosEpisode(projectId, episodeId)
   }
   if (profile === 'voice') {
-    return await loadVoiceEpisode(episodeId)
+    return await loadVoiceEpisode(projectId, episodeId)
   }
   return await loadFullEpisode(projectId, episodeId)
 }
@@ -577,6 +598,14 @@ export const PATCH = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
+  const existingEpisode = await prisma.novelPromotionEpisode.findFirst({
+    where: episodeProjectWhere(projectId, episodeId),
+    select: { id: true },
+  })
+  if (!existingEpisode) {
+    throw new ApiError('NOT_FOUND')
+  }
+
   const body = await request.json()
   const { name, description, novelText, audioUrl, srtContent } = body
 
@@ -611,25 +640,60 @@ export const DELETE = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  await prisma.novelPromotionEpisode.delete({
-    where: { id: episodeId }
-  })
+  const formerCover = await prisma.$transaction(async (tx) => {
+    const existingEpisode = await tx.novelPromotionEpisode.findFirst({
+      where: episodeProjectWhere(projectId, episodeId),
+      select: {
+        id: true,
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
+    })
+    if (!existingEpisode) {
+      throw new ApiError('NOT_FOUND')
+    }
 
-  const novelPromotionProject = await prisma.novelPromotionProject.findUnique({
-    where: { projectId }
-  })
-
-  if (novelPromotionProject?.lastEpisodeId === episodeId) {
-    const anotherEpisode = await prisma.novelPromotionEpisode.findFirst({
-      where: { novelPromotionProjectId: novelPromotionProject.id },
-      orderBy: { episodeNumber: 'asc' }
+    await tx.novelPromotionEpisode.delete({
+      where: { id: episodeId },
     })
 
-    await prisma.novelPromotionProject.update({
-      where: { id: novelPromotionProject.id },
-      data: { lastEpisodeId: anotherEpisode?.id || null }
+    const novelPromotionProject = await tx.novelPromotionProject.findUnique({
+      where: { projectId },
     })
+
+    if (novelPromotionProject?.lastEpisodeId === episodeId) {
+      const anotherEpisode = await tx.novelPromotionEpisode.findFirst({
+        where: { novelPromotionProjectId: novelPromotionProject.id },
+        orderBy: { episodeNumber: 'asc' },
+      })
+
+      await tx.novelPromotionProject.update({
+        where: { id: novelPromotionProject.id },
+        data: { lastEpisodeId: anotherEpisode?.id || null },
+      })
+    }
+
+    return {
+      mediaId: existingEpisode.coverImageMediaId,
+      storageKey: existingEpisode.coverImageMedia?.storageKey,
+    }
+  }, { isolationLevel: 'Serializable' })
+
+  let coverMediaCleanupFailed = 0
+  if (formerCover.mediaId) {
+    try {
+      await deleteMediaObjectIfUnreferenced(formerCover.mediaId)
+    } catch (error) {
+      coverMediaCleanupFailed = 1
+      _ulogError('Episode cover cleanup failed after Episode deletion', {
+        projectId,
+        episodeId,
+        mediaId: formerCover.mediaId,
+        storageKey: formerCover.storageKey,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, coverMediaCleanupFailed })
 })

@@ -44,6 +44,7 @@
   "taskType": {
     "generic": "Task",
     "imagePanel": "Storyboard image",
+    "episodeCoverImage": "Episode cover image",
     "imageCharacter": "Character image",
     "imageLocation": "Location image",
     "videoPanel": "Video generation",
@@ -95,6 +96,8 @@
     "generateCharacterImage": "Generate character image",
     "generateLocationImage": "Generate location image",
     "generatePanelCandidate": "Generate panel candidate",
+    "generateEpisodeCover": "Generate episode cover",
+    "persistEpisodeCover": "Save episode cover",
     "generatePanelVideo": "Generate panel video",
     "generateVoiceSubmit": "Submit voice task",
     "generateVoicePersist": "Persist voice result",

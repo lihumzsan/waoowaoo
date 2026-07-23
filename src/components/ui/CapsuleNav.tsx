@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 
 type StepStatus = 'empty' | 'active' | 'processing' | 'ready'
 
@@ -178,6 +179,7 @@ interface Episode {
     id: string
     title: string
     summary?: string
+    thumbnailUrl?: string | null
     status?: {
         story?: StepStatus
         script?: StepStatus
@@ -238,9 +240,22 @@ export function EpisodeSelector({
                 className="glass-btn-base glass-btn-secondary flex items-center gap-3 px-4 py-3 transition-all group"
                 style={{ borderRadius: '1.5rem' }}
             >
-                <div className="glass-surface-soft flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold text-[var(--glass-tone-info-fg)]">
-                    {t('episode')}
-                </div>
+                {currentEp.thumbnailUrl ? (
+                    <MediaImageWithLoading
+                        src={currentEp.thumbnailUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="40px"
+                        showLoadingIndicator={false}
+                        containerClassName="h-10 w-10 shrink-0 rounded-xl border border-[var(--glass-stroke-base)]"
+                        className="h-full w-full object-cover"
+                    />
+                ) : (
+                    <div className="glass-surface-soft flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold text-[var(--glass-tone-info-fg)]">
+                        {t('episode')}
+                    </div>
+                )}
                 <div className="flex flex-col items-start text-left mr-2">
                     <span className="text-sm font-bold text-[var(--glass-text-primary)] line-clamp-1 max-w-[160px]">
                         {projectName || t('project')}
@@ -266,7 +281,20 @@ export function EpisodeSelector({
                             if (editingId === ep.id) {
                                 return (
                                     <div key={ep.id} className="flex items-center gap-2 p-3 rounded-xl bg-[var(--glass-tone-info-bg)] border border-[var(--glass-stroke-focus)]">
-                                        <div className={`w-2 h-10 rounded-full ${statusColor}`} />
+                                        {ep.thumbnailUrl ? (
+                                            <MediaImageWithLoading
+                                                src={ep.thumbnailUrl}
+                                                alt=""
+                                                aria-hidden="true"
+                                                fill
+                                                sizes="40px"
+                                                showLoadingIndicator={false}
+                                                containerClassName="h-10 w-10 shrink-0 rounded-lg border border-[var(--glass-stroke-base)]"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className={`w-2 h-10 rounded-full ${statusColor}`} />
+                                        )}
                                         <input
                                             type="text"
                                             value={editingName}
@@ -352,7 +380,23 @@ export function EpisodeSelector({
                                         }}
                                         className="flex-1 flex items-center gap-3 text-left"
                                     >
-                                        <div className={`w-2 h-10 rounded-full ${statusColor}`} />
+                                        {ep.thumbnailUrl ? (
+                                            <div className="relative h-10 w-10 shrink-0">
+                                                <MediaImageWithLoading
+                                                    src={ep.thumbnailUrl}
+                                                    alt=""
+                                                    aria-hidden="true"
+                                                    fill
+                                                    sizes="40px"
+                                                    showLoadingIndicator={false}
+                                                    containerClassName="absolute inset-0 rounded-lg border border-[var(--glass-stroke-base)]"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                                <span className={`absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full border-2 border-white ${statusColor}`} />
+                                            </div>
+                                        ) : (
+                                            <div className={`w-2 h-10 rounded-full ${statusColor}`} />
+                                        )}
                                         <div className="flex-1">
                                             <div className="font-bold text-[var(--glass-text-primary)] text-sm truncate">{ep.title}</div>
                                             {ep.summary && (

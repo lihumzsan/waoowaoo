@@ -34,6 +34,7 @@ type TaskPresentationResult = {
   taskStatesByKey: Map<string, TaskTargetState>
   getState: (key: string) => TaskPresentationState | null
   getTaskState: (key: string) => TaskTargetState | null
+  isPending: boolean
   isFetching: boolean
 }
 
@@ -105,9 +106,10 @@ function useTaskPresentationInternal(
       taskStatesByKey,
       getState,
       getTaskState,
+      isPending: taskStates.isPending,
       isFetching: taskStates.isFetching,
     }),
-    [statesByKey, taskStatesByKey, getState, getTaskState, taskStates.isFetching],
+    [statesByKey, taskStatesByKey, getState, getTaskState, taskStates.isPending, taskStates.isFetching],
   )
 }
 

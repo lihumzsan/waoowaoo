@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TASKTYPE_BEHAVIOR_MATRIX } from '../../contracts/tasktype-behavior-matrix'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 type AddCall = {
@@ -8,8 +9,42 @@ type AddCall = {
   options: Record<string, unknown>
 }
 
+type WorkerProcessor = (job: Job<TaskJobData>) => Promise<unknown>
+
 const queueState = vi.hoisted(() => ({
   addCallsByQueue: new Map<string, AddCall[]>(),
+}))
+
+const workerState = vi.hoisted(() => ({
+  processor: null as WorkerProcessor | null,
+}))
+
+const workerSharedMock = vi.hoisted(() => ({
+  reportTaskProgress: vi.fn(async () => undefined),
+  withTaskLifecycle: vi.fn(async (job: Job<TaskJobData>, handler: WorkerProcessor) => await handler(job)),
+}))
+
+const imageHandlerMock = vi.hoisted(() => ({
+  handleAssetHubImageTask: vi.fn(async () => ({ ok: true })),
+  handleAssetHubModifyTask: vi.fn(async () => ({ ok: true })),
+  handleCharacterImageTask: vi.fn(async () => ({ ok: true })),
+  handleEpisodeCoverImageTask: vi.fn(async () => ({ ok: true })),
+  handleLocationImageTask: vi.fn(async () => ({ ok: true })),
+  handleModifyAssetImageTask: vi.fn(async () => ({ ok: true })),
+  handlePanelImageTask: vi.fn(async () => ({ ok: true })),
+  handlePanelVariantTask: vi.fn(async () => ({ ok: true })),
+}))
+
+const configServiceMock = vi.hoisted(() => ({
+  getUserWorkflowConcurrencyConfig: vi.fn(async () => ({
+    analysis: 5,
+    image: 5,
+    video: 5,
+  })),
+}))
+
+const gateMock = vi.hoisted(() => ({
+  withUserConcurrencyGate: vi.fn(async <T>(input: { run: () => Promise<T> }) => await input.run()),
 }))
 
 const utilsMock = vi.hoisted(() => ({
@@ -59,9 +94,18 @@ vi.mock('bullmq', () => ({
       return null
     }
   },
+  Worker: class {
+    constructor(_name: string, processor: WorkerProcessor) {
+      workerState.processor = processor
+    }
+  },
 }))
 
 vi.mock('@/lib/redis', () => ({ queueRedis: {} }))
+vi.mock('@/lib/workers/shared', () => workerSharedMock)
+vi.mock('@/lib/config-service', () => configServiceMock)
+vi.mock('@/lib/workers/user-concurrency-gate', () => gateMock)
+vi.mock('@/lib/workers/handlers/image-task-handlers', () => imageHandlerMock)
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
@@ -83,6 +127,7 @@ describe('chain contract - image queue behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     queueState.addCallsByQueue.clear()
+    workerState.processor = null
   })
 
   it('image tasks are enqueued into image queue with jobId=taskId', async () => {
@@ -127,6 +172,46 @@ describe('chain contract - image queue behavior', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.jobName).toBe(TASK_TYPE.MODIFY_ASSET_IMAGE)
     expect(calls[0]?.data.type).toBe(TASK_TYPE.MODIFY_ASSET_IMAGE)
+  })
+
+  it('routes Episode cover image jobs to the dedicated image worker handler', async () => {
+    const { addTaskJob, QUEUE_NAME } = await import('@/lib/task/queues')
+
+    await addTaskJob({
+      taskId: 'task-episode-cover-1',
+      type: TASK_TYPE.IMAGE_EPISODE_COVER,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'NovelPromotionEpisode',
+      targetId: 'episode-1',
+      payload: {},
+      userId: 'user-1',
+    })
+
+    const queuedCalls = queueState.addCallsByQueue.get(QUEUE_NAME.IMAGE) || []
+    expect(queuedCalls).toEqual([
+      expect.objectContaining({
+        jobName: TASK_TYPE.IMAGE_EPISODE_COVER,
+        data: expect.objectContaining({ type: TASK_TYPE.IMAGE_EPISODE_COVER }),
+      }),
+    ])
+    const queued = queuedCalls[0]
+    expect(queueState.addCallsByQueue.get(QUEUE_NAME.VIDEO) || []).toEqual([])
+    expect(TASKTYPE_BEHAVIOR_MATRIX).toContainEqual(expect.objectContaining({
+      taskType: TASK_TYPE.IMAGE_EPISODE_COVER,
+      chainTest: 'tests/integration/chain/image.chain.test.ts',
+      apiContractTest: 'tests/integration/api/contract/direct-submit-routes.test.ts',
+    }))
+
+    const { createImageWorker } = await import('@/lib/workers/image.worker')
+    createImageWorker()
+
+    expect(workerState.processor).toBeTruthy()
+    const queuedJob = toJob(queued!.data)
+    await workerState.processor!(queuedJob)
+
+    expect(imageHandlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledWith(queuedJob)
   })
 
   it('queued image job payload can be consumed by worker handler and persist image fields', async () => {

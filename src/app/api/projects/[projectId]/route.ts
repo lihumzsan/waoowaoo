@@ -1,7 +1,7 @@
 ﻿import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
+import { addSignedUrlsToProject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
@@ -80,7 +80,9 @@ export const PATCH = apiHandler(async (
   return NextResponse.json({ project: updatedProject })
 })
 
-async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
+async function collectProjectCOSKeys(projectId: string): Promise<{
+  keys: string[]
+}> {
   const keys: string[] = []
 
   const novelPromotion = await prisma.novelPromotionProject.findUnique({
@@ -105,7 +107,7 @@ async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
     },
   })
 
-  if (!novelPromotion) return keys
+  if (!novelPromotion) return { keys }
 
   for (const character of novelPromotion.characters) {
     for (const appearance of character.appearances) {
@@ -160,11 +162,13 @@ async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
     }
   }
 
-  _ulogInfo(`[Project ${projectId}] collected ${keys.length} COS object keys for deletion`)
-  return keys
+  _ulogInfo(
+    `[Project ${projectId}] collected ${keys.length} COS object keys for cleanup review`,
+  )
+  return { keys }
 }
 
-// DELETE - remove project data and related COS objects.
+// DELETE - remove project data and retain media while legacy references are incomplete.
 export const DELETE = apiHandler(async (
   _request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -188,17 +192,54 @@ export const DELETE = apiHandler(async (
   }
 
   _ulogInfo(`[DELETE] deleting project ${project.name} (${projectId})`)
-  const cosKeys = await collectProjectCOSKeys(projectId)
+  const { keys: cosKeys } = await collectProjectCOSKeys(projectId)
+  const uniqueCosKeys = [...new Set(cosKeys)]
 
-  let cosResult = { success: 0, failed: 0 }
-  if (cosKeys.length > 0) {
-    _ulogInfo(`[DELETE] deleting ${cosKeys.length} COS objects`)
-    cosResult = await deleteObjects(cosKeys)
+  const coverMedia = await prisma.$transaction(async (tx) => {
+    const episodes = await tx.novelPromotionEpisode.findMany({
+      where: { novelPromotionProject: { projectId } },
+      select: {
+        id: true,
+        coverImageMediaId: true,
+        coverImageMedia: { select: { storageKey: true } },
+      },
+    })
+    const coversById = new Map<string, {
+      id: string
+      episodeId: string
+      storageKey?: string
+    }>()
+    for (const episode of episodes) {
+      if (!episode.coverImageMediaId || coversById.has(episode.coverImageMediaId)) continue
+      coversById.set(episode.coverImageMediaId, {
+        id: episode.coverImageMediaId,
+        episodeId: episode.id,
+        storageKey: episode.coverImageMedia?.storageKey,
+      })
+    }
+
+    await tx.project.delete({
+      where: { id: projectId },
+    })
+    return [...coversById.values()]
+  }, { isolationLevel: 'Serializable' })
+
+  const skippedStorageKeys = new Set(uniqueCosKeys)
+  for (const media of coverMedia) {
+    if (media.storageKey) skippedStorageKeys.add(media.storageKey)
+  }
+  if (skippedStorageKeys.size > 0 || coverMedia.length > 0) {
+    _ulogInfo(
+      '[DELETE] skipped project media cleanup because legacy reference inventory is incomplete',
+      {
+        projectId,
+        skippedStorageKeyCount: skippedStorageKeys.size,
+        skippedMediaCount: coverMedia.length,
+      },
+    )
   }
 
-  await prisma.project.delete({
-    where: { id: projectId },
-  })
+  const cosResult = { success: 0, failed: 0 }
 
   logProjectAction(
     'DELETE',

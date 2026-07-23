@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireProjectAuth, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
+import { attachMediaFieldsToEpisodes } from '@/lib/media/attach'
 
 /**
  * GET - 获取项目的所有剧集
@@ -22,8 +23,9 @@ export const GET = apiHandler(async (
     where: { novelPromotionProjectId: novelData.id },
     orderBy: { episodeNumber: 'asc' }
   })
+  const episodesWithCoverMedia = await attachMediaFieldsToEpisodes(episodes)
 
-  return NextResponse.json({ episodes })
+  return NextResponse.json({ episodes: episodesWithCoverMedia })
 })
 
 /**

@@ -5,6 +5,18 @@
         "acting": "Acting Direction",
         "detail": "Adding Details"
     },
+    "episodeCover": {
+        "title": "Episode cover",
+        "description": "Generate one independent cover image from this episode's story, characters, and locations using the project aspect ratio.",
+        "pureImageHint": "Pure artwork only—no title, episode number, captions, labels, logos, or watermarks.",
+        "imageAlt": "Episode cover image",
+        "empty": "No cover generated yet",
+        "generate": "Generate cover",
+        "regenerate": "Regenerate",
+        "generating": "Generating cover",
+        "retry": "Retry generation",
+        "failed": "Cover generation failed. Please retry."
+    },
     "prompts": {
         "imagePrompt": "Image Prompt",
         "aiInstruction": "AI Modify Instruction",
@@ -55,7 +67,9 @@
         "dialogueComplianceNone": "No dialogue",
         "dialogueComplianceNoneTitle": "No dialogue beat is bound to this segment.",
         "addAtStart": "Add new storyboard group at the start",
-        "insertHere": "Insert new storyboard group here"
+        "insertHere": "Insert new storyboard group here",
+        "panelSummary": "{total} panels · {pending} pending · {running} running",
+        "panelListLabel": "Panel list for storyboard group {index}"
     },
     "header": {
         "title": "Storyboard Editing",
