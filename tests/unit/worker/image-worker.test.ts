@@ -180,7 +180,7 @@ describe('worker image concurrency behavior', () => {
         hasReadableText: false,
         hasEpisodeNumber: false,
         hasLogo: false,
-        hasWatermark: true,
+        hasWatermark: false,
         isCollage: false,
         isSingleContinuousScene: true,
         issues: [],
@@ -229,8 +229,14 @@ describe('worker image concurrency behavior', () => {
         background: { r: 24, g: 48, b: 72 },
       },
     }).png().toBuffer()
+    const truncated = source.subarray(0, Math.floor(source.byteLength / 2))
+    await expect(sharp(truncated).metadata()).resolves.toMatchObject({
+      format: 'png',
+      width: 1600,
+      height: 900,
+    })
     workerUtilsMock.resolveImageSourceFromGeneration.mockResolvedValue(
-      `data:image/png;base64,${source.toString('base64')}`,
+      `data:image/png;base64,${truncated.toString('base64')}`,
     )
     handlerMock.handleEpisodeCoverImageTask.mockImplementation(handleEpisodeCoverImageTask)
     const processor = workerState.processor
@@ -261,6 +267,9 @@ describe('worker image concurrency behavior', () => {
       expect.objectContaining({ modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY }),
     )
     expect(workerUtilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
+    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+    expect(workerUtilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
+    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
     expect(taskServiceMock.tryMarkTaskFailed).toHaveBeenCalledTimes(1)
     expect(handlerMock.handlePanelImageTask).not.toHaveBeenCalled()
     expect(handlerMock.handleCharacterImageTask).not.toHaveBeenCalled()

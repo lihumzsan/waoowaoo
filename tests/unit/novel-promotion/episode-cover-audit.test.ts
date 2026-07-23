@@ -57,6 +57,60 @@ async function imageBuffer(width = 1600, height = 900) {
   }).png().toBuffer()
 }
 
+async function truncatedImageBuffer(format: 'png' | 'jpeg') {
+  const image = sharp({
+    create: {
+      width: 1600,
+      height: 900,
+      channels: 3,
+      background: { r: 24, g: 48, b: 72 },
+    },
+  })
+  const source = format === 'png'
+    ? await image.png().toBuffer()
+    : await image.jpeg().toBuffer()
+  return source.subarray(0, Math.floor(source.byteLength / 2))
+}
+
+async function corruptSecondFrameWebp() {
+  const frame = async (background: { r: number; g: number; b: number }) => (
+    await sharp({
+      create: {
+        width: 1600,
+        height: 900,
+        channels: 3,
+        background,
+      },
+    }).png().toBuffer()
+  )
+  const source = await sharp(
+    [
+      await frame({ r: 24, g: 48, b: 72 }),
+      await frame({ r: 200, g: 100, b: 50 }),
+    ],
+    { join: { animated: true } },
+  ).webp({ loop: 0, delay: [100, 100] }).toBuffer()
+  const corrupt = Buffer.from(source)
+
+  let offset = 12
+  let frameCount = 0
+  while (offset + 8 <= corrupt.byteLength) {
+    const chunkType = corrupt.toString('ascii', offset, offset + 4)
+    const chunkSize = corrupt.readUInt32LE(offset + 4)
+    const chunkStart = offset + 8
+    const chunkEnd = chunkStart + chunkSize
+    if (chunkEnd > corrupt.byteLength) break
+
+    if (chunkType === 'ANMF' && ++frameCount === 2) {
+      corrupt.fill(0, Math.min(chunkStart + 64, chunkEnd), chunkEnd)
+      return corrupt
+    }
+    offset = chunkEnd + (chunkSize % 2)
+  }
+
+  throw new Error('Expected a second animated WebP frame')
+}
+
 async function audit(imageSource: string | Buffer, expectedAspectRatio = '16:9') {
   return await auditEpisodeCoverImage({
     userId: 'user-1',
@@ -99,6 +153,44 @@ describe('episode cover image audit', () => {
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
+  })
+
+  it.each(['png', 'jpeg'] as const)(
+    'rejects a truncated %s whose header metadata remains readable before vision inspection',
+    async (format) => {
+      const truncated = await truncatedImageBuffer(format)
+
+      await expect(sharp(truncated).metadata()).resolves.toMatchObject({
+        format,
+        width: 1600,
+        height: 900,
+      })
+      await expect(audit(truncated)).rejects.toMatchObject({
+        code: 'GENERATION_FAILED',
+        details: { auditCode: 'EPISODE_COVER_IMAGE_DECODE_FAILED' },
+      })
+      expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+    },
+  )
+
+  it('rejects a WebP with a corrupt later frame before vision inspection', async () => {
+    const corrupt = await corruptSecondFrameWebp()
+
+    await expect(sharp(corrupt).metadata()).resolves.toMatchObject({
+      format: 'webp',
+      width: 1600,
+      height: 900,
+      pages: 2,
+    })
+    await expect(sharp(corrupt, { failOn: 'warning' }).stats()).resolves.toBeDefined()
+    await expect(
+      sharp(corrupt, { failOn: 'warning', animated: true }).stats(),
+    ).rejects.toThrow()
+    await expect(audit(corrupt)).rejects.toMatchObject({
+      code: 'GENERATION_FAILED',
+      details: { auditCode: 'EPISODE_COVER_IMAGE_MULTIPAGE_UNSUPPORTED' },
+    })
+    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
   })
 
   it('accepts a valid image data URL', async () => {
@@ -214,8 +306,10 @@ describe('episode cover image audit', () => {
 
     const result = await audit(source, '9:16')
 
+    expect(result.buffer).toBe(source)
     expect(result.metadata).toMatchObject({
       mimeType: 'image/jpeg',
+      sizeBytes: source.byteLength,
       width: 900,
       height: 1600,
     })

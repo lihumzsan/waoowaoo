@@ -181,15 +181,19 @@ export async function auditEpisodeCoverImage(params: {
 }): Promise<AuditedEpisodeCoverImage> {
   const buffer = await decodeImageSource(params.imageSource)
 
+  const image = sharp(buffer, { failOn: 'warning' })
   let imageMetadata: sharp.Metadata
   try {
-    imageMetadata = await sharp(buffer).metadata()
+    imageMetadata = await image.metadata()
   } catch {
     throw auditError('EPISODE_COVER_IMAGE_DIMENSIONS_MISSING')
   }
 
   const mimeType = imageMetadata.format ? MIME_BY_SHARP_FORMAT[imageMetadata.format] : undefined
   if (!mimeType) throw auditError('EPISODE_COVER_IMAGE_UNSUPPORTED_FORMAT')
+  if ((imageMetadata.pages ?? 1) > 1) {
+    throw auditError('EPISODE_COVER_IMAGE_MULTIPAGE_UNSUPPORTED')
+  }
 
   const encodedWidth = imageMetadata.width
   const encodedHeight = imageMetadata.height
@@ -207,6 +211,13 @@ export async function auditEpisodeCoverImage(params: {
   const relativeError = Math.abs(actualRatio - expectedRatio) / expectedRatio
   if (relativeError > ASPECT_RATIO_TOLERANCE) {
     throw auditError('EPISODE_COVER_IMAGE_ASPECT_RATIO_MISMATCH')
+  }
+
+  try {
+    await image.stats()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw auditError('EPISODE_COVER_IMAGE_DECODE_FAILED', message)
   }
 
   let response: Awaited<ReturnType<typeof executeAiVisionStep>>

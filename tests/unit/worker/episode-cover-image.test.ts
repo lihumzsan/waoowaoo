@@ -358,10 +358,19 @@ describe('worker episode cover image behavior', () => {
 
   it('creates no storage object, media row, or pointer update when audit fails', async () => {
     prismaMock.novelPromotionEpisode.findFirst.mockResolvedValue(buildEpisode('media-old-cover'))
-    auditMock.auditEpisodeCoverImage.mockRejectedValue(new Error('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED'))
+    auditMock.auditEpisodeCoverImage.mockRejectedValue(Object.assign(
+      new Error('EPISODE_COVER_IMAGE_DECODE_FAILED'),
+      {
+        code: 'GENERATION_FAILED',
+        details: { auditCode: 'EPISODE_COVER_IMAGE_DECODE_FAILED' },
+      },
+    ))
     const { handleEpisodeCoverImageTask } = await loadHandler()
 
-    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toThrow('EPISODE_COVER_IMAGE_SEMANTIC_AUDIT_FAILED')
+    await expect(handleEpisodeCoverImageTask(buildJob())).rejects.toMatchObject({
+      code: 'GENERATION_FAILED',
+      details: { auditCode: 'EPISODE_COVER_IMAGE_DECODE_FAILED' },
+    })
 
     expect(utilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
     expect(mediaMock.ensureMediaObjectFromStorageKey).not.toHaveBeenCalled()
