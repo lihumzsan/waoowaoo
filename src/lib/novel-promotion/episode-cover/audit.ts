@@ -54,6 +54,9 @@ function auditError(auditCode: string, detail?: string): Error {
 }
 
 function assertImageSize(sizeBytes: number): void {
+  if (sizeBytes <= 0) {
+    throw auditError('EPISODE_COVER_IMAGE_UNREADABLE', 'empty image')
+  }
   if (sizeBytes > MAX_EPISODE_COVER_IMAGE_BYTES) {
     throw auditError('EPISODE_COVER_IMAGE_TOO_LARGE')
   }

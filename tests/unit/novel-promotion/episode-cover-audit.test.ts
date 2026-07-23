@@ -211,6 +211,41 @@ describe('episode cover image audit', () => {
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()
   })
 
+  it('classifies an empty Buffer as a retryable unreadable image before vision inspection', async () => {
+    const error = await audit(Buffer.alloc(0)).catch((caught) => caught)
+    const normalized = normalizeAnyError(error, { context: 'worker' })
+
+    expect(error).toMatchObject({
+      code: 'GENERATION_FAILED',
+      details: { auditCode: 'EPISODE_COVER_IMAGE_UNREADABLE' },
+    })
+    expect(normalized).toMatchObject({
+      code: 'GENERATION_FAILED',
+      retryable: true,
+    })
+    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty local file from stat before reading its bytes', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'episode-cover-audit-'))
+    const filePath = path.join(directory, 'empty.png')
+    await writeFile(filePath, Buffer.alloc(0))
+    readFileMock.mockClear()
+    statMock.mockClear()
+
+    try {
+      await expect(audit(filePath)).rejects.toMatchObject({
+        code: 'GENERATION_FAILED',
+        details: { auditCode: 'EPISODE_COVER_IMAGE_UNREADABLE' },
+      })
+      expect(statMock).toHaveBeenCalledWith(filePath)
+      expect(readFileMock).not.toHaveBeenCalled()
+      expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('rejects remote HTTP sources instead of downloading them', async () => {
     await expect(audit('https://example.test/cover.png')).rejects.toThrow('EPISODE_COVER_IMAGE_REMOTE_SOURCE')
     expect(executeAiVisionStepMock).not.toHaveBeenCalled()

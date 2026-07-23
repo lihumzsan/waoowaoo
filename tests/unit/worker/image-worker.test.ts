@@ -220,59 +220,67 @@ describe('worker image concurrency behavior', () => {
     expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledWith(job)
   })
 
-  it('requeues the first audit failure and routes the second attempt to the same Episode cover handler', async () => {
-    const source = await sharp({
-      create: {
+  it.each([
+    ['truncated PNG', async () => {
+      const source = await sharp({
+        create: {
+          width: 1600,
+          height: 900,
+          channels: 3,
+          background: { r: 24, g: 48, b: 72 },
+        },
+      }).png().toBuffer()
+      const truncated = source.subarray(0, Math.floor(source.byteLength / 2))
+      await expect(sharp(truncated).metadata()).resolves.toMatchObject({
+        format: 'png',
         width: 1600,
         height: 900,
-        channels: 3,
-        background: { r: 24, g: 48, b: 72 },
-      },
-    }).png().toBuffer()
-    const truncated = source.subarray(0, Math.floor(source.byteLength / 2))
-    await expect(sharp(truncated).metadata()).resolves.toMatchObject({
-      format: 'png',
-      width: 1600,
-      height: 900,
-    })
-    workerUtilsMock.resolveImageSourceFromGeneration.mockResolvedValue(
-      `data:image/png;base64,${truncated.toString('base64')}`,
-    )
-    handlerMock.handleEpisodeCoverImageTask.mockImplementation(handleEpisodeCoverImageTask)
-    const processor = workerState.processor
-    expect(processor).toBeTruthy()
-    const job = buildJob(TASK_TYPE.IMAGE_EPISODE_COVER)
+      })
+      return `data:image/png;base64,${truncated.toString('base64')}`
+    }],
+    ['empty Buffer', async () => Buffer.alloc(0)],
+  ] as const)(
+    'requeues the first %s audit failure and routes the second attempt to the same Episode cover handler',
+    async (_label, buildSource) => {
+      workerUtilsMock.resolveImageSourceFromGeneration.mockResolvedValue(
+        await buildSource(),
+      )
+      handlerMock.handleEpisodeCoverImageTask.mockImplementation(handleEpisodeCoverImageTask)
+      const processor = workerState.processor
+      expect(processor).toBeTruthy()
+      const job = buildJob(TASK_TYPE.IMAGE_EPISODE_COVER)
 
-    const firstError = await processor!(job).catch((error) => error)
+      const firstError = await processor!(job).catch((error) => error)
 
-    expect(firstError).toMatchObject({ code: 'GENERATION_FAILED' })
-    expect(firstError).not.toBeInstanceOf(UnrecoverableError)
-    expect(taskServiceMock.tryMarkTaskQueuedForRetry).toHaveBeenCalledTimes(1)
-    expect(taskServiceMock.tryMarkTaskFailed).not.toHaveBeenCalled()
-    expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledTimes(1)
+      expect(firstError).toMatchObject({ code: 'GENERATION_FAILED' })
+      expect(firstError).not.toBeInstanceOf(UnrecoverableError)
+      expect(taskServiceMock.tryMarkTaskQueuedForRetry).toHaveBeenCalledTimes(1)
+      expect(taskServiceMock.tryMarkTaskFailed).not.toHaveBeenCalled()
+      expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledTimes(1)
 
-    ;(job as Job<TaskJobData> & { attemptsMade: number }).attemptsMade = 1
-    await expect(processor!(job)).rejects.toBeInstanceOf(UnrecoverableError)
+      ;(job as Job<TaskJobData> & { attemptsMade: number }).attemptsMade = 1
+      await expect(processor!(job)).rejects.toBeInstanceOf(UnrecoverableError)
 
-    expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledTimes(2)
-    expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
-    expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
-      1,
-      job,
-      expect.objectContaining({ modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY }),
-    )
-    expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
-      2,
-      job,
-      expect.objectContaining({ modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY }),
-    )
-    expect(workerUtilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
-    expect(executeAiVisionStepMock).not.toHaveBeenCalled()
-    expect(workerUtilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
-    expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
-    expect(taskServiceMock.tryMarkTaskFailed).toHaveBeenCalledTimes(1)
-    expect(handlerMock.handlePanelImageTask).not.toHaveBeenCalled()
-    expect(handlerMock.handleCharacterImageTask).not.toHaveBeenCalled()
-    expect(handlerMock.handleLocationImageTask).not.toHaveBeenCalled()
-  })
+      expect(handlerMock.handleEpisodeCoverImageTask).toHaveBeenCalledTimes(2)
+      expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(2)
+      expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+        1,
+        job,
+        expect.objectContaining({ modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY }),
+      )
+      expect(workerUtilsMock.resolveImageSourceFromGeneration).toHaveBeenNthCalledWith(
+        2,
+        job,
+        expect.objectContaining({ modelId: CODEX_DEFAULT_IMAGE_MODEL_KEY }),
+      )
+      expect(workerUtilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
+      expect(executeAiVisionStepMock).not.toHaveBeenCalled()
+      expect(workerUtilsMock.uploadImageSourceToCosWithMetadata).not.toHaveBeenCalled()
+      expect(prismaMock.novelPromotionEpisode.update).not.toHaveBeenCalled()
+      expect(taskServiceMock.tryMarkTaskFailed).toHaveBeenCalledTimes(1)
+      expect(handlerMock.handlePanelImageTask).not.toHaveBeenCalled()
+      expect(handlerMock.handleCharacterImageTask).not.toHaveBeenCalled()
+      expect(handlerMock.handleLocationImageTask).not.toHaveBeenCalled()
+    },
+  )
 })
