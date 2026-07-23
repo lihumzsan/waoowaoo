@@ -53,7 +53,7 @@ export default function StoryboardGroupActions({
   }, [currentRunningCount, hasAnyImage])
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <GlassButton
         variant="secondary"
         size="sm"
@@ -112,4 +112,3 @@ export default function StoryboardGroupActions({
     </div>
   )
 }
-

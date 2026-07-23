@@ -67,7 +67,9 @@
         "dialogueComplianceNone": "无对白",
         "dialogueComplianceNoneTitle": "该片段没有绑定对白节拍。",
         "addAtStart": "在开头添加新分镜组",
-        "insertHere": "在此插入新分镜组"
+        "insertHere": "在此插入新分镜组",
+        "panelSummary": "共 {total} 个镜头 · 待生成 {pending} · 生成中 {running}",
+        "panelListLabel": "第 {index} 个分镜组的镜头列表"
     },
     "header": {
         "title": "分镜编辑",

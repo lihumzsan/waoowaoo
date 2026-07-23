@@ -12,8 +12,6 @@ import {
 } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { AppIcon } from '@/components/ui/icons'
 import {
-  useDownloadRemoteBlob,
-  useListProjectEpisodeVideoUrls,
   useMatchedVoiceLines,
   useUpdateProjectPanelLink,
 } from '@/lib/query/hooks'
@@ -35,7 +33,6 @@ import { useVideoPanelsProjection } from './video-stage-runtime/useVideoPanelsPr
 import { useVideoPromptState } from './video-stage-runtime/useVideoPromptState'
 import { useVideoPanelLinking } from './video-stage-runtime/useVideoPanelLinking'
 import { useVideoVoiceLines } from './video-stage-runtime/useVideoVoiceLines'
-import { useVideoDownloadAll } from './video-stage-runtime/useVideoDownloadAll'
 import { useVideoStageUiState } from './video-stage-runtime/useVideoStageUiState'
 import { useVideoPanelViewport } from './video-stage-runtime/useVideoPanelViewport'
 import { useVideoFirstLastFrameFlow } from './video-stage-runtime/useVideoFirstLastFrameFlow'
@@ -102,9 +99,7 @@ export function useVideoStageRuntime({
   } = useVideoStageUiState()
 
   const lipSyncMutation = useLipSync(projectId, episodeId)
-  const listEpisodeVideoUrlsMutation = useListProjectEpisodeVideoUrls(projectId)
   const updatePanelLinkMutation = useUpdateProjectPanelLink(projectId)
-  const downloadRemoteBlobMutation = useDownloadRemoteBlob()
   const matchedVoiceLinesQuery = useMatchedVoiceLines(projectId, episodeId)
 
   const { panelVideoStates, panelLipStates, firstLastFramePromptStates } = useVideoTaskStates({
@@ -169,19 +164,7 @@ export function useVideoStageRuntime({
     matchedVoiceLinesQuery,
   })
 
-  const {
-    isDownloading,
-    videosWithUrl,
-    handleDownloadAllVideos,
-  } = useVideoDownloadAll({
-    episodeId,
-    t: (key) => t(key as never),
-    allPanels,
-    panelVideoPreference,
-    lipSyncEnabled,
-    listEpisodeVideoUrlsMutation,
-    downloadRemoteBlobMutation,
-  })
+  const videosWithUrl = allPanels.filter((panel) => panel.videoUrl).length
 
   const allVideoModelOptions = useMemo(
     () => userVideoModels || [],
@@ -579,9 +562,7 @@ export function useVideoStageRuntime({
         videosWithUrl={videosWithUrl}
         failedCount={failedCount}
         isAnyTaskRunning={isAnyTaskRunning}
-        isDownloading={isDownloading}
         onGenerateAll={handleOpenBatchGenerateModal}
-        onDownloadAll={handleDownloadAllVideos}
         onBack={onBack}
         onEnterEditor={onEnterEditor}
         videosReady={videosWithUrl > 0}

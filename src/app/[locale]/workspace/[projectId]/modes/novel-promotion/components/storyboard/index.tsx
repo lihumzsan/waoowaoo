@@ -52,6 +52,8 @@ export default function StoryboardStage({
     sortedStoryboards,
     expandedClips,
     toggleExpandedClip,
+    openStoryboardId,
+    toggleOpenStoryboard,
     getClipInfo,
     getTextPanels,
     getPanelEditData,
@@ -184,6 +186,7 @@ export default function StoryboardStage({
           sortedStoryboards={sortedStoryboards}
           videoRatio={videoRatio}
           expandedClips={expandedClips}
+          openStoryboardId={openStoryboardId}
           submittingStoryboardIds={submittingStoryboardIds}
           selectingCandidateIds={selectingCandidateIds}
           submittingStoryboardTextIds={submittingStoryboardTextIds}
@@ -207,6 +210,7 @@ export default function StoryboardStage({
           defaultStoryboardWorkflow={defaultStoryboardWorkflow}
           formatClipTitle={formatClipTitle}
           onToggleExpandedClip={toggleExpandedClip}
+          onToggleOpenStoryboard={toggleOpenStoryboard}
           onMoveStoryboardGroup={moveStoryboardGroup}
           onRegenerateStoryboardText={regenerateStoryboardText}
           onAddPanel={addPanel}
