@@ -1,8 +1,10 @@
 import { Agent, RunContext, tool, type Tool } from '@openai/agents'
+import { NextRequest } from 'next/server'
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {
   PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA,
+  createProjectAgentOperationTools,
   readProjectAgentOperationGatewayInput,
   readProjectAgentOperationGatewayOperationId,
 } from '@/lib/project-agent/agents-tool-adapter'
@@ -16,12 +18,14 @@ import {
   formatProjectAgentToolNotFound,
 } from '@/lib/project-agent/tool-discovery'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
+import { createProjectAgentOperationBatchCoordinator } from '@/lib/project-agent/operation-batch'
+import { createInitialProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 
 function createFixture() {
   const registry = createProjectAgentOperationRegistry()
   const toolset = resolveProjectAgentToolset({ registry })
   const catalog = createProjectAgentToolCatalog({ registry, toolset })
-  return { catalog }
+  return { registry, toolset, catalog }
 }
 
 describe('project agent tool discovery', () => {
@@ -92,6 +96,74 @@ describe('project agent tool discovery', () => {
     expect(state.loadedOperationIds()).toEqual([approvalOperationId])
     expect(state.isLoaded(approvalOperationId)).toBe(true)
     expect(catalog.filter((entry) => state.isLoaded(entry.operationId))).toHaveLength(1)
+  })
+
+  it('exposes the registry-declared direct baseline once and rejects its gateway alias', async () => {
+    const { registry, toolset, catalog } = createFixture()
+    const operationTools = createProjectAgentOperationTools({
+      request: new NextRequest('http://localhost/api/project-agent'),
+      registry,
+      discoveryState: createProjectAgentToolDiscoveryState({ catalog }),
+      description: 'test gateway',
+      directOperations: toolset.directOperationIds.map((operationId) => {
+        const operation = registry[operationId]
+        if (!operation) throw new Error(`TEST_OPERATION_MISSING:${operationId}`)
+        return { operation, description: operation.summary }
+      }),
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        runId: 'run-1',
+        executionSegmentId: 'segment-1',
+        locale: 'en',
+      },
+      runFence: createInitialProjectAgentRunFence('run-1'),
+      operationSignal: new AbortController().signal,
+      billingConfirmationRequired: true,
+      operationBatch: createProjectAgentOperationBatchCoordinator({ originRunId: 'run-1' }),
+      writer: {
+        write: () => undefined,
+        merge: () => {
+          throw new Error('TEST_WRITER_MERGE_UNSUPPORTED')
+        },
+        onError: (error) => error instanceof Error ? error.message : String(error),
+      },
+    })
+
+    expect(operationTools.map((candidate) => candidate.name)).toEqual([
+      PROJECT_AGENT_OPERATION_GATEWAY_NAME,
+      ...toolset.directOperationIds,
+    ])
+    for (const operationId of toolset.directOperationIds) {
+      const directTool = operationTools.find((candidate) => candidate.name === operationId)
+      if (directTool?.type !== 'function') throw new Error(`FUNCTION_TOOL_REQUIRED:${operationId}`)
+      expect(directTool.parameters).toEqual(registry[operationId]?.toolInputSchema)
+    }
+
+    const gateway = operationTools[0]
+    if (gateway?.type !== 'function') throw new Error('FUNCTION_TOOL_REQUIRED')
+    const result = await gateway.invoke(
+      new RunContext({}),
+      JSON.stringify({
+        operationId: 'update_plan',
+        argumentsJson: JSON.stringify({ explanation: null, plan: [] }),
+      }),
+      {
+        toolCall: {
+          type: 'function_call',
+          callId: 'gateway-direct-alias',
+          name: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
+          arguments: '{}',
+        },
+      },
+    )
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'OPERATION_INPUT_INVALID',
+        message: 'PROJECT_AGENT_OPERATION_DIRECT_TOOL_REQUIRED:update_plan',
+      },
+    })
   })
 
   it('fails explicitly for unknown, duplicate, or oversized load requests', () => {

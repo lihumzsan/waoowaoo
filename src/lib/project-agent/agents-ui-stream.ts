@@ -1,5 +1,6 @@
 import type { UIMessageChunk } from 'ai'
 import { createAiSdkUiMessageStream } from '@openai/agents-extensions/ai-sdk-ui'
+import type { RunStreamEvent } from '@openai/agents'
 
 export type ProjectAgentUiChunk = UIMessageChunk
 
@@ -182,6 +183,42 @@ function replaceChunkToolName(chunk: ProjectAgentUiChunk, toolName: string): Pro
   return { ...chunk, toolName } as unknown as ProjectAgentUiChunk
 }
 
+function readFunctionToolCall(event: RunStreamEvent): {
+  toolCallId: string
+  toolName: string
+} | null {
+  if (
+    event.type !== 'run_item_stream_event'
+    || event.name !== 'tool_called'
+    || event.item.type !== 'tool_call_item'
+    || event.item.rawItem.type !== 'function_call'
+  ) {
+    return null
+  }
+  const toolCallId = event.item.rawItem.callId.trim()
+  const toolName = event.item.rawItem.name.trim()
+  return toolCallId && toolName ? { toolCallId, toolName } : null
+}
+
+function replaceChunkWithToolNotFoundFailure(
+  chunk: ProjectAgentUiChunk,
+  toolName: string,
+): ProjectAgentUiChunk {
+  if (!isRecord(chunk)) return chunk
+  return {
+    ...chunk,
+    toolName,
+    output: {
+      ok: false,
+      error: {
+        code: 'OPERATION_NOT_FOUND',
+        message: 'PROJECT_AGENT_TOOL_NOT_FOUND',
+        details: { toolName },
+      },
+    },
+  } as unknown as ProjectAgentUiChunk
+}
+
 function createSyntheticToolInputChunks(params: {
   toolCallId: string
   toolName: string
@@ -211,9 +248,10 @@ export function createDataChunk(type: string, data: unknown): ProjectAgentUiChun
 }
 
 export function createProjectAgentUiMessageStream(params: {
-  source: Parameters<typeof createAiSdkUiMessageStream>[0]
+  source: AsyncIterable<RunStreamEvent>
   initialChunks: ProjectAgentUiChunk[]
   resolveToolName: (toolCallId: string) => string | null
+  availableToolNames: readonly string[]
   hiddenToolNames?: readonly string[]
   aliasedToolNames?: readonly string[]
   sideChannel: ProjectAgentSideChannel
@@ -223,7 +261,20 @@ export function createProjectAgentUiMessageStream(params: {
   onCancel?: () => Promise<void>
   onSettled: () => Promise<void>
 }): ReadableStream<ProjectAgentUiChunk> {
-  const converted = createAiSdkUiMessageStream(params.source) as ReadableStream<ProjectAgentUiChunk>
+  const availableToolNames = new Set(
+    params.availableToolNames.map((toolName) => toolName.trim()).filter(Boolean),
+  )
+  const missingToolNameByCallId = new Map<string, string>()
+  const observedSource = (async function* (): AsyncGenerator<RunStreamEvent> {
+    for await (const event of params.source) {
+      const toolCall = readFunctionToolCall(event)
+      if (toolCall && !availableToolNames.has(toolCall.toolName)) {
+        missingToolNameByCallId.set(toolCall.toolCallId, toolCall.toolName)
+      }
+      yield event
+    }
+  })()
+  const converted = createAiSdkUiMessageStream(observedSource) as ReadableStream<ProjectAgentUiChunk>
   let cancelled = false
   let settled = false
   let convertedReader: ReadableStreamDefaultReader<ProjectAgentUiChunk> | null = null
@@ -266,6 +317,12 @@ export function createProjectAgentUiMessageStream(params: {
         let chunk = rawChunk
         assertNoTextProtocolLeak(chunk)
         const toolCallId = readChunkString(chunk, 'toolCallId')
+        const missingToolName = toolCallId && isToolOutputChunk(chunk)
+          ? missingToolNameByCallId.get(toolCallId) ?? null
+          : null
+        if (missingToolName) {
+          chunk = replaceChunkWithToolNotFoundFailure(chunk, missingToolName)
+        }
         if (toolCallId && isToolChunk(chunk)) {
           const incomingToolName = readChunkString(chunk, 'toolName')
           if (incomingToolName && hiddenToolNames.has(incomingToolName)) {

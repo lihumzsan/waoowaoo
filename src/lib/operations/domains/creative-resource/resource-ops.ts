@@ -205,6 +205,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'get_resource',
       summary: 'Read one persistent creative Resource, its editable creativeData document/version, and one exact immutable revision with full content, generation provenance, lineage, candidates, and bindings. Pass revisionId from a Binding when it may differ from the current head. Call this immediately before edit_resource; never guess creativeDataVersion.',
       intent: 'query',
+      toolExposure: 'direct',
       effects: {
         writes: false,
         billable: false,

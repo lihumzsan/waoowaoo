@@ -3,6 +3,8 @@ import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 export interface ProjectAgentToolset {
   readonly source: 'operation-registry'
   readonly operationIds: readonly string[]
+  readonly directOperationIds: readonly string[]
+  readonly onDemandOperationIds: readonly string[]
   readonly disabledOperationIds: readonly string[]
 }
 
@@ -18,13 +20,22 @@ export function resolveProjectAgentToolset(params: {
   const disabledOperationIds = Array.from(new Set(
     (params.disabledOperationIds ?? []).map((operationId) => operationId.trim()).filter(Boolean),
   )).sort()
-  const operationIds = Object.values(params.registry)
+  const operations = Object.values(params.registry)
     .filter((operation) => operation.channels.tool && !disabledOperationIds.includes(operation.id))
+  const operationIds = operations.map((operation) => operation.id).sort()
+  const directOperationIds = operations
+    .filter((operation) => operation.toolExposure === 'direct')
+    .map((operation) => operation.id)
+    .sort()
+  const onDemandOperationIds = operations
+    .filter((operation) => operation.toolExposure === 'on_demand')
     .map((operation) => operation.id)
     .sort()
   return {
     source: 'operation-registry',
     operationIds,
+    directOperationIds,
+    onDemandOperationIds,
     disabledOperationIds,
   }
 }

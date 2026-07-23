@@ -49,7 +49,7 @@ describe('workspace assistant run trace view', () => {
   })
 
   it('groups reasoning, tool calls, and pre-tool commentary once in source order', () => {
-    const parts = [
+    const runningParts = [
       { type: 'data', name: 'agent-run', data: { status: 'running' } },
       { type: 'data', name: 'agent-runtime-context', data: {} },
       { type: 'reasoning', text: 'Choose the task to inspect.' },
@@ -67,6 +67,22 @@ describe('workspace assistant run trace view', () => {
         toolCallId: 'tool-plan',
         toolName: 'update_plan',
       },
+    ]
+
+    expect(resolveWorkspaceAssistantRunTraceView(runningParts)).toMatchObject({
+      hasPublicReasoning: true,
+      visibleToolCallCount: 1,
+      traceIndices: [],
+    })
+    expect(groupWorkspaceAssistantMessageParts(runningParts)).toEqual(
+      runningParts.map((_part, index) => ({
+        groupKey: undefined,
+        indices: [index],
+      })),
+    )
+
+    const parts = [
+      ...runningParts,
       { type: 'data', name: 'agent-run', data: { status: 'completed' } },
     ]
 

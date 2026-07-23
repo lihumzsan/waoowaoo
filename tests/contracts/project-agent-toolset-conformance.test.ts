@@ -75,6 +75,18 @@ describe('project agent toolset conformance', () => {
     expect(toolset.source).toBe('operation-registry')
     expect(toolset.disabledOperationIds).toEqual([])
     expect(toolset.operationIds).toEqual(expectedOperationIds)
+    expect(toolset.directOperationIds).toEqual([
+      'get_project_context',
+      'get_resource',
+      'request_choice',
+      'update_plan',
+    ])
+    expect(toolset.onDemandOperationIds).toEqual(
+      expectedOperationIds.filter((operationId) => !toolset.directOperationIds.includes(operationId)),
+    )
+    for (const operationId of toolset.directOperationIds) {
+      expect(registry[operationId]?.toolExposure).toBe('direct')
+    }
     expect(toolset.operationIds).not.toContain('get_user_api_config')
     expect(toolset.operationIds).not.toContain('put_user_api_config')
     expect(toolset.operationIds).not.toContain('get_user_preference')
@@ -133,7 +145,7 @@ describe('project agent toolset conformance', () => {
     const toolset = resolveProjectAgentToolset({ registry })
     const catalog = createProjectAgentToolCatalog({ registry, toolset })
 
-    expect(catalog.map((entry) => entry.operationId)).toEqual(toolset.operationIds)
+    expect(catalog.map((entry) => entry.operationId)).toEqual(toolset.onDemandOperationIds)
     for (const entry of catalog) {
       expect(Object.keys(entry).sort()).toEqual(['description', 'groupPath', 'operationId', 'parameters'])
       expect(entry.groupPath.length).toBeGreaterThan(0)
@@ -156,6 +168,8 @@ describe('project agent toolset conformance', () => {
 
     expect(toolset.disabledOperationIds).toEqual([disabledOperationId])
     expect(toolset.operationIds).not.toContain(disabledOperationId)
+    expect(toolset.directOperationIds).not.toContain(disabledOperationId)
+    expect(toolset.onDemandOperationIds).not.toContain(disabledOperationId)
     expect(toolset.operationIds).toEqual(
       Object.values(registry)
         .filter((operation) => operation.channels.tool && operation.id !== disabledOperationId)

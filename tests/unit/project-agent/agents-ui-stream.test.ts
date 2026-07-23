@@ -56,6 +56,7 @@ describe('Project Agent UI stream arbiter', () => {
       ),
       hiddenToolNames: ['load_tools'],
       aliasedToolNames: ['execute_operation'],
+      availableToolNames: ['load_tools', 'execute_operation'],
       sideChannel: createProjectAgentSideChannel(),
       beforeFinish: async () => [],
       onSettled: async () => undefined,
@@ -84,6 +85,59 @@ describe('Project Agent UI stream arbiter', () => {
     ))).toBe(true)
   })
 
+  it('projects an SDK tool-not-found output as a structured user-visible failure', async () => {
+    const agent = new Agent({ name: 'stream-test', instructions: 'test' })
+    const source = (async function* (): AsyncGenerator<RunStreamEvent> {
+      yield new RunItemStreamEvent('tool_called', new RunToolCallItem({
+        type: 'function_call',
+        callId: 'missing-operation-call',
+        name: 'create_image',
+        arguments: JSON.stringify({ request: { kind: 'asset' } }),
+      }, agent))
+      yield new RunItemStreamEvent('tool_output', new RunToolCallOutputItem({
+        type: 'function_call_result',
+        callId: 'missing-operation-call',
+        name: 'create_image',
+        status: 'completed',
+        output: {
+          type: 'text',
+          text: 'Operation "create_image" cannot be called directly.',
+        },
+      }, agent, 'Operation "create_image" cannot be called directly.'))
+    })()
+    const stream = createProjectAgentUiMessageStream({
+      source,
+      initialChunks: [],
+      resolveToolName: () => null,
+      availableToolNames: ['load_tools', 'execute_operation'],
+      sideChannel: createProjectAgentSideChannel(),
+      beforeFinish: async () => [],
+      onSettled: async () => undefined,
+    })
+    const chunks: ProjectAgentUiChunk[] = []
+    for await (const chunk of stream) chunks.push(chunk)
+
+    const outputChunk = chunks.find((chunk) => (
+      (chunk as { type?: unknown }).type === 'tool-output-available'
+      && (chunk as { toolCallId?: unknown }).toolCallId === 'missing-operation-call'
+    ))
+    expect(outputChunk).toMatchObject({
+      type: 'tool-output-available',
+      toolCallId: 'missing-operation-call',
+      toolName: 'create_image',
+      output: {
+        ok: false,
+        error: {
+          code: 'OPERATION_NOT_FOUND',
+          message: 'PROJECT_AGENT_TOOL_NOT_FOUND',
+          details: {
+            toolName: 'create_image',
+          },
+        },
+      },
+    })
+  })
+
   it('wakes for reasoning while the upstream UI converter is waiting for answer text', async () => {
     let releaseSource!: () => void
     const sourceGate = new Promise<void>((resolve) => {
@@ -106,6 +160,7 @@ describe('Project Agent UI stream arbiter', () => {
       source,
       initialChunks: [createDataChunk('data-agent-run', { status: 'running' })],
       resolveToolName: () => null,
+      availableToolNames: ['load_tools', 'execute_operation'],
       sideChannel,
       beforeFinish: async () => [],
       onSettled: async () => undefined,
@@ -201,6 +256,7 @@ describe('Project Agent UI stream arbiter', () => {
       source,
       initialChunks: [createDataChunk('data-agent-run', { status: 'running' })],
       resolveToolName: () => null,
+      availableToolNames: ['load_tools', 'execute_operation'],
       sideChannel,
       beforeFinish: async () => [],
       onSettled: async () => undefined,

@@ -114,6 +114,8 @@ export interface OperationChannels {
   api: boolean
 }
 
+export type OperationToolExposure = 'direct' | 'on_demand'
+
 type OperationEffectFlags = {
   billable: boolean
   destructive: boolean
@@ -230,6 +232,12 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
   intent: OperationIntent
   groupPath?: OperationGroupPath
   channels?: OperationChannels
+  /**
+   * Stable model transport for this Operation. Direct Operations are always
+   * present as full SDK tools; on-demand Operations are loaded through the
+   * fixed discovery/execution gateway.
+   */
+  toolExposure?: OperationToolExposure
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
   resourceContract?: CreativeResourceOperationContract
@@ -308,6 +316,7 @@ export type ProjectAgentOperationDefinitionBase<Input = unknown, Output = unknow
 type NormalizedOperationFields = {
   groupPath: OperationGroupPath
   channels: OperationChannels
+  toolExposure: OperationToolExposure
   prerequisites: OperationPrerequisites
   toolInputSchema: ProjectAgentToolInputSchema
   resourceContract: CreativeResourceOperationContract

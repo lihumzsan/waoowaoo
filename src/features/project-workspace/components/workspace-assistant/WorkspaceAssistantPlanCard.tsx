@@ -170,7 +170,7 @@ export function WorkspaceAssistantPlanCard({
   return (
     <div
       ref={containerRef}
-      className="pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-2"
+      className="pointer-events-none relative z-20 flex justify-center pb-2"
     >
       <button
         ref={triggerRef}

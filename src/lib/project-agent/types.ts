@@ -145,6 +145,8 @@ export interface AgentRuntimeContextPartData {
   toolset: {
     source: string
     operationIds: string[]
+    directOperationIds: string[]
+    onDemandOperationIds: string[]
     disabledOperationIds: string[]
   }
   selectedTools: Array<{

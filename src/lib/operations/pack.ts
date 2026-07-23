@@ -143,11 +143,16 @@ export function withOperationPack(
       defaultsGroupPath: normalizedDefaults.groupPath,
     })
     const channels = normalizeChannels(operation.channels ?? normalizedDefaults.channels)
+    const toolExposure = operation.toolExposure ?? 'on_demand'
+    if (toolExposure === 'direct' && !channels.tool) {
+      throw new Error(`PROJECT_AGENT_OPERATION_DIRECT_TOOL_CHANNEL_REQUIRED:${operationId}`)
+    }
     const normalized = {
       ...operation,
       summary: normalizeOperationSummary(operation),
       groupPath,
       channels,
+      toolExposure,
       prerequisites: mergePrerequisites(operation, normalizedDefaults),
       confirmation: mergeConfirmation(operation, normalizedDefaults),
       resourceContract: operation.resourceContract ?? {

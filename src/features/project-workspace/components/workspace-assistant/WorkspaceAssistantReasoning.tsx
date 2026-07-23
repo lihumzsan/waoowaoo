@@ -154,7 +154,6 @@ export function WorkspaceAssistantRunTraceGroup({
   readonly children?: ReactNode
 }) {
   const t = useTranslations('assistantAgent')
-  const running = useMessage((state) => state.status?.type === 'running')
   const toolCallCount = useMessage((state) => (
     resolveWorkspaceAssistantRunTraceView(state.content).visibleToolCallCount
   ))
@@ -162,16 +161,12 @@ export function WorkspaceAssistantRunTraceGroup({
   if (groupKey !== WORKSPACE_ASSISTANT_RUN_TRACE_GROUP_KEY) return <>{children}</>
 
   const label = toolCallCount > 0
-    ? running
-      ? t('reasoning.executionRunning', { count: toolCallCount })
-      : t('reasoning.executionCompleted', { count: toolCallCount })
-    : running
-      ? t('reasoning.running')
-      : t('reasoning.completed')
+    ? t('reasoning.executionCompleted', { count: toolCallCount })
+    : t('reasoning.completed')
 
   return (
     <WorkspaceAssistantReasoningDisclosure
-      running={running}
+      running={false}
       label={label}
     >
       <div className="space-y-3">

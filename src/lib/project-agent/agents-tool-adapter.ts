@@ -2,6 +2,7 @@ import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import { randomUUID } from 'node:crypto'
 import {
   tool,
+  type RunContext,
   type Tool,
 } from '@openai/agents'
 import type { NextRequest } from 'next/server'
@@ -79,11 +80,15 @@ function isSuspendingOperation(agentFlow: OperationAgentFlow | undefined): boole
   return agentFlow?.suspendsFor === 'choice'
 }
 
-export interface CreateProjectAgentOperationGatewayToolParams {
+export interface CreateProjectAgentOperationToolsParams {
   request: NextRequest
   registry: ProjectAgentOperationRegistry
   discoveryState: ProjectAgentToolDiscoveryState
   description: string
+  directOperations: readonly {
+    operation: ProjectAgentOperationDefinition
+    description: string
+  }[]
   projectId: string
   userId: string
   context: ProjectAgentContext
@@ -161,9 +166,10 @@ export function readProjectAgentOperationGatewayInput(
   }
 }
 
-export function createProjectAgentOperationGatewayTool(
-  params: CreateProjectAgentOperationGatewayToolParams,
-): Tool {
+export function createProjectAgentOperationTools(
+  params: CreateProjectAgentOperationToolsParams,
+): Tool[] {
+  const directOperationIdByToolCallId = new Map<string, string>()
   const identifyToolCall = (
     toolCallId: string | null | undefined,
     operationId: string,
@@ -179,6 +185,7 @@ export function createProjectAgentOperationGatewayTool(
   }
   const resolveOperation = (
     input: unknown,
+    toolCallId?: string | null,
   ): {
     invocation: ProjectAgentOperationGatewayInput
     operation: ProjectAgentOperationDefinition
@@ -188,7 +195,16 @@ export function createProjectAgentOperationGatewayTool(
     if (!operation?.channels.tool) {
       throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_UNKNOWN:${invocation.operationId}`)
     }
-    if (!params.discoveryState.isLoaded(invocation.operationId)) {
+    if (
+      operation.toolExposure === 'direct'
+      && (!toolCallId || directOperationIdByToolCallId.get(toolCallId) !== operation.id)
+    ) {
+      throw new Error(`PROJECT_AGENT_OPERATION_DIRECT_TOOL_REQUIRED:${invocation.operationId}`)
+    }
+    if (
+      operation.toolExposure === 'on_demand'
+      && !params.discoveryState.isLoaded(invocation.operationId)
+    ) {
       throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_NOT_LOADED:${invocation.operationId}`)
     }
     return { invocation, operation }
@@ -196,7 +212,7 @@ export function createProjectAgentOperationGatewayTool(
   const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
     let resolved: ReturnType<typeof resolveOperation>
     try {
-      resolved = resolveOperation(toolInput)
+      resolved = resolveOperation(toolInput, toolCallId)
     } catch {
       return false
     }
@@ -224,7 +240,7 @@ export function createProjectAgentOperationGatewayTool(
     })
   }
 
-  return tool({
+  const gatewayTool = tool({
     name: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     description: params.description,
     parameters: PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA as never,
@@ -234,7 +250,7 @@ export function createProjectAgentOperationGatewayTool(
       const rawToolCallId = readToolCallId(details)
       let resolved: ReturnType<typeof resolveOperation>
       try {
-        resolved = resolveOperation(toolInput)
+        resolved = resolveOperation(toolInput, rawToolCallId)
       } catch (error) {
         const operationId = (() => {
           try {
@@ -556,4 +572,55 @@ export function createProjectAgentOperationGatewayTool(
       }
     },
   })
+  const gatewayNeedsApproval = gatewayTool.needsApproval as unknown as (
+    runContext: RunContext<unknown>,
+    input: unknown,
+    toolCallId?: string,
+  ) => Promise<boolean>
+  const directTools = params.directOperations.map(({ operation, description }) => {
+    const createGatewayInput = (input: unknown): {
+      operationId: string
+      argumentsJson: string
+    } => ({
+      operationId: operation.id,
+      argumentsJson: JSON.stringify(input),
+    })
+    const markDirectInvocation = (toolCallId: string | null): string => {
+      if (!toolCallId) throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)
+      directOperationIdByToolCallId.set(toolCallId, operation.id)
+      return toolCallId
+    }
+    return tool({
+      name: operation.id,
+      description,
+      parameters: operation.toolInputSchema as never,
+      strict: true,
+      needsApproval: async (runContext, input, toolCallId) => {
+        const identifiedToolCallId = markDirectInvocation(toolCallId?.trim() || null)
+        try {
+          return await gatewayNeedsApproval(
+            runContext,
+            createGatewayInput(input),
+            identifiedToolCallId,
+          )
+        } finally {
+          directOperationIdByToolCallId.delete(identifiedToolCallId)
+        }
+      },
+      execute: async (input, runContext, details) => {
+        if (!runContext) throw new Error('PROJECT_AGENT_DIRECT_TOOL_RUN_CONTEXT_REQUIRED')
+        const toolCallId = markDirectInvocation(readToolCallId(details))
+        try {
+          return await gatewayTool.invoke(
+            runContext,
+            JSON.stringify(createGatewayInput(input)),
+            details,
+          )
+        } finally {
+          directOperationIdByToolCallId.delete(toolCallId)
+        }
+      },
+    })
+  })
+  return [gatewayTool, ...directTools]
 }

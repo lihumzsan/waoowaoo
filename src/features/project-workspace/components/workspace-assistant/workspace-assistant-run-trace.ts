@@ -19,6 +19,8 @@ type MessagePartRecord = {
   readonly type?: unknown
   readonly text?: unknown
   readonly name?: unknown
+  readonly data?: unknown
+  readonly status?: unknown
   readonly toolCallId?: unknown
   readonly toolName?: unknown
 }
@@ -55,6 +57,14 @@ function hasNonEmptyText(value: unknown): boolean {
 function isRunAnchorPart(value: unknown): boolean {
   const part = readPart(value)
   return part?.type === 'data' && part.name === 'agent-run'
+}
+
+function isRunCompleted(value: unknown): boolean {
+  const part = readPart(value)
+  const data = readPart(part?.data)
+  return part?.type === 'data'
+    && part.name === 'agent-run'
+    && data?.status === 'completed'
 }
 
 function isReasoningPart(value: unknown): boolean {
@@ -101,6 +111,8 @@ export function resolveWorkspaceAssistantRunTraceView(
     isReasoningPart(part) && hasNonEmptyText(part)
   ))
   const traceAnchorIndex = parts.findIndex(isRunAnchorPart)
+  const latestRunPart = parts.findLast(isRunAnchorPart)
+  const runCompleted = isRunCompleted(latestRunPart)
   const lastVisibleToolIndex = parts.findLastIndex(isVisibleToolPart)
   const visibleToolCallIds = new Set<string>()
 
@@ -113,7 +125,7 @@ export function resolveWorkspaceAssistantRunTraceView(
     visibleToolCallIds.add(toolCallId)
   }
 
-  const traceIndices = hasPublicReasoning && traceAnchorIndex >= 0
+  const traceIndices = runCompleted && hasPublicReasoning && traceAnchorIndex >= 0
     ? parts.flatMap((part, index) => {
         if (index === traceAnchorIndex) return [index]
         if (isReasoningPart(part) || isToolPart(part)) return [index]
@@ -142,7 +154,7 @@ export function groupWorkspaceAssistantMessageParts(
   parts: readonly unknown[],
 ): WorkspaceAssistantMessagePartGroup[] {
   const view = resolveWorkspaceAssistantRunTraceView(parts)
-  if (!view.hasPublicReasoning || view.traceAnchorIndex === null) {
+  if (view.traceIndices.length === 0 || view.traceAnchorIndex === null) {
     return parts.map((_part, index) => ({
       groupKey: undefined,
       indices: [index],

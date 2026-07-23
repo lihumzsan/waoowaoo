@@ -102,7 +102,7 @@ import {
   formatProjectAgentToolNotFound,
 } from './tool-discovery'
 import {
-  createProjectAgentOperationGatewayTool,
+  createProjectAgentOperationTools,
   readProjectAgentOperationGatewayInput,
   readProjectAgentOperationGatewayOperationId,
 } from './agents-tool-adapter'
@@ -996,7 +996,8 @@ export async function createProjectAgentChatResponse(input: {
     ? Array.from(new Set(
         (persistedApprovalItems.length > 0
           ? persistedApprovalItems.map((item) => item.operationId)
-          : [control.interruption.operationId]),
+          : [control.interruption.operationId])
+          .filter((operationId) => operations[operationId]?.toolExposure === 'on_demand'),
       ))
     : []
   const toolDiscoveryState = createProjectAgentToolDiscoveryState({
@@ -1059,6 +1060,8 @@ export async function createProjectAgentChatResponse(input: {
       toolset: {
         source: toolset.source,
         operationIds: [...toolset.operationIds],
+        directOperationIds: [...toolset.directOperationIds],
+        onDemandOperationIds: [...toolset.onDemandOperationIds],
         disabledOperationIds: [...toolset.disabledOperationIds],
       },
       selectedTools: selectedTools.map((item) => ({
@@ -1213,11 +1216,21 @@ export async function createProjectAgentChatResponse(input: {
   }
   const stopController = createProjectAgentStopController()
   const sideChannel = createProjectAgentSideChannel()
-  const operationGatewayTool = createProjectAgentOperationGatewayTool({
+  const operationTools = createProjectAgentOperationTools({
     request: input.request,
     registry: operations,
     discoveryState: toolDiscoveryState,
     description: buildProjectAgentOperationGatewayDescription(locale),
+    directOperations: toolset.directOperationIds.map((operationId) => {
+      const operation = operations[operationId]
+      if (!operation) {
+        throw new Error(`PROJECT_AGENT_OPERATION_NOT_FOUND operationId=${operationId}`)
+      }
+      return {
+        operation,
+        description: toolDescriptions.get(operationId) ?? operation.summary,
+      }
+    }),
     projectId: input.projectId,
     userId: input.userId,
     context,
@@ -1266,13 +1279,13 @@ export async function createProjectAgentChatResponse(input: {
     },
     onToolCallIdentified: registerToolCallIdentity,
     approvalPreflightStore,
-  }) as Tool<ProjectAgentAgentsRunContext>
+  }) as unknown as Tool<ProjectAgentAgentsRunContext>[]
   const tools: Tool<ProjectAgentAgentsRunContext>[] = [
     createProjectAgentToolDiscoveryTool<ProjectAgentAgentsRunContext>({
       state: toolDiscoveryState,
       locale,
     }),
-    operationGatewayTool,
+    ...operationTools,
   ]
 
   const systemPrompt = buildProjectAgentSystemPrompt({
@@ -1411,15 +1424,20 @@ export async function createProjectAgentChatResponse(input: {
             && event.name === 'tool_called'
             && event.item.type === 'tool_call_item'
             && event.item.rawItem.type === 'function_call'
-            && event.item.rawItem.name === PROJECT_AGENT_OPERATION_GATEWAY_NAME
           ) {
-            const operationId = readProjectAgentOperationGatewayOperationId(
-              JSON.parse(event.item.rawItem.arguments) as unknown,
-            )
-            registerToolCallIdentity({
-              toolCallId: event.item.rawItem.callId,
-              operationId,
-            })
+            const operationId = event.item.rawItem.name === PROJECT_AGENT_OPERATION_GATEWAY_NAME
+              ? readProjectAgentOperationGatewayOperationId(
+                  JSON.parse(event.item.rawItem.arguments) as unknown,
+                )
+              : toolset.directOperationIds.includes(event.item.rawItem.name)
+                ? event.item.rawItem.name
+                : null
+            if (operationId) {
+              registerToolCallIdentity({
+                toolCallId: event.item.rawItem.callId,
+                operationId,
+              })
+            }
           }
           for (const reasoningEvent of publicReasoning.accept(event)) {
             writePublicReasoning(reasoningEvent)
@@ -1538,6 +1556,7 @@ export async function createProjectAgentChatResponse(input: {
       source: observedRunSource,
       initialChunks,
       resolveToolName: (toolCallId) => operationIdByToolCallId.get(toolCallId) ?? null,
+      availableToolNames: tools.map((tool) => tool.name),
       hiddenToolNames: [PROJECT_AGENT_TOOL_DISCOVERY_NAME],
       aliasedToolNames: [PROJECT_AGENT_OPERATION_GATEWAY_NAME],
       sideChannel,

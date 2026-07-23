@@ -685,7 +685,8 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   const parameters = asRecord(
-    loadedOperationDefinitions(request).get(toolName)?.parameters,
+    loadedOperationDefinitions(request).get(toolName)?.parameters
+    ?? request.tools?.find((tool) => tool.function.name === toolName)?.function.parameters,
   )
   return generateGoldenStructuredValue(parameters)
 }
@@ -705,6 +706,14 @@ function buildGatewayToolDecision(input: {
   readonly operationId: string
   readonly operationArguments: unknown
 }): GoldenModelDecision {
+  if (availableToolNames(input.request).has(input.operationId)) {
+    return {
+      kind: 'tool_call',
+      toolCallId: `golden_call_${input.requestOrdinal}_${input.operationId}`,
+      toolName: input.operationId,
+      argumentsJson: JSON.stringify(input.operationArguments),
+    }
+  }
   if (!loadedOperationDefinitions(input.request).has(input.operationId)) {
     return {
       kind: 'tool_call',
