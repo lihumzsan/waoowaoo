@@ -2,7 +2,7 @@
 
 import { useMessage } from '@assistant-ui/react'
 import { useLocale, useTranslations } from 'next-intl'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
 import { getCreativeSkillDefinition } from '@/lib/creative-skills/registry'
@@ -84,14 +84,6 @@ function StatusGlyph({ status }: { status: ProjectAgentSubagentStatus }) {
   return <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 }
 
-function CompletedGlyph() {
-  return (
-    <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white" aria-hidden="true">
-      <AppIcon name="check" className="h-2.5 w-2.5" />
-    </span>
-  )
-}
-
 function SubagentEventGlyph(props: {
   part: ProjectAgentSubagentEventPartData
   subagentStatus: ProjectAgentSubagentStatus
@@ -106,7 +98,10 @@ function SubagentEventGlyph(props: {
   if (event.kind === 'tool_failed' || (eventIsOpen && props.subagentStatus !== 'completed')) {
     return <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
   }
-  return <CompletedGlyph />
+  if (event.kind === 'tool_called' || event.kind === 'tool_completed') {
+    return <AppIcon name="settingsHex" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+  }
+  return null
 }
 
 function SubagentEventBody(props: {
@@ -119,9 +114,9 @@ function SubagentEventBody(props: {
   if (event.kind === 'reasoning') {
     return (
       <div className="min-w-0 flex-1">
-        <div>{label}</div>
+        <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">{label}</div>
         {event.text ? (
-          <div className="mt-1 whitespace-pre-wrap border-l border-[var(--glass-stroke-base)] pl-3 text-[var(--glass-text-tertiary)]">
+          <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--glass-text-secondary)]">
             {event.text}
           </div>
         ) : null}
@@ -165,21 +160,15 @@ function SubagentExecutionDisclosure(props: {
   t: AssistantAgentTranslator
 }) {
   const running = props.subagent.status === 'running'
-  const [open, setOpen] = useState(running)
-  const wasRunning = useRef(running)
-  useEffect(() => {
-    if (running) setOpen(true)
-    else if (wasRunning.current) setOpen(false)
-    wasRunning.current = running
-  }, [running])
+  const [open, setOpen] = useState(true)
 
   return (
-    <section className="mt-3">
+    <section className="mt-4">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center gap-2 text-left font-medium text-[var(--glass-text-primary)]"
+        className="flex w-full items-center gap-2 text-left text-sm font-medium text-[var(--glass-text-tertiary)]"
       >
         <StatusGlyph status={props.subagent.status} />
         <span>{running ? props.t('subagents.execution.running') : props.t('subagents.execution.completed')}</span>
@@ -192,8 +181,8 @@ function SubagentExecutionDisclosure(props: {
       {open ? (
         <ol className="mt-3 space-y-3" aria-live="polite">
           {props.subagent.events.map((event, index) => (
-            <li key={`${event.subagentId}:${String(event.sequence)}`} className="flex items-start gap-3 leading-5 text-[var(--glass-text-secondary)]">
-              <span className="mt-0.5">
+            <li key={`${event.subagentId}:${String(event.sequence)}`} className="flex items-start gap-2 leading-5 text-[var(--glass-text-secondary)]">
+              <span className="mt-0.5 empty:hidden">
                 <SubagentEventGlyph
                   part={event}
                   subagentStatus={props.subagent.status}
@@ -336,7 +325,7 @@ export function WorkspaceAssistantSubagentView(props: {
 
   return (
     <section role="tabpanel" className="mx-auto w-full max-w-2xl py-2 text-sm text-[var(--glass-text-primary)]">
-      <div className="flex items-start gap-3 border-b border-[var(--glass-stroke-base)] pb-4">
+      <div className="flex items-start gap-3 pb-2">
         <AppIcon name="brain" className="mt-0.5 h-5 w-5 shrink-0 text-[var(--glass-text-secondary)]" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 leading-6">
@@ -351,27 +340,37 @@ export function WorkspaceAssistantSubagentView(props: {
         </span>
       </div>
 
-      <SubagentExecutionDisclosure subagent={subagent} locale={locale} t={t} />
+      <SubagentExecutionDisclosure
+        key={subagent.subagentId}
+        subagent={subagent}
+        locale={locale}
+        t={t}
+      />
 
       {subagent.summary ? (
-        <div className="mt-5 border-t border-[var(--glass-stroke-base)] pt-4 leading-6 text-[var(--glass-text-secondary)]">
+        <div className="mt-5 leading-6 text-[var(--glass-text-secondary)]">
           <div className="font-medium text-[var(--glass-text-primary)]">{t('subagents.result')}</div>
           <p className="mt-1 whitespace-pre-wrap">{subagent.summary}</p>
         </div>
       ) : null}
       {subagent.status === 'completed' ? (
-        <div className="mt-5 border-t border-[var(--glass-stroke-base)] pt-4 leading-6 text-[var(--glass-text-secondary)]">
-          <div className="font-medium text-[var(--glass-text-primary)]">{t('subagents.fullResult')}</div>
-          {detail?.output !== undefined ? (
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-neutral-950/[0.04] p-3 text-xs leading-5">
-              {JSON.stringify(detail.output, null, 2)}
-            </pre>
-          ) : detailError ? (
-            <p className="mt-1 text-[var(--glass-tone-warn-fg)]">{t('subagents.fullResultError')}</p>
-          ) : (
-            <p className="mt-1 text-[var(--glass-text-tertiary)]">{t('subagents.fullResultLoading')}</p>
-          )}
-        </div>
+        <details className="group mt-5 text-[var(--glass-text-secondary)]">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-[var(--glass-text-tertiary)]">
+            <span>{t('subagents.fullResult')}</span>
+            <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="mt-2">
+            {detail?.output !== undefined ? (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-neutral-950/[0.04] p-3 text-xs leading-5">
+                {JSON.stringify(detail.output, null, 2)}
+              </pre>
+            ) : detailError ? (
+              <p className="text-[var(--glass-tone-warn-fg)]">{t('subagents.fullResultError')}</p>
+            ) : (
+              <p className="text-[var(--glass-text-tertiary)]">{t('subagents.fullResultLoading')}</p>
+            )}
+          </div>
+        </details>
       ) : null}
     </section>
   )
@@ -382,34 +381,25 @@ export function WorkspaceAssistantSubagentRecords(props: {
   onSelect: (subagentId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
-  const locale = normalizeProjectAgentLocale(useLocale())
   if (props.subagents.length === 0) return null
   return (
     <div className="space-y-2">
       {props.subagents.map((subagent) => (
-        <section
+        <button
           key={subagent.subagentId}
-          className="rounded-xl border border-[var(--glass-stroke-base)] bg-white/88 px-3 py-3 text-sm leading-5 text-[var(--glass-text-secondary)]"
+          type="button"
+          onClick={() => props.onSelect(subagent.subagentId)}
+          className="flex w-full items-center gap-2 rounded-xl border border-[var(--glass-stroke-base)] bg-white/88 px-3 py-2.5 text-left text-sm leading-5 text-[var(--glass-text-secondary)] transition-colors hover:bg-white hover:text-[var(--glass-text-primary)]"
         >
-          <button
-            type="button"
-            onClick={() => props.onSelect(subagent.subagentId)}
-            className="flex w-full items-center gap-2 text-left transition-colors hover:text-[var(--glass-text-primary)]"
-          >
-            <StatusGlyph status={subagent.status} />
-            <span className="min-w-0 flex-1 truncate">
-              {localizeStatus(subagent.status, t)} · {localizeOutputKind(subagent.outputKind, t)}
-            </span>
-            <AppIcon name="chevronUp" className="h-3.5 w-3.5 shrink-0 rotate-90 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
-          </button>
-          <SubagentExecutionDisclosure subagent={subagent} locale={locale} t={t} />
-          {subagent.summary ? (
-            <div className="mt-3 border-t border-[var(--glass-stroke-base)] pt-3">
-              <div className="font-medium text-[var(--glass-text-primary)]">{t('subagents.result')}</div>
-              <p className="mt-1 whitespace-pre-wrap">{subagent.summary}</p>
-            </div>
-          ) : null}
-        </section>
+          <StatusGlyph status={subagent.status} />
+          <span className="min-w-0 flex-1 truncate">
+            {localizeStatus(subagent.status, t)} · {localizeOutputKind(subagent.outputKind, t)}
+          </span>
+          <span className="shrink-0 rounded-full bg-neutral-950/[0.04] px-2 py-0.5 text-xs text-[var(--glass-text-tertiary)]">
+            {t('subagents.label')}
+          </span>
+          <AppIcon name="chevronUp" className="h-3.5 w-3.5 shrink-0 rotate-90 text-[var(--glass-text-tertiary)]" aria-hidden="true" />
+        </button>
       ))}
     </div>
   )

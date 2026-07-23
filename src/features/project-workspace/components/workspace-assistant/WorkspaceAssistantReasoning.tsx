@@ -174,7 +174,7 @@ export function WorkspaceAssistantRunTraceGroup({
       running={running}
       label={label}
     >
-      <div className="space-y-3 border-l border-[var(--glass-stroke-base)] pl-3">
+      <div className="space-y-3">
         {children}
       </div>
     </WorkspaceAssistantReasoningDisclosure>
