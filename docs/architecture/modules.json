@@ -131,7 +131,7 @@
       "sourcePaths": [
         "src/lib/creative-resource",
         "src/lib/creative-style",
-        "src/lib/canonical-screenplay",
+        "src/lib/screenplay",
         "src/lib/asset-generation",
         "src/lib/assets/services/project-asset-writer.ts",
         "src/lib/edit-source-document",
@@ -151,7 +151,8 @@
         "prisma/migrations/20260717120000_add_creative_resource_spine/migration.sql",
         "prisma/migrations/20260720190000_add_creative_resource_data/migration.sql",
         "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql",
-        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql"
+        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql",
+        "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts",
@@ -160,7 +161,7 @@
         "tests/unit/creative-resource/creative-data.test.ts",
         "tests/unit/creative-resource/current-user-text.test.ts",
         "tests/unit/creative-resource/creative-work-materialization.test.ts",
-        "tests/unit/canonical-screenplay/contracts.test.ts",
+        "tests/unit/screenplay/contracts.test.ts",
         "tests/unit/asset-generation/asset-image-format.test.ts",
         "tests/contracts/creative-result-resource-conformance.test.ts",
         "tests/integration/task/creative-resource-voice-binding.integration.test.ts",
@@ -180,9 +181,8 @@
         "src/lib/edit-chapter",
         "src/lib/edit-bible/service.ts",
         "src/lib/creative-resource/creative-work-materialization.ts",
-        "src/lib/canonical-screenplay",
+        "src/lib/screenplay",
         "src/lib/creative-skills/skills/story-development",
-        "src/lib/creative-skills/skills/screenplay-canonicalization",
         "src/lib/creative-skills/skills/continuity-memory",
         "src/lib/creative-worker/context-compiler.ts",
         "src/lib/creative-worker/output-registry.ts",
@@ -688,7 +688,8 @@
         "messages/zh/assets.json",
         "src/app/api/assets",
         "src/app/api/asset-hub",
-        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql"
+        "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql",
+        "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql"
       ],
       "testPaths": [
         "tests/golden-journey/journeys/asset-hub-ownership.spec.ts",

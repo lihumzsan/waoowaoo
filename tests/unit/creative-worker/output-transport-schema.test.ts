@@ -64,11 +64,11 @@ describe('Creative Worker structured-output transport schema', () => {
 
   it('represents optional fields as required nullable transport fields and restores omission locally', () => {
     const schema = z.object({
-      kind: z.literal('canonical_screenplay'),
+      kind: z.literal('screenplay'),
       note: z.string().optional(),
     }).strict()
     const transport = buildCreativeWorkerOutputTransportSchema({
-      kind: 'canonical_screenplay',
+      kind: 'screenplay',
       schema,
     })
 
@@ -78,9 +78,9 @@ describe('Creative Worker structured-output transport schema', () => {
     })
     const normalized = normalizeCreativeWorkerOutputFromTransport({
       schema,
-      value: { kind: 'canonical_screenplay', note: null },
+      value: { kind: 'screenplay', note: null },
     })
-    expect(normalized).toEqual({ kind: 'canonical_screenplay' })
+    expect(normalized).toEqual({ kind: 'screenplay' })
     expect(schema.safeParse(normalized).success).toBe(true)
   })
 

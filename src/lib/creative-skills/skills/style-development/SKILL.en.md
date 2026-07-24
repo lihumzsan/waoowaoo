@@ -6,9 +6,9 @@ Translate story facts, user requirements, and existing visual context into one v
 
 ## Input-order boundary
 
-- Style may be created from an initial brief before a screenplay, or created and revised after an exact `canonical_screenplay`; both orders use the same Style Bible contract.
+- Style may be created from an initial brief before a screenplay, or created and revised after an exact `screenplay` Revision; both orders use the same Style Bible contract.
 - Never require screenplay generation before style or style generation before screenplay. Consume only explicitly supplied facts and exact Revisions, never “latest” or “the previous one.”
-- A Style Bible does not own screenplay entities, and a canonical screenplay does not own visual style. Combine them only in explicit consumers such as asset or video design.
+- A Style Bible does not own screenplay text, and a screenplay does not own visual style. Combine them only in explicit consumers such as asset or video design.
 
 ## Style Bible field ownership
 

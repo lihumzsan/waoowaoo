@@ -9,8 +9,8 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 不变量
 
 - **AP-01 — Primary 没有固定主链。** 系统 Prompt 不包含 stage、next action、剧本确认、风格专用卡、短/中/长视频配方或固定工具顺序。Primary 根据目标与当前 Resource 自由组合能力。
-- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Bible、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。通用 `create_text` 只写 `generic.text`；其中 `current_user_text` 分支只允许保存当前用户消息的精确连续原文，是来源捕获而不是第二专业 writer。用户已提供剧本时不得为了保存、确认或建立正式副本自动委派 canonicalization；只有当前消费者明确需要实体、场景范围与引用等结构化分析时才请求 `canonical_screenplay`。
-- **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、适用 Skill 与 Resource schema；未知字段、缺失字段或错误引用原地失败，不容忍兼容 JSON。
+- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Bible、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`，这是来源捕获而不是第二创作 writer。`screenplay` 只拥有文本和写作元信息；生产资产筛选、设计与 Prompt 只由一个 `asset-development + outputKind=asset_manifest` Subagent Task 决定。
+- **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、适用 Skill 与 Resource schema；当前剧本 kind 是 `screenplay`，不存在 `canonical_screenplay` 或额外 canonicalization Skill。未知字段、缺失字段或错误引用原地失败，不容忍兼容 JSON。
 - **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；Task terminal 的 strict result 才能物化正式 Revision。UI 不从 reasoning、markdown 标题或文案推断完成状态。
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。
 - **AP-06 — `>180s` 只是规划信号。** Prompt 可要求 Primary 评估并行、上下文、恢复与连续性；服务端不得把时长变成 Chapter/Bible/continuity 分支。Primary 若需要 Chapter，先委派 `chapter_plan`，再显式采用；每单元 180 秒仅是采用时的局部校验。
@@ -46,6 +46,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - 风格选择曾默认生成九宫格预览并进入专用 Choice；当前 Style Bible 是普通 Resource，预览图是用户明确要求时的独立图片 Operation。
 - 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。当前时长只作为用户目标与 Primary 判断输入，模型必须从真实对白/动作/停顿估算，服务端不建立时长状态机；真实模型服从度仍需 Golden/抽样验证。
 - 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。首次按需加载又把“下一步新增具体 Operation tool”当作 Schema 交付方式：虽然减少首步 token，却改变多轮 tools 前缀并破坏缓存，且把所有加载后的复杂 schema 重新交给不同 Provider 的 function validator。旧 Prompt/单测只约束“加载与执行分步”，没有约束顶层工具定义稳定。当前双语 Prompt 统一为“`load_tools` 返回 canonical parameters → 后续调用固定 `execute_operation`”，具体 Schema 只追加在消息尾部；Task 回执与终态读取规则保持不变。
+- 剧本 canonicalization 曾在输出契约中同时拥有剧本文本、scene/entity registry 和生产资产候选；Primary 又被要求复制实体名单给 Asset Worker。真实“坠落到崖底”只在结尾出现一次，被前一 Worker 合并进山顶后，下游 exact coverage 反而禁止补回。Prompt 级地点细化只修正一次启发式，没有修正事实 owner。当前双语 Prompt 与语义 guard 明确：`screenplay` 不登记生产资产，Primary 委派 `asset_manifest` 只传精确 screenplay、adopted Style、用户目标和不可从 Revision 推导的约束，绝不手写名单；资产筛选、设计与 Prompt 在一个 Subagent Task 内完成。终态失败的 `errorCode` 由 Task View 确定性展示，Primary 在任何重派前必须先给出用户可见解释且请求发生真实变化；模型叙述不再承担错误事实本身。
 
 ## 修改检查表
 

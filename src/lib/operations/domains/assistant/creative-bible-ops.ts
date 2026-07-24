@@ -12,7 +12,7 @@ const exactRevisionSchema = z.object({
 }).strict()
 
 const adoptBibleInputSchema = z.object({
-  screenplay: exactRevisionSchema.describe('Exact immutable project.canonical_screenplay revision used by the Bible Task.'),
+  screenplay: exactRevisionSchema.describe('Exact immutable project.screenplay revision used by the Bible Task.'),
   bible: exactRevisionSchema.describe('Exact immutable project.edit_bible revision to adopt.'),
   expectedVersion: z.number().int().min(0).nullable().optional()
     .describe('Use null for first adoption, or the current Bible projection version when replacing it.'),
@@ -26,7 +26,7 @@ const adoptBibleOutputSchema = z.object({
 }).strict()
 
 const adoptChaptersInputSchema = z.object({
-  screenplay: exactRevisionSchema.describe('Exact immutable project.canonical_screenplay revision used to create the Chapter plan.'),
+  screenplay: exactRevisionSchema.describe('Exact immutable project.screenplay revision used to create the Chapter plan.'),
   chapterPlan: exactRevisionSchema.describe('Exact immutable project.chapter_plan revision to adopt.'),
 }).strict()
 

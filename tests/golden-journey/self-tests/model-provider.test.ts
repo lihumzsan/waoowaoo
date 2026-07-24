@@ -317,7 +317,7 @@ describe('Golden local model provider', () => {
     expect(readOperationArguments(screenplay, 'delegate_creative_work')).toMatchObject({
       delegation: {
         source: 'requests',
-        requests: [{ outputKind: 'canonical_screenplay', targetDurationSeconds: 240 }],
+        requests: [{ outputKind: 'screenplay', targetDurationSeconds: 240 }],
       },
     })
   })
@@ -340,6 +340,10 @@ describe('Golden local model provider', () => {
       content: {
         kind: 'current_user_text',
         scope: 'project',
+        classification: {
+          kind: 'screenplay',
+          title: '用户提供的完整剧本',
+        },
         text: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
       },
     })
@@ -352,7 +356,7 @@ describe('Golden local model provider', () => {
         schema: {
           type: 'object',
           required: ['kind'],
-          properties: { kind: { type: 'string', const: 'canonical_screenplay' } },
+          properties: { kind: { type: 'string', const: 'screenplay' } },
         },
       },
     }
@@ -361,7 +365,7 @@ describe('Golden local model provider', () => {
       requestOrdinal: 4,
       request: {
         model: 'golden-model',
-        messages: [{ role: 'user', content: '{"requestedOutputKind":"canonical_screenplay"}' }],
+        messages: [{ role: 'user', content: '{"requestedOutputKind":"screenplay"}' }],
         responseFormat,
         tools: [{ type: 'function', function: { name: 'read_skill', parameters: { type: 'object' } } }],
       },
@@ -378,7 +382,7 @@ describe('Golden local model provider', () => {
       request: {
         model: 'golden-model',
         messages: [
-          { role: 'user', content: '{"requestedOutputKind":"canonical_screenplay"}' },
+          { role: 'user', content: '{"requestedOutputKind":"screenplay"}' },
           { role: 'assistant', tool_calls: [{ function: { name: 'read_skill' } }] },
           { role: 'tool', content: '{"content":"story skill"}' },
         ],
@@ -388,10 +392,13 @@ describe('Golden local model provider', () => {
     })
     expect(afterSkillRead.kind).toBe('text')
     if (afterSkillRead.kind !== 'text') return
-    expect(JSON.parse(afterSkillRead.text)).toMatchObject({
-      kind: 'canonical_screenplay',
+    const screenplayOutput = JSON.parse(afterSkillRead.text) as Record<string, unknown>
+    expect(screenplayOutput).toMatchObject({
+      kind: 'screenplay',
       estimatedDurationSeconds: 240,
     })
+    expect(screenplayOutput).not.toHaveProperty('entities')
+    expect(screenplayOutput).not.toHaveProperty('scenes')
   })
 
   it('authors one current Style Bible Choice with one optional current commitment', () => {
@@ -494,7 +501,7 @@ describe('Golden local model provider', () => {
           { role: 'user', content: GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST },
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
-            resourceId: 'screenplay-resource', schemaId: 'project.canonical_screenplay', status: 'ready',
+            resourceId: 'screenplay-resource', schemaId: 'project.screenplay', status: 'ready',
             headRevision: {
               revisionId: 'screenplay-revision',
               content: {
@@ -573,7 +580,7 @@ describe('Golden local model provider', () => {
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [
             { resource: {
-              resourceId: 'screenplay-resource', schemaId: 'project.canonical_screenplay', status: 'ready',
+              resourceId: 'screenplay-resource', schemaId: 'project.screenplay', status: 'ready',
               scope: { episodeId: 'episode-1' },
               headRevision: { revisionId: 'screenplay-revision' },
             } },

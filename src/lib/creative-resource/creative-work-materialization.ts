@@ -10,10 +10,9 @@ import {
 import { readCreativeWorkOutputDefinition } from '@/lib/creative-worker/output-registry'
 import { CREATIVE_RESOURCE_SCHEMA } from './schema-registry'
 import {
-  canonicalScreenplaySchema,
-  compileCanonicalScreenplay,
-  validateAssetManifestCoverage,
-} from '@/lib/canonical-screenplay'
+  compileAssetManifest,
+  screenplaySchema,
+} from '@/lib/screenplay'
 import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 
 export interface CreativeWorkResourceMaterializationPlan {
@@ -29,7 +28,7 @@ export interface CreativeWorkResourceMaterializationPlan {
 export interface CreativeWorkResourceMaterializationOutput {
   readonly mediaType: 'text'
   readonly schemaId:
-    | typeof CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY
+    | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
     | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
     | typeof CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS
@@ -121,13 +120,13 @@ export function planCreativeWorkResourceMaterialization(input: {
     toolCallId: payload.origin.toolCallId,
     inputs: resourceInputsFromPayload(payload),
   }
-  if (output.kind === 'canonical_screenplay') {
-    const screenplay = compileCanonicalScreenplay(output)
+  if (output.kind === 'screenplay') {
+    const screenplay = screenplaySchema.parse(output)
     return {
       ...common,
       outputs: [{
         mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         sourceType: 'CreativeWorkResult',
         sourceId: input.taskId,
         name: truncateResourceName(output.title),
@@ -186,7 +185,7 @@ export function planCreativeWorkResourceMaterialization(input: {
   if (output.kind === 'asset_manifest') {
     const structuredSources = parseStructuredSourceMaterials(payload)
     const screenplaySources = structuredSources.flatMap((source) => {
-      const parsed = canonicalScreenplaySchema.safeParse(source.value)
+      const parsed = screenplaySchema.safeParse(source.value)
       return parsed.success ? [{ revisionId: source.revisionId, screenplay: parsed.data }] : []
     })
     const styleSources = structuredSources.flatMap((source) => {
@@ -194,7 +193,7 @@ export function planCreativeWorkResourceMaterialization(input: {
       return parsed.success ? [{ revisionId: source.revisionId }] : []
     })
     if (screenplaySources.length !== 1) {
-      throw new Error('ASSET_MANIFEST_CANONICAL_SCREENPLAY_SOURCE_REQUIRED')
+      throw new Error('ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED')
     }
     if (styleSources.length !== 1) {
       throw new Error('ASSET_MANIFEST_STYLE_BIBLE_SOURCE_REQUIRED')
@@ -202,7 +201,7 @@ export function planCreativeWorkResourceMaterialization(input: {
     const screenplaySource = screenplaySources[0]
     const styleSource = styleSources[0]
     if (!screenplaySource || !styleSource) throw new Error('ASSET_MANIFEST_SOURCE_REQUIRED')
-    const manifest = validateAssetManifestCoverage({
+    const manifest = compileAssetManifest({
       screenplay: screenplaySource.screenplay,
       manifest: output,
     })
@@ -215,7 +214,7 @@ export function planCreativeWorkResourceMaterialization(input: {
       generationOptions: {
         outputKind: output.kind,
         requestKey: payload.requestKey,
-        canonicalScreenplayRevisionId: screenplaySource.revisionId,
+        screenplayRevisionId: screenplaySource.revisionId,
         styleBibleRevisionId: styleSource.revisionId,
       },
     })

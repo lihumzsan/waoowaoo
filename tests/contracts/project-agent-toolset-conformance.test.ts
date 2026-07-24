@@ -242,12 +242,12 @@ describe('project agent toolset conformance', () => {
       kind: 'resource',
       acceptsReferences: true,
       outputMediaTypes: ['text'],
-      outputSchemaIds: ['generic.text'],
+      outputSchemaIds: ['generic.text', 'project.screenplay'],
       supportsCandidates: true,
     })
     expect(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).toEqual([
       'generic.text',
-      'project.canonical_screenplay',
+      'project.screenplay',
       'project.edit_bible',
       'project.chapter_plan',
       'project.continuity_analysis',
@@ -314,11 +314,15 @@ describe('project agent toolset conformance', () => {
       content: {
         kind: 'current_user_text',
         scope: 'project',
+        classification: {
+          kind: 'screenplay',
+          title: 'User screenplay',
+        },
         text: 'INT. ROOM - DAY',
       },
     }).success).toBe(true)
     expect(registry.create_text.inputSchema.safeParse({
-      schemaId: 'project.canonical_screenplay',
+      schemaId: 'project.screenplay',
       prompt: 'Write a screenplay.',
       content: { kind: 'single', text: 'INT. ROOM - DAY' },
     }).success).toBe(false)
@@ -534,9 +538,9 @@ describe('project agent toolset conformance', () => {
       delegation: {
         source: 'requests' as const,
         requests: [{
-          requestKey: 'canonicalize-provided-script',
-          outputKind: 'canonical_screenplay' as const,
-          goal: 'Canonicalize the supplied screenplay.',
+          requestKey: 'revise-provided-screenplay',
+          outputKind: 'screenplay' as const,
+          goal: 'Revise the supplied screenplay.',
           context: {
             userRequest: 'Use my screenplay.',
             sourceMaterials: [{ kind: 'resource' as const, revisionId: 'revision:provided-script' }],
@@ -615,20 +619,33 @@ describe('project agent toolset conformance', () => {
 
   it('gives the Creative Worker the complete Skill catalog and one autonomous read tool', () => {
     expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual(['read_skill'])
-    expect(listCreativeWorkerSkillCatalog('zh').map((skill) => skill.id)).toEqual([
+    const zhCatalog = listCreativeWorkerSkillCatalog('zh')
+    const enCatalog = listCreativeWorkerSkillCatalog('en')
+    expect(zhCatalog.map((skill) => skill.id)).toEqual([
       ...CREATIVE_SKILL_IDS,
     ])
-    expect(listCreativeWorkerSkillCatalog('en').every((skill) => (
+    expect(enCatalog.every((skill) => (
       skill.title.length > 0 && skill.summary.length > 0 && skill.entryUri.startsWith('skill://')
     ))).toBe(true)
     expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
+    for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
+      const catalogToken = `outputKind=${outputKind}`
+      expect(
+        zhCatalog.some((skill) => skill.summary.includes(catalogToken)),
+        `zh Skill catalog must route ${outputKind}`,
+      ).toBe(true)
+      expect(
+        enCatalog.some((skill) => skill.summary.includes(catalogToken)),
+        `en Skill catalog must route ${outputKind}`,
+      ).toBe(true)
+    }
     expect(Object.values(creativeWorkOutputRegistry).every((definition) => (
       !('requiredSkillIds' in definition)
     ))).toBe(true)
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, definition.resourceScope]
     )))).toEqual({
-      canonical_screenplay: 'project',
+      screenplay: 'project',
       edit_bible_bundle: 'project',
       chapter_plan: 'episode',
       continuity_analysis: 'episode',
@@ -661,7 +678,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v4')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v5')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,
@@ -705,7 +722,7 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
     expect(creativeWorkTaskPayloadSchema.safeParse({
       ...payload,
-      protocol: 'creative_work_v3',
+      protocol: 'creative_work_v4',
     }).success).toBe(false)
 
     const result = {

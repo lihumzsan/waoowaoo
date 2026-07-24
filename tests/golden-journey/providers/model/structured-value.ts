@@ -32,35 +32,70 @@ const GOLDEN_SCREENPLAY = [
   'She closes the dome, breaks the recording mechanism, and remains in the same room until dawn.',
 ].join('')
 
-function buildGoldenCanonicalScreenplay(): unknown {
+function buildGoldenScreenplay(): unknown {
   return {
-    kind: 'canonical_screenplay',
+    kind: 'screenplay',
     title: 'The Red Observatory',
     logline: 'A lone astronomer confronts her moving reflection during one uninterrupted night.',
     synopsis: 'One continuous observatory scene resolves a supernatural warning without a location change.',
     screenplayText: GOLDEN_SCREENPLAY,
     estimatedDurationSeconds: 240,
     source: { kind: 'generated', label: 'Golden Journey request' },
-    entities: {
-      characters: [{ canonicalName: 'Mara', aliases: [], description: 'A lone astronomer.' }],
-      locations: [{ canonicalName: 'Observatory', aliases: [], description: 'A circular observatory.' }],
-      props: [
-        { canonicalName: 'Telescope', aliases: [], description: 'A brass telescope.' },
-        { canonicalName: 'Warning', aliases: [], description: 'A handwritten warning.' },
-      ],
-    },
-    scenes: [{
-      order: 1,
-      heading: 'INT. OBSERVATORY - NIGHT',
-      summary: 'Mara confronts the observatory recording.',
-      sourceStart: 0,
-      sourceEnd: GOLDEN_SCREENPLAY.length,
-      locationCanonicalName: 'Observatory',
-      characterCanonicalNames: ['Mara'],
-      propCanonicalNames: ['Telescope', 'Warning'],
-    }],
     assumptions: ['The requested 240 seconds remain one continuous dramatic context.'],
     openQuestions: [],
+  }
+}
+
+function buildGoldenAssetManifest(): unknown {
+  return {
+    kind: 'asset_manifest',
+    overview: 'Reusable visual assets grounded directly in the supplied observatory screenplay.',
+    assets: [
+      {
+        kind: 'character',
+        canonicalName: 'Mara',
+        aliases: [],
+        sourceRefs: [{
+          sourceExcerpt: 'Mara crosses the silent circular room',
+          reason: 'Mara performs the visible action throughout the screenplay and needs a stable visual identity.',
+        }],
+        stableDescription: 'A solitary adult astronomer with a practical field coat and an observant, composed bearing.',
+        generationPrompt: 'Restrained monochrome ink-wash character reference of Mara, a solitary adult astronomer in a practical field coat, with one controlled red accent and clear full-body identity.',
+        negativePrompt: null,
+        referenceRequirements: [],
+        continuityRequirements: ['Preserve Mara’s coat, age, and facial identity across every generated image.'],
+      },
+      {
+        kind: 'location',
+        canonicalName: 'Observatory at Night',
+        aliases: ['Observatory'],
+        sourceRefs: [{
+          sourceExcerpt: 'INT. OBSERVATORY - NIGHT',
+          reason: 'The complete visible story takes place in this reusable production location.',
+        }],
+        stableDescription: 'A circular observatory interior with a central brass telescope, surrounding windows, and a closable dome.',
+        generationPrompt: 'Restrained monochrome ink-wash environment reference of a circular observatory interior at night, central brass telescope, surrounding storm windows, closable dome, cold moonlight, and one controlled red accent.',
+        negativePrompt: null,
+        referenceRequirements: [],
+        continuityRequirements: ['Preserve the circular floor plan, central telescope position, windows, and dome structure.'],
+      },
+      {
+        kind: 'prop',
+        canonicalName: 'Central Telescope',
+        aliases: ['Telescope'],
+        sourceRefs: [{
+          sourceExcerpt: 'The telescope rotates by itself',
+          reason: 'The telescope drives multiple visible actions and must retain a stable construction.',
+        }],
+        stableDescription: 'A large brass astronomical telescope on a fixed central rotating mount.',
+        generationPrompt: 'Restrained monochrome ink-wash prop reference of a large brass astronomical telescope on a fixed rotating mount, precise mechanical construction, and one controlled red accent.',
+        negativePrompt: null,
+        referenceRequirements: [],
+        continuityRequirements: ['Preserve the brass construction, lens proportions, and rotating base.'],
+      },
+    ],
+    assumptions: [],
+    warnings: [],
   }
 }
 
@@ -202,9 +237,10 @@ export function generateGoldenStructuredValue(schemaValue: unknown): unknown {
 export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
   const schema = readSchemaFromResponseFormat(responseFormat)
   if (!schema) return null
-  if (schemaContainsLiteral(schema, 'canonical_screenplay')) return JSON.stringify(buildGoldenCanonicalScreenplay())
+  if (schemaContainsLiteral(schema, 'screenplay')) return JSON.stringify(buildGoldenScreenplay())
   if (schemaContainsLiteral(schema, 'edit_bible_bundle')) return JSON.stringify(buildGoldenEditBible(schema))
   if (schemaContainsLiteral(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
+  if (schemaContainsLiteral(schema, 'asset_manifest')) return JSON.stringify(buildGoldenAssetManifest())
   if (schemaContainsLiteral(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))
 }

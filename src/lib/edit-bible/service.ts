@@ -12,7 +12,7 @@ import {
   type Ledger,
 } from '@/lib/edit-ledger'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
-import { canonicalScreenplaySchema } from '@/lib/canonical-screenplay'
+import { screenplaySchema } from '@/lib/screenplay'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '@/lib/prisma'
 import { validateEditBibleBundle } from './cross-check'
@@ -177,10 +177,10 @@ async function resolveCreativeTextRevision(input: {
   readonly episodeId: string
   readonly revisionId: string
   readonly schemaId:
-    | typeof CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY
+    | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
     | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
-  readonly outputKind: 'canonical_screenplay' | 'edit_bible_bundle' | 'chapter_plan'
+  readonly outputKind: 'screenplay' | 'edit_bible_bundle' | 'chapter_plan'
   readonly resourceScope: 'project' | 'episode'
 }) {
   const revision = await input.tx.creativeResourceRevision.findFirst({
@@ -193,7 +193,7 @@ async function resolveCreativeTextRevision(input: {
         status: 'ready',
         mediaType: 'text',
         schemaId: input.schemaId,
-        sourceType: 'CreativeWorkResult',
+        ...(input.outputKind === 'screenplay' ? {} : { sourceType: 'CreativeWorkResult' }),
       },
     },
     select: {
@@ -201,13 +201,30 @@ async function resolveCreativeTextRevision(input: {
       resourceId: true,
       contentText: true,
       contentJson: true,
+      operationId: true,
       taskId: true,
       task: { select: { type: true, status: true, payload: true } },
       outputLineage: { select: { inputRevisionId: true, role: true, position: true } },
     },
   })
-  if (!revision?.taskId || !revision.task) {
+  if (!revision) {
     throw new ApiError('NOT_FOUND', { code: 'CREATIVE_TEXT_REVISION_NOT_FOUND', field: 'revisionId' })
+  }
+  if (
+    input.outputKind === 'screenplay'
+    && revision.taskId === null
+    && revision.operationId === 'create_text'
+    && revision.contentJson !== null
+  ) {
+    const screenplay = screenplaySchema.safeParse(revision.contentJson)
+    if (screenplay.success && screenplay.data.source.kind === 'provided') return revision
+  }
+  if (!revision.taskId || !revision.task) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_TEXT_REVISION_PROVENANCE_INVALID',
+      field: 'revisionId',
+      agentRetryableAfterCorrection: true,
+    })
   }
   const payload = revision.task.payload
   const request = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -243,8 +260,8 @@ export async function adoptCreativeBibleResources(input: {
         tx,
         ...input,
         ...input.screenplay,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
-        outputKind: 'canonical_screenplay',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
+        outputKind: 'screenplay',
         resourceScope: 'project',
       }),
       resolveCreativeTextRevision({
@@ -259,7 +276,7 @@ export async function adoptCreativeBibleResources(input: {
     if (screenplayRevision.contentJson === null || bibleRevision.contentJson === null) {
       throw new Error('CREATIVE_BIBLE_RESOURCE_CONTENT_INVALID')
     }
-    const screenplayText = canonicalScreenplaySchema.parse(screenplayRevision.contentJson).screenplayText
+    const screenplayText = screenplaySchema.parse(screenplayRevision.contentJson).screenplayText
     const sourceLineage = bibleRevision.outputLineage.filter((lineage) => (
       lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
     ))
@@ -448,8 +465,8 @@ export async function adoptCreativeChapterPlan(input: {
         tx,
         ...input,
         ...input.screenplay,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
-        outputKind: 'canonical_screenplay',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
+        outputKind: 'screenplay',
         resourceScope: 'project',
       }),
       resolveCreativeTextRevision({
@@ -464,7 +481,7 @@ export async function adoptCreativeChapterPlan(input: {
     if (screenplayRevision.contentJson === null || chapterPlanRevision.contentJson === null) {
       throw new Error('CREATIVE_CHAPTER_PLAN_RESOURCE_CONTENT_INVALID')
     }
-    const screenplayText = canonicalScreenplaySchema.parse(screenplayRevision.contentJson).screenplayText
+    const screenplayText = screenplaySchema.parse(screenplayRevision.contentJson).screenplayText
     const screenplayLineage = chapterPlanRevision.outputLineage.filter((lineage) => (
       lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
     ))

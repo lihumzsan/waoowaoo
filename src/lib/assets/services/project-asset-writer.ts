@@ -18,10 +18,10 @@ function normalizeRequired(value: string, code: string): string {
   return normalized
 }
 
-function canonicalEntityId(value: string | null | undefined): string | null {
+function manifestAssetId(value: string | null | undefined): string | null {
   const normalized = value?.trim() || null
   if (normalized && normalized.length > 80) {
-    throw new ApiError('INVALID_PARAMS', { code: 'CANONICAL_ENTITY_ID_INVALID' })
+    throw new ApiError('INVALID_PARAMS', { code: 'MANIFEST_ASSET_ID_INVALID' })
   }
   return normalized
 }
@@ -46,7 +46,7 @@ export async function createOrReuseProjectAssetInTransaction(input: {
   readonly name: string
   readonly summary?: string | null
   readonly stableDescription: string
-  readonly canonicalEntityId?: string | null
+  readonly manifestAssetId?: string | null
   readonly imageSlotCount?: number
 }): Promise<ProjectAssetWriteResult> {
   const projectId = normalizeRequired(input.projectId, 'PROJECT_ID_REQUIRED')
@@ -55,14 +55,14 @@ export async function createOrReuseProjectAssetInTransaction(input: {
     input.stableDescription,
     'PROJECT_ASSET_STABLE_DESCRIPTION_REQUIRED',
   )
-  const entityId = canonicalEntityId(input.canonicalEntityId)
+  const manifestId = manifestAssetId(input.manifestAssetId)
   const project = await input.tx.project.findUnique({ where: { id: projectId }, select: { id: true } })
   if (!project) throw new ApiError('NOT_FOUND', { code: 'PROJECT_NOT_FOUND' })
 
   if (input.kind === 'character') {
-    if (entityId) {
+    if (manifestId) {
       const existing = await input.tx.projectCharacter.findUnique({
-        where: { projectId_canonicalEntityId: { projectId, canonicalEntityId: entityId } },
+        where: { projectId_manifestAssetId: { projectId, manifestAssetId: manifestId } },
         select: {
           id: true,
           appearances: {
@@ -81,7 +81,7 @@ export async function createOrReuseProjectAssetInTransaction(input: {
       where: { projectId_name: { projectId, name } },
       select: {
         id: true,
-        canonicalEntityId: true,
+        manifestAssetId: true,
         appearances: {
           where: { appearanceIndex: PRIMARY_APPEARANCE_INDEX },
           select: { id: true },
@@ -90,10 +90,10 @@ export async function createOrReuseProjectAssetInTransaction(input: {
       },
     })
     if (conflictingName) {
-      if (entityId && !conflictingName.canonicalEntityId) {
+      if (manifestId && !conflictingName.manifestAssetId) {
         const attached = await input.tx.projectCharacter.update({
           where: { id: conflictingName.id },
-          data: { canonicalEntityId: entityId },
+          data: { manifestAssetId: manifestId },
           select: { id: true },
         })
         const variantId = conflictingName.appearances[0]?.id
@@ -104,7 +104,7 @@ export async function createOrReuseProjectAssetInTransaction(input: {
     }
     try {
       const character = await input.tx.projectCharacter.create({
-        data: { projectId, name, aliases: null, canonicalEntityId: entityId },
+        data: { projectId, name, aliases: null, manifestAssetId: manifestId },
         select: { id: true },
       })
       const appearance = await input.tx.characterAppearance.create({
@@ -125,13 +125,13 @@ export async function createOrReuseProjectAssetInTransaction(input: {
     }
   }
 
-  if (entityId) {
+  if (manifestId) {
     const existing = await input.tx.projectLocation.findUnique({
       where: {
-        projectId_assetKind_canonicalEntityId: {
+        projectId_assetKind_manifestAssetId: {
           projectId,
           assetKind: input.kind,
-          canonicalEntityId: entityId,
+          manifestAssetId: manifestId,
         },
       },
       select: { id: true },
@@ -147,13 +147,13 @@ export async function createOrReuseProjectAssetInTransaction(input: {
   }
   const conflictingName = await input.tx.projectLocation.findUnique({
     where: { projectId_assetKind_name: { projectId, assetKind: input.kind, name } },
-      select: { id: true, canonicalEntityId: true },
+      select: { id: true, manifestAssetId: true },
   })
   if (conflictingName) {
-    if (entityId && !conflictingName.canonicalEntityId) {
+    if (manifestId && !conflictingName.manifestAssetId) {
       const attached = await input.tx.projectLocation.update({
         where: { id: conflictingName.id },
-        data: { canonicalEntityId: entityId },
+        data: { manifestAssetId: manifestId },
         select: { id: true },
       })
       const variant = await input.tx.locationImage.findUnique({
@@ -175,7 +175,7 @@ export async function createOrReuseProjectAssetInTransaction(input: {
         projectId,
         name,
         assetKind: input.kind,
-        canonicalEntityId: entityId,
+        manifestAssetId: manifestId,
         summary: input.summary?.trim() || null,
       },
       select: { id: true },

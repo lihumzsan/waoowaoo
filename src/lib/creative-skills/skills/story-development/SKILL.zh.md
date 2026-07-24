@@ -62,7 +62,7 @@
 
 ## 边界
 
-本 Skill 提供问诊与剧本创作方法。从零产出 `canonical_screenplay` 时，必须在同一 Creative Task 内同时读取 `screenplay-canonicalization`，完成剧本后立即统一登记实体与场景引用；这是同一输出的知识组合，不是两个 Subagent 或两个状态。问题数量、字段、索引、JSON 结构、长度上限和其他严格输出协议由调用方提供，不在这里定义。
+本 Skill 是 `outputKind=screenplay` 的唯一剧本创作方法，只交付剧本文本与写作元信息。不得在剧本输出中登记生产资产、生成资产 ID、建立资产覆盖清单或替资产设计决定视觉空间。问题数量、字段、JSON 结构、长度上限和其他严格输出协议由调用方提供，不在这里定义。
 
 ## Chapter 规划
 

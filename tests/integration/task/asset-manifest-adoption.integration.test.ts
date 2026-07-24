@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { NextRequest } from 'next/server'
 import { Prisma } from '@prisma/client'
-import { compileCanonicalScreenplay } from '@/lib/canonical-screenplay'
+import {
+  compileAssetManifest,
+  screenplaySchema,
+} from '@/lib/screenplay'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
@@ -27,7 +30,7 @@ const styleBible = {
   },
 }
 
-type MaterializedOutputKind = 'canonical_screenplay' | 'style_bible' | 'asset_manifest'
+type MaterializedOutputKind = 'screenplay' | 'style_bible' | 'asset_manifest'
 
 function creativeTaskPayload(input: {
   outputKind: MaterializedOutputKind
@@ -159,10 +162,11 @@ describe('Asset Manifest adoption DB integration', () => {
    * Authority: CR-22/CR-23 exact manifest adoption and the unique Project asset writer.
    * Rejects: duplicate Project identities, manifest-owned image Tasks, or a second asset write path.
    * Production entry: registered adopt_asset_manifest Operation through the canonical invocation service.
-   * Oracle: a repeated exact Revision reuses all canonical identities, advances one Binding, and creates no media Task.
+   * Oracle: exact re-adoption reuses manifest identities; changed Style adoption or missing source
+   * lineage fails closed without changing Project assets, the adopted Manifest, or starting media Tasks.
    * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/asset-manifest-adoption.integration.test.ts
    */
-  it('reuses exact canonical Project asset identities without starting image generation', async () => {
+  it('keeps manifest adoption idempotent and fails closed on changed Style or lineage', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const toolCallId = 'asset-adoption:creative-tool'
@@ -179,36 +183,21 @@ describe('Asset Manifest adoption DB integration', () => {
       },
     })
     const screenplayText = 'INT. STATION — NIGHT\nLin holds a sealed letter.'
-    const screenplay = compileCanonicalScreenplay({
-      kind: 'canonical_screenplay',
+    const screenplay = screenplaySchema.parse({
+      kind: 'screenplay',
       title: 'The Letter',
       logline: null,
       synopsis: 'Lin reaches an old station with a sealed letter.',
       screenplayText,
       estimatedDurationSeconds: 60,
       source: { kind: 'provided', label: 'User screenplay' },
-      entities: {
-        characters: [{ canonicalName: 'Lin', aliases: [], description: 'A tired traveler.' }],
-        locations: [{ canonicalName: 'Old Station', aliases: [], description: 'An abandoned station.' }],
-        props: [{ canonicalName: 'Sealed Letter', aliases: [], description: 'A weathered sealed letter.' }],
-      },
-      scenes: [{
-        order: 1,
-        heading: 'INT. STATION — NIGHT',
-        summary: 'Lin enters with the letter.',
-        sourceStart: 0,
-        sourceEnd: screenplayText.length,
-        locationCanonicalName: 'Old Station',
-        characterCanonicalNames: ['Lin'],
-        propCanonicalNames: ['Sealed Letter'],
-      }],
       assumptions: [],
       openQuestions: [],
     })
     const screenplayTask = await createCompletedCreativeTask({
       userId: user.id,
       projectId: project.id,
-      outputKind: 'canonical_screenplay',
+      outputKind: 'screenplay',
       runId: run.id,
       toolCallId,
     })
@@ -216,7 +205,7 @@ describe('Asset Manifest adoption DB integration', () => {
       userId: user.id,
       projectId: project.id,
       taskId: screenplayTask.id,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
       name: screenplay.title,
       content: screenplay,
     })
@@ -235,7 +224,7 @@ describe('Asset Manifest adoption DB integration', () => {
       name: styleBible.styleSummary,
       content: styleBible,
     })
-    await prisma.creativeResourceBinding.create({
+    const adoptedStyleBinding = await prisma.creativeResourceBinding.create({
       data: {
         userId: user.id,
         projectId: project.id,
@@ -248,26 +237,59 @@ describe('Asset Manifest adoption DB integration', () => {
         source: 'style_adoption',
       },
     })
-    const entities = [
-      ...screenplay.entities.characters,
-      ...screenplay.entities.locations,
-      ...screenplay.entities.props,
-    ]
-    const manifest = {
-      kind: 'asset_manifest' as const,
-      overview: 'Exact canonical assets.',
-      assets: entities.map((entity) => ({
-        canonicalEntity: { entityId: entity.entityId, kind: entity.kind },
-        title: entity.canonicalName,
-        stableDescription: entity.description,
-        generationPrompt: `Design ${entity.canonicalName} in the adopted style.`,
-        negativePrompt: null,
-        referenceRequirements: [],
-        continuityRequirements: [],
-      })),
-      assumptions: [],
-      warnings: [],
-    }
+    const manifest = compileAssetManifest({
+      screenplay,
+      manifest: {
+        kind: 'asset_manifest',
+        overview: 'Exact screenplay-grounded assets.',
+        assets: [
+          {
+            kind: 'character',
+            canonicalName: 'Lin',
+            aliases: [],
+            sourceRefs: [{
+              sourceExcerpt: 'Lin holds a sealed letter',
+              reason: 'The visible protagonist must keep a stable identity.',
+            }],
+            stableDescription: 'A tired traveler with a weathered coat and alert posture.',
+            generationPrompt: 'Character reference for Lin in the adopted ink realism.',
+            negativePrompt: null,
+            referenceRequirements: [],
+            continuityRequirements: ['Keep the weathered coat consistent.'],
+          },
+          {
+            kind: 'location',
+            canonicalName: 'Old Station',
+            aliases: ['Station'],
+            sourceRefs: [{
+              sourceExcerpt: 'INT. STATION — NIGHT',
+              reason: 'This independent visual space carries the scene.',
+            }],
+            stableDescription: 'An abandoned station interior with worn platforms and iron beams.',
+            generationPrompt: 'Environment reference for the old station in the adopted ink realism.',
+            negativePrompt: null,
+            referenceRequirements: [],
+            continuityRequirements: [],
+          },
+          {
+            kind: 'prop',
+            canonicalName: 'Sealed Letter',
+            aliases: ['Letter'],
+            sourceRefs: [{
+              sourceExcerpt: 'sealed letter',
+              reason: 'The handled story prop must remain recognizable.',
+            }],
+            stableDescription: 'A weathered envelope closed by a dark wax seal.',
+            generationPrompt: 'Prop reference for the sealed letter in the adopted ink realism.',
+            negativePrompt: null,
+            referenceRequirements: [],
+            continuityRequirements: ['Keep the wax seal intact.'],
+          },
+        ],
+        assumptions: [],
+        warnings: [],
+      },
+    })
     const manifestTask = await createCompletedCreativeTask({
       userId: user.id,
       projectId: project.id,
@@ -292,7 +314,7 @@ describe('Asset Manifest adoption DB integration', () => {
       projectId: project.id,
       taskId: manifestTask.id,
       schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
-      name: 'Exact canonical assets',
+      name: 'Exact manifest assets',
       content: manifest,
     })
     await prisma.creativeResourceLineage.createMany({
@@ -342,9 +364,9 @@ describe('Asset Manifest adoption DB integration', () => {
         bindingVersion: 0,
         imageGenerationStarted: false,
         assets: [
-          { canonicalEntityId: entities[0]?.entityId, kind: 'character', created: true },
-          { canonicalEntityId: entities[1]?.entityId, kind: 'location', created: true },
-          { canonicalEntityId: entities[2]?.entityId, kind: 'prop', created: true },
+          { manifestAssetId: manifest.assets[0]?.manifestAssetId, kind: 'character', created: true },
+          { manifestAssetId: manifest.assets[1]?.manifestAssetId, kind: 'location', created: true },
+          { manifestAssetId: manifest.assets[2]?.manifestAssetId, kind: 'prop', created: true },
         ],
       },
     })
@@ -383,6 +405,10 @@ describe('Asset Manifest adoption DB integration', () => {
     ])
     expect(characters).toHaveLength(1)
     expect(locations).toHaveLength(2)
+    expect(characters[0]?.manifestAssetId).toBe(manifest.assets[0]?.manifestAssetId)
+    expect(locations.map((location) => location.manifestAssetId).sort()).toEqual(
+      manifest.assets.slice(1).map((asset) => asset.manifestAssetId).sort(),
+    )
     expect(appearances).toBe(1)
     expect(locationImages).toBe(2)
     expect(tasks).toHaveLength(3)
@@ -392,6 +418,107 @@ describe('Asset Manifest adoption DB integration', () => {
       version: 1,
       scopeKind: 'project',
       scopeId: project.id,
+    })
+
+    const replacementStyle = {
+      ...styleBible,
+      styleSummary: 'High-contrast charcoal expressionism',
+      visualStyle: 'Expressive charcoal marks with stark light and deep shadow.',
+    }
+    const replacementStyleTask = await createCompletedCreativeTask({
+      userId: user.id,
+      projectId: project.id,
+      outputKind: 'style_bible',
+      runId: run.id,
+      toolCallId,
+    })
+    const replacementStyleRevision = await createProjectResourceRevision({
+      userId: user.id,
+      projectId: project.id,
+      taskId: replacementStyleTask.id,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      name: replacementStyle.styleSummary,
+      content: replacementStyle,
+    })
+    await prisma.creativeResourceBinding.update({
+      where: { id: adoptedStyleBinding.id },
+      data: {
+        resourceId: replacementStyleRevision.resource.id,
+        revisionId: replacementStyleRevision.revision.id,
+      },
+    })
+
+    await expect(invokeProjectAgentOperation({
+      registry,
+      channel: 'tool',
+      operationId: 'adopt_asset_manifest',
+      context,
+      input: { revisionId: manifestRevision.revision.id, expectedVersion: 1 },
+    })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: {
+        code: 'ASSET_MANIFEST_STYLE_ADOPTION_CHANGED',
+        expectedStyleRevisionId: styleRevision.revision.id,
+        actualStyleRevisionId: replacementStyleRevision.revision.id,
+      },
+    })
+
+    await prisma.creativeResourceBinding.update({
+      where: { id: adoptedStyleBinding.id },
+      data: {
+        resourceId: styleRevision.resource.id,
+        revisionId: styleRevision.revision.id,
+      },
+    })
+    await prisma.creativeResourceLineage.deleteMany({
+      where: {
+        outputRevisionId: manifestRevision.revision.id,
+        inputRevisionId: styleRevision.revision.id,
+      },
+    })
+
+    await expect(invokeProjectAgentOperation({
+      registry,
+      channel: 'tool',
+      operationId: 'adopt_asset_manifest',
+      context,
+      input: { revisionId: manifestRevision.revision.id, expectedVersion: 1 },
+    })).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: {
+        code: 'ASSET_MANIFEST_EXACT_SOURCES_REQUIRED',
+        field: 'revisionId',
+      },
+    })
+
+    const [finalCharacters, finalLocations, finalTasks, finalBinding] = await Promise.all([
+      prisma.projectCharacter.count({ where: { projectId: project.id } }),
+      prisma.projectLocation.count({ where: { projectId: project.id } }),
+      prisma.task.findMany({ where: { projectId: project.id }, select: { type: true } }),
+      prisma.creativeResourceBinding.findUniqueOrThrow({
+        where: { id: adoptedStyleBinding.id },
+      }),
+    ])
+    expect(finalCharacters).toBe(1)
+    expect(finalLocations).toBe(2)
+    expect(finalTasks).toHaveLength(4)
+    expect(finalTasks.every((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(true)
+    expect(finalBinding).toMatchObject({
+      revisionId: styleRevision.revision.id,
+      version: 0,
+    })
+    const adoptedManifest = await prisma.creativeResourceBinding.findUniqueOrThrow({
+      where: {
+        scopeKind_scopeId_role_slotKey: {
+          scopeKind: 'project',
+          scopeId: project.id,
+          ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest,
+        },
+      },
+    })
+    expect(adoptedManifest).toMatchObject({
+      revisionId: manifestRevision.revision.id,
+      version: 1,
     })
   })
 })

@@ -6,9 +6,9 @@
 
 ## 输入顺序边界
 
-- 风格可以先于剧本从用户创意简报产生，也可以在已有 `canonical_screenplay` 后产生或修订；两种顺序使用同一 Style Bible 契约。
+- 风格可以先于剧本从用户创意简报产生，也可以在已有精确 `screenplay` Revision 后产生或修订；两种顺序使用同一 Style Bible 契约。
 - 不要求为了生成风格先生成剧本，也不要求为了生成剧本先生成风格。只消费调用方显式提供的事实与精确 Revision，不读取“最新”或“刚才那份”内容。
-- Style Bible 不改变剧本实体，canonical screenplay 也不拥有视觉风格；两者只在资产设计、视频设计等明确消费者处组合。
+- Style Bible 不改变剧本文本，screenplay 也不拥有视觉风格；两者只在资产设计、视频设计等明确消费者处组合。
 
 ## Style Bible 字段职责
 

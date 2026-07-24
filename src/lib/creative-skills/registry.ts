@@ -36,11 +36,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '1.1.0',
+    version: '2.0.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
-      zh: '从创意问诊、方向收敛到时长受控剧本；从零输出 canonical_screenplay 时必须与 screenplay-canonicalization 同轮读取。',
-      en: 'Creative intake, direction setting, and runtime-controlled scripts; a from-zero canonical_screenplay must read screenplay-canonicalization in the same run.',
+      zh: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
+      en: 'The sole screenwriting Skill required for `outputKind=screenplay`, and the chapter-planning Skill for `outputKind=chapter_plan`; it never extracts production assets or a second entity registry.',
     },
     tags: ['story', 'script', 'screenplay', 'intake', 'writing'],
     keywords: {
@@ -48,27 +48,13 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
       en: ['story', 'script', 'screenplay', 'writer', 'intake', 'runtime', 'motivation', 'conflict', 'ending', 'chapter planning', 'chapter_plan'],
     },
   }),
-  'screenplay-canonicalization': defineSkill({
-    id: 'screenplay-canonicalization',
-    version: '1.1.0',
-    title: { zh: '剧本统一提取', en: 'Screenplay Canonicalization' },
-    summary: {
-      zh: '把生成、上传或粘贴的剧本统一整理为实体登记、场景范围与引用；从零创作时必须与 story-development 同轮读取。',
-      en: 'Normalize generated, uploaded, or pasted screenplays into one entity registry, scene ranges, and references; from-zero writing must read story-development in the same run.',
-    },
-    tags: ['screenplay', 'canonicalization', 'entity', 'scene', 'reference'],
-    keywords: {
-      zh: ['剧本提取', '统一提取', '规范化', '角色登记', '地点登记', '道具登记', '场景引用', 'canonical_screenplay'],
-      en: ['screenplay extraction', 'canonicalization', 'entity registry', 'scene reference', 'canonical screenplay'],
-    },
-  }),
   'continuity-memory': defineSkill({
     id: 'continuity-memory',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
-      zh: '从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
-      en: 'Methods for extracting stable facts, beats, and persistent state, plus continuity judgment for optional Chapter boundaries.',
+      zh: '`outputKind=edit_bible_bundle` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
+      en: 'Required for `outputKind=edit_bible_bundle` and `outputKind=continuity_analysis`: extract stable facts, beats, persistent state, and continuity judgments for optional Chapter boundaries.',
     },
     tags: ['continuity', 'bible', 'story', 'state', 'analysis'],
     keywords: {
@@ -92,11 +78,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'style-development': defineSkill({
     id: 'style-development',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '视觉风格开发', en: 'Visual Style Development' },
     summary: {
-      zh: '跨图片与视频共享的视觉风格、资产图灯光/材质、风格候选与灵感词汇；不拥有固定构图后缀。',
-      en: 'Cross-media visual style, asset-image lighting and texture, style candidates, and inspiration vocabulary; fixed layout suffixes are excluded.',
+      zh: '`outputKind=style_bible` 必须读取：跨图片与视频共享的视觉风格、资产图灯光/材质、风格候选与灵感词汇；不拥有固定构图后缀。',
+      en: 'Required for `outputKind=style_bible`: cross-media visual style, asset-image lighting and texture, style candidates, and inspiration vocabulary; fixed layout suffixes are excluded.',
     },
     tags: ['style', 'art-direction', 'palette', 'medium', 'preview'],
     keywords: {
@@ -106,11 +92,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '1.1.0',
+    version: '2.0.0',
     title: { zh: '资产设计与生成提示词', en: 'Asset Development and Generation Prompts' },
     summary: {
-      zh: '在一个 Task 内完成登记实体的资产事实提取、外观设计与最终生成 Prompt；不生图、不写项目。',
-      en: 'Extract registered-entity asset facts, design appearances, and compose final generation prompts in one Task; never generate images or write the Project.',
+      zh: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、提供原文证据、设计外观并生成最终 Prompt；不生图、不写项目。',
+      en: 'The sole asset-scope and design Skill for `outputKind=asset_manifest`: select reusable production assets from an exact screenplay, ground them in source evidence, design appearances, and compose final prompts in one Task; never generate images or write the Project.',
     },
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
     keywords: {
@@ -134,11 +120,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '音乐与配乐设计', en: 'Music and Score Direction' },
     summary: {
-      zh: '从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
-      en: 'Methods for emotional diagnosis, continuous scoring, orchestration, dynamics, silence, and dialogue-safe mixes.',
+      zh: '`outputKind=music_direction` 必须读取：从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
+      en: 'Required for `outputKind=music_direction`: emotional diagnosis, continuous scoring, orchestration, dynamics, silence, and dialogue-safe mixes.',
     },
     tags: ['music', 'bgm', 'score', 'audio', 'emotion'],
     keywords: {
@@ -148,11 +134,11 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'quality-review': defineSkill({
     id: 'quality-review',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '创作质量审查', en: 'Creative Quality Review' },
     summary: {
-      zh: '基于证据审查创作质量；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',
-      en: 'Evidence-based review; for `outputKind=video_prompt_set`, it must be read with `director-core` and `video-direction` for pre-output self-review.',
+      zh: '`outputKind=creative_review` 必须读取；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',
+      en: 'Required for `outputKind=creative_review`; for `outputKind=video_prompt_set`, it must be read with `director-core` and `video-direction` for pre-output self-review.',
     },
     tags: ['quality', 'review', 'continuity', 'validation', 'retry'],
     keywords: {

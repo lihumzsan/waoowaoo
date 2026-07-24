@@ -78,7 +78,7 @@ model LocationImage {
 model ProjectCharacter {
   id                      String                @id @default(uuid())
   projectId               String
-  canonicalEntityId       String?               @db.VarChar(80)
+  manifestAssetId        String?               @db.VarChar(80)
   name                    String
   aliases                 String?               @db.Text
   createdAt               DateTime              @default(now())
@@ -91,7 +91,7 @@ model ProjectCharacter {
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name])
-  @@unique([projectId, canonicalEntityId])
+  @@unique([projectId, manifestAssetId])
   @@index([projectId])
   @@map("project_characters")
 }
@@ -99,7 +99,7 @@ model ProjectCharacter {
 model ProjectLocation {
   id                     String          @id @default(uuid())
   projectId              String
-  canonicalEntityId      String?         @db.VarChar(80)
+  manifestAssetId        String?         @db.VarChar(80)
   name                   String
   summary                String?         @db.Text // 场景简要描述（用途/人物关联）
   assetKind              String          @default("location")
@@ -112,7 +112,7 @@ model ProjectLocation {
   project                Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, assetKind, name])
-  @@unique([projectId, assetKind, canonicalEntityId])
+  @@unique([projectId, assetKind, manifestAssetId])
   @@index([projectId])
   @@map("project_locations")
 }

@@ -2,9 +2,9 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import {
   assetManifestSchema,
-  canonicalScreenplaySchema,
-  validateAssetManifestCoverage,
-} from '@/lib/canonical-screenplay'
+  screenplaySchema,
+  validateAssetManifest,
+} from '@/lib/screenplay'
 import { createOrReuseProjectAssetInTransaction } from '@/lib/assets/services/project-asset-writer'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
@@ -29,12 +29,12 @@ const adoptAssetManifestOutputSchema = z.object({
   revisionId: z.string().trim().min(1),
   bindingVersion: z.number().int().nonnegative(),
   assets: z.array(z.object({
-    canonicalEntityId: z.string().trim().min(1),
+    manifestAssetId: z.string().trim().min(1),
     kind: z.enum(['character', 'location', 'prop']),
     assetId: z.string().trim().min(1),
     variantId: z.string().trim().min(1),
     created: z.boolean(),
-  }).strict()).min(1),
+  }).strict()),
   imageGenerationStarted: z.literal(false),
 }).strict()
 
@@ -42,7 +42,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
   return {
     adopt_asset_manifest: defineOperation({
       id: 'adopt_asset_manifest',
-      summary: 'Adopt one exact project.asset_manifest Revision, validate exact canonical-screenplay coverage and the currently adopted Style Bible lineage, then create or reuse the corresponding Project asset identities. This operation never generates images or starts downstream Tasks.',
+      summary: 'Adopt one exact project.asset_manifest Revision grounded in one exact screenplay and the currently adopted Style Bible, then create or reuse the corresponding Project asset identities. This operation never generates images or starts downstream Tasks.',
       intent: 'act',
       effects: {
         writes: true,
@@ -130,7 +130,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
           })
         }
         const screenplaySources = sources.filter(
-          (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+          (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         )
         const styleSources = sources.filter(
           (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
@@ -170,37 +170,30 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
             actualStyleRevisionId: adoptedStyle?.revisionId ?? null,
           })
         }
-        const screenplay = canonicalScreenplaySchema.parse(screenplaySource.contentJson)
-        const manifest = validateAssetManifestCoverage({
+        const screenplay = screenplaySchema.parse(screenplaySource.contentJson)
+        const manifest = validateAssetManifest({
           screenplay,
           manifest: assetManifestSchema.parse(revision.contentJson),
         })
-        const canonicalEntities = new Map([
-          ...screenplay.entities.characters,
-          ...screenplay.entities.locations,
-          ...screenplay.entities.props,
-        ].map((entity) => [entity.entityId, entity]))
         const assets: Array<{
-          canonicalEntityId: string
+          manifestAssetId: string
           kind: 'character' | 'location' | 'prop'
           assetId: string
           variantId: string
           created: boolean
         }> = []
         for (const item of manifest.assets) {
-          const entity = canonicalEntities.get(item.canonicalEntity.entityId)
-          if (!entity) throw new Error(`ASSET_MANIFEST_CANONICAL_ENTITY_MISSING:${item.canonicalEntity.entityId}`)
           const written = await createOrReuseProjectAssetInTransaction({
             tx,
             projectId: context.projectId,
-            kind: item.canonicalEntity.kind,
-            name: entity.canonicalName,
-            summary: entity.description || item.stableDescription,
+            kind: item.kind,
+            name: item.canonicalName,
+            summary: item.stableDescription,
             stableDescription: item.stableDescription,
-            canonicalEntityId: entity.entityId,
+            manifestAssetId: item.manifestAssetId,
           })
           assets.push({
-            canonicalEntityId: entity.entityId,
+            manifestAssetId: item.manifestAssetId,
             kind: written.kind,
             assetId: written.assetId,
             variantId: written.variantId,

@@ -16,12 +16,12 @@
 - **ASO-04 — Scope 不匹配不得泄露资源存在性。** missing、foreign、wrong-kind 和 cross-parent 统一在副作用发生前以 `NOT_FOUND` 失败。
 - **ASO-05 — Copy 必须原子验证两端。** 全局 source 与项目 target 必须先完成授权；校验、替换和 source association 位于同一事务。
 - **ASO-06 — 删除不得只凭裸 ID。** destructive deletion 必须经过与 update、select、revert 相同的 scoped identity 证明。
-- **ASO-07 — 资产 identity 由独立采用/创建入口显式建立。** 系统不存在 Edit-first 确认事务或“制作规划后自动建资产”。`adopt_asset_manifest` 只根据 manifest 的 canonicalEntity 创建/复用唯一 ProjectCharacter/ProjectLocation/Prop identity 和绑定，不生成图片。Primary 也可通过普通 scoped asset Operation 显式创建单个资产。后续 Chapter、视频或连续性结果只能引用这些真实 identity，不能创建第二套同义资产，也不能因阶段或最近记录推断。
+- **ASO-07 — 资产 identity 由独立采用/创建入口显式建立。** 系统不存在 Edit-first 确认事务或“制作规划后自动建资产”。`adopt_asset_manifest` 只根据服务端编译的 `manifestAssetId` 创建/复用唯一 ProjectCharacter/ProjectLocation/Prop identity 和绑定，不生成图片。Primary 也可通过普通 scoped asset Operation 显式创建单个资产。后续 Chapter、视频或连续性结果只能引用这些真实 identity，不能创建第二套同义资产，也不能因阶段或最近记录推断。
 - **ASO-08 — 领域关系不拥有共享媒体回收权。** asset select、confirm、revert、cleanup、delete 与 project delete 只更新或删除自己的领域关系；storageKey、MediaObject 或签名 URL 不是独占所有权证明，同一对象可能被 copy/reuse 后由多个关系引用。领域操作不得直接删除已有对象或把任意 key 送入私有 GC/Outbox；物理回收只能由独立 media lifecycle owner 从生产 relation registry 穷尽证明零引用后执行。本次上传新建、尚未提交为任何关系的唯一临时 key 只允许在所属事务失败时原地补偿，不构成 GC 入口。
 - **ASO-09 — 媒体读取也必须证明活跃 owner relation。** `/m/:publicId`、本地 `/api/files/:key`、对象存储签名 route 与后台 Task 的存储读取必须先通过同一媒体访问策略，从生产 MediaObject relation 或精确 legacy relation 证明权威 user 拥有引用；publicId、storageKey、签名 URL、Task payload 和文件存在性都不是公开授权。foreign 与 missing 统一返回 NOT_FOUND，响应只允许 private/no-store，签名 TTL 有固定上限。浏览器必须直接携带 session 读取受保护 route，内部相对重定向不得从服务端 Host 推导第二 origin；后台 Task 以任务的持久 `userId` 通过该策略后直接读取存储，不得为此恢复内部 HTTP token 或伪造浏览器 session。
 - **ASO-10 — 顶层资产删除与重生成各有一个入口。** 角色、场景和道具的顶层删除只允许 `delete_asset → removeAsset`，Project/Asset Hub/API 不得保留按 kind 分裂的 delete Operation；appearance/image 等 variant 删除仍按精确 parent/variant identity 独立处理。已有资产不满意时只允许 `regenerate_asset` 在原 assetId 与既有 variant 下提交图片 Task，禁止创建同义替代资产。重生成计划必须冻结当前图片版本 watermark：同一版本重复提交保持幂等，新的完成版本必须可再次重生成，不能被首次生成任务的 dedupe key 吞掉。重生成可增加同一 parent 下显式候选槽，但不得改变顶层 canonical identity。
 - **ASO-11 — Asset Hub 虚拟 Project identity 唯一。** 所有 API、SSE、Task、计费和 Operation scope 判断必须引用 `GLOBAL_ASSET_PROJECT_ID`；只有该常量定义可以包含协议字面量。调用方散布同名字面量会形成不可穷尽的 scope 解释源，禁止作为“只是字符串”保留。
-- **ASO-12 — canonical entity 映射只有一个 writer。** `ProjectCharacter/ProjectLocation/Prop.canonicalEntityId` 在 Project 内唯一，只由 `project-asset-writer` 建立或复用。Worker 只能返回 `canonicalEntity` 引用，不能自定义数据库 key。已有同名资产可在无冲突时被该 writer 一次性附加 canonical identity；同 ID 指向不同 kind/name 必须失败，不得用数组位置或“最近资产”合并。
+- **ASO-12 — manifest asset 映射只有一个 writer。** `ProjectCharacter/ProjectLocation/Prop.manifestAssetId` 在 Project 内唯一，只由 `project-asset-writer` 建立或复用。Asset Worker 只返回资产事实、逐字来源证据与生成设计，不能自定义数据库 key；稳定 `manifestAssetId` 由服务端对 `kind + normalized canonicalName` 编译。已有同名资产可在无冲突时被该 writer 一次性附加 manifest identity；同 ID 指向不同 kind/name、名称/别名歧义或来源证据不存在必须失败，不得用数组位置或“最近资产”合并。
 - **ASO-13 — 资产设计、identity 与图片分权。** `asset-development` Skill 决定外观和最终 Prompt；`adopt_asset_manifest` 物化 identity；`create_image` 是唯一图片生成入口。专业 asset schema 由统一 policy 强制 4:3 和固定后缀，Task 成功后才以 `project_asset_image + variantId` Binding 绑定图片；不得在 manifest adoption 内启动 Task，也不得恢复角色/场景/道具专用图片 worker。
 
 ## 权威入口
@@ -30,8 +30,8 @@
 | --- | --- | --- |
 | owner、scope、kind、parent/variant 解析 | `src/lib/assets/services/asset-scope-ownership.ts` | 全局资产 `userId`；项目 `userId`；资产 `projectId`；variant parent foreign key |
 | 资产 mutation 与删除 | `delete_asset` Operation → `src/lib/assets/services/asset-actions.ts::removeAsset` | 上述 resolver 返回的完整 scoped target；顶层角色/场景/道具共用一个入口 |
-| Project 资产 identity 创建/复用 | `src/lib/assets/services/project-asset-writer.ts` | `projectId + canonicalEntityId` 或显式单资产输入；角色、地点和道具共用 writer |
-| Asset Manifest 采用 | `src/lib/operations/domains/assistant/creative-asset-ops.ts::adopt_asset_manifest` | 精确 canonical screenplay + 当前 adopted Style lineage、exact-once entity coverage、canonical Project asset writer |
+| Project 资产 identity 创建/复用 | `src/lib/assets/services/project-asset-writer.ts` | `projectId + manifestAssetId` 或显式单资产输入；角色、地点和道具共用 writer |
+| Asset Manifest 采用 | `src/lib/operations/domains/assistant/creative-asset-ops.ts::adopt_asset_manifest` | 精确 screenplay + 当前 adopted Style lineage、manifest source evidence/identity validation、共享 Project asset writer |
 | 资产图片计划与关联 | `create_image` + `src/lib/asset-generation/asset-image-format.ts` + Task terminal materializer | 专业 schema 的 4:3/固定后缀、精确 asset/variant ownership、Binding CAS |
 | 已有资产重生成 | `regenerate_asset` Operation → asset generation planner/commit | 原 assetId、精确 appearance/image variant 与新的 Task；不创建顶层资产 |
 | location-backed 资产操作 | `src/lib/assets/services/location-backed-assets.ts`，仅由 scoped asset actions 调用 | 已验证的 project/global asset identity |
@@ -63,7 +63,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 媒体 route 收紧为浏览器 session 后，真实 Golden 又发现 video/image worker 仍把本地 key 转成 `/api/files` 再通过 HTTP 回读；worker 没有也不应拥有浏览器 Cookie，因此合法参考图被 401 拒绝、视频阶段永久停留在 processing。当前后台读取复用同一 owner relation policy，再直接读取对象存储并执行输入大小上限；旧内部 token、公开文件 route 和 session 冒充均未恢复。项目资产改图查询同时以 `projectId + userId` 约束裸子实体，防止合法 Task payload 被替换成其他 scope 的 ID。
 - 旧风格预览链曾写入 storage 却未登记 MediaObject，暴露受保护媒体关系、Next 图片优化器 session 与本地签名 origin 三类断点。固定预览链已删除；用户显式要求的任意预览现在只走通用图片 Resource 路径，因此必须像其他图片一样先登记 MediaObject、使用受保护同源读取并保持 owner relation，不能恢复专用存储旁路。
 - 顶层资产删除曾同时存在 Project character/location、Asset Hub character/location 和 generic location/prop 五个 Operation，部分路径直接调用 Prisma delete，Agent 又只有按图片组/单图分裂的旧重生成工具。用户无法从统一资产 identity 表达“删除后重做”或“原地重生成”，调用方也可能用 create 新增同义资产。当前五条顶层 delete 收敛为 `delete_asset` 并统一经过 scoped `removeAsset`；两个旧重生成 Operation 收敛为 `regenerate_asset`，复用既有 generation planner、共享资产 writer 和 asset identity。variant 删除不属于顶层资产入口，仍保留其精确 parent/variant 契约。
-- 资产管线曾让 Worker 直接给出实体 key，并在采用结果时同步创建图片任务；这使同一个资产的剧本身份、数据库身份和媒体生命周期彼此耦合。当前 canonical screenplay 编译器生成稳定实体 ID，共享 Project asset writer 唯一建立领域 identity，manifest adoption 只采用，`create_image` 只生成并在终态绑定。当前验证盲区是真实 MySQL 下同名历史资产与新 canonicalEntityId 并发采用的完整竞争组合。
+- 资产管线曾让 Worker 直接给出实体 key，并在采用结果时同步创建图片任务；随后 canonical screenplay 又提前登记生产资产候选，使剧本身份、资产筛选、数据库 identity 和媒体生命周期彼此耦合，剧本漏登时下游无法补救。当前 asset manifest 是生产资产范围唯一 owner，服务端生成稳定 manifest identity，共享 Project asset writer 唯一建立领域 identity，manifest adoption 只采用，`create_image` 只生成并在终态绑定。当前验证盲区是真实 MySQL 下同名历史资产与新 `manifestAssetId` 并发采用的完整竞争组合。
 
 ## 修改检查表
 

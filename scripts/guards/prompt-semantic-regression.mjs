@@ -209,8 +209,12 @@ criticalLocalizedTemplateTokens.set('project-agent/system', {
     '`delegate_creative_work` is the only delegation entry for professional creative judgment.',
     'The server never creates Chapters or chooses Worker groups automatically.',
     '`create_text.content.kind=current_user_text`',
-    'Do not delegate `canonical_screenplay` merely to save, confirm, rename, or create a "formal" copy.',
-    '`canonical_screenplay` is an on-demand structured analysis result, not a storage gate',
+    'use `scope=project + classification.kind=screenplay` for a complete project screenplay',
+    'Request `outputKind=screenplay` only when the current goal actually needs screenplay creation or revision.',
+    '`screenplay` is the sole screenplay output and materializes a `project.screenplay` Resource Revision.',
+    'It owns only screenplay text and writing metadata, never a production-asset or second scene-entity registry.',
+    'For `outputKind=asset_manifest`, provide only the exact screenplay Revision',
+    'never handwrite character, location, prop lists, counts, or entity IDs in the goal.',
     'The default output is text-only Style Bible content.',
     'Generate preview images independently only when the user explicitly asks',
     'Adoption generates no previews, assets, videos, or downstream Tasks.',
@@ -229,6 +233,8 @@ criticalLocalizedTemplateTokens.set('project-agent/system', {
     'Submission executes only the selected current command',
     'A free-text reply executes no candidate command',
     '# Billing, failure, and recovery',
+    'Before redelegating or retrying, first emit one user-visible explanation of the failure.',
+    'ensure the new request materially differs from the failed request.',
     'Never fabricate text, image, video, or audio output.',
     '# Communication and safety',
     '# Current context',
@@ -249,8 +255,12 @@ criticalLocalizedTemplateTokens.set('project-agent/system', {
     '`delegate_creative_work` 是专业创作判断的唯一委派入口。',
     '服务端不自动创建 Chapter，也不自动决定 Worker 分组。',
     '`create_text.content.kind=current_user_text`',
-    '不得为了保存、确认、改名或建立“正式剧本”而委派 `canonical_screenplay`。',
-    '`canonical_screenplay` 是按需生成的结构化分析结果，不是用户原文的保存门槛。',
+    '完整项目剧本使用 `scope=project + classification.kind=screenplay`',
+    '只有当前目标确实需要创作或修改剧本时，才请求 `outputKind=screenplay`。',
+    '`screenplay` 是唯一剧本输出，成功后得到 `project.screenplay` Resource Revision',
+    '它只拥有剧本文本与写作元信息，不登记生产资产或第二套场景实体。',
+    '请求 `outputKind=asset_manifest` 时只提供精确 screenplay Revision',
+    '不得在 goal 中手写角色、地点、道具名单、数量或 entity ID。',
     '默认只产出文字 Style Bible，不生成预览图。',
     '用户明确要求预览时',
     '采用不生成预览、不创建资产、不启动视频或任何后续 Task。',
@@ -269,6 +279,8 @@ criticalLocalizedTemplateTokens.set('project-agent/system', {
     '提交只执行被选中的一个当前命令',
     '用户自由回复时不执行候选命令',
     '# 收费、失败与恢复',
+    '重新委派或重试前，先向用户输出一句可见的失败说明',
+    '确保新请求相对失败请求发生真实变化。',
     '绝不伪造文字、图片、视频或音频结果。',
     '# 沟通与安全',
     '# 当前上下文',
@@ -290,6 +302,8 @@ forbiddenLocalizedTemplateTokens.get('project-agent/system')?.en.push(
   'plan_episode_bgm_design',
   'generate_episode_bgm_score',
   'choiceType',
+  'canonical_screenplay',
+  'screenplay-canonicalization',
 )
 forbiddenLocalizedTemplateTokens.get('project-agent/system')?.zh.push(
   'mainlineStep',
@@ -306,6 +320,8 @@ forbiddenLocalizedTemplateTokens.get('project-agent/system')?.zh.push(
   'plan_episode_bgm_design',
   'generate_episode_bgm_score',
   'choiceType',
+  'canonical_screenplay',
+  'screenplay-canonicalization',
 )
 
 const criticalCreativeSkillTokens = new Map([
@@ -314,8 +330,8 @@ const criticalCreativeSkillTokens = new Map([
     zh: ['# 创作核心', '事实、推断与创作补充', '最短充分路径'],
   }],
   ['story-development', {
-    en: ['# Story Development', 'Runtime comes from dialogue, action, reaction, pauses, and transitions', 'Scene body text must be a complete filmable scene'],
-    zh: ['# 故事与剧本开发', '时长来自对白、动作、反应、停顿和转场的实际时间', '真正可拍摄的完整场景'],
+    en: ['# Story Development', 'Runtime comes from dialogue, action, reaction, pauses, and transitions', 'Scene body text must be a complete filmable scene', 'returns only screenplay text plus writing metadata', 'must not register production assets'],
+    zh: ['# 故事与剧本开发', '时长来自对白、动作、反应、停顿和转场的实际时间', '真正可拍摄的完整场景', '只交付剧本文本与写作元信息', '不得在剧本输出中登记生产资产'],
   }],
   ['continuity-memory', {
     en: ['# Continuity Memory', 'The source text is the only factual authority.', '## Minimum sufficient chapter context'],
@@ -330,8 +346,8 @@ const criticalCreativeSkillTokens = new Map([
     zh: ['# 视觉风格开发', '`visualStyle` 是图片和视频共享的总体画面风格', '`assetImageStyle` 只供角色图', '视频生成只消费 `visualStyle`', '候选应在美术媒介、总体质感、色彩与设计语言上形成实质差异', '不得借预览改变人物身份', 'Style Bible 是视觉风格的唯一权威'],
   }],
   ['asset-development', {
-    en: ['# Asset Development and Generation Prompts', 'Assets may be designed independently when no Style Bible exists', '`stableDescription`', '`generationPrompt`', 'Shoes are mandatory', '### Non-human characters', 'Do not use uncertainty', 'at least three stable, clearly visible spatial anchors', 'clear, sharp, richly detailed, and production-quality', 'occupation- or identity-specific pose/context samples', 'foundational location description stored as project fact', "Describe only the prop's static visible body", 'Preserve every unmodified identity'],
-    zh: ['# 资产设计与生成提示词', '资产可以在没有 Style Bible 时独立设计', '`stableDescription`', '`generationPrompt`', '鞋子是完整人物设计的必要部分', '### 非人类角色', '不用“或”“可能”“也许”“大概”等不确定词', '至少三个稳定、清晰可见的空间锚点', '清晰锐利、细节丰富并达到专业生产质量', '与职业或身份相符、可复用于分镜的轻微姿态或语境样本', '作为项目事实保存的基础地点描述', '只描述道具本体的静态视觉信息', '保留所有未被修改的原有身份'],
+    en: ['# Asset Development and Generation Prompts', 'Select reusable characters, locations, and props worth producing from an exact `screenplay` Revision', 'The formal `asset_manifest` is the sole fact for production-asset scope', 'Perform selection, stable identity design, and final prompt composition in one Creative Task.', '`stableDescription`', '`generationPrompt`', 'Shoes are mandatory', '### Non-human characters', 'Do not use uncertainty', 'at least three stable, clearly visible spatial anchors', 'clear, sharp, richly detailed, and production-quality', 'occupation- or identity-specific pose/context samples', 'foundational location description stored as project fact', "Describe only the prop's static visible body", 'Preserve every unmodified identity'],
+    zh: ['# 资产设计与生成提示词', '从精确 `screenplay` Revision、用户要求、参考素材和精确 Style Bible 中筛选值得制作的可复用角色、场景、道具', '正式 `asset_manifest` 是生产资产范围的唯一事实', '同一个 Creative Task 完成筛选、稳定身份设计和最终 Prompt', '`stableDescription`', '`generationPrompt`', '鞋子是完整人物设计的必要部分', '### 非人类角色', '不用“或”“可能”“也许”“大概”等不确定词', '至少三个稳定、清晰可见的空间锚点', '清晰锐利、细节丰富并达到专业生产质量', '与职业或身份相符、可复用于分镜的轻微姿态或语境样本', '作为项目事实保存的基础地点描述', '只描述道具本体的静态视觉信息', '保留所有未被修改的原有身份'],
   }],
   ['video-direction', {
     en: ['# Video Direction and Generation Design', '## Skill reading composition', 'For `outputKind=video_prompt_set`, actually read `director-core`, `video-direction`, and `quality-review`', 'same generic Worker run', 'finalized Style Bible with exact provenance', 'explicitly ordered reference manifest', 'one final video prompt', '“cut to the location in image N”', 'one to three core actions', 'ignore caller prose that prescribes', 'do not split material that naturally fits one 15-second generation', 'never divide one unfinished action across two generations', '`{spoken line}`', '`<sound description>`', '**No dissolves or fades**', 'No dissolves, cross-dissolves, fade-ins, or fade-outs between shots', '**Dark/black bridge**', 'this is not a fade to black or fade in from black', '**Montage transition**', '**Metaphorical transition**', '**Creative transition**', 'Do not use one at every scene boundary', '## Blocking and first/last frames', 'stable physical anchor', 'starting point, movement path, and landing position', 'outgoing final shot and incoming first shot must use visibly different scales', 'A side/back view or slight camera-angle change cannot replace a scale change', '## Excellent complete prompt examples', '### Example one: one scene without a creative transition', '### Example two: a motivated dark and metaphorical transition', '### Example three: blocking and seam design across two independent segments', '**Sound relationship choice:**', 'The sound-relationship judgment is required, but a special cue is not', "Write each Shot's synchronized sound directly as `<sound description>`", 'Native audio is enabled by default', '## Dialogue, sound, and native audio'],

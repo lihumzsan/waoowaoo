@@ -411,6 +411,10 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       content: {
         kind: 'current_user_text',
         scope: 'project',
+        classification: {
+          kind: 'screenplay',
+          title: '用户提供的完整剧本',
+        },
         text: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
       },
     }
@@ -489,7 +493,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
         source: 'requests',
         requests: [{
           requestKey: 'golden-screenplay-draft',
-          outputKind: 'canonical_screenplay',
+          outputKind: 'screenplay',
           goal: 'Write one complete 240-second screenplay in one uninterrupted dramatic context.',
           targetDurationSeconds: 240,
           context: {
@@ -505,7 +509,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplayResource = resourceBySchema(request, 'project.screenplay')
     const screenplay = exactResourceRevision(screenplayResource)
     return {
       delegation: {
@@ -556,7 +560,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'adopt_bible' && instruction.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)) {
     return {
-      screenplay: exactResourceRevision(resourceBySchema(request, 'project.canonical_screenplay')),
+      screenplay: exactResourceRevision(resourceBySchema(request, 'project.screenplay')),
       bible: exactResourceRevision(latestResourceBySchema(request, 'project.edit_bible')),
       expectedVersion: null,
     }
@@ -601,7 +605,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplayResource = resourceBySchema(request, 'project.screenplay')
     const screenplay = exactResourceRevision(screenplayResource)
     return {
       delegation: {
@@ -628,7 +632,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplayResource = resourceBySchema(request, 'project.screenplay')
     const screenplay = exactResourceRevision(screenplayResource)
     return {
       delegation: {
@@ -672,7 +676,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)) {
-    const screenplayResource = resourceBySchema(request, 'project.canonical_screenplay')
+    const screenplayResource = resourceBySchema(request, 'project.screenplay')
     return {
       screenplay: exactResourceRevision(screenplayResource),
       chapterPlan: exactResourceRevision(resourceBySchema(request, 'project.chapter_plan')),
@@ -680,7 +684,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST)) {
     return {
-      screenplay: exactResourceRevision(resourceBySchema(request, 'project.canonical_screenplay')),
+      screenplay: exactResourceRevision(resourceBySchema(request, 'project.screenplay')),
       chapterPlan: exactResourceRevision(latestResourceBySchema(request, 'project.chapter_plan')),
     }
   }
@@ -744,7 +748,11 @@ export function decideGoldenModelResponse(input: {
     const called = allCalledTools(input.request)
     if (available.has('read_skill') && !called.has('read_skill')) {
       const text = messageText(input.request)
-      const skillId = text.includes('style_bible') ? 'style-development' : 'story-development'
+      const skillId = text.includes('style_bible')
+        ? 'style-development'
+        : text.includes('asset_manifest')
+          ? 'asset-development'
+          : 'story-development'
       return {
         kind: 'tool_call',
         toolCallId: `golden_call_${input.requestOrdinal}_read_skill`,

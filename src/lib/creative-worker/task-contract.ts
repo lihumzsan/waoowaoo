@@ -14,7 +14,7 @@ import {
 } from './trace-contract'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
-  creativeWorkOutputSchemas.canonical_screenplay,
+  creativeWorkOutputSchemas.screenplay,
   creativeWorkOutputSchemas.edit_bible_bundle,
   creativeWorkOutputSchemas.chapter_plan,
   creativeWorkOutputSchemas.continuity_analysis,
@@ -109,7 +109,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v4' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v5' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -214,7 +214,7 @@ export function buildCreativeWorkInputFingerprint(input: {
 
 export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string {
   switch (output.kind) {
-    case 'canonical_screenplay':
+    case 'screenplay':
       return output.logline || output.synopsis || output.title
     case 'edit_bible_bundle':
       return output.bundle.bible.logline || output.bundle.bible.synopsis
@@ -227,7 +227,7 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
         ? output.design.styleBible.styleSummary
         : output.design.candidates.map((candidate) => candidate.title).join(' / ')
     case 'asset_manifest':
-      return output.overview || output.assets.map((asset) => asset.title).join(' / ')
+      return output.overview || output.assets.map((asset) => asset.canonicalName).join(' / ')
     case 'video_prompt_set':
       return output.segments.map((segment) => segment.key).join(' / ').slice(0, 4_000)
     case 'music_direction':

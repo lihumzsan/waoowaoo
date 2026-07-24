@@ -12,7 +12,7 @@ Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段
 
 - **CP-01 — Chapter 可选且独立。** Chapter 可以由显式 Operation 从精确剧本 Revision 或用户给出的结构创建、修改和删除；采用 Bible 不自动创建 Chapter，创建 Chapter 不自动生成 Bible、连续性分析、资产、视频或渲染。
 - **CP-02 — 没有时长状态机。** 服务端不得按 `<=15`、`15–180`、`>180` 自动选择流程、Operation 或 Worker。`>180s` 只进入 Primary 的规划提示；最终判断还必须考虑独立工作单元、共享事实、上下文与恢复价值。Primary 已经选择委派 `chapter_plan` 后，`adopt_chapters` 只校验每个已给独立单元不超过 180 秒；它不决定章数或边界。
-- **CP-03 — 规范剧本 Revision 是来源。** Chapter 必须显式引用一个精确 `canonical_screenplay` Resource Revision；revisionId 是唯一跨层身份，服务端回库读取结构化剧本与 source ranges。`ProjectEpisodeSourceDocument` 只是该 Revision 的严格不可变领域投影，不拥有第二份内容解释权。不存在 `confirmed_screenplay`、最近剧本或“正式剧本”副本。旧 Revision 即使不再是 head 仍可合法使用。
+- **CP-03 — 精确 screenplay Revision 是来源。** Chapter 必须显式引用一个精确 `screenplay` Resource Revision；revisionId 是唯一跨层身份，服务端回库读取剧本文本。该 Revision 可以来自 `creative_work(outputKind=screenplay)`，也可以是 `create_text.current_user_text + classification.kind=screenplay` 精确捕获的用户完整剧本；Bible/Chapter/continuity 不得强迫后一种来源先经过另一个 screenplay Subagent。`ProjectEpisodeSourceDocument` 只是该 Revision 的严格不可变领域投影，不拥有第二份内容解释权。不存在 `confirmed_screenplay`、最近剧本、“正式剧本”副本或 scene/entity registry 前置。旧 Revision 即使不再是 head 仍可合法使用。
 - **CP-04 — Bible、连续性分析与 Chapter 分权。** Bible 是可采用的全局 canon Resource，continuity analysis 是针对一组精确输入 revisions 的专业结果，Chapter 是执行上下文单元。三者各有唯一 writer 和版本，互不自动派生，消费者必须显式传入实际使用的 revisions。
 - **CP-05 — 并行不产生 WorkerGroup。** Primary 可对多个 Chapter 调用 `delegate_creative_work({delegation:{source:'chapters'}})`；每个 Chapter 对应一个独立 `creative_work` Task，聚合只复用 OperationBatch/Wait。系统不持久化 WorkerGroup、章节批次状态机或跨 Task 共享可变内存。
 - **CP-06 — 最小上下文纯派生。** Context Compiler 只从显式 canonical screenplay/Bible/Chapter/Style/asset revisionId 为一个 Chapter 构造有界输入；缺失、scope 或 schema 不符必须失败。它不写事实、不选择 Skill、不创建 Task、不决定执行顺序。
@@ -25,7 +25,7 @@ Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段
 
 | 事实 | 唯一 owner / writer | 消费者 |
 | --- | --- | --- |
-| 剧本内容、实体与场景引用 | `canonical_screenplay` Creative Resource Revision / Creative Task terminal materializer + deterministic compiler | Primary、Bible/continuity/Chapter Operations |
+| 剧本文本与写作元信息 | `screenplay` Creative Resource Revision / Creative Task terminal materializer | Primary、Bible/continuity/Chapter Operations |
 | 全局 canon | 被采用的 Bible Resource Revision / Bible adoption Operation | Context Compiler、Primary、显式下游调用 |
 | Chapter identity 与版本 | `adopt_chapters` / Chapter service；同 Plan 幂等、不同 Plan 原子重建 | Primary、Context Compiler、Canvas |
 | 连续性分析结果 | `creative_work(outputKind=continuity_analysis)` 终态 Revision | Primary；除非显式采用，不写其他事实 |

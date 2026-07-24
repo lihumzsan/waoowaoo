@@ -23,7 +23,7 @@ describe('Creative Worker read_skill lifecycle', () => {
     lifecycle.begin({
       toolCallId: 'call-screenplay',
       toolName: 'read_skill',
-      skillId: 'screenplay-canonicalization',
+      skillId: 'story-development',
     })
     lifecycle.begin({
       toolCallId: 'call-continuity',
@@ -32,7 +32,7 @@ describe('Creative Worker read_skill lifecycle', () => {
     })
     const traces = [
       trace(1, 'continuity-memory'),
-      trace(2, 'screenplay-canonicalization'),
+      trace(2, 'story-development'),
     ]
 
     expect(lifecycle.complete('call-continuity', traces)).toEqual({
@@ -47,7 +47,7 @@ describe('Creative Worker read_skill lifecycle', () => {
       toolCall: {
         toolCallId: 'call-screenplay',
         toolName: 'read_skill',
-        skillId: 'screenplay-canonicalization',
+        skillId: 'story-development',
       },
       trace: traces[1],
     })

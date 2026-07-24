@@ -5,7 +5,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   GENERIC_IMAGE: 'generic.image',
   GENERIC_AUDIO: 'generic.audio',
   GENERIC_VIDEO: 'generic.video',
-  CANONICAL_SCREENPLAY: 'project.canonical_screenplay',
+  SCREENPLAY: 'project.screenplay',
   EDIT_BIBLE: 'project.edit_bible',
   CHAPTER_PLAN: 'project.chapter_plan',
   CONTINUITY_ANALYSIS: 'project.continuity_analysis',
@@ -36,7 +36,7 @@ export type CreativeResourceSchemaId = typeof CREATIVE_RESOURCE_SCHEMA[keyof typ
 export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   text: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
-    CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY,
+    CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
     CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
     CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
     CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS,

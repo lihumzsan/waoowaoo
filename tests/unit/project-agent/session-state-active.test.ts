@@ -139,11 +139,11 @@ describe('project agent session-state', () => {
       id: 'creative-task-project-scope',
       status: 'failed',
       payload: {
-        protocol: 'creative_work_v4',
-        requestKey: 'screenplay-normalization',
+        protocol: 'creative_work_v5',
+        requestKey: 'screenplay-drafting',
         request: {
-          outputKind: 'canonical_screenplay',
-          goal: 'Normalize the supplied screenplay.',
+          outputKind: 'screenplay',
+          goal: 'Write the requested screenplay.',
           context: {
             userRequest: 'Produce this screenplay.',
             sourceMaterials: [],
@@ -155,16 +155,16 @@ describe('project agent session-state', () => {
         inputFingerprint: 'fingerprint-1',
         origin: { runId: 'run-1', toolCallId: 'tool-creative-1' },
         lifecycleProjection: {
-          requestKey: 'screenplay-normalization',
-          outputKind: 'canonical_screenplay',
-          goal: 'Normalize the supplied screenplay.',
+          requestKey: 'screenplay-drafting',
+          outputKind: 'screenplay',
+          goal: 'Write the requested screenplay.',
           events: [{
             sequence: 1,
             occurredAt: '2026-07-23T00:00:00.000Z',
             event: {
               kind: 'started',
-              outputKind: 'canonical_screenplay',
-              goal: 'Normalize the supplied screenplay.',
+              outputKind: 'screenplay',
+              goal: 'Write the requested screenplay.',
             },
           }],
         },
@@ -186,7 +186,7 @@ describe('project agent session-state', () => {
       taskId: 'creative-task-project-scope',
       runId: 'run-1',
       status: 'failed',
-      outputKind: 'canonical_screenplay',
+      outputKind: 'screenplay',
       errorCode: 'INTERNAL_ERROR',
     })])
     const creativeTaskQuery = (prismaMock.task.findMany.mock.calls

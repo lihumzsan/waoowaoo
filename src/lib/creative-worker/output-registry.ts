@@ -6,8 +6,8 @@ import {
 import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 import {
   assetManifestWorkerOutputSchema,
-  canonicalScreenplayWorkerOutputSchema,
-} from '@/lib/canonical-screenplay'
+  screenplayWorkerOutputSchema,
+} from '@/lib/screenplay'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
@@ -131,7 +131,7 @@ const creativeReviewOutputSchema = z.object({
 }).strict()
 
 export const creativeWorkOutputSchemas = {
-  canonical_screenplay: canonicalScreenplayWorkerOutputSchema,
+  screenplay: screenplayWorkerOutputSchema,
   edit_bible_bundle: editBibleBundleOutputSchema,
   chapter_plan: creativeChapterPlanOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
@@ -153,9 +153,9 @@ export interface CreativeWorkOutputDefinition {
 }
 
 export const creativeWorkOutputRegistry = {
-  canonical_screenplay: {
-    kind: 'canonical_screenplay',
-    schema: creativeWorkOutputSchemas.canonical_screenplay,
+  screenplay: {
+    kind: 'screenplay',
+    schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
   },
   edit_bible_bundle: {

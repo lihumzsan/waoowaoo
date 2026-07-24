@@ -254,7 +254,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     .filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE).length
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_SCREENPLAY_REQUEST)
-  const screenplayResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.CANONICAL_SCREENPLAY)
+  const screenplayResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.SCREENPLAY)
   const afterScreenplay = await readGoldenOracleSnapshot(scope)
   const screenplayRevision = afterScreenplay.resourceRevisions.find((revision) => (
     revision.resourceId === screenplayResource.id
@@ -271,13 +271,16 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(screenplayTask?.episodeId).toBeNull()
   expect(screenplayRevision).toMatchObject({
     resourceId: screenplayResource.id,
-    generationOptions: { outputKind: 'canonical_screenplay' },
-    contentJson: { kind: 'canonical_screenplay', estimatedDurationSeconds: 240 },
+    generationOptions: { outputKind: 'screenplay' },
+    contentJson: { kind: 'screenplay', estimatedDurationSeconds: 240 },
   })
+  const screenplayContent = asRecord(screenplayRevision?.contentJson)
+  expect(screenplayContent).not.toHaveProperty('entities')
+  expect(screenplayContent).not.toHaveProperty('scenes')
   expect(afterScreenplay.domain.sourceDocuments).toHaveLength(0)
   expect(afterScreenplay.domain.bibles).toHaveLength(0)
   expect(afterScreenplay.domain.chapters).toHaveLength(0)
-  await expect(page.getByRole('tab', { name: '规范剧本', exact: true })).toBeVisible({
+  await expect(page.getByRole('tab', { name: '剧本', exact: true })).toBeVisible({
     timeout: 60_000,
   })
 
@@ -626,17 +629,28 @@ test('[GJ-PROVIDED-SCREENPLAY] supplied screenplay text is persisted directly wi
   const resource = resources[0]
   const revision = snapshot.resourceRevisions.find((candidate) => candidate.resourceId === resource?.id)
   expect(resource).toMatchObject({
-    schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
+    schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
     episodeId: null,
     scopeKind: 'project',
     scopeId: scope.projectId,
   })
   expect(revision).toMatchObject({
-    contentText: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
-    contentJson: null,
+    contentText: null,
+    contentJson: {
+      kind: 'screenplay',
+      title: '用户提供的完整剧本',
+      screenplayText: GOLDEN_PROVIDED_SCREENPLAY_TEXT,
+      source: {
+        kind: 'provided',
+        label: '用户提供的完整剧本',
+      },
+    },
     generationOptions: { source: 'current_user_turn' },
     taskId: null,
   })
+  const providedScreenplayContent = asRecord(revision?.contentJson)
+  expect(providedScreenplayContent).not.toHaveProperty('entities')
+  expect(providedScreenplayContent).not.toHaveProperty('scenes')
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)
   expect(snapshot.waits).toHaveLength(0)
   browserObservations.assertClean()

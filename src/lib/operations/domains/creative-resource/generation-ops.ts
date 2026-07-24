@@ -129,6 +129,15 @@ const createTextInputSchema = z.object({
       kind: z.literal('current_user_text'),
       scope: z.enum(['project', 'current_episode'])
         .describe('Persist the exact current-user text at project scope or the currently selected Episode scope.'),
+      classification: z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('generic_text'),
+        }).strict(),
+        z.object({
+          kind: z.literal('screenplay'),
+          title: z.string().trim().min(1).max(300),
+        }).strict(),
+      ]).describe('Classify a complete project screenplay as screenplay; use generic_text for every other exact excerpt.'),
       text: z.string().trim().min(1)
         .describe('An exact contiguous excerpt of the visible user message that started this turn. Do not rewrite, summarize, normalize, or copy text from an earlier turn.'),
     }).strict(),
@@ -463,7 +472,14 @@ async function createTextResources(
   input: CreateTextInput,
   tx: Parameters<NonNullable<ReturnType<typeof defineOperation>['executeInTransaction']>>[2],
 ) {
-  const schemaId = CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT
+  const suppliedScreenplayTitle = input.content.kind === 'current_user_text'
+    && input.content.classification.kind === 'screenplay'
+    ? input.content.classification.title
+    : null
+  const suppliedScreenplay = suppliedScreenplayTitle !== null
+  const schemaId = suppliedScreenplay
+    ? CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
+    : CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT
   const currentUserTextMatch = input.content.kind === 'current_user_text'
     ? matchCurrentUserText({
         currentUserTurnText: ctx.context.userTurnText,
@@ -490,6 +506,14 @@ async function createTextResources(
       agentRetryableAfterCorrection: true,
     })
   }
+  if (suppliedScreenplay && episodeId !== null) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'SCREENPLAY_PROJECT_SCOPE_REQUIRED',
+      field: 'content.scope',
+      allowedValues: ['project'],
+      agentRetryableAfterCorrection: true,
+    })
+  }
   const scope = resolveProjectCreativeResourceScope({
     userId: ctx.userId,
     projectId: ctx.projectId,
@@ -502,7 +526,7 @@ async function createTextResources(
   const candidates = input.content.kind === 'candidates'
     ? input.content.candidates
     : [{
-        name: input.name,
+        name: suppliedScreenplayTitle ?? input.name,
         text: currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text,
       }]
   const candidateSetId = candidates.length > 1 ? randomUUID() : null
@@ -531,7 +555,25 @@ async function createTextResources(
       userId: ctx.userId,
       mediaType: 'text',
       schemaId,
-      content: { kind: 'text', text: candidate.text },
+      content: suppliedScreenplay
+        ? {
+            kind: 'structured',
+            data: {
+              kind: 'screenplay',
+              title: suppliedScreenplayTitle ?? candidate.text.trim().slice(0, 300),
+              logline: null,
+              synopsis: '',
+              screenplayText: candidate.text,
+              estimatedDurationSeconds: null,
+              source: {
+                kind: 'provided',
+                label: suppliedScreenplayTitle ?? candidate.text.trim().slice(0, 500),
+              },
+              assumptions: [],
+              openQuestions: [],
+            },
+          }
+        : { kind: 'text', text: candidate.text },
       inputs: references,
       provenance: {
         operationId: 'create_text',
@@ -1296,7 +1338,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. A complete screenplay supplied by the user should be stored verbatim through current_user_text without delegating Creative Work merely to save or confirm it. Creative authoring, revision, and structured professional analysis still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text for every other excerpt. Creative authoring and revision still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,
@@ -1312,7 +1354,10 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         kind: 'resource',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
-        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT],
+        outputSchemaIds: [
+          CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
+          CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
+        ],
         supportsCandidates: true,
       },
       confirmation: { kind: 'none', required: false },
