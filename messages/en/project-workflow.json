@@ -13,7 +13,7 @@
   },
   "episodeOverview": {
     "title": "Episode context",
-    "titleWithBible": "Episode context · {title}",
+    "titleWithStoryCanon": "Episode context · {title}",
     "chapters": "Chapters",
     "targetDuration": "Target duration",
     "characters": "Characters {count}",

@@ -10,7 +10,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   GENERIC_AUDIO: 'generic.audio',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
-  EDIT_BIBLE: 'project.edit_bible',
+  STORY_CANON: 'project.story_canon',
   CHAPTER_PLAN: 'project.chapter_plan',
   CONTINUITY_ANALYSIS: 'project.continuity_analysis',
   STYLE_BIBLE: 'project.style_bible',
@@ -78,12 +78,12 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
       stringValue(object, 'screenplayText'),
     )
   },
-  [CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE]: (data) => {
-    const bible = objectField(objectValue(data), 'bible')
+  [CREATIVE_RESOURCE_SCHEMA.STORY_CANON]: (data) => {
+    const storyCanon = objectField(objectValue(data), 'storyCanon')
     return firstText(
-      stringValue(bible, 'logline'),
-      stringValue(bible, 'synopsis'),
-      stringValue(bible, 'title'),
+      stringValue(storyCanon, 'logline'),
+      stringValue(storyCanon, 'synopsis'),
+      stringValue(storyCanon, 'title'),
     )
   },
   [CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN]: (data) => {
@@ -129,7 +129,7 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   text: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
     CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
-    CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
+    CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
     CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
     CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS,
     CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,

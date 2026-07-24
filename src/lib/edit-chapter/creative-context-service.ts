@@ -10,7 +10,7 @@ import {
   type CompiledCreativeChapterContextResult,
   type CreativeContextAsset,
 } from '@/lib/creative-worker'
-import { normalizeCreativeBibleResourceBundle } from '@/lib/edit-bible'
+import { normalizeStoryCanonResourceBundle } from '@/lib/story-canon'
 import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 import type { LedgerEntityRef } from '@/lib/edit-ledger'
 import { prisma } from '@/lib/prisma'
@@ -78,7 +78,7 @@ const chapterProvenanceSchema = z.object({
   sourceRevisionId: z.string().trim().min(1),
   chapterPlanResourceId: z.string().trim().min(1),
   chapterPlanRevisionId: z.string().trim().min(1),
-  bible: exactResourceRevisionSchema.nullable(),
+  storyCanon: exactResourceRevisionSchema.nullable(),
   contextRevisions: z.array(exactResourceRevisionSchema.extend({
     schemaId: z.string().trim().min(1),
   }).strict()),
@@ -92,7 +92,7 @@ function exactReferenceKey(reference: ExactResourceRevision): string {
   return reference.revisionId
 }
 
-async function resolveOptionalBibleBundle(input: {
+async function resolveOptionalStoryCanonBundle(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
@@ -110,7 +110,7 @@ async function resolveOptionalBibleBundle(input: {
         episodeId: null,
         status: 'ready',
         mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
         sourceType: 'CreativeWorkResult',
       },
     },
@@ -128,7 +128,7 @@ async function resolveOptionalBibleBundle(input: {
   ) {
     fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: input.reference.revisionId })
   }
-  return normalizeCreativeBibleResourceBundle({
+  return normalizeStoryCanonResourceBundle({
     rawBundle: revision.contentJson,
     sourceText: input.sourceText,
   })
@@ -287,19 +287,19 @@ export async function compileEpisodeChapterContexts(
     }
     return { chapter, provenance: provenance.data }
   })
-  const bibleRefs = new Map<string, ExactResourceRevision>()
-  const bibleRefKeys = new Set<string>()
+  const storyCanonRefs = new Map<string, ExactResourceRevision>()
+  const storyCanonRefKeys = new Set<string>()
   for (const parsed of parsedChapters) {
-    if (parsed.provenance.bible) {
-      const key = exactReferenceKey(parsed.provenance.bible)
-      bibleRefKeys.add(key)
-      bibleRefs.set(key, parsed.provenance.bible)
+    if (parsed.provenance.storyCanon) {
+      const key = exactReferenceKey(parsed.provenance.storyCanon)
+      storyCanonRefKeys.add(key)
+      storyCanonRefs.set(key, parsed.provenance.storyCanon)
     } else {
-      bibleRefKeys.add('none')
+      storyCanonRefKeys.add('none')
     }
   }
-  if (bibleRefKeys.size > 1) {
-    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterBibleRevisions' })
+  if (storyCanonRefKeys.size > 1) {
+    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterStoryCanonRevisions' })
   }
   const firstChapter = parsedChapters[0]
   if (!firstChapter) fail('CREATIVE_CONTEXT_CHAPTER_NOT_FOUND', { episodeId: input.episodeId })
@@ -307,13 +307,13 @@ export async function compileEpisodeChapterContexts(
   if (commonSourceRevisionIds.size !== 1) {
     fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', { episodeId: input.episodeId })
   }
-  const bibleBundle = await resolveOptionalBibleBundle({
+  const storyCanonBundle = await resolveOptionalStoryCanonBundle({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
     sourceRevisionId: firstChapter.provenance.sourceRevisionId,
     sourceText: firstChapter.chapter.sourceDocument.normalizedText,
-    reference: bibleRefs.values().next().value ?? null,
+    reference: storyCanonRefs.values().next().value ?? null,
   })
   const styleResources = referencedResources.filter(
     (resource) => resource.asset.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
@@ -359,7 +359,7 @@ export async function compileEpisodeChapterContexts(
         entrySnapshotJson: chapter.entrySnapshotJson,
         eventsJson: chapter.eventsJson,
       },
-      bibleBundle,
+      storyCanonBundle,
       styleBible: parsedStyleBible?.data ?? null,
       styleBibleSource: styleResource ? {
         revisionId: styleResource.asset.revisionId,

@@ -14,7 +14,7 @@ describe('resource-impact', () => {
       episodeId: 'episode-1',
     })).toEqual([
       { kind: WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES, projectId: 'project-1', episodeId: 'episode-1' },
-      { kind: WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId: 'project-1', episodeId: 'episode-1' },
+      { kind: WORKSPACE_RESOURCE_KIND.STORY_CANON, projectId: 'project-1', episodeId: 'episode-1' },
       { kind: WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId: 'project-1', episodeId: 'episode-1' },
       { kind: WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId: 'project-1', episodeId: 'episode-1' },
       { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
@@ -54,7 +54,7 @@ describe('resource-impact', () => {
 
   it('rejects malformed or duplicate explicit wire refs', () => {
     expect(() => requireWorkspaceResourceRefs([
-      { kind: WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId: 'project-1', episodeId: 1 },
+      { kind: WORKSPACE_RESOURCE_KIND.STORY_CANON, projectId: 'project-1', episodeId: 1 },
     ])).toThrow('WORKSPACE_RESOURCE_REFS_INVALID')
     expect(() => requireWorkspaceResourceRefs([
       { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },

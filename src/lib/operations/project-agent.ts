@@ -21,7 +21,7 @@ import { createCreativeResourceOperations } from './domains/creative-resource/re
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
-import { createAssistantCreativeBibleOperations } from './domains/assistant/creative-bible-ops'
+import { createAssistantStoryCanonOperations } from './domains/assistant/creative-story-canon-ops'
 import { createAssistantCreativeStyleOperations } from './domains/assistant/creative-style-ops'
 import { createAssistantCreativeAssetOperations } from './domains/assistant/creative-asset-ops'
 import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
@@ -54,7 +54,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createAssistantCreativeBibleOperations(), {
+    ...withOperationPack(createAssistantStoryCanonOperations(), {
       groupPath: ['assistant', 'creative'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,

@@ -58,9 +58,9 @@ function collectLineViolations(fullPath) {
   const violations = []
 
   if (
-    /useQuery\s*\(\s*\{[\s\S]{0,500}?queryKey\s*:\s*queryKeys\.project\.editBible\s*\(/.test(content)
+    /useQuery\s*\(\s*\{[\s\S]{0,500}?queryKey\s*:\s*queryKeys\.project\.storyCanon\s*\(/.test(content)
   ) {
-    violations.push(`${relPath}: forbidden: edit Bible query must reuse projectEditBibleQueryOptions`)
+    violations.push(`${relPath}: forbidden: Story Canon query must reuse projectStoryCanonQueryOptions`)
   }
 
   for (let i = 0; i < lines.length; i += 1) {

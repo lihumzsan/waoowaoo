@@ -27,7 +27,7 @@ function localizeOutputKind(
 ): string {
   switch (outputKind) {
     case 'screenplay': return t('subagents.outputKinds.screenplay')
-    case 'edit_bible_bundle': return t('subagents.outputKinds.editBibleBundle')
+    case 'story_canon': return t('subagents.outputKinds.storyCanon')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
     case 'chapter_plan': return t('subagents.outputKinds.chapterPlan')
     case 'style_bible': return t('subagents.outputKinds.styleBible')

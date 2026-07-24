@@ -29,7 +29,7 @@ export interface CreativeWorkResourceMaterializationOutput {
   readonly mediaType: 'text'
   readonly schemaId:
     | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
-    | typeof CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE
+    | typeof CREATIVE_RESOURCE_SCHEMA.STORY_CANON
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
     | typeof CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS
     | typeof CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
@@ -142,12 +142,14 @@ export function planCreativeWorkResourceMaterialization(input: {
       }],
     }
   }
-  if (output.kind === 'edit_bible_bundle') {
+  if (output.kind === 'story_canon') {
     return structuredOutput({
       ...common,
       taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE,
-      name: output.bundle.bible.title || output.bundle.bible.logline || 'Production Bible',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
+      name: output.bundle.storyCanon.title
+        || output.bundle.storyCanon.logline
+        || 'Story Canon',
       data: output.bundle,
       generationOptions: {
         outputKind: output.kind,

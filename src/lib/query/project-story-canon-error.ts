@@ -10,18 +10,18 @@ interface ApiErrorPayload {
   readonly message?: unknown
 }
 
-interface ProjectBibleRequestErrorOptions {
+interface ProjectStoryCanonRequestErrorOptions {
   readonly apiCode: string | null
   readonly detailCode: string | null
 }
 
-export class ProjectBibleRequestError extends Error {
+export class ProjectStoryCanonRequestError extends Error {
   readonly apiCode: string | null
   readonly detailCode: string | null
 
-  constructor(message: string, options: ProjectBibleRequestErrorOptions) {
+  constructor(message: string, options: ProjectStoryCanonRequestErrorOptions) {
     super(message)
-    this.name = 'ProjectBibleRequestError'
+    this.name = 'ProjectStoryCanonRequestError'
     this.apiCode = options.apiCode
     this.detailCode = options.detailCode
   }
@@ -38,7 +38,7 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function readErrorCodes(payload: unknown): ProjectBibleRequestErrorOptions {
+function readErrorCodes(payload: unknown): ProjectStoryCanonRequestErrorOptions {
   const root = asObject(payload)
   const error = asObject(root?.error)
   const details = asObject(error?.details)
@@ -48,7 +48,13 @@ function readErrorCodes(payload: unknown): ProjectBibleRequestErrorOptions {
   }
 }
 
-export async function readProjectBibleJsonError(response: Response, fallback: string): Promise<Error> {
+export async function readProjectStoryCanonJsonError(
+  response: Response,
+  fallback: string,
+): Promise<Error> {
   const payload = await response.json().catch((): ApiErrorPayload | null => null)
-  return new ProjectBibleRequestError(resolveTaskErrorMessage(payload, fallback), readErrorCodes(payload))
+  return new ProjectStoryCanonRequestError(
+    resolveTaskErrorMessage(payload, fallback),
+    readErrorCodes(payload),
+  )
 }

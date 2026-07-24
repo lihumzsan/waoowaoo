@@ -53,13 +53,13 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     version: '1.1.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
-      zh: '`outputKind=edit_bible_bundle` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
-      en: 'Required for `outputKind=edit_bible_bundle` and `outputKind=continuity_analysis`: extract stable facts, beats, persistent state, and continuity judgments for optional Chapter boundaries.',
+      zh: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
+      en: 'Required for `outputKind=story_canon` and `outputKind=continuity_analysis`: extract stable facts, beats, persistent state, and continuity judgments for optional Chapter boundaries.',
     },
-    tags: ['continuity', 'bible', 'story', 'state', 'analysis'],
+    tags: ['continuity', 'canon', 'story', 'state', 'analysis'],
     keywords: {
       zh: ['连续性', '圣经', '设定', '角色', '地点', '节拍', '状态', '事件', '情绪', '时间线', '章节边界', 'chapter_plan'],
-      en: ['continuity', 'bible', 'canon', 'character', 'location', 'beat', 'state', 'event', 'emotion', 'timeline', 'chapter boundary', 'chapter_plan'],
+      en: ['continuity', 'story canon', 'canon', 'character', 'location', 'beat', 'state', 'event', 'emotion', 'timeline', 'chapter boundary', 'chapter_plan'],
     },
   }),
   'director-core': defineSkill({

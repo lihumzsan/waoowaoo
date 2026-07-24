@@ -13,8 +13,8 @@ export type WorkspaceResourceKind = (typeof WORKSPACE_RESOURCE_KIND)[keyof typeo
 export type WorkspaceResourceChange = WorkspaceResourceRef
 
 function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_BIBLE && ref.episodeId) {
-    return [queryKeys.project.editBible(ref.projectId, ref.episodeId)]
+  if (ref.kind === WORKSPACE_RESOURCE_KIND.STORY_CANON && ref.episodeId) {
+    return [queryKeys.project.storyCanon(ref.projectId, ref.episodeId)]
   }
 
   if (ref.kind === WORKSPACE_RESOURCE_KIND.EPISODE_DATA && ref.episodeId) {

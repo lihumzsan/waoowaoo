@@ -123,10 +123,10 @@ export {
 } from './useCreativeResources'
 
 export {
-    projectEditBibleQueryOptions,
-    useProjectEditBible,
-    useProjectEditBibleResponse,
-} from './useProjectBible'
+    projectStoryCanonQueryOptions,
+    useProjectStoryCanon,
+    useProjectStoryCanonResponse,
+} from './useStoryCanon'
 
 export {
     useProjectAssistantThread,

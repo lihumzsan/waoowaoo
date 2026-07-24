@@ -66,7 +66,7 @@ This Skill is the sole screenwriting method for `outputKind=screenplay` and retu
 
 ## Chapter planning
 
-- For `outputKind=chapter_plan`, use the complete, exactly sourced screenplay as the only source text for Chapter boundaries. A Bible, continuity analysis, or Style Bible is optional context only when actually supplied; their absence is never a failure condition.
+- For `outputKind=chapter_plan`, use the complete, exactly sourced screenplay as the only source text for Chapter boundaries. A Story Canon, continuity analysis, or Style Story Canon is optional context only when actually supplied; their absence is never a failure condition.
 - A Chapter is an optional creative and execution context unit, not a workflow stage. Plan Chapters only when relatively independent narrative work, parallel production, bounded context, or local recovery has real value. A runtime above 180 seconds is a strong signal to evaluate those needs, never an automatic Chapter count.
 - Choose boundaries from story causality, scene or time changes, completed actions, information reveals, and emotional landings. Do not replace creative judgment with average character counts, fixed duration buckets, or mechanical equal splits.
 - Every Chapter must stand as a usable context unit. Express its range as UTF-16 character offsets into the exact supplied screenplay, keep ranges ordered and non-overlapping, and keep them inside that screenplay. Do not rewrite, extend, or omit text inside a selected range.

@@ -248,7 +248,7 @@ describe('project agent toolset conformance', () => {
     expect(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text).toEqual([
       'generic.text',
       'project.screenplay',
-      'project.edit_bible',
+      'project.story_canon',
       'project.chapter_plan',
       'project.continuity_analysis',
       'project.style_bible',
@@ -434,11 +434,11 @@ describe('project agent toolset conformance', () => {
   it('uses exact immutable revisions for canonical Bible and Style Bible adoption', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.adopt_bible.channels.tool).toBe(true)
-    expect(Object.keys(registry.adopt_bible.toolInputSchema.properties)).toEqual([
+    expect(registry.adopt_story_canon.channels.tool).toBe(true)
+    expect(Object.keys(registry.adopt_story_canon.toolInputSchema.properties)).toEqual([
       'screenplay', 'bible', 'expectedVersion',
     ])
-    expect(registry.adopt_bible.inputSchema.safeParse({
+    expect(registry.adopt_story_canon.inputSchema.safeParse({
       screenplay: {
         revisionId: 'revision:screenplay',
       },
@@ -646,7 +646,7 @@ describe('project agent toolset conformance', () => {
       [kind, definition.resourceScope]
     )))).toEqual({
       screenplay: 'project',
-      edit_bible_bundle: 'project',
+      story_canon: 'project',
       chapter_plan: 'episode',
       continuity_analysis: 'episode',
       style_bible: 'project',

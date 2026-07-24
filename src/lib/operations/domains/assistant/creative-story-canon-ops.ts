@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
 import {
-  adoptCreativeBibleResources,
+  adoptStoryCanonResources,
   adoptCreativeChapterPlan,
-} from '@/lib/edit-bible'
+} from '@/lib/story-canon'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 
@@ -11,17 +11,17 @@ const exactRevisionSchema = z.object({
   revisionId: z.string().trim().min(1),
 }).strict()
 
-const adoptBibleInputSchema = z.object({
-  screenplay: exactRevisionSchema.describe('Exact immutable project.screenplay revision used by the Bible Task.'),
-  bible: exactRevisionSchema.describe('Exact immutable project.edit_bible revision to adopt.'),
+const adoptStoryCanonInputSchema = z.object({
+  screenplay: exactRevisionSchema.describe('Exact immutable project.screenplay revision used by the Story Canon Task.'),
+  storyCanon: exactRevisionSchema.describe('Exact immutable project.story_canon revision to adopt.'),
   expectedVersion: z.number().int().min(0).nullable().optional()
-    .describe('Use null for first adoption, or the current Bible projection version when replacing it.'),
+    .describe('Use null for first adoption, or the current Story Canon projection version when replacing it.'),
 }).strict()
 
-const adoptBibleOutputSchema = z.object({
+const adoptStoryCanonOutputSchema = z.object({
   success: z.literal(true),
   episodeId: z.string().trim().min(1),
-  bibleRevisionId: z.string().trim().min(1),
+  storyCanonRevisionId: z.string().trim().min(1),
   version: z.number().int().positive(),
 }).strict()
 
@@ -49,11 +49,11 @@ function requireEpisodeId(value: unknown): string {
   return episodeId
 }
 
-export function createAssistantCreativeBibleOperations(): ProjectAgentOperationRegistryDraft {
+export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    adopt_bible: defineOperation({
-      id: 'adopt_bible',
-      summary: 'Adopt one exact Bible Resource revision derived from one exact screenplay Resource revision. This writes only the current Bible/source-range projection; it does not confirm the screenplay, create Chapters, generate assets, or start downstream work.',
+    adopt_story_canon: defineOperation({
+      id: 'adopt_story_canon',
+      summary: 'Adopt one exact Story Canon Resource revision derived from one exact screenplay Resource revision. This writes only the current Story Canon/source-range projection; it does not confirm the screenplay, create Chapters, generate assets, or start downstream work.',
       intent: 'act',
       effects: {
         writes: true,
@@ -69,36 +69,36 @@ export function createAssistantCreativeBibleOperations(): ProjectAgentOperationR
         kind: 'resource',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
-        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE],
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.STORY_CANON],
         supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       prerequisites: { episodeId: 'required' },
       choiceCommit: { enabled: true },
-      inputSchema: adoptBibleInputSchema,
-      outputSchema: adoptBibleOutputSchema,
+      inputSchema: adoptStoryCanonInputSchema,
+      outputSchema: adoptStoryCanonOutputSchema,
       executeInTransaction: async (context, input, transaction) => {
         const episodeId = requireEpisodeId(context.context.episodeId)
-        const bible = await adoptCreativeBibleResources({
+        const storyCanon = await adoptStoryCanonResources({
           projectId: context.projectId,
           userId: context.userId,
           episodeId,
           screenplay: input.screenplay,
-          bible: input.bible,
+          storyCanon: input.storyCanon,
           expectedVersion: input.expectedVersion ?? null,
           client: transaction,
         })
-        return adoptBibleOutputSchema.parse({
+        return adoptStoryCanonOutputSchema.parse({
           success: true,
           episodeId,
-          bibleRevisionId: bible.bibleRevisionId,
-          version: bible.version,
+          storyCanonRevisionId: storyCanon.storyCanonRevisionId,
+          version: storyCanon.version,
         })
       },
     }),
     adopt_chapters: defineOperation({
       id: 'adopt_chapters',
-      summary: 'Adopt one exact chapter_plan Resource revision derived from one exact screenplay Resource revision. The Creative Skill/Subagent owns Chapter-boundary judgment; this operation only validates scope, exact lineage, source ranges and the 180-second per-Chapter ceiling, then persists the Chapter projection. A Bible, continuity analysis or Style Bible may be optional context, never a prerequisite. This operation starts no downstream work.',
+      summary: 'Adopt one exact chapter_plan Resource revision derived from one exact screenplay Resource revision. The Creative Skill/Subagent owns Chapter-boundary judgment; this operation only validates scope, exact lineage, source ranges and the 180-second per-Chapter ceiling, then persists the Chapter projection. Story Canon, continuity analysis or Style Bible may be optional context, never a prerequisite. This operation starts no downstream work.',
       intent: 'act',
       effects: {
         writes: true,

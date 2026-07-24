@@ -154,7 +154,7 @@ export type TaskSSEEvent = {
 }
 
 export type WorkspaceResourceName =
-  | 'editBible'
+  | 'storyCanon'
   | 'projectAssets'
   | 'globalAssets'
   | 'episodeData'

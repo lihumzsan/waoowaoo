@@ -18,8 +18,8 @@ export const GOLDEN_FREEFORM_ADOPT_REQUEST = '选择第二张图片作为主视�
 export const GOLDEN_FREEFORM_SCREENPLAY_REQUEST = '创作一部约240秒、全程保持单一连续场景的完整剧本'
 export const GOLDEN_PROVIDED_SCREENPLAY_TEXT = '场景一：夜，山门。守灯人推开生锈的门，风吹灭最后一盏灯。'
 export const GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST = `这是我已经写好的完整剧本，请直接保存并继续按需制作，不要先规范化：\n${GOLDEN_PROVIDED_SCREENPLAY_TEXT}`
-export const GOLDEN_FREEFORM_BIBLE_REQUEST = '基于当前剧本生成一份全项目可复用的 Edit Bible'
-export const GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST = '为当前 Episode 采用刚才的剧本和 Edit Bible'
+export const GOLDEN_FREEFORM_STORY_CANON_REQUEST = '基于当前剧本生成一份全项目可复用的 Story Canon'
+export const GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST = '为当前 Episode 采用刚才的剧本和 Story Canon'
 export const GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST = '为当前项目设计一份文字 Style Bible，不要生成预览图'
 export const GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST = '用一张选择卡询问我是否采用刚才的 Style Bible，只处理这个当前决定'
 export const GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST = '现在为了并行制作和失败恢复，把当前剧本规划为两个可独立执行的 Chapter'
@@ -41,8 +41,8 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
   GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
-  GOLDEN_FREEFORM_BIBLE_REQUEST,
-  GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_STORY_CANON_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST,
   GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
@@ -326,11 +326,11 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   if (instruction.text.includes(GOLDEN_FREEFORM_SCREENPLAY_REQUEST)) {
     return choose('delegate_creative_work')
   }
-  if (instruction.text.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)) {
+  if (instruction.text.includes(GOLDEN_FREEFORM_STORY_CANON_REQUEST)) {
     return called.has('list_resources') ? choose('delegate_creative_work') : choose('list_resources')
   }
-  if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)) {
-    return called.has('list_resources') ? choose('adopt_bible') : choose('list_resources')
+  if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)) {
+    return called.has('list_resources') ? choose('adopt_story_canon') : choose('list_resources')
   }
   if (instruction.text.includes(GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)) {
     return choose('delegate_creative_work')
@@ -508,18 +508,18 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       },
     }
   }
-  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)) {
+  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_STORY_CANON_REQUEST)) {
     const screenplayResource = resourceBySchema(request, 'project.screenplay')
     const screenplay = exactResourceRevision(screenplayResource)
     return {
       delegation: {
         source: 'requests',
         requests: [{
-          requestKey: 'golden-edit-bible',
-          outputKind: 'edit_bible_bundle',
-          goal: 'Build one production Bible whose canon can be adopted by any Episode in this Project.',
+          requestKey: 'golden-story-canon',
+          outputKind: 'story_canon',
+          goal: 'Build one Story Canon whose canon can be adopted by any Episode in this Project.',
           context: {
-            userRequest: GOLDEN_FREEFORM_BIBLE_REQUEST,
+            userRequest: GOLDEN_FREEFORM_STORY_CANON_REQUEST,
             sourceMaterials: [{
               kind: 'resource',
               revisionId: screenplay.revisionId,
@@ -548,8 +548,8 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'list_resources' && (
-    instruction.includes(GOLDEN_FREEFORM_BIBLE_REQUEST)
-    || instruction.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)
+    instruction.includes(GOLDEN_FREEFORM_STORY_CANON_REQUEST)
+    || instruction.includes(GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)
     || instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)
     || instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)
     || instruction.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)
@@ -558,10 +558,10 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   )) {
     return { mediaType: 'text', status: 'ready', limit: 20 }
   }
-  if (toolName === 'adopt_bible' && instruction.includes(GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)) {
+  if (toolName === 'adopt_story_canon' && instruction.includes(GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)) {
     return {
       screenplay: exactResourceRevision(resourceBySchema(request, 'project.screenplay')),
-      bible: exactResourceRevision(latestResourceBySchema(request, 'project.edit_bible')),
+      storyCanon: exactResourceRevision(latestResourceBySchema(request, 'project.story_canon')),
       expectedVersion: null,
     }
   }

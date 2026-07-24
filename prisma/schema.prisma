@@ -133,7 +133,7 @@ model ProjectEpisode {
   project           Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   chapters          ProjectEditChapter[]
   sourceDocuments   ProjectEpisodeSourceDocument[]
-  editBible         ProjectEditBible?
+  storyCanon         ProjectStoryCanon?
   canvasLayout      ProjectCanvasLayout?
   creativeResources CreativeResource[]
   creativeBindings  CreativeResourceBinding[]
@@ -180,7 +180,7 @@ model ProjectEpisodeSourceDocument {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @default(now()) @updatedAt
   episode           ProjectEpisode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editBibles        ProjectEditBible[]
+  storyCanons       ProjectStoryCanon[]
   chapters          ProjectEditChapter[]
 
   @@unique([episodeId, version])
@@ -190,16 +190,16 @@ model ProjectEpisodeSourceDocument {
   @@map("project_episode_source_documents")
 }
 
-model ProjectEditBible {
+model ProjectStoryCanon {
   id                 String                       @id @default(uuid())
   episodeId          String                       @unique
   sourceDocumentId   String
-  bibleJson          Json
+  storyCanonJson     Json
   beatSheetJson      Json
   ledgerJson         Json
   emotionalCurveJson Json
-  bibleResourceId    String                       @db.VarChar(191)
-  bibleRevisionId    String                       @db.VarChar(191)
+  storyCanonResourceId String                       @db.VarChar(191)
+  storyCanonRevisionId String                       @db.VarChar(191)
   version            Int                          @default(1)
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @default(now()) @updatedAt
@@ -208,9 +208,9 @@ model ProjectEditBible {
 
   @@index([episodeId])
   @@index([sourceDocumentId])
-  @@index([bibleResourceId])
-  @@index([bibleRevisionId])
-  @@map("project_edit_bibles")
+  @@index([storyCanonResourceId])
+  @@index([storyCanonRevisionId])
+  @@map("project_story_canons")
 }
 
 model MutationBatch {

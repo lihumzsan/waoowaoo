@@ -5,7 +5,7 @@ import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { apiFetch } from '@/lib/api-fetch'
-import { useProjectEditBibleResponse } from '@/lib/query/hooks'
+import { useProjectStoryCanonResponse } from '@/lib/query/hooks'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
@@ -58,11 +58,11 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     onEpisodeDelete,
     onProjectRename,
   } = props
-  const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
-  const editBibleForWorkspace = editBibleResponse?.editBible ?? null
+  const { data: storyCanonResponse } = useProjectStoryCanonResponse(projectId, episodeId ?? null)
+  const storyCanonForWorkspace = storyCanonResponse?.storyCanon ?? null
   const workspaceChapters = useMemo(
-    () => editBibleResponse?.chapters ?? [],
-    [editBibleResponse?.chapters],
+    () => storyCanonResponse?.chapters ?? [],
+    [storyCanonResponse?.chapters],
   )
   const workspaceEpisodeId = episodeId ?? null
   const selectedWorkspaceScope = readWorkspaceScopeId(workspaceScopeSelection.scopeId)
@@ -128,7 +128,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onEpisodeDelete={onEpisodeDelete}
         onProjectRename={onProjectRename}
         projectConfigurable={projectConfigurable}
-        currentEditBible={editBibleForWorkspace ?? null}
+        currentStoryCanon={storyCanonForWorkspace ?? null}
         workspaceChapters={workspaceChapters}
         currentWorkspaceScopeId={workspaceScopeId}
         onWorkspaceScopeSelect={handleWorkspaceScopeSelect}

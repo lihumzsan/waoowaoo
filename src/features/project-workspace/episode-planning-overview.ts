@@ -1,14 +1,14 @@
 import type { ProjectEditChapter } from '@/types/project'
 
-export interface EpisodePlanningBibleSource {
-  readonly bible?: unknown | null
+export interface EpisodePlanningStoryCanonSource {
+  readonly storyCanon?: unknown | null
   readonly beatSheet?: unknown | null
   readonly ledger?: unknown | null
   readonly emotionalCurve?: unknown | null
   readonly chapters?: readonly ProjectEditChapter[] | null
 }
 
-export interface EpisodePlanningBibleStats {
+export interface EpisodePlanningStoryCanonStats {
   readonly title: string | null
   readonly characterCount: number
   readonly locationCount: number
@@ -27,15 +27,15 @@ export interface EpisodePlanningChapterOverview {
 }
 
 export interface EpisodePlanningOverview {
-  readonly hasBible: boolean
-  readonly bible: EpisodePlanningBibleStats
+  readonly hasStoryCanon: boolean
+  readonly storyCanon: EpisodePlanningStoryCanonStats
   readonly chapterCount: number
   readonly targetDurationSec: number
   readonly chapters: readonly EpisodePlanningChapterOverview[]
 }
 
 export interface BuildEpisodePlanningOverviewInput {
-  readonly editBible?: EpisodePlanningBibleSource | null
+  readonly storyCanon?: EpisodePlanningStoryCanonSource | null
   readonly chapters?: readonly ProjectEditChapter[] | null
 }
 
@@ -51,16 +51,18 @@ function readArrayLength(value: unknown): number {
   return Array.isArray(value) ? value.length : 0
 }
 
-export function readEpisodePlanningBibleStats(editBible?: EpisodePlanningBibleSource | null): EpisodePlanningBibleStats {
-  const bible = isRecord(editBible?.bible) ? editBible.bible : null
-  const beatSheet = isRecord(editBible?.beatSheet) ? editBible.beatSheet : null
-  const ledger = isRecord(editBible?.ledger) ? editBible.ledger : null
-  const emotionalCurve = isRecord(editBible?.emotionalCurve) ? editBible.emotionalCurve : null
+export function readEpisodePlanningStoryCanonStats(
+  storyCanon?: EpisodePlanningStoryCanonSource | null,
+): EpisodePlanningStoryCanonStats {
+  const canon = isRecord(storyCanon?.storyCanon) ? storyCanon.storyCanon : null
+  const beatSheet = isRecord(storyCanon?.beatSheet) ? storyCanon.beatSheet : null
+  const ledger = isRecord(storyCanon?.ledger) ? storyCanon.ledger : null
+  const emotionalCurve = isRecord(storyCanon?.emotionalCurve) ? storyCanon.emotionalCurve : null
   return {
-    title: readString(bible?.title),
-    characterCount: readArrayLength(bible?.characters),
-    locationCount: readArrayLength(bible?.locations),
-    worldRuleCount: readArrayLength(bible?.worldRules),
+    title: readString(canon?.title),
+    characterCount: readArrayLength(canon?.characters),
+    locationCount: readArrayLength(canon?.locations),
+    worldRuleCount: readArrayLength(canon?.worldRules),
     beatCount: readArrayLength(beatSheet?.beats),
     ledgerEventCount: readArrayLength(ledger?.events),
     emotionalCueCount: readArrayLength(emotionalCurve?.cues),
@@ -73,10 +75,10 @@ export function formatEpisodePlanningDuration(seconds: number): string {
 }
 
 export function buildEpisodePlanningOverview(input: BuildEpisodePlanningOverviewInput): EpisodePlanningOverview {
-  const chapters = input.chapters ?? input.editBible?.chapters ?? []
+  const chapters = input.chapters ?? input.storyCanon?.chapters ?? []
   return {
-    hasBible: Boolean(input.editBible),
-    bible: readEpisodePlanningBibleStats(input.editBible),
+    hasStoryCanon: Boolean(input.storyCanon),
+    storyCanon: readEpisodePlanningStoryCanonStats(input.storyCanon),
     chapterCount: chapters.length,
     targetDurationSec: chapters.reduce((total, chapter) => total + chapter.targetDurationSec, 0),
     chapters: chapters.map((chapter) => ({

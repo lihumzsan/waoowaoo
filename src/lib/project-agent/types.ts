@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 import type {
-  ProjectContextEditBibleSnapshot,
+  ProjectContextStoryCanonSnapshot,
   ProjectContextEditChapterSnapshot,
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
@@ -204,7 +204,7 @@ export interface ProjectAssistantContextSnapshot {
   selectedAssetId?: string | null
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']
   recentOperationResults: ProjectContextSnapshot['recentOperationResults']
-  editBible?: ProjectContextEditBibleSnapshot | null
+  storyCanon?: ProjectContextStoryCanonSnapshot | null
   chapters?: ProjectContextEditChapterSnapshot[]
   config: {
     videoRatio: string | null

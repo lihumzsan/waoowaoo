@@ -13,7 +13,7 @@ import { readGoldenOracleSnapshot } from '../oracle/reader'
 import { failNextGoldenFalRequests, setGoldenStreamPacing } from '../providers/control'
 import {
   GOLDEN_FREEFORM_ADOPT_REQUEST,
-  GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST,
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
   GOLDEN_FREEFORM_AUDIO_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
@@ -26,7 +26,7 @@ import {
   GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
   GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
   GOLDEN_PROVIDED_SCREENPLAY_TEXT,
-  GOLDEN_FREEFORM_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_STORY_CANON_REQUEST,
   GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_TEXT_REQUEST,
@@ -278,42 +278,42 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(screenplayContent).not.toHaveProperty('entities')
   expect(screenplayContent).not.toHaveProperty('scenes')
   expect(afterScreenplay.domain.sourceDocuments).toHaveLength(0)
-  expect(afterScreenplay.domain.bibles).toHaveLength(0)
+  expect(afterScreenplay.domain.storyCanons).toHaveLength(0)
   expect(afterScreenplay.domain.chapters).toHaveLength(0)
   await expect(page.getByRole('tab', { name: '剧本', exact: true })).toBeVisible({
     timeout: 60_000,
   })
 
-  await sendNaturalLanguage(page, GOLDEN_FREEFORM_BIBLE_REQUEST)
-  const bibleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE)
-  const afterBibleGeneration = await readGoldenOracleSnapshot(scope)
-  const bibleRevision = afterBibleGeneration.resourceRevisions.find((revision) => (
-    revision.resourceId === bibleResource.id
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_STORY_CANON_REQUEST)
+  const storyCanonResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.STORY_CANON)
+  const afterStoryCanonGeneration = await readGoldenOracleSnapshot(scope)
+  const storyCanonRevision = afterStoryCanonGeneration.resourceRevisions.find((revision) => (
+    revision.resourceId === storyCanonResource.id
   ))
-  expect(bibleResource.episodeId).toBeNull()
-  expect(afterBibleGeneration.resourceLineage.filter((lineage) => (
-    lineage.outputRevisionId === bibleRevision?.id
+  expect(storyCanonResource.episodeId).toBeNull()
+  expect(afterStoryCanonGeneration.resourceLineage.filter((lineage) => (
+    lineage.outputRevisionId === storyCanonRevision?.id
   ))).toEqual([expect.objectContaining({
     inputRevisionId: screenplayRevision?.id,
     role: 'source_material',
   })])
-  expect(afterBibleGeneration.domain.bibles).toHaveLength(0)
+  expect(afterStoryCanonGeneration.domain.storyCanons).toHaveLength(0)
 
-  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)
   await expect.poll(async () => {
     const snapshot = await readGoldenOracleSnapshot(scope)
     return {
       runStatus: snapshot.runs.at(-1)?.status ?? null,
-      bibles: snapshot.domain.bibles.length,
+      storyCanons: snapshot.domain.storyCanons.length,
     }
   }, {
     timeout: 60_000,
-    message: 'Bible adoption must project project-scoped canon only into the current Episode',
-  }).toEqual({ runStatus: 'completed', bibles: 1 })
-  const afterBibleAdoption = await readGoldenOracleSnapshot(scope)
-  expect(afterBibleAdoption.domain.bibles[0]).toMatchObject({
-    bibleResourceId: bibleResource.id,
-    bibleRevisionId: bibleRevision?.id,
+    message: 'Story Canon adoption must project project-scoped canon only into the current Episode',
+  }).toEqual({ runStatus: 'completed', storyCanons: 1 })
+  const afterStoryCanonAdoption = await readGoldenOracleSnapshot(scope)
+  expect(afterStoryCanonAdoption.domain.storyCanons[0]).toMatchObject({
+    storyCanonResourceId: storyCanonResource.id,
+    storyCanonRevisionId: storyCanonRevision?.id,
   })
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)
@@ -398,7 +398,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     .filter((activity) => !activityIdsBeforeChoiceDecision.has(activity.id))
     .filter((activity) => activity.operationId !== 'list_resources')
     .map((activity) => activity.operationId)).toEqual(['adopt_style_bible'])
-  expect(afterStyleChoice.domain.bibles).toHaveLength(1)
+  expect(afterStyleChoice.domain.storyCanons).toHaveLength(1)
   expect(afterStyleChoice.domain.chapters).toHaveLength(0)
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)
@@ -443,7 +443,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     sourceResourceId: screenplayResource.id,
     sourceRevisionId: screenplayRevision?.id,
   })
-  expect(afterChapterAdoption.domain.bibles).toHaveLength(1)
+  expect(afterChapterAdoption.domain.storyCanons).toHaveLength(1)
   expect(afterChapterAdoption.domain.chapters).toEqual([
     expect.objectContaining({ chapterIndex: 0, targetDurationSec: 120 }),
     expect.objectContaining({ chapterIndex: 1, targetDurationSec: 120 }),
@@ -567,13 +567,15 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await page.goto(`/zh/workspace/${scope.projectId}?episode=${secondEpisodeId}`, {
     waitUntil: 'domcontentloaded',
   })
-  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_BIBLE_REQUEST)
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)
   await expect.poll(async () => {
     const snapshot = await readGoldenOracleSnapshot(secondEpisodeScope)
     return {
       runStatus: snapshot.runs.at(-1)?.status ?? null,
       sourceRevisionIds: snapshot.domain.sourceDocuments.map((document) => document.sourceRevisionId),
-      bibleRevisionIds: snapshot.domain.bibles.map((bible) => bible.bibleRevisionId),
+      storyCanonRevisionIds: snapshot.domain.storyCanons.map((storyCanon) => (
+        storyCanon.storyCanonRevisionId
+      )),
     }
   }, {
     timeout: 60_000,
@@ -581,11 +583,11 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   }).toEqual({
     runStatus: 'completed',
     sourceRevisionIds: [screenplayRevision?.id],
-    bibleRevisionIds: [bibleRevision?.id],
+    storyCanonRevisionIds: [storyCanonRevision?.id],
   })
   const secondEpisodeSnapshot = await readGoldenOracleSnapshot(secondEpisodeScope)
   expect(secondEpisodeSnapshot.resources.filter((resource) => (
-    resource.id === screenplayResource.id || resource.id === bibleResource.id
+    resource.id === screenplayResource.id || resource.id === storyCanonResource.id
   ))).toHaveLength(2)
   browserObservations.assertClean()
 
@@ -611,7 +613,7 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   await waitForResources(scope, 'video', 1)
   const snapshot = await readGoldenOracleSnapshot(scope)
   expect(snapshot.domain.sourceDocuments).toHaveLength(0)
-  expect(snapshot.domain.bibles).toHaveLength(0)
+  expect(snapshot.domain.storyCanons).toHaveLength(0)
   expect(snapshot.domain.chapters).toHaveLength(0)
   expect(snapshot.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO)).toHaveLength(1)
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)

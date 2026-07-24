@@ -15,7 +15,7 @@ import {
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay,
-  creativeWorkOutputSchemas.edit_bible_bundle,
+  creativeWorkOutputSchemas.story_canon,
   creativeWorkOutputSchemas.chapter_plan,
   creativeWorkOutputSchemas.continuity_analysis,
   creativeWorkOutputSchemas.style_bible,
@@ -216,8 +216,8 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
   switch (output.kind) {
     case 'screenplay':
       return output.logline || output.synopsis || output.title
-    case 'edit_bible_bundle':
-      return output.bundle.bible.logline || output.bundle.bible.synopsis
+    case 'story_canon':
+      return output.bundle.storyCanon.logline || output.bundle.storyCanon.synopsis
     case 'chapter_plan':
       return output.rationale
     case 'continuity_analysis':

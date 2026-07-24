@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import {
-  getEditBibleInputSchema,
-  readEpisodeEditBible,
+  getStoryCanonInputSchema,
+  readEpisodeStoryCanon,
   readEpisodeEditChapters,
-} from '@/lib/edit-bible'
+} from '@/lib/story-canon'
 
 export const GET = apiHandler(async (
   request: NextRequest,
@@ -16,13 +16,13 @@ export const GET = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const { searchParams } = new URL(request.url)
-  const parsed = getEditBibleInputSchema.safeParse({
+  const parsed = getStoryCanonInputSchema.safeParse({
     episodeId: searchParams.get('episodeId'),
   })
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const [editBible, chapters] = await Promise.all([
-    readEpisodeEditBible({
+  const [storyCanon, chapters] = await Promise.all([
+    readEpisodeStoryCanon({
       projectId,
       episodeId: parsed.data.episodeId,
     }),
@@ -32,7 +32,7 @@ export const GET = apiHandler(async (
     }),
   ])
   return NextResponse.json({
-    editBible: editBible ? { ...editBible, chapters } : null,
+    storyCanon: storyCanon ? { ...storyCanon, chapters } : null,
     chapters,
   })
 })

@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import {
-  editBibleBundleSchema,
-  editBibleBeatSchema,
-  editBibleCharacterSchema,
-  editBibleEntitySchema,
-  editBibleStyleGuideSchema,
-} from '@/lib/edit-bible/schemas'
+  storyCanonBundleSchema,
+  storyCanonBeatSchema,
+  storyCanonCharacterSchema,
+  storyCanonEntitySchema,
+} from '@/lib/story-canon/schemas'
 import {
   ledgerEntityRefSchema,
   ledgerEventSchema,
@@ -85,7 +84,7 @@ export const compileCreativeChapterContextInputSchema = z.object({
     normalizedText: z.string().min(1),
   }).strict(),
   chapter: chapterContextSourceSchema,
-  bibleBundle: editBibleBundleSchema.nullable(),
+  storyCanonBundle: storyCanonBundleSchema.nullable(),
   styleBible: creativeStyleBibleSchema.nullable(),
   styleBibleSource: creativeStyleBibleSourceSchema.nullable(),
   referencedAssets: z.array(creativeContextAssetSchema).max(128),
@@ -108,13 +107,13 @@ const chapterIdentitySchema = z.object({
   targetDurationSec: z.number().int().positive(),
 }).strict()
 
-const selectedBibleSchema = z.object({
+const selectedStoryCanonSchema = z.object({
   title: z.string().trim().min(1).nullable(),
   logline: z.string().trim().min(1).nullable(),
   synopsis: z.string().trim().min(1),
   worldRules: z.array(z.string().trim().min(1)),
-  characters: z.array(editBibleCharacterSchema),
-  locations: z.array(editBibleEntitySchema),
+  characters: z.array(storyCanonCharacterSchema),
+  locations: z.array(storyCanonEntitySchema),
 }).strict()
 
 const compiledChapterContextSchema = z.object({
@@ -128,17 +127,16 @@ const compiledChapterContextSchema = z.object({
   }).strict(),
   narrative: z.object({
     beatIds: z.array(z.string().trim().min(1)),
-    beats: z.array(editBibleBeatSchema),
+    beats: z.array(storyCanonBeatSchema),
     eventIds: z.array(z.string().trim().min(1)),
-    emotionalCues: editBibleBundleSchema.shape.emotionalCurve.shape.cues,
+    emotionalCues: storyCanonBundleSchema.shape.emotionalCurve.shape.cues,
   }).strict(),
   continuity: z.object({
-    bible: selectedBibleSchema.nullable(),
+    storyCanon: selectedStoryCanonSchema.nullable(),
     entrySnapshot: ledgerSnapshotSchema,
     events: z.array(ledgerEventSchema),
   }).strict(),
   style: z.object({
-    storyStyleGuide: editBibleStyleGuideSchema,
     productionStyleBible: creativeStyleBibleSchema.nullable(),
     source: creativeStyleBibleSourceSchema.nullable(),
   }).strict(),
@@ -239,12 +237,12 @@ function isContainedByRange(
   return item.sourceStart >= sourceStart && item.sourceEnd <= sourceEnd
 }
 
-function selectRelevantBibleEntities(input: {
-  readonly bundle: NonNullable<CompileCreativeChapterContextInput['bibleBundle']>
+function selectRelevantStoryCanonEntities(input: {
+  readonly bundle: NonNullable<CompileCreativeChapterContextInput['storyCanonBundle']>
   readonly entityRefs: readonly z.infer<typeof ledgerEntityRefSchema>[]
 }) {
-  const characterByName = new Map<string, (typeof input.bundle.bible.characters)[number]>()
-  const locationByName = new Map<string, (typeof input.bundle.bible.locations)[number]>()
+  const characterByName = new Map<string, (typeof input.bundle.storyCanon.characters)[number]>()
+  const locationByName = new Map<string, (typeof input.bundle.storyCanon.locations)[number]>()
 
   const register = <TEntity extends {
     readonly entityId: string
@@ -265,15 +263,15 @@ function selectRelevantBibleEntities(input: {
     }
   }
 
-  for (const character of input.bundle.bible.characters) {
+  for (const character of input.bundle.storyCanon.characters) {
     register(characterByName, character, 'character')
   }
-  for (const location of input.bundle.bible.locations) {
+  for (const location of input.bundle.storyCanon.locations) {
     register(locationByName, location, 'location')
   }
 
-  const characters = new Map<string, (typeof input.bundle.bible.characters)[number]>()
-  const locations = new Map<string, (typeof input.bundle.bible.locations)[number]>()
+  const characters = new Map<string, (typeof input.bundle.storyCanon.characters)[number]>()
+  const locations = new Map<string, (typeof input.bundle.storyCanon.locations)[number]>()
   for (const ref of input.entityRefs) {
     if (ref.entityType !== 'character' && ref.entityType !== 'location') continue
     if (ref.entityType === 'character') {
@@ -307,7 +305,7 @@ export function compileCreativeChapterContext(
   raw: unknown,
 ): CompiledCreativeChapterContextResult {
   const input = parseInput(raw)
-  const { chapter, sourceDocument, bibleBundle } = input
+  const { chapter, sourceDocument, storyCanonBundle } = input
 
   if (chapter.sourceDocumentId !== sourceDocument.id) {
     fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', {
@@ -335,14 +333,14 @@ export function compileCreativeChapterContext(
   const sourceStart = chapter.sourceStart
   const sourceEnd = chapter.sourceEnd
 
-  if (bibleBundle) {
+  if (storyCanonBundle) {
     assertUniqueIds(
-      bibleBundle.beatSheet.beats.map((beat) => beat.beatId),
+      storyCanonBundle.beatSheet.beats.map((beat) => beat.beatId),
       'CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID',
       'beatId',
     )
     assertUniqueIds(
-      bibleBundle.ledger.events.map((event) => event.eventId),
+      storyCanonBundle.ledger.events.map((event) => event.eventId),
       'CREATIVE_CONTEXT_EVENT_MISMATCH',
       'eventId',
     )
@@ -353,18 +351,18 @@ export function compileCreativeChapterContext(
     'resourceId',
   )
 
-  const overlappingBeats = (bibleBundle?.beatSheet.beats ?? []).filter((beat) => (
+  const overlappingBeats = (storyCanonBundle?.beatSheet.beats ?? []).filter((beat) => (
     overlapsRange(beat, sourceStart, sourceEnd)
   ))
   const beats = overlappingBeats
-  if (bibleBundle && beats.length === 0) {
+  if (storyCanonBundle && beats.length === 0) {
     fail('CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID', {
       chapterId: chapter.id,
       overlappingBeatCount: overlappingBeats.length,
     })
   }
 
-  const events = (bibleBundle?.ledger.events ?? []).filter((event) => (
+  const events = (storyCanonBundle?.ledger.events ?? []).filter((event) => (
     isContainedByRange(event, sourceStart, sourceEnd)
   ))
   const persistedEventsResult = z.array(ledgerEventSchema).safeParse(chapter.eventsJson)
@@ -379,8 +377,8 @@ export function compileCreativeChapterContext(
     fail('CREATIVE_CONTEXT_EVENT_MISMATCH', { chapterId: chapter.id })
   }
 
-  const expectedSnapshot = bibleBundle
-    ? projectLedgerSnapshotAtSourceOffset({ ledger: bibleBundle.ledger, sourceEnd: sourceStart })
+  const expectedSnapshot = storyCanonBundle
+    ? projectLedgerSnapshotAtSourceOffset({ ledger: storyCanonBundle.ledger, sourceEnd: sourceStart })
     : { sourceEnd: sourceStart, facts: [], entities: [] }
   const persistedSnapshotResult = ledgerSnapshotSchema.safeParse(chapter.entrySnapshotJson)
   if (!persistedSnapshotResult.success) {
@@ -403,14 +401,14 @@ export function compileCreativeChapterContext(
   ]
   const chapterEntityKeys = new Set(chapterEntityRefs.map(entityRefKey))
   const referencedAssets = input.referencedAssets.filter((asset) => (
-    !bibleBundle
+    !storyCanonBundle
     || asset.entityRef === null
     || chapterEntityKeys.has(entityRefKey(asset.entityRef))
   ))
-  const selectedEntities = bibleBundle
-    ? selectRelevantBibleEntities({ bundle: bibleBundle, entityRefs: chapterEntityRefs })
+  const selectedEntities = storyCanonBundle
+    ? selectRelevantStoryCanonEntities({ bundle: storyCanonBundle, entityRefs: chapterEntityRefs })
     : { characters: [], locations: [] }
-  const emotionalCues = (bibleBundle?.emotionalCurve.cues ?? []).filter((cue) => (
+  const emotionalCues = (storyCanonBundle?.emotionalCurve.cues ?? []).filter((cue) => (
     overlapsRange(cue, sourceStart, sourceEnd)
   ))
   const sourceText = sourceDocument.normalizedText.slice(sourceStart, sourceEnd)
@@ -445,11 +443,11 @@ export function compileCreativeChapterContext(
       emotionalCues,
     },
     continuity: {
-      bible: bibleBundle ? {
-        title: bibleBundle.bible.title ?? null,
-        logline: bibleBundle.bible.logline ?? null,
-        synopsis: bibleBundle.bible.synopsis,
-        worldRules: bibleBundle.bible.worldRules,
+      storyCanon: storyCanonBundle ? {
+        title: storyCanonBundle.storyCanon.title ?? null,
+        logline: storyCanonBundle.storyCanon.logline ?? null,
+        synopsis: storyCanonBundle.storyCanon.synopsis,
+        worldRules: storyCanonBundle.storyCanon.worldRules,
         characters: selectedEntities.characters,
         locations: selectedEntities.locations,
       } : null,
@@ -457,7 +455,6 @@ export function compileCreativeChapterContext(
       events,
     },
     style: {
-      storyStyleGuide: bibleBundle?.bible.styleGuide ?? {},
       productionStyleBible: input.styleBible,
       source: input.styleBibleSource,
     },

@@ -25,7 +25,7 @@ function input(eventsJson: unknown = []) {
       entrySnapshotJson: { sourceEnd: 0, facts: [], entities: [] },
       eventsJson,
     },
-    bibleBundle: null,
+    storyCanonBundle: null,
     styleBible: null,
     styleBibleSource: null,
     referencedAssets: [],
@@ -33,7 +33,7 @@ function input(eventsJson: unknown = []) {
   }
 }
 
-describe('Chapter context without a Bible prerequisite', () => {
+describe('Chapter context without a Story Canon prerequisite', () => {
   it('compiles screenplay slice and Chapter identity with empty optional continuity context', () => {
     const result = compileCreativeChapterContext(input())
 
@@ -45,14 +45,14 @@ describe('Chapter context without a Bible prerequisite', () => {
       emotionalCues: [],
     })
     expect(result.context.continuity).toEqual({
-      bible: null,
+      storyCanon: null,
       entrySnapshot: { sourceEnd: 0, facts: [], entities: [] },
       events: [],
     })
-    expect(result.context.style.storyStyleGuide).toEqual({})
+    expect(result.context.style).not.toHaveProperty('storyStyleGuide')
   })
 
-  it('rejects persisted continuity events when no exact Bible context owns them', () => {
+  it('rejects persisted continuity events when no exact Story Canon context owns them', () => {
     expect(() => compileCreativeChapterContext(input([{
       eventId: 'invented',
       kind: 'plot',

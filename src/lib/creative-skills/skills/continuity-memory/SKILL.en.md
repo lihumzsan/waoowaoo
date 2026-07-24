@@ -95,6 +95,6 @@ This Skill provides fact extraction and continuity methods. Entity IDs, source-c
 ## Continuity judgment for Chapter planning
 
 - When `outputKind=chapter_plan` and this Skill is supplied, use narrative state changes, cross-section dependencies, persistent entity state, and emotional regions to identify natural boundaries. Do not turn fact extraction back into a fixed splitter.
-- The exact screenplay Revision remains the authority for every Chapter range. A Bible or continuity material may explain shared facts in that screenplay, but cannot add source text, override its ranges, or become a prerequisite for planning Chapters.
+- The exact screenplay Revision remains the authority for every Chapter range. A Story Canon or continuity material may explain shared facts in that screenplay, but cannot add source text, override its ranges, or become a prerequisite for planning Chapters.
 - Avoid cutting through an unfinished persistent state transition. When a dependency truly crosses Chapters, state the adjacent units' entry and exit conditions clearly in their summaries without creating another global canon.
 - The 180-second ceiling is only a local validation rule after Chapters have been chosen. Whether Chapters are useful still depends on independent work value, parallelism, context bounds, and recovery needs.

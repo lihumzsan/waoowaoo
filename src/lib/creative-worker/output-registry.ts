@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import {
   creativeChapterPlanOutputSchema,
-  rawEditBibleBundleSchema,
-} from '@/lib/edit-bible/schemas'
+  rawStoryCanonBundleSchema,
+} from '@/lib/story-canon/schemas'
 import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 import {
   assetManifestWorkerOutputSchema,
@@ -15,9 +15,9 @@ const textList = (maxItems: number, maxLength: number) => z.array(
   z.string().trim().min(1).max(maxLength),
 ).max(maxItems)
 
-const editBibleBundleOutputSchema = z.object({
-  kind: z.literal('edit_bible_bundle'),
-  bundle: rawEditBibleBundleSchema,
+const storyCanonBundleOutputSchema = z.object({
+  kind: z.literal('story_canon'),
+  bundle: rawStoryCanonBundleSchema,
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),
 }).strict()
@@ -132,7 +132,7 @@ const creativeReviewOutputSchema = z.object({
 
 export const creativeWorkOutputSchemas = {
   screenplay: screenplayWorkerOutputSchema,
-  edit_bible_bundle: editBibleBundleOutputSchema,
+  story_canon: storyCanonBundleOutputSchema,
   chapter_plan: creativeChapterPlanOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
   style_bible: styleBibleOutputSchema,
@@ -158,9 +158,9 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
   },
-  edit_bible_bundle: {
-    kind: 'edit_bible_bundle',
-    schema: creativeWorkOutputSchemas.edit_bible_bundle,
+  story_canon: {
+    kind: 'story_canon',
+    schema: creativeWorkOutputSchemas.story_canon,
     resourceScope: 'project',
   },
   chapter_plan: {

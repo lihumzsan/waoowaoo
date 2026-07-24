@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
-import { getEditChaptersInputSchema, readEpisodeEditChapters } from '@/lib/edit-bible'
+import { getEditChaptersInputSchema, readEpisodeEditChapters } from '@/lib/story-canon'
 
 export const GET = apiHandler(async (
   request: NextRequest,

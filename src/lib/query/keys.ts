@@ -89,8 +89,8 @@ export const queryKeys = {
             ['project', projectId, 'creative-resources', episodeId ?? ''] as const,
         assistantThread: (projectId: string, episodeId?: string | null) =>
             ['project', projectId, 'assistant-thread', episodeId ?? ''] as const,
-        editBible: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-bible', episodeId] as const,
+        storyCanon: (projectId: string, episodeId: string) =>
+            ['project', projectId, 'story-canon', episodeId] as const,
     },
 
     // ============ 顶层便捷函数 ============

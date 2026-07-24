@@ -14,7 +14,7 @@ import {
 import {
   buildEpisodePlanningOverview,
   formatEpisodePlanningDuration,
-  type EpisodePlanningBibleSource,
+  type EpisodePlanningStoryCanonSource,
   type EpisodePlanningOverview,
 } from '../episode-planning-overview'
 
@@ -25,7 +25,7 @@ interface EpisodeSummary {
   description?: string | null
   novelText?: string | null
   chapters?: ProjectEditChapter[] | null
-  editBible?: EpisodePlanningBibleSource | null
+  storyCanon?: EpisodePlanningStoryCanonSource | null
 }
 
 interface UserModelOption {
@@ -70,7 +70,7 @@ interface WorkspaceHeaderShellProps {
   onEpisodeDelete?: (episodeId: string) => void
   onProjectRename?: (newName: string) => void | Promise<void>
   projectConfigurable: boolean
-  currentEditBible?: EpisodePlanningBibleSource | null
+  currentStoryCanon?: EpisodePlanningStoryCanonSource | null
   workspaceChapters?: readonly ProjectEditChapter[]
   currentWorkspaceScopeId?: WorkspaceScopeId
   onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
@@ -105,7 +105,7 @@ interface EpisodeSelectorOverview {
 }
 
 function resolveOverviewTone(overview: EpisodePlanningOverview): EpisodeSelectorOverview['statusTone'] {
-  if (overview.chapterCount > 0 || overview.hasBible) return 'ready'
+  if (overview.chapterCount > 0 || overview.hasStoryCanon) return 'ready'
   return 'muted'
 }
 
@@ -136,7 +136,7 @@ export default function WorkspaceHeaderShell({
   onEpisodeDelete,
   onProjectRename,
   projectConfigurable,
-  currentEditBible = null,
+  currentStoryCanon = null,
   workspaceChapters = [],
   currentWorkspaceScopeId = WORKSPACE_SCOPE_ALL_ID,
   onWorkspaceScopeSelect,
@@ -156,24 +156,26 @@ export default function WorkspaceHeaderShell({
   }, [onWorkspaceScopeSelect])
 
   const toEpisodeSelectorOverview = useCallback((overview: EpisodePlanningOverview): EpisodeSelectorOverview => ({
-    title: overview.bible.title ? overviewT('titleWithBible', { title: overview.bible.title }) : overviewT('title'),
+    title: overview.storyCanon.title
+      ? overviewT('titleWithStoryCanon', { title: overview.storyCanon.title })
+      : overviewT('title'),
     summaryLabel: `${overviewT('chapters')}: ${String(overview.chapterCount)}`,
     statusTone: resolveOverviewTone(overview),
     metrics: [
       { label: overviewT('chapters'), value: String(overview.chapterCount) },
       { label: overviewT('targetDuration'), value: formatEpisodePlanningDuration(overview.targetDurationSec) },
-      { label: overviewT('characters', { count: overview.bible.characterCount }), value: String(overview.bible.characterCount) },
-      { label: overviewT('locations', { count: overview.bible.locationCount }), value: String(overview.bible.locationCount) },
-      { label: overviewT('beats', { count: overview.bible.beatCount }), value: String(overview.bible.beatCount) },
-      { label: overviewT('ledgerEvents', { count: overview.bible.ledgerEventCount }), value: String(overview.bible.ledgerEventCount) },
+      { label: overviewT('characters', { count: overview.storyCanon.characterCount }), value: String(overview.storyCanon.characterCount) },
+      { label: overviewT('locations', { count: overview.storyCanon.locationCount }), value: String(overview.storyCanon.locationCount) },
+      { label: overviewT('beats', { count: overview.storyCanon.beatCount }), value: String(overview.storyCanon.beatCount) },
+      { label: overviewT('ledgerEvents', { count: overview.storyCanon.ledgerEventCount }), value: String(overview.storyCanon.ledgerEventCount) },
     ],
     chips: [
-      { label: overviewT('characters', { count: overview.bible.characterCount }) },
-      { label: overviewT('locations', { count: overview.bible.locationCount }) },
-      { label: overviewT('beats', { count: overview.bible.beatCount }) },
-      { label: overviewT('ledgerEvents', { count: overview.bible.ledgerEventCount }) },
-      { label: overviewT('emotionalCues', { count: overview.bible.emotionalCueCount }) },
-      { label: overviewT('worldRules', { count: overview.bible.worldRuleCount }) },
+      { label: overviewT('characters', { count: overview.storyCanon.characterCount }) },
+      { label: overviewT('locations', { count: overview.storyCanon.locationCount }) },
+      { label: overviewT('beats', { count: overview.storyCanon.beatCount }) },
+      { label: overviewT('ledgerEvents', { count: overview.storyCanon.ledgerEventCount }) },
+      { label: overviewT('emotionalCues', { count: overview.storyCanon.emotionalCueCount }) },
+      { label: overviewT('worldRules', { count: overview.storyCanon.worldRuleCount }) },
     ],
     chapters: overview.chapters.map((chapter) => ({
       id: chapter.id,
@@ -232,15 +234,15 @@ export default function WorkspaceHeaderShell({
           <EpisodeSelector
             projectName={projectName}
             episodes={sorted.map((ep) => {
-              const episodeEditBible = ep.id === currentEpisodeId
-                ? currentEditBible ?? ep.editBible ?? null
-                : ep.editBible ?? null
+              const episodeStoryCanon = ep.id === currentEpisodeId
+                ? currentStoryCanon ?? ep.storyCanon ?? null
+                : ep.storyCanon ?? null
               const episodeChapters = ep.id === currentEpisodeId
                 ? workspaceChapters
-                : ep.chapters ?? episodeEditBible?.chapters ?? []
-              const planningOverview = ep.id === currentEpisodeId || episodeEditBible
+                : ep.chapters ?? episodeStoryCanon?.chapters ?? []
+              const planningOverview = ep.id === currentEpisodeId || episodeStoryCanon
                 ? buildEpisodePlanningOverview({
-                    editBible: episodeEditBible,
+                    storyCanon: episodeStoryCanon,
                     chapters: episodeChapters,
                   })
                 : null

@@ -42,7 +42,7 @@ const banned = [
   'mainlineRecommendedOperation',
   'request_script_intake_choice',
   'request_edit_script_review_choice',
-  'request_edit_bible_review_choice',
+  'request_story_canon_review_choice',
   'request_edit_style_choice',
   'request_edit_asset_review_choice',
   'confirmed_screenplay',

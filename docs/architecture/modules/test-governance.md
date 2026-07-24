@@ -4,7 +4,7 @@
 
 ## 设计理念
 
-测试用最少的独立证据反证会伤害用户结果或架构不变量的错误实现。证据分为 Logic、Registry Conformance、Critical Infrastructure 与 Golden Journey；Harness 只是隔离运行环境。固定创作阶段已经删除，因此测试不能再通过复刻 screenplay → Bible → Chapter → asset → video 的顺序制造第二条 Workflow。
+测试用最少的独立证据反证会伤害用户结果或架构不变量的错误实现。证据分为 Logic、Registry Conformance、Critical Infrastructure 与 Golden Journey；Harness 只是隔离运行环境。固定创作阶段已经删除，因此测试不能再通过复刻 screenplay → Story Canon → Chapter → asset → video 的顺序制造第二条 Workflow。
 
 ## 不变量
 
@@ -12,8 +12,8 @@
 - **TG-02 — 测试准入。** 新测试只能属于真实 Golden、安全 Journey、Critical Infrastructure、非平凡 Logic、Registry Conformance 或 Harness fail-closed 自测。
 - **TG-03 — Golden 走生产链。** 不 mock 自己的 UI、route、service、数据库、queue、worker、Outbox、SSE、projector 或状态机；只在付费/不可控外部模型和媒体协议边界使用替身。
 - **TG-04 — 自由组合是最高产品证据。** Golden 只给 Primary 自然语言目标，允许 Skill、Subagent、Operation 和 Resource 自由组合。它不能指定工具顺序、注入阶段、写业务事实或使用旧 mainline driver。
-- **TG-05 — 权威事实断言。** Oracle 读取 Project/Run/Task/Operation、CreativeResource/Revision/Lineage/Binding，以及可选的 screenplay source projection、Bible adoption 和 Chapter projection。不得查询已删除的 style preview/edit script/shot/video segment/BGM/final output 表，也不得用卡片文案代替领域事实。
-- **TG-06 — 关键目标必须有组合反证。** 适用 Golden 应覆盖通用模型作者 Choice、Choice 只提交当前决定、剧本 Revision 无确认门、Style Bible 默认无预览、多 Chapter 由 Primary 自主选择、`>180s` 不触发服务端分支、Bible/continuity/Chapter 独立。
+- **TG-05 — 权威事实断言。** Oracle 读取 Project/Run/Task/Operation、CreativeResource/Revision/Lineage/Binding，以及可选的 screenplay source projection、Story Canon adoption 和 Chapter projection。不得查询已删除的 style preview/edit script/shot/video segment/BGM/final output 表，也不得用卡片文案代替领域事实。
+- **TG-06 — 关键目标必须有组合反证。** 适用 Golden 应覆盖通用模型作者 Choice、Choice 只提交当前决定、剧本 Revision 无确认门、Style Bible 默认无预览、多 Chapter 由 Primary 自主选择、`>180s` 不触发服务端分支、Story Canon/continuity/Chapter 独立。
 - **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、late/replay、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam。
 - **TG-08 — Logic 与 Conformance 有边界。** Logic 只验证非平凡纯函数、parser、resolver、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，禁止维护第二份 Task/Operation/Canvas/Resource 清单。
 - **TG-09 — Harness fail closed。** runtime identity、MySQL/Redis scope、端口、Next dist、Next tsconfig、上传和报告目录必须隔离；Golden 为每个 runtime 生成忽略且可清理的独立 tsconfig，Next 不得回写仓库根 `tsconfig.json`。required case 缺失、skip/todo、浏览器异常、依赖不可用、付费调用或 Oracle 写入都显式失败。

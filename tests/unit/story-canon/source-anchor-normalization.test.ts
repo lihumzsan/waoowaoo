@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { EditSourceBlock } from '@/lib/edit-source-document'
 import {
   normalizeRawBeatSheet,
-  normalizeRawEditBible,
+  normalizeRawStoryCanon,
   normalizeRawEmotionalCurve,
   normalizeRawLedger,
-} from '@/lib/edit-bible/source-anchor-normalization'
+} from '@/lib/story-canon/source-anchor-normalization'
 
 const sourceText = '老李启动机器。蓝光照亮地下室。时间开始倒流。'
 const blocks: readonly EditSourceBlock[] = [{
@@ -15,7 +15,7 @@ const blocks: readonly EditSourceBlock[] = [{
   text: sourceText,
 }]
 
-describe('edit bible source-anchor normalization', () => {
+describe('story canon source-anchor normalization', () => {
   it('converts raw beat anchors into source ranges for exact optional continuity context', () => {
     const beatSheet = normalizeRawBeatSheet({
       sourceText,
@@ -120,11 +120,11 @@ describe('edit bible source-anchor normalization', () => {
           persistentFacts: [],
         }],
       },
-    })).toThrow('EDIT_BIBLE_LEDGER_BEAT_NOT_FOUND:event_001:beat_missing')
+    })).toThrow('STORY_CANON_LEDGER_BEAT_NOT_FOUND:event_001:beat_missing')
   })
 
-  it('normalizes global bible entities without source-position metadata', () => {
-    const bible = normalizeRawEditBible({
+  it('normalizes global Story Canon entities without source-position metadata', () => {
+    const storyCanon = normalizeRawStoryCanon({
       raw: {
         synopsis: '老李启动机器后，时间开始倒流。',
         characters: [{
@@ -141,12 +141,11 @@ describe('edit bible source-anchor normalization', () => {
           summary: '蓝光出现的空间。',
         }],
         worldRules: ['时间可以开始倒流'],
-        styleGuide: {},
       },
     })
 
-    expect(bible.characters[0]?.voiceProfile).toBe('低厚温润带细碎颗粒感的中年男声')
-    expect(bible.characters[0]).not.toHaveProperty('firstSourceStart')
-    expect(bible.locations[0]).not.toHaveProperty('firstSourceStart')
+    expect(storyCanon.characters[0]?.voiceProfile).toBe('低厚温润带细碎颗粒感的中年男声')
+    expect(storyCanon.characters[0]).not.toHaveProperty('firstSourceStart')
+    expect(storyCanon.locations[0]).not.toHaveProperty('firstSourceStart')
   })
 })

@@ -9,12 +9,12 @@ const cwd = process.cwd()
 const read = (file) => fs.readFileSync(path.join(cwd, file), 'utf8')
 const violations = []
 
-const operations = read('src/lib/operations/domains/assistant/creative-bible-ops.ts')
-const service = read('src/lib/edit-bible/service.ts')
+const operations = read('src/lib/operations/domains/assistant/creative-story-canon-ops.ts')
+const service = read('src/lib/story-canon/service.ts')
 const materializer = read('src/lib/creative-resource/creative-work-materialization.ts')
 const outputRegistry = read('src/lib/creative-worker/output-registry.ts')
 const chapterContext = read('src/lib/edit-chapter/creative-context-service.ts')
-const constraints = read('src/lib/edit-bible/constraints.ts')
+const constraints = read('src/lib/story-canon/constraints.ts')
 
 for (const required of [
   "chapter_plan: creativeChapterPlanOutputSchema",
@@ -44,15 +44,15 @@ for (const required of [
 if (!constraints.includes('CREATIVE_CHAPTER_MAX_DURATION_SECONDS = 180')) {
   violations.push('Chapter adoption must retain the 180-second local ceiling')
 }
-if (chapterContext.includes('CREATIVE_CONTEXT_BIBLE_INCOMPLETE')) {
-  violations.push('Chapter context must not require a previously adopted Bible')
+if (chapterContext.includes('CREATIVE_CONTEXT_STORY_CANON_INCOMPLETE')) {
+  violations.push('Chapter context must not require a previously adopted Story Canon')
 }
-for (const forbidden of ['plan_chapters', 'splitEditBibleIntoChapterPlans', 'WorkerGroup', 'confirmed_screenplay', 'nextAction']) {
+for (const forbidden of ['plan_chapters', 'splitStoryCanonIntoChapterPlans', 'WorkerGroup', 'confirmed_screenplay', 'nextAction']) {
   if (operations.includes(forbidden) || service.includes(forbidden) || materializer.includes(forbidden)) {
     violations.push(`Chapter runtime restores forbidden workflow identity: ${forbidden}`)
   }
 }
-if (fs.existsSync(path.join(cwd, 'src/lib/edit-bible/chapter-split.ts'))) {
+if (fs.existsSync(path.join(cwd, 'src/lib/story-canon/chapter-split.ts'))) {
   violations.push('deterministic Chapter boundary splitter must remain deleted')
 }
 

@@ -13,7 +13,7 @@
   },
   "episodeOverview": {
     "title": "剧集上下文",
-    "titleWithBible": "剧集上下文 · {title}",
+    "titleWithStoryCanon": "剧集上下文 · {title}",
     "chapters": "Chapter",
     "targetDuration": "目标时长",
     "characters": "角色 {count}",

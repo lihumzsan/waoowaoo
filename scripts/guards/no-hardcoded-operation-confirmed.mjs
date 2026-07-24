@@ -7,8 +7,8 @@ const sourceRoot = path.join(root, 'src')
 const assignmentPattern = /\boperationConfirmed\b/g
 const legacyInstructionPattern = /confirmed\s*=\s*true/g
 const retiredBooleanApprovalFiles = new Set([
-  'src/app/api/projects/[projectId]/bible/route.ts',
-  'src/lib/edit-bible/task-submission.ts',
+  'src/app/api/projects/[projectId]/story-canon/route.ts',
+  'src/lib/story-canon/task-submission.ts',
   'src/lib/operations/domains/media/bible-ops.ts',
 ])
 

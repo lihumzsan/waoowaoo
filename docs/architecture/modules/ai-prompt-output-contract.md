@@ -9,11 +9,11 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 不变量
 
 - **AP-01 — Primary 没有固定主链。** 系统 Prompt 不包含 stage、next action、剧本确认、风格专用卡、短/中/长视频配方或固定工具顺序。Primary 根据目标与当前 Resource 自由组合能力。
-- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Bible、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`，这是来源捕获而不是第二创作 writer。`screenplay` 只拥有文本和写作元信息；生产资产筛选、设计与 Prompt 只由一个 `asset-development + outputKind=asset_manifest` Subagent Task 决定。
+- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Story Canon、continuity、Chapter plan、Style Bible、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`，这是来源捕获而不是第二创作 writer。`screenplay` 只拥有文本和写作元信息；生产资产筛选、设计与 Prompt 只由一个 `asset-development + outputKind=asset_manifest` Subagent Task 决定。
 - **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、适用 Skill 与 Resource schema；当前剧本 kind 是 `screenplay`，不存在 `canonical_screenplay` 或额外 canonicalization Skill。未知字段、缺失字段或错误引用原地失败，不容忍兼容 JSON。
 - **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；Task terminal 的 strict result 才能物化正式 Revision。UI 不从 reasoning、markdown 标题或文案推断完成状态。
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。
-- **AP-06 — `>180s` 只是规划信号。** Prompt 可要求 Primary 评估并行、上下文、恢复与连续性；服务端不得把时长变成 Chapter/Bible/continuity 分支。Primary 若需要 Chapter，先委派 `chapter_plan`，再显式采用；每单元 180 秒仅是采用时的局部校验。
+- **AP-06 — `>180s` 只是规划信号。** Prompt 可要求 Primary 评估并行、上下文、恢复与连续性；服务端不得把时长变成 Chapter/Story Canon/continuity 分支。Primary 若需要 Chapter，先委派 `chapter_plan`，再显式采用；每单元 180 秒仅是采用时的局部校验。
 - **AP-07 — Style Bible 默认纯文本/结构化 Resource。** 只有用户明确要求预览时才调用普通图片 Operation；Style Choice 不隐式生成图片。
 - **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 revisionId 及显式用途；服务端回库解析 Resource、schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。
 - **AP-09 — Provider 约束不升级为创作流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此写固定产品阶段。
@@ -40,9 +40,9 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 历史回归
 
 - Prompt 曾先被过度缩短而遗漏 Choice/Approval/Task 规则，随后又把 `allowedOperationIds`、固定下一步、唯一视频配方和 15/180 秒阈值写回系统 Prompt。当前只保留判断标准与运行协议，semantic guard 拒绝固定编排回流。
-- 旧 script intake、Bible、核心剪辑、镜头计划、风格预览与 BGM 各有 prompt/schema/worker，和 Creative Skill 形成竞争 writer。当前删除专用模板与 worker，专业结果只经 output registry 物化。
+- 旧 script intake、Story Canon、核心剪辑、镜头计划、风格预览与 BGM 各有 prompt/schema/worker，和 Creative Skill 形成竞争 writer。当前删除专用模板与 worker，专业结果只经 output registry 物化。
 - 旧结构化 stream projector 把 token 增量当正式领域内容，刷新和并发会造成空窗或串流。当前 stream 只展示运行状态，正式 Revision 在 Task terminal 一次接手。
-- 旧 source script/Bible schema 要求模型回传系统 identity、版本标记或重复 persistent facts，服务端再用启发式校验，形成第二事实来源。当前 identity/fingerprint/lineage 由服务端构造，模型只输出创作内容。
+- 旧 source script/Story Canon schema 要求模型回传系统 identity、版本标记或重复 persistent facts，服务端再用启发式校验，形成第二事实来源。当前 identity/fingerprint/lineage 由服务端构造，模型只输出创作内容。
 - 风格选择曾默认生成九宫格预览并进入专用 Choice；当前 Style Bible 是普通 Resource，预览图是用户明确要求时的独立图片 Operation。
 - 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。当前时长只作为用户目标与 Primary 判断输入，模型必须从真实对白/动作/停顿估算，服务端不建立时长状态机；真实模型服从度仍需 Golden/抽样验证。
 - 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。首次按需加载又把“下一步新增具体 Operation tool”当作 Schema 交付方式：虽然减少首步 token，却改变多轮 tools 前缀并破坏缓存，且把所有加载后的复杂 schema 重新交给不同 Provider 的 function validator。旧 Prompt/单测只约束“加载与执行分步”，没有约束顶层工具定义稳定。当前双语 Prompt 统一为“`load_tools` 返回 canonical parameters → 后续调用固定 `execute_operation`”，具体 Schema 只追加在消息尾部；Task 回执与终态读取规则保持不变。

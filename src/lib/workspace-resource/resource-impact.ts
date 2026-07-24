@@ -3,7 +3,7 @@ import type { WorkspaceResourceName, WorkspaceResourceRef } from '@/lib/task/typ
 type UnknownRecord = Record<string, unknown>
 
 export const WORKSPACE_RESOURCE_KIND = {
-  EDIT_BIBLE: 'editBible',
+  STORY_CANON: 'storyCanon',
   PROJECT_ASSETS: 'projectAssets',
   GLOBAL_ASSETS: 'globalAssets',
   EPISODE_DATA: 'episodeData',
@@ -93,7 +93,7 @@ function creativeResourceRefs(projectId: string, episodeId: string | null): Work
     resourceRef(WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES, projectId, episodeId),
     ...(episodeId
       ? [
-          resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId, episodeId),
+          resourceRef(WORKSPACE_RESOURCE_KIND.STORY_CANON, projectId, episodeId),
           resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
           resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
         ]

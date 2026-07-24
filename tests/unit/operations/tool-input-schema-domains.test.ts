@@ -7,21 +7,21 @@ import {
 } from './tool-input-schema.fixture'
 
 describe('tool input schema domain conformance', () => {
-  it('accepts exact Resource revisions for current Bible adoption', () => {
-    const operation = createProjectAgentOperationRegistry().adopt_bible
+  it('accepts exact Resource revisions for current Story Canon adoption', () => {
+    const operation = createProjectAgentOperationRegistry().adopt_story_canon
 
     expect(operation.inputSchema.safeParse({
       screenplay: {
         revisionId: 'screenplay-revision-1',
       },
-      bible: {
-        revisionId: 'bible-revision-1',
+      storyCanon: {
+        revisionId: 'story-canon-revision-1',
       },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation.inputSchema.safeParse({
-      bible: {
-        revisionId: 'bible-revision-1',
+      storyCanon: {
+        revisionId: 'story-canon-revision-1',
       },
     }).success).toBe(false)
   })

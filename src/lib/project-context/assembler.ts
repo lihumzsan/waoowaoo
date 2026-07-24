@@ -1,5 +1,5 @@
 import { getProjectModelConfig } from '@/lib/config-service'
-import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible/service'
+import { readEpisodeStoryCanon, readEpisodeEditChapters } from '@/lib/story-canon/service'
 import { prisma } from '@/lib/prisma'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveProjectContextPolicy } from './policy'
@@ -53,7 +53,7 @@ export async function assembleProjectContext(params: {
   selectedScopeRef?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editBible, chapters, activeOperationTasks, recentOperationResults, projectModelConfig] = await Promise.all([
+  const [project, episode, storyCanon, chapters, activeOperationTasks, recentOperationResults, projectModelConfig] = await Promise.all([
     prisma.project.findFirst({ where: { id: params.projectId, userId: params.userId } }),
     params.episodeId
       ? prisma.projectEpisode.findFirst({
@@ -62,7 +62,7 @@ export async function assembleProjectContext(params: {
         })
       : Promise.resolve(null),
     params.episodeId
-      ? readEpisodeEditBible({ projectId: params.projectId, episodeId: params.episodeId })
+      ? readEpisodeStoryCanon({ projectId: params.projectId, episodeId: params.episodeId })
       : Promise.resolve(null),
     params.episodeId
       ? readEpisodeEditChapters({ projectId: params.projectId, episodeId: params.episodeId })
@@ -105,14 +105,14 @@ export async function assembleProjectContext(params: {
     recentOperationResults,
     policy,
     episodeDetail: {
-      editBible: editBible ? {
-        id: editBible.id,
-        sourceResourceId: editBible.sourceResourceId,
-        sourceRevisionId: editBible.sourceRevisionId,
-        bibleResourceId: editBible.bibleResourceId,
-        bibleRevisionId: editBible.bibleRevisionId,
-        version: editBible.version,
-        updatedAt: editBible.updatedAt.toISOString(),
+      storyCanon: storyCanon ? {
+        id: storyCanon.id,
+        sourceResourceId: storyCanon.sourceResourceId,
+        sourceRevisionId: storyCanon.sourceRevisionId,
+        storyCanonResourceId: storyCanon.storyCanonResourceId,
+        storyCanonRevisionId: storyCanon.storyCanonRevisionId,
+        version: storyCanon.version,
+        updatedAt: storyCanon.updatedAt.toISOString(),
       } : null,
       chapters: chapters.map((chapter) => ({
         id: chapter.id,

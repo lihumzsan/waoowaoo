@@ -31,7 +31,7 @@ export interface GoldenOracleSnapshot {
   readonly resourceBindings: readonly Record<string, unknown>[]
   readonly domain: {
     readonly sourceDocuments: readonly Record<string, unknown>[]
-    readonly bibles: readonly Record<string, unknown>[]
+    readonly storyCanons: readonly Record<string, unknown>[]
     readonly chapters: readonly Record<string, unknown>[]
   }
   readonly identities: GoldenOracleIdentitySummary

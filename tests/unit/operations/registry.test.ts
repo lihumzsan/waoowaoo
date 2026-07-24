@@ -62,7 +62,7 @@ describe('project agent operation registry', () => {
   it('keeps adoption and Chapter planning as explicit current operations', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(registry.adopt_bible).toMatchObject({
+    expect(registry.adopt_story_canon).toMatchObject({
       channels: { tool: true, api: false },
       groupPath: ['assistant', 'creative'],
       choiceCommit: { enabled: true },

@@ -447,9 +447,9 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 
 interface ProjectRuntimeFacts {
   planning: {
-    bibleVersion: number | null
+    storyCanonVersion: number | null
     screenplayRevisionId: string | null
-    bibleRevisionId: string | null
+    storyCanonRevisionId: string | null
     chapterCount: number
   }
 }
@@ -459,9 +459,9 @@ async function readProjectRuntimeFacts(params: {
   userId: string
   episodeId: string | null
 }): Promise<ProjectRuntimeFacts> {
-  const [bible, chapterCount] = await Promise.all([
+  const [storyCanon, chapterCount] = await Promise.all([
     params.episodeId
-      ? prisma.projectEditBible.findFirst({
+      ? prisma.projectStoryCanon.findFirst({
           where: {
             episodeId: params.episodeId,
             episode: {
@@ -471,7 +471,7 @@ async function readProjectRuntimeFacts(params: {
           },
           select: {
             version: true,
-            bibleRevisionId: true,
+            storyCanonRevisionId: true,
             sourceDocument: {
               select: { sourceRevisionId: true },
             },
@@ -492,9 +492,9 @@ async function readProjectRuntimeFacts(params: {
   ])
   return {
     planning: {
-      bibleVersion: bible?.version ?? null,
-      screenplayRevisionId: bible?.sourceDocument.sourceRevisionId ?? null,
-      bibleRevisionId: bible?.bibleRevisionId ?? null,
+      storyCanonVersion: storyCanon?.version ?? null,
+      screenplayRevisionId: storyCanon?.sourceDocument.sourceRevisionId ?? null,
+      storyCanonRevisionId: storyCanon?.storyCanonRevisionId ?? null,
       chapterCount,
     },
   }
@@ -507,9 +507,9 @@ function buildProjectStateVersion(params: {
 }): string {
   return [
     params.videoRatio ?? 'none',
-    String(params.facts.planning.bibleVersion ?? 'none'),
+    String(params.facts.planning.storyCanonVersion ?? 'none'),
     params.facts.planning.screenplayRevisionId ?? 'none',
-    params.facts.planning.bibleRevisionId ?? 'none',
+    params.facts.planning.storyCanonRevisionId ?? 'none',
     String(params.facts.planning.chapterCount),
     params.creativeWorkingSet.adoptedStyleBible?.revisionId ?? 'none',
     ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
@@ -533,9 +533,9 @@ function buildProjectStateInputItem(params: {
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
-    `planning.bibleVersion=${formatRuntimeStateValue(String(params.facts.planning.bibleVersion ?? 'none'))}`,
+    `planning.storyCanonVersion=${formatRuntimeStateValue(String(params.facts.planning.storyCanonVersion ?? 'none'))}`,
     `planning.screenplayRevisionId=${formatRuntimeStateValue(params.facts.planning.screenplayRevisionId)}`,
-    `planning.bibleRevisionId=${formatRuntimeStateValue(params.facts.planning.bibleRevisionId)}`,
+    `planning.storyCanonRevisionId=${formatRuntimeStateValue(params.facts.planning.storyCanonRevisionId)}`,
     `planning.chapterCount=${String(params.facts.planning.chapterCount)}`,
     `creativeWorkingSet.adoptedStyleBible=${JSON.stringify(params.creativeWorkingSet.adoptedStyleBible)}`,
     `creativeWorkingSet.adoptedAssetManifest=${JSON.stringify(params.creativeWorkingSet.adoptedAssetManifest)}`,
@@ -1107,7 +1107,7 @@ export async function createProjectAgentChatResponse(input: {
       `toolsetSource=${toolset.source}`,
       `tools=${String(operationIds.length)}`,
       `chapterCount=${String(runtimeFacts.planning.chapterCount)}`,
-      `bibleVersion=${String(runtimeFacts.planning.bibleVersion ?? 'none')}`,
+      `storyCanonVersion=${String(runtimeFacts.planning.storyCanonVersion ?? 'none')}`,
     ].join('\n')))
     initialChunks.push(createDataChunk('data-agent-debug', {
       requestId,

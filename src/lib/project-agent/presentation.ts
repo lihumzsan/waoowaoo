@@ -15,7 +15,7 @@ export function buildAssistantProjectContextSnapshot(
     selectedAssetId: context.selectedAssetId,
     activeOperationTasks: context.activeOperationTasks,
     recentOperationResults: context.recentOperationResults,
-    editBible: context.episodeDetail?.editBible ?? null,
+    storyCanon: context.episodeDetail?.storyCanon ?? null,
     chapters: context.episodeDetail?.chapters ?? [],
     config: {
       videoRatio: context.policy.videoRatio,

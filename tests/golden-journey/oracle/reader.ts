@@ -325,7 +325,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       resourceLineage,
       resourceBindings,
       sourceDocuments,
-      bibles,
+      storyCanons,
       chapters,
     ] = await Promise.all([
       queryRows(connection, 'SELECT id, userId, name, videoRatio, createdAt, updatedAt FROM projects WHERE id = ?', projectScope),
@@ -361,7 +361,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT l.* FROM creative_resource_lineage l JOIN creative_resource_revisions r ON r.id = l.outputRevisionId JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM creative_resource_bindings WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT id, episodeId, version, normalizedText, sourceResourceId, sourceRevisionId, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
-      queryRows(connection, 'SELECT * FROM project_edit_bibles WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_story_canons WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
     ])
     const parsedThreads = threads.map((thread) => ({
@@ -402,7 +402,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       resourceBindings: sortOracleRows(resourceBindings, 'createdAt', 'id'),
       domain: {
         sourceDocuments,
-        bibles: sortOracleRows(bibles, 'createdAt', 'id'),
+        storyCanons: sortOracleRows(storyCanons, 'createdAt', 'id'),
         chapters: sortOracleRows(chapters, 'chapterIndex', 'id'),
       },
       identities: collectIdentities(parsedThreads),

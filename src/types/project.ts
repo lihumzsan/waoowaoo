@@ -123,18 +123,18 @@ export interface AssetLibraryLocation {
   media?: MediaRef | null
 }
 
-export interface ProjectEditBible {
+export interface ProjectStoryCanon {
   id: string
   projectId: string
   episodeId: string
   sourceDocumentId: string
   sourceResourceId: string
   sourceRevisionId: string
-  bibleResourceId: string
-  bibleRevisionId: string
+  storyCanonResourceId: string
+  storyCanonRevisionId: string
   sourceText: string
   version: number
-  bible: unknown
+  storyCanon: unknown
   beatSheet: unknown
   ledger: unknown
   emotionalCurve: unknown

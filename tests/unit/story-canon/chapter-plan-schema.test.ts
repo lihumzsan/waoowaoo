@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { creativeChapterPlanOutputSchema } from '@/lib/edit-bible'
+import { creativeChapterPlanOutputSchema } from '@/lib/story-canon'
 
 function chapter(overrides: Partial<{
   chapterIndex: number
@@ -19,7 +19,7 @@ function chapter(overrides: Partial<{
 }
 
 describe('Creative Chapter plan output', () => {
-  it('accepts ordered model-authored ranges without requiring a Bible', () => {
+  it('accepts ordered model-authored ranges without requiring a Story Canon', () => {
     expect(creativeChapterPlanOutputSchema.parse({
       kind: 'chapter_plan',
       rationale: 'The screenplay contains two independent production contexts.',

@@ -13,12 +13,12 @@ export interface ProjectPolicyOverrideInput {
   overrides?: Record<string, unknown>
 }
 
-export interface ProjectContextEditBibleSnapshot {
+export interface ProjectContextStoryCanonSnapshot {
   id: string
   sourceResourceId: string
   sourceRevisionId: string
-  bibleResourceId: string
-  bibleRevisionId: string
+  storyCanonResourceId: string
+  storyCanonRevisionId: string
   version: number
   updatedAt: string
 }
@@ -36,7 +36,7 @@ export interface ProjectContextEditChapterSnapshot {
 }
 
 export interface ProjectContextEpisodeDetailSnapshot {
-  editBible: ProjectContextEditBibleSnapshot | null
+  storyCanon: ProjectContextStoryCanonSnapshot | null
   chapters: ProjectContextEditChapterSnapshot[]
 }
 

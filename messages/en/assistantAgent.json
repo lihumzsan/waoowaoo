@@ -77,7 +77,7 @@
     },
     "outputKinds": {
       "screenplay": "Screenplay",
-      "editBibleBundle": "Production Bible",
+      "storyCanon": "Story Canon",
       "continuityAnalysis": "Continuity Analysis",
       "chapterPlan": "Chapter Planning",
       "styleBible": "Visual Style Design",

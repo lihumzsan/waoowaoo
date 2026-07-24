@@ -146,7 +146,7 @@ function buildGoldenChapterPlan(): unknown {
   }
 }
 
-function buildGoldenEditBible(schema: unknown): unknown {
+function buildGoldenStoryCanon(schema: unknown): unknown {
   const output = generateGoldenStructuredValue(schema)
   const outputRecord = asRecord(output)
   const bundle = asRecord(outputRecord?.bundle)
@@ -238,7 +238,7 @@ export function generateGoldenResponseFormatText(responseFormat: unknown): strin
   const schema = readSchemaFromResponseFormat(responseFormat)
   if (!schema) return null
   if (schemaContainsLiteral(schema, 'screenplay')) return JSON.stringify(buildGoldenScreenplay())
-  if (schemaContainsLiteral(schema, 'edit_bible_bundle')) return JSON.stringify(buildGoldenEditBible(schema))
+  if (schemaContainsLiteral(schema, 'story_canon')) return JSON.stringify(buildGoldenStoryCanon(schema))
   if (schemaContainsLiteral(schema, 'style_bible')) return JSON.stringify(buildGoldenStyleBible())
   if (schemaContainsLiteral(schema, 'asset_manifest')) return JSON.stringify(buildGoldenAssetManifest())
   if (schemaContainsLiteral(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createAssistantCreativeAssetOperations } from '@/lib/operations/domains/assistant/creative-asset-ops'
-import { createAssistantCreativeBibleOperations } from '@/lib/operations/domains/assistant/creative-bible-ops'
+import { createAssistantStoryCanonOperations } from '@/lib/operations/domains/assistant/creative-story-canon-ops'
 import { createAssistantCreativeStyleOperations } from '@/lib/operations/domains/assistant/creative-style-ops'
 import { createCreativeResourceOperations } from '@/lib/operations/domains/creative-resource/resource-ops'
 
@@ -37,14 +37,14 @@ describe('creative result Resource conformance', () => {
     }).success).toBe(false)
   })
 
-  it('keeps Bible and model-authored Chapter-plan adoption as separate operations', () => {
+  it('keeps Story Canon and model-authored Chapter-plan adoption as separate operations', () => {
     expect(createCreativeResourceOperations()).not.toHaveProperty('confirm_script_resource')
-    const operations = createAssistantCreativeBibleOperations()
-    expect(Object.keys(operations).sort()).toEqual(['adopt_bible', 'adopt_chapters'])
-    expect(operations.adopt_bible?.choiceCommit).toEqual({ enabled: true })
-    expect(operations.adopt_bible?.inputSchema.safeParse({
+    const operations = createAssistantStoryCanonOperations()
+    expect(Object.keys(operations).sort()).toEqual(['adopt_chapters', 'adopt_story_canon'])
+    expect(operations.adopt_story_canon?.choiceCommit).toEqual({ enabled: true })
+    expect(operations.adopt_story_canon?.inputSchema.safeParse({
       screenplay: { revisionId: 'screenplay-r1' },
-      bible: { revisionId: 'bible-r1' },
+      storyCanon: { revisionId: 'story-canon-r1' },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operations.adopt_chapters?.choiceCommit).toEqual({ enabled: true })
@@ -54,7 +54,7 @@ describe('creative result Resource conformance', () => {
     }).success).toBe(true)
     expect(operations.adopt_chapters?.inputSchema.safeParse({
       episodeId: 'episode',
-      bibleRevisionId: 'bible-r1',
+      storyCanonRevisionId: 'story-canon-r1',
     }).success).toBe(false)
   })
 })
