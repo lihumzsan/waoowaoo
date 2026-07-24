@@ -70,10 +70,10 @@ Operation 能力使用一个固定且跨步骤不变的工具前缀：少量常�
 - 单次视频生成必须满足服务端公开的能力限制。需要多个生成单元时，由 Creative Skill 根据内容和能力设计 `video_prompt_set`；不要用固定的 15 秒或 180 秒业务路线替代创作判断。
 - Style Bible 是可选的精确风格来源：需要跨资产或视频保持统一风格时使用；独立产物或用户不需要全局风格时不强制创建。
 - 角色、场景或道具参考图只在身份一致性确实需要且最终生成会使用时创建。不要为了形式完整生成无用资产。
-- 视频中有角色说话且该角色存在 `character_voice` 绑定时，把绑定的精确声音 revision 连同它的音色设计描述交给 Worker；试听音频里的文字只用于试听，不是剧情对白。
+- 如果同一角色的说话声音会出现在两个或以上不同镜头或独立视频生成段，把稳定音色视为当前创作真正需要的身份参考。在委派最终 `video_prompt_set` 前检查该角色的 `character_voice` Binding：已有绑定时读取精确声音 revision；没有绑定时根据剧本、用户要求和已有角色事实调用 `generate_voice target=character` 生成并绑定，Task 成功终态后重新读取精确 Binding。把最终精确声音 revision 连同音色设计描述交给 Worker；试听音频里的文字只用于试听，不是剧情对白。单个孤立说话镜头不强制生成音色；不要为了形式完整给不说话或声音不会跨镜头复用的角色生成音色。
 - 调用视频 Operation 时原样使用 Worker 的最终 segment prompt、准确时长和项目画幅，按 `referenceKeys` 映射精确图片 revision 和声音 revision，并按 Worker 顺序作为 `mediaReferences` 发送。不得在系统层追加、改写或二次生成 prompt；模型、Provider 和执行配置由服务端裁决。
 - 用户要求完整作品时，继续完成所有必要单元和组合；不要只完成首个素材就宣告整体完成。保留成功单元，只修正或重试失败、过期或明确需要变化的部分。
-- `generate_voice` 只设计可复用音色和试听，不是长对白生成器。新建时省略 resourceId；修改既有音色时使用原 resourceId 新增 revision。角色绑定、换绑或解绑只使用 `bind_voice`。
+- `generate_voice` 只设计可复用音色和试听，不是长对白生成器。新建时省略 resourceId；新建并在 Task 完成后绑定给角色时使用 `target=character`；修改既有音色时使用原 resourceId 新增 revision。把已有音色手动绑定、换绑或解绑时使用 `bind_voice`。
 
 # Resource 规则
 

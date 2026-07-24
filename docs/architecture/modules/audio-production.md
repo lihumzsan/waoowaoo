@@ -19,7 +19,7 @@
 - **AP-07 — 被删除能力不得残留入口。** 旧固定 BGM plan/generate、环境音/音效规划、专用 Canvas stage、TaskType、worker writer、状态字段和 Workflow recommendation 必须删除；历史名字只可出现在迁移删除语句或历史说明。
 - **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice` 是新建与原位重生成音色的唯一入口；Agent 只提交描述、试听文字、语言、可选原 Resource 与绑定目标。服务端解析正式 Voice Design 模型，报价和结算按同一冻结试听文字计算。
 - **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)` Revision；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。生成期间发生较新换绑时保留新 Revision并返回显式 conflict。
-- **AP-11 — 绑定音色只作为显式视频参考。** 有对白的角色存在 `character_voice` Binding 时，Primary 读取该 Binding 的精确 Revision 并作为 Worker source material；Worker 用 `@AudioN` 把音色身份写入唯一最终 Prompt，试听音频文字不得成为剧情对白。执行层只负责校验、冻结和传输 exact Revision，不自动追加 Prompt，也不从角色名、最新音色或试听内容推断引用。
+- **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Revision，缺失则按剧本、用户要求和已有角色事实调用 `generate_voice target=character`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Revision 与音色设计描述作为 Worker source material，Worker 用 `@AudioN` 写入唯一最终 Prompt，试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 exact Revision，也不从角色名、最新音色或试听内容推断引用。
 - **AP-10 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未生成中、未绑定且未被 Lineage 引用的音色 Resource；MediaObject 仍由独立生命周期拥有。
 
 ## 权威入口
@@ -44,6 +44,7 @@
 - 音乐模型时长曾被调用方复制成离散 options。当前连续范围只由 capability registry 声明；它约束一次 provider 请求，不决定作品是否需要 Chapter 或全局连续性。
 - 最终混音曾因 AAC priming、不同 EOF 和 `-shortest` 挂起或截短。确定性执行仍统一服从 stitched duration、显式 `-t` 和 bounded FFmpeg；删除固定 BGM plan 不削弱该技术防线。
 - 旧声音提案曾观看/听取最终视频并写语义状态，形成第二事实解释器。当前音乐创意只来自显式 Creative Task 输入，混音只处理技术事实。
+- 角色音色与视频引用首次接入时只覆盖“已有 `character_voice` Binding 则传入”的条件分支。真实完整制作中，同一角色的对白跨多个镜头，但项目没有 Voice Resource、Binding 或 `generate_voice` Task；Primary 仍委派只含图片的 `video_prompt_set`，随后所有视频 Task 都以 `generateAudio=true + audioInputPositions=[]` 合法提交，现有 Tool conformance、Binding lifecycle 与媒体传输测试均未反证这个决策缺口。当前防线由双语 Primary Prompt 明确“跨镜头复用声音”是生成并绑定稳定音色的创作信号，同时保留单镜头自由组合和无执行层门禁；Prompt semantic guard 防止该判断静默丢失。真实外部模型是否稳定遵循仍是发布验证盲区。
 
 ## 修改检查表
 
@@ -52,4 +53,4 @@
 3. provider 的单次时长能力是否只作为执行约束，而非创作分支？
 4. 混音是否只消费显式精确 revisions 与时间线？
 5. 是否仍有旧 BgmDesign/环境音 Workflow、Task、Canvas 或 writer 回流？
-6. 音色是否仍只由 `generate_voice` 与 Binding service 拥有？
+6. 音色是否仍只由 `generate_voice` 与 Binding service 拥有，且 Primary 会为跨镜头复用的说话声音先取得精确 Binding、不会把单个孤立对白变成固定门禁？
