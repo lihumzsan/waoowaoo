@@ -50,7 +50,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'screenplay-canonicalization': defineSkill({
     id: 'screenplay-canonicalization',
-    version: '1.0.0',
+    version: '1.1.0',
     title: { zh: '剧本统一提取', en: 'Screenplay Canonicalization' },
     summary: {
       zh: '把生成、上传或粘贴的剧本统一整理为实体登记、场景范围与引用；从零创作时必须与 story-development 同轮读取。',
