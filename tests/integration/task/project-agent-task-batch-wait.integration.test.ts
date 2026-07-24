@@ -113,6 +113,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
               sourceMaterials: [],
               constraints: [],
             },
+            creativeDirection: null,
             productionContext: { video: null },
           },
           modelKey: 'test:creative-model',

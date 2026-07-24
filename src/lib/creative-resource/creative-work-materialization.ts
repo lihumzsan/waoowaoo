@@ -13,7 +13,6 @@ import {
   compileAssetManifest,
   screenplaySchema,
 } from '@/lib/screenplay'
-import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 
 export interface CreativeWorkResourceMaterializationPlan {
   readonly resourceScope: 'project' | 'episode'
@@ -32,7 +31,7 @@ export interface CreativeWorkResourceMaterializationOutput {
     | typeof CREATIVE_RESOURCE_SCHEMA.STORY_CANON
     | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
     | typeof CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS
-    | typeof CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE
+    | typeof CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION
     | typeof CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST
     | typeof CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET
     | typeof CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION
@@ -75,6 +74,13 @@ function resourceInputsFromPayload(
     inputs.push({
       revisionId: source.provenance.revisionId,
       role: 'source_material',
+      position: inputs.length,
+    })
+  }
+  if (payload.request.creativeDirection) {
+    inputs.push({
+      revisionId: payload.request.creativeDirection.revisionId,
+      role: 'creative_direction',
       position: inputs.length,
     })
   }
@@ -190,19 +196,11 @@ export function planCreativeWorkResourceMaterialization(input: {
       const parsed = screenplaySchema.safeParse(source.value)
       return parsed.success ? [{ revisionId: source.revisionId, screenplay: parsed.data }] : []
     })
-    const styleSources = structuredSources.flatMap((source) => {
-      const parsed = creativeStyleBibleSchema.safeParse(source.value)
-      return parsed.success ? [{ revisionId: source.revisionId }] : []
-    })
     if (screenplaySources.length !== 1) {
       throw new Error('ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED')
     }
-    if (styleSources.length !== 1) {
-      throw new Error('ASSET_MANIFEST_STYLE_BIBLE_SOURCE_REQUIRED')
-    }
     const screenplaySource = screenplaySources[0]
-    const styleSource = styleSources[0]
-    if (!screenplaySource || !styleSource) throw new Error('ASSET_MANIFEST_SOURCE_REQUIRED')
+    if (!screenplaySource) throw new Error('ASSET_MANIFEST_SOURCE_REQUIRED')
     const manifest = compileAssetManifest({
       screenplay: screenplaySource.screenplay,
       manifest: output,
@@ -217,7 +215,7 @@ export function planCreativeWorkResourceMaterialization(input: {
         outputKind: output.kind,
         requestKey: payload.requestKey,
         screenplayRevisionId: screenplaySource.revisionId,
-        styleBibleRevisionId: styleSource.revisionId,
+        creativeDirectionRevisionId: payload.request.creativeDirection?.revisionId ?? null,
       },
     })
   }
@@ -251,7 +249,7 @@ export function planCreativeWorkResourceMaterialization(input: {
       generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
     })
   }
-  if (output.kind !== 'style_bible') {
+  if (output.kind !== 'creative_direction') {
     const unreachable: never = output
     throw new Error(`CREATIVE_WORK_RESOURCE_OUTPUT_UNMAPPED:${String(unreachable)}`)
   }
@@ -260,16 +258,16 @@ export function planCreativeWorkResourceMaterialization(input: {
       ...common,
       outputs: [{
         mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
         sourceType: 'CreativeWorkResult',
         sourceId: `${input.taskId}:final`,
-        name: truncateResourceName(output.design.styleBible.styleSummary),
+        name: truncateResourceName(output.design.creativeDirection.styleSummary),
         candidateSetId: null,
         candidateIndex: null,
         candidateKey: null,
         content: {
           kind: 'structured',
-          data: toCreativeJson(output.design.styleBible),
+          data: toCreativeJson(output.design.creativeDirection),
         },
         generationOptions: toCreativeJson({
           outputKind: output.kind,
@@ -285,7 +283,7 @@ export function planCreativeWorkResourceMaterialization(input: {
     ...common,
     outputs: output.design.candidates.map((candidate, candidateIndex) => ({
       mediaType: 'text',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       sourceType: 'CreativeWorkResult',
       sourceId: `${input.taskId}:candidate:${candidate.candidateKey}`,
       name: truncateResourceName(candidate.title),
@@ -294,7 +292,7 @@ export function planCreativeWorkResourceMaterialization(input: {
       candidateKey: candidate.candidateKey,
       content: {
         kind: 'structured',
-        data: toCreativeJson(candidate.styleBible),
+        data: toCreativeJson(candidate.creativeDirection),
       },
       generationOptions: toCreativeJson({
         outputKind: output.kind,

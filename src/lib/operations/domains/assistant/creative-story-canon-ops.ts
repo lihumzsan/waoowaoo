@@ -98,7 +98,7 @@ export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegi
     }),
     adopt_chapters: defineOperation({
       id: 'adopt_chapters',
-      summary: 'Adopt one exact chapter_plan Resource revision derived from one exact screenplay Resource revision. The Creative Skill/Subagent owns Chapter-boundary judgment; this operation only validates scope, exact lineage, source ranges and the 180-second per-Chapter ceiling, then persists the Chapter projection. Story Canon, continuity analysis or Style Bible may be optional context, never a prerequisite. This operation starts no downstream work.',
+      summary: 'Adopt one exact chapter_plan Resource revision derived from one exact screenplay Resource revision. The Creative Skill/Subagent owns Chapter-boundary judgment; this operation only validates scope, exact lineage, source ranges and the 180-second per-Chapter ceiling, then persists the Chapter projection. Story Canon or continuity analysis may be optional context, never a prerequisite; chapter planning receives no Creative Direction. This operation starts no downstream work.',
       intent: 'act',
       effects: {
         writes: true,

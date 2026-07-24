@@ -6,7 +6,7 @@ starts from an empty project and invokes independent Operations from natural
 language; no fixed stage sequence or recommended next action is part of the
 test oracle. The primary free-composition Journey also proves that a Creative
 Worker result materializes as an immutable Resource, one model-authored Choice
-can commit only its current decision, Style Bible creation does not imply an
+can commit only its current decision, Creative Direction creation does not imply an
 image preview, a missing frame ratio is resolved through that same Choice
 protocol, the pending Choice survives refresh, and Chapters appear only after
 explicit planning and adoption before becoming independent parallel Worker inputs.

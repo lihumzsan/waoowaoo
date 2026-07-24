@@ -3,7 +3,11 @@ import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills'
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
-import { creativeWorkOutputSchemas, type CreativeWorkOutput } from './output-registry'
+import {
+  creativeWorkOutputSchemas,
+  readCreativeWorkOutputDefinition,
+  type CreativeWorkOutput,
+} from './output-registry'
 import {
   creativeWorkDelegationRequestSchema,
   creativeWorkRequestSchema,
@@ -18,7 +22,7 @@ const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.story_canon,
   creativeWorkOutputSchemas.chapter_plan,
   creativeWorkOutputSchemas.continuity_analysis,
-  creativeWorkOutputSchemas.style_bible,
+  creativeWorkOutputSchemas.creative_direction,
   creativeWorkOutputSchemas.asset_manifest,
   creativeWorkOutputSchemas.video_prompt_set,
   creativeWorkOutputSchemas.music_direction,
@@ -76,7 +80,7 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     revisionId: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
-    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Style Bible and any relevant media assets.'),
+    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Creative Direction and any relevant media assets.'),
 }).strict()
 
 const creativeWorkRequestBatchInputSchema = z.object({
@@ -109,7 +113,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v5' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v6' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -133,7 +137,28 @@ export const creativeWorkTaskPayloadSchema = z.object({
   runId: z.string().trim().min(1).optional(),
   ui: z.record(z.string(), z.unknown()).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
-}).strict()
+}).strict().superRefine((payload, context) => {
+  const expectedDomains = readCreativeWorkOutputDefinition(
+    payload.request.outputKind,
+  ).creativeDirectionDomains
+  const actualDomains = payload.request.creativeDirection
+    ? Object.keys(payload.request.creativeDirection.direction).sort()
+    : []
+  if (
+    actualDomains.length === 0
+    || (
+      actualDomains.length === expectedDomains.length
+      && [...expectedDomains].sort().every((domain, index) => domain === actualDomains[index])
+    )
+  ) {
+    return
+  }
+  context.addIssue({
+    code: 'custom',
+    path: ['request', 'creativeDirection'],
+    message: 'CREATIVE_DIRECTION_INJECTION_DOMAINS_INVALID',
+  })
+})
 
 const creativeWorkContinuationProjectionSchema = z.object({
   requestKey: z.string().trim().min(1).max(200),
@@ -222,9 +247,9 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
       return output.rationale
     case 'continuity_analysis':
       return output.summary
-    case 'style_bible':
+    case 'creative_direction':
       return output.design.mode === 'final'
-        ? output.design.styleBible.styleSummary
+        ? output.design.creativeDirection.styleSummary
         : output.design.candidates.map((candidate) => candidate.title).join(' / ')
     case 'asset_manifest':
       return output.overview || output.assets.map((asset) => asset.canonicalName).join(' / ')

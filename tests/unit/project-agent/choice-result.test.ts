@@ -33,7 +33,7 @@ const selectionOffer: ProjectAgentChoiceOffer = {
   subject: { kind: 'none', fingerprint: '0'.repeat(64) },
   commitments: [{
     when: { kind: 'option', groupKey: 'direction', optionValue: 'b' },
-    operationId: 'adopt_style_bible',
+    operationId: 'adopt_creative_direction',
     input: {
       resourceId: 'resource-b',
       revisionId: 'revision-b',

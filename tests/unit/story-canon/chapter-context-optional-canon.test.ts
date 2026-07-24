@@ -26,8 +26,6 @@ function input(eventsJson: unknown = []) {
       eventsJson,
     },
     storyCanonBundle: null,
-    styleBible: null,
-    styleBibleSource: null,
     referencedAssets: [],
     maxChars: 20_000,
   }
@@ -49,7 +47,7 @@ describe('Chapter context without a Story Canon prerequisite', () => {
       entrySnapshot: { sourceEnd: 0, facts: [], entities: [] },
       events: [],
     })
-    expect(result.context.style).not.toHaveProperty('storyStyleGuide')
+    expect(result.context).not.toHaveProperty('style')
   })
 
   it('rejects persisted continuity events when no exact Story Canon context owns them', () => {

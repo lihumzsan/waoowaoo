@@ -209,7 +209,7 @@ describe('operation planning billing quote', () => {
   it('rejects a tool-only operation before API planning performs business work', async () => {
     await expect(planProjectAgentOperationFromApi({
       request: new NextRequest('http://localhost/api/operations/plan'),
-      operationId: 'adopt_style_bible',
+      operationId: 'adopt_creative_direction',
       projectId: 'project-1',
       userId: 'user-1',
       input: {},

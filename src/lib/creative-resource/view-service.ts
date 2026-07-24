@@ -548,10 +548,10 @@ export async function readProjectCreativeResourceWorkingSet(input: {
     count: entry._count._all,
   }))
   return {
-    adoptedStyleBible: canonicalBinding(
+    adoptedCreativeDirection: canonicalBinding(
       bindings,
-      CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
-      CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
+      CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     ),
     adoptedAssetManifest: canonicalBinding(
       bindings,

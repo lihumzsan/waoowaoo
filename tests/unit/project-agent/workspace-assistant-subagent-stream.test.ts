@@ -40,7 +40,7 @@ describe('Workspace Subagent reasoning stream', () => {
       taskId: 'task-1',
       runId: 'run-1',
       toolCallId: 'call-1',
-      outputKind: 'style_bible',
+      outputKind: 'creative_direction',
       goal: 'Design a style',
       status: 'running',
       summary: null,
@@ -54,7 +54,7 @@ describe('Workspace Subagent reasoning stream', () => {
         toolCallId: 'call-1',
         sequence: 1,
         occurredAt: '2026-07-22T00:00:00.000Z',
-        event: { kind: 'started', outputKind: 'style_bible', goal: 'Design a style' },
+        event: { kind: 'started', outputKind: 'creative_direction', goal: 'Design a style' },
       }],
     }
     const resolved = resolveWorkspaceAssistantSubagents({

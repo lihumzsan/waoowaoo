@@ -6,7 +6,7 @@ export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 export const projectCanvasNodeTypeSchema = z.enum([
   'editSourceScript',
   'storyCanon',
-  'editStyleBible',
+  'creativeDirection',
   'editPipelineStep',
   'editProcessGroup',
   'editScript',
@@ -26,7 +26,7 @@ export const projectCanvasTargetTypeSchema = z.enum([
   'videoSegment',
   'editSourceScript',
   'storyCanon',
-  'editStyleBible',
+  'creativeDirection',
   'editPipelineStep',
   'editScript',
   'editShotExecutionPlan',

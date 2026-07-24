@@ -130,14 +130,14 @@
       "title": "创作 Resource、Revision 与 Lineage",
       "sourcePaths": [
         "src/lib/creative-resource",
-        "src/lib/creative-style",
+        "src/lib/creative-direction",
         "src/lib/screenplay",
         "src/lib/asset-generation",
         "src/lib/assets/services/project-asset-writer.ts",
         "src/lib/edit-source-document",
         "src/lib/operations/domains/creative-resource",
         "src/lib/operations/domains/assistant/creative-asset-ops.ts",
-        "src/lib/operations/domains/assistant/creative-style-ops.ts",
+        "src/lib/operations/domains/assistant/creative-direction-ops.ts",
         "src/lib/workers/handlers/creative-resource-video-merge.ts",
         "src/app/api/projects/[projectId]/resources",
         "src/lib/query/hooks/useCreativeResources.ts",
@@ -152,7 +152,8 @@
         "prisma/migrations/20260720190000_add_creative_resource_data/migration.sql",
         "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql",
         "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql",
-        "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql"
+        "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql",
+        "prisma/migrations/20260724223000_creative_direction_cutover/migration.sql"
       ],
       "testPaths": [
         "tests/contracts/project-agent-toolset-conformance.test.ts",
@@ -465,7 +466,7 @@
       "src/lib/ai-exec/agents-public-reasoning.ts",
         "src/lib/operations/domains/assistant/creative-ops.ts",
         "src/lib/operations/domains/assistant/creative-story-canon-ops.ts",
-        "src/lib/operations/domains/assistant/creative-style-ops.ts",
+        "src/lib/operations/domains/assistant/creative-direction-ops.ts",
         "src/lib/workers/handlers/creative-work.ts",
         "src/lib/creative-resource/creative-work-materialization.ts",
         "src/lib/task/definition.ts",

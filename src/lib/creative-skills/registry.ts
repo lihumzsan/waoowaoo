@@ -36,7 +36,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '2.0.0',
+    version: '2.1.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
       zh: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
@@ -50,7 +50,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'continuity-memory': defineSkill({
     id: 'continuity-memory',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
       zh: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
@@ -76,23 +76,23 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
       en: ['director', 'editing', 'production timeline', 'shot', 'camera', 'blocking', 'staging', 'performance', 'segmentation', 'sync sound'],
     },
   }),
-  'style-development': defineSkill({
-    id: 'style-development',
-    version: '1.2.0',
-    title: { zh: '视觉风格开发', en: 'Visual Style Development' },
+  'creative-direction': defineSkill({
+    id: 'creative-direction',
+    version: '3.0.0',
+    title: { zh: '创作方向', en: 'Creative Direction' },
     summary: {
-      zh: '`outputKind=style_bible` 必须读取：跨图片与视频共享的视觉风格、资产图灯光/材质、风格候选与灵感词汇；不拥有固定构图后缀。',
-      en: 'Required for `outputKind=style_bible`: cross-media visual style, asset-image lighting and texture, style candidates, and inspiration vocabulary; fixed layout suffixes are excluded.',
+      zh: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究转译为视觉、叙事、导演、剪辑、声音和资产六个可执行方向块，可返回最终方向或 2–12 个完整候选。',
+      en: 'Required for `outputKind=creative_direction`: translate user intent and any needed research into executable visual, narrative, directing, editing, sound, and asset-policy domains, returning one final direction or 2–12 complete candidates.',
     },
-    tags: ['style', 'art-direction', 'palette', 'medium', 'preview'],
+    tags: ['creative-direction', 'style', 'narrative', 'directing', 'editing', 'sound', 'assets'],
     keywords: {
-      zh: ['视觉风格', '画风', '美术指导', '媒介', '质感', '色彩', '滤镜', '风格候选', '风格预览', '风格圣经'],
-      en: ['visual style', 'art style', 'art direction', 'medium', 'finish', 'palette', 'filter', 'style candidate', 'style preview', 'style bible'],
+      zh: ['创作方向', '视觉风格', '叙事', '导演', '运镜', '剪辑', '声音', '资产方针', '候选', '研究'],
+      en: ['creative direction', 'visual style', 'narrative', 'directing', 'camera', 'editing', 'sound', 'asset policy', 'candidate', 'research'],
     },
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '2.0.0',
+    version: '2.1.0',
     title: { zh: '资产设计与生成提示词', en: 'Asset Development and Generation Prompts' },
     summary: {
       zh: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、提供原文证据、设计外观并生成最终 Prompt；不生图、不写项目。',
@@ -106,7 +106,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.3.1',
+    version: '1.4.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
       zh: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
@@ -120,7 +120,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
-    version: '1.1.0',
+    version: '1.2.0',
     title: { zh: '音乐与配乐设计', en: 'Music and Score Direction' },
     summary: {
       zh: '`outputKind=music_direction` 必须读取：从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',

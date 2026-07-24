@@ -27,7 +27,7 @@ import {
   GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
   GOLDEN_PROVIDED_SCREENPLAY_TEXT,
   GOLDEN_FREEFORM_STORY_CANON_REQUEST,
-  GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_TEXT_REQUEST,
   GOLDEN_FREEFORM_VIDEO_REQUEST,
@@ -316,8 +316,8 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     storyCanonRevisionId: storyCanonRevision?.id,
   })
 
-  await sendNaturalLanguage(page, GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)
-  const styleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE)
+  await sendNaturalLanguage(page, GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST)
+  const styleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION)
   const afterStyle = await readGoldenOracleSnapshot(scope)
   const styleRevision = afterStyle.resourceRevisions.find((revision) => revision.resourceId === styleResource.id)
   expect(styleResource).toMatchObject({
@@ -327,7 +327,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   })
   expect(styleRevision).toMatchObject({
     resourceId: styleResource.id,
-    generationOptions: { outputKind: 'style_bible' },
+    generationOptions: { outputKind: 'creative_direction' },
   })
   expect(afterStyle.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE))
     .toHaveLength(imageTaskCountBeforeCreativeJudgment)
@@ -338,7 +338,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)
   await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
     timeout: 60_000,
-    message: 'the model-authored Choice must suspend only the current Style Bible decision',
+    message: 'the model-authored Choice must suspend only the current Creative Direction decision',
   }).toBe('request_choice')
   const awaitingStyleChoice = await readGoldenOracleSnapshot(scope)
   const activityIdsBeforeChoiceDecision = new Set(awaitingStyleChoice.activities.map((activity) => activity.id))
@@ -351,7 +351,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   const choiceCommitments = Array.isArray(choiceOffer?.commitments) ? choiceOffer.commitments : []
   expect(choiceCard).toMatchObject({
     mode: 'select',
-    title: '是否采用当前 Style Bible？',
+    title: '是否采用当前 Creative Direction？',
     description: '这里只决定当前视觉规则是否成为项目采用版本。',
     submitLabel: '提交本次视觉风格选择',
   })
@@ -361,7 +361,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   })
   expect(choiceCommitments).toEqual([expect.objectContaining({
     when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
-    operationId: 'adopt_style_bible',
+    operationId: 'adopt_creative_direction',
   })])
   const pendingStyleChoiceId = pendingStyleChoice?.id
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -373,18 +373,18 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(afterChoiceRefresh.interruptions.filter((interruption) => (
     interruption.type === 'choice' && interruption.status === 'pending'
   )).map((interruption) => interruption.id)).toEqual([pendingStyleChoiceId])
-  await page.getByRole('button', { name: /\u91c7\u7528\u8fd9\u4efd Style Bible/ }).click()
+  await page.getByRole('button', { name: /\u91c7\u7528\u8fd9\u4efd Creative Direction/ }).click()
   await page.getByRole('button', { name: '提交本次视觉风格选择', exact: true }).click()
   await expect.poll(async () => {
     const snapshot = await readGoldenOracleSnapshot(scope)
-    return snapshot.resourceBindings.filter((binding) => binding.role === 'adopted_style_bible').length
+    return snapshot.resourceBindings.filter((binding) => binding.role === 'adopted_creative_direction').length
   }, {
     timeout: 60_000,
-    message: 'the selected Choice commitment must atomically adopt only the exact Style Bible revision',
+    message: 'the selected Choice commitment must atomically adopt only the exact Creative Direction revision',
   }).toBe(1)
   await waitForAgentRunSettlement(scope)
   const afterStyleChoice = await readGoldenOracleSnapshot(scope)
-  expect(afterStyleChoice.resourceBindings.find((binding) => binding.role === 'adopted_style_bible')).toMatchObject({
+  expect(afterStyleChoice.resourceBindings.find((binding) => binding.role === 'adopted_creative_direction')).toMatchObject({
     episodeId: null,
     scopeKind: 'project',
     scopeId: scope.projectId,
@@ -397,7 +397,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(afterStyleChoice.activities
     .filter((activity) => !activityIdsBeforeChoiceDecision.has(activity.id))
     .filter((activity) => activity.operationId !== 'list_resources')
-    .map((activity) => activity.operationId)).toEqual(['adopt_style_bible'])
+    .map((activity) => activity.operationId)).toEqual(['adopt_creative_direction'])
   expect(afterStyleChoice.domain.storyCanons).toHaveLength(1)
   expect(afterStyleChoice.domain.chapters).toHaveLength(0)
 
@@ -533,7 +533,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     && typeof revision.inputHash === 'string'
   ))).toBe(true)
   expect(finalSnapshot.resourceBindings.map((binding) => binding.role).sort()).toEqual([
-    'adopted_style_bible',
+    'adopted_creative_direction',
     'primary_image',
   ])
 

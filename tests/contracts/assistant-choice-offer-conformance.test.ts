@@ -27,7 +27,7 @@ function selectCard(): ProjectAgentChoiceCardDefinition {
     mode: 'select_or_text',
     replyMode: 'whole_card',
     title: 'Choose the current visual direction',
-    description: 'This decision only adopts the selected Style Bible.',
+    description: 'This decision only adopts the selected Creative Direction.',
     groups: [{
       key: 'style',
       label: 'Style',
@@ -49,7 +49,7 @@ function selectCard(): ProjectAgentChoiceCardDefinition {
 function styleCommitments(): ProjectAgentChoiceCommitment[] {
   return [{
     when: { kind: 'option', groupKey: 'style', optionValue: 'style_b' },
-    operationId: 'adopt_style_bible',
+    operationId: 'adopt_creative_direction',
     input: {
       resourceId: 'resource-b',
       revisionId: 'revision-b',

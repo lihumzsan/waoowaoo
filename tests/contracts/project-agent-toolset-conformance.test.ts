@@ -12,6 +12,7 @@ import {
   creativeWorkOutputRegistry,
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
+  projectAdoptedCreativeDirection,
 } from '@/lib/creative-worker'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
 import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-access'
@@ -251,7 +252,7 @@ describe('project agent toolset conformance', () => {
       'project.story_canon',
       'project.chapter_plan',
       'project.continuity_analysis',
-      'project.style_bible',
+      'project.creative_direction',
       'project.asset_manifest',
       'project.video_prompt_set',
       'project.music_direction',
@@ -431,28 +432,28 @@ describe('project agent toolset conformance', () => {
     ])
   })
 
-  it('uses exact immutable revisions for canonical Bible and Style Bible adoption', () => {
+  it('uses exact immutable revisions for Story Canon and Creative Direction adoption', () => {
     const registry = createProjectAgentOperationRegistry()
 
     expect(registry.adopt_story_canon.channels.tool).toBe(true)
     expect(Object.keys(registry.adopt_story_canon.toolInputSchema.properties)).toEqual([
-      'screenplay', 'bible', 'expectedVersion',
+      'screenplay', 'storyCanon', 'expectedVersion',
     ])
     expect(registry.adopt_story_canon.inputSchema.safeParse({
       screenplay: {
         revisionId: 'revision:screenplay',
       },
-      bible: {
-        revisionId: 'revision:bible',
+      storyCanon: {
+        revisionId: 'revision:story-canon',
       },
       expectedVersion: null,
     }).success).toBe(true)
 
-    expect(registry.adopt_style_bible.inputSchema.safeParse({
+    expect(registry.adopt_creative_direction.inputSchema.safeParse({
       revisionId: 'revision:style',
       expectedVersion: null,
     }).success).toBe(true)
-    expect(registry.adopt_style_bible.inputSchema.safeParse({
+    expect(registry.adopt_creative_direction.inputSchema.safeParse({
       resourceId: 'resource:style',
       revisionId: 'revision:style',
       expectedVersion: null,
@@ -649,12 +650,60 @@ describe('project agent toolset conformance', () => {
       story_canon: 'project',
       chapter_plan: 'episode',
       continuity_analysis: 'episode',
-      style_bible: 'project',
+      creative_direction: 'project',
       asset_manifest: 'project',
       video_prompt_set: 'episode',
       music_direction: 'episode',
       creative_review: 'episode',
     })
+    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
+      [kind, definition.creativeDirectionDomains]
+    )))).toEqual({
+      screenplay: ['narrative'],
+      story_canon: ['narrative'],
+      chapter_plan: [],
+      continuity_analysis: [],
+      creative_direction: [],
+      asset_manifest: ['visual', 'assetPolicy'],
+      video_prompt_set: ['visual', 'directing', 'editing', 'sound'],
+      music_direction: ['narrative', 'sound'],
+      creative_review: ['visual', 'narrative', 'directing', 'editing', 'sound', 'assetPolicy'],
+    })
+    const adoptedDirection = {
+      revisionId: 'direction-revision-1',
+      direction: {
+        styleSummary: 'Restrained procedural observation',
+        rawUserStyle: '规则怪谈',
+        visual: {
+          visualStyle: 'Low-saturation institutional video.',
+          assetImageStyle: {
+            lighting: 'Flat fluorescent reference lighting.',
+            texture: 'Compressed institutional video texture.',
+          },
+        },
+        narrative: 'Release rules before revealing their consequences.',
+        directing: 'Locked frames are the default.',
+        editing: 'Cut only when evidence changes.',
+        sound: 'Preserve room tone and use silence for rule violations.',
+        assetPolicy: 'Keep signage and recurring props legible and stable.',
+      },
+    }
+    expect(projectAdoptedCreativeDirection({
+      snapshot: adoptedDirection,
+      outputKind: 'video_prompt_set',
+    })).toEqual({
+      revisionId: 'direction-revision-1',
+      direction: {
+        visual: adoptedDirection.direction.visual,
+        directing: adoptedDirection.direction.directing,
+        editing: adoptedDirection.direction.editing,
+        sound: adoptedDirection.direction.sound,
+      },
+    })
+    expect(projectAdoptedCreativeDirection({
+      snapshot: adoptedDirection,
+      outputKind: 'creative_direction',
+    })).toBeNull()
 
     const videoOutput = {
       kind: 'video_prompt_set',
@@ -678,7 +727,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v5')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v6')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,
@@ -700,6 +749,7 @@ describe('project agent toolset conformance', () => {
         outputKind: 'creative_review' as const,
         goal: 'Review the supplied result.',
         context: { userRequest: '', sourceMaterials: [], constraints: [] },
+        creativeDirection: null,
         productionContext: { video: null },
       },
       modelKey: 'test:model',

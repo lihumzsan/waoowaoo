@@ -70,12 +70,14 @@ function resourceView(input: {
 describe('Creative Resource summary projection', () => {
   it('uses the registered semantic field for structured content', () => {
     const resource = resourceView({
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       content: {
         kind: 'structured',
         data: {
           styleSummary: 'Ink animation with restrained motion.',
-          visualStyle: 'Full structured detail is not the collapsed summary.',
+          visual: {
+            visualStyle: 'Full structured detail is not the collapsed summary.',
+          },
         },
       },
     })

@@ -11,7 +11,6 @@ import {
   type CreativeContextAsset,
 } from '@/lib/creative-worker'
 import { normalizeStoryCanonResourceBundle } from '@/lib/story-canon'
-import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 import type { LedgerEntityRef } from '@/lib/edit-ledger'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -176,6 +175,12 @@ async function resolveCreativeContextResources(input: {
     if (!revision) {
       fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: reference.revisionId })
     }
+    if (revision.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION) {
+      fail('CREATIVE_CONTEXT_INPUT_INVALID', {
+        label: 'creativeDirectionIsServerInjected',
+        revisionId: reference.revisionId,
+      })
+    }
     if (!isCreativeResourceMediaType(revision.resource.mediaType)) {
       fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'resourceMediaType' })
     }
@@ -315,28 +320,7 @@ export async function compileEpisodeChapterContexts(
     sourceText: firstChapter.chapter.sourceDocument.normalizedText,
     reference: storyCanonRefs.values().next().value ?? null,
   })
-  const styleResources = referencedResources.filter(
-    (resource) => resource.asset.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
-  )
-  if (styleResources.length > 1) {
-    fail('CREATIVE_CONTEXT_ASSET_CONFLICT', { label: 'styleBible', styleBibleCount: styleResources.length })
-  }
-  const styleResource = styleResources[0]
-  if (styleResource && styleResource.content.kind !== 'structured') {
-    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'styleBibleContent' })
-  }
-  const parsedStyleBible = styleResource
-    ? creativeStyleBibleSchema.safeParse(styleResource.content.kind === 'structured' ? styleResource.content.data : null)
-    : null
-  if (parsedStyleBible && !parsedStyleBible.success) {
-    fail('CREATIVE_CONTEXT_INPUT_INVALID', {
-      label: 'styleBible',
-      issueCount: parsedStyleBible.error.issues.length,
-    })
-  }
-  const referencedAssets = referencedResources
-    .filter((resource) => resource.asset.schemaId !== CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE)
-    .map((resource) => resource.asset)
+  const referencedAssets = referencedResources.map((resource) => resource.asset)
   const chapterById = new Map(parsedChapters.map((parsed) => [parsed.chapter.id, parsed.chapter]))
   return input.chapterIds.map((chapterId) => {
     const chapter = chapterById.get(chapterId)
@@ -360,10 +344,6 @@ export async function compileEpisodeChapterContexts(
         eventsJson: chapter.eventsJson,
       },
       storyCanonBundle,
-      styleBible: parsedStyleBible?.data ?? null,
-      styleBibleSource: styleResource ? {
-        revisionId: styleResource.asset.revisionId,
-      } : null,
       referencedAssets,
       maxChars: input.maxCharsPerChapter,
     })

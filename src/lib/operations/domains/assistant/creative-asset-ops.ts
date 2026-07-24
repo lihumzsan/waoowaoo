@@ -42,7 +42,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
   return {
     adopt_asset_manifest: defineOperation({
       id: 'adopt_asset_manifest',
-      summary: 'Adopt one exact project.asset_manifest Revision grounded in one exact screenplay and the currently adopted Style Bible, then create or reuse the corresponding Project asset identities. This operation never generates images or starts downstream Tasks.',
+      summary: 'Adopt one exact project.asset_manifest Revision grounded in one exact screenplay, then create or reuse the corresponding Project asset identities. Any adopted Creative Direction was already frozen into the generating Task by the server and is not an adoption gate. This operation never generates images or starts downstream Tasks.',
       intent: 'act',
       effects: {
         writes: true,
@@ -132,19 +132,15 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
         const screenplaySources = sources.filter(
           (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         )
-        const styleSources = sources.filter(
-          (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
-        )
-        if (screenplaySources.length !== 1 || styleSources.length !== 1) {
+        if (screenplaySources.length !== 1) {
           throw new ApiError('INVALID_PARAMS', {
-            code: 'ASSET_MANIFEST_EXACT_SOURCES_REQUIRED',
+            code: 'ASSET_MANIFEST_EXACT_SCREENPLAY_SOURCE_REQUIRED',
             field: 'revisionId',
             agentRetryableAfterCorrection: true,
           })
         }
         const screenplaySource = screenplaySources[0]
-        const styleSource = styleSources[0]
-        if (!screenplaySource || !styleSource || screenplaySource.contentJson === null) {
+        if (!screenplaySource || screenplaySource.contentJson === null) {
           throw new Error('ASSET_MANIFEST_SOURCE_CONTENT_MISSING')
         }
         const scope = resolveProjectCreativeResourceScope({
@@ -152,24 +148,6 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
           projectId: context.projectId,
           episodeId: null,
         })
-        const adoptedStyle = await tx.creativeResourceBinding.findUnique({
-          where: {
-            scopeKind_scopeId_role_slotKey: {
-              scopeKind: scope.kind,
-              scopeId: scope.id,
-              role: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.role,
-              slotKey: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.slotKey,
-            },
-          },
-          select: { revisionId: true },
-        })
-        if (adoptedStyle?.revisionId !== styleSource.id) {
-          throw new ApiError('CONFLICT', {
-            code: 'ASSET_MANIFEST_STYLE_ADOPTION_CHANGED',
-            expectedStyleRevisionId: styleSource.id,
-            actualStyleRevisionId: adoptedStyle?.revisionId ?? null,
-          })
-        }
         const screenplay = screenplaySchema.parse(screenplaySource.contentJson)
         const manifest = validateAssetManifest({
           screenplay,

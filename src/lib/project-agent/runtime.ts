@@ -511,7 +511,7 @@ function buildProjectStateVersion(params: {
     params.facts.planning.screenplayRevisionId ?? 'none',
     params.facts.planning.storyCanonRevisionId ?? 'none',
     String(params.facts.planning.chapterCount),
-    params.creativeWorkingSet.adoptedStyleBible?.revisionId ?? 'none',
+    params.creativeWorkingSet.adoptedCreativeDirection?.revisionId ?? 'none',
     ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
   ].map(formatRuntimeStateValue).join(':')
 }
@@ -537,7 +537,7 @@ function buildProjectStateInputItem(params: {
     `planning.screenplayRevisionId=${formatRuntimeStateValue(params.facts.planning.screenplayRevisionId)}`,
     `planning.storyCanonRevisionId=${formatRuntimeStateValue(params.facts.planning.storyCanonRevisionId)}`,
     `planning.chapterCount=${String(params.facts.planning.chapterCount)}`,
-    `creativeWorkingSet.adoptedStyleBible=${JSON.stringify(params.creativeWorkingSet.adoptedStyleBible)}`,
+    `creativeWorkingSet.adoptedCreativeDirection=${JSON.stringify(params.creativeWorkingSet.adoptedCreativeDirection)}`,
     `creativeWorkingSet.adoptedAssetManifest=${JSON.stringify(params.creativeWorkingSet.adoptedAssetManifest)}`,
     `creativeWorkingSet.bindings=${JSON.stringify(params.creativeWorkingSet.bindings)}`,
     `creativeWorkingSet.availableResources=${JSON.stringify(params.creativeWorkingSet.availableResources)}`,

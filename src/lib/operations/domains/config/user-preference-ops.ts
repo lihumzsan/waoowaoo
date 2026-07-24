@@ -11,7 +11,7 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   throw new ApiError('INVALID_PARAMS', {
     code: 'LEGACY_ART_STYLE_REMOVED',
     field: 'artStyle',
-    message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+    message: 'artStyle is no longer supported; use the AI-generated Creative Direction workflow.',
   })
 }
 

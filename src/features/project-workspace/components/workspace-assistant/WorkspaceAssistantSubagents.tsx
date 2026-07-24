@@ -30,7 +30,7 @@ function localizeOutputKind(
     case 'story_canon': return t('subagents.outputKinds.storyCanon')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
     case 'chapter_plan': return t('subagents.outputKinds.chapterPlan')
-    case 'style_bible': return t('subagents.outputKinds.styleBible')
+    case 'creative_direction': return t('subagents.outputKinds.creativeDirection')
     case 'asset_manifest': return t('subagents.outputKinds.assetManifest')
     case 'video_prompt_set': return t('subagents.outputKinds.videoPromptSet')
     case 'music_direction': return t('subagents.outputKinds.musicDirection')

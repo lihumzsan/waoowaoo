@@ -11,7 +11,7 @@
 ## 不变量
 
 - **AP-01 — 创意方向只有 Skill + Creative Worker。** 不存在 `BGM_DESIGN_PLAN`、固定 BgmDesign writer、`plan_episode_bgm_design` 或“规划完成后生成”链。需要专业音乐方向时，Primary 显式委派 `music_direction`；完整结果保存在 Creative Task/Revision，后续是否生成由 Primary 另一次显式调用决定。
-- **AP-02 — 音乐生成是独立 Operation。** `create_audio` 只消费本次完整输入和显式 context revisions，创建一个或多个音频 Resource/Task；它不要求 Chapter、Style Bible、最终视频或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
+- **AP-02 — 音乐生成是独立 Operation。** `create_audio` 只消费本次完整输入和显式 context revisions，创建一个或多个音频 Resource/Task；它不要求 Chapter、Creative Direction、最终视频或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
 - **AP-03 — 没有隐藏媒体分析。** 除非用户明确请求一种分析能力，音乐方向不得观看视频帧、分析原生波形或最终混音来写第二份状态；输入 Resource 只按其显式用途和 lineage 被消费。
 - **AP-04 — Provider 能力不是创作流程。** Agent-facing Operation 不接受 provider/model；模型由服务端配置解析。FAL Lyria 的 120–180 秒连续能力属于单次执行约束：短目标可生成后确定性裁切，范围内按目标生成，超范围调用原地失败或由 Primary 显式拆成多个独立请求。该限制不得被解释为 `>180s` 自动 Chapter/Bible/连续性分支。
 - **AP-05 — 最终混音只消费精确输入。** 混音必须显式列出有序视频 revisionId、可选音乐 revisionId、时间范围和 automation；stitched video duration 是输出时长权威。所有输入先由服务端回库验证 owner/scope/content，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。不得从“当前 BGM”“最近音乐”或旧 BgmDesign 推断。

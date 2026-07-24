@@ -20,17 +20,24 @@ import { createTestProject, createTestUser } from '../../helpers/billing-fixture
 import { resetBillingState } from '../../helpers/db-reset'
 import { prisma } from '../../helpers/prisma'
 
-const styleBible = {
+const creativeDirection = {
   rawUserStyle: null,
   styleSummary: 'Restrained ink realism',
-  visualStyle: 'Observational ink-and-paper realism with restrained color.',
-  assetImageStyle: {
-    lighting: 'Soft directional daylight',
-    texture: 'Fibrous paper and dry-brush edges',
+  visual: {
+    visualStyle: 'Observational ink-and-paper realism with restrained color.',
+    assetImageStyle: {
+      lighting: 'Soft directional daylight',
+      texture: 'Fibrous paper and dry-brush edges',
+    },
   },
+  narrative: 'Reveal character intent through observable behavior.',
+  directing: 'Prefer locked frames and motivated movement.',
+  editing: 'Use measured hard cuts.',
+  sound: 'Preserve quiet room tone and deliberate silence.',
+  assetPolicy: 'Use stable reusable silhouettes and material definitions.',
 }
 
-type MaterializedOutputKind = 'screenplay' | 'style_bible' | 'asset_manifest'
+type MaterializedOutputKind = 'screenplay' | 'creative_direction' | 'asset_manifest'
 
 function creativeTaskPayload(input: {
   outputKind: MaterializedOutputKind
@@ -41,6 +48,13 @@ function creativeTaskPayload(input: {
     revisionId: string
     value: unknown
   }[]
+  creativeDirection?: {
+    revisionId: string
+    direction: {
+      visual: typeof creativeDirection.visual
+      assetPolicy: string
+    }
+  } | null
 }) {
   const requestKey = `asset-adoption:${input.outputKind}`
   const goal = `Produce ${input.outputKind}.`
@@ -60,6 +74,7 @@ function creativeTaskPayload(input: {
         })),
         constraints: [],
       },
+      creativeDirection: input.creativeDirection ?? null,
       productionContext: { video: null },
     },
     modelKey: 'test:creative-model',
@@ -85,6 +100,13 @@ async function createCompletedCreativeTask(input: {
     revisionId: string
     value: unknown
   }[]
+  creativeDirection?: {
+    revisionId: string
+    direction: {
+      visual: typeof creativeDirection.visual
+      assetPolicy: string
+    }
+  } | null
 }) {
   return await prisma.task.create({
     data: {
@@ -162,11 +184,12 @@ describe('Asset Manifest adoption DB integration', () => {
    * Authority: CR-22/CR-23 exact manifest adoption and the unique Project asset writer.
    * Rejects: duplicate Project identities, manifest-owned image Tasks, or a second asset write path.
    * Production entry: registered adopt_asset_manifest Operation through the canonical invocation service.
-   * Oracle: exact re-adoption reuses manifest identities; changed Style adoption or missing source
-   * lineage fails closed without changing Project assets, the adopted Manifest, or starting media Tasks.
+   * Oracle: exact re-adoption reuses manifest identities; replacing the adopted Direction does not
+   * rewrite the frozen Task or block adoption, while missing screenplay lineage fails closed without
+   * changing Project assets, the adopted Manifest, or starting media Tasks.
    * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/asset-manifest-adoption.integration.test.ts
    */
-  it('keeps manifest adoption idempotent and fails closed on changed Style or lineage', async () => {
+  it('keeps manifest adoption idempotent across Direction replacement and fails closed on missing screenplay lineage', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const toolCallId = 'asset-adoption:creative-tool'
@@ -212,7 +235,7 @@ describe('Asset Manifest adoption DB integration', () => {
     const styleTask = await createCompletedCreativeTask({
       userId: user.id,
       projectId: project.id,
-      outputKind: 'style_bible',
+      outputKind: 'creative_direction',
       runId: run.id,
       toolCallId,
     })
@@ -220,9 +243,9 @@ describe('Asset Manifest adoption DB integration', () => {
       userId: user.id,
       projectId: project.id,
       taskId: styleTask.id,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
-      name: styleBible.styleSummary,
-      content: styleBible,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+      name: creativeDirection.styleSummary,
+      content: creativeDirection,
     })
     const adoptedStyleBinding = await prisma.creativeResourceBinding.create({
       data: {
@@ -231,7 +254,7 @@ describe('Asset Manifest adoption DB integration', () => {
         episodeId: null,
         scopeKind: 'project',
         scopeId: project.id,
-        ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
+        ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
         resourceId: styleRevision.resource.id,
         revisionId: styleRevision.revision.id,
         source: 'style_adoption',
@@ -302,12 +325,14 @@ describe('Asset Manifest adoption DB integration', () => {
           revisionId: screenplayRevision.revision.id,
           value: screenplay,
         },
-        {
-          label: 'Style Bible',
-          revisionId: styleRevision.revision.id,
-          value: styleBible,
-        },
       ],
+      creativeDirection: {
+        revisionId: styleRevision.revision.id,
+        direction: {
+          visual: creativeDirection.visual,
+          assetPolicy: creativeDirection.assetPolicy,
+        },
+      },
     })
     const manifestRevision = await createProjectResourceRevision({
       userId: user.id,
@@ -328,7 +353,7 @@ describe('Asset Manifest adoption DB integration', () => {
         {
           outputRevisionId: manifestRevision.revision.id,
           inputRevisionId: styleRevision.revision.id,
-          role: 'source_material',
+          role: 'creative_direction',
           position: 1,
         },
       ],
@@ -421,14 +446,17 @@ describe('Asset Manifest adoption DB integration', () => {
     })
 
     const replacementStyle = {
-      ...styleBible,
+      ...creativeDirection,
       styleSummary: 'High-contrast charcoal expressionism',
-      visualStyle: 'Expressive charcoal marks with stark light and deep shadow.',
+      visual: {
+        ...creativeDirection.visual,
+        visualStyle: 'Expressive charcoal marks with stark light and deep shadow.',
+      },
     }
     const replacementStyleTask = await createCompletedCreativeTask({
       userId: user.id,
       projectId: project.id,
-      outputKind: 'style_bible',
+      outputKind: 'creative_direction',
       runId: run.id,
       toolCallId,
     })
@@ -436,7 +464,7 @@ describe('Asset Manifest adoption DB integration', () => {
       userId: user.id,
       projectId: project.id,
       taskId: replacementStyleTask.id,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       name: replacementStyle.styleSummary,
       content: replacementStyle,
     })
@@ -448,32 +476,26 @@ describe('Asset Manifest adoption DB integration', () => {
       },
     })
 
-    await expect(invokeProjectAgentOperation({
+    const afterDirectionReplacement = await invokeProjectAgentOperation({
       registry,
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
       input: { revisionId: manifestRevision.revision.id, expectedVersion: 1 },
-    })).rejects.toMatchObject({
-      code: 'CONFLICT',
-      details: {
-        code: 'ASSET_MANIFEST_STYLE_ADOPTION_CHANGED',
-        expectedStyleRevisionId: styleRevision.revision.id,
-        actualStyleRevisionId: replacementStyleRevision.revision.id,
+    })
+    expect(afterDirectionReplacement).toMatchObject({
+      kind: 'executed',
+      data: {
+        bindingVersion: 2,
+        imageGenerationStarted: false,
+        assets: [{ created: false }, { created: false }, { created: false }],
       },
     })
 
-    await prisma.creativeResourceBinding.update({
-      where: { id: adoptedStyleBinding.id },
-      data: {
-        resourceId: styleRevision.resource.id,
-        revisionId: styleRevision.revision.id,
-      },
-    })
     await prisma.creativeResourceLineage.deleteMany({
       where: {
         outputRevisionId: manifestRevision.revision.id,
-        inputRevisionId: styleRevision.revision.id,
+        inputRevisionId: screenplayRevision.revision.id,
       },
     })
 
@@ -482,11 +504,11 @@ describe('Asset Manifest adoption DB integration', () => {
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
-      input: { revisionId: manifestRevision.revision.id, expectedVersion: 1 },
+      input: { revisionId: manifestRevision.revision.id, expectedVersion: 2 },
     })).rejects.toMatchObject({
       code: 'INVALID_PARAMS',
       details: {
-        code: 'ASSET_MANIFEST_EXACT_SOURCES_REQUIRED',
+        code: 'ASSET_MANIFEST_EXACT_SCREENPLAY_SOURCE_REQUIRED',
         field: 'revisionId',
       },
     })
@@ -504,7 +526,7 @@ describe('Asset Manifest adoption DB integration', () => {
     expect(finalTasks).toHaveLength(4)
     expect(finalTasks.every((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(true)
     expect(finalBinding).toMatchObject({
-      revisionId: styleRevision.revision.id,
+      revisionId: replacementStyleRevision.revision.id,
       version: 0,
     })
     const adoptedManifest = await prisma.creativeResourceBinding.findUniqueOrThrow({
@@ -518,7 +540,7 @@ describe('Asset Manifest adoption DB integration', () => {
     })
     expect(adoptedManifest).toMatchObject({
       revisionId: manifestRevision.revision.id,
-      version: 1,
+      version: 2,
     })
   })
 })

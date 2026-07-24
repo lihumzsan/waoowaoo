@@ -3,7 +3,6 @@ import { ApiError } from '@/lib/api-errors'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
-  CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
   isCreativeResourceMediaType,
 } from '@/lib/creative-resource'
@@ -12,7 +11,10 @@ import {
   CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskPayloadSchema,
+  projectAdoptedCreativeDirection,
+  readAdoptedCreativeDirectionSnapshot,
   readCreativeWorkOutputDefinition,
+  type AdoptedCreativeDirectionSnapshot,
   type CreativeWorkDelegationInput,
   type CreativeWorkDelegationItem,
   type CreativeWorkHydratedRequest,
@@ -128,10 +130,6 @@ async function resolveDelegationRequests(input: {
               revision: `${String(sourceStart)}:${String(sourceEnd)}`,
             },
           },
-          ...(result.context.style.productionStyleBible && result.context.style.source ? [{
-            kind: 'resource' as const,
-            revisionId: result.context.style.source.revisionId,
-          }] : []),
         ],
         constraints: operationInput.constraints,
       },
@@ -154,9 +152,7 @@ async function hydrateExactResourceMaterials(input: {
       source.kind === 'resource' ? [source.revisionId] : []
     ))
   )))]
-  const needsAssetManifest = input.requests.some((request) => request.outputKind === 'asset_manifest')
-  const [revisions, adoptedStyle] = await Promise.all([
-    revisionIds.length > 0 ? prisma.creativeResourceRevision.findMany({
+  const revisions = revisionIds.length > 0 ? await prisma.creativeResourceRevision.findMany({
       where: {
         id: { in: revisionIds },
         resource: {
@@ -189,19 +185,7 @@ async function hydrateExactResourceMaterials(input: {
           },
         },
       },
-    }) : Promise.resolve([]),
-    needsAssetManifest ? prisma.creativeResourceBinding.findFirst({
-      where: {
-        userId: input.userId,
-        projectId: input.projectId,
-        scopeKind: 'project',
-        scopeId: input.projectId,
-        role: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.role,
-        slotKey: CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.slotKey,
-      },
-      select: { revisionId: true },
-    }) : Promise.resolve(null),
-  ])
+    }) : []
   if (revisions.length !== revisionIds.length) {
     const found = new Set(revisions.map((revision) => revision.id))
     const missing = revisionIds.find((revisionId) => !found.has(revisionId)) ?? 'unknown'
@@ -271,25 +255,25 @@ async function hydrateExactResourceMaterials(input: {
         provenance: { kind: 'resource' as const, revisionId },
       }
     })
+    const manuallySuppliedDirection = resourceSchemas.find(
+      (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+    )
+    if (request.outputKind !== 'creative_direction' && manuallySuppliedDirection) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_DIRECTION_MANUAL_REFERENCE_FORBIDDEN',
+        field: 'sourceMaterials',
+        revisionId: manuallySuppliedDirection.revisionId,
+        agentRetryableAfterCorrection: true,
+      })
+    }
     if (request.outputKind === 'asset_manifest') {
       const screenplaySources = resourceSchemas.filter(
         (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
-      )
-      const styleSources = resourceSchemas.filter(
-        (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
       )
       if (screenplaySources.length !== 1) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED',
           field: 'sourceMaterials',
-          agentRetryableAfterCorrection: true,
-        })
-      }
-      if (styleSources.length !== 1 || styleSources[0]?.revisionId !== adoptedStyle?.revisionId) {
-        throw new ApiError('INVALID_PARAMS', {
-          code: 'ASSET_MANIFEST_ADOPTED_STYLE_SOURCE_REQUIRED',
-          field: 'sourceMaterials',
-          adoptedStyleRevisionId: adoptedStyle?.revisionId ?? null,
           agentRetryableAfterCorrection: true,
         })
       }
@@ -319,11 +303,16 @@ async function resolveTaskRequests(input: {
   readonly requests: readonly CreativeWorkHydratedItem[]
   readonly projectId: string
   readonly userId: string
+  readonly adoptedCreativeDirection: AdoptedCreativeDirectionSnapshot | null
 }): Promise<CreativeWorkTaskItem[]> {
   const needsVideoProduction = input.requests.some((request) => request.outputKind === 'video_prompt_set')
   if (!needsVideoProduction) {
     return input.requests.map((request) => ({
       ...request,
+      creativeDirection: projectAdoptedCreativeDirection({
+        snapshot: input.adoptedCreativeDirection,
+        outputKind: request.outputKind,
+      }),
       productionContext: { video: null },
     }))
   }
@@ -360,7 +349,14 @@ async function resolveTaskRequests(input: {
 
   return input.requests.map((request) => {
     if (request.outputKind !== 'video_prompt_set') {
-      return { ...request, productionContext: { video: null } }
+      return {
+        ...request,
+        creativeDirection: projectAdoptedCreativeDirection({
+          snapshot: input.adoptedCreativeDirection,
+          outputKind: request.outputKind,
+        }),
+        productionContext: { video: null },
+      }
     }
     const targetDurationSeconds = request.targetDurationSeconds
     if (
@@ -379,6 +375,10 @@ async function resolveTaskRequests(input: {
     }
     return {
       ...request,
+      creativeDirection: projectAdoptedCreativeDirection({
+        snapshot: input.adoptedCreativeDirection,
+        outputKind: request.outputKind,
+      }),
       productionContext: {
         video: {
           aspectRatio,
@@ -413,10 +413,15 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
           userId: context.userId,
           contextEpisodeId: context.context.episodeId,
         })
+        const adoptedCreativeDirection = await readAdoptedCreativeDirectionSnapshot({
+          projectId: context.projectId,
+          userId: context.userId,
+        })
         const requests = await resolveTaskRequests({
           requests: delegatedRequests,
           projectId: context.projectId,
           userId: context.userId,
+          adoptedCreativeDirection,
         })
         const invocationEpisodeId = input.delegation.source === 'chapters'
           ? resolveEpisodeId(undefined, context.context.episodeId)

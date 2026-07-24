@@ -401,7 +401,7 @@ describe('Golden local model provider', () => {
     expect(screenplayOutput).not.toHaveProperty('scenes')
   })
 
-  it('authors one current Style Bible Choice with one optional current commitment', () => {
+  it('authors one current Creative Direction Choice with one optional current commitment', () => {
     const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 6,
@@ -411,7 +411,7 @@ describe('Golden local model provider', () => {
           { role: 'user', content: GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST },
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
-            resourceId: 'style-resource', schemaId: 'project.style_bible', status: 'ready',
+            resourceId: 'style-resource', schemaId: 'project.creative_direction', status: 'ready',
             headRevision: { revisionId: 'style-revision' },
           } }] }) },
         ],
@@ -426,8 +426,8 @@ describe('Golden local model provider', () => {
         kind: 'resource_revisions',
         revisions: [{ revisionId: 'style-revision' }],
       },
-      card: { title: '是否采用当前 Style Bible？' },
-      commitments: [{ operationId: 'adopt_style_bible' }],
+      card: { title: '是否采用当前 Creative Direction？' },
+      commitments: [{ operationId: 'adopt_creative_direction' }],
     })
   })
 

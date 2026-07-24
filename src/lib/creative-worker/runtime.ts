@@ -161,6 +161,7 @@ function buildWorkerInput(input: {
     goal: input.request.goal,
     targetDurationSeconds: input.request.targetDurationSeconds ?? null,
     context: input.request.context,
+    creativeDirection: input.request.creativeDirection,
     productionContext: input.request.productionContext,
     preloadedSkills: input.preloadedSkills,
     skillCatalog: input.skillCatalog,

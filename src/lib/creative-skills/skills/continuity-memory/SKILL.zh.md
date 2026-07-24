@@ -4,6 +4,8 @@
 
 从剧本原文中提取能支持长篇、分章和并行制作的最小充分项目事实：稳定设定、主要实体、剧情节拍、持续状态变化、情绪区间和来源依据。它记录作品已经成立的事实，不替作品继续创作，也不设计镜头。
 
+对于 `outputKind=story_canon`，Creative Direction 可选。`creativeDirection` 非空时只把服务端注入的 `narrative` 政策用于框架与重点判断，绝不能把呈现政策写成 Canon 事实。`continuity_analysis` 不接收 Creative Direction。
+
 ## 来源纪律
 
 - 原文是唯一事实来源。名称、身份、地点、规则、事件、动机或结局没有文本依据时不写。

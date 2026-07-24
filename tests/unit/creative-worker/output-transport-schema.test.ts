@@ -86,12 +86,12 @@ describe('Creative Worker structured-output transport schema', () => {
 
   it('keeps business limits authoritative in the original Zod output schema', () => {
     const invalidStyleOutput = {
-      kind: 'style_bible',
+      kind: 'creative_direction',
       design: { mode: 'candidates', candidates: [] },
       assumptions: [],
       warnings: [],
     }
 
-    expect(creativeWorkOutputSchemas.style_bible.safeParse(invalidStyleOutput).success).toBe(false)
+    expect(creativeWorkOutputSchemas.creative_direction.safeParse(invalidStyleOutput).success).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAssistantCreativeAssetOperations } from '@/lib/operations/domains/assistant/creative-asset-ops'
 import { createAssistantStoryCanonOperations } from '@/lib/operations/domains/assistant/creative-story-canon-ops'
-import { createAssistantCreativeStyleOperations } from '@/lib/operations/domains/assistant/creative-style-ops'
+import { createAssistantCreativeDirectionOperations } from '@/lib/operations/domains/assistant/creative-direction-ops'
 import { createCreativeResourceOperations } from '@/lib/operations/domains/creative-resource/resource-ops'
 
 describe('creative result Resource conformance', () => {
@@ -22,8 +22,8 @@ describe('creative result Resource conformance', () => {
     expect(operation?.choiceCommit).toBeUndefined()
   })
 
-  it('adopts an exact materialized Style Bible revision instead of copying a Task candidate', () => {
-    const operation = createAssistantCreativeStyleOperations().adopt_style_bible
+  it('adopts an exact materialized Creative Direction revision instead of copying a Task candidate', () => {
+    const operation = createAssistantCreativeDirectionOperations().adopt_creative_direction
     expect(operation).toBeDefined()
     expect(operation?.inputSchema.safeParse({
       revisionId: 'style-revision',

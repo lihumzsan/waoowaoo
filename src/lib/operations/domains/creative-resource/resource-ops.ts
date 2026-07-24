@@ -341,7 +341,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
             code: 'CREATIVE_RESOURCE_RESERVED_BINDING_OPERATION_REQUIRED',
             field: 'role',
             requestedValue: `${input.role}:${input.slotKey}`,
-            allowedValues: ['adopt_style_bible', 'bind_voice'],
+            allowedValues: ['adopt_creative_direction', 'bind_voice'],
             agentRetryableAfterCorrection: true,
           })
         }

@@ -1,5 +1,6 @@
 import type { Model } from '@openai/agents'
 import { z } from 'zod'
+import { injectedCreativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import type { CreativeSkillLocale } from '@/lib/creative-skills'
 import {
   CREATIVE_WORK_OUTPUT_KINDS,
@@ -113,10 +114,12 @@ const creativeVideoProductionContextSchema = z.object({
 })
 
 export const creativeWorkRequestSchema = creativeWorkHydratedRequestSchema.extend({
+  creativeDirection: injectedCreativeDirectionSchema.nullable()
+    .describe('Exact adopted Creative Direction projection injected and frozen by the server for this output kind. The primary Agent cannot supply it.'),
   productionContext: z.object({
     video: creativeVideoProductionContextSchema.nullable(),
   }).strict(),
-}).strict().describe('Server-compiled request for one isolated creative-worker run. productionContext is supplied by the execution layer, never by the primary Agent.')
+}).strict().describe('Server-compiled request for one isolated creative-worker run. Creative Direction and productionContext are supplied by the execution layer, never by the primary Agent.')
 
 export type CreativeWorkDelegationRequest = z.infer<typeof creativeWorkDelegationRequestSchema>
 export type CreativeWorkHydratedRequest = z.infer<typeof creativeWorkHydratedRequestSchema>

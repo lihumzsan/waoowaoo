@@ -9,6 +9,10 @@ export {
   isCreativeWorkerError,
 } from './errors'
 export {
+  projectAdoptedCreativeDirection,
+  readAdoptedCreativeDirectionSnapshot,
+} from './creative-direction-context'
+export {
   creativeWorkOutputRegistry,
   creativeWorkOutputSchemas,
   readCreativeWorkOutputDefinition,
@@ -56,6 +60,9 @@ export type {
 export type {
   CreativeWorkerErrorCode,
 } from './errors'
+export type {
+  AdoptedCreativeDirectionSnapshot,
+} from './creative-direction-context'
 export type {
   CreativeWorkOutput,
   CreativeWorkOutputDefinition,

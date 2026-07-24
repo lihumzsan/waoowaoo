@@ -11,18 +11,18 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
-const adoptStyleBibleInputSchema = z.object({
+const adoptCreativeDirectionInputSchema = z.object({
   revisionId: z.string().trim().min(1)
-    .describe('Exact immutable Style Bible revision selected by the current choice.'),
+    .describe('Exact immutable Creative Direction revision selected by the current choice.'),
   expectedVersion: z.number().int().min(0).nullable().optional()
-    .describe('Pass null for the first adoption; pass the current canonical style binding version when replacing it.'),
+    .describe('Pass null for the first adoption; pass the current adopted Creative Direction binding version when replacing it.'),
 }).strict()
 
-const adoptStyleBibleOutputSchema = z.object({
+const adoptCreativeDirectionOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE),
+  schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION),
   binding: z.object({
     bindingId: z.string().trim().min(1),
     scope: z.object({
@@ -32,8 +32,8 @@ const adoptStyleBibleOutputSchema = z.object({
       projectId: z.string().trim().min(1).nullable(),
       episodeId: z.string().trim().min(1).nullable(),
     }).strict(),
-    role: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.role),
-    slotKey: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible.slotKey),
+    role: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.role),
+    slotKey: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.slotKey),
     resourceId: z.string().trim().min(1),
     revisionId: z.string().trim().min(1),
     version: z.number().int().min(0),
@@ -41,11 +41,11 @@ const adoptStyleBibleOutputSchema = z.object({
   }).strict(),
 }).strict()
 
-export function createAssistantCreativeStyleOperations(): ProjectAgentOperationRegistryDraft {
+export function createAssistantCreativeDirectionOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    adopt_style_bible: defineOperation({
-      id: 'adopt_style_bible',
-      summary: 'Adopt one exact immutable project.style_bible Resource revision selected by the current action. The Creative Task already materialized the revision; this operation only updates the canonical adopted_style_bible Binding and starts no downstream work.',
+    adopt_creative_direction: defineOperation({
+      id: 'adopt_creative_direction',
+      summary: 'Adopt one exact immutable project.creative_direction Resource revision selected by the current action. The Creative Task already materialized the revision; this operation only updates the canonical adopted_creative_direction Binding and starts no downstream work.',
       intent: 'act',
       effects: {
         writes: true,
@@ -61,13 +61,13 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
         kind: 'resource',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
-        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE],
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION],
         supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       choiceCommit: { enabled: true },
-      inputSchema: adoptStyleBibleInputSchema,
-      outputSchema: adoptStyleBibleOutputSchema,
+      inputSchema: adoptCreativeDirectionInputSchema,
+      outputSchema: adoptCreativeDirectionOutputSchema,
       executeInTransaction: async (context, input, transaction) => {
         const revision = await transaction.creativeResourceRevision.findFirst({
           where: {
@@ -81,7 +81,7 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
               scopeId: context.projectId,
               status: 'ready',
               mediaType: 'text',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+              schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
               sourceType: 'CreativeWorkResult',
             },
           },
@@ -100,7 +100,7 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
         })
         if (!revision || !revision.taskId || !revision.task) {
           throw new ApiError('NOT_FOUND', {
-            code: 'CREATIVE_STYLE_BIBLE_REVISION_NOT_FOUND',
+            code: 'CREATIVE_DIRECTION_REVISION_NOT_FOUND',
             field: 'revisionId',
           })
         }
@@ -109,10 +109,10 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
           revision.task.type !== TASK_TYPE.CREATIVE_WORK
           || revision.task.status !== TASK_STATUS.COMPLETED
           || !payload.success
-          || payload.data.request.outputKind !== 'style_bible'
+          || payload.data.request.outputKind !== 'creative_direction'
         ) {
           throw new ApiError('INVALID_PARAMS', {
-            code: 'CREATIVE_STYLE_BIBLE_REVISION_PROVENANCE_INVALID',
+            code: 'CREATIVE_DIRECTION_REVISION_PROVENANCE_INVALID',
             field: 'revisionId',
             agentRetryableAfterCorrection: true,
           })
@@ -124,17 +124,17 @@ export function createAssistantCreativeStyleOperations(): ProjectAgentOperationR
         })
         const binding = await bindCreativeResourceRevisionInTransaction(transaction, {
           scope,
-          ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedStyleBible,
+          ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
           resourceId: revision.resourceId,
           revisionId: revision.id,
-          source: 'style_adoption',
+          source: 'creative_direction_adoption',
           expectedVersion: input.expectedVersion ?? null,
         })
-        return adoptStyleBibleOutputSchema.parse({
+        return adoptCreativeDirectionOutputSchema.parse({
           success: true,
           resourceId: revision.resourceId,
           revisionId: revision.id,
-          schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+          schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
           binding,
         })
       },

@@ -3,7 +3,7 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
   'story_canon',
   'chapter_plan',
   'continuity_analysis',
-  'style_bible',
+  'creative_direction',
   'asset_manifest',
   'video_prompt_set',
   'music_direction',

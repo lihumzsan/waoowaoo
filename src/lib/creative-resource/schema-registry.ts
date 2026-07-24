@@ -13,7 +13,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   STORY_CANON: 'project.story_canon',
   CHAPTER_PLAN: 'project.chapter_plan',
   CONTINUITY_ANALYSIS: 'project.continuity_analysis',
-  STYLE_BIBLE: 'project.style_bible',
+  CREATIVE_DIRECTION: 'project.creative_direction',
   ASSET_MANIFEST: 'project.asset_manifest',
   VIDEO_PROMPT_SET: 'project.video_prompt_set',
   MUSIC_DIRECTION: 'project.music_direction',
@@ -98,7 +98,7 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
   [CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS]: (data) => (
     stringValue(objectValue(data), 'summary')
   ),
-  [CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE]: (data) => (
+  [CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION]: (data) => (
     stringValue(objectValue(data), 'styleSummary')
   ),
   [CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST]: (data) => (
@@ -132,7 +132,7 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
     CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
     CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS,
-    CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+    CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
     CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION,

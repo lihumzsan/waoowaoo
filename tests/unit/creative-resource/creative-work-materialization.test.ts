@@ -8,16 +8,23 @@ import {
   type CreativeWorkRequest,
 } from '@/lib/creative-worker'
 
-type TestOutputKind = 'screenplay' | 'style_bible' | 'chapter_plan' | 'asset_manifest'
+type TestOutputKind = 'screenplay' | 'creative_direction' | 'chapter_plan' | 'asset_manifest'
 
-const styleBible = {
+const creativeDirection = {
   rawUserStyle: null,
   styleSummary: 'Ink and paper animation',
-  visualStyle: 'Hand-painted ink animation with restrained motion.',
-  assetImageStyle: {
-    lighting: 'Soft directional light',
-    texture: 'Fibrous paper',
+  visual: {
+    visualStyle: 'Hand-painted ink animation with restrained motion.',
+    assetImageStyle: {
+      lighting: 'Soft directional light',
+      texture: 'Fibrous paper',
+    },
   },
+  narrative: 'Reveal information through observed behavior and withheld context.',
+  directing: 'Prefer locked compositions; move only when character motion motivates it.',
+  editing: 'Use measured hard cuts and reserve dissolves for explicit time shifts.',
+  sound: 'Keep a dry room tone, close voices, and intentional silence.',
+  assetPolicy: 'Design reusable silhouettes and preserve paper texture across assets.',
 }
 
 function taskPayload(
@@ -31,6 +38,7 @@ function taskPayload(
       revisionId: 'source-revision',
     },
   }],
+  injectedDirection: CreativeWorkRequest['creativeDirection'] = null,
 ) {
   return {
     protocol: CREATIVE_WORK_TASK_PROTOCOL,
@@ -43,6 +51,7 @@ function taskPayload(
         sourceMaterials,
         constraints: [],
       },
+      creativeDirection: injectedDirection,
       productionContext: { video: null },
     },
     modelKey: 'provider:model',
@@ -100,10 +109,10 @@ describe('Creative Task Resource materialization planning', () => {
       candidateKey,
       title: candidateKey,
       summary: `${candidateKey} summary`,
-      styleBible: { ...styleBible, styleSummary: candidateKey },
+      creativeDirection: { ...creativeDirection, styleSummary: candidateKey },
     }))
-    const output = creativeWorkOutputSchemas.style_bible.parse({
-      kind: 'style_bible',
+    const output = creativeWorkOutputSchemas.creative_direction.parse({
+      kind: 'creative_direction',
       design: { mode: 'candidates', candidates },
       assumptions: [],
       warnings: [],
@@ -111,8 +120,8 @@ describe('Creative Task Resource materialization planning', () => {
 
     const plan = planCreativeWorkResourceMaterialization({
       taskId: 'style-task',
-      payload: taskPayload('style_bible'),
-      result: taskResult('style_bible', output),
+      payload: taskPayload('creative_direction'),
+      result: taskResult('creative_direction', output),
     })
 
     expect(plan.resourceScope).toBe('project')
@@ -125,7 +134,7 @@ describe('Creative Task Resource materialization planning', () => {
     ])
     expect(plan.outputs).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
         candidateSetId: 'style-task',
       }),
     ]))
@@ -137,14 +146,14 @@ describe('Creative Task Resource materialization planning', () => {
       candidateKey: 'ink',
       title: 'Ink',
       summary: 'Ink summary',
-      styleBible,
+      creativeDirection,
     }
-    expect(() => creativeWorkOutputSchemas.style_bible.parse({
-      kind: 'style_bible',
+    expect(() => creativeWorkOutputSchemas.creative_direction.parse({
+      kind: 'creative_direction',
       design: { mode: 'candidates', candidates: [candidate, candidate] },
       assumptions: [],
       warnings: [],
-    })).toThrow('CREATIVE_STYLE_BIBLE_CANDIDATE_KEY_DUPLICATE')
+    })).toThrow('CREATIVE_DIRECTION_CANDIDATE_KEY_DUPLICATE')
   })
 
   it('projects a screenplay as one exact source-script revision plan with Task lineage', () => {
@@ -237,7 +246,7 @@ describe('Creative Task Resource materialization planning', () => {
     })
   })
 
-  it('materializes one source-grounded asset manifest from screenplay and Style revisions without generating images', () => {
+  it('materializes one source-grounded asset manifest with the server-frozen Creative Direction lineage without generating images', () => {
     const screenplayText = 'INT. STATION — NIGHT\nThe traveler holds a letter.'
     const screenplay = screenplaySchema.parse({
       kind: 'screenplay',
@@ -279,19 +288,22 @@ describe('Creative Task Resource materialization planning', () => {
           content: JSON.stringify(screenplay),
           provenance: { kind: 'resource', revisionId: 'screenplay-r1' },
         },
-        {
-          label: 'Style Bible',
-          kind: 'structured',
-          content: JSON.stringify(styleBible),
-          provenance: { kind: 'resource', revisionId: 'style-r1' },
+      ], {
+        revisionId: 'direction-r1',
+        direction: {
+          visual: creativeDirection.visual,
+          assetPolicy: creativeDirection.assetPolicy,
         },
-      ]),
+      }),
       result: taskResult('asset_manifest', output),
     })
 
     expect(plan).toMatchObject({
       resourceScope: 'project',
-      inputs: [{ revisionId: 'screenplay-r1' }, { revisionId: 'style-r1' }],
+      inputs: [
+        { revisionId: 'screenplay-r1', role: 'source_material' },
+        { revisionId: 'direction-r1', role: 'creative_direction' },
+      ],
       outputs: [{
         schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
         sourceType: 'CreativeWorkResult',
@@ -307,7 +319,7 @@ describe('Creative Task Resource materialization planning', () => {
         },
         generationOptions: {
           screenplayRevisionId: 'screenplay-r1',
-          styleBibleRevisionId: 'style-r1',
+          creativeDirectionRevisionId: 'direction-r1',
         },
       }],
     })

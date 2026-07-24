@@ -3,7 +3,11 @@ import {
   creativeChapterPlanOutputSchema,
   rawStoryCanonBundleSchema,
 } from '@/lib/story-canon/schemas'
-import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
+import {
+  CREATIVE_DIRECTION_DOMAINS,
+  creativeDirectionSchema,
+  type CreativeDirectionDomain,
+} from '@/lib/creative-direction/contracts'
 import {
   assetManifestWorkerOutputSchema,
   screenplayWorkerOutputSchema,
@@ -43,18 +47,18 @@ const continuityAnalysisOutputSchema = z.object({
   assumptions: textList(64, 2_000),
 }).strict()
 
-const styleBibleCandidateKeySchema = z.string()
+const creativeDirectionCandidateKeySchema = z.string()
   .trim()
   .min(1)
   .max(100)
   .regex(/^[a-z0-9][a-z0-9_-]*$/)
   .describe('Model-authored stable identity for this candidate. It is not tied to a fixed option count or a predefined A/B/C vocabulary.')
 
-const styleBibleCandidatesSchema = z.array(z.object({
-  candidateKey: styleBibleCandidateKeySchema,
+const creativeDirectionCandidatesSchema = z.array(z.object({
+  candidateKey: creativeDirectionCandidateKeySchema,
   title: z.string().trim().min(1).max(300),
   summary: z.string().trim().min(1).max(4_000),
-  styleBible: creativeStyleBibleSchema,
+  creativeDirection: creativeDirectionSchema,
 }).strict()).min(2).max(12).superRefine((candidates, context) => {
   const keys = new Set<string>()
   for (const [index, candidate] of candidates.entries()) {
@@ -62,25 +66,25 @@ const styleBibleCandidatesSchema = z.array(z.object({
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: [index, 'candidateKey'],
-        message: 'CREATIVE_STYLE_BIBLE_CANDIDATE_KEY_DUPLICATE',
+        message: 'CREATIVE_DIRECTION_CANDIDATE_KEY_DUPLICATE',
       })
     }
     keys.add(candidate.candidateKey)
   }
 })
 
-const styleBibleOutputSchema = z.object({
-  kind: z.literal('style_bible'),
+const creativeDirectionOutputSchema = z.object({
+  kind: z.literal('creative_direction'),
   design: z.discriminatedUnion('mode', [
     z.object({
       mode: z.literal('final'),
-      styleBible: creativeStyleBibleSchema,
+      creativeDirection: creativeDirectionSchema,
     }).strict(),
     z.object({
       mode: z.literal('candidates'),
-      candidates: styleBibleCandidatesSchema,
+      candidates: creativeDirectionCandidatesSchema,
     }).strict(),
-  ]).describe('Return one finalized Style Bible, or a validated candidate set when the user needs comparison.'),
+  ]).describe('Return one finalized Creative Direction, or a validated candidate set when the user needs comparison.'),
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),
 }).strict()
@@ -135,7 +139,7 @@ export const creativeWorkOutputSchemas = {
   story_canon: storyCanonBundleOutputSchema,
   chapter_plan: creativeChapterPlanOutputSchema,
   continuity_analysis: continuityAnalysisOutputSchema,
-  style_bible: styleBibleOutputSchema,
+  creative_direction: creativeDirectionOutputSchema,
   asset_manifest: assetManifestWorkerOutputSchema,
   video_prompt_set: videoPromptSetOutputSchema,
   music_direction: musicDirectionOutputSchema,
@@ -150,6 +154,7 @@ export interface CreativeWorkOutputDefinition {
   kind: CreativeWorkOutputKind
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
+  creativeDirectionDomains: readonly CreativeDirectionDomain[]
 }
 
 export const creativeWorkOutputRegistry = {
@@ -157,46 +162,55 @@ export const creativeWorkOutputRegistry = {
     kind: 'screenplay',
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
+    creativeDirectionDomains: ['narrative'],
   },
   story_canon: {
     kind: 'story_canon',
     schema: creativeWorkOutputSchemas.story_canon,
     resourceScope: 'project',
+    creativeDirectionDomains: ['narrative'],
   },
   chapter_plan: {
     kind: 'chapter_plan',
     schema: creativeWorkOutputSchemas.chapter_plan,
     resourceScope: 'episode',
+    creativeDirectionDomains: [],
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
     schema: creativeWorkOutputSchemas.continuity_analysis,
     resourceScope: 'episode',
+    creativeDirectionDomains: [],
   },
-  style_bible: {
-    kind: 'style_bible',
-    schema: creativeWorkOutputSchemas.style_bible,
+  creative_direction: {
+    kind: 'creative_direction',
+    schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
+    creativeDirectionDomains: [],
   },
   asset_manifest: {
     kind: 'asset_manifest',
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
+    creativeDirectionDomains: ['visual', 'assetPolicy'],
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
+    creativeDirectionDomains: ['visual', 'directing', 'editing', 'sound'],
   },
   music_direction: {
     kind: 'music_direction',
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
+    creativeDirectionDomains: ['narrative', 'sound'],
   },
   creative_review: {
     kind: 'creative_review',
     schema: creativeWorkOutputSchemas.creative_review,
     resourceScope: 'episode',
+    creativeDirectionDomains: CREATIVE_DIRECTION_DOMAINS,
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>
 

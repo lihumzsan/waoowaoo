@@ -68,17 +68,17 @@ import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-
 const contextReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Exact immutable Resource revisions used as creative context and lineage only. Text, Style Bible, audio, video, and image Resources are allowed here; these references are never sent to an image input channel.')
+  .describe('Exact immutable Resource revisions used as creative context and lineage only. Text, Creative Direction, audio, video, and image Resources are allowed here; these references are never sent to an image input channel.')
 
 const imageReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Exact ready image Resource revisions to send through the provider image-input channel. Never put text, Style Bible, audio, or video Resources here.')
+  .describe('Exact ready image Resource revisions to send through the provider image-input channel. Never put text, Creative Direction, audio, or video Resources here.')
 
 const videoMediaReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(11)
   .optional()
-  .describe('Ordered exact ready image or audio Resource revisions sent to the configured video model. Images and audios are numbered independently in the prompt as @ImageN and @AudioN. Never put text, Style Bible, or video Resources here.')
+  .describe('Ordered exact ready image or audio Resource revisions sent to the configured video model. Images and audios are numbered independently in the prompt as @ImageN and @AudioN. Never put text, Creative Direction, or video Resources here.')
 
 const commonNewMediaGenerationShape = {
   kind: z.literal('new'),

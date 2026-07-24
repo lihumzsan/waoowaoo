@@ -73,7 +73,7 @@ function assertNoLegacyStyleFields(body: Record<string, unknown>) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'LEGACY_STYLE_CONFIG_REMOVED',
       field,
-      message: 'legacy visual style config is no longer supported; use the AI-generated Style Bible workflow.',
+      message: 'legacy visual style config is no longer supported; use the AI-generated Creative Direction workflow.',
     })
   }
 }

@@ -22,7 +22,7 @@ import { createCreativeResourceVideoMergeOperations } from './domains/creative-r
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
 import { createAssistantStoryCanonOperations } from './domains/assistant/creative-story-canon-ops'
-import { createAssistantCreativeStyleOperations } from './domains/assistant/creative-style-ops'
+import { createAssistantCreativeDirectionOperations } from './domains/assistant/creative-direction-ops'
 import { createAssistantCreativeAssetOperations } from './domains/assistant/creative-asset-ops'
 import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
 import { createVoiceOperations } from './domains/voice/voice-ops'
@@ -60,7 +60,7 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
-    ...withOperationPack(createAssistantCreativeStyleOperations(), {
+    ...withOperationPack(createAssistantCreativeDirectionOperations(), {
       groupPath: ['assistant', 'creative'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,

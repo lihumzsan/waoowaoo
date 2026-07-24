@@ -67,7 +67,7 @@ describe('project agent operation registry', () => {
       groupPath: ['assistant', 'creative'],
       choiceCommit: { enabled: true },
     })
-    expect(registry.adopt_style_bible).toMatchObject({
+    expect(registry.adopt_creative_direction).toMatchObject({
       channels: { tool: true, api: false },
       groupPath: ['assistant', 'creative'],
       choiceCommit: { enabled: true },

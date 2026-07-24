@@ -40,7 +40,7 @@ const assetManifestItemWorkerSchema = z.object({
   stableDescription: z.string().min(1).max(16_000)
     .describe('Stable visible identity and structure only; exclude transient action and project visual-style wording.'),
   generationPrompt: z.string().min(1).max(24_000)
-    .describe('Final asset image prompt using the exact supplied Style Bible and the grounded asset facts.'),
+    .describe('Final asset image prompt using the exact supplied Creative Direction and the grounded asset facts.'),
   negativePrompt: z.string().max(8_000).nullable(),
   referenceRequirements: textList(64, 2_000),
   continuityRequirements: textList(64, 2_000),

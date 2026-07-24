@@ -49,13 +49,14 @@ function styleTaskPayload(runId: string, toolCallId: string) {
     protocol: CREATIVE_WORK_TASK_PROTOCOL,
     requestKey: `${TEST_PREFIX}style-request`,
     request: {
-      outputKind: 'style_bible',
+      outputKind: 'creative_direction',
       goal: 'Create a visual direction.',
       context: {
         userRequest: 'Create a restrained visual direction.',
         sourceMaterials: [],
         constraints: [],
       },
+      creativeDirection: null,
       productionContext: { video: null },
     },
     modelKey: 'golden:creative-model',
@@ -63,7 +64,7 @@ function styleTaskPayload(runId: string, toolCallId: string) {
     origin: { runId, toolCallId },
     lifecycleProjection: {
       requestKey: `${TEST_PREFIX}style-request`,
-      outputKind: 'style_bible',
+      outputKind: 'creative_direction',
       goal: 'Create a visual direction.',
       events: [],
     },
@@ -118,7 +119,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
       scopeKind: 'project',
       scopeId: project.id,
       mediaType: 'text',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       name: 'Restrained visual direction',
       status: 'ready',
       originKey: `${TEST_PREFIX}style-resource:${episode.id}`,
@@ -135,11 +136,18 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
       contentJson: {
         rawUserStyle: null,
         styleSummary: 'Restrained monochrome realism',
-        visualStyle: 'Quiet, observational, low-saturation realism.',
-        assetImageStyle: {
-          lighting: 'Soft overcast daylight with restrained contrast.',
-          texture: 'Natural film grain and tactile practical surfaces.',
+        visual: {
+          visualStyle: 'Quiet, observational, low-saturation realism.',
+          assetImageStyle: {
+            lighting: 'Soft overcast daylight with restrained contrast.',
+            texture: 'Natural film grain and tactile practical surfaces.',
+          },
         },
+        narrative: 'Reveal facts through restrained observation.',
+        directing: 'Prefer locked frames and motivated movement.',
+        editing: 'Use measured hard cuts.',
+        sound: 'Preserve natural room tone and deliberate silence.',
+        assetPolicy: 'Keep identities realistic, stable, and free of decorative styling.',
       },
       sourceType: 'CreativeWorkResult',
       sourceId: task.id,
@@ -168,7 +176,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     mode: 'select' as const,
     replyMode: 'none' as const,
     title: '选择当前视觉方向',
-    description: '这个选择只采用当前 Style Bible。',
+    description: '这个选择只采用当前 Creative Direction。',
     groups: [{
       key: 'style',
       label: '视觉方向',
@@ -180,7 +188,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
   }
   const commitments = [{
     when: { kind: 'option' as const, groupKey: 'style', optionValue: revision.id },
-    operationId: 'adopt_style_bible',
+    operationId: 'adopt_creative_direction',
     input: {
       revisionId: params.validCommitment ? revision.id : `${revision.id}:missing`,
       expectedVersion: null,
@@ -348,11 +356,11 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     }
 
     const consumed = await consumeProjectAgentChoiceInterruption(consumeInput)
-    expect(consumed?.appliedOperationId).toBe('adopt_style_bible')
+    expect(consumed?.appliedOperationId).toBe('adopt_creative_direction')
     await expect(prisma.creativeResourceBinding.findFirstOrThrow({
       where: {
         projectId: seeded.project.id,
-        role: 'adopted_style_bible',
+        role: 'adopted_creative_direction',
         slotKey: 'primary',
       },
       select: { resourceId: true, revisionId: true },
@@ -364,7 +372,7 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     expect(await prisma.projectAgentActivity.findMany({
       where: {
         runId: seeded.run.id,
-        operationId: 'adopt_style_bible',
+        operationId: 'adopt_creative_direction',
         sourceOperationId: 'request_choice',
       },
       select: { status: true },
@@ -373,10 +381,10 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     await expect(readRetryableConsumedProjectAgentChoiceInterruption(consumeInput)).resolves.toMatchObject({
       id: seeded.interruptionId,
       status: 'consumed',
-      appliedOperationId: 'adopt_style_bible',
+      appliedOperationId: 'adopt_creative_direction',
     })
     expect(await prisma.projectAgentActivity.count({
-      where: { runId: seeded.run.id, operationId: 'adopt_style_bible' },
+      where: { runId: seeded.run.id, operationId: 'adopt_creative_direction' },
     })).toBe(1)
   })
 
@@ -403,14 +411,14 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     })).rejects.toThrow()
 
     await expect(prisma.creativeResourceBinding.findFirst({
-      where: { projectId: seeded.project.id, role: 'adopted_style_bible' },
+      where: { projectId: seeded.project.id, role: 'adopted_creative_direction' },
     })).resolves.toBeNull()
     await expect(prisma.projectAgentInterruption.findUniqueOrThrow({
       where: { id: seeded.interruptionId },
       select: { status: true },
     })).resolves.toEqual({ status: 'pending' })
     expect(await prisma.projectAgentActivity.count({
-      where: { runId: seeded.run.id, operationId: 'adopt_style_bible' },
+      where: { runId: seeded.run.id, operationId: 'adopt_creative_direction' },
     })).toBe(0)
     expect(await prisma.projectAgentEvent.count({
       where: {

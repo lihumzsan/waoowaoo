@@ -11,7 +11,6 @@ import {
   ledgerSnapshotSchema,
   projectLedgerSnapshotAtSourceOffset,
 } from '@/lib/edit-ledger'
-import { creativeStyleBibleSchema } from '@/lib/creative-style/contracts'
 
 export const CREATIVE_CONTEXT_COMPILER_ERROR_CODES = [
   'CREATIVE_CONTEXT_INPUT_INVALID',
@@ -74,10 +73,6 @@ const creativeContextAssetSchema = z.object({
   entityRef: ledgerEntityRefSchema.nullable(),
 }).strict()
 
-const creativeStyleBibleSourceSchema = z.object({
-  revisionId: z.string().trim().min(1),
-}).strict()
-
 export const compileCreativeChapterContextInputSchema = z.object({
   sourceDocument: z.object({
     id: z.string().trim().min(1),
@@ -85,18 +80,9 @@ export const compileCreativeChapterContextInputSchema = z.object({
   }).strict(),
   chapter: chapterContextSourceSchema,
   storyCanonBundle: storyCanonBundleSchema.nullable(),
-  styleBible: creativeStyleBibleSchema.nullable(),
-  styleBibleSource: creativeStyleBibleSourceSchema.nullable(),
   referencedAssets: z.array(creativeContextAssetSchema).max(128),
   maxChars: z.number().int().positive(),
-}).strict().superRefine((input, context) => {
-  if ((input.styleBible === null) === (input.styleBibleSource === null)) return
-  context.addIssue({
-    code: 'custom',
-    message: 'CREATIVE_CONTEXT_STYLE_SOURCE_PAIR_INVALID',
-    path: ['styleBibleSource'],
-  })
-})
+}).strict()
 
 const chapterIdentitySchema = z.object({
   chapterId: z.string().trim().min(1),
@@ -135,10 +121,6 @@ const compiledChapterContextSchema = z.object({
     storyCanon: selectedStoryCanonSchema.nullable(),
     entrySnapshot: ledgerSnapshotSchema,
     events: z.array(ledgerEventSchema),
-  }).strict(),
-  style: z.object({
-    productionStyleBible: creativeStyleBibleSchema.nullable(),
-    source: creativeStyleBibleSourceSchema.nullable(),
   }).strict(),
   referencedAssets: z.array(creativeContextAssetSchema),
 }).strict()
@@ -453,10 +435,6 @@ export function compileCreativeChapterContext(
       } : null,
       entrySnapshot: expectedSnapshot,
       events,
-    },
-    style: {
-      productionStyleBible: input.styleBible,
-      source: input.styleBibleSource,
     },
     referencedAssets,
   })

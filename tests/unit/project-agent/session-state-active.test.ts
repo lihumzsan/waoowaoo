@@ -139,7 +139,7 @@ describe('project agent session-state', () => {
       id: 'creative-task-project-scope',
       status: 'failed',
       payload: {
-        protocol: 'creative_work_v5',
+        protocol: 'creative_work_v6',
         requestKey: 'screenplay-drafting',
         request: {
           outputKind: 'screenplay',
@@ -149,6 +149,7 @@ describe('project agent session-state', () => {
             sourceMaterials: [],
             constraints: [],
           },
+          creativeDirection: null,
           productionContext: { video: null },
         },
         modelKey: 'openrouter::anthropic/claude-fable-5',

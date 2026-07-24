@@ -20,8 +20,8 @@ export const GOLDEN_PROVIDED_SCREENPLAY_TEXT = '场景一：夜，山门。守�
 export const GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST = `这是我已经写好的完整剧本，请直接保存并继续按需制作，不要先规范化：\n${GOLDEN_PROVIDED_SCREENPLAY_TEXT}`
 export const GOLDEN_FREEFORM_STORY_CANON_REQUEST = '基于当前剧本生成一份全项目可复用的 Story Canon'
 export const GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST = '为当前 Episode 采用刚才的剧本和 Story Canon'
-export const GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST = '为当前项目设计一份文字 Style Bible，不要生成预览图'
-export const GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST = '用一张选择卡询问我是否采用刚才的 Style Bible，只处理这个当前决定'
+export const GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST = '为当前项目设计一份文字 Creative Direction，不要生成预览图'
+export const GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST = '用一张选择卡询问我是否采用刚才的 Creative Direction，只处理这个当前决定'
 export const GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST = '现在为了并行制作和失败恢复，把当前剧本规划为两个可独立执行的 Chapter'
 export const GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST = '采用刚才的 Chapter 规划作为当前制作单元'
 export const GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST = '基于同一剧本重新生成一份新的双 Chapter 规划'
@@ -43,7 +43,7 @@ const FREEFORM_REQUEST_MARKERS = [
   GOLDEN_FREEFORM_PROVIDED_SCREENPLAY_REQUEST,
   GOLDEN_FREEFORM_STORY_CANON_REQUEST,
   GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST,
-  GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
+  GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST,
   GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST,
   GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
   GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST,
@@ -332,7 +332,7 @@ function selectFreeformTool(request: GoldenChatCompletionRequest): string | null
   if (instruction.text.includes(GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)) {
     return called.has('list_resources') ? choose('adopt_story_canon') : choose('list_resources')
   }
-  if (instruction.text.includes(GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)) {
+  if (instruction.text.includes(GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST)) {
     return choose('delegate_creative_work')
   }
   if (instruction.text.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)) {
@@ -530,16 +530,16 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       },
     }
   }
-  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST)) {
+  if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST)) {
     return {
       delegation: {
         source: 'requests',
         requests: [{
           requestKey: 'golden-style-bible',
-          outputKind: 'style_bible',
-          goal: 'Design one final textual Style Bible without generating any preview image.',
+          outputKind: 'creative_direction',
+          goal: 'Design one final textual Creative Direction without generating any preview image.',
           context: {
-            userRequest: GOLDEN_FREEFORM_STYLE_BIBLE_REQUEST,
+            userRequest: GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST,
             sourceMaterials: [],
             constraints: ['Return textual visual rules only. Do not request or create preview media.'],
           },
@@ -566,7 +566,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     }
   }
   if (toolName === 'request_choice' && instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)) {
-    const style = exactResourceRevision(resourceBySchema(request, 'project.style_bible'))
+    const style = exactResourceRevision(resourceBySchema(request, 'project.creative_direction'))
     return {
       subject: {
         kind: 'resource_revisions',
@@ -575,7 +575,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       card: {
         mode: 'select',
         replyMode: 'none',
-        title: '是否采用当前 Style Bible？',
+        title: '是否采用当前 Creative Direction？',
         description: '这里只决定当前视觉规则是否成为项目采用版本。',
         groups: [{
           key: 'styleDecision',
@@ -585,7 +585,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           options: [
             {
               value: 'adopt',
-              label: '采用这份 Style Bible',
+              label: '采用这份 Creative Direction',
               description: '仅更新当前项目的视觉规则绑定。',
             },
             {
@@ -599,7 +599,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       },
       commitments: [{
         when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
-        operationId: 'adopt_style_bible',
+        operationId: 'adopt_creative_direction',
         inputJson: JSON.stringify({ ...style, expectedVersion: null }),
       }],
     }
@@ -748,8 +748,8 @@ export function decideGoldenModelResponse(input: {
     const called = allCalledTools(input.request)
     if (available.has('read_skill') && !called.has('read_skill')) {
       const text = messageText(input.request)
-      const skillId = text.includes('style_bible')
-        ? 'style-development'
+      const skillId = text.includes('creative_direction')
+        ? 'creative-direction'
         : text.includes('asset_manifest')
           ? 'asset-development'
           : 'story-development'

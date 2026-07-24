@@ -93,7 +93,7 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>): void {
   throw new ApiError('INVALID_PARAMS', {
     code: 'LEGACY_ART_STYLE_REMOVED',
     field: 'artStyle',
-    message: 'artStyle is not an asset-record field; use an explicit Style Bible Resource when relevant.',
+    message: 'artStyle is not an asset-record field; use an explicit Creative Direction Resource when relevant.',
   })
 }
 
