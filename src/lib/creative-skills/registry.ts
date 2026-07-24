@@ -36,7 +36,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '2.1.0',
+    version: '2.2.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
       zh: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
@@ -50,7 +50,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'continuity-memory': defineSkill({
     id: 'continuity-memory',
-    version: '1.2.0',
+    version: '1.3.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
       zh: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
@@ -64,7 +64,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'director-core': defineSkill({
     id: 'director-core',
-    version: '1.2.0',
+    version: '1.3.0',
     title: { zh: '导演与制作时间线核心', en: 'Director and Production Timeline Core' },
     summary: {
       zh: '把剧情事实组织成镜头、分段、场面调度与音画时间线；`outputKind=video_prompt_set` 时必须与 `video-direction`、`quality-review` 一起读取。',
@@ -106,7 +106,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.4.0',
+    version: '1.5.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
       zh: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
@@ -134,7 +134,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'quality-review': defineSkill({
     id: 'quality-review',
-    version: '1.2.0',
+    version: '1.3.0',
     title: { zh: '创作质量审查', en: 'Creative Quality Review' },
     summary: {
       zh: '`outputKind=creative_review` 必须读取；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',

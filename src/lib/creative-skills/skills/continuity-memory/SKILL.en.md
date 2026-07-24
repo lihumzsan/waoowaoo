@@ -50,6 +50,15 @@ For `outputKind=story_canon`, Creative Direction is optional. When `creativeDire
 - More beats do not imply a longer work. Their combined duration should approximate the script's real performance scale.
 - A source anchor should use verbatim, locally unique phrases sufficient to find the passage again, without paraphrase, summary, or ellipsis.
 
+### Duration estimation method
+
+- Convert dialogue at real speaking pace: roughly 4–6 Chinese characters per second, or about 150–180 English words per minute. Take the faster end for fast-paced genres and the slower end for grave, grieving, or threatening lines. Compute how long the lines actually take to speak instead of assigning fixed seconds per line.
+- Take the longest item for simultaneous content instead of adding them. Voice-over, inner monologue, and narration run at the same time as the picture action they cover; a character speaking while walking, or shouting while fighting, is likewise counted once. Add durations only for actions that genuinely happen in sequence.
+- Give pauses only where they are earned: a major reveal, an emotional landing, a punchline button, or a threat turn may take an explicit 0.5–2 seconds. Ordinary reactions, glances, blocking, and head turns are not timed separately.
+- Cuts and shot transitions themselves take no duration.
+- Set the pacing tier by genre: vertical short drama and hook-driven short video are estimated at the shortest duration in which the audience still follows cause and effect, keeping action and dialogue running in parallel; slow emotional drama, arthouse work, and suspense build-ups are estimated at natural performance pace and must not lose necessary silence, breath, or negative space for the sake of speed.
+- The estimate is real performance time, not a target duration. Never inflate estimates to reach some total, and never cut the action required to understand cause and effect to look compact.
+
 ## Persistent events and state
 
 - Record only changes that continue to affect later material: identity reveals, character appearance or physical state, relationships, location, object possession or damage, plot facts, world rules, and emotional states with lasting effect.

@@ -33,6 +33,8 @@ The purpose of intake is not to collect every setting detail. It is to find the 
 - When the user specifies a duration, the complete script must actually play within it; a runtime label in the title or summary is insufficient.
 - Dialogue-heavy Chinese material may use roughly 300–450 characters per minute as a reference. The more action, pauses, atmosphere, or complex staging, the less text should remain. Estimate other languages from natural speech and real performance time.
 - Runtime comes from dialogue, action, reaction, pauses, and transitions, not from the number of acts, scenes, or beats.
+- Simultaneous content shares one timeline instead of being added in sequence: voice-over, inner monologue, and narration run at the same time as the picture action they cover, and a character can speak while walking or shout while fighting.
+- Set the pacing tier by genre: vertical short drama and hook-driven short video reach the conflict quickly, deliberately run dialogue and action in parallel, and cut travel, small talk, repeated observation, and purely expository monologue; slow emotional drama, arthouse work, and suspense build-ups keep the silence, breath, and negative space they need instead of sacrificing an emotional landing for speed.
 - Scene and beat counts must not become a second authority that inflates runtime. A short film may use one scene, but it still needs a clear progression and landing point.
 - When over time, cut secondary plot, repeated description, long dialogue, redundant action, and ineffective transitions first. Preserve the user's core facts, relationships, and main line.
 - When no duration is specified, write a naturally compact work suited to the story's scale rather than declaring an arbitrary runtime.

@@ -30,6 +30,7 @@ Use actually visible evidence to evaluate story, visual assets, video segments, 
 - Does each scene have place, action, dialogue or narration, emotional/information advance, and a natural connection to adjacent scenes?
 - Is there repeated exposition, excessive dialogue, a scene that changes nothing, unsupported canon, knowledge acquired too early, or an object that returns after loss without cause?
 - Can actual dialogue, action, reaction, pauses, and transitions fit the target runtime? Do not judge runtime from prose length or beat count alone.
+- Check the opposite direction as well: is there repeated action, stretched performance, uninformative long pauses, redundant environmental shots, or recurring transitional filler that exists only to fill duration? Were simultaneous dialogue, voice-over, and action added as sequential events, inflating the estimated runtime?
 
 ## Continuity review
 
@@ -71,6 +72,7 @@ Use actually visible evidence to evaluate story, visual assets, video segments, 
 - Are gaze, orientation, primary movement, performance, prop possession, and core set objects clear? When placement affects action, relationships, composition, or continuity, do the first frame and landing combine a stable physical anchor, frame region or depth, body orientation, and prop relationship?
 - When a character changes position, are the starting point, path, and landing position visibly completed, with later shots inheriting the reached position through the same set anchor?
 - Do major reveals, punchlines, reactions, and scale comparisons receive enough time while pacing remains causally understandable?
+- Does every segment duration match that segment's real content, with no clip stretched to fill an allowed duration or a total? With `durationIntent.mode=fixed`, segments must sum to the user-stated seconds; with `mode=derive`, the total must equal what the content genuinely needs rather than drifting toward a planning estimate.
 - Is every independently generated segment complete? Compare every outgoing final shot with the next incoming first shot: do they use visibly different scales rather than only a side/back view or slight camera-angle change, and are stable set anchors compatible when the character reappears?
 - Did the model accidentally create a collage, grid, split screen, captions, title, watermark, or unwanted text overlay?
 
