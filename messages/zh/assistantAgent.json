@@ -57,6 +57,14 @@
     "fullResult": "完整结构化结果",
     "fullResultLoading": "正在读取完整结果…",
     "fullResultError": "无法读取完整结果。",
+    "failure": {
+      "title": "Subagent 未能完成",
+      "codeLabel": "错误代码",
+      "codeUnavailable": "未提供",
+      "reasonLabel": "原因",
+      "reasonFallback": "任务没有提供可展示的具体失败原因。",
+      "nextStep": "请根据原因修正委派输入、上下文或配置后再重新委派；不要原样静默重试。"
+    },
     "execution": {
       "running": "思考与工具调用",
       "completed": "思考与工具调用记录"
@@ -68,7 +76,7 @@
       "cancelled": "已取消"
     },
     "outputKinds": {
-      "canonicalScreenplay": "规范剧本",
+      "screenplay": "剧本",
       "editBibleBundle": "制作 Bible",
       "continuityAnalysis": "连续性分析",
       "chapterPlan": "章节规划",

@@ -57,6 +57,14 @@
     "fullResult": "Complete structured result",
     "fullResultLoading": "Loading the complete result…",
     "fullResultError": "The complete result could not be loaded.",
+    "failure": {
+      "title": "Subagent did not complete",
+      "codeLabel": "Error code",
+      "codeUnavailable": "Not provided",
+      "reasonLabel": "Reason",
+      "reasonFallback": "The task did not provide a displayable failure reason.",
+      "nextStep": "Correct the delegated input, context, or configuration based on this reason before delegating again; do not silently retry the same request."
+    },
     "execution": {
       "running": "Reasoning and tool calls",
       "completed": "Reasoning and tool call history"
@@ -68,7 +76,7 @@
       "cancelled": "Cancelled"
     },
     "outputKinds": {
-      "canonicalScreenplay": "Canonical Screenplay",
+      "screenplay": "Screenplay",
       "editBibleBundle": "Production Bible",
       "continuityAnalysis": "Continuity Analysis",
       "chapterPlan": "Chapter Planning",

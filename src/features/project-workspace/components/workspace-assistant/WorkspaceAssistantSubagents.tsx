@@ -12,15 +12,21 @@ import type {
   ProjectAgentSubagentView,
 } from '@/lib/project-agent/subagent-events'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import { WorkspaceAssistantAnimatedPlainText } from './WorkspaceAssistantTextPlayback'
 
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
+type ErrorTranslator = ReturnType<typeof useTranslations<'errors'>>
+type SubagentReasoningEvent = Extract<
+  ProjectAgentSubagentEventPartData['event'],
+  { kind: 'reasoning' }
+>
 
 function localizeOutputKind(
   outputKind: ProjectAgentSubagentView['outputKind'],
   t: AssistantAgentTranslator,
 ): string {
   switch (outputKind) {
-    case 'canonical_screenplay': return t('subagents.outputKinds.canonicalScreenplay')
+    case 'screenplay': return t('subagents.outputKinds.screenplay')
     case 'edit_bible_bundle': return t('subagents.outputKinds.editBibleBundle')
     case 'continuity_analysis': return t('subagents.outputKinds.continuityAnalysis')
     case 'chapter_plan': return t('subagents.outputKinds.chapterPlan')
@@ -113,19 +119,12 @@ function SubagentEventBody(props: {
   const label = localizeEvent(props.part, props.locale, props.t)
   if (event.kind === 'reasoning') {
     return (
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">{label}</div>
-        {event.text ? (
-          <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--glass-text-secondary)]">
-            {event.text}
-          </div>
-        ) : null}
-        {event.truncated ? (
-          <div className="mt-1 text-xs text-[var(--glass-text-tertiary)]">
-            {props.t('subagents.events.reasoningTruncated')}
-          </div>
-        ) : null}
-      </div>
+      <SubagentReasoningEventBody
+        event={event}
+        label={label}
+        playbackKey={`subagent:${props.part.subagentId}:reasoning:${event.reasoningId}`}
+        t={props.t}
+      />
     )
   }
   if (event.kind === 'tool_completed') {
@@ -152,6 +151,33 @@ function SubagentEventBody(props: {
     )
   }
   return <span className="min-w-0 break-words">{label}</span>
+}
+
+function SubagentReasoningEventBody(props: {
+  event: SubagentReasoningEvent
+  label: string
+  playbackKey: string
+  t: AssistantAgentTranslator
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">{props.label}</div>
+      {props.event.text ? (
+        <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--glass-text-secondary)]">
+          <WorkspaceAssistantAnimatedPlainText
+            text={props.event.text}
+            running={props.event.status === 'running'}
+            playbackKey={props.playbackKey}
+          />
+        </div>
+      ) : null}
+      {props.event.truncated ? (
+        <div className="mt-1 text-xs text-[var(--glass-text-tertiary)]">
+          {props.t('subagents.events.reasoningTruncated')}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function SubagentExecutionDisclosure(props: {
@@ -200,6 +226,40 @@ function SubagentExecutionDisclosure(props: {
           ) : null}
         </ol>
       ) : null}
+    </section>
+  )
+}
+
+function SubagentFailureNotice(props: {
+  errorCode: string | null
+  t: AssistantAgentTranslator
+  tErrors: ErrorTranslator
+}) {
+  const errorCode = props.errorCode?.trim() ?? ''
+  const reason = errorCode && props.tErrors.has(errorCode)
+    ? props.tErrors(errorCode)
+    : props.t('subagents.failure.reasonFallback')
+
+  return (
+    <section
+      role="alert"
+      className="mt-5 rounded-xl border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-3 leading-5 text-[var(--glass-tone-warn-fg)]"
+    >
+      <div className="flex items-start gap-2">
+        <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{props.t('subagents.failure.title')}</div>
+          <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs leading-5">
+            <dt className="opacity-70">{props.t('subagents.failure.codeLabel')}</dt>
+            <dd className="min-w-0 break-all font-mono">
+              {errorCode || props.t('subagents.failure.codeUnavailable')}
+            </dd>
+            <dt className="opacity-70">{props.t('subagents.failure.reasonLabel')}</dt>
+            <dd className="min-w-0 break-words">{reason}</dd>
+          </dl>
+          <p className="mt-2 text-xs leading-5">{props.t('subagents.failure.nextStep')}</p>
+        </div>
+      </div>
     </section>
   )
 }
@@ -282,6 +342,7 @@ export function WorkspaceAssistantSubagentView(props: {
   subagent: ProjectAgentSubagentView | null
 }) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
   const locale = normalizeProjectAgentLocale(useLocale())
   const subagent = props.subagent
   const subagentTaskId = subagent?.taskId ?? null
@@ -346,6 +407,14 @@ export function WorkspaceAssistantSubagentView(props: {
         locale={locale}
         t={t}
       />
+
+      {subagent.status === 'failed' ? (
+        <SubagentFailureNotice
+          errorCode={subagent.errorCode}
+          t={t}
+          tErrors={tErrors}
+        />
+      ) : null}
 
       {subagent.summary ? (
         <div className="mt-5 leading-6 text-[var(--glass-text-secondary)]">
