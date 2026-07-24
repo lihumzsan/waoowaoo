@@ -56,21 +56,19 @@ function localizedNotice(
   locale: CreativeSkillLocale,
   status: CreativeWorkerResearchEvidence['status'],
 ): string | null {
-  if (status === 'completed') return null
+  if (status === 'completed' || status === 'not_attempted') return null
   if (locale === 'zh') {
     if (status === 'partial') return '外部研究仅部分完成；制作方向只使用已归档来源，并明确保留未验证项。'
     if (status === 'budget_exhausted') return '未做外部研究：联网检索预算已耗尽。'
     if (status === 'unavailable') return '未做外部研究：联网检索未配置或当前不可用。'
-    if (status === 'failed') return '未做外部研究：联网检索失败，未把推测伪装成检索结论。'
-    return '未做外部研究：本次没有调用联网检索。'
+    return '未做外部研究：联网检索失败，未把推测伪装成检索结论。'
   }
   if (status === 'partial') {
     return 'External research was only partially completed; the direction uses only archived sources and preserves unverified points.'
   }
   if (status === 'budget_exhausted') return 'External research was not performed: the web-search budget was exhausted.'
   if (status === 'unavailable') return 'External research was not performed: web search was not configured or unavailable.'
-  if (status === 'failed') return 'External research was not performed: web search failed, and assumptions were not presented as findings.'
-  return 'External research was not performed: web search was not called for this run.'
+  return 'External research was not performed: web search failed, and assumptions were not presented as findings.'
 }
 
 export function normalizeResearchRequest(

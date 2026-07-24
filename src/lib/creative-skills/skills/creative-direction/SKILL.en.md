@@ -88,7 +88,9 @@ Avoid empty terms such as “cinematic,” “premium,” “immersive,” or �
 
 Use web research only when the task benefits from current, niche, regional, platform-specific, or unfamiliar knowledge. Do not search merely to decorate a familiar direction.
 
-When research capability is available:
+When none of those conditions applies, completing without a search is normal and must not add a warning.
+
+When research is warranted and the capability is available:
 
 1. Search the user's exact term and its likely aliases or original-language spelling.
 2. Search separately for primary examples, practitioner/critical analysis, and audience or community usage.
@@ -98,7 +100,7 @@ When research capability is available:
 6. Translate evidence into domain-owned creative policies; do not paste quotations, URLs, rankings, or search summaries into the Creative Direction.
 7. Research queries and source titles/URLs belong to research metadata, not the direction body.
 
-If research is unavailable, fails, or reaches its budget, explicitly report that external research was not completed in the output's available warnings/assumptions. Never imply research happened when it did not.
+If a search was attempted but became unavailable, failed, completed only partially, or reached its budget, explicitly report the research limitation in the output's available warnings/assumptions. Never imply completed research when it did not happen.
 
 ## Review
 

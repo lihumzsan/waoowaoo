@@ -15,7 +15,7 @@ Web Search 是一个受限的外部资料读取能力，不是第二个 Agent、
 - **WS-03 — 同一环境密钥机制。** cloud 与 self-hosted 都只从服务端 `TAVILY_API_KEY` 读取。缺失或凭据被拒绝必须返回 `WEB_SEARCH_UNAVAILABLE`，不得读取聊天文本、用户 Resource、客户端参数或另一 provider 作为 fallback。
 - **WS-04 — Main Agent 只读且按需。** `web_search` 是 Operation registry 中的 `query`、`on_demand`、零写入能力；它仍通过固定 `load_tools + execute_operation` gateway 和 Operation executor。未配置密钥时该 Operation 明确失败，不伪造空搜索成功。
 - **WS-05 — Worker 暴露面由 output registry 穷尽。** `creative_direction.workerTools=['web_search']` 是 Creative Worker 搜索能力的唯一声明；其他 output kind 只能看到 `read_skill`。Primary 不手动把搜索工具或研究结果注入 Worker，Worker 也不能搜索任意 URL、读取项目或调用 Extract/Crawl/Research。
-- **WS-06 — 研究预算与失败语义显式。** 每个 Creative Direction Task 冻结 `maxWebSearchCalls`。每次工具调用按 query 记录 completed/unavailable/failed/budget_exhausted；预算耗尽不发 provider 请求。无成功查询时，Worker 输出 warnings 和研究元数据必须明确“未做外部研究”；部分成功必须标为 partial，禁止把推测伪装为来源结论。
+- **WS-06 — 搜索可选，研究预算与失败语义显式。** Worker 只有在任务依赖最新、陌生、冷门、地域性、平台性或社群定义的信息且现有输入不足时才调用搜索；熟悉且稳定的方向不得为装饰而搜索。每个 Creative Direction Task 冻结 `maxWebSearchCalls`，每次工具调用按 query 记录 completed/unavailable/failed/budget_exhausted，预算耗尽不发 provider 请求。零调用是正常完成：研究元数据记录 `not_attempted` 且不产生 warning。实际尝试后的不可用、失败、部分完成或预算耗尽才产生确定性 warning；部分成功必须标为 partial，禁止把推测伪装为来源结论。
 - **WS-07 — 证据与政策分离。** Task result 的 `research` 由运行时根据真实工具调用构造，模型不能自报。Creative Direction Resource 的 `generationOptions.research` 只保存 query、状态、来源 title+URL 和预算，不保存网页摘要；Direction structured content 只保存 `styleSummary/rawUserStyle` 与六个领域正文。
 - **WS-08 — 网页内容不可信且有界。** Tavily 请求固定关闭 answer、raw content、images 和 auto parameters；只接受 HTTP(S) source URL，标题/摘要/结果数都有上限。系统提示词与 `creative-direction` Skill 必须同时声明网页指令无权覆盖系统行为。
 
@@ -33,7 +33,7 @@ Web Search 是一个受限的外部资料读取能力，不是第二个 Agent、
 
 Main Agent 需要当前资料时按需加载 `web_search`，通过唯一 Operation executor 发起一次受限查询。Operation 成功返回有界 source，配置缺失、凭据拒绝、网络或响应异常以 typed error 结束本次调用，不写项目事实。
 
-Creative Direction Task 启动时，output registry 决定 Worker 同时获得 `read_skill` 与 `web_search`；其他 Task 不创建研究状态也不获得该工具。Worker 每次搜索先占用本 Task 预算，再由 `searchWeb` 请求 Tavily。成功结果可供本轮综合，运行时只把 query 与 source identity 归档；失败返回显式非研究结果供 Worker继续生成并写 warning。Task 完成后，完整研究证据进入 `Task.result`，Creative Direction 物化时复制到每个 final/candidate Revision 的 generation metadata，正文不含来源证据。
+Creative Direction Task 启动时，output registry 决定 Worker 同时获得 `read_skill` 与 `web_search`；其他 Task 不创建研究状态也不获得该工具。Worker 先判断是否确有研究必要；不调用时正常生成方向，运行时只归档 `not_attempted`，不向正文补 warning。每次实际搜索先占用本 Task 预算，再由 `searchWeb` 请求 Tavily。成功结果可供本轮综合，运行时只把 query 与 source identity 归档；尝试后的失败返回显式非研究结果供 Worker 继续生成并写 warning。Task 完成后，完整研究证据进入 `Task.result`，Creative Direction 物化时复制到每个 final/candidate Revision 的 generation metadata，正文不含来源证据。
 
 Main Agent 搜索失败是 Operation 失败；Creative Direction 研究失败是显式、可审计的降级结果而非 Task 失败，因为方向仍可基于用户事实与 Skill 生成。两者都不得返回伪造来源或假装最新。
 
@@ -59,6 +59,6 @@ Main Agent 搜索失败是 Operation 失败；Creative Direction 研究失败是
 2. 公共 schema 是否仍不含 API key、raw content、answer、images 或 Tavily 私有控制项？
 3. Main Agent 是否仍通过 Operation registry/gateway，且配置缺失明确失败？
 4. Worker 搜索能力是否只由 `creative_direction.workerTools` 声明，其他 output kind 仍只有 `read_skill`？
-5. 预算、无研究、部分研究和失败是否由运行时证据决定，而非模型自报？
+5. 预算、未尝试、部分研究和失败是否由运行时证据决定，且未尝试不会产生 warning？
 6. Creative Direction structured content 是否仍不含 query、citation 或网页摘要，证据只在 generation metadata？
 7. 测试是否观察真实 provider wire adapter 边界，并明确真实 Tavily 质量仍需发布复验？

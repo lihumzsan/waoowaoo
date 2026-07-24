@@ -70,7 +70,7 @@ describe('Creative Worker external research evidence', () => {
       state: untouched,
     })).toMatchObject({
       status: 'not_attempted',
-      notice: expect.stringContaining('未做外部研究'),
+      notice: null,
     })
 
     const unavailable = state()
