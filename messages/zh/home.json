@@ -7,7 +7,11 @@
   "aspectRatioHints": {
     "widescreen": "宽银幕 · 电影感",
     "landscape": "横屏 · 常规视频",
-    "portrait": "竖屏 · 手机短视频"
+    "classicLandscape": "经典横屏 · 传统画幅",
+    "square": "方形 · 社交媒体",
+    "classicPortrait": "经典竖屏 · 人像构图",
+    "portrait": "竖屏 · 手机短视频",
+    "tallPortrait": "超长竖屏 · 沉浸画面"
   },
   "defaultProjectName": "新项目 {timestamp}",
   "createFailed": "项目创建失败，请稍后重试",

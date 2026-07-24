@@ -5,19 +5,27 @@ import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AppIcon, RatioPreviewIcon } from '@/components/ui/icons'
-import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+import {
+  PROJECT_VIDEO_RATIOS,
+  type ProjectVideoRatio,
+} from '@/lib/projects/video-ratio'
 
-const HOME_VIDEO_RATIO_OPTIONS = ['21:9', '16:9', '9:16'] as const satisfies readonly ProjectVideoRatio[]
-
-const RATIO_HINT_KEYS: Record<ProjectVideoRatio, 'widescreen' | 'landscape' | 'portrait'> = {
+const RATIO_HINT_KEYS: Record<
+  ProjectVideoRatio,
+  'widescreen' | 'landscape' | 'classicLandscape' | 'square' | 'classicPortrait' | 'portrait' | 'tallPortrait'
+> = {
   '21:9': 'widescreen',
   '16:9': 'landscape',
+  '4:3': 'classicLandscape',
+  '1:1': 'square',
+  '3:4': 'classicPortrait',
   '9:16': 'portrait',
+  '9:21': 'tallPortrait',
 }
 
-const PANEL_WIDTH = 262
-const PANEL_MAX_HEIGHT = 300
-const MIN_COMFORTABLE_PANEL_HEIGHT = 220
+const PANEL_WIDTH = 744
+const PANEL_MAX_HEIGHT = 172
+const MIN_COMFORTABLE_PANEL_HEIGHT = 160
 const VIEWPORT_EDGE_GAP = 16
 
 interface HomeVideoRatioSelectProps {
@@ -143,6 +151,7 @@ export default function HomeVideoRatioSelect({
               ref={panelRef}
               role="listbox"
               aria-label={t('aspectRatio')}
+              aria-orientation="horizontal"
               className="glass-surface-modal z-[9999] flex flex-col overflow-hidden rounded-[20px] p-1.5 shadow-[0_12px_40px_-8px_rgba(15,17,23,0.24)]"
               style={panelStyle}
             >
@@ -150,8 +159,8 @@ export default function HomeVideoRatioSelect({
                 {t('aspectRatio')}
               </div>
 
-              <div className="app-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-                {HOME_VIDEO_RATIO_OPTIONS.map((option) => {
+              <div className="app-scrollbar flex min-h-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden pb-0.5">
+                {PROJECT_VIDEO_RATIOS.map((option) => {
                   const selected = option === value
                   return (
                     <button
@@ -163,33 +172,33 @@ export default function HomeVideoRatioSelect({
                         onChange(option)
                         setIsOpen(false)
                       }}
-                      className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors duration-200 ${
+                      className={`relative flex min-w-[96px] flex-1 flex-col items-center gap-1.5 rounded-xl px-2 py-2.5 text-center transition-colors duration-200 ${
                         selected
                           ? 'bg-[color-mix(in_srgb,var(--glass-accent-from)_9%,transparent)]'
                           : 'hover:bg-[rgba(15,17,23,0.035)]'
                       }`}
                     >
-                      <span className="flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center">
+                      <span className="flex h-[42px] w-full flex-shrink-0 items-center justify-center">
                         <RatioPreviewIcon
                           ratio={option}
-                          size={38}
+                          size={40}
                           selected={selected}
                           variant="muted"
                           radiusClassName="rounded-[4px]"
                         />
                       </span>
 
-                      <span className="min-w-0 flex-1">
+                      <span className="min-w-0">
                         <span className={`block text-[14px] font-bold ${selected ? 'text-[var(--glass-tone-info-fg)]' : 'text-[var(--glass-text-primary)]'}`}>
                           {option}
                         </span>
-                        <span className="mt-0.5 block truncate text-[12px] text-[var(--glass-text-tertiary)]">
+                        <span className="mt-0.5 block min-h-8 text-[11px] leading-4 text-[var(--glass-text-tertiary)]">
                           {t(`aspectRatioHints.${RATIO_HINT_KEYS[option]}`)}
                         </span>
                       </span>
 
                       {selected ? (
-                        <AppIcon name="check" className="h-4 w-4 flex-shrink-0 text-[var(--glass-tone-info-fg)]" />
+                        <AppIcon name="check" className="absolute right-2 top-2 h-3.5 w-3.5 text-[var(--glass-tone-info-fg)]" />
                       ) : null}
                     </button>
                   )

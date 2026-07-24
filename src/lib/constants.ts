@@ -17,6 +17,7 @@ export const ASPECT_RATIO_CONFIGS: Record<string, { label: string; isVertical: b
   '5:4': { label: '5:4', isVertical: false },
   '4:5': { label: '4:5', isVertical: true },
   '21:9': { label: '21:9', isVertical: false },
+  '9:21': { label: '9:21', isVertical: true },
 }
 
 // 配置页面使用的选项列表（从 ASPECT_RATIO_CONFIGS 派生）

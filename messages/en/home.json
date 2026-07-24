@@ -7,7 +7,11 @@
   "aspectRatioHints": {
     "widescreen": "Widescreen · cinematic",
     "landscape": "Landscape · standard video",
-    "portrait": "Portrait · mobile short video"
+    "classicLandscape": "Classic landscape · traditional",
+    "square": "Square · social media",
+    "classicPortrait": "Classic portrait · people",
+    "portrait": "Portrait · mobile short video",
+    "tallPortrait": "Ultra-tall · immersive"
   },
   "defaultProjectName": "New Project {timestamp}",
   "createFailed": "Failed to create project. Please try again.",
