@@ -39,7 +39,6 @@ function buildGoldenScreenplay(): unknown {
     logline: 'A lone astronomer confronts her moving reflection during one uninterrupted night.',
     synopsis: 'One continuous observatory scene resolves a supernatural warning without a location change.',
     screenplayText: GOLDEN_SCREENPLAY,
-    estimatedDurationSeconds: 240,
     source: { kind: 'generated', label: 'Golden Journey request' },
     assumptions: ['The requested 240 seconds remain one continuous dramatic context.'],
     openQuestions: [],

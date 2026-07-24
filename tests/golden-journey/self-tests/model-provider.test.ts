@@ -317,7 +317,7 @@ describe('Golden local model provider', () => {
     expect(readOperationArguments(screenplay, 'delegate_creative_work')).toMatchObject({
       delegation: {
         source: 'requests',
-        requests: [{ outputKind: 'screenplay', targetDurationSeconds: 240 }],
+        requests: [{ outputKind: 'screenplay', durationIntent: { mode: 'fixed', seconds: 240 } }],
       },
     })
   })
@@ -395,7 +395,7 @@ describe('Golden local model provider', () => {
     const screenplayOutput = JSON.parse(afterSkillRead.text) as Record<string, unknown>
     expect(screenplayOutput).toMatchObject({
       kind: 'screenplay',
-      estimatedDurationSeconds: 240,
+      title: 'The Red Observatory',
     })
     expect(screenplayOutput).not.toHaveProperty('entities')
     expect(screenplayOutput).not.toHaveProperty('scenes')

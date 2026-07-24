@@ -68,13 +68,26 @@ const creativeWorkDelegationSourceMaterialSchema = z.discriminatedUnion('kind', 
   }).strict(),
 ]).describe('Use kind=resource with revisionId only for persisted Resources. Inline material carries its own content and optional exact domain provenance.')
 
+export const creativeWorkDurationIntentSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('fixed'),
+    seconds: z.number().int().positive().max(36_000)
+      .describe('The exact total delivery duration the user explicitly stated. For video_prompt_set this is the whole work or Chapter duration, never a caller-chosen segment duration or segment count.'),
+  }).strict()
+    .describe('Use only when the user actually stated a delivery duration, or when an adopted plan allocates that stated total to this unit.'),
+  z.object({
+    mode: z.literal('derive'),
+  }).strict()
+    .describe('Use whenever the user did not state a delivery duration. The Worker derives the real duration from the dialogue, action, and beats it actually designs.'),
+]).describe('Explicit duration authority for this delegation. There is no implicit default: never convert your own estimate, a planning estimate, or a Chapter estimate into mode=fixed.')
+
 const creativeWorkRequestBaseShape = {
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS)
     .describe('The strict structured result contract the creative worker must return.'),
   goal: z.string().trim().min(1).max(8_000)
     .describe('A concrete professional creative objective for this one stateless delegation.'),
-  targetDurationSeconds: z.number().int().positive().max(36_000).optional()
-    .describe('Overall requested delivery duration. For video_prompt_set this is the whole work or Chapter duration, never a caller-chosen segment duration or segment count.'),
+  durationIntent: creativeWorkDurationIntentSchema.optional()
+    .describe('Required for video_prompt_set. Omit only for output kinds whose result has no delivery duration.'),
 } as const
 
 export const creativeWorkDelegationRequestSchema = z.object({

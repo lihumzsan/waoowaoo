@@ -204,7 +204,7 @@ function buildWorkerInput(input: {
   return JSON.stringify({
     requestedOutputKind: input.request.outputKind,
     goal: input.request.goal,
-    targetDurationSeconds: input.request.targetDurationSeconds ?? null,
+    durationIntent: input.request.durationIntent ?? null,
     context: input.request.context,
     creativeDirection: input.request.creativeDirection,
     productionContext: input.request.productionContext,
@@ -268,11 +268,11 @@ function parseFinalOutput(input: {
   }
   if (output.kind === 'video_prompt_set') {
     const production = input.request.productionContext.video
-    const targetDurationSeconds = input.request.targetDurationSeconds
-    if (!production || targetDurationSeconds === undefined) {
+    const durationIntent = input.request.durationIntent
+    if (!production || durationIntent === undefined) {
       throw new CreativeWorkerError('CREATIVE_WORK_REQUEST_INVALID', {
         outputKind: output.kind,
-        reason: 'video production context and target duration are required',
+        reason: 'video production context and duration intent are required',
       })
     }
     const allowedDurations = new Set(production.allowedSegmentDurationsSeconds)
@@ -297,11 +297,11 @@ function parseFinalOutput(input: {
       }
       totalDurationSeconds += segment.durationSeconds
     }
-    if (totalDurationSeconds !== targetDurationSeconds) {
+    if (durationIntent.mode === 'fixed' && totalDurationSeconds !== durationIntent.seconds) {
       throw new CreativeWorkerError('CREATIVE_WORK_OUTPUT_INVALID', {
         outputKind: output.kind,
-        reason: 'video segment durations do not equal the requested delivery duration',
-        targetDurationSeconds,
+        reason: 'video segment durations do not equal the user-stated delivery duration',
+        targetDurationSeconds: durationIntent.seconds,
         totalDurationSeconds,
       })
     }

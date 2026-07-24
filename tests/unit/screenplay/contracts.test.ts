@@ -11,7 +11,6 @@ const screenplay = screenplaySchema.parse({
   logline: null,
   synopsis: '角色从山顶坠落并在崖底醒来。',
   screenplayText: '山顶。阿澈失足越过悬崖边缘。\n崖底。阿澈摔在碎石地上，怀表发出金光。',
-  estimatedDurationSeconds: 30,
   source: { kind: 'generated', label: '坠落剧本' },
   assumptions: [],
   openQuestions: [],

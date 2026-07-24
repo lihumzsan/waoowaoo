@@ -564,7 +564,6 @@ async function createTextResources(
               logline: null,
               synopsis: '',
               screenplayText: candidate.text,
-              estimatedDurationSeconds: null,
               source: {
                 kind: 'provided',
                 label: suppliedScreenplayTitle ?? candidate.text.trim().slice(0, 500),

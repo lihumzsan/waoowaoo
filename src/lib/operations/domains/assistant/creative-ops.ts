@@ -114,7 +114,7 @@ async function resolveDelegationRequests(input: {
       requestKey: requestedChapter.requestKey,
       outputKind: operationInput.outputKind,
       goal: `${operationInput.goal}\nChapter ${String(result.context.chapter.chapterIndex + 1)}: ${result.context.chapter.title}`,
-      targetDurationSeconds: result.context.chapter.targetDurationSec,
+      durationIntent: requestedChapter.durationIntent,
       context: {
         userRequest: operationInput.userRequest,
         sourceMaterials: [
@@ -358,17 +358,23 @@ async function resolveTaskRequests(input: {
         productionContext: { video: null },
       }
     }
-    const targetDurationSeconds = request.targetDurationSeconds
+    const durationIntent = request.durationIntent
+    if (durationIntent === undefined) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
+        field: 'durationIntent',
+        allowedValues: allowedSegmentDurationsSeconds,
+        agentRetryableAfterCorrection: true,
+      })
+    }
     if (
-      targetDurationSeconds === undefined
-      || !canComposeDuration(targetDurationSeconds, allowedSegmentDurationsSeconds)
+      durationIntent.mode === 'fixed'
+      && !canComposeDuration(durationIntent.seconds, allowedSegmentDurationsSeconds)
     ) {
       throw new ApiError('INVALID_PARAMS', {
-        code: targetDurationSeconds === undefined
-          ? 'CREATIVE_VIDEO_TARGET_DURATION_REQUIRED'
-          : 'CREATIVE_VIDEO_TARGET_DURATION_UNSUPPORTED',
-        field: 'targetDurationSeconds',
-        requestedValue: targetDurationSeconds ?? null,
+        code: 'CREATIVE_VIDEO_TARGET_DURATION_UNSUPPORTED',
+        field: 'durationIntent.seconds',
+        requestedValue: durationIntent.seconds,
         allowedValues: allowedSegmentDurationsSeconds,
         agentRetryableAfterCorrection: true,
       })

@@ -272,7 +272,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(screenplayRevision).toMatchObject({
     resourceId: screenplayResource.id,
     generationOptions: { outputKind: 'screenplay' },
-    contentJson: { kind: 'screenplay', estimatedDurationSeconds: 240 },
+    contentJson: { kind: 'screenplay', title: 'The Red Observatory' },
   })
   const screenplayContent = asRecord(screenplayRevision?.contentJson)
   expect(screenplayContent).not.toHaveProperty('entities')

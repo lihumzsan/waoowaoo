@@ -15,7 +15,6 @@ export const screenplayWorkerOutputSchema = z.object({
   logline: z.string().max(2_000).nullable(),
   synopsis: z.string().max(12_000),
   screenplayText: z.string().min(1).max(200_000),
-  estimatedDurationSeconds: z.number().finite().nonnegative().nullable(),
   source: z.object({
     kind: z.enum(['generated', 'provided', 'revised']),
     label: z.string().trim().min(1).max(500),

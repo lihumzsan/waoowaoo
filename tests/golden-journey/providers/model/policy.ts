@@ -495,7 +495,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           requestKey: 'golden-screenplay-draft',
           outputKind: 'screenplay',
           goal: 'Write one complete 240-second screenplay in one uninterrupted dramatic context.',
-          targetDurationSeconds: 240,
+          durationIntent: { mode: 'fixed', seconds: 240 },
           context: {
             userRequest: GOLDEN_FREEFORM_SCREENPLAY_REQUEST,
             sourceMaterials: [],
@@ -614,7 +614,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           requestKey: 'golden-chapter-plan',
           outputKind: 'chapter_plan',
           goal: 'Plan two independently recoverable production Chapters while preserving the continuous story context.',
-          targetDurationSeconds: 240,
+          durationIntent: { mode: 'fixed', seconds: 240 },
           context: {
             userRequest: GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
             sourceMaterials: [{
@@ -641,7 +641,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
           requestKey: 'golden-chapter-plan-v2',
           outputKind: 'chapter_plan',
           goal: 'Create a replacement two-Chapter production plan with fresh narrative unit identities.',
-          targetDurationSeconds: 240,
+          durationIntent: { mode: 'fixed', seconds: 240 },
           context: {
             userRequest: GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST,
             sourceMaterials: [{

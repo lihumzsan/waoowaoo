@@ -212,7 +212,6 @@ describe('Asset Manifest adoption DB integration', () => {
       logline: null,
       synopsis: 'Lin reaches an old station with a sealed letter.',
       screenplayText,
-      estimatedDurationSeconds: 60,
       source: { kind: 'provided', label: 'User screenplay' },
       assumptions: [],
       openQuestions: [],

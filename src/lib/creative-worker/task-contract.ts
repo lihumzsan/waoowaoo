@@ -10,6 +10,7 @@ import {
 } from './output-registry'
 import {
   creativeWorkDelegationRequestSchema,
+  creativeWorkDurationIntentSchema,
   creativeWorkRequestSchema,
 } from './types'
 import {
@@ -73,7 +74,15 @@ export const creativeWorkerResultSchema = z.object({
 export const creativeWorkDelegationItemSchema = creativeWorkDelegationRequestSchema.extend({
   requestKey: z.string().trim().min(1).max(200)
     .describe('Caller-owned stable identity for this one logical Subagent request. It must be unique inside a batch and reused only for an explicit retry of the same logical item.'),
-}).strict()
+}).strict().superRefine((request, context) => {
+  if (request.outputKind === 'video_prompt_set' && request.durationIntent === undefined) {
+    context.addIssue({
+      code: 'custom',
+      message: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
+      path: ['durationIntent'],
+    })
+  }
+})
 
 export const creativeWorkChapterBatchInputSchema = z.object({
   source: z.literal('chapters')
@@ -83,6 +92,8 @@ export const creativeWorkChapterBatchInputSchema = z.object({
       .describe('Exact persisted Chapter identity.'),
     requestKey: z.string().trim().min(1).max(200)
       .describe('Caller-owned stable identity for this Chapter Subagent request.'),
+    durationIntent: creativeWorkDurationIntentSchema.optional()
+      .describe('Required for video_prompt_set. Use mode=fixed with this Chapter\'s allocated seconds only when the user stated the total duration being allocated; the adopted Chapter targetDurationSec is a planning estimate and must not be resent as mode=fixed on its own.'),
   }).strict()).min(1).max(64),
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS)
     .describe('Strict structured output contract requested from every Chapter Subagent.'),
@@ -97,7 +108,18 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
     .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Creative Direction and any relevant media assets.'),
-}).strict()
+}).strict().superRefine((batch, context) => {
+  if (batch.outputKind !== 'video_prompt_set') return
+  for (const [index, chapter] of batch.chapters.entries()) {
+    if (chapter.durationIntent === undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
+        path: ['chapters', index, 'durationIntent'],
+      })
+    }
+  }
+})
 
 const creativeWorkRequestBatchInputSchema = z.object({
   source: z.literal('requests')

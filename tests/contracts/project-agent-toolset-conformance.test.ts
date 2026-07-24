@@ -523,7 +523,7 @@ describe('project agent toolset conformance', () => {
           requestKey: 'short-video-1',
           outputKind: 'video_prompt_set',
           goal: 'Design the complete requested video.',
-          targetDurationSeconds: 60,
+          durationIntent: { mode: 'fixed', seconds: 60 },
           context: {
             userRequest: 'A lantern wakes in an abandoned shrine.',
             sourceMaterials: [],
@@ -571,7 +571,11 @@ describe('project agent toolset conformance', () => {
     expect(operation.inputSchema.safeParse({
       delegation: {
         source: 'chapters',
-        chapters: [{ chapterId: 'chapter-1', requestKey: 'chapter-1-video' }],
+        chapters: [{
+          chapterId: 'chapter-1',
+          requestKey: 'chapter-1-video',
+          durationIntent: { mode: 'derive' },
+        }],
         outputKind: 'video_prompt_set',
         goal: 'Design this Chapter as executable video generations.',
         userRequest: 'Produce the complete long-form story.',
@@ -579,6 +583,40 @@ describe('project agent toolset conformance', () => {
         referencedAssets: [],
       },
     }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      delegation: {
+        source: 'chapters',
+        chapters: [{ chapterId: 'chapter-1', requestKey: 'chapter-1-video' }],
+        outputKind: 'video_prompt_set',
+        goal: 'Design this Chapter as executable video generations.',
+        userRequest: 'Produce the complete long-form story.',
+        constraints: ['Preserve continuity with adjacent Chapters.'],
+        referencedAssets: [],
+      },
+    }).success).toBe(false)
+    expect(operation.inputSchema.safeParse({
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'derived-duration-video',
+          outputKind: 'video_prompt_set',
+          goal: 'Design the complete requested video.',
+          durationIntent: { mode: 'derive' },
+          context: { userRequest: 'Film this scene.', sourceMaterials: [], constraints: [] },
+        }],
+      },
+    }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      delegation: {
+        source: 'requests',
+        requests: [{
+          requestKey: 'missing-duration-intent-video',
+          outputKind: 'video_prompt_set',
+          goal: 'Design the complete requested video.',
+          context: { userRequest: 'Film this scene.', sourceMaterials: [], constraints: [] },
+        }],
+      },
+    }).success).toBe(false)
     expect(operation.inputSchema.safeParse({
       delegation: {
         source: 'requests',
