@@ -579,7 +579,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     }
   }, {
     timeout: 60_000,
-    message: 'the same project-scoped screenplay and Bible revisions must be adoptable by another Episode',
+    message: 'the same project-scoped screenplay and Story Canon revisions must be adoptable by another Episode',
   }).toEqual({
     runStatus: 'completed',
     sourceRevisionIds: [screenplayRevision?.id],

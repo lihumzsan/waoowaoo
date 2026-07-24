@@ -90,15 +90,50 @@ function taskResult(
       outputKind,
       output,
       skillTrace: [],
-      metrics: { readCalls: 0, skillContentChars: 0 },
+      metrics: {
+        readCalls: 0,
+        skillContentChars: 0,
+        webSearchCalls: outputKind === 'creative_direction' ? 2 : 0,
+        webSearchSources: outputKind === 'creative_direction' ? 2 : 0,
+      },
       budgets: {
         maxTurns: 8,
         maxReadCalls: 12,
+        maxWebSearchCalls: 4,
         maxSkillContentChars: 80_000,
         maxSingleSkillResourceChars: 24_000,
         maxInputChars: 300_000,
         maxOutputChars: 120_000,
       },
+      research: outputKind === 'creative_direction'
+        ? {
+            status: 'completed',
+            provider: 'tavily',
+            notice: null,
+            budget: { maxCalls: 4, usedCalls: 2 },
+            queries: [{
+              ordinal: 1,
+              query: 'analog horror directing grammar',
+              status: 'completed',
+              searchDepth: 'advanced',
+              topic: 'general',
+              sources: [{
+                title: 'Analog horror reference',
+                url: 'https://example.com/analog-horror',
+              }],
+            }, {
+              ordinal: 2,
+              query: 'analog horror community anti patterns',
+              status: 'completed',
+              searchDepth: 'basic',
+              topic: 'general',
+              sources: [{
+                title: 'Community discussion',
+                url: 'https://example.com/community',
+              }],
+            }],
+          }
+        : null,
     },
   }
 }
@@ -139,6 +174,20 @@ describe('Creative Task Resource materialization planning', () => {
       }),
     ]))
     expect(JSON.stringify(plan)).not.toContain('gridImagePrompt')
+    expect(plan.outputs[0]?.generationOptions).toMatchObject({
+      research: {
+        status: 'completed',
+        provider: 'tavily',
+        queries: expect.arrayContaining([
+          expect.objectContaining({
+            query: 'analog horror directing grammar',
+            sources: [expect.objectContaining({
+              url: 'https://example.com/analog-horror',
+            })],
+          }),
+        ]),
+      },
+    })
   })
 
   it('rejects duplicate model-authored candidate keys', () => {

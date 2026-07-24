@@ -618,8 +618,7 @@ describe('project agent toolset conformance', () => {
     }
   })
 
-  it('gives the Creative Worker the complete Skill catalog and one autonomous read tool', () => {
-    expect(createCreativeWorkerTools().map((tool) => tool.name)).toEqual(['read_skill'])
+  it('gives every Creative Worker the complete Skill catalog and only registry-declared tools', () => {
     const zhCatalog = listCreativeWorkerSkillCatalog('zh')
     const enCatalog = listCreativeWorkerSkillCatalog('en')
     expect(zhCatalog.map((skill) => skill.id)).toEqual([
@@ -668,6 +667,19 @@ describe('project agent toolset conformance', () => {
       video_prompt_set: ['visual', 'directing', 'editing', 'sound'],
       music_direction: ['narrative', 'sound'],
       creative_review: ['visual', 'narrative', 'directing', 'editing', 'sound', 'assetPolicy'],
+    })
+    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
+      [kind, createCreativeWorkerTools({ workerTools: definition.workerTools }).map((tool) => tool.name)]
+    )))).toEqual({
+      screenplay: ['read_skill'],
+      story_canon: ['read_skill'],
+      chapter_plan: ['read_skill'],
+      continuity_analysis: ['read_skill'],
+      creative_direction: ['read_skill', 'web_search'],
+      asset_manifest: ['read_skill'],
+      video_prompt_set: ['read_skill'],
+      music_direction: ['read_skill'],
+      creative_review: ['read_skill'],
     })
     const adoptedDirection = {
       revisionId: 'direction-revision-1',
@@ -804,15 +816,22 @@ describe('project agent toolset conformance', () => {
           checksum: 'checksum',
           contentChars: 100,
         }],
-        metrics: { readCalls: 1, skillContentChars: 100 },
+        metrics: {
+          readCalls: 1,
+          skillContentChars: 100,
+          webSearchCalls: 0,
+          webSearchSources: 0,
+        },
         budgets: {
           maxTurns: 8,
           maxReadCalls: 8,
+          maxWebSearchCalls: 4,
           maxSkillContentChars: 100_000,
           maxSingleSkillResourceChars: 50_000,
           maxInputChars: 1_000_000,
           maxOutputChars: 100_000,
         },
+        research: null,
       },
     }
     expect(creativeWorkTaskResultSchema.safeParse(result).success).toBe(true)

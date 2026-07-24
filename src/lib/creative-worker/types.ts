@@ -10,6 +10,11 @@ import type {
   CreativeSkillReadTraceEntry,
   CreativeWorkTraceEvent,
 } from './trace-contract'
+import type {
+  CreativeWorkerResearchEvidence,
+  CreativeWorkerResearchState,
+} from './research'
+import type { WebSearchRequest, WebSearchResponse } from '@/lib/web-search'
 export type { CreativeSkillReadTraceEntry } from './trace-contract'
 
 export type CreativeWorkOutputKind = (typeof CREATIVE_WORK_OUTPUT_KINDS)[number]
@@ -128,6 +133,7 @@ export type CreativeWorkRequest = z.infer<typeof creativeWorkRequestSchema>
 export interface CreativeWorkerBudgets {
   maxTurns: number
   maxReadCalls: number
+  maxWebSearchCalls: number
   maxSkillContentChars: number
   maxSingleSkillResourceChars: number
   maxInputChars: number
@@ -139,6 +145,8 @@ export type CreativeWorkerBudgetOverrides = Partial<CreativeWorkerBudgets>
 export interface CreativeWorkerMetrics {
   readCalls: number
   skillContentChars: number
+  webSearchCalls: number
+  webSearchSources: number
 }
 
 export type CreativeWorkerEvent = CreativeWorkTraceEvent
@@ -171,6 +179,10 @@ export interface RunCreativeWorkerInput {
   request: CreativeWorkRequest
   budgets?: CreativeWorkerBudgetOverrides
   onEvent?: CreativeWorkerEventListener
+  webSearch?: (input: {
+    readonly request: WebSearchRequest
+    readonly signal: AbortSignal
+  }) => Promise<WebSearchResponse>
 }
 
 export interface CreativeWorkerResult<TOutput = CreativeWorkOutput> {
@@ -179,6 +191,7 @@ export interface CreativeWorkerResult<TOutput = CreativeWorkOutput> {
   skillTrace: readonly CreativeSkillReadTraceEntry[]
   metrics: CreativeWorkerMetrics
   budgets: CreativeWorkerBudgets
+  research: CreativeWorkerResearchEvidence | null
 }
 
 export interface CreativeWorkerRunContext {
@@ -187,8 +200,13 @@ export interface CreativeWorkerRunContext {
   counters: {
     readCalls: number
     skillContentChars: number
+    webSearchCalls: number
+    webSearchSources: number
   }
   skillTrace: CreativeSkillReadTraceEntry[]
+  research: CreativeWorkerResearchState | null
+  signal: AbortSignal
+  webSearch: NonNullable<RunCreativeWorkerInput['webSearch']>
   onEvent?: CreativeWorkerEventListener
 }
 

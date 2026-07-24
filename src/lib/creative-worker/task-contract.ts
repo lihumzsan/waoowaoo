@@ -16,6 +16,7 @@ import {
   creativeSkillReadTraceEntrySchema,
   creativeWorkTraceEventSchema,
 } from './trace-contract'
+import { creativeWorkerResearchEvidenceSchema } from './research'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay,
@@ -36,22 +37,37 @@ export const creativeWorkerResultSchema = z.object({
   metrics: z.object({
     readCalls: z.number().int().nonnegative(),
     skillContentChars: z.number().int().nonnegative(),
+    webSearchCalls: z.number().int().nonnegative(),
+    webSearchSources: z.number().int().nonnegative(),
   }).strict(),
   budgets: z.object({
     maxTurns: z.number().int().positive(),
     maxReadCalls: z.number().int().positive(),
+    maxWebSearchCalls: z.number().int().positive(),
     maxSkillContentChars: z.number().int().positive(),
     maxSingleSkillResourceChars: z.number().int().positive(),
     maxInputChars: z.number().int().positive(),
     maxOutputChars: z.number().int().positive(),
   }).strict(),
+  research: creativeWorkerResearchEvidenceSchema.nullable(),
 }).strict().superRefine((result, context) => {
-  if (result.output.kind === result.outputKind) return
-  context.addIssue({
-    code: 'custom',
-    message: 'CREATIVE_WORK_OUTPUT_KIND_MISMATCH',
-    path: ['output'],
-  })
+  if (result.output.kind !== result.outputKind) {
+    context.addIssue({
+      code: 'custom',
+      message: 'CREATIVE_WORK_OUTPUT_KIND_MISMATCH',
+      path: ['output'],
+    })
+  }
+  if (
+    (result.outputKind === 'creative_direction' && result.research === null)
+    || (result.outputKind !== 'creative_direction' && result.research !== null)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'CREATIVE_WORK_RESEARCH_CAPABILITY_MISMATCH',
+      path: ['research'],
+    })
+  }
 })
 
 export const creativeWorkDelegationItemSchema = creativeWorkDelegationRequestSchema.extend({

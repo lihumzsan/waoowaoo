@@ -72,7 +72,7 @@ async function assertEpisodeAccess(input: {
 }
 
 /**
- * Builds the immutable source-range projection used by Bible and Chapter
+ * Builds the immutable source-range projection used by Story Canon and Chapter
  * algorithms from one exact screenplay Resource revision. The Resource
  * revision remains the screenplay authority; this row is only its indexed
  * text projection and can never be confirmed or edited independently.

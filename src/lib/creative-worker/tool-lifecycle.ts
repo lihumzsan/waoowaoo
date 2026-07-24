@@ -8,16 +8,30 @@ export interface CreativeWorkerReadSkillToolCall {
   readonly skillId: CreativeSkillId
 }
 
-export interface CompletedCreativeWorkerReadSkillToolCall {
-  readonly toolCall: CreativeWorkerReadSkillToolCall
-  readonly trace: CreativeSkillReadTraceEntry
+export interface CreativeWorkerWebSearchToolCall {
+  readonly toolCallId: string
+  readonly toolName: 'web_search'
+  readonly query: string
 }
 
+export type CreativeWorkerToolCall =
+  | CreativeWorkerReadSkillToolCall
+  | CreativeWorkerWebSearchToolCall
+
+export type CompletedCreativeWorkerToolCall =
+  | {
+      readonly toolCall: CreativeWorkerReadSkillToolCall
+      readonly trace: CreativeSkillReadTraceEntry
+    }
+  | {
+      readonly toolCall: CreativeWorkerWebSearchToolCall
+    }
+
 export class CreativeWorkerToolLifecycle {
-  private readonly activeCalls = new Map<string, CreativeWorkerReadSkillToolCall>()
+  private readonly activeCalls = new Map<string, CreativeWorkerToolCall>()
   private readonly claimedTraceOrdinals = new Set<number>()
 
-  begin(toolCall: CreativeWorkerReadSkillToolCall): void {
+  begin(toolCall: CreativeWorkerToolCall): void {
     if (this.activeCalls.has(toolCall.toolCallId)) {
       throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
         reason: 'creative worker tool call identity is duplicated',
@@ -29,12 +43,16 @@ export class CreativeWorkerToolLifecycle {
   complete(
     toolCallId: string,
     skillTrace: readonly CreativeSkillReadTraceEntry[],
-  ): CompletedCreativeWorkerReadSkillToolCall {
+  ): CompletedCreativeWorkerToolCall {
     const toolCall = this.activeCalls.get(toolCallId)
     if (!toolCall) {
       throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
         reason: 'creative worker tool output has no matching active tool call',
       })
+    }
+    if (toolCall.toolName === 'web_search') {
+      this.activeCalls.delete(toolCallId)
+      return { toolCall }
     }
     const trace = skillTrace.find((entry) => (
       entry.source === 'tool'
@@ -51,7 +69,7 @@ export class CreativeWorkerToolLifecycle {
     return { toolCall, trace }
   }
 
-  drainActive(): readonly CreativeWorkerReadSkillToolCall[] {
+  drainActive(): readonly CreativeWorkerToolCall[] {
     const activeCalls = [...this.activeCalls.values()]
     this.activeCalls.clear()
     return activeCalls

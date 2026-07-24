@@ -59,6 +59,31 @@ describe('project agent operation registry', () => {
     })
   })
 
+  it('registers Web Search as one read-only on-demand Operation', () => {
+    const operation = createProjectAgentOperationRegistry().web_search
+
+    expect(operation).toMatchObject({
+      intent: 'query',
+      channels: { tool: true, api: false },
+      toolExposure: 'on_demand',
+      groupPath: ['web', 'search'],
+      confirmation: { kind: 'none', required: false },
+      effects: {
+        writes: false,
+        billable: false,
+        destructive: false,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+    })
+    expect(operation.toolInputSchema.properties).toMatchObject({
+      query: expect.objectContaining({ type: 'string' }),
+      searchDepth: expect.objectContaining({ enum: ['basic', 'advanced', null] }),
+      topic: expect.objectContaining({ enum: ['general', 'news', null] }),
+    })
+  })
+
   it('keeps adoption and Chapter planning as explicit current operations', () => {
     const registry = createProjectAgentOperationRegistry()
 
@@ -106,7 +131,7 @@ describe('project agent operation registry', () => {
     expect(registry.get_project_snapshot.summary).toContain(
       'only when the injected project_state_snapshot and conversation context are insufficient',
     )
-    expect(registry.get_project_context.summary).toContain('exact adopted screenplay and Bible revisions')
+    expect(registry.get_project_context.summary).toContain('exact adopted screenplay and Story Canon revisions')
     expect(registry.get_project_context.summary).toContain('optional Chapter context units')
     expect(registry.get_project_context.summary).toContain('never infer current adoption')
   })

@@ -535,7 +535,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
       delegation: {
         source: 'requests',
         requests: [{
-          requestKey: 'golden-style-bible',
+          requestKey: 'golden-creative-direction',
           outputKind: 'creative_direction',
           goal: 'Design one final textual Creative Direction without generating any preview image.',
           context: {

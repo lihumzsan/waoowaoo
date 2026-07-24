@@ -71,8 +71,10 @@ describe('Creative Worker read_skill lifecycle', () => {
       trace(2, 'quality-review'),
     ]
 
-    expect(lifecycle.complete('call-1', traces).trace.ordinal).toBe(1)
-    expect(lifecycle.complete('call-2', traces).trace.ordinal).toBe(2)
+    const first = lifecycle.complete('call-1', traces)
+    const second = lifecycle.complete('call-2', traces)
+    expect('trace' in first ? first.trace.ordinal : null).toBe(1)
+    expect('trace' in second ? second.trace.ordinal : null).toBe(2)
     expect(() => lifecycle.assertSettled()).not.toThrow()
   })
 

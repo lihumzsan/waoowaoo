@@ -13,6 +13,7 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
 export const DEFAULT_CREATIVE_WORKER_BUDGETS = {
   maxTurns: 8,
   maxReadCalls: 12,
+  maxWebSearchCalls: 4,
   maxSkillContentChars: 80_000,
   maxSingleSkillResourceChars: 24_000,
   maxInputChars: 300_000,
@@ -22,6 +23,7 @@ export const DEFAULT_CREATIVE_WORKER_BUDGETS = {
 export const CREATIVE_WORKER_HARD_LIMITS = {
   maxTurns: 16,
   maxReadCalls: 24,
+  maxWebSearchCalls: 8,
   maxSkillContentChars: 160_000,
   maxSingleSkillResourceChars: 48_000,
   maxInputChars: 600_000,

@@ -155,6 +155,7 @@ export interface CreativeWorkOutputDefinition {
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
   creativeDirectionDomains: readonly CreativeDirectionDomain[]
+  workerTools: readonly ('web_search')[]
 }
 
 export const creativeWorkOutputRegistry = {
@@ -163,54 +164,63 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
     creativeDirectionDomains: ['narrative'],
+    workerTools: [],
   },
   story_canon: {
     kind: 'story_canon',
     schema: creativeWorkOutputSchemas.story_canon,
     resourceScope: 'project',
     creativeDirectionDomains: ['narrative'],
+    workerTools: [],
   },
   chapter_plan: {
     kind: 'chapter_plan',
     schema: creativeWorkOutputSchemas.chapter_plan,
     resourceScope: 'episode',
     creativeDirectionDomains: [],
+    workerTools: [],
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
     schema: creativeWorkOutputSchemas.continuity_analysis,
     resourceScope: 'episode',
     creativeDirectionDomains: [],
+    workerTools: [],
   },
   creative_direction: {
     kind: 'creative_direction',
     schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
     creativeDirectionDomains: [],
+    workerTools: ['web_search'],
   },
   asset_manifest: {
     kind: 'asset_manifest',
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
     creativeDirectionDomains: ['visual', 'assetPolicy'],
+    workerTools: [],
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
     creativeDirectionDomains: ['visual', 'directing', 'editing', 'sound'],
+    workerTools: [],
   },
   music_direction: {
     kind: 'music_direction',
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
     creativeDirectionDomains: ['narrative', 'sound'],
+    workerTools: [],
   },
   creative_review: {
     kind: 'creative_review',
     schema: creativeWorkOutputSchemas.creative_review,
     resourceScope: 'episode',
     creativeDirectionDomains: CREATIVE_DIRECTION_DOMAINS,
+    workerTools: [],
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>
 

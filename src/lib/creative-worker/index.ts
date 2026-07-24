@@ -47,6 +47,11 @@ export {
   creativeWorkTraceEventSchema,
 } from './trace-contract'
 export {
+  creativeWorkerResearchAttemptSchema,
+  creativeWorkerResearchEvidenceSchema,
+  projectCreativeWorkerResearchEvidence,
+} from './research'
+export {
   creativeWorkRequestSchema,
   defaultCreativeWorkerBudgets,
 } from './types'
@@ -80,6 +85,10 @@ export type {
   CreativeWorkerResult,
   RunCreativeWorkerInput,
 } from './types'
+export type {
+  CreativeWorkerResearchAttempt,
+  CreativeWorkerResearchEvidence,
+} from './research'
 export type {
   CreativeWorkDelegationInput,
   CreativeWorkDelegationItem,

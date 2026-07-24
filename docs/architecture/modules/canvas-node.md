@@ -19,7 +19,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据文案、有无字段、timer 或 refetch 推断 succeeded/failed。
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
 - **CN-06 — 视频只作为 Resource 或真实 Task 投影。** Canvas 不存在 Storyboard、Panel、VideoGroup、EditScript stage 或专用 `videoPlan` 流程节点。每个生成结果是独立 video Resource；需要表达 Chapter/镜头语义时由 schema 与真实 Lineage 附加，不能改变 lifecycle 或建立第二生成入口。
-- **CN-07 — 专业文字结果仍是 Resource。** 剧本、Bible、continuity analysis、asset/video prompt 与 music direction 通过 schema-aware Resource renderer 展示；不得恢复制作规划、镜头执行或风格预览专用阶段卡。
+- **CN-07 — 专业文字结果仍是 Resource。** 剧本、Story Canon、continuity analysis、asset/video prompt 与 music direction 通过 schema-aware Resource renderer 展示；不得恢复制作规划、镜头执行或风格预览专用阶段卡。
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 Binding role 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputRevisionId → outputRevisionId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。

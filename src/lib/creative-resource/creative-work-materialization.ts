@@ -275,6 +275,7 @@ export function planCreativeWorkResourceMaterialization(input: {
           mode: output.design.mode,
           assumptions: output.assumptions,
           warnings: output.warnings,
+          research: result.creativeWorkResult.research,
         }),
       }],
     }
@@ -303,6 +304,7 @@ export function planCreativeWorkResourceMaterialization(input: {
         summary: candidate.summary,
         assumptions: output.assumptions,
         warnings: output.warnings,
+        research: result.creativeWorkResult.research,
       }),
     })),
   }

@@ -16,6 +16,7 @@ import {
   readCreativeWorkOutputDefinition,
   type CreativeWorkOutput,
 } from './output-registry'
+import { searchWeb, webSearchRequestSchema } from '@/lib/web-search'
 import {
   listCreativeWorkerSkillCatalog,
   loadPreloadedCreativeSkills,
@@ -23,7 +24,7 @@ import {
 import { buildCreativeWorkerSystemPrompt } from './system-prompt'
 import {
   CreativeWorkerToolLifecycle,
-  type CreativeWorkerReadSkillToolCall,
+  type CreativeWorkerToolCall,
 } from './tool-lifecycle'
 import { createCreativeWorkerTools } from './tools'
 import {
@@ -31,6 +32,10 @@ import {
   normalizeCreativeWorkerOutputFromTransport,
 } from './output-transport-schema'
 import { CREATIVE_WORK_REASONING_MAX_CHARS } from './trace-contract'
+import {
+  projectCreativeWorkerResearchEvidence,
+  type CreativeWorkerResearchEvidence,
+} from './research'
 import {
   creativeWorkRequestSchema,
   defaultCreativeWorkerBudgets,
@@ -46,6 +51,7 @@ const REASONING_SNAPSHOT_DELTA_CHARS = 4_096
 const creativeWorkerBudgetsSchema = z.object({
   maxTurns: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxTurns),
   maxReadCalls: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxReadCalls),
+  maxWebSearchCalls: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxWebSearchCalls),
   maxSkillContentChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxSkillContentChars),
   maxSingleSkillResourceChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxSingleSkillResourceChars),
   maxInputChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxInputChars),
@@ -76,8 +82,9 @@ function resolveCreativeWorkerBudgets(
 }
 
 function createRunContext(
-  input: Pick<RunCreativeWorkerInput, 'locale' | 'onEvent'>,
+  input: Pick<RunCreativeWorkerInput, 'locale' | 'onEvent' | 'signal' | 'webSearch'>,
   budgets: CreativeWorkerBudgets,
+  enableWebSearch: boolean,
 ): CreativeWorkerRunContext {
   return {
     locale: input.locale,
@@ -85,8 +92,20 @@ function createRunContext(
     counters: {
       readCalls: 0,
       skillContentChars: 0,
+      webSearchCalls: 0,
+      webSearchSources: 0,
     },
     skillTrace: [],
+    research: enableWebSearch
+      ? {
+          provider: 'tavily',
+          maxCalls: budgets.maxWebSearchCalls,
+          usedCalls: 0,
+          attempts: [],
+        }
+      : null,
+    signal: input.signal,
+    webSearch: input.webSearch ?? searchWeb,
     ...(input.onEvent ? { onEvent: input.onEvent } : {}),
   }
 }
@@ -97,15 +116,16 @@ function readRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function parseReadSkillToolCall(item: unknown): CreativeWorkerReadSkillToolCall | null {
+function parseCreativeWorkerToolCall(item: unknown): CreativeWorkerToolCall | null {
   const itemRecord = readRecord(item)
   const rawItem = readRecord(itemRecord?.rawItem)
-  if (rawItem?.type !== 'function_call' || rawItem.name !== 'read_skill') return null
+  if (rawItem?.type !== 'function_call') return null
+  if (rawItem.name !== 'read_skill' && rawItem.name !== 'web_search') return null
   const toolCallId = typeof rawItem.callId === 'string' ? rawItem.callId.trim() : ''
   const rawArguments = typeof rawItem.arguments === 'string' ? rawItem.arguments : ''
   if (!toolCallId || !rawArguments) {
     throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
-      reason: 'read_skill tool identity or arguments are missing',
+      reason: 'creative worker tool identity or arguments are missing',
     })
   }
   let parsedArguments: unknown
@@ -113,8 +133,21 @@ function parseReadSkillToolCall(item: unknown): CreativeWorkerReadSkillToolCall 
     parsedArguments = JSON.parse(rawArguments) as unknown
   } catch (error) {
     throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
-      reason: 'read_skill tool arguments are not valid JSON',
+      reason: 'creative worker tool arguments are not valid JSON',
     }, { cause: error })
+  }
+  if (rawItem.name === 'web_search') {
+    const parsed = webSearchRequestSchema.safeParse(parsedArguments)
+    if (!parsed.success) {
+      throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
+        reason: 'web_search tool arguments are invalid',
+      }, { cause: parsed.error })
+    }
+    return {
+      toolCallId,
+      toolName: 'web_search',
+      query: parsed.data.query,
+    }
   }
   const args = readRecord(parsedArguments)
   const skillId = typeof args?.skillId === 'string' ? args.skillId : ''
@@ -124,6 +157,18 @@ function parseReadSkillToolCall(item: unknown): CreativeWorkerReadSkillToolCall 
     })
   }
   return { toolCallId, toolName: 'read_skill', skillId }
+}
+
+function appendResearchNotice(
+  output: CreativeWorkOutput,
+  research: CreativeWorkerResearchEvidence | null,
+): CreativeWorkOutput {
+  if (output.kind !== 'creative_direction' || !research?.notice) return output
+  if (output.warnings.includes(research.notice)) return output
+  return {
+    ...output,
+    warnings: [...output.warnings.slice(0, 63), research.notice],
+  }
 }
 
 function readToolOutputCallId(item: unknown): string | null {
@@ -281,9 +326,13 @@ export async function runCreativeWorker(
   assertNotAborted(input.signal)
   const request = parseCreativeWorkRequest(input.request)
   const budgets = resolveCreativeWorkerBudgets(input.budgets)
-  const context = createRunContext(input, budgets)
-  const toolLifecycle = new CreativeWorkerToolLifecycle()
   const definition = readCreativeWorkOutputDefinition(request.outputKind)
+  const context = createRunContext(
+    input,
+    budgets,
+    definition.workerTools.includes('web_search'),
+  )
+  const toolLifecycle = new CreativeWorkerToolLifecycle()
   let eventDeliveryFailed = false
 
   const emitEvent = async (
@@ -333,7 +382,7 @@ export async function runCreativeWorker(
         parallelToolCalls: true,
       },
       outputType: outputTransportSchema,
-      tools: [...createCreativeWorkerTools()],
+      tools: [...createCreativeWorkerTools({ workerTools: definition.workerTools })],
     })
     const result = await run(agent, workerInput, {
       context,
@@ -412,14 +461,16 @@ export async function runCreativeWorker(
       }
       if (event.type !== 'run_item_stream_event') continue
       if (event.name === 'tool_called') {
-        const toolCall = parseReadSkillToolCall(event.item)
+        const toolCall = parseCreativeWorkerToolCall(event.item)
         if (!toolCall) {
           throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
             reason: 'creative worker emitted an unsupported tool call',
           })
         }
         toolLifecycle.begin(toolCall)
-        await emitEvent({ kind: 'tool_called', ...toolCall })
+        if (toolCall.toolName === 'read_skill') {
+          await emitEvent({ kind: 'tool_called', ...toolCall })
+        }
         continue
       }
       if (event.name === 'tool_output') {
@@ -430,11 +481,16 @@ export async function runCreativeWorker(
           })
         }
         const completedToolCall = toolLifecycle.complete(callId, context.skillTrace)
-        await emitEvent({
-          kind: 'tool_completed',
-          ...completedToolCall.toolCall,
-          trace: completedToolCall.trace,
-        })
+        if (
+          completedToolCall.toolCall.toolName === 'read_skill'
+          && 'trace' in completedToolCall
+        ) {
+          await emitEvent({
+            kind: 'tool_completed',
+            ...completedToolCall.toolCall,
+            trace: completedToolCall.trace,
+          })
+        }
       }
     }
     for (const reasoningEvent of publicReasoning.finish()) {
@@ -444,11 +500,17 @@ export async function runCreativeWorker(
     toolLifecycle.assertSettled()
     assertNotAborted(input.signal)
     assertProfessionalSkillRead(context)
-    const output = parseFinalOutput({
+    const research = context.research
+      ? projectCreativeWorkerResearchEvidence({
+          locale: context.locale,
+          state: context.research,
+        })
+      : null
+    const output = appendResearchNotice(parseFinalOutput({
       request,
       raw: result.finalOutput,
       maxOutputChars: budgets.maxOutputChars,
-    })
+    }), research)
     await emitEvent({
       kind: 'completed',
       outputKind: request.outputKind,
@@ -459,6 +521,7 @@ export async function runCreativeWorker(
       skillTrace: [...context.skillTrace],
       metrics: { ...context.counters },
       budgets,
+      research,
     }
   } catch (error) {
     const normalizedError = isCreativeWorkerError(error)
@@ -472,11 +535,13 @@ export async function runCreativeWorker(
           : new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
     if (!eventDeliveryFailed) {
       for (const activeToolCall of toolLifecycle.drainActive()) {
-        await emitEvent({
-          kind: 'tool_failed',
-          ...activeToolCall,
-          code: normalizedError.code,
-        })
+        if (activeToolCall.toolName === 'read_skill') {
+          await emitEvent({
+            kind: 'tool_failed',
+            ...activeToolCall,
+            code: normalizedError.code,
+          })
+        }
       }
       await emitEvent(normalizedError.code === 'CREATIVE_WORK_ABORTED'
         ? {
