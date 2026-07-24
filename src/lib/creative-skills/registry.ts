@@ -78,7 +78,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
-    version: '3.0.0',
+    version: '3.1.0',
     title: { zh: '创作方向', en: 'Creative Direction' },
     summary: {
       zh: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究转译为视觉、叙事、导演、剪辑、声音和资产六个可执行方向块，可返回最终方向或 2–12 个完整候选。',

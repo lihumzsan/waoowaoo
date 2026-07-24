@@ -79,8 +79,7 @@ describe('project agent operation registry', () => {
     })
     expect(operation.toolInputSchema.properties).toMatchObject({
       query: expect.objectContaining({ type: 'string' }),
-      searchDepth: expect.objectContaining({ enum: ['basic', 'advanced', null] }),
-      topic: expect.objectContaining({ enum: ['general', 'news', null] }),
+      allowedDomains: expect.objectContaining({ type: ['array', 'null'] }),
     })
   })
 

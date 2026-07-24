@@ -22,14 +22,13 @@ describe('Main Agent Web Search Operation', () => {
   it('returns the provider-neutral source contract through the sole search executor', async () => {
     const operation = createWebSearchOperations({
       search: async ({ request }) => ({
-        provider: 'tavily',
+        provider: 'openai',
         query: request.query,
-        results: [{
+        report: 'Current research report.',
+        queries: ['current documentary advertising grammar'],
+        sources: [{
           title: 'Reference',
           url: 'https://example.com/reference',
-          content: 'Bounded source data.',
-          score: 0.9,
-          publishedAt: null,
         }],
       }),
     }).web_search
@@ -38,9 +37,10 @@ describe('Main Agent Web Search Operation', () => {
     await expect(operation.execute(context(), {
       query: 'current documentary advertising grammar',
     })).resolves.toMatchObject({
-      provider: 'tavily',
+      provider: 'openai',
       query: 'current documentary advertising grammar',
-      results: [{ title: 'Reference' }],
+      report: 'Current research report.',
+      sources: [{ title: 'Reference' }],
     })
   })
 
@@ -48,8 +48,8 @@ describe('Main Agent Web Search Operation', () => {
     const operation = createWebSearchOperations({
       search: async () => {
         throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', {
-          provider: 'tavily',
-          reason: 'TAVILY_API_KEY is not configured',
+          provider: 'openai',
+          reason: 'OPENAI_API_KEY is not configured',
         })
       },
     }).web_search
@@ -61,7 +61,7 @@ describe('Main Agent Web Search Operation', () => {
       code: 'MISSING_CONFIG',
       details: {
         code: 'WEB_SEARCH_UNAVAILABLE',
-        provider: 'tavily',
+        provider: 'openai',
       },
     })
   })

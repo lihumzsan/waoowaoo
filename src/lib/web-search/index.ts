@@ -19,4 +19,3 @@ export type {
 export type { WebSearchErrorCode } from './errors'
 export type { WebSearchProvider } from './provider'
 export { createConfiguredWebSearchProvider, searchWeb } from './service'
-export { createTavilyWebSearchProvider } from './tavily'

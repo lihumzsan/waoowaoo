@@ -4,7 +4,7 @@ import type {
 } from './contracts'
 
 export interface WebSearchProvider {
-  readonly id: 'tavily'
+  readonly id: 'openai'
   search(
     request: NormalizedWebSearchRequest,
     options: { readonly signal: AbortSignal },

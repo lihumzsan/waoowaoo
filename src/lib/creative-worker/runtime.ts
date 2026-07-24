@@ -98,7 +98,7 @@ function createRunContext(
     skillTrace: [],
     research: enableWebSearch
       ? {
-          provider: 'tavily',
+          provider: 'openai',
           maxCalls: budgets.maxWebSearchCalls,
           usedCalls: 0,
           attempts: [],

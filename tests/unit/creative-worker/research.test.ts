@@ -9,7 +9,7 @@ import {
 
 function state(): CreativeWorkerResearchState {
   return {
-    provider: 'tavily',
+    provider: 'openai',
     maxCalls: 4,
     usedCalls: 0,
     attempts: [],
@@ -24,17 +24,16 @@ describe('Creative Worker external research evidence', () => {
       state: research,
       request: normalizeResearchRequest({
         query: '规则怪谈 叙事 影像 论坛',
-        includeDomains: ['zhihu.com'],
+        allowedDomains: ['zhihu.com'],
       }),
       response: {
-        provider: 'tavily',
+        provider: 'openai',
         query: '规则怪谈 叙事 影像 论坛',
-        results: [{
+        report: 'A synthesized report that must remain outside evidence metadata.',
+        queries: ['规则怪谈 起源 A岛', 'site:zhihu.com 规则怪谈 社区用法'],
+        sources: [{
           title: 'Community discussion',
           url: 'https://example.com/rules-horror',
-          content: 'Untrusted content must remain outside evidence metadata.',
-          score: 0.8,
-          publishedAt: null,
         }],
       },
     })
@@ -45,22 +44,21 @@ describe('Creative Worker external research evidence', () => {
     })
     expect(evidence).toEqual({
       status: 'completed',
-      provider: 'tavily',
+      provider: 'openai',
       notice: null,
       budget: { maxCalls: 4, usedCalls: 1 },
       queries: [{
         ordinal: 1,
         query: '规则怪谈 叙事 影像 论坛',
         status: 'completed',
-        searchDepth: 'basic',
-        topic: 'general',
+        providerQueries: ['规则怪谈 起源 A岛', 'site:zhihu.com 规则怪谈 社区用法'],
         sources: [{
           title: 'Community discussion',
           url: 'https://example.com/rules-horror',
         }],
       }],
     })
-    expect(JSON.stringify(evidence)).not.toContain('Untrusted content')
+    expect(JSON.stringify(evidence)).not.toContain('synthesized report')
   })
 
   it('distinguishes no research, unavailable research, and partial research truthfully', () => {
@@ -94,9 +92,14 @@ describe('Creative Worker external research evidence', () => {
       state: partial,
       request: normalizeResearchRequest({ query: 'analog horror grammar' }),
       response: {
-        provider: 'tavily',
+        provider: 'openai',
         query: 'analog horror grammar',
-        results: [],
+        report: 'Research report.',
+        queries: ['analog horror grammar'],
+        sources: [{
+          title: 'Primary reference',
+          url: 'https://example.com/primary',
+        }],
       },
     })
     recordResearchFailure({

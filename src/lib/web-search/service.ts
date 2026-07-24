@@ -3,21 +3,28 @@ import {
   type WebSearchRequest,
   type WebSearchResponse,
 } from './contracts'
+import { executeOpenAIHostedWebSearch } from '@/lib/ai-exec/hosted-web-search'
 import { WebSearchError } from './errors'
 import type { WebSearchProvider } from './provider'
-import { createTavilyWebSearchProvider } from './tavily'
 
 export function createConfiguredWebSearchProvider(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): WebSearchProvider {
-  const apiKey = environment.TAVILY_API_KEY?.trim() ?? ''
+  const apiKey = environment.OPENAI_API_KEY?.trim() ?? ''
   if (!apiKey) {
     throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', {
-      provider: 'tavily',
-      reason: 'TAVILY_API_KEY is not configured',
+      provider: 'openai',
+      reason: 'OPENAI_API_KEY is not configured',
     })
   }
-  return createTavilyWebSearchProvider({ apiKey })
+  return {
+    id: 'openai',
+    search: (request, options) => executeOpenAIHostedWebSearch({
+      apiKey,
+      request,
+      signal: options.signal,
+    }),
+  }
 }
 
 export async function searchWeb(input: {
@@ -28,7 +35,7 @@ export async function searchWeb(input: {
   const parsed = normalizedWebSearchRequestSchema.safeParse(input.request)
   if (!parsed.success) {
     throw new WebSearchError('WEB_SEARCH_REQUEST_FAILED', {
-      provider: input.provider?.id ?? 'tavily',
+      provider: input.provider?.id ?? 'openai',
       reason: 'request contract mismatch',
       issueCount: parsed.error.issues.length,
     })

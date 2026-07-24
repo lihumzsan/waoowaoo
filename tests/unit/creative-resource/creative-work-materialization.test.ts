@@ -108,15 +108,14 @@ function taskResult(
       research: outputKind === 'creative_direction'
         ? {
             status: 'completed',
-            provider: 'tavily',
+            provider: 'openai',
             notice: null,
             budget: { maxCalls: 4, usedCalls: 2 },
             queries: [{
               ordinal: 1,
               query: 'analog horror directing grammar',
               status: 'completed',
-              searchDepth: 'advanced',
-              topic: 'general',
+              providerQueries: ['analog horror directing grammar primary examples'],
               sources: [{
                 title: 'Analog horror reference',
                 url: 'https://example.com/analog-horror',
@@ -125,8 +124,7 @@ function taskResult(
               ordinal: 2,
               query: 'analog horror community anti patterns',
               status: 'completed',
-              searchDepth: 'basic',
-              topic: 'general',
+              providerQueries: ['analog horror community anti patterns'],
               sources: [{
                 title: 'Community discussion',
                 url: 'https://example.com/community',
@@ -177,7 +175,7 @@ describe('Creative Task Resource materialization planning', () => {
     expect(plan.outputs[0]?.generationOptions).toMatchObject({
       research: {
         status: 'completed',
-        provider: 'tavily',
+        provider: 'openai',
         queries: expect.arrayContaining([
           expect.objectContaining({
             query: 'analog horror directing grammar',

@@ -7,12 +7,11 @@ export const creativeWorkerResearchAttemptSchema = z.object({
   ordinal: z.number().int().positive(),
   query: z.string().trim().min(1).max(1_000),
   status: z.enum(['completed', 'unavailable', 'failed', 'budget_exhausted']),
-  searchDepth: z.enum(['basic', 'advanced']),
-  topic: z.enum(['general', 'news']),
+  providerQueries: z.array(z.string().trim().min(1).max(1_000)).max(32),
   sources: z.array(z.object({
     title: z.string().trim().min(1).max(500),
     url: z.string().url().max(2_000),
-  }).strict()).max(10),
+  }).strict()).max(32),
 }).strict()
 
 export const creativeWorkerResearchEvidenceSchema = z.object({
@@ -24,7 +23,7 @@ export const creativeWorkerResearchEvidenceSchema = z.object({
     'failed',
     'budget_exhausted',
   ]),
-  provider: z.literal('tavily'),
+  provider: z.literal('openai'),
   notice: z.string().trim().min(1).max(2_000).nullable(),
   budget: z.object({
     maxCalls: z.number().int().positive(),
@@ -46,7 +45,7 @@ export type CreativeWorkerResearchAttempt = z.infer<typeof creativeWorkerResearc
 export type CreativeWorkerResearchEvidence = z.infer<typeof creativeWorkerResearchEvidenceSchema>
 
 export interface CreativeWorkerResearchState {
-  readonly provider: 'tavily'
+  readonly provider: 'openai'
   readonly maxCalls: number
   usedCalls: number
   readonly attempts: CreativeWorkerResearchAttempt[]
@@ -73,12 +72,11 @@ function localizedNotice(
 
 export function normalizeResearchRequest(
   request: WebSearchRequest,
-): Required<Pick<WebSearchRequest, 'query' | 'searchDepth' | 'topic'>> & WebSearchRequest {
+): Required<Pick<WebSearchRequest, 'query' | 'allowedDomains'>> & WebSearchRequest {
   return {
     ...request,
     query: request.query.trim(),
-    searchDepth: request.searchDepth ?? 'basic',
-    topic: request.topic ?? 'general',
+    allowedDomains: request.allowedDomains ?? [],
   }
 }
 
@@ -91,9 +89,8 @@ export function recordCompletedResearchAttempt(input: {
     ordinal: input.state.attempts.length + 1,
     query: input.request.query,
     status: 'completed',
-    searchDepth: input.request.searchDepth,
-    topic: input.request.topic,
-    sources: input.response.results.map((source) => ({
+    providerQueries: input.response.queries,
+    sources: input.response.sources.map((source) => ({
       title: source.title,
       url: source.url,
     })),
@@ -111,8 +108,7 @@ export function recordResearchFailure(input: {
     ordinal: input.state.attempts.length + 1,
     query: input.request.query,
     status: input.status,
-    searchDepth: input.request.searchDepth,
-    topic: input.request.topic,
+    providerQueries: [],
     sources: [],
   }
   input.state.attempts.push(attempt)

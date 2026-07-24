@@ -24,21 +24,20 @@ function runContext(input: {
     },
     skillTrace: [],
     research: {
-      provider: 'tavily',
+      provider: 'openai',
       maxCalls: input.maxCalls,
       usedCalls: 0,
       attempts: [],
     },
     signal: new AbortController().signal,
     webSearch: input.search ?? (async ({ request }) => ({
-      provider: 'tavily',
+      provider: 'openai',
       query: request.query,
-      results: [{
+      report: 'Evidence-grounded community research.',
+      queries: ['community research query'],
+      sources: [{
         title: 'Community reference',
         url: 'https://example.com/community',
-        content: 'Untrusted source snippet.',
-        score: 0.8,
-        publishedAt: null,
       }],
     })),
   }
@@ -52,14 +51,13 @@ describe('Creative Direction Worker web_search tool', () => {
       search: async ({ request }) => {
         providerCalls += 1
         return {
-          provider: 'tavily',
+          provider: 'openai',
           query: request.query,
-          results: [{
+          report: 'Analog horror is organized around evidentiary media.',
+          queries: ['analog horror primary examples'],
+          sources: [{
             title: 'Analog horror reference',
             url: 'https://example.com/analog-horror',
-            content: 'Untrusted source snippet.',
-            score: 0.9,
-            publishedAt: null,
           }],
         }
       },
@@ -72,7 +70,6 @@ describe('Creative Direction Worker web_search tool', () => {
 
     const completed = await tool.invoke(agentContext, JSON.stringify({
       query: '模拟恐怖 镜头 声音 叙事',
-      searchDepth: 'advanced',
     }))
     const exhausted = await tool.invoke(agentContext, JSON.stringify({
       query: 'analog horror forum conventions',
@@ -83,12 +80,14 @@ describe('Creative Direction Worker web_search tool', () => {
 
     expect(completed).toMatchObject({
       status: 'completed',
-      provider: 'tavily',
-      results: [{ title: 'Analog horror reference' }],
+      provider: 'openai',
+      report: 'Analog horror is organized around evidentiary media.',
+      queries: ['analog horror primary examples'],
+      sources: [{ title: 'Analog horror reference' }],
     })
     expect(exhausted).toMatchObject({
       status: 'budget_exhausted',
-      results: [],
+      sources: [],
       notice: expect.stringContaining('部分完成'),
     })
     expect(providerCalls).toBe(1)
@@ -100,6 +99,7 @@ describe('Creative Direction Worker web_search tool', () => {
       expect.objectContaining({
         ordinal: 1,
         status: 'completed',
+        providerQueries: ['analog horror primary examples'],
         sources: [{
           title: 'Analog horror reference',
           url: 'https://example.com/analog-horror',

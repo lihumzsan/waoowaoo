@@ -596,7 +596,8 @@
       "title": "Web Search",
       "sourcePaths": [
         "src/lib/web-search",
-        "src/lib/http/outbound-proxy.ts",
+        "src/lib/ai-exec/hosted-web-search.ts",
+        "src/lib/ai-providers/openai/hosted-web-search.ts",
         "src/lib/operations/domains/web-search",
         "src/lib/creative-worker/research.ts",
         "src/lib/creative-worker/tools.ts",
@@ -608,7 +609,7 @@
         ".env.cloud.example"
       ],
       "testPaths": [
-        "tests/integration/provider/tavily-web-search.contract.test.ts",
+        "tests/integration/provider/openai-hosted-web-search.contract.test.ts",
         "tests/contracts/project-agent-toolset-conformance.test.ts",
         "tests/unit/creative-worker/research.test.ts",
         "tests/unit/creative-worker/web-search-tool.test.ts",

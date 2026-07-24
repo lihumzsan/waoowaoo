@@ -29,7 +29,7 @@ npm run architecture:impact -- --changed
 | route → queue → worker → DB 的任务提交、状态、重试、补偿 | [异步任务生命周期](modules/async-task-lifecycle.md) | task types、submitter、task service |
 | Agent run、工具调度、确认、心跳、恢复、任务完成后的继续执行 | [Assistant Run 生命周期](modules/assistant-run-lifecycle.md) | project-agent runtime、operation registry |
 | Creative Skill、专业知识发现、无状态 Creative Worker 与主 Agent 委派 | [Creative Skill 与无状态 Worker](modules/creative-skill-worker.md) | Creative Skill registry、Creative Worker、`delegate_creative_work` |
-| 联网搜索、Tavily 协议、研究预算、证据归档与不可信网页边界 | [Web Search](modules/web-search.md) | web-search service/provider、`web_search` Operation、Creative Worker research projector |
+| 联网搜索、OpenAI 托管研究、研究预算、证据归档与不可信网页边界 | [Web Search](modules/web-search.md) | web-search service/provider、`web_search` Operation、Creative Worker research projector |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
 | 注册/登录、顶层导航、语言切换、deployment capability 投影 | [产品外壳、身份与本地化](modules/product-shell.md) | auth/session、i18n navigation、deployment features、Navbar |
 | 全局/项目资产的 owner、scope、kind、variant 与复制边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、unified asset operations |
