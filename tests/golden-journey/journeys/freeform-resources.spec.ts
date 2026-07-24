@@ -542,6 +542,15 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     await expect(page.locator(`article[data-node-id="${workspaceNodeId.resourceCard(String(resource.candidateSetId ?? resource.id))}"]`))
       .toHaveCount(1)
   }
+  if (typeof styleResource.id !== 'string') throw new Error('GOLDEN_STYLE_RESOURCE_ID_MISSING')
+  const styleCardSummary = page
+    .locator(`article[data-node-id="${workspaceNodeId.resourceCard(styleResource.id)}"]`)
+    .locator('.workspace-canvas-node-content[data-expanded="false"]')
+  await expect(styleCardSummary.getByText(
+    'Restrained monochrome ink-wash science fiction with one red accent.',
+    { exact: true },
+  )).toBeVisible()
+  await expect(styleCardSummary).not.toContainText('"styleSummary"')
   await expect(page.locator('article[data-node-id^="resource:"] video[src]')).toHaveCount(2)
   await expect(page.locator('article[data-node-id^="resource:"] audio[src]')).toHaveCount(1)
   expect(finalSnapshot.identities.duplicateMessageIds).toHaveLength(0)

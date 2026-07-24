@@ -125,6 +125,24 @@ const resourceCardSchema = z.object({
   presentation: z.object({
     rendererKey: z.string().min(1),
     fallbackMediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES),
+    summary: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('text'), text: z.string().min(1) }).strict(),
+      z.object({
+        kind: z.literal('structured'),
+        entryCount: z.number().int().nonnegative().nullable(),
+      }).strict(),
+      z.object({
+        kind: z.literal('media'),
+        mediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES),
+        url: z.string().optional(),
+        mimeType: z.string().nullable().optional(),
+        width: z.number().nullable().optional(),
+        height: z.number().nullable().optional(),
+        durationMs: z.number().nullable().optional(),
+      }).strict(),
+      z.object({ kind: z.literal('domain_snapshot') }).strict(),
+      z.object({ kind: z.literal('empty') }).strict(),
+    ]),
   }).strict(),
 }).strict()
 

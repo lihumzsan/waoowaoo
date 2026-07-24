@@ -1,4 +1,8 @@
-import type { CreativeResourceMediaType } from './contracts'
+import type {
+  CreativeResourceJsonObject,
+  CreativeResourceJsonValue,
+  CreativeResourceMediaType,
+} from './contracts'
 
 export const CREATIVE_RESOURCE_SCHEMA = {
   GENERIC_TEXT: 'generic.text',
@@ -26,6 +30,94 @@ export const CREATIVE_RESOURCE_SCHEMA = {
 } as const
 
 export type CreativeResourceSchemaId = typeof CREATIVE_RESOURCE_SCHEMA[keyof typeof CREATIVE_RESOURCE_SCHEMA]
+
+export type CreativeResourceStructuredSummaryProjector = (
+  data: CreativeResourceJsonValue,
+) => string | null
+
+function objectValue(value: CreativeResourceJsonValue): CreativeResourceJsonObject | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : null
+}
+
+function stringValue(
+  object: CreativeResourceJsonObject | null,
+  key: string,
+): string | null {
+  const value = object?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function objectField(
+  object: CreativeResourceJsonObject | null,
+  key: string,
+): CreativeResourceJsonObject | null {
+  const value = object?.[key]
+  return value === undefined ? null : objectValue(value)
+}
+
+function arrayField(
+  object: CreativeResourceJsonObject | null,
+  key: string,
+): readonly CreativeResourceJsonValue[] {
+  const value = object?.[key]
+  return Array.isArray(value) ? value : []
+}
+
+function firstText(...values: readonly (string | null)[]): string | null {
+  return values.find((value): value is string => value !== null) ?? null
+}
+
+const STRUCTURED_SUMMARY_PROJECTORS: Partial<
+  Record<CreativeResourceSchemaId, CreativeResourceStructuredSummaryProjector>
+> = {
+  [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY]: (data) => {
+    const object = objectValue(data)
+    return firstText(
+      stringValue(object, 'logline'),
+      stringValue(object, 'synopsis'),
+      stringValue(object, 'screenplayText'),
+    )
+  },
+  [CREATIVE_RESOURCE_SCHEMA.EDIT_BIBLE]: (data) => {
+    const bible = objectField(objectValue(data), 'bible')
+    return firstText(
+      stringValue(bible, 'logline'),
+      stringValue(bible, 'synopsis'),
+      stringValue(bible, 'title'),
+    )
+  },
+  [CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN]: (data) => {
+    const object = objectValue(data)
+    const firstChapter = objectValue(arrayField(object, 'chapters')[0] ?? null)
+    return firstText(
+      stringValue(object, 'rationale'),
+      stringValue(firstChapter, 'summary'),
+      stringValue(firstChapter, 'title'),
+    )
+  },
+  [CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS]: (data) => (
+    stringValue(objectValue(data), 'summary')
+  ),
+  [CREATIVE_RESOURCE_SCHEMA.STYLE_BIBLE]: (data) => (
+    stringValue(objectValue(data), 'styleSummary')
+  ),
+  [CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST]: (data) => (
+    stringValue(objectValue(data), 'overview')
+  ),
+  [CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET]: (data) => {
+    const firstSegment = objectValue(arrayField(objectValue(data), 'segments')[0] ?? null)
+    return firstText(
+      stringValue(firstSegment, 'prompt'),
+      stringValue(firstSegment, 'key'),
+    )
+  },
+  [CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION]: (data) => (
+    stringValue(objectValue(data), 'overview')
+  ),
+  [CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW]: (data) => (
+    stringValue(objectValue(data), 'summary')
+  ),
+}
 
 /**
  * The exhaustive public vocabulary for Resource semantics, grouped by the
@@ -69,13 +161,18 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
 export interface CreativeResourceSchemaDefinition {
   readonly schemaId: CreativeResourceSchemaId
   readonly mediaType: CreativeResourceMediaType
+  readonly structuredSummaryProjector?: CreativeResourceStructuredSummaryProjector
 }
 
 function schemaDefinitions(
   mediaType: CreativeResourceMediaType,
   schemaIds: readonly CreativeResourceSchemaId[],
 ): CreativeResourceSchemaDefinition[] {
-  return schemaIds.map((schemaId) => ({ schemaId, mediaType }))
+  return schemaIds.map((schemaId) => ({
+    schemaId,
+    mediaType,
+    structuredSummaryProjector: STRUCTURED_SUMMARY_PROJECTORS[schemaId],
+  }))
 }
 
 export const CREATIVE_RESOURCE_SCHEMAS: readonly CreativeResourceSchemaDefinition[] = [

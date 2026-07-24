@@ -27,6 +27,7 @@ import { parseCreativeResourceGenerationTaskPayload, toCreativeResourceJsonValue
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
 import { CREATIVE_RESOURCE_SCHEMA, getCreativeResourceSchema } from './schema-registry'
+import { projectCreativeResourceSummary } from './summary-projection'
 
 type CreativeResourceReadClient = Pick<
   Prisma.TransactionClient,
@@ -207,6 +208,7 @@ export function projectCreativeResourceCardView(
     presentation: {
       rendererKey: schema?.schemaId ?? 'generic.resource',
       fallbackMediaType: resource.mediaType,
+      summary: projectCreativeResourceSummary(resource),
     },
   }
 }
@@ -292,21 +294,34 @@ export async function listProjectCreativeResourceCards(input: {
   })
   const pending = await loadPendingGenerations(client, rows.map((row) => row.id))
   const views = rows.map((row) => projectCreativeResourceCardView(row, pending.get(row.id) ?? null))
-  const byCandidateSet = new Map<string, CreativeResourceView[]>()
+  const byCandidateSet = new Map<string, CreativeResourceCardView[]>()
   for (const view of views) {
     const candidateSetId = view.resource.candidateSetId
     if (!candidateSetId) continue
     const group = byCandidateSet.get(candidateSetId) ?? []
-    group.push(view.resource)
+    group.push(view)
     byCandidateSet.set(candidateSetId, group)
   }
   return views.map((view) => {
     const candidateSetId = view.resource.candidateSetId
     if (!candidateSetId) return view
-    const resources = byCandidateSet.get(candidateSetId) ?? [view.resource]
+    const candidateViews = byCandidateSet.get(candidateSetId) ?? [view]
+    const resources = candidateViews.map((candidate) => candidate.resource)
+    const summaries = candidateViews.map((candidate) => ({
+      resourceId: candidate.resource.resourceId,
+      summary: candidate.presentation.summary,
+    }))
     const selectedRevisionId = resources
       .flatMap((resource) => resource.bindings.map((binding) => binding.revisionId))[0] ?? null
-    return { ...view, candidates: { candidateSetId, resources, selectedRevisionId } }
+    return {
+      ...view,
+      candidates: {
+        candidateSetId,
+        resources,
+        summaries,
+        selectedRevisionId,
+      },
+    }
   })
 }
 

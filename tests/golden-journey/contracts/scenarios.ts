@@ -4,7 +4,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-FREEFORM-RESOURCE-CREATION',
     kind: 'freeform',
-    title: 'natural language composes independent Resources, refresh-safe current Choice commitments, and explicitly adopted Chapters that become parallel Worker inputs',
+    title: 'natural language composes independent Resources with schema-projected card summaries, refresh-safe current Choice commitments, and explicitly adopted Chapters that become parallel Worker inputs',
     startState: 'empty_project',
     expectedTerminal: 'independent_resources_and_explicit_optional_projections_ready',
     requiresWorkers: true,

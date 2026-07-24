@@ -158,9 +158,40 @@ export interface CreativeResourceDataView {
   readonly creativeDataVersion: number
 }
 
+export type CreativeResourceSummaryView =
+  | {
+      readonly kind: 'text'
+      readonly text: string
+    }
+  | {
+      readonly kind: 'structured'
+      readonly entryCount: number | null
+    }
+  | {
+      readonly kind: 'media'
+      readonly mediaType: CreativeResourceMediaType
+      readonly url?: string
+      readonly mimeType?: string | null
+      readonly width?: number | null
+      readonly height?: number | null
+      readonly durationMs?: number | null
+    }
+  | {
+      readonly kind: 'domain_snapshot'
+    }
+  | {
+      readonly kind: 'empty'
+    }
+
+export interface CreativeResourceCandidateSummaryView {
+  readonly resourceId: string
+  readonly summary: CreativeResourceSummaryView
+}
+
 export interface CreativeResourceCandidateView {
   readonly candidateSetId: string
   readonly resources: readonly CreativeResourceView[]
+  readonly summaries: readonly CreativeResourceCandidateSummaryView[]
   readonly selectedRevisionId: string | null
 }
 
@@ -198,6 +229,7 @@ export interface CreativeResourceCardView {
   readonly presentation: {
     readonly rendererKey: string
     readonly fallbackMediaType: CreativeResourceMediaType
+    readonly summary: CreativeResourceSummaryView
   }
 }
 
