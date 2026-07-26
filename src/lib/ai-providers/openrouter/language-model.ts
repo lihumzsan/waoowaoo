@@ -53,6 +53,7 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
       modelId: input.selection.modelId,
       body,
       executionMode: input.executionMode,
+      ...(input.promptCacheTtl ? { promptCacheTtl: input.promptCacheTtl } : {}),
       sourceMessages: input.messages,
     }))
     const preparedInput = typeof Request !== 'undefined' && requestInput instanceof Request

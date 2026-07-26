@@ -40,6 +40,19 @@ export type AiProviderLanguageModelContext = {
   executionMode: 'sync' | 'stream' | 'vision' | 'agent'
   reasoning: boolean
   reasoningEffort: ReasoningEffort
+  /**
+   * Opt in to a long provider prompt-cache TTL.
+   *
+   * The question a TTL answers is whether this prefix gets read again after
+   * the provider's short window lapses — not what shape the call has. Those
+   * differ: the Primary Agent and the Creative Worker share one execution mode
+   * yet sit on opposite sides of it, because a Worker Task ends when it ends
+   * and the next Task carries a different prefix. A long TTL costs a higher
+   * write multiplier, so callers that cannot promise the later read must not
+   * declare it. Absent means the provider default, which is the pre-existing
+   * behaviour rather than an assumption.
+   */
+  promptCacheTtl?: '1h'
   messages?: AiLlmMessage[]
   openRouterSessionId?: string
 }

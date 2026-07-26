@@ -118,6 +118,7 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
     userId: job.data.userId,
     modelKey: payload.modelKey,
     reasoningPurpose: 'analysis',
+    promptCacheHorizon: 'one_shot',
     projectId: job.data.projectId,
     openRouterSessionId: buildAiExecutionSessionId({
       kind: 'project-agent',

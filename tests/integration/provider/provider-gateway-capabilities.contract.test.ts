@@ -505,6 +505,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
         executionMode: 'agent',
         reasoning: false,
         reasoningEffort: 'medium',
+        promptCacheTtl: '1h',
         openRouterSessionId: 'agent-session',
       })
       const firstTurn = [
@@ -522,9 +523,8 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
       const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      // Agent loops re-read the same prefix across user turns, and those gaps
-      // routinely exceed the 5m default; the 1h write premium is only worth
-      // paying for this execution shape.
+      // A conversation prefix is re-read across user turns, and those gaps
+      // routinely exceed the 5m default, so the 1h write premium is earned.
       expect(firstBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
       expect(secondBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
       const firstWireMessages = [
@@ -542,6 +542,57 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       ])
       const headers = new Headers((fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])[1]?.headers)
       expect(headers.get('x-session-id')).toBe('agent-session')
+    })
+
+    it('keeps an undeclared Claude Agent loop on the 5m default', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({
+        id: 'openrouter-worker-response',
+        model: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+        provider: 'Anthropic',
+        choices: [{
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'ok' },
+        }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          cost: 0.01,
+        },
+      }))
+      const model = createAiLanguageModel({
+        providerKey: 'openrouter',
+        selection: {
+          provider: 'openrouter',
+          modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+          modelKey: `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
+        },
+        providerConfig: {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          apiKey: 'test-key',
+          baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        executionMode: 'agent',
+        reasoning: false,
+        reasoningEffort: 'medium',
+      })
+      await generateText({
+        model,
+        messages: [
+          { role: 'system' as const, content: 'stable system and tool context' },
+          { role: 'user' as const, content: 'background task' },
+        ],
+        maxRetries: 0,
+      })
+
+      const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
+      // The Creative Worker runs the same Agents loop under the same execution
+      // mode as the Primary Agent, but its Task ends when it ends and the next
+      // Task carries a different prefix. Execution mode must never be read as
+      // an implicit opt-in to the higher write multiplier.
+      expect(body.cache_control).toEqual({ type: 'ephemeral' })
     })
 
     it('keeps Claude one-shot sync caching on the 5m default', async () => {

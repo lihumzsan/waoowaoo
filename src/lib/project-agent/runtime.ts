@@ -885,6 +885,7 @@ export async function createProjectAgentChatResponse(input: {
     userId: input.userId,
     modelKey: assistantModelKey,
     reasoningPurpose: 'assistant',
+    promptCacheHorizon: 'conversation',
     openRouterSessionId,
   })
   let runLockReleased = false

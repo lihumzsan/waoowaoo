@@ -40,10 +40,26 @@ export async function resolveProjectAgentAssistantModelKey(userId: string): Prom
   return normalizeProjectAgentAssistantModelKey(userConfig.assistantModel)
 }
 
+/**
+ * Whether this caller's prompt prefix survives long enough to justify a long
+ * provider cache TTL.
+ *
+ * `conversation` spans user turns: the same instructions and history are read
+ * again after the user reads, thinks and replies, a gap that routinely exceeds
+ * the provider's short window. `one_shot` covers background Tasks that end
+ * when they end — the next Task carries a different prefix, so the later read
+ * never arrives and a longer TTL would only buy a higher write multiplier.
+ *
+ * Both callers here run the same Agents loop under the same execution mode, so
+ * this cannot be inferred from the call shape and must be declared.
+ */
+export type ProjectAgentPromptCacheHorizon = 'conversation' | 'one_shot'
+
 export async function resolveProjectAgentLanguageModel(input: {
   userId: string
   modelKey: string
   reasoningPurpose: ReasoningEffortPurpose
+  promptCacheHorizon: ProjectAgentPromptCacheHorizon
   projectId?: string
   openRouterSessionId?: string
 }): Promise<{
@@ -66,6 +82,7 @@ export async function resolveProjectAgentLanguageModel(input: {
       executionMode: 'agent',
       reasoning: true,
       reasoningEffort,
+      ...(input.promptCacheHorizon === 'conversation' ? { promptCacheTtl: '1h' as const } : {}),
       openRouterSessionId: input.openRouterSessionId,
     }),
   }

@@ -25,24 +25,25 @@ export type OpenRouterChatMessage = {
 }
 
 /**
- * Automatic top-level cache TTL by execution shape.
- *
  * A 1h cache write costs 2x base input against 1.25x for 5m, while every hit
  * costs 0.1x either way, so the longer TTL only pays off when the same prefix
  * is read again after the 5m window has lapsed. Hits refresh the TTL, so an
- * Agents loop never expires mid-run; the gap that matters is the one between
- * user turns, which routinely exceeds 5m in an authoring session. One-shot
- * sync/vision calls have no second read at all, so paying the 1h premium there
- * would be a pure loss — they stay on the 5m default.
+ * Agents loop never expires mid-run; the gap that matters is between user
+ * turns, which routinely exceeds 5m in an authoring session.
+ *
+ * Execution mode cannot decide this. The Primary Agent and the Creative Worker
+ * are both `agent`, yet a Worker Task ends when it ends and the next Task
+ * carries a different prefix, so it never collects that later read and the 2x
+ * write would be a pure loss. Only a caller that can promise the read declares
+ * the long TTL; everything else stays on the provider default.
  */
-const AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE: Record<
-  OpenRouterPromptCacheExecutionMode,
-  OpenRouterCacheControl
-> = {
-  agent: { type: 'ephemeral', ttl: '1h' },
-  stream: { type: 'ephemeral' },
-  sync: { type: 'ephemeral' },
-  vision: { type: 'ephemeral' },
+const DEFAULT_ANTHROPIC_CACHE_CONTROL: OpenRouterCacheControl = {
+  type: 'ephemeral',
+}
+
+const LONG_TTL_ANTHROPIC_CACHE_CONTROL: OpenRouterCacheControl = {
+  type: 'ephemeral',
+  ttl: '1h',
 }
 
 /** Gemini has no 1h option; `ttl` is Anthropic-only on this wire. */
@@ -239,6 +240,7 @@ export function applyOpenRouterPromptCaching(input: {
   modelId: string
   body: Record<string, unknown>
   executionMode: OpenRouterPromptCacheExecutionMode
+  promptCacheTtl?: '1h'
   sourceMessages?: readonly ProviderChatMessage[]
 }): Record<string, unknown> {
   const family = resolveOpenRouterPromptCacheFamily(input.modelId)
@@ -261,6 +263,9 @@ export function applyOpenRouterPromptCaching(input: {
   const shouldUseClaudeAutomaticCache = family === 'anthropic'
     && !hasOwnCacheControl(input.body)
     && !hasExplicitCacheControl
+  // Gemini has no top-level automatic form at all, so the breakpoint is worth
+  // placing for any Agents loop regardless of TTL: without it those steps are
+  // uncached outright, not merely short-lived.
   const shouldAddGeminiPrefixBreakpoint = family === 'google'
     && input.executionMode === 'agent'
     && !hasOwnCacheControl(input.body)
@@ -273,7 +278,11 @@ export function applyOpenRouterPromptCaching(input: {
     ...input.body,
     ...(cachedMessages !== input.body.messages ? { messages: cachedMessages } : {}),
     ...(shouldUseClaudeAutomaticCache
-      ? { cache_control: AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE[input.executionMode] }
+      ? {
+        cache_control: input.promptCacheTtl === '1h'
+          ? LONG_TTL_ANTHROPIC_CACHE_CONTROL
+          : DEFAULT_ANTHROPIC_CACHE_CONTROL,
+      }
       : {}),
   }
 }
