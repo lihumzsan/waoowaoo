@@ -21,7 +21,9 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 - Use an explicitly ordered reference manifest for media. Number images and audios independently, and refer to them as “the character in image 1 (@Image1)” or “the locked voice in audio 1 (@Audio1).” Do not make the model guess from asset names, filenames, internal IDs, or chat nicknames.
 - `referenceKeys` contains only the exact source-material labels actually used by this Segment, in provider-media order. Images map to `@ImageN` within the image sequence and audios map to `@AudioN` within the audio sequence; never create a second field such as `voiceReferenceKeys`.
 - Order references by narrative importance and first use. Identity-critical characters normally come first, then key props or required UI, then locations in order of appearance; the current story's actual emphasis outranks a fixed template.
-- Give each image one clear primary responsibility. Supply only media used in the current segment and respect the target model's real reference limit; never silently truncate, substitute, or reorder user-locked references.
+- Give each image one clear primary responsibility. Supply only media used in the current segment and respect the reference limits supplied in `productionContext.video`; never silently truncate, substitute, or reorder user-locked references.
+- An audio reference can never stand alone: any Segment citing `@AudioN` must also cite at least one image. When offscreen dialogue is needed but the segment has no usable image reference, cite the speaker or the space they occupy instead, or move the line into an adjacent Shot that does have one.
+- Audio references and first/last-frame image references are mutually exclusive. One Segment cannot both lock its opening or closing frame with an image and cite a bound voice; when both are needed, split it into two adjacent independent Segments.
 - Preserve approved identity, wardrobe, silhouette, environment structure, and prop design, while preventing incidental source pose, lighting, noise, or composition from overriding the current video requirements.
 - Phone messages, screen cards, or critical UI that must appear within the video may be image references rendered diegetically. Design a post-production overlay only when the user explicitly requests one.
 
@@ -141,6 +143,7 @@ These are two separate, self-sufficient prompts. The seam changes from medium-wi
 ## Final segment review
 
 - Does every image and audio reference number point exactly to its intended character, location, prop, UI, or locked character voice?
+- Does every Segment citing audio also cite at least one image, without combining audio with a first/last-frame image reference?
 - Can every shot finish within its allocated time, with a clear entry, action order, and landing state?
 - Was transition necessity judged first? Are ordinary connections simple, and does every creative transition have a clear motivation, visible endpoint and starting state without deforming the subject?
 - Does every multi-Shot prompt explicitly prohibit dissolves, cross-dissolves, fade-ins, and fade-outs, with no transparent overlap between outgoing and incoming images?
