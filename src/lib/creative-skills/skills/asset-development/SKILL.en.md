@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Select reusable characters, locations, and props worth producing from an exact `screenplay` Revision, user requirements, references, and any server-injected Creative Direction domains, then perform asset-fact extraction, appearance design, and final prompt composition in one pass. The formal `asset_manifest` is the sole fact for production-asset scope; this Skill never generates images or writes the Project. A formal `asset_manifest` requires exactly one screenplay Revision. Creative Direction is optional; when adopted, the server injects only `visual` and `assetPolicy`.
+Select reusable characters, locations, and props worth producing from an exact `screenplay` Revision, user requirements, references, and the complete server-injected Creative Direction when one is adopted, then perform asset-fact extraction, appearance design, and final prompt composition in one pass. The formal `asset_manifest` is the sole fact for production-asset scope; this Skill never generates images or writes the Project. A formal `asset_manifest` requires exactly one screenplay Revision. Creative Direction remains optional.
 
 ## Asset selection and source evidence
 
@@ -17,7 +17,7 @@ Select reusable characters, locations, and props worth producing from an exact `
 
 ## Style-consumption boundary
 
-- When `creativeDirection` is non-null, consume only its injected `visual` and `assetPolicy`. `visual.visualStyle` and `visual.assetImageStyle` are the sole style authority for this task; do not redefine project style from one reference image or asset. When it is null, design the asset identity from the supplied facts without inventing a project-wide direction.
+- When `creativeDirection` is non-null, use the complete adopted direction and decide which policies affect asset selection, stable identity, and generation prompts. `visual` and `assetPolicy` normally carry the direct asset rules, while narrative, directing, editing, and sound may reveal cross-media requirements or recurring motifs; do not force an irrelevant field into the asset. The six domain bodies outrank `styleSummary`, `rawUserStyle`, or one reference image. When it is null, design the asset identity from supplied facts without inventing a project-wide direction.
 - Always put style-free stable asset identity in `stableDescription`, then compose that identity with an actually supplied Creative Direction in `generationPrompt`. Never use the final generation prompt to rewrite stable identity.
 - A stable character identity description excludes artistic style, filters, and lighting; the final image prompt appends them consistently.
 - A foundational location description preserves real spatial structure, materials, and physical lighting conditions. Stylized lighting and material treatment are composed with the Creative Direction only in the final image prompt; fixed layout comes from execution policy.
@@ -106,7 +106,7 @@ Select reusable characters, locations, and props worth producing from an exact `
 
 ## Review
 
-- Does a formal Asset Manifest contain only source-grounded, reusable production assets and give every item valid `sourceRefs`? If `visual` and `assetPolicy` were injected, does it follow them without inventing other Direction domains?
+- Does a formal Asset Manifest contain only source-grounded, reusable production assets and give every item valid `sourceRefs`? When a complete Creative Direction was injected, did it use every relevant policy without forcing unrelated domains into asset facts?
 - For an ordinary single-asset task, if a Creative Direction was supplied, does the design follow it and separate cross-media style from asset-only lighting and material treatment? If none was supplied, does the result keep style unbound?
 - Is the character stable, complete, era-consistent, explicit about footwear, and free of body color, action, background, uncertainty, and abstract aura?
 - Is a non-human identity described through its real form rather than a human template?

@@ -50,10 +50,7 @@ function creativeTaskPayload(input: {
   }[]
   creativeDirection?: {
     revisionId: string
-    direction: {
-      visual: typeof creativeDirection.visual
-      assetPolicy: string
-    }
+    direction: typeof creativeDirection
   } | null
 }) {
   const requestKey = `asset-adoption:${input.outputKind}`
@@ -102,10 +99,7 @@ async function createCompletedCreativeTask(input: {
   }[]
   creativeDirection?: {
     revisionId: string
-    direction: {
-      visual: typeof creativeDirection.visual
-      assetPolicy: string
-    }
+    direction: typeof creativeDirection
   } | null
 }) {
   return await prisma.task.create({
@@ -327,10 +321,7 @@ describe('Asset Manifest adoption DB integration', () => {
       ],
       creativeDirection: {
         revisionId: styleRevision.revision.id,
-        direction: {
-          visual: creativeDirection.visual,
-          assetPolicy: creativeDirection.assetPolicy,
-        },
+        direction: creativeDirection,
       },
     })
     const manifestRevision = await createProjectResourceRevision({

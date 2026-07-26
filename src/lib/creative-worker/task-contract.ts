@@ -107,7 +107,7 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     revisionId: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
-    .describe('Exact Resource revisions the Context Compiler may copy into every relevant Chapter packet, including an optional Creative Direction and any relevant media assets.'),
+    .describe('Exact non-Direction Resource revisions the Context Compiler may copy into every relevant Chapter packet. Adopted Creative Direction is read once and injected only by the central Task input compiler.'),
 }).strict().superRefine((batch, context) => {
   if (batch.outputKind !== 'video_prompt_set') return
   for (const [index, chapter] of batch.chapters.entries()) {
@@ -151,7 +151,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v6' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v7' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -176,25 +176,14 @@ export const creativeWorkTaskPayloadSchema = z.object({
   ui: z.record(z.string(), z.unknown()).optional(),
   meta: z.record(z.string(), z.unknown()).optional(),
 }).strict().superRefine((payload, context) => {
-  const expectedDomains = readCreativeWorkOutputDefinition(
+  const injectCreativeDirection = readCreativeWorkOutputDefinition(
     payload.request.outputKind,
-  ).creativeDirectionDomains
-  const actualDomains = payload.request.creativeDirection
-    ? Object.keys(payload.request.creativeDirection.direction).sort()
-    : []
-  if (
-    actualDomains.length === 0
-    || (
-      actualDomains.length === expectedDomains.length
-      && [...expectedDomains].sort().every((domain, index) => domain === actualDomains[index])
-    )
-  ) {
-    return
-  }
+  ).injectCreativeDirection
+  if (injectCreativeDirection || payload.request.creativeDirection === null) return
   context.addIssue({
     code: 'custom',
     path: ['request', 'creativeDirection'],
-    message: 'CREATIVE_DIRECTION_INJECTION_DOMAINS_INVALID',
+    message: 'CREATIVE_DIRECTION_INJECTION_FORBIDDEN',
   })
 })
 

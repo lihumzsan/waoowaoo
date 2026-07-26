@@ -36,7 +36,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '2.2.0',
+    version: '2.3.0',
     title: { zh: '故事与剧本开发', en: 'Story Development' },
     summary: {
       zh: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
@@ -50,7 +50,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'continuity-memory': defineSkill({
     id: 'continuity-memory',
-    version: '1.3.0',
+    version: '1.4.0',
     title: { zh: '连续性记忆', en: 'Continuity Memory' },
     summary: {
       zh: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
@@ -78,7 +78,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
-    version: '3.1.0',
+    version: '3.2.0',
     title: { zh: '创作方向', en: 'Creative Direction' },
     summary: {
       zh: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究转译为视觉、叙事、导演、剪辑、声音和资产六个可执行方向块，可返回最终方向或 2–12 个完整候选。',
@@ -92,7 +92,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '2.1.0',
+    version: '2.2.0',
     title: { zh: '资产设计与生成提示词', en: 'Asset Development and Generation Prompts' },
     summary: {
       zh: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、提供原文证据、设计外观并生成最终 Prompt；不生图、不写项目。',
@@ -106,7 +106,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.5.0',
+    version: '1.6.0',
     title: { zh: '视频导演与生成设计', en: 'Video Direction and Generation Design' },
     summary: {
       zh: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
@@ -120,7 +120,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
-    version: '1.2.0',
+    version: '1.3.0',
     title: { zh: '音乐与配乐设计', en: 'Music and Score Direction' },
     summary: {
       zh: '`outputKind=music_direction` 必须读取：从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
@@ -134,7 +134,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'quality-review': defineSkill({
     id: 'quality-review',
-    version: '1.3.0',
+    version: '1.4.0',
     title: { zh: '创作质量审查', en: 'Creative Quality Review' },
     summary: {
       zh: '`outputKind=creative_review` 必须读取；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',

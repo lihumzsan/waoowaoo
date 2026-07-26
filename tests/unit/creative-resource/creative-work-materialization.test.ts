@@ -335,10 +335,7 @@ describe('Creative Task Resource materialization planning', () => {
         },
       ], {
         revisionId: 'direction-r1',
-        direction: {
-          visual: creativeDirection.visual,
-          assetPolicy: creativeDirection.assetPolicy,
-        },
+        direction: creativeDirection,
       }),
       result: taskResult('asset_manifest', output),
     })

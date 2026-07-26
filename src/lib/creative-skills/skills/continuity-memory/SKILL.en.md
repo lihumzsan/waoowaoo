@@ -4,7 +4,7 @@
 
 Extract the minimum sufficient project facts that support long-form, chaptered, and parallel production: stable canon, major entities, narrative beats, persistent state changes, emotional regions, and source evidence. It records facts already established by the work; it does not continue writing the story or design shots.
 
-For `outputKind=story_canon`, Creative Direction is optional. When `creativeDirection` is non-null, consume only its server-injected `narrative` policy as guidance for framing and emphasis; never turn presentation policy into a canon fact. `continuity_analysis` receives no Creative Direction.
+Creative Direction is optional. For both `story_canon` and `continuity_analysis`, the server supplies the complete adopted direction when one exists. Use whichever domains help distinguish intended presentation, emphasis, motivated variation, or continuity expectations, but never let presentation policy create, erase, or override a canon fact. Source evidence remains the sole factual authority.
 
 ## Source discipline
 

@@ -9,7 +9,7 @@ The result may be one final direction or 2–12 materially distinct candidates. 
 ## Contract ownership
 
 - `styleSummary`: one concise human-facing summary for cards and comparison. It is not a substitute for the six executable domains.
-- `rawUserStyle`: preserve the user's original style wording when it exists; otherwise use `null`. Downstream workers never consume this field.
+- `rawUserStyle`: preserve the user's original style wording when it exists; otherwise use `null`. Downstream workers may use it only as original-intent context; it never overrides the six executable domains.
 - `visual`: the common image treatment plus asset-image lighting and texture.
   - `visual.visualStyle` defines medium, palette, image treatment, finish, and cross-media texture.
   - `visual.assetImageStyle.lighting` and `.texture` apply to asset-reference images, not automatically to every story shot.
@@ -111,10 +111,10 @@ If a search was attempted but became unavailable, failed, completed only partial
 - Are defaults, motivated exceptions, and prohibitions explicit?
 - Do the six domains reinforce one presentation mechanism without duplicating authority?
 - Are story facts and specific asset identities kept outside Direction?
-- Is `rawUserStyle` preserved but excluded from downstream policy?
+- Are `styleSummary` and `rawUserStyle` useful intent context without overriding the six executable domains?
 - If research was used, was it cross-checked and translated rather than copied?
-- Would an asset, screenplay, video, music, or review worker receive only the domains it needs and still act correctly?
+- Can every downstream worker receive the same complete Direction, select what materially applies, and keep the six domains coordinated without turning policy into story fact?
 
 ## Boundary
 
-This Skill owns project-level presentation policy and candidate comparison. It does not adopt a revision, write bindings, create Story Canon, select production assets, author final shots, generate media, or execute project operations. The server decides which adopted domains each downstream output receives.
+This Skill owns project-level presentation policy and candidate comparison. It does not adopt a revision, write bindings, create Story Canon, select production assets, author final shots, generate media, or execute project operations. The server injects the same complete adopted Direction into every downstream Creative Worker; each Worker decides relevance within its own professional boundary.

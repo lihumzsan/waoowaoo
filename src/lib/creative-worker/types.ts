@@ -133,7 +133,7 @@ const creativeVideoProductionContextSchema = z.object({
 
 export const creativeWorkRequestSchema = creativeWorkHydratedRequestSchema.extend({
   creativeDirection: injectedCreativeDirectionSchema.nullable()
-    .describe('Exact adopted Creative Direction projection injected and frozen by the server for this output kind. The primary Agent cannot supply it.'),
+    .describe('Complete exact adopted Creative Direction injected and frozen by the server for every output kind except creative_direction itself. The primary Agent cannot supply it.'),
   productionContext: z.object({
     video: creativeVideoProductionContextSchema.nullable(),
   }).strict(),

@@ -694,17 +694,17 @@ describe('project agent toolset conformance', () => {
       creative_review: 'episode',
     })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
-      [kind, definition.creativeDirectionDomains]
+      [kind, definition.injectCreativeDirection]
     )))).toEqual({
-      screenplay: ['narrative'],
-      story_canon: ['narrative'],
-      chapter_plan: [],
-      continuity_analysis: [],
-      creative_direction: [],
-      asset_manifest: ['visual', 'assetPolicy'],
-      video_prompt_set: ['visual', 'directing', 'editing', 'sound'],
-      music_direction: ['narrative', 'sound'],
-      creative_review: ['visual', 'narrative', 'directing', 'editing', 'sound', 'assetPolicy'],
+      screenplay: true,
+      story_canon: true,
+      chapter_plan: true,
+      continuity_analysis: true,
+      creative_direction: false,
+      asset_manifest: true,
+      video_prompt_set: true,
+      music_direction: true,
+      creative_review: true,
     })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, createCreativeWorkerTools({ workerTools: definition.workerTools }).map((tool) => tool.name)]
@@ -738,18 +738,17 @@ describe('project agent toolset conformance', () => {
         assetPolicy: 'Keep signage and recurring props legible and stable.',
       },
     }
-    expect(projectAdoptedCreativeDirection({
-      snapshot: adoptedDirection,
-      outputKind: 'video_prompt_set',
-    })).toEqual({
-      revisionId: 'direction-revision-1',
-      direction: {
-        visual: adoptedDirection.direction.visual,
-        directing: adoptedDirection.direction.directing,
-        editing: adoptedDirection.direction.editing,
-        sound: adoptedDirection.direction.sound,
-      },
-    })
+    for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
+      const projected = projectAdoptedCreativeDirection({
+        snapshot: adoptedDirection,
+        outputKind,
+      })
+      if (outputKind === 'creative_direction') {
+        expect(projected).toBeNull()
+        continue
+      }
+      expect(projected).toEqual(adoptedDirection)
+    }
     expect(projectAdoptedCreativeDirection({
       snapshot: adoptedDirection,
       outputKind: 'creative_direction',
@@ -777,7 +776,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v6')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v7')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,
@@ -823,6 +822,48 @@ describe('project agent toolset conformance', () => {
     expect(creativeWorkTaskPayloadSchema.safeParse({
       ...payload,
       protocol: 'creative_work_v4',
+    }).success).toBe(false)
+    expect(creativeWorkTaskPayloadSchema.safeParse({
+      ...payload,
+      request: {
+        ...payload.request,
+        creativeDirection: {
+          revisionId: 'direction-r1',
+          direction: {
+            narrative: 'A partial projection is no longer a valid task input.',
+          },
+        },
+      },
+    }).success).toBe(false)
+    expect(creativeWorkTaskPayloadSchema.safeParse({
+      ...payload,
+      request: {
+        ...payload.request,
+        outputKind: 'creative_direction',
+        creativeDirection: {
+          revisionId: 'direction-r1',
+          direction: {
+            styleSummary: 'Complete direction',
+            rawUserStyle: null,
+            visual: {
+              visualStyle: 'Restrained realism.',
+              assetImageStyle: {
+                lighting: 'Soft daylight.',
+                texture: 'Natural material detail.',
+              },
+            },
+            narrative: 'Reveal information through behavior.',
+            directing: 'Use motivated camera behavior.',
+            editing: 'Prefer clean causal cuts.',
+            sound: 'Preserve environmental continuity.',
+            assetPolicy: 'Keep reusable identities stable.',
+          },
+        },
+      },
+      lifecycleProjection: {
+        ...payload.lifecycleProjection,
+        outputKind: 'creative_direction',
+      },
     }).success).toBe(false)
 
     const result = {

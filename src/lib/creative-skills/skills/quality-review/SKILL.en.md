@@ -12,6 +12,7 @@ Use actually visible evidence to evaluate story, visual assets, video segments, 
 ## Evidence discipline
 
 - Review only text, images, video, audio, structured facts, and exact versions actually supplied to the task.
+- Creative Direction is optional. When `creativeDirection` is non-null, the server supplies the complete adopted direction. Use every materially relevant domain as review policy across story, image, motion, edit, sound, and asset consistency; the six domain bodies outrank `styleSummary` and `rawUserStyle`. Do not turn presentation policy into a story fact or report an irrelevant domain as a defect.
 - When images or video are unavailable, do not claim that identity, location, action, text, or visual quality passed. When audio is unavailable, do not claim that dialogue, synchronization, mix, or music passed listening review.
 - Metadata may prove format, duration, state, or reference relationships, but cannot replace content review.
 - Clearly distinguish what was verified, inferred from facts, requires human confirmation, or cannot be checked with current capability.

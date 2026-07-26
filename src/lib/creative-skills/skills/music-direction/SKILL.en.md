@@ -10,7 +10,7 @@ Use locked story, edit, and real timeline facts to design one unified but contin
 - When frames or audio tracks are not actually provided, do not claim to have watched video, analyzed native audio, the final video, or the final mix.
 - When planned duration differs from the real renderable timeline, use the real media duration as the music boundary while preserving narrative understanding from locked script and edit facts.
 - A shot-by-shot summary is a convenience index and cannot replace complete edit facts and segment continuity.
-- Creative Direction is optional. When `creativeDirection` is non-null, consume only the server-injected `narrative` and `sound`; never infer visual, directing, editing, or asset rules. Translate those supplied policies into musical character, soundstage width/depth, rhythmic density, and orchestration instead of copying adjectives. When it is null, work from the supplied narrative and constraints.
+- Creative Direction is optional. When `creativeDirection` is non-null, use the complete adopted direction and decide which policies materially affect the score. Narrative and sound are usually direct inputs, while visual rhythm, directing behavior, editing grammar, or recurring asset motifs may also imply musical relationships; translate relevant mechanisms into musical character, soundstage width/depth, rhythmic density, and orchestration instead of copying adjectives. When it is null, work from the supplied narrative and constraints.
 
 ## Diagnose the narrative first
 
@@ -70,7 +70,7 @@ These are reasoning examples, not fixed orchestration templates.
 ## Review
 
 - Does the design use the real timeline duration without claiming analysis of unavailable frames or audio?
-- When `narrative` and `sound` were injected, were they concretely translated into musical character, soundstage, rhythmic density, and orchestration rather than ignored, copied literally, or expanded into other Direction domains?
+- When a complete Creative Direction was injected, were all musically relevant policies concretely translated into character, soundstage, rhythmic density, and orchestration rather than ignored, copied literally, or forced into the score?
 - Did it diagnose narrative need before deciding stance, presence, and silence?
 - Is this one continuously evolving score rather than a collage of shot-level miniatures?
 - Are tempo, pitch, harmony, texture, spectrum, orchestration, dynamics, and phases concrete and mutually consistent?

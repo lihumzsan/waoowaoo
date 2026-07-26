@@ -11,7 +11,7 @@ Turn approved story facts, shot intent, character/location/prop references, and 
 
 ## When to design video directly
 
-- Creative Direction is optional. When `creativeDirection` is non-null, the server has frozen the exact adopted revision and injected only `visual`, `directing`, `editing`, and `sound`; follow those domains and do not infer `narrative` or `assetPolicy`. When it is null, create an executable design from the supplied goal and facts without inventing a project-wide direction.
+- Creative Direction is optional. When `creativeDirection` is non-null, the server has frozen and injected the complete exact adopted revision. Use every domain that materially affects the current video—normally visual, narrative, directing, editing, sound, and any asset-policy identity constraints—without forcing irrelevant wording into the prompt. When it is null, create an executable design from the supplied goal and facts without inventing a project-wide direction.
 - A single short shot can become a final video prompt directly from the user's goal; it does not require a complete screenplay, Story Canon, professional timeline, or adopted Creative Direction.
 - Multi-shot, multi-segment, or assembled work should first obtain enough shot order, duration, and continuity facts, then generate independently valid video segments.
 - Design only character, location, prop, or UI references that the final result will actually use. Irrelevant inputs dilute identity and location priority.

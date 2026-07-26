@@ -9,7 +9,7 @@
 ## 契约字段职责
 
 - `styleSummary`：供卡片展示和人工比较的一句话摘要，不能替代六个可执行领域。
-- `rawUserStyle`：有用户原始风格表达时原样保存，否则为 `null`；下游 Worker 永不消费它。
+- `rawUserStyle`：有用户原始风格表达时原样保存，否则为 `null`；下游 Worker 只能把它当作原始意图语境，不能用它覆盖六个可执行领域。
 - `visual`：跨媒体画面处理，以及资产参考图专用的灯光与材质。
   - `visual.visualStyle` 定义媒介、色彩、画面处理、完成度与跨媒体质感。
   - `visual.assetImageStyle.lighting` 和 `.texture` 只用于资产参考图，不自动成为所有剧情镜头的光影。
@@ -111,10 +111,10 @@
 - 默认、触发式例外与禁止项是否清楚？
 - 六领域是否共同支持一种呈现机制，且没有重复权威？
 - 是否把故事事实和具体资产身份留在 Direction 之外？
-- 是否保存但不下发 `rawUserStyle`？
+- `styleSummary` 与 `rawUserStyle` 是否只提供意图语境，没有覆盖六个可执行领域？
 - 使用研究时，是否先交叉验证再转译，而不是照搬？
-- 如果资产、剧本、视频、音乐或审查 Worker 只收到自己需要的领域，它是否仍能正确工作？
+- 每个下游 Worker 收到同一份完整 Direction 后，是否能自行选择实质相关内容、保持六领域协调，并且不把呈现政策变成故事事实？
 
 ## 边界
 
-本 Skill 只拥有项目级呈现政策与候选比较，不负责采纳 Revision、写 Binding、创建 Story Canon、筛选生产资产、编写最终镜头、生成媒体或执行项目 Operation。服务端决定每种下游输出接收已采纳 Direction 的哪些领域。
+本 Skill 只拥有项目级呈现政策与候选比较，不负责采纳 Revision、写 Binding、创建 Story Canon、筛选生产资产、编写最终镜头、生成媒体或执行项目 Operation。服务端向每个下游 Creative Worker 注入同一份完整已采纳 Direction，各 Worker 在自己的专业边界内自行判断相关性。

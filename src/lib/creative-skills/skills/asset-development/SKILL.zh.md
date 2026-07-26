@@ -2,7 +2,7 @@
 
 ## 作用
 
-从精确 `screenplay` Revision、用户要求、参考素材和服务端实际注入的 Creative Direction 领域中筛选值得制作的可复用角色、场景、道具，并一次性完成资产事实提取、外观设计与最终生成提示词。正式 `asset_manifest` 是生产资产范围的唯一事实；本 Skill 不直接生成图片或写入项目。正式 `asset_manifest` 只强制一个精确 screenplay Revision；Creative Direction 可选，已采纳时服务端只注入 `visual` 与 `assetPolicy`。
+从精确 `screenplay` Revision、用户要求、参考素材，以及项目已采纳时由服务端完整注入的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，并一次性完成资产事实提取、外观设计与最终生成提示词。正式 `asset_manifest` 是生产资产范围的唯一事实；本 Skill 不直接生成图片或写入项目。正式 `asset_manifest` 只强制一个精确 screenplay Revision；Creative Direction 仍然可选。
 
 ## 资产筛选与原文证据
 
@@ -17,7 +17,7 @@
 
 ## 风格消费边界
 
-- `creativeDirection` 非空时只消费注入的 `visual` 与 `assetPolicy`。其中 `visual.visualStyle` 与 `visual.assetImageStyle` 是本任务的唯一风格权威，不能根据单张参考图或单个资产重新定义项目风格。它为空时，按已提供事实设计资产身份，不得临时发明项目级方向。
+- `creativeDirection` 非空时使用完整已采纳方向，自行判断哪些政策影响资产筛选、稳定身份和生成 Prompt。`visual` 与 `assetPolicy` 通常承载直接资产规则，叙事、导演、剪辑和声音也可能揭示跨媒体要求或反复母题，但不得把无关领域强塞进资产。六领域正文高于 `styleSummary`、`rawUserStyle` 或单张参考图。它为空时，按已提供事实设计资产身份，不得临时发明项目级方向。
 - 始终把不含风格的稳定资产身份写入 `stableDescription`，再把稳定身份与输入中实际存在的 Creative Direction 合成为 `generationPrompt`；不能用最终生图 Prompt 反向改写稳定身份。
 - 角色稳定身份描述不混入艺术风格、滤镜和光影；这些由最终生图提示词统一追加。
 - 场景基础描述保存真实空间结构、材质与物理光源条件；风格化灯光和材质处理只在最终生图提示词中与 Creative Direction 合成，固定版式由执行 policy 追加。
@@ -106,7 +106,7 @@
 
 ## 自检
 
-- 正式 Asset Manifest 是否只包含有原文证据、值得复用的生产资产，并且每项都有合法 `sourceRefs`？若注入了 `visual` 与 `assetPolicy`，是否服从它们且没有臆造其他 Direction 领域？
+- 正式 Asset Manifest 是否只包含有原文证据、值得复用的生产资产，并且每项都有合法 `sourceRefs`？注入完整 Creative Direction 时，是否使用了所有相关政策且没有把无关领域变成资产事实？
 - 普通单资产任务如果提供 Creative Direction，是否服从它并清楚区分跨媒体视觉风格与资产图片专用灯光、材质？如果没有，是否明确保持风格未绑定？
 - 角色是否稳定、完整、年代一致、鞋履明确，并排除了身体颜色、动作、背景、不确定词和抽象气质？
 - 非人类角色是否按真实形态处理而非套用人类模板？

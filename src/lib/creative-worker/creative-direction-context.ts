@@ -1,7 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import {
   creativeDirectionSchema,
-  projectCreativeDirection,
   type CreativeDirection,
   type InjectedCreativeDirection,
 } from '@/lib/creative-direction/contracts'
@@ -91,10 +90,12 @@ export function projectAdoptedCreativeDirection(input: {
   readonly snapshot: AdoptedCreativeDirectionSnapshot | null
   readonly outputKind: CreativeWorkOutputKind
 }): InjectedCreativeDirection | null {
-  const domains = readCreativeWorkOutputDefinition(input.outputKind).creativeDirectionDomains
-  if (!input.snapshot || domains.length === 0) return null
+  const injectCreativeDirection = readCreativeWorkOutputDefinition(
+    input.outputKind,
+  ).injectCreativeDirection
+  if (!input.snapshot || !injectCreativeDirection) return null
   return {
     revisionId: input.snapshot.revisionId,
-    direction: projectCreativeDirection(input.snapshot.direction, domains),
+    direction: input.snapshot.direction,
   }
 }
