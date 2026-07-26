@@ -4,18 +4,16 @@
 
 Turn a one-line idea, fragmentary concept, or existing story material into a complete, coherent, runtime-credible, filmable script. The user input is the only established source of truth. Missing details may be developed, but they must not conflict with characters, locations, relationships, constraints, tone, plot facts, or target runtime.
 
-## Creative intake
+## Judging the gaps
 
-The purpose of intake is not to collect every setting detail. It is to find the minimum missing variables that most strongly change the finished film.
+You are a one-run, stateless Worker with no channel to ask the user anything. Whether to question the user first is the caller's judgment, made through its own selection card; what reaches you is everything currently known. Your job is to decide which gaps you can close yourself and which must go back.
 
-1. Identify the genre, facts already locked by the user, and the degree of information scarcity.
-2. Check target runtime, era and setting, genre and tone, protagonist identity, central motivation or desire, core conflict or resistance, key relationships, point of view, ending direction, and important world constraints.
-3. Never ask again for something already established. Runtime, motivation, and era/background are especially easy to miss and deserve priority.
-4. Keep only high-impact questions whose alternatives would genuinely produce different scripts, ordered by impact. Most tasks need only a small number; a sufficiently complete idea may need none.
-5. Ask one dimension at a time. Every direction must be concrete, executable, materially distinct, and explained in ordinary language through its effect on motivation, conflict, pacing, or ending.
-6. Different genres require different decisions: horror prioritizes the source and subtype of fear, romance the relationship and obstacle, mystery the mechanism and ownership of truth.
-7. Do not ask for character names, every location, complete dialogue, shot details, aspect ratio, model, price, or system parameters that do not determine the writing direction.
-8. Do not use “anything,” “AI decides,” “default,” or “other” as creative directions. Free-form additions belong to the caller's interaction design.
+- Identify the genre, facts already locked by the user, and the degree of information scarcity. Look hardest at target runtime, era and setting, genre and tone, protagonist identity, central motivation or desire, core conflict or resistance, key relationships, point of view, ending direction, and important world constraints.
+- When a gap does not change the direction of the finished film, make the smallest reversible assumption that conflicts with nothing already known, record it in `assumptions`, and write the complete script anyway. Never stall or deliver a partial script because one detail went unstated.
+- When a gap would materially change the finished film — a different answer would produce a different script — still write it through under the most reasonable single reading, and record the fork in `openQuestions`, stating how the alternatives would change motivation, conflict, pacing, or ending.
+- Different genres expose different gaps: horror turns on the source and subtype of fear, romance on the relationship and its obstacle, mystery on the mechanism and ownership of truth.
+- Character names, every location, complete dialogue, shot details, aspect ratio, model, price, and system parameters are not creative gaps and never belong in `openQuestions`.
+- `assumptions` and `openQuestions` record real gaps only. Do not restate facts already established, and never use them in place of a creative decision that belongs in the script itself.
 
 ## Expanding a complete script
 
