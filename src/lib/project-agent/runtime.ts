@@ -35,6 +35,7 @@ import type {
   AgentRuntimeContextPartData,
   ProjectAgentChoiceResolvedPartData,
   ProjectAgentContext,
+  ProjectAgentContextCompactedPartData,
   ProjectAgentInterruptionPartData,
   ProjectAgentInterruptionResolvedPartData,
   ProjectAgentRunPartData,
@@ -54,6 +55,7 @@ import {
   measureProjectAgentToolSchemas,
 } from './context-telemetry'
 import { decideProjectAgentModelInput } from './model-input/filter'
+import { compactProjectAgentConversation } from './model-input/compaction'
 import { estimateProjectAgentTokens } from './model-input/estimate'
 import {
   resolveProjectAgentAssistantModelKey,
@@ -1020,14 +1022,42 @@ export async function createProjectAgentChatResponse(input: {
         assistantId: 'workspace-command',
       })
 
+  // Conversation only grows between turns, so it is compacted here rather than
+  // inside the per-step filter: summarising mid-run would rewrite a prefix the
+  // provider is still caching for the steps that follow.
+  const compaction = control.kind === 'approval'
+    ? null
+    : await compactProjectAgentConversation({
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId || null,
+        assistantId: 'workspace-command',
+        locale,
+        messages: runtimeMessages,
+        signal: runAbortController.signal,
+        onFailure: (error) => {
+          projectAgentLogger.warn({
+            action: 'assistant.context.summary_failed',
+            message: 'Conversation summary failed; continuing without compaction',
+            requestId,
+            projectId: input.projectId,
+            userId: input.userId,
+            error,
+          })
+        },
+      })
+  const compactedMessages = compaction?.messages ?? runtimeMessages
   const conversationInputItems: AgentInputItem[] = control.kind === 'approval'
     ? []
-    : control.kind === 'user_turn'
-      ? withDeclinedApprovalsNote(
-          toAgentInputItems(runtimeMessages, locale),
-          buildDeclinedApprovalsInputItem(control.declinedInterruptions),
-        )
-      : toAgentInputItems(runtimeMessages, locale)
+    : [
+        ...(compaction?.summaryInputItem ? [compaction.summaryInputItem] : []),
+        ...(control.kind === 'user_turn'
+          ? withDeclinedApprovalsNote(
+              toAgentInputItems(compactedMessages, locale),
+              buildDeclinedApprovalsInputItem(control.declinedInterruptions),
+            )
+          : toAgentInputItems(compactedMessages, locale)),
+      ]
   const agentPlanInputItem = currentPlan ? buildProjectAgentPlanInputItem(currentPlan) : null
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
@@ -1092,6 +1122,13 @@ export async function createProjectAgentChatResponse(input: {
         outcome: declined.type === 'approval' ? 'rejected' : 'superseded',
       } satisfies ProjectAgentInterruptionResolvedPartData))
     }
+  }
+  if (compaction?.compacted) {
+    initialChunks.push(createDataChunk('data-assistant-context-compacted', {
+      runId: input.run.id,
+      summarizedMessageCount: compaction.compacted.summarizedMessageCount,
+      summaryText: compaction.compacted.summaryText,
+    } satisfies ProjectAgentContextCompactedPartData))
   }
   if (control.kind === 'choice') {
     initialChunks.push(createDataChunk('data-assistant-choice-resolved', {

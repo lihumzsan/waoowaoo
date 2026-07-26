@@ -258,6 +258,10 @@ model ProjectAssistantThread {
   scopeRef     String
   messagesJson Json
   planJson     Json?
+  /// Incremental conversation summary: { version, summarizedThroughMessageId, summaryText }.
+  /// Summarising is lossy and costs a model call, so the result is persisted and
+  /// extended rather than recomputed from full history on every turn.
+  summaryJson  Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

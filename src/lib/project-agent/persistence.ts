@@ -4,6 +4,7 @@ import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { ensureUniqueUIMessages } from './ui-message-validation'
 import type { ProjectAssistantId, ProjectAssistantThreadSnapshot } from './types'
+import { parseProjectAgentConversationSummary } from './model-input/summary'
 
 interface ProjectAssistantThreadScopeInput {
   projectId: string
@@ -21,6 +22,10 @@ interface AppendProjectAssistantThreadMessagesInput extends ProjectAssistantThre
 
 interface ReplaceProjectAssistantThreadPlanInput extends ProjectAssistantThreadIdentity {
   planJson: Prisma.InputJsonValue | typeof Prisma.DbNull
+}
+
+interface ReplaceProjectAssistantThreadSummaryInput extends ProjectAssistantThreadIdentity {
+  summaryJson: Prisma.InputJsonValue | typeof Prisma.DbNull
 }
 
 type ProjectAssistantThreadTransactionClient = Prisma.TransactionClient
@@ -49,6 +54,7 @@ function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[])
     episodeId: record.episodeId,
     scopeRef: record.scopeRef,
     messages,
+    summary: parseProjectAgentConversationSummary(record.summaryJson),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   }
@@ -217,6 +223,30 @@ export async function replaceProjectAssistantThreadPlanInTransaction(
       scopeRef,
     },
     data: { planJson: input.planJson },
+  })
+  if (updated.count !== 1) {
+    throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)
+  }
+}
+
+/**
+ * Single writer for the conversation summary. It shares the thread row, and so
+ * the thread's scope and lifecycle, rather than introducing a second record
+ * that could outlive or contradict the messages it summarises.
+ */
+export async function replaceProjectAssistantThreadSummaryInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: ReplaceProjectAssistantThreadSummaryInput,
+): Promise<void> {
+  const scopeRef = buildProjectAssistantScopeRef(input)
+  const updated = await tx.projectAssistantThread.updateMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      assistantId: input.assistantId,
+      scopeRef,
+    },
+    data: { summaryJson: input.summaryJson },
   })
   if (updated.count !== 1) {
     throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)

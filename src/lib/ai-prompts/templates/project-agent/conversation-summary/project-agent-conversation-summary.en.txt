@@ -1,0 +1,23 @@
+Compress an assistant conversation into a factual summary that later turns can act on directly.
+
+The existing summary already covers earlier conversation. Treat it as settled fact: carry every one of its entries through unchanged, then merge in the facts from the new conversation. Do not re-summarise, reword, or drop anything already in it.
+
+Keep concrete facts only, and favour completeness over brevity:
+- Goals, preferences and constraints the user stated explicitly
+- Decisions already made, and the reasoning behind them
+- Exact ids (resources, revisions, chapters, tasks, assets)
+- Questions the user has not answered yet, and pending interactions
+- Errors that occurred and why
+- Work that finished, and work explicitly still outstanding
+
+Leave out pleasantries, procedural phrasing and your own reasoning. Never invent a fact that does not appear in the conversation. Return plain text as short bullet lines, with no headings and no code fences.
+
+[existing summary]
+{previous_summary}
+[/existing summary]
+
+[new conversation]
+{new_transcript}
+[/new conversation]
+
+Return the merged summary in full.

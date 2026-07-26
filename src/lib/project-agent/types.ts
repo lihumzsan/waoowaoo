@@ -5,6 +5,7 @@ import type {
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
 import type { ProjectAgentChoiceDecision } from './choice-result'
+import type { ProjectAgentConversationSummary } from './model-input/summary'
 import type {
   ProjectAgentChoiceCardPartData,
 } from './choice-offer'
@@ -211,6 +212,21 @@ export interface ProjectAssistantContextSnapshot {
   }
 }
 
+/**
+ * Surfaces a lossy context operation to the user.
+ *
+ * Shedding recoverable tool results is deliberately silent — the model can
+ * re-read them, so a notice would be noise. Summarising conversation is not
+ * recoverable, so it must be visible: otherwise a later gap in the assistant's
+ * memory reads as the model being careless rather than as a known trade-off,
+ * and the user has no way to tell which part was condensed.
+ */
+export interface ProjectAgentContextCompactedPartData {
+  runId: string
+  summarizedMessageCount: number
+  summaryText: string
+}
+
 export interface ProjectAssistantThreadSnapshot {
   id: string
   assistantId: ProjectAssistantId
@@ -218,6 +234,7 @@ export interface ProjectAssistantThreadSnapshot {
   episodeId?: string | null
   scopeRef: string
   messages: UIMessage[]
+  summary: ProjectAgentConversationSummary | null
   createdAt: string
   updatedAt: string
 }
@@ -233,6 +250,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-activity'
   | 'data-agent-subagent-event'
   | 'data-agent-stop'
+  | 'data-assistant-context-compacted'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'
   | 'data-task-submitted'
