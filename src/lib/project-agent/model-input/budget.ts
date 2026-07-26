@@ -30,8 +30,8 @@ export type ProjectAgentModelInputBudgetResolution =
   }
 
 /**
- * Platform ceiling on how large a model context may grow, independent of what
- * the model would technically accept.
+ * Ceiling on how large the assistant context may grow, independent of what the
+ * model would technically accept.
  *
  * This is a quality decision before it is a cost one. Every model in the
  * catalogue advertises a window around a million tokens, but answer quality
@@ -39,27 +39,20 @@ export type ProjectAgentModelInputBudgetResolution =
  * middle get dropped. Capping keeps the agent inside the range it actually
  * reasons well over, and shorter input is cheaper and faster as a side effect.
  *
- * A model that genuinely accepts less lowers this via its declared
+ * Deliberately a constant rather than configuration. It expresses where this
+ * product judges answers to stay good, which does not vary by deployment, and
+ * an operator knob here would mostly be a way to silently opt into worse
+ * output. A model that genuinely accepts less lowers it through its declared
  * `contextWindow` capability; the effective window is always the smaller of
  * the two, so a small-window model can never overflow because of this cap.
  */
-export const DEFAULT_PROJECT_AGENT_CONTEXT_WINDOW_CAP = 256_000
-export const PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV = 'PLATFORM_ASSISTANT_CONTEXT_WINDOW_CAP'
-
-function readContextWindowCap(): number {
-  const raw = process.env[PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV]?.trim()
-  if (!raw) return DEFAULT_PROJECT_AGENT_CONTEXT_WINDOW_CAP
-  const parsed = Number(raw)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new Error(`PROJECT_AGENT_CONTEXT_WINDOW_CAP_INVALID:${PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV}`)
-  }
-  return parsed
-}
+export const PROJECT_AGENT_CONTEXT_WINDOW_CAP = 256_000
 
 export function resolveProjectAgentEffectiveContextWindow(modelKey: string): number {
-  const cap = readContextWindowCap()
   const declared = readModelContextWindow(modelKey)
-  return declared === null ? cap : Math.min(cap, declared)
+  return declared === null
+    ? PROJECT_AGENT_CONTEXT_WINDOW_CAP
+    : Math.min(PROJECT_AGENT_CONTEXT_WINDOW_CAP, declared)
 }
 
 /**
