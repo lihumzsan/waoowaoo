@@ -6,6 +6,8 @@ import {
 
 export type OpenRouterPromptCacheFamily = 'anthropic' | 'google' | 'openai' | 'none'
 
+export type OpenRouterPromptCacheExecutionMode = 'sync' | 'stream' | 'vision' | 'agent'
+
 export type OpenRouterCacheControl = {
   type: 'ephemeral'
   ttl?: '1h'
@@ -22,8 +24,25 @@ export type OpenRouterChatMessage = {
   content: string | OpenRouterTextContentPart[]
 }
 
-const DEFAULT_CACHE_CONTROL: OpenRouterCacheControl = {
-  type: 'ephemeral',
+/**
+ * Automatic top-level cache TTL by execution shape.
+ *
+ * A 1h cache write costs 2x base input against 1.25x for 5m, while every hit
+ * costs 0.1x either way, so the longer TTL only pays off when the same prefix
+ * is read again after the 5m window has lapsed. Hits refresh the TTL, so an
+ * Agents loop never expires mid-run; the gap that matters is the one between
+ * user turns, which routinely exceeds 5m in an authoring session. One-shot
+ * sync/vision calls have no second read at all, so paying the 1h premium there
+ * would be a pure loss — they stay on the 5m default.
+ */
+const AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE: Record<
+  OpenRouterPromptCacheExecutionMode,
+  OpenRouterCacheControl
+> = {
+  agent: { type: 'ephemeral', ttl: '1h' },
+  stream: { type: 'ephemeral' },
+  sync: { type: 'ephemeral' },
+  vision: { type: 'ephemeral' },
 }
 
 const ANTHROPIC_EXPLICIT_CACHE_BREAKPOINT_LIMIT = 4
@@ -175,6 +194,7 @@ function applyExplicitSourceMessages(input: {
 export function applyOpenRouterPromptCaching(input: {
   modelId: string
   body: Record<string, unknown>
+  executionMode: OpenRouterPromptCacheExecutionMode
   sourceMessages?: readonly ProviderChatMessage[]
 }): Record<string, unknown> {
   const family = resolveOpenRouterPromptCacheFamily(input.modelId)
@@ -201,6 +221,8 @@ export function applyOpenRouterPromptCaching(input: {
   return {
     ...input.body,
     ...(messages !== input.body.messages ? { messages } : {}),
-    ...(shouldUseClaudeAutomaticCache ? { cache_control: DEFAULT_CACHE_CONTROL } : {}),
+    ...(shouldUseClaudeAutomaticCache
+      ? { cache_control: AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE[input.executionMode] }
+      : {}),
   }
 }

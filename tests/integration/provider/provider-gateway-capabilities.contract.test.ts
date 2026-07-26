@@ -521,8 +521,11 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
       const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
-      expect(firstBody.cache_control).toEqual({ type: 'ephemeral' })
-      expect(secondBody.cache_control).toEqual({ type: 'ephemeral' })
+      // Agent loops re-read the same prefix across user turns, and those gaps
+      // routinely exceed the 5m default; the 1h write premium is only worth
+      // paying for this execution shape.
+      expect(firstBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
+      expect(secondBody.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
       const firstWireMessages = [
         {
           role: 'system',
@@ -538,6 +541,53 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       ])
       const headers = new Headers((fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])[1]?.headers)
       expect(headers.get('x-session-id')).toBe('agent-session')
+    })
+
+    it('keeps Claude one-shot sync caching on the 5m default', async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({
+        id: 'openrouter-sync-response',
+        model: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+        provider: 'Anthropic',
+        choices: [{
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'ok' },
+        }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          cost: 0.01,
+        },
+      }))
+      const model = createAiLanguageModel({
+        providerKey: 'openrouter',
+        selection: {
+          provider: 'openrouter',
+          modelId: OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+          modelKey: `openrouter::${OPENROUTER_CLAUDE_SONNET_5_MODEL_ID}`,
+        },
+        providerConfig: {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          apiKey: 'test-key',
+          baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        executionMode: 'sync',
+        reasoning: false,
+        reasoningEffort: 'medium',
+      })
+      await generateText({
+        model,
+        messages: [{ role: 'user' as const, content: 'one shot' }],
+        maxRetries: 0,
+      })
+
+      const body = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
+      // A one-shot call has no second read, so the 1h write premium would be a
+      // pure loss. Execution mode is the declared authority for this choice —
+      // it must never be inferred from model id or message shape.
+      expect(body.cache_control).toEqual({ type: 'ephemeral' })
     })
 
     it('passes Google thinking configuration through the Google AI SDK', async () => {

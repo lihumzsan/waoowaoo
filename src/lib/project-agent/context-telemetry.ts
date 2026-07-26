@@ -42,6 +42,15 @@ export type ProjectAgentUsageProjection = {
    */
   readonly inputTokensPerRequest: readonly number[]
   readonly maxInputTokens: number
+  /**
+   * Provider-reported input token breakdown per request, merged across
+   * requests. Cache hit/write counters live here, and they are the only
+   * authority for whether a caching decision (breakpoint placement, TTL
+   * choice) actually paid off. Keys are passed through verbatim rather than
+   * mapped to a fixed set, because each provider names them differently and
+   * guessing would silently drop the ones we did not anticipate.
+   */
+  readonly inputTokenDetails: Readonly<Record<string, number>>
 }
 
 export type ProjectAgentContextTelemetry = {
@@ -149,9 +158,25 @@ function readRequestInputTokens(usage: Usage): number[] {
   return entries.map((entry) => entry.inputTokens)
 }
 
+function mergeInputTokenDetails(usage: Usage): Record<string, number> {
+  const merged: Record<string, number> = {}
+  const sources: Array<Record<string, number>> = usage.requestUsageEntries
+    ? usage.requestUsageEntries.map((entry) => entry.inputTokensDetails)
+    : usage.inputTokensDetails
+  for (const source of sources) {
+    if (!isRecord(source)) continue
+    for (const [key, value] of Object.entries(source)) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue
+      merged[key] = (merged[key] ?? 0) + value
+    }
+  }
+  return merged
+}
+
 export function projectProjectAgentUsage(usage: Usage): ProjectAgentUsageProjection {
   const inputTokensPerRequest = readRequestInputTokens(usage)
   return {
+    inputTokenDetails: mergeInputTokenDetails(usage),
     requests: usage.requests,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,

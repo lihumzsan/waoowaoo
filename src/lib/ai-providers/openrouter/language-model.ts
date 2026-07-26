@@ -52,6 +52,7 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
     const nextBody = JSON.stringify(applyOpenRouterPromptCaching({
       modelId: input.selection.modelId,
       body,
+      executionMode: input.executionMode,
       sourceMessages: input.messages,
     }))
     const preparedInput = typeof Request !== 'undefined' && requestInput instanceof Request
