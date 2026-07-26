@@ -52,7 +52,8 @@ Creative Direction is optional. For both `story_canon` and `continuity_analysis`
 
 ### Duration estimation method
 
-- Convert dialogue at real speaking pace: roughly 4–6 Chinese characters per second, or about 150–180 English words per minute. Take the faster end for fast-paced genres and the slower end for grave, grieving, or threatening lines. Compute how long the lines actually take to speak instead of assigning fixed seconds per line.
+- Convert dialogue at real speaking pace. This is the single duration authority for the whole system: roughly 4–5 Chinese characters per second (240–300 per minute), or about 120–160 English words per minute. Take the faster end for fast-paced genres; take the slower end for grave, grieving, or threatening lines, down to 3.5 characters per second or 110 words per minute. Convert only words that are actually spoken, excluding scene headings, action lines, and character names. Compute how long the lines actually take to speak instead of assigning fixed seconds per line.
+- Prefer erring slow over erring fast. Underestimating means a character cannot finish the line before the segment ends and the clip must be regenerated; overestimating only adds a little breathing room.
 - Take the longest item for simultaneous content instead of adding them. Voice-over, inner monologue, and narration run at the same time as the picture action they cover; a character speaking while walking, or shouting while fighting, is likewise counted once. Add durations only for actions that genuinely happen in sequence.
 - Give pauses only where they are earned: a major reveal, an emotional landing, a punchline button, or a threat turn may take an explicit 0.5–2 seconds. Ordinary reactions, glances, blocking, and head turns are not timed separately.
 - Cuts and shot transitions themselves take no duration.

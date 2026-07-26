@@ -31,7 +31,8 @@ The purpose of intake is not to collect every setting detail. It is to find the 
 ## Runtime control
 
 - When the user specifies a duration, the complete script must actually play within it; a runtime label in the title or summary is insufficient.
-- Dialogue-heavy Chinese material may use roughly 300–450 characters per minute as a reference. The more action, pauses, atmosphere, or complex staging, the less text should remain. Estimate other languages from natural speech and real performance time.
+- There is one speaking-pace authority, in the “Duration estimation method” section of `continuity-memory`: roughly 4–5 Chinese characters per second or 120–160 English words per minute, counting only words actually spoken. This Skill never states a second figure.
+- Derive script volume from it: one minute of dialogue-heavy material is about 240–300 **spoken** Chinese characters, and the script text runs longer once scene headings, action lines, and character names are added. The more action, pauses, atmosphere, or complex staging, the less dialogue should remain.
 - Runtime comes from dialogue, action, reaction, pauses, and transitions, not from the number of acts, scenes, or beats.
 - Simultaneous content shares one timeline instead of being added in sequence: voice-over, inner monologue, and narration run at the same time as the picture action they cover, and a character can speak while walking or shout while fighting.
 - Set the pacing tier by genre: vertical short drama and hook-driven short video reach the conflict quickly, deliberately run dialogue and action in parallel, and cut travel, small talk, repeated observation, and purely expository monologue; slow emotional drama, arthouse work, and suspense build-ups keep the silence, breath, and negative space they need instead of sacrificing an emotional landing for speed.
