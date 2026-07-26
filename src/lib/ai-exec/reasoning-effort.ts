@@ -12,11 +12,19 @@ import {
 } from '@/lib/ai-registry/reasoning-effort'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 
-export type ReasoningEffortPurpose = 'analysis' | 'assistant'
+/**
+ * `utility` covers short mechanical LLM work that is not the Primary Agent and
+ * not professional creative analysis — conversation summarisation, normalisation
+ * and similar. It exists as its own declared role so those callers stop
+ * borrowing the assistant or analysis role and inheriting an effort level that
+ * was tuned for a different job.
+ */
+export type ReasoningEffortPurpose = 'analysis' | 'assistant' | 'utility'
 
 const PLATFORM_REASONING_EFFORT_ENV: Record<ReasoningEffortPurpose, string> = {
   analysis: 'PLATFORM_DEFAULT_ANALYSIS_REASONING_EFFORT',
   assistant: 'PLATFORM_DEFAULT_ASSISTANT_REASONING_EFFORT',
+  utility: 'PLATFORM_DEFAULT_UTILITY_REASONING_EFFORT',
 }
 
 function readPlatformReasoningEffort(purpose: ReasoningEffortPurpose): ReasoningEffort {
