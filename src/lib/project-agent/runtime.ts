@@ -50,6 +50,11 @@ import { readAssistantBillingConfirmationRequired } from './billing-confirmation
 import { stableArgsHash } from './stable-args-hash'
 import { compressMessages } from './message-compression'
 import {
+  buildProjectAgentContextComposition,
+  buildProjectAgentContextTelemetry,
+  measureProjectAgentToolSchemas,
+} from './context-telemetry'
+import {
   resolveProjectAgentAssistantModelKey,
   resolveProjectAgentLanguageModel,
 } from './model'
@@ -1020,19 +1025,23 @@ export async function createProjectAgentChatResponse(input: {
         assistantId: 'workspace-command',
       })
 
+  const conversationInputItems: AgentInputItem[] = control.kind === 'approval'
+    ? []
+    : control.kind === 'user_turn'
+      ? withDeclinedApprovalsNote(
+          toAgentInputItems(runtimeMessages, locale),
+          buildDeclinedApprovalsInputItem(control.declinedInterruptions),
+        )
+      : toAgentInputItems(runtimeMessages, locale)
+  const agentPlanInputItem = currentPlan ? buildProjectAgentPlanInputItem(currentPlan) : null
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
     : [
-        ...(control.kind === 'user_turn'
-          ? withDeclinedApprovalsNote(
-              toAgentInputItems(runtimeMessages, locale),
-              buildDeclinedApprovalsInputItem(control.declinedInterruptions),
-            )
-          : toAgentInputItems(runtimeMessages, locale)),
+        ...conversationInputItems,
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
         projectStateInputItem,
-        ...(currentPlan ? [buildProjectAgentPlanInputItem(currentPlan)] : []),
+        ...(agentPlanInputItem ? [agentPlanInputItem] : []),
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [
@@ -1292,6 +1301,13 @@ export async function createProjectAgentChatResponse(input: {
     locale,
     projectId: input.projectId,
     episodeId: context.episodeId || 'unknown',
+  })
+  const contextComposition = buildProjectAgentContextComposition({
+    instructions: systemPrompt,
+    toolSchemas: measureProjectAgentToolSchemas(tools),
+    conversation: conversationInputItems,
+    projectState: projectStateInputItem,
+    agentPlan: agentPlanInputItem,
   })
   const agent = new Agent<ProjectAgentAgentsRunContext>({
     name: 'Project Workspace Agent',
@@ -1569,6 +1585,24 @@ export async function createProjectAgentChatResponse(input: {
         } catch (error) {
           completionError = error
         }
+
+        projectAgentLogger.info({
+          action: 'assistant.context.usage',
+          message: 'Project agent model context usage',
+          requestId,
+          projectId: input.projectId,
+          userId: input.userId,
+          details: {
+            runId: input.run.id,
+            executionSegmentId: executionSegment.id,
+            control: control.kind,
+            modelKey: assistantModelKey,
+            ...buildProjectAgentContextTelemetry({
+              composition: contextComposition,
+              usage: runContext.usage,
+            }),
+          },
+        })
 
         const approvalItems = result.interruptions.length > 0
           ? result.interruptions
