@@ -48,12 +48,13 @@ import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
 import { stableArgsHash } from './stable-args-hash'
-import { compressMessages } from './message-compression'
 import {
   buildProjectAgentContextComposition,
   buildProjectAgentContextTelemetry,
   measureProjectAgentToolSchemas,
 } from './context-telemetry'
+import { decideProjectAgentModelInput } from './model-input/filter'
+import { estimateProjectAgentTokens } from './model-input/estimate'
 import {
   resolveProjectAgentAssistantModelKey,
   resolveProjectAgentLanguageModel,
@@ -962,14 +963,7 @@ export async function createProjectAgentChatResponse(input: {
         }],
       })
     }
-    const runtimeMessages = control.kind === 'approval'
-      ? normalizedMessages
-      : await compressMessages({
-          messages: normalizedMessages,
-          locale,
-          model: resolved.languageModel,
-          signal: runAbortController.signal,
-        })
+    const runtimeMessages = normalizedMessages
 
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
@@ -1303,13 +1297,19 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     episodeId: context.episodeId || 'unknown',
   })
+  const toolSchemaMeasurement = measureProjectAgentToolSchemas(tools)
   const contextComposition = buildProjectAgentContextComposition({
     instructions: systemPrompt,
-    toolSchemas: measureProjectAgentToolSchemas(tools),
+    toolSchemas: toolSchemaMeasurement,
     conversation: conversationInputItems,
     projectState: projectStateInputItem,
     agentPlan: agentPlanInputItem,
   })
+  const modelInputFilterConfig = {
+    modelKey: assistantModelKey,
+    toolSchemaTokens: estimateProjectAgentTokens(toolSchemaMeasurement),
+  }
+  let latestModelInputDecision: ReturnType<typeof decideProjectAgentModelInput> | null = null
   const agent = new Agent<ProjectAgentAgentsRunContext>({
     name: 'Project Workspace Agent',
     instructions: systemPrompt,
@@ -1391,6 +1391,18 @@ export async function createProjectAgentChatResponse(input: {
           : undefined
       ),
       toolExecution: { maxFunctionToolConcurrency: 1 },
+      // Runs before every model request, including the ones a restored run
+      // state produces, so approval resume is governed by the same authority
+      // as an initial turn. It rewrites only the outgoing payload; the
+      // serialised state stays byte-identical.
+      callModelInputFilter: ({ modelData }) => {
+        const decision = decideProjectAgentModelInput(modelInputFilterConfig, modelData)
+        latestModelInputDecision = decision
+        return {
+          input: decision.input,
+          ...(decision.instructions === undefined ? {} : { instructions: decision.instructions }),
+        }
+      },
       signal: runAbortController.signal,
     })
     const publicReasoning = createAgentsPublicReasoningNormalizer()
@@ -1598,6 +1610,13 @@ export async function createProjectAgentChatResponse(input: {
             executionSegmentId: executionSegment.id,
             control: control.kind,
             modelKey: assistantModelKey,
+            budget: latestModelInputDecision
+              ? {
+                availableInputTokens: latestModelInputDecision.budget?.availableInputTokens ?? null,
+                estimatedInputTokens: latestModelInputDecision.estimatedInputTokens,
+                overBudget: latestModelInputDecision.overBudget,
+              }
+              : null,
             ...buildProjectAgentContextTelemetry({
               composition: contextComposition,
               usage: runContext.usage,

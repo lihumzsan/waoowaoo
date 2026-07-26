@@ -48,6 +48,16 @@ export type ProjectAgentModelInputBudgetResolution =
  */
 export const PROJECT_AGENT_CONTEXT_WINDOW_CAP = 256_000
 
+/**
+ * Window space held back for the model's own reply and reasoning.
+ *
+ * The runtime sets no explicit output limit, so the provider will happily
+ * spend whatever the window has left. Reserving it up front is what keeps a
+ * full input from starving the answer — a request that fits but leaves no room
+ * to respond fails just as hard as one that does not fit.
+ */
+export const PROJECT_AGENT_RESERVED_OUTPUT_TOKENS = 16_000
+
 export function resolveProjectAgentEffectiveContextWindow(modelKey: string): number {
   const declared = readModelContextWindow(modelKey)
   return declared === null

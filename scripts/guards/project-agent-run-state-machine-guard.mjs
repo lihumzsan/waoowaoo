@@ -231,17 +231,22 @@ if (
 ) {
   violations.push('src/lib/project-agent/runtime.ts: user-visible failure must atomically settle message + Run and must not reopen a consumed decision')
 }
+// Nothing that spends model tokens or shapes the model payload may run before
+// the durable execution-segment fence is claimed. The context authority is the
+// model input filter — it decides what each step sends and is where context
+// shedding and summarisation spend lives — so it is anchored alongside the
+// primary model call rather than the deleted standalone compression step.
 const executionFenceIndex = runtimeSource.search(/kind\s*:\s*['"]run\.execution_started['"]/)
-const compressionModelIndex = runtimeSource.indexOf('await compressMessages')
+const modelInputFilterIndex = runtimeSource.indexOf('callModelInputFilter')
 const modelRunIndex = runtimeSource.indexOf('await run(agent, runInput')
 if (
   executionFenceIndex < 0
-  || compressionModelIndex < 0
+  || modelInputFilterIndex < 0
   || modelRunIndex < 0
-  || executionFenceIndex > compressionModelIndex
+  || executionFenceIndex > modelInputFilterIndex
   || executionFenceIndex > modelRunIndex
 ) {
-  violations.push('src/lib/project-agent/runtime.ts: execution-segment fence must precede compression and primary model execution')
+  violations.push('src/lib/project-agent/runtime.ts: execution-segment fence must precede the model input filter and primary model execution')
 }
 for (const [required, pattern] of [
   ['createProjectAgentExecutionSegment', /createProjectAgentExecutionSegment/],

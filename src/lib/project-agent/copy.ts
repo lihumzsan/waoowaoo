@@ -121,33 +121,3 @@ export function localizeProjectAgentOperationTitle(
   return PROJECT_AGENT_OPERATION_TITLE_COPY[operationId]?.[locale]
     ?? (locale === 'en' ? 'Project operation' : '项目操作')
 }
-
-export function buildCompressionPrompt(locale: ProjectAgentLocale, transcript: string): {
-  system: string
-  prompt: string
-} {
-  if (locale === 'en') {
-    return {
-      system: [
-        'Summarize an older assistant conversation for continued execution.',
-        'Keep concrete facts only: user goals, decisions, pending interactions, exact ids, errors, unfinished work, and constraints.',
-        'Do not invent facts. Return plain text with short bullet lines.',
-      ].join('\n'),
-      prompt: `Summarize the following earlier conversation for future turns:\n\n${transcript}`,
-    }
-  }
-  return {
-    system: [
-      '请把较早的 assistant 对话压缩成后续可继续执行的摘要。',
-      '只保留具体事实：用户目标、决定、待处理交互、精确 id、错误、未完成工作和约束。',
-      '禁止编造事实，返回纯文本短项目符号。',
-    ].join('\n'),
-    prompt: `请总结下面这段较早的对话，供后续轮次继续使用：\n\n${transcript}`,
-  }
-}
-
-export function buildSummaryText(locale: ProjectAgentLocale, summary: string): string {
-  return locale === 'en'
-    ? `Conversation summary for earlier turns:\n${summary.trim()}`
-    : `早期对话摘要：\n${summary.trim()}`
-}

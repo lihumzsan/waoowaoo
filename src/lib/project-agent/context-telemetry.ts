@@ -1,4 +1,11 @@
 import type { AgentInputItem, Usage } from '@openai/agents'
+import {
+  measureProjectAgentInputItems,
+  measureProjectAgentText,
+  measureProjectAgentUnknown,
+  mergeProjectAgentMeasurements,
+  type ProjectAgentTextMeasurement,
+} from './model-input/estimate'
 
 /**
  * Observability for what the model actually receives.
@@ -19,11 +26,6 @@ export const PROJECT_AGENT_CONTEXT_SOURCE_KINDS = [
 ] as const
 
 export type ProjectAgentContextSourceKind = (typeof PROJECT_AGENT_CONTEXT_SOURCE_KINDS)[number]
-
-export type ProjectAgentTextMeasurement = {
-  readonly chars: number
-  readonly cjkChars: number
-}
 
 export type ProjectAgentContextComposition = {
   readonly sources: Readonly<Record<ProjectAgentContextSourceKind, ProjectAgentTextMeasurement>>
@@ -64,72 +66,25 @@ export type ProjectAgentContextTelemetry = {
   readonly charsPerInputToken: number | null
 }
 
-const CJK_CHAR_PATTERN = /[　-〿㐀-䶿一-鿿豈-﫿＀-￯]/u
-
-const EMPTY_MEASUREMENT: ProjectAgentTextMeasurement = { chars: 0, cjkChars: 0 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function collectStrings(value: unknown, sink: string[]): void {
-  if (typeof value === 'string') {
-    sink.push(value)
-    return
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectStrings(item, sink)
-    return
-  }
-  if (isRecord(value)) {
-    for (const item of Object.values(value)) collectStrings(item, sink)
-  }
-}
-
-export function measureProjectAgentText(value: string): ProjectAgentTextMeasurement {
-  let cjkChars = 0
-  for (const char of value) {
-    if (CJK_CHAR_PATTERN.test(char)) cjkChars += 1
-  }
-  return { chars: value.length, cjkChars }
-}
-
-function mergeMeasurements(
-  measurements: readonly ProjectAgentTextMeasurement[],
-): ProjectAgentTextMeasurement {
-  return measurements.reduce<ProjectAgentTextMeasurement>((total, measurement) => ({
-    chars: total.chars + measurement.chars,
-    cjkChars: total.cjkChars + measurement.cjkChars,
-  }), EMPTY_MEASUREMENT)
-}
-
-export function measureProjectAgentInputItems(
-  items: readonly AgentInputItem[],
-): ProjectAgentTextMeasurement {
-  const strings: string[] = []
-  collectStrings(items, strings)
-  return mergeMeasurements(strings.map((value) => measureProjectAgentText(value)))
 }
 
 export function measureProjectAgentToolSchemas(
   tools: readonly unknown[],
 ): ProjectAgentTextMeasurement {
-  const strings: string[] = []
-  for (const tool of tools) {
-    if (!isRecord(tool)) continue
-    // The Tool union spans function/hosted/computer variants; only the schema
-    // carrying fields matter here, so read them structurally rather than
-    // narrowing to one variant.
-    collectStrings(
-      {
+  // The Tool union spans function/hosted/computer variants; only the schema
+  // carrying fields matter here, so read them structurally rather than
+  // narrowing to one variant.
+  return mergeProjectAgentMeasurements(tools.map((tool) => (
+    isRecord(tool)
+      ? measureProjectAgentUnknown({
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters,
-      },
-      strings,
-    )
-  }
-  return mergeMeasurements(strings.map((value) => measureProjectAgentText(value)))
+      })
+      : measureProjectAgentUnknown(null)
+  )))
 }
 
 export function buildProjectAgentContextComposition(input: {
@@ -144,11 +99,11 @@ export function buildProjectAgentContextComposition(input: {
     tool_schemas: input.toolSchemas,
     conversation: measureProjectAgentInputItems(input.conversation),
     project_state: measureProjectAgentInputItems([input.projectState]),
-    agent_plan: input.agentPlan ? measureProjectAgentInputItems([input.agentPlan]) : EMPTY_MEASUREMENT,
+    agent_plan: measureProjectAgentInputItems(input.agentPlan ? [input.agentPlan] : []),
   }
   return {
     sources,
-    total: mergeMeasurements(PROJECT_AGENT_CONTEXT_SOURCE_KINDS.map((kind) => sources[kind])),
+    total: mergeProjectAgentMeasurements(PROJECT_AGENT_CONTEXT_SOURCE_KINDS.map((kind) => sources[kind])),
   }
 }
 
