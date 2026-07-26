@@ -45,6 +45,11 @@ const AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE: Record<
   vision: { type: 'ephemeral' },
 }
 
+/** Gemini has no 1h option; `ttl` is Anthropic-only on this wire. */
+const DEFAULT_GEMINI_CACHE_CONTROL: OpenRouterCacheControl = {
+  type: 'ephemeral',
+}
+
 const ANTHROPIC_EXPLICIT_CACHE_BREAKPOINT_LIMIT = 4
 
 function normalizeModelId(modelId: string): string {
@@ -191,6 +196,45 @@ function applyExplicitSourceMessages(input: {
   })
 }
 
+/**
+ * Gemini has no automatic top-level cache form: without an explicit breakpoint
+ * an Agents loop resends the whole prefix uncached on every step. Claude keeps
+ * using the top-level automatic form, which advances its own breakpoint as the
+ * conversation grows and is the provider's recommendation for multi-turn.
+ *
+ * The breakpoint is derived from this request's wire body — never from a
+ * caller-held snapshot, which is the 2026-07-19 defect — and lands on the
+ * system message, the one block that is byte-identical on every step. Anything
+ * that moves per step would invalidate the prefix it is meant to preserve.
+ */
+function applyGeminiSystemPrefixBreakpoint(wireMessages: unknown): unknown {
+  if (!Array.isArray(wireMessages)) return wireMessages
+  const systemIndex = wireMessages.findIndex((message) => {
+    const record = asRecord(message)
+    return !!record && record.role === 'system'
+  })
+  if (systemIndex < 0) return wireMessages
+  const systemMessage = asRecord(wireMessages[systemIndex])
+  if (!systemMessage) return wireMessages
+
+  const parts = typeof systemMessage.content === 'string'
+    ? [{ type: 'text', text: systemMessage.content }]
+    : Array.isArray(systemMessage.content)
+      ? systemMessage.content
+      : null
+  if (!parts || parts.length === 0) return wireMessages
+  const lastIndex = parts.length - 1
+  const lastPart = asRecord(parts[lastIndex])
+  if (!lastPart || lastPart.type !== 'text') return wireMessages
+
+  const nextParts = parts.map((part, index) => (
+    index === lastIndex ? { ...lastPart, cache_control: DEFAULT_GEMINI_CACHE_CONTROL } : part
+  ))
+  return wireMessages.map((message, index) => (
+    index === systemIndex ? { ...systemMessage, content: nextParts } : message
+  ))
+}
+
 export function applyOpenRouterPromptCaching(input: {
   modelId: string
   body: Record<string, unknown>
@@ -217,10 +261,17 @@ export function applyOpenRouterPromptCaching(input: {
   const shouldUseClaudeAutomaticCache = family === 'anthropic'
     && !hasOwnCacheControl(input.body)
     && !hasExplicitCacheControl
+  const shouldAddGeminiPrefixBreakpoint = family === 'google'
+    && input.executionMode === 'agent'
+    && !hasOwnCacheControl(input.body)
+    && !hasExplicitCacheControl
+  const cachedMessages = shouldAddGeminiPrefixBreakpoint
+    ? applyGeminiSystemPrefixBreakpoint(messages)
+    : messages
 
   return {
     ...input.body,
-    ...(messages !== input.body.messages ? { messages } : {}),
+    ...(cachedMessages !== input.body.messages ? { messages: cachedMessages } : {}),
     ...(shouldUseClaudeAutomaticCache
       ? { cache_control: AUTOMATIC_CACHE_CONTROL_BY_EXECUTION_MODE[input.executionMode] }
       : {}),

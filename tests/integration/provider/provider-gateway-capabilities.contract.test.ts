@@ -30,6 +30,7 @@ import { listBuiltinCapabilityCatalog } from '@/lib/ai-registry/capabilities-cat
 import {
   OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
   OPENROUTER_CLAUDE_SONNET_5_MODEL_ID,
+  OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
   OPENROUTER_GPT_IMAGE_2_MODEL_ID,
   OPENROUTER_GPT_5_6_LUNA_MODEL_ID,
   OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
@@ -588,6 +589,80 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       // pure loss. Execution mode is the declared authority for this choice —
       // it must never be inferred from model id or message shape.
       expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    })
+
+    it('pins a stable Gemini Agent cache breakpoint on the system prefix', async () => {
+      const response = () => jsonResponse({
+        id: 'openrouter-gemini-agent-response',
+        model: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
+        provider: 'Google',
+        choices: [{
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'ok' },
+        }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          cost: 0.01,
+        },
+      })
+      fetchMock.mockResolvedValueOnce(response()).mockResolvedValueOnce(response())
+      const model = createAiLanguageModel({
+        providerKey: 'openrouter',
+        selection: {
+          provider: 'openrouter',
+          modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
+          modelKey: `openrouter::${OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID}`,
+        },
+        providerConfig: {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          apiKey: 'test-key',
+          baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        executionMode: 'agent',
+        reasoning: false,
+        reasoningEffort: 'medium',
+      })
+      const firstTurn = [
+        { role: 'system' as const, content: 'stable system and tool context' },
+        { role: 'user' as const, content: 'turn one' },
+      ]
+      await generateText({ model, messages: firstTurn, maxRetries: 0 })
+      await generateText({
+        model,
+        messages: [
+          ...firstTurn,
+          { role: 'assistant' as const, content: 'ok' },
+          { role: 'user' as const, content: 'turn two' },
+        ],
+        maxRetries: 0,
+      })
+
+      const firstBody = await requestBodyOf(fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit?])
+      const secondBody = await requestBodyOf(fetchMock.mock.calls[1] as [RequestInfo | URL, RequestInit?])
+      // Gemini has no top-level automatic form, so without this breakpoint an
+      // Agents loop resends the whole prefix uncached on every step.
+      const cachedSystemMessage = {
+        role: 'system',
+        content: [{
+          type: 'text',
+          text: 'stable system and tool context',
+          cache_control: { type: 'ephemeral' },
+        }],
+      }
+      expect(firstBody.cache_control).toBeUndefined()
+      // Byte-identical across a growing conversation: a breakpoint that moved
+      // per step would invalidate the prefix it exists to preserve.
+      expect(Array.isArray(firstBody.messages) && firstBody.messages[0]).toEqual(cachedSystemMessage)
+      expect(Array.isArray(secondBody.messages) && secondBody.messages[0]).toEqual(cachedSystemMessage)
+      expect(Array.isArray(secondBody.messages) && secondBody.messages.slice(1)).toEqual([
+        { role: 'user', content: 'turn one' },
+        { role: 'assistant', content: 'ok' },
+        { role: 'user', content: 'turn two' },
+      ])
     })
 
     it('passes Google thinking configuration through the Google AI SDK', async () => {
