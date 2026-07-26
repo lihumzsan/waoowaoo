@@ -232,6 +232,14 @@ export interface LLMCapabilities {
   protocol: AiLlmProtocol
   publicReasoningMode?: AiPublicReasoningMode
   reasoningEffortOptions?: ReasoningEffort[]
+  /**
+   * Total input+output token window the model accepts. Any caller that must
+   * bound what it sends reads it from here; deriving a window from a model id,
+   * a provider name or a hardcoded constant is what this field exists to stop.
+   * Absent means undeclared, and consumers must fail closed rather than assume
+   * a default — an assumed window is either wasted context or a hard overflow.
+   */
+  contextWindow?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -293,6 +301,7 @@ const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
   'protocol',
   'publicReasoningMode',
   'reasoningEffortOptions',
+  'contextWindow',
   'fieldI18n',
 ])
 
@@ -519,6 +528,20 @@ function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unkno
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.llm.reasoningEffortOptions',
       message: 'reasoningEffortOptions must contain only canonical reasoning effort values',
+    })
+  }
+
+  const contextWindow = raw.contextWindow
+  if (
+    contextWindow !== undefined
+    && (typeof contextWindow !== 'number'
+      || !Number.isSafeInteger(contextWindow)
+      || contextWindow <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.llm.contextWindow',
+      message: 'contextWindow must be a positive integer token count',
     })
   }
 
