@@ -57,6 +57,15 @@ type OpenRouterLlmModelDefinition = {
   pricingUsdPerMillion: readonly [input: number, output: number] | null
   publicReasoningMode: AiPublicReasoningMode
   reasoningEffortOptions: readonly ReasoningEffort[] | null
+  /**
+   * Total token window the model accepts, or null when it has not been
+   * verified against the provider. Consumers already clamp to a platform
+   * ceiling well below every current entry, so null means "the ceiling
+   * governs" rather than "unbounded"; declaring a value only matters for a
+   * model whose real window sits below that ceiling. Never fill this in from
+   * a guess — an overstated window is a hard overflow at request time.
+   */
+  contextWindow: number | null
   showInApiConfig: boolean
   showInPlatform: boolean
 }
@@ -68,6 +77,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: null,
     publicReasoningMode: 'none',
     reasoningEffortOptions: null,
+    contextWindow: 128_000,
     showInApiConfig: false,
     showInPlatform: false,
   },
@@ -77,6 +87,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [1.25, 10],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -86,6 +97,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [1.25, 10],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -95,6 +107,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [1.5, 9],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: 1_048_576,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -104,6 +117,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: null,
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -113,6 +127,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [3, 15],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -122,6 +137,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [2, 10],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    contextWindow: 1_000_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -131,6 +147,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [10, 50],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    contextWindow: 1_000_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -140,6 +157,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [5, 25],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    contextWindow: 1_000_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -149,6 +167,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [3, 15],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
+    contextWindow: 200_000,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -158,6 +177,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [3, 15],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high'],
+    contextWindow: 200_000,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -167,6 +187,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [5, 30],
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -176,6 +197,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [1, 6],
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    contextWindow: 1_050_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -185,6 +207,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [2.5, 15],
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    contextWindow: 1_050_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -194,6 +217,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: [5, 30],
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: OPENROUTER_GPT_5_6_REASONING_EFFORT_OPTIONS,
+    contextWindow: 1_050_000,
     showInApiConfig: true,
     showInPlatform: true,
   },
@@ -203,6 +227,7 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     pricingUsdPerMillion: null,
     publicReasoningMode: 'summary_auto',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: null,
     showInApiConfig: true,
     showInPlatform: false,
   },
@@ -242,6 +267,7 @@ const OPENROUTER_LLM_CAPABILITY_CATALOG_ENTRIES = OPENROUTER_LLM_MODEL_DEFINITIO
       ...(model.reasoningEffortOptions
         ? { reasoningEffortOptions: [...model.reasoningEffortOptions] }
         : {}),
+      ...(model.contextWindow === null ? {} : { contextWindow: model.contextWindow }),
     },
   },
 }))

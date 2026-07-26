@@ -22,13 +22,45 @@ export type ProjectAgentModelInputBudget = {
 
 export type ProjectAgentModelInputBudgetResolution =
   | { readonly kind: 'resolved'; readonly budget: ProjectAgentModelInputBudget }
-  | { readonly kind: 'context_window_undeclared'; readonly modelKey: string }
   | {
     readonly kind: 'window_too_small'
     readonly modelKey: string
     readonly contextWindow: number
     readonly requiredTokens: number
   }
+
+/**
+ * Platform ceiling on how large a model context may grow, independent of what
+ * the model would technically accept.
+ *
+ * This is a quality decision before it is a cost one. Every model in the
+ * catalogue advertises a window around a million tokens, but answer quality
+ * degrades well before that: attention spreads thin and instructions in the
+ * middle get dropped. Capping keeps the agent inside the range it actually
+ * reasons well over, and shorter input is cheaper and faster as a side effect.
+ *
+ * A model that genuinely accepts less lowers this via its declared
+ * `contextWindow` capability; the effective window is always the smaller of
+ * the two, so a small-window model can never overflow because of this cap.
+ */
+export const DEFAULT_PROJECT_AGENT_CONTEXT_WINDOW_CAP = 256_000
+export const PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV = 'PLATFORM_ASSISTANT_CONTEXT_WINDOW_CAP'
+
+function readContextWindowCap(): number {
+  const raw = process.env[PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV]?.trim()
+  if (!raw) return DEFAULT_PROJECT_AGENT_CONTEXT_WINDOW_CAP
+  const parsed = Number(raw)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`PROJECT_AGENT_CONTEXT_WINDOW_CAP_INVALID:${PROJECT_AGENT_CONTEXT_WINDOW_CAP_ENV}`)
+  }
+  return parsed
+}
+
+export function resolveProjectAgentEffectiveContextWindow(modelKey: string): number {
+  const cap = readContextWindowCap()
+  const declared = readModelContextWindow(modelKey)
+  return declared === null ? cap : Math.min(cap, declared)
+}
 
 /**
  * Headroom absorbs the gap between our token estimate and the provider's real
@@ -43,11 +75,7 @@ export function resolveProjectAgentModelInputBudget(input: {
   toolSchemaTokens: number
   maxOutputTokens: number
 }): ProjectAgentModelInputBudgetResolution {
-  const contextWindow = readModelContextWindow(input.modelKey)
-  if (contextWindow === null) {
-    return { kind: 'context_window_undeclared', modelKey: input.modelKey }
-  }
-
+  const contextWindow = resolveProjectAgentEffectiveContextWindow(input.modelKey)
   const requiredTokens = input.instructionTokens
     + input.toolSchemaTokens
     + input.maxOutputTokens
