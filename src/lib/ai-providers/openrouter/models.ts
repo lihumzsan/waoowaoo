@@ -21,6 +21,7 @@ export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'
 export const OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID = 'anthropic/claude-sonnet-4.6'
 export const OPENROUTER_CLAUDE_SONNET_5_MODEL_ID = 'anthropic/claude-sonnet-5'
 export const OPENROUTER_CLAUDE_FABLE_5_MODEL_ID = 'anthropic/claude-fable-5'
+export const OPENROUTER_CLAUDE_OPUS_5_MODEL_ID = 'anthropic/claude-opus-5'
 export const OPENROUTER_GPT_5_5_MODEL_ID = 'openai/gpt-5.5'
 export const OPENROUTER_GPT_5_6_LUNA_MODEL_ID = 'openai/gpt-5.6-luna'
 export const OPENROUTER_GPT_5_6_TERRA_MODEL_ID = 'openai/gpt-5.6-terra'
@@ -128,6 +129,15 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     modelId: OPENROUTER_CLAUDE_FABLE_5_MODEL_ID,
     name: 'Claude Fable 5',
     pricingUsdPerMillion: [10, 50],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_CLAUDE_OPUS_5_MODEL_ID,
+    name: 'Claude Opus 5',
+    pricingUsdPerMillion: [5, 25],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['low', 'medium', 'high', 'xhigh', 'max'],
     showInApiConfig: true,
