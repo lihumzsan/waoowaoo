@@ -1308,6 +1308,15 @@ export async function createProjectAgentChatResponse(input: {
   const modelInputFilterConfig = {
     modelKey: assistantModelKey,
     toolSchemaTokens: estimateProjectAgentTokens(toolSchemaMeasurement),
+    locale,
+    // Enumerated from the production registry so a new Operation whose result
+    // cannot be re-fetched is protected by declaring it, not by editing a
+    // second list here.
+    irreplaceableToolNames: new Set(
+      Object.values(operations)
+        .filter((operation) => operation.modelResultRetention === 'irreplaceable')
+        .map((operation) => operation.id),
+    ),
   }
   let latestModelInputDecision: ReturnType<typeof decideProjectAgentModelInput> | null = null
   const agent = new Agent<ProjectAgentAgentsRunContext>({
@@ -1615,6 +1624,8 @@ export async function createProjectAgentChatResponse(input: {
                 availableInputTokens: latestModelInputDecision.budget?.availableInputTokens ?? null,
                 estimatedInputTokens: latestModelInputDecision.estimatedInputTokens,
                 overBudget: latestModelInputDecision.overBudget,
+                clearedResultCount: latestModelInputDecision.clearedResultCount,
+                freedTokens: latestModelInputDecision.freedTokens,
               }
               : null,
             ...buildProjectAgentContextTelemetry({

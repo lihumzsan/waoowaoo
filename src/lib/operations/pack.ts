@@ -153,6 +153,10 @@ export function withOperationPack(
       groupPath,
       channels,
       toolExposure,
+      // Recoverable is the safe default: shedding a re-issuable read or a
+      // receipt whose outcome survives costs at most one extra call. Only a
+      // result that exists nowhere else must opt out.
+      modelResultRetention: operation.modelResultRetention ?? 'recoverable',
       prerequisites: mergePrerequisites(operation, normalizedDefaults),
       confirmation: mergeConfirmation(operation, normalizedDefaults),
       resourceContract: operation.resourceContract ?? {

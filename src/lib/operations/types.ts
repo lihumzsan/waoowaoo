@@ -116,6 +116,9 @@ export interface OperationChannels {
 
 export type OperationToolExposure = 'direct' | 'on_demand'
 
+export const OPERATION_MODEL_RESULT_RETENTIONS = ['recoverable', 'irreplaceable'] as const
+export type OperationModelResultRetention = (typeof OPERATION_MODEL_RESULT_RETENTIONS)[number]
+
 type OperationEffectFlags = {
   billable: boolean
   destructive: boolean
@@ -238,6 +241,19 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
    * fixed discovery/execution gateway.
    */
   toolExposure?: OperationToolExposure
+  /**
+   * Whether this Operation's result can be recovered once it has scrolled out
+   * of the model's context.
+   *
+   * `recoverable` is the ordinary case: reads can be re-issued, and writes
+   * leave a receipt whose outcome survives in the cleared placeholder, so the
+   * body may be shed under budget pressure. `irreplaceable` marks a result
+   * that exists nowhere else — a user's answer to a Choice is the case that
+   * matters, since it arrives as a synthetic tool result and cannot be
+   * re-fetched from anything. Shedding one of those would silently lose a
+   * decision the user already made.
+   */
+  modelResultRetention?: OperationModelResultRetention
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
   resourceContract?: CreativeResourceOperationContract
@@ -317,6 +333,7 @@ type NormalizedOperationFields = {
   groupPath: OperationGroupPath
   channels: OperationChannels
   toolExposure: OperationToolExposure
+  modelResultRetention: OperationModelResultRetention
   prerequisites: OperationPrerequisites
   toolInputSchema: ProjectAgentToolInputSchema
   resourceContract: CreativeResourceOperationContract

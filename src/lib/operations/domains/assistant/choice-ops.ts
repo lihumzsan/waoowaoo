@@ -112,6 +112,10 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
       summary: 'Ask the user exactly one current question using a model-authored Choice card. Author the complete card copy and options in the conversation language. Titles, descriptions, and button labels must describe only this decision and must never promise a downstream step such as "confirm and generate". Use commitments only when this answer may atomically invoke one explicitly Choice-eligible operation; otherwise pass an empty array. This operation neither prescribes nor starts a later workflow.',
       intent: 'query',
       toolExposure: 'direct',
+      // The answer arrives as a synthetic tool result and exists nowhere else.
+      // Re-issuing the call would ask the user the same question again, so this
+      // result must survive context shedding.
+      modelResultRetention: 'irreplaceable',
       effects: EFFECTS_NONE,
       agentFlow: { suspendsFor: 'choice' },
       confirmation: { kind: 'none', required: false },

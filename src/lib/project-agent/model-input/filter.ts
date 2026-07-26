@@ -8,6 +8,8 @@ import {
   resolveProjectAgentModelInputBudget,
   type ProjectAgentModelInputBudget,
 } from './budget'
+import { shedProjectAgentToolResults } from './tool-result'
+import type { ProjectAgentLocale } from '../locale'
 
 /**
  * The single authority for what this agent's model sees on any given step.
@@ -30,12 +32,30 @@ export type ProjectAgentModelInputDecision = {
   readonly budget: ProjectAgentModelInputBudget | null
   readonly estimatedInputTokens: number
   readonly overBudget: boolean
+  readonly clearedResultCount: number
+  readonly freedTokens: number
 }
 
 export type ProjectAgentModelInputFilterInput = {
   readonly modelKey: string
   readonly toolSchemaTokens: number
+  readonly locale: ProjectAgentLocale
+  readonly irreplaceableToolNames: ReadonlySet<string>
 }
+
+/**
+ * Results left verbatim regardless of pressure. The model is usually still
+ * working with what it just fetched, so clearing the newest results would
+ * force an immediate re-read and free nothing in practice.
+ */
+const KEEP_RECENT_TOOL_RESULTS = 5
+
+/**
+ * Clearing is aimed below the limit rather than at it. Stopping exactly at the
+ * threshold would re-trigger on the next step and invalidate the prompt cache
+ * again; overshooting once buys many steps of untouched prefix.
+ */
+const SHED_TARGET_RATIO = 0.7
 
 export function decideProjectAgentModelInput(
   config: ProjectAgentModelInputFilterInput,
@@ -50,17 +70,44 @@ export function decideProjectAgentModelInput(
     toolSchemaTokens: config.toolSchemaTokens,
     maxOutputTokens: PROJECT_AGENT_RESERVED_OUTPUT_TOKENS,
   })
-  const estimatedInputTokens = estimateProjectAgentUnknownTokens(modelData.input)
   const budget = resolution.kind === 'resolved' ? resolution.budget : null
+  const initialTokens = estimateProjectAgentUnknownTokens(modelData.input)
+
+  // A null budget means the reservations already exhaust the window, which no
+  // amount of shedding can fix; it is reported as over budget so the caller
+  // surfaces it rather than proceeding as if the request were fine.
+  if (budget === null) {
+    return {
+      input: modelData.input,
+      ...(modelData.instructions === undefined ? {} : { instructions: modelData.instructions }),
+      budget,
+      estimatedInputTokens: initialTokens,
+      overBudget: true,
+      clearedResultCount: 0,
+      freedTokens: 0,
+    }
+  }
+
+  const shedding = initialTokens > budget.availableInputTokens
+    ? shedProjectAgentToolResults({
+      items: modelData.input,
+      locale: config.locale,
+      keepRecentResults: KEEP_RECENT_TOOL_RESULTS,
+      targetFreedTokens: initialTokens - Math.floor(budget.availableInputTokens * SHED_TARGET_RATIO),
+      irreplaceableToolNames: config.irreplaceableToolNames,
+    })
+    : null
+
+  const input = shedding ? shedding.items : modelData.input
+  const estimatedInputTokens = shedding ? initialTokens - shedding.freedTokens : initialTokens
 
   return {
-    input: modelData.input,
+    input,
     ...(modelData.instructions === undefined ? {} : { instructions: modelData.instructions }),
     budget,
     estimatedInputTokens,
-    // A null budget means the reservations already exhaust the window, which no
-    // amount of shedding can fix; it is reported as over budget so the caller
-    // surfaces it rather than proceeding as if the request were fine.
-    overBudget: budget === null || estimatedInputTokens > budget.availableInputTokens,
+    overBudget: estimatedInputTokens > budget.availableInputTokens,
+    clearedResultCount: shedding?.clearedResultCount ?? 0,
+    freedTokens: shedding?.freedTokens ?? 0,
   }
 }
