@@ -207,6 +207,7 @@
     "choiceReplySubmit": "Submit notes",
     "choiceCustomOptionLabel": "Other {label}",
     "choiceCustomOptionPlaceholder": "Other {label}",
-    "choiceCustomOptionSubmit": "Select other {label}"
+    "choiceCustomOptionSubmit": "Select other {label}",
+    "contextCompacted": "Condensed {count} earlier messages"
   }
 }

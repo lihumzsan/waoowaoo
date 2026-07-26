@@ -20,7 +20,6 @@ import {
 import type {
   ProjectAgentChoiceCardPartData,
   ProjectAgentOperationPlanPreviewPartData,
-  ProjectAgentStopPartData,
   ProjectContextPartData,
   TaskBatchSubmittedPartData,
   TaskSubmittedPartData,
@@ -58,6 +57,10 @@ import {
   type BillingActionItemSummary,
 } from './billing-action-items'
 import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
+import {
+  AgentStopDataCard,
+  AssistantContextCompactedDataCard,
+} from './WorkspaceAssistantNotices'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -85,17 +88,6 @@ export function resolveProgressStageLabel(raw: string | null, progressT: ReturnT
   const key = raw.slice('progress.'.length)
   if (progressT.has(key)) return progressT(key)
   return `MISSING_MESSAGE:${raw}`
-}
-
-export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
-  const t = useTranslations('assistantAgent')
-  if (data.reason === 'awaiting_user_confirmation') return null
-  return (
-    <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-sm leading-5 text-[var(--glass-text-secondary)]">
-      <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 truncate">{t('cards.toolErrorBoundary')}</span>
-    </div>
-  )
 }
 
 export function HiddenApprovalRequestDataCard() {
@@ -650,6 +642,7 @@ export function useWorkspaceAssistantMessagePartComponents({
             ),
         'agent-interruption-resolved': HiddenRuntimeContextDataCard,
         'assistant-choice-resolved': HiddenRuntimeContextDataCard,
+        'assistant-context-compacted': AssistantContextCompactedDataCard,
         'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         'project-context': ProjectContextDataCard,
