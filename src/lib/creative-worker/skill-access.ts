@@ -4,7 +4,6 @@ import {
   readCreativeSkillResource,
   type CreativeSkillDiscovery,
   type CreativeSkillId,
-  type CreativeSkillLocale,
   type CreativeSkillResource,
 } from '@/lib/creative-skills'
 import { CreativeWorkerError } from './errors'
@@ -60,7 +59,6 @@ export async function readCreativeWorkerSkillResource(input: {
 }): Promise<CreativeSkillResource> {
   const definition = getCreativeSkillDefinition(input.skillId)
   const resource = await readCreativeSkillResource({
-    locale: input.context.locale,
     uri: definition.entryUri,
   })
   // Parallel reads may all begin before the first filesystem read settles, so
@@ -71,14 +69,12 @@ export async function readCreativeWorkerSkillResource(input: {
   return resource
 }
 
-export function listCreativeWorkerSkillCatalog(
-  locale: CreativeSkillLocale,
-): readonly CreativeSkillDiscovery[] {
+export function listCreativeWorkerSkillCatalog(): readonly CreativeSkillDiscovery[] {
   return CREATIVE_SKILLS.map((definition) => ({
     id: definition.id,
     version: definition.version,
-    title: definition.title[locale],
-    summary: definition.summary[locale],
+    title: definition.title,
+    summary: definition.summary,
     tags: definition.tags,
     entryUri: definition.entryUri,
   }))

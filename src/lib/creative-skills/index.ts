@@ -5,23 +5,15 @@ export {
 } from './registry'
 export { readCreativeSkillResource } from './loader'
 export {
-  assertCreativeSkillLocale,
   isCreativeSkillId,
-  isCreativeSkillLocale,
   parseCreativeSkillUri,
 } from './uri'
-export {
-  CREATIVE_SKILL_IDS,
-  CREATIVE_SKILL_LOCALES,
-} from './types'
+export { CREATIVE_SKILL_IDS } from './types'
 export type {
   CreativeSkillDefinition,
   CreativeSkillDiscovery,
   CreativeSkillId,
-  CreativeSkillLocale,
   CreativeSkillResource,
   CreativeSkillUri,
-  LocalizedCreativeSkillList,
-  LocalizedCreativeSkillText,
   ReadCreativeSkillResourceInput,
 } from './types'

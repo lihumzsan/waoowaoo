@@ -633,49 +633,41 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
   })
 
-  it('keeps every Creative Skill flat, localized, registry-addressed, and Worker-readable', async () => {
+  it('keeps every Creative Skill flat, single-document, registry-addressed, and Worker-readable', async () => {
     expect(Object.keys(CREATIVE_SKILL_REGISTRY)).toEqual([...CREATIVE_SKILL_IDS])
+
+    const skillsRoot = path.join(process.cwd(), 'src', 'lib', 'creative-skills', 'skills')
+    // The registry is the only Skill identity. A directory that no id declares
+    // would be an orphan the loader can never reach.
+    expect(fs.readdirSync(skillsRoot).sort()).toEqual([...CREATIVE_SKILL_IDS].sort())
 
     for (const skillId of CREATIVE_SKILL_IDS) {
       const definition = CREATIVE_SKILL_REGISTRY[skillId]
-      const skillDir = path.join(process.cwd(), 'src', 'lib', 'creative-skills', 'skills', skillId)
-      expect(fs.readdirSync(skillDir).sort(), skillId).toEqual([
-        'SKILL.en.md', 'SKILL.zh.md',
-      ])
+      const skillDir = path.join(skillsRoot, skillId)
+      expect(fs.readdirSync(skillDir).sort(), skillId).toEqual(['SKILL.md'])
       expect(definition.entryUri).toBe(`skill://${skillId}/SKILL.md`)
 
-      for (const locale of ['zh', 'en'] as const) {
-        const resource = await readCreativeSkillResource({
-          locale,
-          uri: definition.entryUri,
-        })
-        expect(resource.skillId).toBe(skillId)
-        expect(resource.locale).toBe(locale)
-        expect(resource.content.trim().length).toBeGreaterThan(0)
-        expect(resource.checksum).toMatch(/^[a-f0-9]{64}$/)
-      }
+      const resource = await readCreativeSkillResource({ uri: definition.entryUri })
+      expect(resource.skillId).toBe(skillId)
+      expect(resource.content.trim().length).toBeGreaterThan(0)
+      expect(resource.checksum).toMatch(/^[a-f0-9]{64}$/)
     }
   })
 
   it('gives every Creative Worker the complete Skill catalog and only registry-declared tools', () => {
-    const zhCatalog = listCreativeWorkerSkillCatalog('zh')
-    const enCatalog = listCreativeWorkerSkillCatalog('en')
-    expect(zhCatalog.map((skill) => skill.id)).toEqual([
+    const catalog = listCreativeWorkerSkillCatalog()
+    expect(catalog.map((skill) => skill.id)).toEqual([
       ...CREATIVE_SKILL_IDS,
     ])
-    expect(enCatalog.every((skill) => (
+    expect(catalog.every((skill) => (
       skill.title.length > 0 && skill.summary.length > 0 && skill.entryUri.startsWith('skill://')
     ))).toBe(true)
     expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
     for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
       const catalogToken = `outputKind=${outputKind}`
       expect(
-        zhCatalog.some((skill) => skill.summary.includes(catalogToken)),
-        `zh Skill catalog must route ${outputKind}`,
-      ).toBe(true)
-      expect(
-        enCatalog.some((skill) => skill.summary.includes(catalogToken)),
-        `en Skill catalog must route ${outputKind}`,
+        catalog.some((skill) => skill.summary.includes(catalogToken)),
+        `Skill catalog must route ${outputKind}`,
       ).toBe(true)
     }
     expect(Object.values(creativeWorkOutputRegistry).every((definition) => (

@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { getCreativeSkillDefinition } from './registry'
-import { assertCreativeSkillLocale, parseCreativeSkillUri } from './uri'
+import { parseCreativeSkillUri } from './uri'
 import type { CreativeSkillResource, ReadCreativeSkillResourceInput } from './types'
 
 const SKILL_ROOT_SEGMENTS = ['src', 'lib', 'creative-skills', 'skills'] as const
+const SKILL_RESOURCE_FILE = 'SKILL.md'
 
 function checksum(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex')
@@ -14,7 +15,6 @@ function checksum(content: string): string {
 export async function readCreativeSkillResource(
   input: ReadCreativeSkillResourceInput,
 ): Promise<CreativeSkillResource> {
-  assertCreativeSkillLocale(input.locale)
   const parsed = parseCreativeSkillUri(input.uri)
   const definition = getCreativeSkillDefinition(parsed.skillId)
   if (definition.entryUri !== parsed.uri) {
@@ -22,7 +22,7 @@ export async function readCreativeSkillResource(
   }
 
   const root = path.resolve(process.cwd(), ...SKILL_ROOT_SEGMENTS)
-  const filePath = path.resolve(root, definition.id, definition.resources[input.locale])
+  const filePath = path.resolve(root, definition.id, SKILL_RESOURCE_FILE)
   const expectedParent = path.resolve(root, definition.id)
   if (path.dirname(filePath) !== expectedParent) {
     throw new Error(`CREATIVE_SKILL_URI_INVALID:${input.uri}`)
@@ -36,7 +36,7 @@ export async function readCreativeSkillResource(
       ? String((error as Error & { readonly code?: unknown }).code)
       : 'UNKNOWN'
     throw new Error(
-      `CREATIVE_SKILL_RESOURCE_NOT_FOUND:${definition.id}:${input.locale}:${code}`,
+      `CREATIVE_SKILL_RESOURCE_NOT_FOUND:${definition.id}:${code}`,
       { cause: error },
     )
   }
@@ -44,7 +44,6 @@ export async function readCreativeSkillResource(
   return {
     skillId: definition.id,
     version: definition.version,
-    locale: input.locale,
     uri: parsed.uri,
     checksum: checksum(content),
     content,

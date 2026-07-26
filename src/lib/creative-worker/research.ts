@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { CreativeSkillLocale } from '@/lib/creative-skills'
+import type { Locale } from '@/i18n/routing'
 import type { WebSearchRequest, WebSearchResponse } from '@/lib/web-search'
 import { CREATIVE_WORKER_HARD_LIMITS } from './constants'
 
@@ -52,7 +52,7 @@ export interface CreativeWorkerResearchState {
 }
 
 function localizedNotice(
-  locale: CreativeSkillLocale,
+  locale: Locale,
   status: CreativeWorkerResearchEvidence['status'],
 ): string | null {
   if (status === 'completed' || status === 'not_attempted') return null
@@ -116,7 +116,7 @@ export function recordResearchFailure(input: {
 }
 
 export function projectCreativeWorkerResearchEvidence(input: {
-  readonly locale: CreativeSkillLocale
+  readonly locale: Locale
   readonly state: CreativeWorkerResearchState
 }): CreativeWorkerResearchEvidence {
   const completed = input.state.attempts.filter((attempt) => attempt.status === 'completed').length

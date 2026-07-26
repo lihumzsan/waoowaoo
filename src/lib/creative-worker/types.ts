@@ -1,7 +1,7 @@
 import type { Model } from '@openai/agents'
 import { z } from 'zod'
 import { injectedCreativeDirectionSchema } from '@/lib/creative-direction/contracts'
-import type { CreativeSkillLocale } from '@/lib/creative-skills'
+import type { Locale } from '@/i18n/routing'
 import {
   CREATIVE_WORK_OUTPUT_KINDS,
   DEFAULT_CREATIVE_WORKER_BUDGETS,
@@ -187,7 +187,7 @@ export type CreativeWorkerEventListener = (
 
 export interface RunCreativeWorkerInput {
   model: Model
-  locale: CreativeSkillLocale
+  locale: Locale
   signal: AbortSignal
   request: CreativeWorkRequest
   budgets?: CreativeWorkerBudgetOverrides
@@ -208,7 +208,7 @@ export interface CreativeWorkerResult<TOutput = CreativeWorkOutput> {
 }
 
 export interface CreativeWorkerRunContext {
-  locale: CreativeSkillLocale
+  locale: Locale
   budgets: CreativeWorkerBudgets
   counters: {
     readCalls: number

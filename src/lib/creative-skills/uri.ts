@@ -1,18 +1,7 @@
-import { CREATIVE_SKILL_IDS, CREATIVE_SKILL_LOCALES } from './types'
-import type { CreativeSkillId, CreativeSkillLocale, CreativeSkillUri } from './types'
+import { CREATIVE_SKILL_IDS } from './types'
+import type { CreativeSkillId, CreativeSkillUri } from './types'
 
 const URI_PATTERN = /^skill:\/\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/
-
-export function isCreativeSkillLocale(value: unknown): value is CreativeSkillLocale {
-  return typeof value === 'string'
-    && (CREATIVE_SKILL_LOCALES as readonly string[]).includes(value)
-}
-
-export function assertCreativeSkillLocale(value: unknown): asserts value is CreativeSkillLocale {
-  if (!isCreativeSkillLocale(value)) {
-    throw new Error(`CREATIVE_SKILL_LOCALE_MISSING:${String(value)}`)
-  }
-}
 
 export function isCreativeSkillId(value: string): value is CreativeSkillId {
   return (CREATIVE_SKILL_IDS as readonly string[]).includes(value)

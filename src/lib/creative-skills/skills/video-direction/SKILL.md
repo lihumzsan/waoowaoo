@@ -122,6 +122,8 @@
 
 以下示例展示的是可以直接交给视频模型的一整份提示词，不是字段模板。根据实际片段自由取舍，不要机械复制题材、秒数或镜头数量。
 
+最终提示词必须使用与作品内容和对白一致的语言：中文内容写中文提示词，英文内容写英文提示词。本节先给中文示例，再给同等质量的英文示例，两者示范的是同一套方法。
+
 ### 示例一：同一场景，不使用创意转场
 
 > 15 秒，16:9，写实悬疑电影。保持图片1中女工程师的脸、短发、深蓝防水外套和疲惫但克制的气质；地点始终是图片2中的海岸声呐控制室，冷青色仪器光与窗外暴雨保持一致。0–4 秒，控制室全景，摄影机缓慢向控制台推进，女工程师背对镜头检查连续跳动的声呐波形，窗玻璃被雨水冲刷，<暴雨敲窗、设备低频嗡鸣>。4–10 秒，中近景从她右侧稳定跟进，她听见异常回波后停住手，抬眼望向屏幕中央的巨大圆形信号，呼吸变浅，用低沉、清晰、略带沙哑的固有声线说：{它不是鲸。它在回答我们。} <短促声呐脉冲，随后更深的回声>。10–15 秒，先给屏幕上不断扩大的圆形回波特写，再回到她的面部近景；红色警示灯亮起，她没有后退，只缓慢握紧桌沿，最后一秒看向窗外漆黑海面。动作只发生一次，表演克制真实，口型与逐字台词同步，仪器、人物服装和暴雨方向全程连续，不生成字幕、标题或额外人物。
@@ -139,6 +141,16 @@
 > 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明，木材、黄铜与湿玻璃质感真实。保持图片1中守塔人的脸、灰白短须、深绿色粗呢外套和低沉稳重的固有声线；地点始终是图片2中的弧形风暴窗、海图桌和黄铜无线电。0–7 秒，中近景，守塔人站在海图桌左端、画面左三分之一，身体朝向风暴窗，右手按住位于桌面中央的无线电旋钮；他听见异常信号后侧耳停住，<海风撞击玻璃、无线电静电、木结构轻响>。7–15 秒，切到中远景侧面，海图桌横贯画面下方，守塔人仍在桌子左端，黄铜无线电位于中央，风暴窗占据背景；他用低沉稳重的固有声线说：{这不是求救信号。它在报我们的坐标。} 随后抬眼看向窗外，右手仍停在旋钮上，最后一帧由左侧人物、中央无线电和背景风暴窗形成清楚三层关系，<逐字台词与口型同步、静电突然中断、远处一声低沉汽笛>。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
 
 > 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明；保持图片1中守塔人的身份和服装、图片2中的弧形风暴窗、海图桌与黄铜无线电。入口状态：守塔人位于海图桌左端，右手停在桌面中央的无线电旋钮上。0–4 秒，极近特写，黄铜频率指针、潮湿旋钮和戴手套的右手充满画面，海图桌木纹形成浅景深背景；指针自行越过刻度并停在红线处，<细密静电、旋钮内一声金属轻响>。4–10 秒，切到中近景，守塔人在海图桌左端、画面左三分之一重新成为画面主体，身体朝向风暴窗，右手从旋钮缓慢移到桌沿；中央无线电和背景风暴窗保持同一空间关系，冷蓝闪电照亮他的侧脸。10–15 秒，面部近景缓慢推近，他看向窗外海面，湿玻璃反射出正在接近的白色光束，<风声压低、远处汽笛再次响起>；他保持沉默，以警觉眼神落点。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+
+### 英文内容示例一：同一场景，不使用创意转场
+
+> 15 seconds, 16:9, grounded suspense cinema. Preserve the engineer's face, short hair, dark-blue rain jacket, and restrained presence from image 1; remain in the cold-cyan coastal sonar room from image 2. 0–4s, wide view slowly pushing toward the console: she stands back to camera at the controls as rain crosses the window, <rain on glass, equipment hum>. 4–10s, stable medium close from her right: an anomalous echo stops her hand; she looks to the circular signal and says in her low, slightly rough voice: {It isn't a whale. It's answering us.} <short sonar pulse, deeper return>. 10–15s, insert of the expanding echo, then face close-up; red warning light activates as she grips the desk and looks toward the dark sea. Keep action single, performance restrained, the exact line lip-synced, and wardrobe, instruments, and rain continuous. No captions or additional people. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
+
+### 英文内容示例二：两个独立片段的站位与接缝
+
+> 15 seconds, 2.39:1, grounded maritime suspense in the storm-lit lighthouse room from image 2. Preserve the keeper and wardrobe from image 1. 0–7s, medium close: he stands at the chart table's left end in the left third, body toward the storm window, right hand on the centered brass radio; an anomalous signal makes him listen, <wind on glass, static, timber strain>. 7–15s, cut to medium-wide: table across the lower frame, keeper at the same left end, radio center, window behind. In his low voice: {This is not a distress signal. It is broadcasting our coordinates.} He looks to the window, hand still on the dial. Land on the three-layer arrangement, <lip-synced line, static stopping, distant foghorn>. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
+
+> 15 seconds, 2.39:1, the same grounded storm-lit lighthouse room; preserve the keeper from image 1 and the window, chart table, and radio from image 2. Entry: keeper at the table's left end, right hand on the centered radio dial. 0–4s, extreme close-up: frequency needle, damp dial, and gloved hand fill frame; the needle stops at a red mark, <fine static, metallic click>. 4–10s, cut to medium close: he becomes the identifiable subject at the same table end in the left third, body toward the window, hand moving from dial to table edge; lightning reveals his profile. 10–15s, push into face close-up as wet glass reflects an approaching white beam, <lower wind, distant foghorn>. He stays silent and alert. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
 
 ## 最终片段检查
 

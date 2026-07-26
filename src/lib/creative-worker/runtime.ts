@@ -351,7 +351,7 @@ export async function runCreativeWorker(
       skillIds: [COMMON_CREATIVE_SKILL_ID],
       signal: input.signal,
     })
-    const skillCatalog = listCreativeWorkerSkillCatalog(input.locale)
+    const skillCatalog = listCreativeWorkerSkillCatalog()
     assertNotAborted(input.signal)
     const workerInput = buildWorkerInput({
       request,
