@@ -9,7 +9,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 ## 不变量
 
 - **AP-01 — Primary 没有固定主链。** 系统 Prompt 不包含 stage、next action、剧本确认、风格专用卡、短/中/长视频配方或固定工具顺序。Primary 根据目标与当前 Resource 自由组合能力。
-- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Story Canon、continuity、Chapter plan、Creative Direction、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`，这是来源捕获而不是第二创作 writer。`screenplay` 只拥有文本和写作元信息；生产资产筛选、设计与 Prompt 只由一个 `asset-development + outputKind=asset_manifest` Subagent Task 决定。
+- **AP-02 — 专业判断只有 Skill + Creative Worker。** screenplay 创作/修改、Story Canon、continuity、Chapter plan、Creative Direction、asset/video prompt、music direction 与 review 只能由 `creative_work` 产生。公共 Worker system Prompt 不承载任一专业方法；专业知识来自 Worker 按目录读取的 Skill，结构和执行事实来自当前 output schema 与服务端编译输入，只有实际开放额外能力时才追加该能力的安全协议。`create_text.current_user_text` 只允许保存当前用户消息的精确连续原文；完整用户剧本必须显式标记 `classification.kind=screenplay` 并写 `project.screenplay`，这是来源捕获而不是第二创作 writer。`screenplay` 只拥有文本和写作元信息；生产资产筛选、设计与 Prompt 只由一个 `asset-development + outputKind=asset_manifest` Subagent Task 决定。
 - **AP-03 — outputKind 严格穷尽。** 每个 outputKind 在生产 output registry 声明 schema、适用 Skill 与 Resource schema；当前剧本 kind 是 `screenplay`，不存在 `canonical_screenplay` 或额外 canonicalization Skill。未知字段、缺失字段或错误引用原地失败，不容忍兼容 JSON。
 - **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；Task terminal 的 strict result 才能物化正式 Revision。UI 不从 reasoning、markdown 标题或文案推断完成状态。
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。

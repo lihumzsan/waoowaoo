@@ -327,10 +327,11 @@ export async function runCreativeWorker(
   const request = parseCreativeWorkRequest(input.request)
   const budgets = resolveCreativeWorkerBudgets(input.budgets)
   const definition = readCreativeWorkOutputDefinition(request.outputKind)
+  const enableWebSearch = definition.workerTools.includes('web_search')
   const context = createRunContext(
     input,
     budgets,
-    definition.workerTools.includes('web_search'),
+    enableWebSearch,
   )
   const toolLifecycle = new CreativeWorkerToolLifecycle()
   let eventDeliveryFailed = false
@@ -376,7 +377,7 @@ export async function runCreativeWorker(
 
     const agent = new Agent<CreativeWorkerRunContext, typeof outputTransportSchema>({
       name: 'Creative Worker',
-      instructions: buildCreativeWorkerSystemPrompt(input.locale),
+      instructions: buildCreativeWorkerSystemPrompt(input.locale, { enableWebSearch }),
       model: input.model,
       modelSettings: {
         parallelToolCalls: true,

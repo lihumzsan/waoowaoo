@@ -12,6 +12,7 @@ import {
   creativeWorkOutputRegistry,
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
+  buildCreativeWorkerSystemPrompt,
   projectAdoptedCreativeDirection,
 } from '@/lib/creative-worker'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
@@ -719,6 +720,18 @@ describe('project agent toolset conformance', () => {
       music_direction: ['read_skill'],
       creative_review: ['read_skill'],
     })
+    for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
+      const definition = creativeWorkOutputRegistry[outputKind]
+      for (const locale of ['zh', 'en'] as const) {
+        const systemPrompt = buildCreativeWorkerSystemPrompt(locale, {
+          enableWebSearch: definition.workerTools.length > 0,
+        })
+        expect(systemPrompt.includes('web_search')).toBe(outputKind === 'creative_direction')
+        expect(systemPrompt).not.toContain('video_prompt_set')
+        expect(systemPrompt).not.toContain('productionContext')
+        expect(systemPrompt).not.toContain('durationIntent')
+      }
+    }
     const adoptedDirection = {
       revisionId: 'direction-revision-1',
       direction: {

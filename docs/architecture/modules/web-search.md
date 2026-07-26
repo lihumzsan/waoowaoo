@@ -14,7 +14,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - **WS-02 — 单 provider、托管检索。** 当前唯一 provider 是 `openai`。Provider 内部使用专用 OpenAI Search Agent + Responses `web_search`，固定启用 live web 与 high search context。公共请求只包含 research brief 和可选 allowed domains；公共结果只包含 provider、原 brief、研究报告、真实 hosted queries 与 URL citations，不暴露任意 OpenAI payload、网页正文或模型推理。
 - **WS-03 — 独立凭据、明确失败。** cloud 与 self-hosted 都只从服务端 `OPENAI_API_KEY` 读取搜索凭据。缺失、401 或 403 返回 `WEB_SEARCH_UNAVAILABLE`；超时、网络、429、5xx 与非法响应返回 typed failure；不得从聊天、Resource、客户端参数或 Primary/analysis provider 凭据猜 key，也不得 fallback 到 Tavily 或另一个 provider。
 - **WS-04 — Primary 仍经 Operation gateway。** `web_search` 是生产 Operation registry 中的 `query`、`on_demand`、零业务写入能力。Primary 当前可能通过 OpenRouter 或其他模型运行，因此 hosted search 不能直接挂到 Primary 模型；Operation 仍通过固定 `load_tools + execute_operation` gateway 调用 `searchWeb`。缺少 OpenAI 搜索配置必须明确失败。
-- **WS-05 — Worker 暴露面由 output registry 穷尽。** `creative_direction.workerTools=['web_search']` 是 Creative Worker 搜索能力的唯一声明；其他 output kind 只看到 `read_skill`。Worker 获得的是一个受预算约束的函数 Tool，内部调用同一 `searchWeb`；不得把 OpenAI hosted tool 直接挂到可配置的 analysis 模型，也不得开放 URL fetch、Extract、Crawl 或 Deep Research。
+- **WS-05 — Worker 工具与提示暴露面由 output registry 穷尽。** `creative_direction.workerTools=['web_search']` 是 Creative Worker 搜索能力的唯一声明；运行时从该声明同时决定研究状态、函数 Tool 与搜索 system Prompt 片段。其他 output kind 只看到 `read_skill`，也不接收搜索说明。Worker 的预算函数 Tool 内部调用同一 `searchWeb`；不得把 OpenAI hosted tool 直接挂到可配置的 analysis 模型，也不得开放 URL fetch、Extract、Crawl 或 Deep Research。
 - **WS-06 — 外层判断可选，内层搜索必须真实。** Primary/Worker 只有在目标依赖最新、陌生、冷门、地域性、平台性、社群定义、含义不明或置信度不足的信息时才调用；熟悉且稳定的内容不得装饰性搜索。外层一旦调用，专用 Search Agent 必须真实使用 hosted `web_search`，没有 completed hosted call 或结构化 URL citation 的响应按非法失败，不能把模型记忆伪装成研究。
 - **WS-07 — Worker budget 约束 research invocation。** 每个 Creative Direction Task 冻结 `maxWebSearchCalls`；它限制 Worker 对统一研究 Tool 的外层调用次数。一次外层调用可由 hosted Agent 自主生成多个相关 query；运行时归档这些真实 query。预算耗尽不发 provider 请求。零调用是正常完成，research=`not_attempted` 且无 warning；实际尝试后的不可用、失败、部分完成或预算耗尽才产生确定性 warning。
 - **WS-08 — 证据与政策分离。** Worker `Task.result.research` 由运行时根据真实 Tool 结果构造，模型不能自报。Creative Direction `generationOptions.research` 只保存 outer brief、hosted queries、状态、citation title+URL 和预算，不保存研究报告。Direction structured content 只保存 `styleSummary/rawUserStyle` 与六领域正文。
@@ -30,7 +30,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - Primary Operation：`src/lib/operations/domains/web-search/web-search-ops.ts`；能力发现与执行仍由生产 Operation registry 和固定 gateway 负责。
 - Worker 能力声明：`src/lib/creative-worker/output-registry.ts`；外层预算、工具执行与证据投影：`tools.ts`、`research.ts`、`runtime.ts`。
 - Task/Resource 研究元数据：`src/lib/creative-worker/task-contract.ts`、`src/lib/creative-resource/creative-work-materialization.ts`。
-- 研究判断与翻译协议：双语 Primary Prompt、Creative Worker system Prompt、`creative-direction` Skill。
+- 研究判断与翻译协议：双语 Primary Prompt、仅搜索能力 Worker 接收的 system Prompt 片段、`creative-direction` Skill。
 - 环境变量示例：`.env.example`、`.env.cloud.example`。真实 key 只能存在于忽略的环境配置。
 
 ## 生命周期
