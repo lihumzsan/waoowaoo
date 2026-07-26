@@ -52,19 +52,9 @@ const creativeWorkerBudgetsSchema = z.object({
   maxTurns: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxTurns),
   maxReadCalls: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxReadCalls),
   maxWebSearchCalls: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxWebSearchCalls),
-  maxSkillContentChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxSkillContentChars),
-  maxSingleSkillResourceChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxSingleSkillResourceChars),
   maxInputChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxInputChars),
   maxOutputChars: z.number().int().min(1).max(CREATIVE_WORKER_HARD_LIMITS.maxOutputChars),
-}).strict().superRefine((budgets, context) => {
-  if (budgets.maxSingleSkillResourceChars > budgets.maxSkillContentChars) {
-    context.addIssue({
-      code: 'custom',
-      message: 'CREATIVE_WORK_RESOURCE_BUDGET_EXCEEDS_TOTAL',
-      path: ['maxSingleSkillResourceChars'],
-    })
-  }
-})
+}).strict()
 
 function resolveCreativeWorkerBudgets(
   overrides: RunCreativeWorkerInput['budgets'],

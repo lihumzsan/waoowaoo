@@ -45,8 +45,6 @@ export const creativeWorkerResultSchema = z.object({
     maxTurns: z.number().int().positive(),
     maxReadCalls: z.number().int().positive(),
     maxWebSearchCalls: z.number().int().positive(),
-    maxSkillContentChars: z.number().int().positive(),
-    maxSingleSkillResourceChars: z.number().int().positive(),
     maxInputChars: z.number().int().positive(),
     maxOutputChars: z.number().int().positive(),
   }).strict(),

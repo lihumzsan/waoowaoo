@@ -100,8 +100,6 @@ function taskResult(
         maxTurns: 8,
         maxReadCalls: 12,
         maxWebSearchCalls: 4,
-        maxSkillContentChars: 80_000,
-        maxSingleSkillResourceChars: 24_000,
         maxInputChars: 300_000,
         maxOutputChars: 120_000,
       },

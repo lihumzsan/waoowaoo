@@ -147,8 +147,6 @@ export interface CreativeWorkerBudgets {
   maxTurns: number
   maxReadCalls: number
   maxWebSearchCalls: number
-  maxSkillContentChars: number
-  maxSingleSkillResourceChars: number
   maxInputChars: number
   maxOutputChars: number
 }

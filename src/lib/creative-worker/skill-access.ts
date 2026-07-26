@@ -29,28 +29,6 @@ function assertReadBudget(context: CreativeWorkerRunContext): void {
   }
 }
 
-function assertResourceBudget(
-  context: CreativeWorkerRunContext,
-  resource: CreativeSkillResource,
-): void {
-  const contentChars = resource.content.length
-  if (contentChars > context.budgets.maxSingleSkillResourceChars) {
-    throw new CreativeWorkerError('CREATIVE_WORK_RESOURCE_BUDGET_EXCEEDED', {
-      uri: resource.uri,
-      contentChars,
-      maxSingleSkillResourceChars: context.budgets.maxSingleSkillResourceChars,
-    })
-  }
-  if (context.counters.skillContentChars + contentChars > context.budgets.maxSkillContentChars) {
-    throw new CreativeWorkerError('CREATIVE_WORK_CONTENT_BUDGET_EXCEEDED', {
-      uri: resource.uri,
-      contentChars,
-      consumedChars: context.counters.skillContentChars,
-      maxSkillContentChars: context.budgets.maxSkillContentChars,
-    })
-  }
-}
-
 async function recordRead(
   context: CreativeWorkerRunContext,
   resource: CreativeSkillResource,
@@ -85,11 +63,10 @@ export async function readCreativeWorkerSkillResource(input: {
     locale: input.context.locale,
     uri: definition.entryUri,
   })
-  // Parallel reads may all begin before the first filesystem read settles.
-  // Reserve both budgets only after content is known and immediately before
-  // recordRead synchronously increments the shared counters.
+  // Parallel reads may all begin before the first filesystem read settles, so
+  // claim the read budget immediately before recordRead synchronously
+  // increments the shared counters.
   assertReadBudget(input.context)
-  assertResourceBudget(input.context, resource)
   await recordRead(input.context, resource, input.source)
   return resource
 }

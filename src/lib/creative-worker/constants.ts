@@ -10,12 +10,14 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
   'creative_review',
 ] as const
 
+// Skill resources are authored in this repository and reviewed with the code
+// that reads them, so their size is an authoring concern rather than a runtime
+// risk. Turn, read-concurrency, and paid-search bounds remain because they
+// constrain model behaviour and external cost.
 export const DEFAULT_CREATIVE_WORKER_BUDGETS = {
   maxTurns: 8,
   maxReadCalls: 12,
   maxWebSearchCalls: 4,
-  maxSkillContentChars: 80_000,
-  maxSingleSkillResourceChars: 24_000,
   maxInputChars: 300_000,
   maxOutputChars: 120_000,
 } as const
@@ -24,8 +26,6 @@ export const CREATIVE_WORKER_HARD_LIMITS = {
   maxTurns: 16,
   maxReadCalls: 24,
   maxWebSearchCalls: 8,
-  maxSkillContentChars: 160_000,
-  maxSingleSkillResourceChars: 48_000,
   maxInputChars: 600_000,
   maxOutputChars: 240_000,
 } as const

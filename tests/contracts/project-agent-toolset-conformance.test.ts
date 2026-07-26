@@ -918,8 +918,6 @@ describe('project agent toolset conformance', () => {
           maxTurns: 8,
           maxReadCalls: 8,
           maxWebSearchCalls: 4,
-          maxSkillContentChars: 100_000,
-          maxSingleSkillResourceChars: 50_000,
           maxInputChars: 1_000_000,
           maxOutputChars: 100_000,
         },
