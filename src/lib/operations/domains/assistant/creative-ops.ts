@@ -332,7 +332,12 @@ async function resolveTaskRequests(input: {
     throw new ApiError('NOT_FOUND', { code: 'PROJECT_NOT_FOUND', field: 'projectId' })
   }
   const aspectRatio = requireProjectVideoRatio(project.videoRatio).value
-  const rawDurationOptions = resolveBuiltinCapabilitiesByModelKey('video', videoModelKey)?.video?.durationOptions ?? []
+  const videoCapabilities = resolveBuiltinCapabilitiesByModelKey('video', videoModelKey)?.video
+  // The reference ceilings are the same capability facts create_video enforces.
+  // Without them the Worker can only guess how many labels a Segment may carry.
+  const maxReferenceImages = videoCapabilities?.maxReferenceImages ?? 1
+  const maxReferenceAudios = videoCapabilities?.maxReferenceAudios ?? 0
+  const rawDurationOptions = videoCapabilities?.durationOptions ?? []
   const allowedSegmentDurationsSeconds = Array.from(new Set(rawDurationOptions
     .filter((duration): duration is number => Number.isInteger(duration)
       && duration > 0
@@ -391,6 +396,8 @@ async function resolveTaskRequests(input: {
           allowedSegmentDurationsSeconds,
           minSegmentDurationSeconds,
           maxSegmentDurationSeconds,
+          maxReferenceImages,
+          maxReferenceAudios,
         },
       },
     }
