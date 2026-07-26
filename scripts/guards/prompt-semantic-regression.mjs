@@ -524,6 +524,19 @@ for (const entry of entries) {
   }
 }
 
+// Deleted Skill identities and deleted capabilities must not survive inside any
+// Skill body. A Worker that reads one of these strings is routed to a Skill the
+// registry no longer declares, or to a capability the product no longer offers.
+const forbiddenCreativeSkillTokens = [
+  'visual-development',
+  'style-development',
+  'screenplay-canonicalization',
+  'visual-style Skill',
+  '视觉风格 Skill',
+  '风格预览',
+  'style previews',
+]
+
 for (const [skillId, localizedTokens] of criticalCreativeSkillTokens) {
   const skillDir = path.join(root, 'src', 'lib', 'creative-skills', 'skills', skillId)
   for (const [locale, tokens] of Object.entries(localizedTokens)) {
@@ -537,6 +550,11 @@ for (const [skillId, localizedTokens] of criticalCreativeSkillTokens) {
     for (const token of tokens) {
       if (!skill.includes(token)) {
         violations.push(`missing Creative Skill semantic token ${token} in ${relativeSkillPath}`)
+      }
+    }
+    for (const token of forbiddenCreativeSkillTokens) {
+      if (skill.includes(token)) {
+        violations.push(`forbidden legacy Creative Skill token ${token} in ${relativeSkillPath}`)
       }
     }
   }

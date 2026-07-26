@@ -29,10 +29,10 @@ Select reusable characters, locations, and props worth producing from an exact `
 ### Visible information for human characters
 
 - Establish gender presentation and a specific age impression.
-- Describe face shape and visible facial features, including eye shape and size, but never eye color.
+- Describe face shape, visible facial features, eye shape and size, and eye color.
 - Describe hair color, length, style, and texture.
 - Describe height impression, posture, shoulder width, waistline, body type, and overall silhouette.
-- For skin, describe only texture and visible marks such as smoothness, roughness, freckles, birthmarks, scars, or tattoos. Do not describe skin tone, lip color, complexion, eye color, or the color of any body part.
+- Describe skin tone, skin texture, and visible marks such as smoothness, roughness, freckles, birthmarks, scars, or tattoos. Skin tone is a cross-shot identity anchor exactly like hair and eye color: state it in neutral, concrete terms, because an unstated value is re-randomized by the generation model on every image.
 - Clothing includes silhouette, era, material, palette, construction, and detail. Shoes are mandatory in a complete character design and must include style, material, and color.
 - Add only wearable accessories that strengthen identity and reuse, such as glasses, earrings, necklaces, watches, or rings.
 - Clothing, hair, footwear, and accessories must fit the story's era and social context.
@@ -48,14 +48,14 @@ Select reusable characters, locations, and props worth producing from an exact `
 - A character asset description contains stable appearance only: no expression, pose, action, background, environment, held story prop, or narrative sentence.
 - Do not use uncertainty such as “or,” “possibly,” “maybe,” or “probably.” Every visual choice is concrete.
 - Do not write invisible abstractions such as “powerful aura” or “an air of mature confidence.” Translate role energy into visible silhouette, clothing, material, and accessories.
-- Explicit source appearance has highest priority while still respecting body-color restrictions and current safety boundaries.
+- Explicit source appearance has highest priority while still respecting current safety boundaries.
 - Preserve reasonable generative freedom. Unless the input demands it, do not lock every facial micro-feature, hair strand, color swatch, or accessory.
 
 ## Character reference images
 
 - Extract stable identity from face structure, hairstyle, body type, garment construction, and wearable accessories.
 - When the image shows only part of the body, infer compatible lower garments, shoes, arms, and hands from the visible clothing and identity. Added parts must coordinate with visible parts.
-- Image-derived descriptions still exclude skin tone, eye color, expression, action, background, and pose.
+- Image-derived descriptions record the skin tone and eye color actually visible in the image, but still exclude expression, action, background, and pose.
 - Reference analysis may include overall styling or character-impression keywords directly supported by the image. In a final generation description, translate those keywords into visible silhouette, clothing, material, and accessories rather than leaving an unrenderable abstraction.
 - When producing an asset board, use attractive normal proportions, complete clothing and footwear, major wearable accessories, a calm neutral expression, stable identity anchors, and a background that supports style without binding the character to a story location. The final image must be clear, sharp, richly detailed, and production-quality rather than inheriting source blur, noise, or defects.
 - A simple character reference defaults to one clearly identified character with a complete silhouette and stable wardrobe. Do not automatically create grids, multi-view sheets, or action breakdowns; use an asset-board design only when the requested deliverable requires it.
@@ -108,7 +108,7 @@ Select reusable characters, locations, and props worth producing from an exact `
 
 - Does a formal Asset Manifest contain only source-grounded, reusable production assets and give every item valid `sourceRefs`? When a complete Creative Direction was injected, did it use every relevant policy without forcing unrelated domains into asset facts?
 - For an ordinary single-asset task, if a Creative Direction was supplied, does the design follow it and separate cross-media style from asset-only lighting and material treatment? If none was supplied, does the result keep style unbound?
-- Is the character stable, complete, era-consistent, explicit about footwear, and free of body color, action, background, uncertainty, and abstract aura?
+- Is the character stable, complete, era-consistent, explicit about footwear and about identity anchors such as skin, hair, and eye color, and free of action, background, uncertainty, and abstract aura?
 - Is a non-human identity described through its real form rather than a human template?
 - Is the location faithful, structurally complete, layered, anchored, and equipped with unmarked placement space?
 - Does the prop contain static object information only?
@@ -117,4 +117,4 @@ Select reusable characters, locations, and props worth producing from an exact `
 
 ## Boundary
 
-This Skill provides visual-design methods for characters, locations, props, reference images, asset candidates, and existing-asset modifications. The visual-style Skill owns Creative Directions, style candidates, and style previews. Output length, candidate count, JSON shape, image aspect ratio, exact asset-board layout, provider parameters, real-person safety policy, and final image-prompt suffixes are defined by the caller and execution layer.
+This Skill provides visual-design methods for characters, locations, props, reference images, asset candidates, and existing-asset modifications. The `creative-direction` Skill owns project-level presentation policy and direction candidates. Output length, candidate count, JSON shape, image aspect ratio, exact asset-board layout, provider parameters, real-person safety policy, and final image-prompt suffixes are defined by the caller and execution layer.

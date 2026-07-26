@@ -59,7 +59,7 @@ Primary 对每个目标评估独立工作单元、共享 canon、跨单元状态
 
 ## 验证
 
-- `scripts/guards/prompt-semantic-regression.mjs` 应同时验证主 Agent 运行闭环、双语 Skill 关键语义、条件式转场与完整提示词示例、`creative-direction`/`asset-development` 分离以及旧 `visual-development` 身份删除。
+- `scripts/guards/prompt-semantic-regression.mjs` 同时验证主 Agent 运行闭环、双语 Skill 关键语义、条件式转场与完整提示词示例、`creative-direction`/`asset-development` 分离，并以穷尽 forbidden token 列表拒绝已删除 Skill identity（`visual-development`、`style-development`、`screenplay-canonicalization`、`视觉风格 Skill`）与已删除能力（`风格预览`）回流进任何 Skill 正文。
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation registry 证明唯一委派 Operation 进入完整 toolset，并验证 strict `delegation.source=requests|chapters` schema。
 - 同一 Conformance 还从 `creativeWorkOutputRegistry.workerTools` 穷尽证明只有 `creative_direction` 获得 `web_search`；研究协议、provider wire 和 generation metadata 分别由 Web Search 模块列出的 Logic/Critical contract 承担。
 - TaskDefinition conformance、OperationBatch/Wait Critical 场景和 Assistant Session/Task SSE 场景是 Task 生命周期与聚合语义的适用证据。`GJ-FREEFORM-RESOURCES` 必须证明 Episode 对话发起的项目级 screenplay Subagent 在 UI 可见；`GJ-PROVIDED-SCREENPLAY` 必须证明当前用户原文直接写为项目级通用文字且不创建 Creative Task。
