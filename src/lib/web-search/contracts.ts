@@ -19,15 +19,40 @@ export const webSearchSourceSchema = z.object({
   url: z.string().url().max(2_000),
 }).strict()
 
+/**
+ * Visual evidence returned by the hosted search. Every URL is third-party and
+ * untrusted: it must never be rendered or fetched directly, only through the
+ * owned media boundary.
+ */
+export const webSearchImageSchema = z.object({
+  imageUrl: z.string().url().max(2_000),
+  thumbnailUrl: z.string().url().max(2_000).nullable(),
+  sourceUrl: z.string().url().max(2_000).nullable(),
+  caption: z.string().trim().min(1).max(1_000).nullable(),
+}).strict()
+
 export const webSearchResponseSchema = z.object({
   provider: z.literal(WEB_SEARCH_PROVIDER_ID),
   query: z.string().trim().min(1).max(1_000),
   report: z.string().trim().min(1).max(30_000),
   queries: z.array(z.string().trim().min(1).max(1_000)).max(32),
   sources: z.array(webSearchSourceSchema).min(1).max(32),
+  images: z.array(webSearchImageSchema).max(16),
 }).strict()
 
 export type WebSearchRequest = z.input<typeof webSearchRequestSchema>
 export type NormalizedWebSearchRequest = z.output<typeof normalizedWebSearchRequestSchema>
 export type WebSearchResponse = z.infer<typeof webSearchResponseSchema>
 export type WebSearchSource = z.infer<typeof webSearchSourceSchema>
+export type WebSearchImage = z.infer<typeof webSearchImageSchema>
+
+/**
+ * Live hosted-search progress. It is presentation only: no caller may derive a
+ * completion, failure, or evidence decision from it.
+ */
+export interface WebSearchProgressEvent {
+  readonly phase: 'searching' | 'search_completed'
+  readonly query: string | null
+}
+
+export type WebSearchProgressListener = (event: WebSearchProgressEvent) => void

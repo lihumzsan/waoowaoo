@@ -30,6 +30,7 @@ describe('Main Agent Web Search Operation', () => {
           title: 'Reference',
           url: 'https://example.com/reference',
         }],
+        images: [],
       }),
     }).web_search
     if (!operation?.execute) throw new Error('WEB_SEARCH_EXECUTOR_REQUIRED')

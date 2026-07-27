@@ -1,6 +1,7 @@
 export {
   WEB_SEARCH_PROVIDER_ID,
   normalizedWebSearchRequestSchema,
+  webSearchImageSchema,
   webSearchRequestSchema,
   webSearchResponseSchema,
   webSearchSourceSchema,
@@ -12,10 +13,18 @@ export {
 } from './errors'
 export type {
   NormalizedWebSearchRequest,
+  WebSearchImage,
+  WebSearchProgressEvent,
+  WebSearchProgressListener,
   WebSearchRequest,
   WebSearchResponse,
   WebSearchSource,
 } from './contracts'
 export type { WebSearchErrorCode } from './errors'
 export type { WebSearchProvider } from './provider'
-export { createConfiguredWebSearchProvider, searchWeb } from './service'
+export {
+  OPENAI_WEB_SEARCH_MODEL_ENV,
+  createConfiguredWebSearchProvider,
+  resolveWebSearchModel,
+  searchWeb,
+} from './service'

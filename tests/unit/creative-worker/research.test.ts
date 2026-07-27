@@ -35,6 +35,7 @@ describe('Creative Worker external research evidence', () => {
           title: 'Community discussion',
           url: 'https://example.com/rules-horror',
         }],
+        images: [],
       },
     })
 
@@ -100,6 +101,7 @@ describe('Creative Worker external research evidence', () => {
           title: 'Primary reference',
           url: 'https://example.com/primary',
         }],
+        images: [],
       },
     })
     recordResearchFailure({

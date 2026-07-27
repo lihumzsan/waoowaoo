@@ -39,6 +39,7 @@ function runContext(input: {
         title: 'Community reference',
         url: 'https://example.com/community',
       }],
+      images: [],
     })),
   }
 }
@@ -59,6 +60,7 @@ describe('Creative Direction Worker web_search tool', () => {
             title: 'Analog horror reference',
             url: 'https://example.com/analog-horror',
           }],
+          images: [],
         }
       },
     })
