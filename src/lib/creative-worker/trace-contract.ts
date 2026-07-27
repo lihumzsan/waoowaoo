@@ -52,6 +52,22 @@ export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
     skillId: z.enum(CREATIVE_SKILL_IDS),
     code: z.enum(CREATIVE_WORKER_ERROR_CODES),
   }).strict(),
+  // Research visibility. Without these a user cannot tell a direction that was
+  // grounded in real sources apart from one the model asserted from memory,
+  // because zero calls is deliberately a silent, warning-free completion.
+  z.object({
+    kind: z.literal('research_started'),
+    researchId: z.string().trim().min(1).max(500),
+    query: z.string().trim().min(1).max(1_000),
+  }).strict(),
+  z.object({
+    kind: z.literal('research_completed'),
+    researchId: z.string().trim().min(1).max(500),
+    query: z.string().trim().min(1).max(1_000),
+    status: z.enum(['completed', 'unavailable', 'failed', 'budget_exhausted']),
+    sourceCount: z.number().int().nonnegative(),
+    imageCount: z.number().int().nonnegative(),
+  }).strict(),
 ])
 
 export type CreativeSkillReadTraceEntry = z.infer<typeof creativeSkillReadTraceEntrySchema>

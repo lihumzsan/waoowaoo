@@ -15,6 +15,7 @@ import {
   recordCompletedResearchAttempt,
   recordResearchFailure,
 } from './research'
+import type { CreativeWorkTraceEvent } from './trace-contract'
 import type {
   CreativeWorkerRunContext,
 } from './types'
@@ -29,6 +30,21 @@ function requireRunContext(
 ): CreativeWorkerRunContext {
   if (!runContext) throw new CreativeWorkerError('CREATIVE_WORK_CONTEXT_MISSING')
   return runContext.context
+}
+
+/**
+ * Research visibility is presentation only. A listener failure must never
+ * change the research outcome the run context already recorded.
+ */
+async function emitResearchEvent(
+  context: CreativeWorkerRunContext,
+  event: Extract<
+    CreativeWorkTraceEvent,
+    { kind: 'research_started' | 'research_completed' }
+  >,
+): Promise<void> {
+  if (!context.onEvent) return
+  await context.onEvent(event)
 }
 
 function createReadSkillTool(): Tool<CreativeWorkerRunContext> {
@@ -95,6 +111,12 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
 
       research.usedCalls += 1
       context.counters.webSearchCalls += 1
+      const researchId = `research-${String(research.usedCalls)}`
+      await emitResearchEvent(context, {
+        kind: 'research_started',
+        researchId,
+        query: request.query,
+      })
       try {
         const response = await context.webSearch({
           request,
@@ -105,6 +127,14 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
           state: research,
           request,
           response,
+        })
+        await emitResearchEvent(context, {
+          kind: 'research_completed',
+          researchId,
+          query: request.query,
+          status: attempt.status,
+          sourceCount: response.sources.length,
+          imageCount: response.images.length,
         })
         return {
           status: attempt.status,
@@ -128,6 +158,14 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
           state: research,
           request,
           status,
+        })
+        await emitResearchEvent(context, {
+          kind: 'research_completed',
+          researchId,
+          query: request.query,
+          status: attempt.status,
+          sourceCount: 0,
+          imageCount: 0,
         })
         const evidence = projectCreativeWorkerResearchEvidence({
           locale: context.locale,

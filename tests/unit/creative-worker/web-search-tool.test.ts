@@ -5,13 +5,17 @@ import {
   defaultCreativeWorkerBudgets,
   type CreativeWorkerRunContext,
 } from '@/lib/creative-worker/types'
+import type { CreativeWorkTraceEvent } from '@/lib/creative-worker/trace-contract'
+import { WebSearchError } from '@/lib/web-search'
 
 function runContext(input: {
   readonly maxCalls: number
   readonly search?: CreativeWorkerRunContext['webSearch']
+  readonly onEvent?: CreativeWorkerRunContext['onEvent']
 }): CreativeWorkerRunContext {
   return {
     locale: 'zh',
+    ...(input.onEvent ? { onEvent: input.onEvent } : {}),
     budgets: {
       ...defaultCreativeWorkerBudgets,
       maxWebSearchCalls: input.maxCalls,
@@ -118,6 +122,65 @@ describe('Creative Direction Worker web_search tool', () => {
   it('does not create the search tool for output kinds whose registry declaration is empty', () => {
     expect(createCreativeWorkerTools({ workerTools: [] }).map((tool) => tool.name)).toEqual([
       'read_skill',
+    ])
+  })
+
+  it('emits research visibility events for both a completed and a failed search', async () => {
+    const events: CreativeWorkTraceEvent[] = []
+    const context = runContext({
+      maxCalls: 2,
+      onEvent: (event) => {
+        if (
+          event.kind === 'research_started'
+          || event.kind === 'research_completed'
+        ) events.push(event)
+      },
+      search: async ({ request }) => {
+        if (request.query === 'failing brief') {
+          throw new WebSearchError('WEB_SEARCH_UNAVAILABLE', { provider: 'openai' })
+        }
+        return {
+          provider: 'openai',
+          query: request.query,
+          report: 'Report.',
+          queries: ['hosted query'],
+          sources: [{ title: 'Reference', url: 'https://example.com/a' }],
+          images: [{
+            imageUrl: 'https://example.com/a.jpg',
+            thumbnailUrl: null,
+            sourceUrl: 'https://example.com/a',
+            caption: null,
+          }],
+        }
+      },
+    })
+    const tool = createCreativeWorkerTools({ workerTools: ['web_search'] })
+      .find((candidate) => candidate.name === 'web_search')
+    if (!tool || tool.type !== 'function') throw new Error('WEB_SEARCH_TOOL_MISSING')
+    const runner = new RunContext(context)
+
+    await tool.invoke(runner, JSON.stringify({ query: 'succeeding brief' }))
+    await tool.invoke(runner, JSON.stringify({ query: 'failing brief' }))
+
+    expect(events).toEqual([
+      { kind: 'research_started', researchId: 'research-1', query: 'succeeding brief' },
+      {
+        kind: 'research_completed',
+        researchId: 'research-1',
+        query: 'succeeding brief',
+        status: 'completed',
+        sourceCount: 1,
+        imageCount: 1,
+      },
+      { kind: 'research_started', researchId: 'research-2', query: 'failing brief' },
+      {
+        kind: 'research_completed',
+        researchId: 'research-2',
+        query: 'failing brief',
+        status: 'unavailable',
+        sourceCount: 0,
+        imageCount: 0,
+      },
     ])
   })
 })
