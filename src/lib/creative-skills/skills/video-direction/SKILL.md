@@ -2,7 +2,7 @@
 
 ## 作用
 
-把已确认的剧情、镜头意图、角色/场景/道具参考和声音要求转化为可直接交给视频生成模型的完整设计。重点是引用明确、时间可执行、动作有入口与落点、片段内部连续、独立片段接缝可信，并正确利用模型的原生同步声音能力。
+把已确认的剧情、镜头意图、角色/场景/道具参考和声音要求转化为可直接交给视频生成模型的完整设计。重点是引用明确、时间可执行、动作有入口与落点、机位构图与视线明确、剪辑点只向前推进、片段内部连续、独立片段接缝可信，并正确利用模型的原生同步声音能力。
 
 ## Skill 读取组合
 
@@ -24,25 +24,28 @@
 - 每张图只承担清楚的主要职责。只传当前片段实际使用的素材，并遵守 `productionContext.video` 给出的参考数量上限；不得自行截断、替换或重排用户锁定的引用。
 - 声音参考不能单独存在：任何引用了 `@AudioN` 的 Segment 必须同时至少引用一张图片。需要画外人声但当前段没有可用图片参考时，改为引用该角色或所在空间的图片，或把这句台词放到有图片参考的相邻 Shot。
 - 声音参考与首帧/末帧定格用途的图片参考互斥。同一个 Segment 不能既用图片锁定首尾画面又引用绑定音色；两者都需要时，拆成相邻的两个独立 Segment。
-- 要求模型保持已批准的人物身份、服装、轮廓、场景结构和道具设计，但不要让参考图中的偶然姿势、光线、噪点或构图覆盖当前视频要求。
+- 要求模型保持已批准的人物身份、服装、轮廓、场景结构和道具设计。资产参考图只提供身份，不提供机位、构图、主体位置、姿态、朝向与视线：角色资产板里的正面居中站姿与直视镜头是资产板固定版式的产物，不是本段的画面要求。每个镜头都要正向写明本段实际的机位、落位、朝向与视线，不让参考图的偶然姿势、光线、噪点或构图代替这些判断。
 - 手机消息、屏幕卡片或必须在视频内出现的关键 UI 可以作为图片参考，要求模型在世界内呈现；只有用户明确要求后期图层时才设计成覆盖层。
 
 ## 最终视频提示词
 
 - 使用与用户内容和对白一致的语言。
-- 先在内部完成导演判断，再把当前生成段实际需要的全部专业知识落实到唯一一份最终视频提示词。镜头目的、入口与出口状态、表演、动作、景别、运镜、连续性、逐字对白、同步声音和适用转场都不是平行过程输出；只要适用于当前片段，就必须在最终提示词中成为模型可执行的画面或声音指令。
+- 先在内部完成导演判断，再把当前生成段实际需要的全部专业知识落实到唯一一份最终视频提示词。镜头目的、入口与出口状态、表演、动作、景别、机位、构图、视线、运镜、剪辑点位置、连续性、逐字对白、同步声音和适用转场都不是平行过程输出；只要适用于当前片段，就必须在最终提示词中成为模型可执行的画面或声音指令。
 - 开头简洁说明视频总时长、画幅、题材和总体视觉风格，然后按时间顺序写镜头；最后只附与当前视频直接相关的连续性和质量要求。
-- 每个镜头以明确时间段组织，依次给出景别、一种主要运镜、使用的图片引用、可见地点、人物或道具、动作与表演、逐字对白和同步声音。逐字对白统一写成 `{逐字台词}`，短同步声音统一写成 `<声音描述>`，不要只用自然语言含糊混在一起。
+- 每个镜头以明确时间段组织，依次给出景别、机位角度与主体落位、一种主要运镜、人物视线落点、使用的图片引用、可见地点、人物或道具、动作与表演、逐字对白和同步声音。逐字对白统一写成 `{逐字台词}`，短同步声音统一写成 `<声音描述>`，不要只用自然语言含糊混在一起。
 - 提示词必须描述模型需要生成的完整画面与声音，不解释制作流程、系统规则、测试原因、内部数据结构或项目状态。
 - 保持充分但简洁：只带入当前镜头相关事实，不复制完整项目档案、全部规范或无关禁词。
 - 输出是单一全画幅连续视频，不生成拼贴、网格、分屏、联系人表、字幕、标题或文字覆盖，除非用户明确要求且模型能力支持。
 
-## 场面调度与首尾画面
+## 场面调度、构图与首尾画面
 
-- 站位影响动作可读性、人物关系、构图或连续性时，在最终提示词中写清首个可见布局和镜头结束落点。组合最少且充分的稳定实物锚点、画面区域或前中后景、身体朝向以及与道具或其他人物的关系；使用“海图桌左端、画面左三分之一”这类自然描述，不使用像素坐标。
+- 有人物出镜的镜头默认写清三件事：主体在画幅中的落位（三分线区域或前中后景层次）、身体朝向、视线落点。它们与 `{逐字台词}`、`<声音描述>` 同级，是每个镜头的必写项，不是只在“影响构图时”才补的可选项——提示词里没有构图和视线指令，模型就会回落到参考图的正面居中直视。
+- 站位还影响动作可读性、人物关系或跨镜连续性时，进一步写清首个可见布局和镜头结束落点。组合最少且充分的稳定实物锚点、画面区域或前中后景、身体朝向以及与道具或其他人物的关系；使用“海图桌左端、画面左三分之一”这类自然描述，不使用像素坐标。
+- 相邻镜头不复用同一构图。居中构图必须有叙事动机，例如正式感、对称仪式、审讯压迫或单点凝视；没有动机时不得连续居中，让主体落在三分线一侧，并把负空间留给它正在注视或即将进入的方向。
+- **视线不与镜头交汇**：视线落在场景内的具体对象上，写成正向画面事实，例如“看向屏幕中央的圆形回波”“看向走廊尽头的门缝”。除口播、vlog、独白或剧情明确打破第四面墙外，每份含人物的最终提示词都必须明确写入：`人物视线落在场景内明确对象上，不与镜头交汇。` 不能把“没有主动要求看镜头”当作已经禁止。
 - 人物改变位置时，把起点、移动路径和落点写成连续可见动作。人物已经到达后，后续相关镜头直接从结果状态开始，并沿用同一个场景锚点、区域、朝向或道具关系。
 - 多人物镜头只在叙事需要时说明彼此距离、前后关系和所处场景锚点；动作方向或对视关系依赖空间轴线时，保持清楚的银幕方向。
-- 空镜、孤立道具特写和空间关系已经明确的细节镜头不必机械补人物站位，但仍要写清第一帧实际由什么主体、景别和空间层次构成。
+- 空镜、孤立道具特写和空间关系已经明确的细节镜头不必机械补人物站位，但仍要写清第一帧实际由什么主体、景别、机位和空间层次构成。
 - 把这些信息写成模型应当生成的正向画面事实，不把连续性改写成冗长的防御性否定句。
 
 ## 镜头切换与条件式转场
@@ -64,7 +67,9 @@
 - 根据时长安排少量、有先后顺序的动作节拍，每个动作都有可见落点。通常一段短镜头只承载一到三个核心动作。
 - 不用一个过短动作填满长镜头，否则模型容易重复表演；也不在短时长内塞入无法完成的复杂动作链。
 - 写清镜头开始时的可见状态和结束时达到的状态。人物已经站定、拿到道具、坐下、转身或到达后，下一镜头从结果状态开始，不无意重演。
-- 剧情依赖朝向或视线时，写成可见事实，例如“背对镜头面向壁画”“侧身看向走廊尽头”“抬头看向海面巨物”，不只写“观察”或“看见”。
+- 相邻镜头沿同一时间轴严格递进：后一镜头第一帧呈现的时刻必须晚于前一镜头最后一帧。同一个动作节拍不得换景别再呈现一次，改变角度、加一个特写或换一个景别名称都不构成新的节拍。
+- 切点按边界类型选择。同一份提示词内部的 Shot 边界，强动作优先切在动作进行中：前镜头承载节拍前半，后镜头从节拍后半进入，运动方向与速度跨切口延续。独立生成片段之间的切点必须落在节拍的完成落点上：前段以完成状态收尾，后段从下一个节拍开始，不从未完成的中途接续——两次独立生成之间没有帧级接力，中途接续只会得到错位跳帧。
+- 朝向和视线始终写成可见事实，例如“背对镜头面向壁画”“侧身看向走廊尽头”“抬头看向海面巨物”，不只写“观察”或“看见”。
 - 多人物高风险镜头可以简洁要求每个角色只出现一个实例；不要堆叠“只发生一次、不得返回、不得再次经过”等防御句，优先用清楚动作节拍消除歧义。
 
 ## 连续性
@@ -73,7 +78,7 @@
 - 连续性写成画面和声音事实，不使用剪辑元语言。
 - 核心道具、祭坛、轿子、车辆或其他重要场景物在后续仍需存在时明确写出，不无理由新增参考图没有的新物体或复制核心结构。
 - 同一生成片段中的镜头共享必要空间与动作连续性；不同独立生成片段保持状态相容，但不假装是同一次无缝拍摄。
-- 每个片段使用准确的入口状态，并在结束处形成后续可继承的出口状态。
+- 每个片段使用准确的入口状态，并在结束处形成后续可继承的出口状态。一份结果包含两个以上片段时，把它们写成成对的明确句子：非首段以一句“入口状态：……”开始，承接上一段的出口状态并说明动作节拍已经推进到哪里；非末段以一句“出口状态：……”结束，写清最后一帧的动作节拍、人物落位与朝向、道具状态和持续声音。这两句本身就是模型要生成的画面事实，不是制作流程说明；后续只重做其中一段时，它们是唯一能被准确继承的接力点。单个独立片段不需要机械补这两句。
 
 ## 节奏、空镜和情绪释放
 
@@ -95,7 +100,8 @@
 - 较短分段的正当理由：时空或状态切换、动作需要独立落点、内容真实长度更短，或者准确总时长的余量组合。
 - 超过模型单次时长时拆成多个各自完整的视频片段。每段承担明确的局部剧情与情绪任务，不把一个未完成动作切到两次独立生成。
 - 输出前按最终顺序逐对检查所有相邻独立片段。前段末镜头与后段首镜头必须使用真实可见的不同景别；只改变侧面、背面或轻微机位角度不能代替景别变化，不能用不同景别名称包装近似的主体大小和构图。
-- 同地点、同人物的接缝还应避免重复近似的主背景构图。根据叙事选择明显远近变化、有信息价值的道具或动作特写、环境空镜或清楚改变主体与空间比例的机位；人物再次成为可识别的画面主体时，用相同稳定场景锚点继承其站位。
+- 景别变化是必要条件，不是充分条件。后段首镜头必须同时在时间上推进：不得复现前段已完成的动作节拍，也不得重看前段已经展示过的状态瞬间。为了制造景别差异而把同一个节拍重新取景，属于时间回退，必须改为推进到下一个节拍。
+- 同地点、同人物的接缝还应避免重复近似的主背景构图。根据叙事选择明显远近变化、有信息价值的道具或动作特写、环境空镜或清楚改变主体与空间比例的机位；插入的道具或动作特写必须承载后段的新节拍，不能是前段落点的第二次呈现。人物再次成为可识别的画面主体时，用相同稳定场景锚点继承其站位。
 - 不用无动机黑帧、凭空出现的墙面或专门遮满画幅的物体掩盖接缝；若剧情本身提供合理的黑暗、光线、反射或视觉母题，可以按上面的条件式规则设计转场。
 - 相邻片段保持人物身份、服装、道具状态、运动强度、环境色调和声音氛围相容，但允许它们作为独立镜头自然切换。
 - 需要一个完整文件时，为片段保留清楚顺序、真实时长和可组合的音画边界；只有调用方真实提供了视频组合能力时才能继续合成。没有该能力时必须明确告诉用户，生成片段本身不能虚构已经完成合成。
@@ -126,31 +132,41 @@
 
 ### 示例一：同一场景，不使用创意转场
 
-> 15 秒，16:9，写实悬疑电影。保持图片1中女工程师的脸、短发、深蓝防水外套和疲惫但克制的气质；地点始终是图片2中的海岸声呐控制室，冷青色仪器光与窗外暴雨保持一致。0–4 秒，控制室全景，摄影机缓慢向控制台推进，女工程师背对镜头检查连续跳动的声呐波形，窗玻璃被雨水冲刷，<暴雨敲窗、设备低频嗡鸣>。4–10 秒，中近景从她右侧稳定跟进，她听见异常回波后停住手，抬眼望向屏幕中央的巨大圆形信号，呼吸变浅，用低沉、清晰、略带沙哑的固有声线说：{它不是鲸。它在回答我们。} <短促声呐脉冲，随后更深的回声>。10–15 秒，先给屏幕上不断扩大的圆形回波特写，再回到她的面部近景；红色警示灯亮起，她没有后退，只缓慢握紧桌沿，最后一秒看向窗外漆黑海面。动作只发生一次，表演克制真实，口型与逐字台词同步，仪器、人物服装和暴雨方向全程连续，不生成字幕、标题或额外人物。
+> 15 秒，16:9，写实悬疑电影。保持图片1中女工程师的脸、短发、深蓝防水外套和疲惫但克制的气质；地点始终是图片2中的海岸声呐控制室，冷青色仪器光与窗外暴雨保持一致。0–4 秒，控制室全景，机位在她左后方过肩，她位于画面右三分之一、控制台后方中景层，背对镜头检查连续跳动的声呐波形，负空间留给左侧被雨水冲刷的窗玻璃；摄影机缓慢向控制台推进，<暴雨敲窗、设备低频嗡鸣>。4–10 秒，中近景四分之三侧从她右侧稳定跟进，她仍在画面右三分之一，身体朝向左前方的屏幕；她听见异常回波后停住手，抬眼望向屏幕中央的巨大圆形信号，呼吸变浅，用低沉、清晰、略带沙哑的固有声线说：{它不是鲸。它在回答我们。} <短促声呐脉冲，随后更深的回声>。10–15 秒，先给屏幕上不断扩大的圆形回波特写，圆形回波占据画面中央、她的肩线虚化在右侧前景；再切到她的面部近景，机位仍在右侧四分之三侧，红色警示灯亮起，她没有后退，只缓慢握紧桌沿，最后一秒把视线移到窗外漆黑海面。动作只发生一次，每个节拍只呈现一次，表演克制真实，口型与逐字台词同步，仪器、人物服装和暴雨方向全程连续，不生成字幕、标题或额外人物。人物视线落在场景内明确对象上，不与镜头交汇。
 
 > 镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
 
 ### 示例二：有动机的黑暗与隐喻转场
 
-> 15 秒，2.39:1，诗意科幻电影，低饱和深蓝与银灰色，潮湿空气、真实体积光。图片1中的女性勘探员保持同一脸部、银色防护服和手持圆筒灯。0–6 秒，位于图片2中的废弃海底站走廊，中景稳定跟随她向前，她的灯束扫过锈蚀墙面和漂浮水汽，她停在无光舱门前侧身聆听，<靴底踏水、远处金属低鸣、克制呼吸>。6–8 秒，她推开舱门并走入完全无照明的空间，手持灯在门框后真实消失，走廊随场景内光源消失而抵达接近全黑，金属低鸣仍持续；画面完全变暗后清楚切换，不使用淡出。8–12 秒，新镜头第一帧已经是图片3中的暴风海面，只是处于接近全黑的真实低照度；灯塔光束横向扫过并照亮原本已经存在的海面与灯塔。前镜手持灯束与后镜灯塔光束方向和速度一致，形成清楚的视觉隐喻，但两个地点从不同时可见、不透明混合，<金属低鸣自然转为海风与低沉浪声>。12–15 秒，远景缓慢拉远，灯塔在巨浪前显得渺小，光束再次扫过镜头并照出云层中的巨大静止轮廓，<一记遥远低频轰鸣>。只在 6–8 秒到 8–12 秒使用这一处转场；人物只出现在海底站，灯塔镜头不复制人物，声音、光束方向和情绪递进清楚，不生成字幕或额外物体。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+> 15 秒，2.39:1，诗意科幻电影，低饱和深蓝与银灰色，潮湿空气、真实体积光。图片1中的女性勘探员保持同一脸部、银色防护服和手持圆筒灯。0–6 秒，位于图片2中的废弃海底站走廊，中景稳定跟随她向前，机位在她右后方略低，她位于画面左三分之一、走廊中景层，身体朝向走廊深处，负空间留给右前方尚未照亮的墙面；她的灯束扫过锈蚀墙面和漂浮水汽，她停在无光舱门前侧身聆听，视线落在舱门缝隙，<靴底踏水、远处金属低鸣、克制呼吸>。6–8 秒，她推开舱门并走入完全无照明的空间，手持灯在门框后真实消失，走廊随场景内光源消失而抵达接近全黑，金属低鸣仍持续；画面完全变暗后清楚切换，不使用淡出。8–12 秒，新镜头第一帧已经是图片3中的暴风海面，只是处于接近全黑的真实低照度；灯塔光束横向扫过并照亮原本已经存在的海面与灯塔。前镜手持灯束与后镜灯塔光束方向和速度一致，形成清楚的视觉隐喻，但两个地点从不同时可见、不透明混合，<金属低鸣自然转为海风与低沉浪声>。12–15 秒，远景缓慢拉远，灯塔在巨浪前显得渺小，光束再次扫过镜头并照出云层中的巨大静止轮廓，<一记遥远低频轰鸣>。只在 6–8 秒到 8–12 秒使用这一处转场；人物只出现在海底站，灯塔镜头不复制人物，声音、光束方向和情绪递进清楚，不生成字幕或额外物体。人物视线落在场景内明确对象上，不与镜头交汇。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
 
 ### 示例三：两个独立片段的站位与接缝
 
-下面两段引文分别是可直接生成的完整提示词。前段以中远景结束，后段以极近特写开始；人物重新成为可识别的画面主体时，仍由同一海图桌锚点确定站位。
+下面两段引文分别是可直接生成的完整提示词。前段以中远景结束，后段以极近特写开始；人物重新成为可识别的画面主体时，仍由同一海图桌锚点确定站位。后段首镜头不是前段落点的第二次呈现，而是下一个节拍——指针自行移动；成对的“出口状态”“入口状态”是两段之间唯一的接力点。
 
-> 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明，木材、黄铜与湿玻璃质感真实。保持图片1中守塔人的脸、灰白短须、深绿色粗呢外套和低沉稳重的固有声线；地点始终是图片2中的弧形风暴窗、海图桌和黄铜无线电。0–7 秒，中近景，守塔人站在海图桌左端、画面左三分之一，身体朝向风暴窗，右手按住位于桌面中央的无线电旋钮；他听见异常信号后侧耳停住，<海风撞击玻璃、无线电静电、木结构轻响>。7–15 秒，切到中远景侧面，海图桌横贯画面下方，守塔人仍在桌子左端，黄铜无线电位于中央，风暴窗占据背景；他用低沉稳重的固有声线说：{这不是求救信号。它在报我们的坐标。} 随后抬眼看向窗外，右手仍停在旋钮上，最后一帧由左侧人物、中央无线电和背景风暴窗形成清楚三层关系，<逐字台词与口型同步、静电突然中断、远处一声低沉汽笛>。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+> 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明，木材、黄铜与湿玻璃质感真实。保持图片1中守塔人的脸、灰白短须、深绿色粗呢外套和低沉稳重的固有声线；地点始终是图片2中的弧形风暴窗、海图桌和黄铜无线电。0–7 秒，中近景，守塔人站在海图桌左端、画面左三分之一，身体朝向风暴窗，右手按住位于桌面中央的无线电旋钮；他听见异常信号后侧耳停住，<海风撞击玻璃、无线电静电、木结构轻响>。7–15 秒，切到中远景侧面，海图桌横贯画面下方，守塔人仍在桌子左端，黄铜无线电位于中央，风暴窗占据背景；他用低沉稳重的固有声线说：{这不是求救信号。它在报我们的坐标。} 随后抬眼看向窗外，右手仍停在旋钮上，最后一帧由左侧人物、中央无线电和背景风暴窗形成清楚三层关系，<逐字台词与口型同步、静电突然中断、远处一声低沉汽笛>。出口状态：台词已经说完，守塔人站在海图桌左端、画面左三分之一，身体朝向风暴窗，视线停在窗外海面，右手仍停在桌面中央的无线电旋钮上，静电已中断，风声持续。人物视线落在场景内明确对象上，不与镜头交汇。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
 
-> 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明；保持图片1中守塔人的身份和服装、图片2中的弧形风暴窗、海图桌与黄铜无线电。入口状态：守塔人位于海图桌左端，右手停在桌面中央的无线电旋钮上。0–4 秒，极近特写，黄铜频率指针、潮湿旋钮和戴手套的右手充满画面，海图桌木纹形成浅景深背景；指针自行越过刻度并停在红线处，<细密静电、旋钮内一声金属轻响>。4–10 秒，切到中近景，守塔人在海图桌左端、画面左三分之一重新成为画面主体，身体朝向风暴窗，右手从旋钮缓慢移到桌沿；中央无线电和背景风暴窗保持同一空间关系，冷蓝闪电照亮他的侧脸。10–15 秒，面部近景缓慢推近，他看向窗外海面，湿玻璃反射出正在接近的白色光束，<风声压低、远处汽笛再次响起>；他保持沉默，以警觉眼神落点。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+> 15 秒，2.39:1，写实海上惊悚电影，暴风夜的老灯塔值守室，暖色钨丝灯与冷蓝闪电交替照明；保持图片1中守塔人的身份和服装、图片2中的弧形风暴窗、海图桌与黄铜无线电。入口状态：承接上一段出口，台词已经说完，守塔人位于海图桌左端、画面左三分之一，右手停在桌面中央的无线电旋钮上，视线在窗外海面；本段从下一个节拍开始——频率指针自行移动，不重演上一段的说话和转头。0–4 秒，极近特写，机位与桌面近乎平视，黄铜频率指针、潮湿旋钮和戴手套的右手充满画面，指针位于画面左侧、旋钮在右下前景，海图桌木纹形成浅景深背景；指针自行越过刻度并停在红线处，<细密静电、旋钮内一声金属轻响>。4–10 秒，切到中近景四分之三侧，守塔人在海图桌左端、画面左三分之一重新成为画面主体，身体朝向风暴窗，视线落在窗外逼近的海面，右手从旋钮缓慢移到桌沿；中央无线电和背景风暴窗保持同一空间关系，冷蓝闪电照亮他的侧脸。10–15 秒，面部近景缓慢推近，他仍在画面左三分之一、面向右前方的窗，湿玻璃反射出正在接近的白色光束，<风声压低、远处汽笛再次响起>；他保持沉默，视线落在那道反射光束上。人物视线落在场景内明确对象上，不与镜头交汇。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+
+### 示例四：动作节拍跨切点，以及两个常见反例
+
+同一份提示词内部的 Shot 边界可以切在动作进行中。下面这份提示词把一次拍桌拆成三个镜头，节拍只前进、不回看。
+
+> 10 秒，9:16，写实职场短剧，会议室冷白顶光与百叶窗条纹阴影。保持图片1中中年男主管的脸、灰色衬衫和深色领带；地点是图片2中的长桌会议室。0–3 秒，中景四分之三侧，他位于画面右三分之一、长桌后方中景层，身体朝向左侧的下属，视线落在下属手里的报表上；右手已经握拳抬到肩高并开始下压，<衬衫布料摩擦、空调低鸣>。3–6 秒，切到桌面高度的低角度特写，机位在拳头正前方略低，握拳占据画面左侧，笔记本与水杯在右侧前景；同一次下压继续进行，拳侧砸在桌面上，水杯跳起、报表边角掀动，<一记闷响、瓷杯磕碰、纸张震动>。6–10 秒，切到过肩中近景，机位在下属右后方，主管在画面左三分之一，拳头已经松开、掌面压在桌面上，他抬眼看向下属的眼睛，用压低克制的固有声线说：{这个数字，你自己信吗。} <空调低鸣持续、椅子轻响>。三个镜头是同一次动作的连续节拍，没有任何节拍被呈现两次。人物视线落在场景内明确对象上，不与镜头交汇。镜头之间禁止叠化、交叉溶解、淡入和淡出；前后画面不得透明重叠。
+
+反例一，时间回退。前一镜头「拳侧砸在桌面上，水杯跳起」→ 后一镜头「桌面上手掌的特写，掌面压在木纹上」：身份、服装、道具和站位全部连续，景别也确实从中景换成了特写，但这一下被观众看了两次，观感就是卡。改法是让后一镜头承载下一个节拍——掌面已经压住桌面，人物抬眼开口。
+
+反例二，无动机居中直视。「中景，男主管站在会议室中间，看向镜头说：{这个数字，你自己信吗。}」：主体居中没有叙事动机，视线又与镜头交汇，这是角色资产板正面站姿加上提示词缺失构图指令的共同结果。改法是给出落位、朝向和世内视线目标——「过肩中近景，他在画面左三分之一，身体朝向右前方的下属，视线落在下属的眼睛上，说：{……}」。
 
 ### 英文内容示例一：同一场景，不使用创意转场
 
-> 15 seconds, 16:9, grounded suspense cinema. Preserve the engineer's face, short hair, dark-blue rain jacket, and restrained presence from image 1; remain in the cold-cyan coastal sonar room from image 2. 0–4s, wide view slowly pushing toward the console: she stands back to camera at the controls as rain crosses the window, <rain on glass, equipment hum>. 4–10s, stable medium close from her right: an anomalous echo stops her hand; she looks to the circular signal and says in her low, slightly rough voice: {It isn't a whale. It's answering us.} <short sonar pulse, deeper return>. 10–15s, insert of the expanding echo, then face close-up; red warning light activates as she grips the desk and looks toward the dark sea. Keep action single, performance restrained, the exact line lip-synced, and wardrobe, instruments, and rain continuous. No captions or additional people. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
+> 15 seconds, 16:9, grounded suspense cinema. Preserve the engineer's face, short hair, dark-blue rain jacket, and restrained presence from image 1; remain in the cold-cyan coastal sonar room from image 2. 0–4s, wide view, camera over her left shoulder: she stands in the right third behind the console, back to camera, negative space held for the rain-washed window at left, camera slowly pushing toward the console, <rain on glass, equipment hum>. 4–10s, stable three-quarter medium close from her right, she stays in the right third facing the screen at her left front: an anomalous echo stops her hand; her gaze goes to the circular signal and she says in her low, slightly rough voice: {It isn't a whale. It's answering us.} <short sonar pulse, deeper return>. 10–15s, insert of the expanding echo centered in frame with her shoulder blurred in the right foreground, then face close-up from the same right three-quarter angle; red warning light activates as she grips the desk and moves her gaze to the dark sea. Keep action single with every beat shown only once, performance restrained, the exact line lip-synced, and wardrobe, instruments, and rain continuous. No captions or additional people. Character gaze stays on a specific in-scene object and never meets the lens. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
 
 ### 英文内容示例二：两个独立片段的站位与接缝
 
-> 15 seconds, 2.39:1, grounded maritime suspense in the storm-lit lighthouse room from image 2. Preserve the keeper and wardrobe from image 1. 0–7s, medium close: he stands at the chart table's left end in the left third, body toward the storm window, right hand on the centered brass radio; an anomalous signal makes him listen, <wind on glass, static, timber strain>. 7–15s, cut to medium-wide: table across the lower frame, keeper at the same left end, radio center, window behind. In his low voice: {This is not a distress signal. It is broadcasting our coordinates.} He looks to the window, hand still on the dial. Land on the three-layer arrangement, <lip-synced line, static stopping, distant foghorn>. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
+> 15 seconds, 2.39:1, grounded maritime suspense in the storm-lit lighthouse room from image 2. Preserve the keeper and wardrobe from image 1. 0–7s, medium close: he stands at the chart table's left end in the left third, body toward the storm window, right hand on the centered brass radio; an anomalous signal makes him listen, <wind on glass, static, timber strain>. 7–15s, cut to medium-wide: table across the lower frame, keeper at the same left end, radio center, window behind. In his low voice: {This is not a distress signal. It is broadcasting our coordinates.} He looks to the window, hand still on the dial. Land on the three-layer arrangement, <lip-synced line, static stopping, distant foghorn>. Exit state: the line is finished, the keeper stands at the table's left end in the left third facing the storm window, gaze on the sea outside, right hand still on the centered dial, static already stopped, wind continuing. Character gaze stays on a specific in-scene object and never meets the lens. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
 
-> 15 seconds, 2.39:1, the same grounded storm-lit lighthouse room; preserve the keeper from image 1 and the window, chart table, and radio from image 2. Entry: keeper at the table's left end, right hand on the centered radio dial. 0–4s, extreme close-up: frequency needle, damp dial, and gloved hand fill frame; the needle stops at a red mark, <fine static, metallic click>. 4–10s, cut to medium close: he becomes the identifiable subject at the same table end in the left third, body toward the window, hand moving from dial to table edge; lightning reveals his profile. 10–15s, push into face close-up as wet glass reflects an approaching white beam, <lower wind, distant foghorn>. He stays silent and alert. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
+> 15 seconds, 2.39:1, the same grounded storm-lit lighthouse room; preserve the keeper from image 1 and the window, chart table, and radio from image 2. Entry state: continuing the previous exit, the line is already finished; keeper at the table's left end in the left third, right hand on the centered radio dial, gaze on the sea outside. This segment starts on the next beat — the needle moves by itself — and never replays the previous speech or head turn. 0–4s, extreme close-up near table height: frequency needle at frame left, damp dial and gloved hand in the right foreground, table grain as shallow-focus background; the needle crosses the scale and stops at a red mark, <fine static, metallic click>. 4–10s, cut to three-quarter medium close: he becomes the identifiable subject at the same table end in the left third, body toward the window, gaze on the closing sea, hand moving from dial to table edge; lightning reveals his profile. 10–15s, push into face close-up, still left third and facing the window at his right front, as wet glass reflects an approaching white beam, <lower wind, distant foghorn>. He stays silent, gaze on that reflected beam. Character gaze stays on a specific in-scene object and never meets the lens. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
 
 ## 最终片段检查
 
@@ -163,6 +179,10 @@
 - 对白是否逐字、说话人明确；声音是否按需要同步、先行或延续，且没有重复独立音频层？
 - 每个有绑定音色的说话角色是否引用了正确的 `@AudioN`，且试听文字没有进入 `{逐字台词}`？
 - 是否按顺序逐对检查全部相邻独立片段，并让前段末镜头与后段首镜头形成真实可见的不同景别，而非只换角度或重命名近似构图？
+- 相邻镜头和相邻片段的时间是否严格递进？是否有任何动作节拍被换景别或加特写再呈现一次？段内切点是否切在动作进行中，跨段切点是否落在节拍的完成落点上？
+- 一份结果包含多个片段时，非首段是否写了承接上一段的“入口状态”，非末段是否写了“出口状态”？
+- 每个有人物的镜头是否都给出机位角度、主体落位和视线落点？是否出现无叙事动机的连续居中？
+- 每份含人物的提示词是否写入了“人物视线落在场景内明确对象上，不与镜头交汇。”（口播、vlog、独白或明确打破第四面墙的题材除外）？
 - 需要站位的首尾画面是否使用稳定实物锚点、画面区域或纵深、身体朝向和道具关系；位置变化是否有可见起点、路径和落点？
 - 是否只包含当前视频所需信息，没有无关素材和内部说明？
 
