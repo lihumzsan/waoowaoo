@@ -6,6 +6,7 @@ export type AsyncExternalIdProvider =
   | 'GEMINI'
   | 'GOOGLE'
   | 'OPENROUTER'
+  | 'MUREKA'
 
 export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'VOICE' | 'BATCH'
 

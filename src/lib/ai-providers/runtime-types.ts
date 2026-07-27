@@ -128,6 +128,8 @@ export type AiProviderMusicExecutionContext = {
     mood?: string
     bpm?: number
     outputFormat?: 'mp3' | 'wav'
+    referenceVideoUrl?: string
+    referenceVideoDurationMs?: number
     [key: string]: unknown
   }
 }

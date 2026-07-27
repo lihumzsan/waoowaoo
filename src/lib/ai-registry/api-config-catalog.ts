@@ -51,6 +51,7 @@ export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
   { id: 'elevenlabs', name: 'ElevenLabs' },
+  { id: 'mureka', name: 'Mureka' },
 ]
 
 const CATALOG_PROVIDER_ORDER = new Map(API_CONFIG_CATALOG_PROVIDERS.map((provider, index) => [provider.id, index]))

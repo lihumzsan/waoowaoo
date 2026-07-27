@@ -47,7 +47,7 @@ type PlatformProviderEnv = {
   baseUrl?: string
 }
 
-const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google'])
+const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google', 'mureka'])
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -77,6 +77,8 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
         return 'PLATFORM_FAL'
       case 'ark':
         return 'PLATFORM_ARK'
+      case 'mureka':
+        return 'PLATFORM_MUREKA'
       case 'openrouter':
         return 'PLATFORM_OPENROUTER'
       default:

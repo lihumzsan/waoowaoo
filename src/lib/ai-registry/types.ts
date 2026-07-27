@@ -273,6 +273,11 @@ export interface MusicCapabilities {
   vocalModeOptions?: string[]
   outputFormatOptions?: string[]
   bpmOptions?: number[]
+  /**
+   * Whether and how many video Resource references this music model accepts as
+   * generation conditioning (video-to-soundtrack). Absent means unsupported.
+   */
+  maxReferenceVideos?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -332,6 +337,7 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
+  'maxReferenceVideos',
   'fieldI18n',
 ])
 
@@ -742,6 +748,17 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.music.bpmOptions',
       message: 'bpmOptions must be a finite number array',
+    })
+  }
+
+  if (
+    raw.maxReferenceVideos !== undefined
+    && (!Number.isInteger(raw.maxReferenceVideos) || (raw.maxReferenceVideos as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.maxReferenceVideos',
+      message: 'maxReferenceVideos must be a positive integer',
     })
   }
 

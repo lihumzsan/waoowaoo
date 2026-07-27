@@ -72,6 +72,9 @@ export type AiMusicExecutionOptions = {
   mood?: string
   bpm?: number
   outputFormat?: 'mp3' | 'wav'
+  /** Video conditioning input; only valid when the selected music model declares `maxReferenceVideos`. */
+  referenceVideoUrl?: string
+  referenceVideoDurationMs?: number
 }
 
 export type AiVoiceExecutionOptions = {
