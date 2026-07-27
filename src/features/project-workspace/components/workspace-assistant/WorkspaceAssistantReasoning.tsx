@@ -130,15 +130,55 @@ export function HiddenWorkspaceAssistantReasoning() {
   return null
 }
 
+// 流式期间 run 尚未完成,不会进入 RunTraceGroup,所以「思考中」状态必须由本组件自己表达:
+// 运行时标题扫光并展开正文,结束后自动折叠成一行,正文用左竖线与助手正文区分。
 export function WorkspaceAssistantReasoningPart({
   text,
   status,
 }: ReasoningMessagePartProps) {
+  const t = useTranslations('assistantAgent')
+  const running = status.type === 'running'
+  const [open, setOpen] = useState(running)
+  const [touched, setTouched] = useState(false)
+  const previousRunning = useRef(running)
+
+  useEffect(() => {
+    if (previousRunning.current === running) return
+    previousRunning.current = running
+    if (!touched) setOpen(running)
+  }, [running, touched])
+
   if (!text.trim()) return null
+
   return (
-    <div className="text-sm leading-6 text-[var(--glass-text-secondary)]">
-      <MarkdownTextPart text={text} status={status} />
-    </div>
+    <section className="text-sm text-[var(--glass-text-tertiary)]">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => {
+          setTouched(true)
+          setOpen((current) => !current)
+        }}
+        className="flex w-full items-center gap-2 py-0.5 text-left"
+      >
+        {running ? (
+          <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+        ) : null}
+        <span className={`text-xs font-medium ${running ? 'assistant-shimmer-text' : ''}`}>
+          {running ? t('reasoning.running') : t('reasoning.completed')}
+        </span>
+        <AppIcon
+          name="chevronDown"
+          className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+      </button>
+      {open ? (
+        <div className="mt-1 border-l border-[var(--glass-stroke-base)] pl-3 leading-6 text-[var(--glass-text-secondary)]">
+          <MarkdownTextPart text={text} status={status} />
+        </div>
+      ) : null}
+    </section>
   )
 }
 
