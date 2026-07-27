@@ -109,6 +109,39 @@ describe('assistant choice offer conformance', () => {
     }).success).toBe(false)
   })
 
+  it('makes per-group custom text impossible outside per_group reply mode', () => {
+    const authored = {
+      mode: 'select_or_text',
+      replyMode: 'whole_card',
+      title: 'Choose a direction',
+      description: 'Choose or describe the current direction.',
+      groups: [{
+        key: 'direction',
+        label: 'Direction',
+        required: true,
+        presentation: 'options',
+        allowCustomText: true,
+        options: [{
+          value: 'folk_horror',
+          label: 'Folk horror',
+          description: null,
+          imageUrl: null,
+          meta: null,
+        }],
+      }],
+      submitLabel: 'Confirm',
+      replyLabel: 'Other direction',
+      replyPlaceholder: 'Describe another direction',
+      replySubmitLabel: 'Send direction',
+    }
+
+    expect(projectAgentChoiceCardAuthoringSchema.safeParse(authored).success).toBe(false)
+    expect(projectAgentChoiceCardAuthoringSchema.safeParse({
+      ...authored,
+      replyMode: 'per_group',
+    }).success).toBe(true)
+  })
+
   it('persists generic card, subject, commitment, run, interruption, and tool identities without choiceType', () => {
     const card = selectCard()
     const commitments = styleCommitments()

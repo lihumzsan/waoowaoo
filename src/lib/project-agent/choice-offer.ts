@@ -14,35 +14,50 @@ const choiceCardOptionSchema = z.object({
   meta: z.string().trim().max(500).nullable().optional(),
 }).strict()
 
-const choiceCardGroupSchema = z.object({
+const choiceCardGroupFields = {
   key: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
   label: z.string().trim().min(1).max(300),
   required: z.boolean(),
   presentation: z.enum(['options', 'aspect_ratio', 'image'])
     .describe('Choose the renderer that best represents this group; image requires imageUrl on every option.'),
-  allowCustomText: z.boolean().optional()
-    .describe('Enable only with replyMode=per_group when the user may replace an offered option with text.'),
   options: z.array(choiceCardOptionSchema).min(1).max(12),
-}).strict().superRefine((group, context) => {
-  const values = new Set<string>()
-  for (const option of group.options) {
-    if (values.has(option.value)) {
-      context.addIssue({
-        code: 'custom',
-        path: ['options'],
-        message: `duplicate option value: ${option.value}`,
-      })
+} as const
+
+function buildChoiceCardGroupSchema(allowCustomText: z.ZodType<boolean | undefined>) {
+  return z.object({
+    ...choiceCardGroupFields,
+    allowCustomText,
+  }).strict().superRefine((group, context) => {
+    const values = new Set<string>()
+    for (const option of group.options) {
+      if (values.has(option.value)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['options'],
+          message: `duplicate option value: ${option.value}`,
+        })
+      }
+      values.add(option.value)
+      if (group.presentation === 'image' && !option.imageUrl) {
+        context.addIssue({
+          code: 'custom',
+          path: ['options'],
+          message: `image presentation requires imageUrl: ${option.value}`,
+        })
+      }
     }
-    values.add(option.value)
-    if (group.presentation === 'image' && !option.imageUrl) {
-      context.addIssue({
-        code: 'custom',
-        path: ['options'],
-        message: `image presentation requires imageUrl: ${option.value}`,
-      })
-    }
-  }
-})
+  })
+}
+
+const choiceCardGroupSchema = buildChoiceCardGroupSchema(
+  z.boolean().optional()
+    .describe('Enable only with replyMode=per_group when the user may replace an offered option with text.'),
+)
+
+const choiceCardGroupWithoutCustomTextSchema = buildChoiceCardGroupSchema(
+  z.literal(false).optional()
+    .describe('Must be false because this reply mode does not collect text per group.'),
+)
 
 const choiceCardContentFields = {
   mode: z.enum(['confirm', 'confirm_or_text', 'select', 'select_or_text'])
@@ -66,7 +81,6 @@ const choiceCardAuthoringBaseFields = {
   mode: choiceCardContentFields.mode,
   title: choiceCardContentFields.title,
   description: choiceCardContentFields.description,
-  groups: choiceCardContentFields.groups,
   submitLabel: choiceCardContentFields.submitLabel,
 } as const
 
@@ -151,6 +165,7 @@ export const projectAgentChoiceCardDefinitionSchema = z.object(choiceCardDefinit
 export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('replyMode', [
   z.object({
     ...choiceCardAuthoringBaseFields,
+    groups: z.array(choiceCardGroupWithoutCustomTextSchema).max(12),
     replyMode: z.literal('none')
       .describe('Use only when this card accepts no free-text answer.'),
     replyLabel: z.null().describe('Must be null when replyMode is none.'),
@@ -159,12 +174,14 @@ export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('reply
   }).strict(),
   z.object({
     ...choiceCardAuthoringBaseFields,
+    groups: z.array(choiceCardGroupWithoutCustomTextSchema).max(12),
     replyMode: z.literal('whole_card')
       .describe('Collect one free-text answer for the whole card.'),
     ...enabledReplyAuthoringFields,
   }).strict(),
   z.object({
     ...choiceCardAuthoringBaseFields,
+    groups: z.array(choiceCardGroupSchema).max(12),
     replyMode: z.literal('per_group')
       .describe('Collect free text only for groups with allowCustomText=true; at least one group must enable it.'),
     ...enabledReplyAuthoringFields,
