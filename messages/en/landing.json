@@ -23,5 +23,11 @@
   },
   "footer": {
     "copyright": "2026 waoowaoo AI. All rights reserved."
+  },
+  "auto": {
+    "headline": "Fully Automated AI",
+    "highlight": "Films, End to End",
+    "sub": "Script, characters, scenes, storyboards, score, voice and editing — all automated, with characters and style kept consistent throughout",
+    "ctaPrimary": "Start One-Click Film"
   }
 }

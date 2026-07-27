@@ -1,0 +1,206 @@
+/* 首页 Hero 展示带动效。
+ *
+ * 性能红线(对应历史修复 708e59ddf「Remove hidden workspace aurora animation」):
+ * 该次事故的根因是「大尺寸 blur() 图层 + 持续动画」被隔离为 canvas 页的 GPU 负载源。
+ * 因此本文件的所有动效只使用 transform / opacity:
+ *   - 环境光用一次性绘制的静态 radial-gradient,不加 filter、不加动画;
+ *   - 持续移动的卡片一律不使用 backdrop-filter(移动的 backdrop 每帧都要重新模糊背景)。
+ * 修改本文件时不得引入上述两类组合。
+ */
+
+/* 轨道:整条容器做一次 translateX,单个合成层 */
+@keyframes home-rail-kf {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.home-rail {
+  animation: home-rail-kf linear infinite;
+}
+
+/* 卡片轻跳:各卡相位、幅度、周期与倾角不同,避免整排同高 */
+@keyframes home-bob-kf {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--home-tilt, 0deg));
+  }
+
+  50% {
+    transform: translateY(var(--home-bob, -12px)) rotate(calc(var(--home-tilt, 0deg) * -1));
+  }
+}
+
+.home-bob {
+  animation: home-bob-kf ease-in-out infinite;
+}
+
+/* 卡内常驻微动效 */
+@keyframes home-dot-kf {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.home-dot {
+  animation: home-dot-kf 2.4s ease-in-out infinite;
+}
+
+@keyframes home-eq-kf {
+  0% {
+    transform: scaleY(0.24);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.home-eq {
+  transform-origin: bottom;
+  animation: home-eq-kf 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes home-wave-kf {
+  0% {
+    transform: scaleY(0.22);
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.home-wave {
+  transform-origin: center;
+  animation: home-wave-kf 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes home-bar-kf {
+  0% {
+    width: 6%;
+  }
+
+  90%,
+  100% {
+    width: 100%;
+  }
+}
+
+.home-bar {
+  animation: home-bar-kf 12s linear infinite;
+}
+
+@keyframes home-spot-kf {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  16%,
+  28% {
+    box-shadow: 0 0 0 1.5px rgba(47, 123, 255, 0.45);
+  }
+
+  40% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.home-spot {
+  animation: home-spot-kf 10s ease-in-out infinite;
+}
+
+@keyframes home-drift-kf {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  50% {
+    transform: translate(4%, -5%);
+  }
+}
+
+.home-drift {
+  animation: home-drift-kf 15s ease-in-out infinite;
+}
+
+/* 品牌标记:沿用系统 brand-loading 的液态范式 */
+.home-mark .logo-shape__art,
+.home-mark .logo-shape__dot {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.home-mark .logo-shape__art {
+  animation: home-mark-bob-kf 3.6s ease-in-out infinite;
+}
+
+.home-mark .logo-shape__dot {
+  animation: home-mark-dot-kf 1.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes home-mark-bob-kf {
+  0%,
+  100% {
+    transform: translateY(1.5px) rotate(-1.4deg);
+  }
+
+  50% {
+    transform: translateY(-3.5px) rotate(1.4deg);
+  }
+}
+
+@keyframes home-mark-dot-kf {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  45% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes home-halo-kf {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+
+  70%,
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.home-halo {
+  animation: home-halo-kf 3.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-rail,
+  .home-bob,
+  .home-dot,
+  .home-eq,
+  .home-wave,
+  .home-bar,
+  .home-spot,
+  .home-drift,
+  .home-halo,
+  .home-mark .logo-shape__art,
+  .home-mark .logo-shape__dot {
+    animation: none;
+  }
+}

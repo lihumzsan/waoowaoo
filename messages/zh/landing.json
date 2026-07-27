@@ -23,5 +23,11 @@
   },
   "footer": {
     "copyright": "2026 waoowaoo AI. All rights reserved."
+  },
+  "auto": {
+    "headline": "AI 全自动生成",
+    "highlight": "整部成片一次交付",
+    "sub": "剧本、角色、场景、分镜、配乐、配音、剪辑全流程自动完成，角色与画风全片保持一致",
+    "ctaPrimary": "开始一键成片"
   }
 }

@@ -2,6 +2,7 @@
 @import "../styles/ui-tokens-glass.css";
 @import "../styles/ui-semantic-glass.css";
 @import "../styles/animations.css";
+@import "../styles/home-showcase.css";
 @import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
