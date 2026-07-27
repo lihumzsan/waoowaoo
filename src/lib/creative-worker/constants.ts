@@ -17,7 +17,11 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
 export const DEFAULT_CREATIVE_WORKER_BUDGETS = {
   maxTurns: 8,
   maxReadCalls: 12,
-  maxWebSearchCalls: 4,
+  // A research gap that still changes the six domains must be answerable by a
+  // second, narrower call, and a candidate set explores several directions from
+  // the same frozen budget. This is a ceiling, not a quota: unused calls cost
+  // nothing, so it is sized for the deepest legitimate run.
+  maxWebSearchCalls: 6,
   maxInputChars: 300_000,
   maxOutputChars: 120_000,
 } as const

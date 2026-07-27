@@ -55,7 +55,7 @@ const creativeDirectionCandidatesSchema = z.array(z.object({
   title: z.string().trim().min(1).max(300),
   summary: z.string().trim().min(1).max(4_000),
   creativeDirection: creativeDirectionSchema,
-}).strict()).min(2).max(12).superRefine((candidates, context) => {
+}).strict()).min(2).max(3).superRefine((candidates, context) => {
   const keys = new Set<string>()
   for (const [index, candidate] of candidates.entries()) {
     if (keys.has(candidate.candidateKey)) {
