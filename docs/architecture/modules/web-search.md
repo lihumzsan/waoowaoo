@@ -20,6 +20,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - **WS-08 — 证据与政策分离。** Worker `Task.result.research` 由运行时根据真实 Tool 结果构造，模型不能自报。Creative Direction `generationOptions.research` 只保存 outer brief、hosted queries、状态、citation title+URL 和预算，不保存研究报告。Direction structured content 只保存 `styleSummary/rawUserStyle` 与六领域正文。
 - **WS-09 — 搜索综合不成为第二创意裁判。** Search Agent 的系统 Prompt 只要求证据优先级、交叉验证、社区用法和不确定性边界，并明确禁止输出项目状态、Creative Direction schema 或无请求的具体故事。Creative Worker 必须区分来源事实、社区用法/争议和制作推导，再把机制翻译为领域所属的默认行为、触发式例外与禁止项。
 - **WS-10 — Citation 与 image 只读结构化输出。** 来源 identity 只从 Responses output 的 `url_citation` annotation 读取并按 HTTP(S) URL 去重；image 证据只从结构化 `image_result` 记录读取并按 image URL 去重，非 HTTP(S) 一律丢弃。不得从 Markdown 链接、报告正文、模型声称的引用或网页内容猜测来源或图片。没有结构化 citation 必须 fail closed；没有 image 是正常完成，不得因此失败。
+- **WS-12 — 网页图片只能经导入 Task 成为素材。** 搜索返回的 image URL 是不可信外部数据，任何 provider 调用都不得直接收到它。要成为可用素材只有一条路径：Primary 调 `import_web_reference_image`，它提交 `creative_resource_web_reference` Task；worker 经 `src/lib/media/outbound-image.ts` 的出站边界（http(s)、拒私网/环回、限重定向、限字节）抓取并落入自有存储，终态由既有 `creative_resource` materializer 写成 Revision。下游一律只认 `revisionId`，不新增第二条参考图协议。Worker 仍然没有该能力。identity 为 image URL 的 `stableArgsHash`，同一张图重复导入收敛到同一 Resource。出处（`origin`/`imageUrl`/`sourceWebsiteUrl`/`caption`）随 payload 冻结进 Revision 的 generation metadata，缺失即契约失败——没有出处的第三方素材不得入库。明显受保护的角色与商业 IP 由 Prompt 要求拒绝；该拒绝是补充，不是防线，出处记录才是可审计的那一层。
 - **WS-11 — 进度与研究可见性只用于呈现。** hosted run 以 streaming 执行，`web_search_call` 的进行中/完成事件与真实 query 可投影为用户可见进度。Worker 每次外层调用另发 `research_started`/`research_completed` trace 事件（brief、状态与来源/图片计数），使“基于真实来源”与“凭记忆断言”在 UI 上可区分——零调用仍是无 warning 的正常完成。两者都不是状态权威：任何完成、失败、证据或预算判定只能来自最终结构化输出与运行时构造的 evidence，消费者不得从进度或 trace 推断结论；listener 失败也不得改变已记录的研究结果。
 
 ## 权威入口
@@ -32,6 +33,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - Primary Operation：`src/lib/operations/domains/web-search/web-search-ops.ts`；能力发现与执行仍由生产 Operation registry 和固定 gateway 负责。
 - Worker 能力声明：`src/lib/creative-worker/output-registry.ts`；外层预算、工具执行与证据投影：`tools.ts`、`research.ts`、`runtime.ts`。
 - Task/Resource 研究元数据：`src/lib/creative-worker/task-contract.ts`、`src/lib/creative-resource/creative-work-materialization.ts`。
+- 网页图片导入：Operation `src/lib/operations/domains/creative-resource/reference-image-ops.ts`；payload 与出处契约 `src/lib/creative-resource/web-reference-contract.ts`；worker `src/lib/workers/handlers/creative-resource-web-reference.ts`；Task 声明 `src/lib/task/definition.ts`。
 - 研究判断与翻译协议：双语 Primary Prompt、仅搜索能力 Worker 接收的 system Prompt 片段、`creative-direction` Skill。
 - 环境变量示例：`.env.example`、`.env.cloud.example`。真实 key 只能存在于忽略的环境配置。
 
@@ -60,6 +62,7 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 - 初始 Web Search 使用 Tavily function Tool：项目自行拥有 query 参数、HTTP wire、结果裁剪和二次模型往返，返回的 ranked snippets 仍需当前 Worker 重新判断检索充分性。真实“规则怪谈”配对测试显示 OpenAI hosted search 可以在一次托管 run 中自主规划多条 query、综合报告并提供结构化 citation，同时延迟更低；当前删除 Tavily adapter 和私有参数，不保留 fallback 双轨。
 - 直接把 `webSearchTool()` 挂到 Primary/Worker 看似更短，但当前 Primary 默认可经 OpenRouter、analysis Worker 也可使用 Claude；hosted tool 只属于 OpenAI Responses 执行边界。当前由统一 `searchWeb → ai-exec` 内部的专用 OpenAI Search Agent 拥有 hosted tool，保留项目模型 resolver 的唯一性，也避免按 output kind 偷换 Worker 模型。
 - 初版直调改造前，hosted 搜索经 Agents SDK 的 `Agent + Runner` 执行。该 SDK 在序列化 `web_search` 时按白名单逐字段重建工具，并把 `include` 写死为 undefined：任何超出 `user_location/filters/search_context_size/external_web_access` 的配置（图片内容类型、image 设置、完整来源）都会被**静默丢弃**，请求照常成功，日志无异常。同时它引入了 `maxTurns` 与 `toolChoice` 复位这类与研究深度无关的隐式行为。当前直接调用 Responses 接口，工具请求形状由本模块自己声明，SDK 不再是能力上限。
+- 导入能力最初写成一个带 `prepareTransaction`/`compensateTransactionFailure` 的助手可调用 Operation，在 registry 校验处失败：该三段式补偿协议被结构性限定为非 tool 通道（`channels.tool === false`），而 `writes + impact + externalSideEffects` 又强制要求它。这不是缺陷而是设计——助手可调用的 Operation 不得内联执行外部 I/O，外部副作用必须交给 Task/worker 生命周期。当前按 `merge_videos` 的既有形状提交 Task，未新增旁路。
 - 搜索 provider 若返回网页正文或让 Search Agent直接输出 Creative Direction，会使网页指令或研究模型成为第二创意 writer。当前只把本轮报告作为短期 Tool data，持久化删除报告，Creative Worker仍独占六领域政策。
 
 ## 修改检查表

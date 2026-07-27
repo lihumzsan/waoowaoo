@@ -15,6 +15,7 @@ import {
   toCreativeResourceJsonValue,
 } from './generation-contract'
 import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
+import { parseCreativeResourceWebReferenceTaskPayload } from './web-reference-contract'
 import { buildCreativeResourceScopeRef, resolveProjectCreativeResourceScope } from './identity'
 import {
   appendCreativeResourceRevisionInTransaction,
@@ -46,6 +47,30 @@ function readRequiredString(record: Record<string, unknown>, key: string, code: 
   const value = readString(record, key)
   if (!value) throw new Error(code)
   return value
+}
+
+/**
+ * Every `creative_resource` task type declares its own frozen payload shape.
+ * The switch is exhaustive against TaskType so a new type cannot be added
+ * without deciding how its terminal payload is read.
+ */
+function parseTerminalResourcePayload(task: TerminalTask) {
+  switch (task.type) {
+    case TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE:
+      return parseCreativeResourceVideoMergeTaskPayload(task.payload ?? {})
+    case TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE:
+      return parseCreativeResourceWebReferenceTaskPayload(task.payload ?? {})
+    case TASK_TYPE.CREATIVE_WORK:
+    case TASK_TYPE.CREATIVE_RESOURCE_IMAGE:
+    case TASK_TYPE.CREATIVE_RESOURCE_AUDIO:
+    case TASK_TYPE.CREATIVE_RESOURCE_VOICE:
+    case TASK_TYPE.CREATIVE_RESOURCE_VIDEO:
+      return parseCreativeResourceGenerationTaskPayload(task.payload ?? {})
+    default: {
+      const exhaustive: never = task.type
+      throw new Error(`CREATIVE_RESOURCE_TASK_PAYLOAD_UNSUPPORTED:${String(exhaustive)}`)
+    }
+  }
 }
 
 async function materializeDomainOutputs(
@@ -139,9 +164,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
   if (input.task.targetType !== 'CreativeResource') {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${input.task.targetType}`)
   }
-  const payload = input.task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
-    ? parseCreativeResourceVideoMergeTaskPayload(input.task.payload ?? {})
-    : parseCreativeResourceGenerationTaskPayload(input.task.payload ?? {})
+  const payload = parseTerminalResourcePayload(input.task)
   if (payload.resource.resourceId !== input.task.targetId) {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_MISMATCH:${input.task.id}`)
   }
@@ -160,7 +183,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
   }
   if (!input.result) throw new Error(`CREATIVE_RESOURCE_TASK_RESULT_REQUIRED:${input.task.id}`)
   const mediaId = readRequiredString(input.result, 'mediaId', 'CREATIVE_RESOURCE_TASK_MEDIA_ID_REQUIRED')
-  const actualModelKey = input.task.type === TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE
+  const actualModelKey = definition.terminalModelKeyRequirement === 'none'
     ? null
     : readRequiredString(input.result, 'modelKey', 'CREATIVE_RESOURCE_TASK_MODEL_KEY_REQUIRED')
   const revision = await appendCreativeResourceRevisionInTransaction(tx, {

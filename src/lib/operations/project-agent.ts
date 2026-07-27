@@ -26,6 +26,7 @@ import { createAssistantCreativeAssetOperations } from './domains/assistant/crea
 import { createAssistantChoiceOperations } from './domains/assistant/choice-ops'
 import { createVoiceOperations } from './domains/voice/voice-ops'
 import { createWebSearchOperations } from './domains/web-search/web-search-ops'
+import { createCreativeResourceReferenceImageOperations } from './domains/creative-resource/reference-image-ops'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
@@ -73,6 +74,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
       confirmation: CONFIRM_NONE,
     }),
     ...withOperationPack(createWebSearchOperations(), {
+      groupPath: ['web', 'search'],
+      channels: { tool: true, api: false },
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createCreativeResourceReferenceImageOperations(), {
       groupPath: ['web', 'search'],
       channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,

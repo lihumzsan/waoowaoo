@@ -6,6 +6,7 @@ export type TaskTargetTerminalProjector =
 
 export type ImageTaskHandlerKey =
   | 'creative_resource_image'
+  | 'creative_resource_web_reference'
 
 export type VideoTaskHandlerKey = 'creative_resource_video' | 'creative_resource_video_merge'
 export type MusicTaskHandlerKey = 'creative_resource_audio'
@@ -25,6 +26,7 @@ export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
 export type TaskTerminalOutputMaterializer = 'none' | 'creative_resource' | 'domain_creative_resource'
 export type TaskSubmissionTargetOwnership = 'none'
+export type TaskTerminalModelKeyRequirement = 'required' | 'none'
 export type TaskContinuationResultProjection = 'full' | 'reference'
 export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
@@ -42,6 +44,12 @@ export type TaskDefinition<Q extends QueueType = QueueType> = {
   terminalCancelProjector: TaskTargetTerminalProjector
   continuationResultProjection: TaskContinuationResultProjection
   lifecyclePayloadProjection: TaskLifecyclePayloadProjection
+  /**
+   * Whether the terminal handler result must carry the model key that produced
+   * the artifact. Declared here so a task type that runs no model is a registry
+   * fact rather than a special case inside the materializer.
+   */
+  terminalModelKeyRequirement: TaskTerminalModelKeyRequirement
 }
 
 function definition<Q extends QueueType>(
@@ -56,6 +64,7 @@ function definition<Q extends QueueType>(
   terminalOutputMaterializer: TaskTerminalOutputMaterializer = 'none',
   continuationResultProjection: TaskContinuationResultProjection = 'full',
   lifecyclePayloadProjection: TaskLifecyclePayloadProjection = 'full',
+  terminalModelKeyRequirement: TaskTerminalModelKeyRequirement = 'required',
 ): TaskDefinition<Q> {
   return {
     queue,
@@ -71,6 +80,7 @@ function definition<Q extends QueueType>(
     terminalResourceImpact,
     terminalFailureProjector,
     terminalCancelProjector,
+    terminalModelKeyRequirement,
   }
 }
 
@@ -89,10 +99,11 @@ export const TASK_DEFINITIONS = {
     'reference',
   ),
   [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
+  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition('image', 'creative_resource_web_reference', 'none', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'full', 'full', 'none'),
   [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition('voice', 'creative_resource_voice', 'voice', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
   [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'full', 'full', 'none'),
 } satisfies Record<TaskType, TaskDefinition>
 
 export function getTaskDefinition(type: TaskType): TaskDefinition {

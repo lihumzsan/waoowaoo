@@ -5,6 +5,7 @@ import { getTaskDefinitionForQueue, type ImageTaskHandlerKey } from '@/lib/task/
 import { QUEUE_NAME } from '@/lib/task/queues'
 import type { TaskJobData } from '@/lib/task/types'
 import { handleCreativeResourceImageTask } from './handlers/creative-resource-image'
+import { handleCreativeResourceWebReferenceTask } from './handlers/creative-resource-web-reference'
 import { getWorkerConcurrency } from './runtime-config'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { withUserConcurrencyGate } from './user-concurrency-gate'
@@ -13,6 +14,7 @@ type ImageTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknow
 
 const IMAGE_TASK_HANDLERS = {
   creative_resource_image: handleCreativeResourceImageTask,
+  creative_resource_web_reference: handleCreativeResourceWebReferenceTask,
 } satisfies Record<ImageTaskHandlerKey, ImageTaskHandler>
 
 async function processImageTask(job: Job<TaskJobData>) {

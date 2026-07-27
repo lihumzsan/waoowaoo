@@ -9,7 +9,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 ## 不变量
 
 - **TL-01 — 单一提交入口。** Task、billing freeze、Created Event 与 `task.enqueue` Outbox 只能由共享 submitter/事务 primitive 创建。route、Operation 和 worker 不得直接写队列或复制提交协议。
-- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task。
+- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task，以及把外部网页图片导入自有存储的 `creative_resource_web_reference` Task。终态是否要求 handler 回传 modelKey 也是 registry 声明（`terminalModelKeyRequirement`），不运行模型的 Task 声明 `none`；materializer 不得按 Task 类型内联特判。
 - **TL-03 — attempt 唯一执行者。** worker 以 DB CAS 领取 `queued → processing`，携带 `taskId + taskAttempt` 写 heartbeat、progress、provider checkpoint 与终态。重复、晚到或旧 attempt 无写权。
 - **TL-04 — 提交失败原子回滚。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；提交后的 Redis 故障由持久 Outbox 恢复，不能把业务 Task 改写为失败。
 - **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。

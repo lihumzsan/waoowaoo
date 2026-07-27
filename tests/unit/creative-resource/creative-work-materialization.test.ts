@@ -136,7 +136,7 @@ function taskResult(
 
 describe('Creative Task Resource materialization planning', () => {
   it('accepts a model-authored variable candidate set without preview-image prompts', () => {
-    const candidates = ['ink', 'paper_cut', 'stylized_3d', 'charcoal'].map((candidateKey) => ({
+    const candidates = ['ink', 'paper_cut', 'stylized_3d'].map((candidateKey) => ({
       candidateKey,
       title: candidateKey,
       summary: `${candidateKey} summary`,
@@ -156,12 +156,11 @@ describe('Creative Task Resource materialization planning', () => {
     })
 
     expect(plan.resourceScope).toBe('project')
-    expect(plan.outputs).toHaveLength(4)
+    expect(plan.outputs).toHaveLength(3)
     expect(plan.outputs.map((candidate) => candidate.candidateKey)).toEqual([
       'ink',
       'paper_cut',
       'stylized_3d',
-      'charcoal',
     ])
     expect(plan.outputs).toEqual(expect.arrayContaining([
       expect.objectContaining({

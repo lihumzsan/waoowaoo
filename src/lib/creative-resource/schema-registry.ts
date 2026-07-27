@@ -27,6 +27,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   BGM_AUDIO: 'project.bgm_audio',
   VOICE_REFERENCE: 'project.voice_reference',
   RENDERED_VIDEO: 'project.rendered_video',
+  WEB_REFERENCE_IMAGE: 'project.web_reference_image',
 } as const
 
 export type CreativeResourceSchemaId = typeof CREATIVE_RESOURCE_SCHEMA[keyof typeof CREATIVE_RESOURCE_SCHEMA]
@@ -144,6 +145,7 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
     CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
     CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE,
+    CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
   ],
   audio: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
