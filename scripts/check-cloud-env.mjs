@@ -47,17 +47,11 @@ const DEFAULT_MODEL_KEYS = [
   'PLATFORM_DEFAULT_MUSIC_MODEL',
 ]
 
-const PLATFORM_KEY_BY_PROVIDER = {
-  google: 'PLATFORM_GOOGLE_API_KEY',
-  fal: 'PLATFORM_FAL_API_KEY',
-  ark: 'PLATFORM_ARK_API_KEY',
-  openrouter: 'PLATFORM_OPENROUTER_API_KEY',
-  mureka: 'PLATFORM_MUREKA_API_KEY',
-}
-
-const PLATFORM_BASE_URL_BY_PROVIDER = {
-  openrouter: 'PLATFORM_OPENROUTER_BASE_URL',
-}
+// Single source of truth shared with src/lib/user-api/runtime-config.ts
+// (resolvePlatformProviderEnv). Do not maintain a provider table here.
+const PLATFORM_PROVIDER_ENV = JSON.parse(
+  readFileSync(new URL('../src/lib/deployment/platform-provider-env.json', import.meta.url), 'utf8'),
+)
 
 function parseEnvLine(line) {
   const trimmed = line.trim()
@@ -213,15 +207,14 @@ for (const modelEnvKey of DEFAULT_MODEL_KEYS) {
     missing.push(`${modelEnvKey}=provider::model`)
     continue
   }
-  const platformKey = PLATFORM_KEY_BY_PROVIDER[provider]
-  if (!platformKey) {
+  const providerEnv = PLATFORM_PROVIDER_ENV[provider]
+  if (!providerEnv) {
     missing.push(`PLATFORM_PROVIDER_SUPPORTED:${provider}`)
     continue
   }
-  requiredPlatformKeys.add(platformKey)
-  const platformBaseUrl = PLATFORM_BASE_URL_BY_PROVIDER[provider]
-  if (platformBaseUrl) {
-    requiredPlatformBaseUrls.add(platformBaseUrl)
+  requiredPlatformKeys.add(`${providerEnv.envPrefix}_API_KEY`)
+  if (providerEnv.requiresBaseUrl) {
+    requiredPlatformBaseUrls.add(`${providerEnv.envPrefix}_BASE_URL`)
   }
 }
 

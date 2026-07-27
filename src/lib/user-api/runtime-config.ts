@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
+import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
@@ -69,30 +70,18 @@ function getProviderFamily(providerId: string): string {
 
 function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   const providerFamily = getProviderFamily(providerId)
-  const envPrefix = (() => {
-    switch (providerFamily) {
-      case 'google':
-        return 'PLATFORM_GOOGLE'
-      case 'fal':
-        return 'PLATFORM_FAL'
-      case 'ark':
-        return 'PLATFORM_ARK'
-      case 'mureka':
-        return 'PLATFORM_MUREKA'
-      case 'openrouter':
-        return 'PLATFORM_OPENROUTER'
-      default:
-        throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
-    }
-  })()
+  const entry = (PLATFORM_PROVIDER_ENV as Record<string, { envPrefix: string; requiresBaseUrl?: boolean }>)[providerFamily]
+  if (!entry) {
+    throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
+  }
 
-  const apiKey = readEnvString(`${envPrefix}_API_KEY`)
+  const apiKey = readEnvString(`${entry.envPrefix}_API_KEY`)
   if (!apiKey) {
     throw new Error(`PLATFORM_PROVIDER_API_KEY_MISSING: ${providerId}`)
   }
 
-  const baseUrl = readEnvString(`${envPrefix}_BASE_URL`)
-  if (providerFamily === 'openrouter' && !baseUrl) {
+  const baseUrl = readEnvString(`${entry.envPrefix}_BASE_URL`)
+  if (entry.requiresBaseUrl && !baseUrl) {
     throw new Error(`PLATFORM_PROVIDER_BASE_URL_MISSING: ${providerId}`)
   }
   return {
