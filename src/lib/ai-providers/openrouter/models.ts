@@ -18,6 +18,7 @@ export const OPENROUTER_GPT_IMAGE_2_MODEL_ID = 'openai/gpt-image-2'
 export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0-fast'
 export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'
+export const OPENROUTER_GEMINI_3_5_FLASH_LITE_MODEL_ID = 'google/gemini-3.5-flash-lite'
 export const OPENROUTER_CLAUDE_SONNET_4_6_MODEL_ID = 'anthropic/claude-sonnet-4.6'
 export const OPENROUTER_CLAUDE_SONNET_5_MODEL_ID = 'anthropic/claude-sonnet-5'
 export const OPENROUTER_CLAUDE_FABLE_5_MODEL_ID = 'anthropic/claude-fable-5'
@@ -105,6 +106,16 @@ export const OPENROUTER_LLM_MODEL_DEFINITIONS = [
     modelId: OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID,
     name: 'Gemini 3.5 Flash',
     pricingUsdPerMillion: [1.5, 9],
+    publicReasoningMode: 'native',
+    reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
+    contextWindow: 1_048_576,
+    showInApiConfig: true,
+    showInPlatform: true,
+  },
+  {
+    modelId: OPENROUTER_GEMINI_3_5_FLASH_LITE_MODEL_ID,
+    name: 'Gemini 3.5 Flash Lite',
+    pricingUsdPerMillion: [0.3, 2.5],
     publicReasoningMode: 'native',
     reasoningEffortOptions: ['minimal', 'low', 'medium', 'high'],
     contextWindow: 1_048_576,
