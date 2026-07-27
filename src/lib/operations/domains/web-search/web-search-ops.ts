@@ -1,11 +1,16 @@
 import { ApiError } from '@/lib/api-errors'
 import { defineOperation } from '@/lib/operations/define-operation'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  writeOperationDataPart,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
+import type { ProjectAgentWebSearchPartData } from '@/lib/project-agent/types'
 import {
   isWebSearchError,
   searchWeb,
   webSearchRequestSchema,
   webSearchResponseSchema,
+  type WebSearchProgressListener,
   type WebSearchRequest,
   type WebSearchResponse,
 } from '@/lib/web-search'
@@ -13,6 +18,7 @@ import {
 type SearchWeb = (input: {
   readonly request: WebSearchRequest
   readonly signal: AbortSignal
+  readonly onProgress?: WebSearchProgressListener
 }) => Promise<WebSearchResponse>
 
 function toOperationError(error: unknown): never {
@@ -60,11 +66,53 @@ export function createWebSearchOperations(
       inputSchema: webSearchRequestSchema,
       outputSchema: webSearchResponseSchema,
       execute: async (ctx, input) => {
+        // One reconciling part per tool call: the card updates in place from
+        // "searching" to the final source list instead of stacking cards.
+        const partId = `web-search:${ctx.toolCallId ?? input.query}`
+        const publish = (data: ProjectAgentWebSearchPartData): void => {
+          writeOperationDataPart<ProjectAgentWebSearchPartData>(
+            ctx.writer,
+            'data-web-search',
+            data,
+            { id: partId },
+          )
+        }
+        publish({
+          toolCallId: ctx.toolCallId ?? null,
+          phase: 'searching',
+          brief: input.query,
+          activeQuery: null,
+          queries: [],
+          sources: [],
+          images: [],
+        })
         try {
-          return await executeSearch({
+          const response = await executeSearch({
             request: input,
             signal: ctx.request.signal,
+            onProgress: (event) => {
+              if (event.phase !== 'searching') return
+              publish({
+                toolCallId: ctx.toolCallId ?? null,
+                phase: 'searching',
+                brief: input.query,
+                activeQuery: event.query,
+                queries: [],
+                sources: [],
+                images: [],
+              })
+            },
           })
+          publish({
+            toolCallId: ctx.toolCallId ?? null,
+            phase: 'completed',
+            brief: input.query,
+            activeQuery: null,
+            queries: response.queries,
+            sources: response.sources,
+            images: response.images,
+          })
+          return response
         } catch (error) {
           return toOperationError(error)
         }

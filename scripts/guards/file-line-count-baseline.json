@@ -6,7 +6,7 @@
   "src/components/ui/icons/custom.tsx": 733,
   "src/components/ui/model-dropdown-innovative.tsx": 588,
   "src/components/ui/model-dropdown-variants.tsx": 543,
-  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 730,
+  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 725,
   "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 587,
   "src/lib/query/mutations/asset-hub-character-mutations.ts": 350,
   "src/lib/query/mutations/asset-hub-location-mutations.ts": 310,

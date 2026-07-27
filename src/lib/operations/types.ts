@@ -362,10 +362,16 @@ export function writeOperationDataPart<T>(
   writer: UIMessageStreamWriter<UIMessage> | null | undefined,
   type: WorkspaceAssistantPartType,
   data: T,
+  /**
+   * A stable id lets successive writes reconcile into one part instead of
+   * appending a new card per update, which is what live progress needs.
+   */
+  options?: { readonly id?: string },
 ) {
   if (!writer) return
   writer.write({
     type,
+    ...(options?.id ? { id: options.id } : {}),
     data,
   })
 }

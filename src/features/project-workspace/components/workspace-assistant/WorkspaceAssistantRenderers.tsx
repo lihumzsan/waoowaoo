@@ -60,7 +60,9 @@ import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 import {
   AgentStopDataCard,
   AssistantContextCompactedDataCard,
+  HiddenRuntimeContextDataCard,
 } from './WorkspaceAssistantNotices'
+import { WebSearchDataCard } from './WorkspaceAssistantWebSearch'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -88,14 +90,6 @@ export function resolveProgressStageLabel(raw: string | null, progressT: ReturnT
   const key = raw.slice('progress.'.length)
   if (progressT.has(key)) return progressT(key)
   return `MISSING_MESSAGE:${raw}`
-}
-
-export function HiddenApprovalRequestDataCard() {
-  return null
-}
-
-export function HiddenRuntimeContextDataCard() {
-  return null
 }
 
 function translateBillingActionItemSummary(
@@ -646,6 +640,7 @@ export function useWorkspaceAssistantMessagePartComponents({
         'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         'project-context': ProjectContextDataCard,
+        'web-search': WebSearchDataCard,
       },
     }
     return {

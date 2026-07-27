@@ -73,6 +73,27 @@ export interface ProjectContextPartData {
   context: ProjectAssistantContextSnapshot
 }
 
+/**
+ * Live view of one Primary web_search call. `phase` and `query` are presentation
+ * only; the authoritative result is still the Operation output. Every url here
+ * is untrusted third-party data and must be rendered as an external link, never
+ * as project material.
+ */
+export interface ProjectAgentWebSearchPartData {
+  toolCallId: string | null
+  phase: 'searching' | 'completed'
+  brief: string
+  activeQuery: string | null
+  queries: readonly string[]
+  sources: readonly { title: string; url: string }[]
+  images: readonly {
+    imageUrl: string
+    thumbnailUrl: string | null
+    sourceUrl: string | null
+    caption: string | null
+  }[]
+}
+
 export type ProjectAgentStopPartData =
   | {
     reason: 'awaiting_user_confirmation'
@@ -256,3 +277,4 @@ export type WorkspaceAssistantPartType =
   | 'data-task-submitted'
   | 'data-task-batch-submitted'
   | 'data-project-context'
+  | 'data-web-search'
