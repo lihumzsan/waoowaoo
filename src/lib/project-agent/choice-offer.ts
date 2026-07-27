@@ -62,6 +62,23 @@ const choiceCardContentFields = {
     .describe('Label only submission of the current free-text answer.'),
 } as const
 
+const choiceCardAuthoringBaseFields = {
+  mode: choiceCardContentFields.mode,
+  title: choiceCardContentFields.title,
+  description: choiceCardContentFields.description,
+  groups: choiceCardContentFields.groups,
+  submitLabel: choiceCardContentFields.submitLabel,
+} as const
+
+const enabledReplyAuthoringFields = {
+  replyLabel: z.string().trim().min(1).max(300)
+    .describe('Required user-visible label whenever replyMode is whole_card or per_group.'),
+  replyPlaceholder: z.string().trim().min(1).max(1000)
+    .describe('Required user-visible placeholder whenever replyMode is whole_card or per_group.'),
+  replySubmitLabel: z.string().trim().min(1).max(200)
+    .describe('Required submission label whenever replyMode is whole_card or per_group.'),
+} as const
+
 const choiceCardDefinitionFields = {
   cardId: z.string().trim().min(1).max(191),
   toolCallId: z.string().trim().min(1).max(191),
@@ -131,8 +148,28 @@ export const projectAgentChoiceCardDefinitionSchema = z.object(choiceCardDefinit
   .strict()
   .superRefine(validateChoiceCard)
 
-export const projectAgentChoiceCardAuthoringSchema = z.object(choiceCardContentFields)
-  .strict()
+export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('replyMode', [
+  z.object({
+    ...choiceCardAuthoringBaseFields,
+    replyMode: z.literal('none')
+      .describe('Use only when this card accepts no free-text answer.'),
+    replyLabel: z.null().describe('Must be null when replyMode is none.'),
+    replyPlaceholder: z.null().describe('Must be null when replyMode is none.'),
+    replySubmitLabel: z.null().describe('Must be null when replyMode is none.'),
+  }).strict(),
+  z.object({
+    ...choiceCardAuthoringBaseFields,
+    replyMode: z.literal('whole_card')
+      .describe('Collect one free-text answer for the whole card.'),
+    ...enabledReplyAuthoringFields,
+  }).strict(),
+  z.object({
+    ...choiceCardAuthoringBaseFields,
+    replyMode: z.literal('per_group')
+      .describe('Collect free text only for groups with allowCustomText=true; at least one group must enable it.'),
+    ...enabledReplyAuthoringFields,
+  }).strict(),
+])
   .superRefine(validateChoiceCard)
 
 export const projectAgentChoiceCardSchema = z.object({

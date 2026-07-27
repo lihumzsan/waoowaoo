@@ -11,7 +11,10 @@ import {
 import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
-import { normalizeProjectAgentToolInput } from './tool-input-schema'
+import {
+  buildProjectAgentToolInputCorrections,
+  normalizeProjectAgentToolInput,
+} from './tool-input-schema'
 import {
   invokeApprovedOperationPlan,
   splitPlannedOperationInvocation,
@@ -172,6 +175,11 @@ export function prepareProjectAgentOperationInput(params: {
       operationId: params.operation.id,
       message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
       issues: parsedInput.error.issues,
+      corrections: buildProjectAgentToolInputCorrections({
+        input: normalizedBusinessInput,
+        toolInputSchema: params.operation.toolInputSchema,
+        issues: parsedInput.error.issues,
+      }),
     })
   }
   return {

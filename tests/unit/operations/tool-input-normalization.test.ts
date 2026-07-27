@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
+  buildProjectAgentToolInputCorrections,
   createProjectAgentToolInputSchema,
   normalizeProjectAgentToolInput,
 } from '@/lib/operations/tool-input-schema'
+import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 
 describe('project agent tool-input null normalization', () => {
   it('maps strict-model null for an optional field to absence before canonical Zod validation', () => {
@@ -146,5 +148,46 @@ describe('project agent tool-input null normalization', () => {
       },
     })
     expect(inputSchema.safeParse(result).success).toBe(true)
+  })
+})
+
+describe('project agent tool-input corrections', () => {
+  it('directs a misplaced Choice subject to its canonical top-level path', () => {
+    const operation = createProjectAgentOperationRegistry().request_choice
+    const input = {
+      card: {
+        subject: { kind: 'none' },
+        mode: 'confirm',
+        replyMode: 'none',
+        title: 'Use this direction?',
+        groups: [],
+        submitLabel: 'Confirm',
+        replyLabel: null,
+        replyPlaceholder: null,
+        replySubmitLabel: null,
+      },
+      commitments: [],
+    }
+    const parsed = operation.inputSchema.safeParse(input)
+    expect(parsed.success).toBe(false)
+    if (parsed.success) throw new Error('expected request_choice input to be rejected')
+
+    const corrections = buildProjectAgentToolInputCorrections({
+      input,
+      toolInputSchema: operation.toolInputSchema,
+      issues: parsed.error.issues,
+    })
+
+    expect(corrections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: 'move_unknown_field',
+        fieldPath: '$input.card.subject',
+        targetPath: '$input.subject',
+      }),
+    ]))
+    expect(corrections.some((correction) => (
+      correction.action === 'add_required_field'
+      && correction.fieldPath === '$input.subject'
+    ))).toBe(false)
   })
 })

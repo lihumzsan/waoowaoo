@@ -198,6 +198,171 @@ export function normalizeProjectAgentToolInput(params: {
   return params.inputSchema.safeParse(normalized).success ? normalized : params.input
 }
 
+export type ProjectAgentToolInputCorrectionAction =
+  | 'add_required_field'
+  | 'move_unknown_field'
+  | 'remove_unknown_field'
+  | 'fix_invalid_value'
+
+export interface ProjectAgentToolInputCorrection {
+  action: ProjectAgentToolInputCorrectionAction
+  fieldPath: string
+  message: string
+  targetPath?: string
+  allowedKeys?: string[]
+  expectedSchema?: JsonValue
+}
+
+function readIssuePath(issue: UnknownRecord): Array<string | number> {
+  if (!Array.isArray(issue.path)) return []
+  return issue.path.flatMap((part) => (
+    typeof part === 'string' || typeof part === 'number' ? [part] : []
+  ))
+}
+
+function formatInputPath(path: readonly (string | number)[]): string {
+  return path.reduce<string>((result, part) => (
+    typeof part === 'number'
+      ? `${result}[${String(part)}]`
+      : `${result}.${part}`
+  ), '$input')
+}
+
+function readInputAtPath(input: unknown, path: readonly (string | number)[]): unknown {
+  let current = input
+  for (const part of path) {
+    if (typeof part === 'number') {
+      if (!Array.isArray(current)) return undefined
+      current = current[part]
+      continue
+    }
+    if (!isRecord(current)) return undefined
+    current = current[part]
+  }
+  return current
+}
+
+function readSchemaAtPath(params: {
+  schema: JsonValue
+  input: unknown
+  path: readonly (string | number)[]
+}): JsonValue | undefined {
+  let currentSchema = params.schema
+  let currentInput = params.input
+  for (const part of params.path) {
+    if (!isRecord(currentSchema)) return undefined
+    const selectedBranch = selectUnionBranch(currentInput, currentSchema)
+    if (selectedBranch !== null) currentSchema = selectedBranch
+    if (!isRecord(currentSchema)) return undefined
+    if (typeof part === 'number') {
+      if (currentSchema.items === undefined) return undefined
+      currentSchema = toJsonValue(currentSchema.items)
+      currentInput = Array.isArray(currentInput) ? currentInput[part] : undefined
+      continue
+    }
+    const property = readProperties(currentSchema)[part]
+    if (property === undefined) return undefined
+    currentSchema = property
+    currentInput = isRecord(currentInput) ? currentInput[part] : undefined
+  }
+  if (isRecord(currentSchema)) {
+    return selectUnionBranch(currentInput, currentSchema) ?? currentSchema
+  }
+  return currentSchema
+}
+
+function readAllowedKeys(schema: JsonValue | undefined): string[] | undefined {
+  if (!isRecord(schema)) return undefined
+  const keys = Object.keys(readProperties(schema))
+  return keys.length > 0 ? keys : undefined
+}
+
+/**
+ * Converts canonical Zod issues into model-correctable instructions without
+ * creating a second validation contract. Paths and expected shapes are always
+ * projected from the same model-facing schema that accepted the tool call.
+ */
+export function buildProjectAgentToolInputCorrections(params: {
+  input: unknown
+  toolInputSchema: ProjectAgentToolInputSchema
+  issues: unknown
+}): ProjectAgentToolInputCorrection[] {
+  const rootSchema = serializeToolInputSchema(params.toolInputSchema)
+  const rootProperties = readProperties(rootSchema)
+  const corrections: ProjectAgentToolInputCorrection[] = []
+  const moveTargets = new Set<string>()
+  const issues = Array.isArray(params.issues) ? params.issues : []
+
+  for (const rawIssue of issues) {
+    if (!isRecord(rawIssue) || rawIssue.code !== 'unrecognized_keys') continue
+    const parentPath = readIssuePath(rawIssue)
+    const parentSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path: parentPath,
+    })
+    for (const key of readStringArray(rawIssue.keys)) {
+      const fieldPath = formatInputPath([...parentPath, key])
+      const targetPath = `$input.${key}`
+      if (
+        parentPath.length > 0
+        && rootProperties[key] !== undefined
+        && readInputAtPath(params.input, [key]) === undefined
+      ) {
+        moveTargets.add(targetPath)
+        corrections.push({
+          action: 'move_unknown_field',
+          fieldPath,
+          targetPath,
+          message: `Move ${fieldPath} to ${targetPath}; "${key}" is a top-level sibling of ${Object.keys(rootProperties).filter((rootKey) => rootKey !== key).map((rootKey) => `$input.${rootKey}`).join(' and ')}.`,
+          allowedKeys: readAllowedKeys(parentSchema),
+          expectedSchema: rootProperties[key],
+        })
+      } else {
+        corrections.push({
+          action: 'remove_unknown_field',
+          fieldPath,
+          message: `Remove ${fieldPath}; it is not allowed at ${formatInputPath(parentPath)}.`,
+          allowedKeys: readAllowedKeys(parentSchema),
+        })
+      }
+    }
+  }
+
+  for (const rawIssue of issues) {
+    if (!isRecord(rawIssue) || rawIssue.code === 'unrecognized_keys') continue
+    const path = readIssuePath(rawIssue)
+    const fieldPath = formatInputPath(path)
+    const expectedSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path,
+    })
+    const missing = path.length > 0 && readInputAtPath(params.input, path) === undefined
+    if (missing && moveTargets.has(fieldPath)) continue
+    const parentPath = path.slice(0, -1)
+    const parentSchema = readSchemaAtPath({
+      schema: rootSchema,
+      input: params.input,
+      path: parentPath,
+    })
+    const issueMessage = typeof rawIssue.message === 'string'
+      ? rawIssue.message
+      : 'Value does not match the operation input schema.'
+    corrections.push({
+      action: missing ? 'add_required_field' : 'fix_invalid_value',
+      fieldPath,
+      message: missing
+        ? `Add required field ${fieldPath} at this exact path.`
+        : `Fix ${fieldPath}: ${issueMessage}`,
+      allowedKeys: readAllowedKeys(parentSchema),
+      ...(expectedSchema === undefined ? {} : { expectedSchema }),
+    })
+  }
+
+  return corrections
+}
+
 function addNullable(schema: JsonValue): JsonValue {
   if (schemaAllowsNull(schema)) return schema
   if (!isRecord(schema)) {

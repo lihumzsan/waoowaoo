@@ -20,9 +20,9 @@ import { prisma } from '@/lib/prisma'
 
 const requestChoiceInputSchema = z.object({
   subject: projectAgentChoiceSubjectRequestSchema
-    .describe('The exact current fact being reviewed, or none for a preference/question with no mutable subject.'),
+    .describe('Required top-level field, alongside card and commitments. Use {kind:"none"} when no mutable fact is being reviewed. Never place subject inside card.'),
   card: projectAgentChoiceCardAuthoringSchema
-    .describe('Complete user-visible content for this current decision. The server adds all identities.'),
+    .describe('Required top-level Choice content only. It never contains subject or commitments; the server adds all identities.'),
   commitments: z.array(projectAgentChoiceCommitmentRequestSchema).max(12)
     .describe('Usually empty. Add only deterministic mutations that are fully decided by this answer.'),
 }).strict()
