@@ -39,10 +39,18 @@ export const FAL_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'] as const
 export const FAL_GPT_IMAGE_2_QUALITY_OPTIONS = ['high', 'medium', 'low'] as const
 export const FAL_QWEN_3_TTS_LANGUAGE_OPTIONS = VOICE_DESIGN_LANGUAGE_OPTIONS
 
+const FAL_QWEN_3_TTS_VOICE_DESIGN_MODEL = {
+  provider: 'fal',
+  modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+  name: 'Qwen 3 TTS Voice Design 1.7B',
+  type: 'voice',
+} as const satisfies PlatformModelPreset
+
 export const FAL_PLATFORM_MODEL_PRESETS = [
   { provider: 'fal', modelId: 'banana-2', name: 'Banana 2', type: 'image' },
   { provider: 'fal', modelId: FAL_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image' },
   { provider: 'fal', modelId: FAL_LYRIA_3_PRO_MODEL_ID, name: 'Lyria 3 Pro', type: 'music' },
+  FAL_QWEN_3_TTS_VOICE_DESIGN_MODEL,
 ] as const satisfies ReadonlyArray<PlatformModelPreset>
 
 export const FAL_VIDEO_MODEL_IDS = new Set([
@@ -222,6 +230,7 @@ export const FAL_API_CONFIG_CATALOG_MODELS = [
   { modelId: 'banana-2', name: 'Banana 2', type: 'image', provider: 'fal' },
   { modelId: FAL_GPT_IMAGE_2_MODEL_ID, name: 'GPT Image 2', type: 'image', provider: 'fal' },
   { modelId: FAL_LYRIA_3_PRO_MODEL_ID, name: 'Lyria 3 Pro', type: 'music', provider: 'fal' },
+  FAL_QWEN_3_TTS_VOICE_DESIGN_MODEL,
   { modelId: 'fal-wan25', name: 'Wan 2.6', type: 'video', provider: 'fal' },
   { modelId: 'fal-veo31', name: 'Veo 3.1', type: 'video', provider: 'fal' },
   { modelId: 'fal-sora2', name: 'Sora 2', type: 'video', provider: 'fal' },

@@ -126,8 +126,12 @@ export function resolveGptImage2ImageSize(input: {
   const rawSize = ratio >= 1
     ? { width: Math.round(shortEdge * ratio), height: shortEdge }
     : { width: shortEdge, height: Math.round(shortEdge / ratio) }
+  const alignedSize = {
+    width: ceilToMultipleOf16(rawSize.width),
+    height: ceilToMultipleOf16(rawSize.height),
+  }
 
-  return constrainGptImage2ImageSize(rawSize)
+  return constrainGptImage2ImageSize(alignedSize)
 }
 
 function normalizeGptImage2Options(

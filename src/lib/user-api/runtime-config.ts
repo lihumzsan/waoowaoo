@@ -14,6 +14,7 @@ import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/dep
 import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
+import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
 import {
   findRuntimeModelByKey,
   normalizeProviderRuntimeBaseUrl,
@@ -90,15 +91,6 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
   }
 }
 
-function isUnifiedModelType(value: unknown): value is UnifiedModelType {
-  return (
-    value === 'llm'
-    || value === 'image'
-    || value === 'video'
-    || value === 'music'
-  )
-}
-
 function assertModelKey(value: string, field: string): { provider: string; modelId: string; modelKey: string } {
   const parsed = parseModelKeyStrict(value)
   if (!parsed) {
@@ -166,7 +158,7 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
 
   const typeRaw = Reflect.get(raw, 'type')
   if (!isUnifiedModelType(typeRaw)) {
-    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/music`)
+    throw new Error(`MODEL_PAYLOAD_INVALID: customModels[${index}].type must be one of llm/image/video/music/voice`)
   }
 
   return {

@@ -39,7 +39,10 @@ describe('provider contract - OpenRouter image', () => {
       quality: 'high',
       outputFormat: 'png',
       referenceImages: [],
-      imageSize: { width: 1080, height: 1080 },
+      imageSize: { width: 1088, height: 1088 },
+    })
+    expect(normalizeImageOptions({ aspectRatio: '4:3' })).toMatchObject({
+      imageSize: { width: 1440, height: 1088 },
     })
     expect(() => normalizeImageOptions({
       aspectRatio: '1:1',
@@ -108,7 +111,7 @@ describe('provider contract - OpenRouter image', () => {
       model: 'openai/gpt-image-2',
       prompt: 'paint this as a watercolor scene',
       n: 1,
-      size: '1080x1920',
+      size: '1088x1920',
       quality: 'high',
       output_format: 'webp',
       input_references: [{

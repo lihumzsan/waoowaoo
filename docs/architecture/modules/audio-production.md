@@ -47,6 +47,7 @@
 - 最终混音曾因 AAC priming、不同 EOF 和 `-shortest` 挂起或截短。确定性执行仍统一服从 stitched duration、显式 `-t` 和 bounded FFmpeg；删除固定 BGM plan 不削弱该技术防线。
 - 旧声音提案曾观看/听取最终视频并写语义状态，形成第二事实解释器。当前音乐创意只来自显式 Creative Task 输入，混音只处理技术事实。
 - 角色音色与视频引用首次接入时只覆盖“已有 `character_voice` Binding 则传入”的条件分支。真实完整制作中，同一角色的对白跨多个镜头，但项目没有 Voice Resource、Binding 或 `generate_voice` Task；Primary 仍委派只含图片的 `video_prompt_set`，随后所有视频 Task 都以 `generateAudio=true + audioInputPositions=[]` 合法提交，现有 Tool conformance、Binding lifecycle 与媒体传输测试均未反证这个决策缺口。当前防线由双语 Primary Prompt 明确“跨镜头复用声音”是生成并绑定稳定音色的创作信号，同时保留单镜头自由组合和无执行层门禁；Prompt semantic guard 防止该判断静默丢失。真实外部模型是否稳定遵循仍是发布验证盲区。
+- 固定 Qwen Voice Design 初次上线时，能力、价格、adapter 与 Binding 生命周期测试全部通过，但运行时启用模型清单没有登记该 `voice` identity，且 provider contract mock 掉了真实 runtime selection；首个真实三音色批次因此全部在 Provider HTTP 前失败。当前固定模型由 FAL production identity 同时进入 platform/API runtime catalog，真实 catalog selection 成为 provider contract 的前置断言。
 
 ## 修改检查表
 

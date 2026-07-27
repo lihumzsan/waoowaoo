@@ -7,7 +7,10 @@ import {
   FAL_QWEN_3_TTS_LANGUAGE_OPTIONS,
   FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
 } from '@/lib/ai-providers/fal/models'
+import { listApiConfigCatalogModels } from '@/lib/ai-registry/api-config-catalog'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import { resolveRuntimeModelSelection } from '@/lib/ai-registry/runtime-selection'
+import { getPlatformModels } from '@/lib/platform-models/catalog'
 
 const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>())
 
@@ -65,6 +68,24 @@ describe('FAL Qwen voice-design capability', () => {
       context: 'fal-voice-test',
     })).toThrow('AI_OPTION_UNSUPPORTED:fal-voice-test:temperature')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('enables the fixed voice model in every runtime catalog', () => {
+    const platformModels = getPlatformModels()
+    expect(resolveRuntimeModelSelection(
+      platformModels,
+      FAL_PLATFORM_DEFAULT_VOICE_MODEL_KEY,
+      'voice',
+    )).toMatchObject({
+      provider: 'fal',
+      modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+      mediaType: 'voice',
+    })
+    expect(listApiConfigCatalogModels()).toContainEqual(expect.objectContaining({
+      provider: 'fal',
+      modelId: FAL_QWEN_3_TTS_VOICE_DESIGN_1_7B_MODEL_ID,
+      type: 'voice',
+    }))
   })
 
   it('submits only the server-owned voice-design contract', async () => {
