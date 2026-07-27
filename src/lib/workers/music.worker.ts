@@ -1,8 +1,14 @@
 import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { generateMusic } from '@/lib/ai-exec/engine'
+import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
+import {
+  parseCreativeResourceGenerationTaskPayload,
+  type CreativeResourceGenerationTaskPayload,
+} from '@/lib/creative-resource/generation-contract'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import { uploadObject } from '@/lib/storage'
+import { prisma } from '@/lib/prisma'
+import { getSignedUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
@@ -11,67 +17,83 @@ import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from './audio-artifact'
 
-type MusicPayload = {
-  musicModel?: unknown
-  prompt?: unknown
-  durationSeconds?: unknown
-  vocalMode?: unknown
-  genre?: unknown
-  mood?: unknown
-  bpm?: unknown
-  outputFormat?: unknown
+type MusicVideoReference = {
+  readonly url: string
+  readonly durationMs: number | null
 }
 
-function readString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function readPositiveInteger(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    throw new Error(`MUSIC_GENERATE_${field.toUpperCase()}_INVALID`)
+async function loadMusicVideoReference(
+  job: Job<TaskJobData>,
+  payload: CreativeResourceGenerationTaskPayload,
+): Promise<MusicVideoReference | null> {
+  const inputByPosition = new Map(payload.resource.inputs.map((reference) => [reference.position, reference]))
+  const videoInputs = payload.resource.videoInputPositions.map((position) => {
+    const reference = inputByPosition.get(position)
+    if (!reference) throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_INPUT_POSITION_INVALID:${String(position)}`)
+    return reference
+  })
+  if (videoInputs.length === 0) return null
+  const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', payload.resource.modelKey)
+    ?.music?.maxReferenceVideos
+  if (!maxReferenceVideos || videoInputs.length > maxReferenceVideos) {
+    throw new Error(
+      `MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED:${payload.resource.modelKey}:${String(videoInputs.length)}:${String(maxReferenceVideos ?? 0)}`,
+    )
   }
-  return value
-}
-
-function readOptionalInteger(value: unknown, field: string): number | undefined {
-  if (value === undefined || value === null) return undefined
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    throw new Error(`MUSIC_GENERATE_${field.toUpperCase()}_INVALID`)
+  const reference = videoInputs[0]
+  if (!reference) throw new Error('CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED')
+  const revision = await prisma.creativeResourceRevision.findUnique({
+    where: { id: reference.revisionId },
+    select: {
+      media: { select: { storageKey: true, durationMs: true } },
+      resource: { select: { userId: true, mediaType: true, status: true } },
+    },
+  })
+  if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
+  if (revision.resource.userId !== job.data.userId || revision.resource.status !== 'ready') {
+    throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
   }
-  return value
-}
-
-function readOptionalEnum<T extends string>(value: unknown, allowed: readonly T[], field: string): T | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'string' || !allowed.includes(value as T)) {
-    throw new Error(`MUSIC_GENERATE_${field.toUpperCase()}_INVALID`)
+  if (revision.resource.mediaType !== 'video' || !revision.media?.storageKey) {
+    throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.revisionId}`)
   }
-  return value as T
+  return {
+    url: await getSignedUrl(revision.media.storageKey, 3600),
+    durationMs: revision.media.durationMs ?? null,
+  }
 }
 
 export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
-  const payload = (job.data.payload || {}) as MusicPayload
-  const musicModel = readString(payload.musicModel)
-  const prompt = readString(payload.prompt)
-  const durationSeconds = readPositiveInteger(payload.durationSeconds, 'durationSeconds')
-  if (!musicModel) throw new Error('MUSIC_GENERATE_MODEL_REQUIRED')
-  if (!prompt) throw new Error('MUSIC_GENERATE_PROMPT_REQUIRED')
+  if (job.data.targetType !== 'CreativeResource') {
+    throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${job.data.targetType}`)
+  }
+  const payload = parseCreativeResourceGenerationTaskPayload(job.data.payload ?? {})
+  if (
+    payload.resource.resourceId !== job.data.targetId
+    || payload.resource.mediaType !== 'audio'
+    || payload.musicModel !== payload.resource.modelKey
+  ) {
+    throw new Error(`CREATIVE_RESOURCE_MUSIC_TASK_CONTRACT_INVALID:${job.data.taskId}`)
+  }
+  const musicModel = payload.resource.modelKey
+  const prompt = payload.resource.prompt
+  const durationSeconds = payload.durationSeconds
+  if (!durationSeconds || durationSeconds <= 0) throw new Error('MUSIC_GENERATE_DURATIONSECONDS_INVALID')
 
-  const vocalMode = readOptionalEnum(payload.vocalMode, ['instrumental', 'vocal'] as const, 'vocalMode')
-  const outputFormat = readOptionalEnum(payload.outputFormat, ['mp3', 'wav'] as const, 'outputFormat')
-  const bpm = readOptionalInteger(payload.bpm, 'bpm')
-  const genre = readString(payload.genre)
-  const mood = readString(payload.mood)
+  const videoReference = await loadMusicVideoReference(job, payload)
 
   await reportTaskProgress(job, 20, { stage: 'generate_music_submit' })
 
   const generated = await generateMusic(job.data.userId, musicModel, prompt, {
     durationSeconds,
-    ...(vocalMode ? { vocalMode } : {}),
-    ...(genre ? { genre } : {}),
-    ...(mood ? { mood } : {}),
-    ...(typeof bpm === 'number' ? { bpm } : {}),
-    ...(outputFormat ? { outputFormat } : {}),
+    ...(payload.vocalMode ? { vocalMode: payload.vocalMode } : {}),
+    ...(payload.genre ? { genre: payload.genre } : {}),
+    ...(payload.mood ? { mood: payload.mood } : {}),
+    ...(typeof payload.bpm === 'number' ? { bpm: payload.bpm } : {}),
+    ...(payload.outputFormat ? { outputFormat: payload.outputFormat } : {}),
+    ...(videoReference ? {
+      referenceVideoUrl: videoReference.url,
+      referenceVideoDurationMs: videoReference.durationMs ?? Math.round(durationSeconds * 1000),
+    } : {}),
   }, { key: 'media:music:primary' })
   if (!generated.success) {
     throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
@@ -99,7 +121,7 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
   const media = await ensureMediaObjectFromStorageKey(storageKey, {
     mimeType: audio.mimeType,
     sizeBytes: audio.buffer.byteLength,
-    durationMs: durationSeconds * 1000,
+    durationMs: videoReference?.durationMs ?? durationSeconds * 1000,
   })
 
   return {

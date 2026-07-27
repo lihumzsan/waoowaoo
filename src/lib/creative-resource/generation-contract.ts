@@ -52,6 +52,19 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
           })
         }
       }),
+    // Frozen payloads created before video conditioning existed carry no
+    // videoInputPositions; absent means "no video reference", not a second
+    // interpretation, so retry replays them unchanged.
+    videoInputPositions: z.array(z.number().int().min(0)).max(1)
+      .superRefine((positions, context) => {
+        if (new Set(positions).size !== positions.length) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'videoInputPositions must contain unique Resource input positions.',
+          })
+        }
+      })
+      .default([]),
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
@@ -96,6 +109,15 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
         })
       }
     }
+    for (const position of resource.videoInputPositions) {
+      if (!inputPositions.has(position)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['videoInputPositions'],
+          message: `videoInputPositions contains unknown Resource input position ${String(position)}.`,
+        })
+      }
+    }
     const imagePositions = new Set(resource.imageInputPositions)
     for (const position of resource.audioInputPositions) {
       if (imagePositions.has(position)) {
@@ -103,6 +125,16 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
           code: z.ZodIssueCode.custom,
           path: ['audioInputPositions'],
           message: `Resource input position ${String(position)} cannot be both an image and audio reference.`,
+        })
+      }
+    }
+    const audioPositions = new Set(resource.audioInputPositions)
+    for (const position of resource.videoInputPositions) {
+      if (imagePositions.has(position) || audioPositions.has(position)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['videoInputPositions'],
+          message: `Resource input position ${String(position)} cannot be both a video and another provider reference.`,
         })
       }
     }

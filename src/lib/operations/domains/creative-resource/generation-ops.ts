@@ -80,6 +80,11 @@ const videoMediaReferenceSchema = z.array(creativeResourceInputRefSchema)
   .optional()
   .describe('Ordered exact ready image or audio Resource revisions sent to the configured video model. Images and audios are numbered independently in the prompt as @ImageN and @AudioN. Never put text, Creative Direction, or video Resources here.')
 
+const audioMediaReferenceSchema = z.array(creativeResourceInputRefSchema)
+  .max(1)
+  .optional()
+  .describe('Exact ready video Resource revision the configured music model watches to compose a matching soundtrack. Only supported when the server-configured music model declares video reference capability; the soundtrack follows this exact video timeline. Never put text, image, or audio Resources here.')
+
 const commonNewMediaGenerationShape = {
   kind: z.literal('new'),
   episodeId: z.string().trim().min(1).optional(),
@@ -187,6 +192,7 @@ const createImageInputSchema = z.object({
 
 const createAudioNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
+  mediaReferences: audioMediaReferenceSchema,
   schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio).optional()
     .describe('Professional meaning of the audio Resource. Omit to use generic.audio.'),
   durationSeconds: z.number().int().min(1).max(600)
@@ -386,11 +392,20 @@ async function classifyProviderInputReferences(
 ): Promise<{
   readonly imageInputs: CreativeResourceInputRef[]
   readonly audioInputs: CreativeResourceInputRef[]
+  readonly videoInputs: CreativeResourceInputRef[]
   readonly imageInputPositions: number[]
   readonly audioInputPositions: number[]
+  readonly videoInputPositions: number[]
 }> {
   if (references.length === 0) {
-    return { imageInputs: [], audioInputs: [], imageInputPositions: [], audioInputPositions: [] }
+    return {
+      imageInputs: [],
+      audioInputs: [],
+      videoInputs: [],
+      imageInputPositions: [],
+      audioInputPositions: [],
+      videoInputPositions: [],
+    }
   }
   const revisions = await prisma.creativeResourceRevision.findMany({
     where: { id: { in: references.map((reference) => reference.revisionId) } },
@@ -401,10 +416,13 @@ async function classifyProviderInputReferences(
     ? ['image', 'audio']
     : mediaType === 'image'
       ? ['image']
-      : []
-  const field = mediaType === 'video' ? 'mediaReferences' : 'imageReferences'
+      : mediaType === 'audio'
+        ? ['video']
+        : []
+  const field = mediaType === 'image' ? 'imageReferences' : 'mediaReferences'
   const imageInputs: CreativeResourceInputRef[] = []
   const audioInputs: CreativeResourceInputRef[] = []
+  const videoInputs: CreativeResourceInputRef[] = []
   for (const reference of references) {
     const referenceMediaType = mediaTypeById.get(reference.revisionId)
     if (!referenceMediaType || !allowedMediaTypes.some((allowed) => allowed === referenceMediaType)) {
@@ -418,12 +436,15 @@ async function classifyProviderInputReferences(
     }
     if (referenceMediaType === 'image') imageInputs.push(reference)
     if (referenceMediaType === 'audio') audioInputs.push(reference)
+    if (referenceMediaType === 'video') videoInputs.push(reference)
   }
   return {
     imageInputs,
     audioInputs,
+    videoInputs,
     imageInputPositions: imageInputs.map((reference) => reference.position),
     audioInputPositions: audioInputs.map((reference) => reference.position),
+    videoInputPositions: videoInputs.map((reference) => reference.position),
   }
 }
 
@@ -916,6 +937,22 @@ async function planNewMediaGeneration(
       })
     }
   }
+  if (config.mediaType === 'audio') {
+    const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', modelKey)?.music?.maxReferenceVideos
+    if (
+      providerReferences.videoInputs.length > 0
+      && (!maxReferenceVideos || providerReferences.videoInputs.length > maxReferenceVideos)
+    ) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
+        field: 'mediaReferences',
+        modelKey,
+        requestedValue: providerReferences.videoInputs.length,
+        allowedValues: [maxReferenceVideos ?? 0],
+        agentRetryableAfterCorrection: true,
+      })
+    }
+  }
   const generationOptions = await resolveFrozenGenerationOptions({
     ctx,
     config,
@@ -931,6 +968,7 @@ async function planNewMediaGeneration(
     references,
     imageInputPositions: providerReferences.imageInputPositions,
     audioInputPositions: providerReferences.audioInputPositions,
+    videoInputPositions: providerReferences.videoInputPositions,
     generationOptions,
     assetBinding: requestedAssetBinding ?? null,
     ...(config.mediaType === 'audio' ? {
@@ -976,6 +1014,7 @@ async function planNewMediaGeneration(
       inputs: references,
       imageInputPositions: providerReferences.imageInputPositions,
       audioInputPositions: providerReferences.audioInputPositions,
+      videoInputPositions: providerReferences.videoInputPositions,
       generationOptions,
       // Approval revalidates the frozen plan in a later decision segment. The
       // stable toolCallId identifies the creative invocation across both
@@ -1091,6 +1130,18 @@ async function planMediaGenerationRetry(
       }
       return reference
     })
+    const videoInputs = candidate.payload.resource.videoInputPositions.map((position) => {
+      const reference = inputByPosition.get(position)
+      if (!reference) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_INVALID',
+          field: 'request.resourceIds',
+          resourceId: candidate.resourceId,
+          agentRetryableAfterCorrection: false,
+        })
+      }
+      return reference
+    })
     await assertInputReferences(ctx.userId, references, null, 'contextReferences')
     await assertInputReferences(
       ctx.userId,
@@ -1099,6 +1150,20 @@ async function planMediaGenerationRetry(
       config.mediaType === 'video' ? 'mediaReferences' : 'imageReferences',
     )
     await assertInputReferences(ctx.userId, audioInputs, 'audio', 'mediaReferences')
+    await assertInputReferences(ctx.userId, videoInputs, 'video', 'mediaReferences')
+    if (config.mediaType === 'audio') {
+      const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', candidate.payload.resource.modelKey)
+        ?.music?.maxReferenceVideos
+      if (videoInputs.length > 0 && (!maxReferenceVideos || videoInputs.length > maxReferenceVideos)) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
+          field: 'request.resourceIds',
+          modelKey: candidate.payload.resource.modelKey,
+          resourceId: candidate.resourceId,
+          agentRetryableAfterCorrection: false,
+        })
+      }
+    }
     if (config.mediaType === 'video') {
       if (audioInputs.length > 0 && imageInputs.length === 0) {
         throw new ApiError('INVALID_PARAMS', {
@@ -1384,7 +1449,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate independent audio Resources. For new generation, provide the complete prompt and lineage inside request.kind=new. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate independent audio Resources. For new generation, provide the complete prompt and lineage inside request.kind=new. When the server-configured music model supports video-conditioned soundtracks, pass exactly one ready video Resource revision in mediaReferences and set durationSeconds to that video duration; the model watches the video and composes matching music. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
