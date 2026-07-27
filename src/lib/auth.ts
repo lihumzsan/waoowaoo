@@ -1,16 +1,50 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
 import { logAuthAction } from './logging/semantic'
-import { prisma } from './prisma'
 import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
 import { createGoogleOAuthProvider, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
+import { authorizePasswordIdentity } from '@/lib/auth/password-auth'
+import { authorizePhoneIdentity } from '@/lib/auth/phone-verification'
 import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
 
 const deploymentConfig = getDeploymentConfig()
 const deploymentFeatures = getDeploymentFeatures(deploymentConfig)
 const googleOAuthProvider = createGoogleOAuthProvider(deploymentFeatures)
+const passwordProvider = deploymentFeatures.enablePasswordAuth
+  ? CredentialsProvider({
+      id: 'credentials',
+      name: 'password',
+      credentials: {
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        return await authorizePasswordIdentity({
+          username: credentials?.username,
+          password: credentials?.password,
+        })
+      },
+    })
+  : null
+const phoneProvider = deploymentFeatures.enablePhoneAuth
+  ? CredentialsProvider({
+      id: 'phone',
+      name: 'phone',
+      credentials: {
+        phoneNumber: { label: 'Phone number', type: 'tel' },
+        code: { label: 'Verification code', type: 'text' },
+        inviteCode: { label: 'Invite code', type: 'text' },
+      },
+      async authorize(credentials) {
+        return await authorizePhoneIdentity({
+          phoneNumber: credentials?.phoneNumber,
+          code: credentials?.code,
+          inviteCode: credentials?.inviteCode,
+        })
+      },
+    })
+  : null
 const secureCookieRequired = (isCloudDeployment(deploymentConfig) && process.env.NODE_ENV === 'production')
   || (process.env.NEXTAUTH_URL || '').startsWith('https://')
 
@@ -18,45 +52,8 @@ export const authOptions: NextAuthOptions = {
   adapter: createAuthAdapter(),
   useSecureCookies: secureCookieRequired,
   providers: [
-    CredentialsProvider({
-      name: "credentials",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          logAuthAction('LOGIN', credentials?.username || 'unknown', { error: 'Missing credentials' })
-          return null
-        }
-
-        const user = await prisma.user.findUnique({
-          where: {
-            name: credentials.username
-          }
-        })
-
-        if (!user || !user.password) {
-          logAuthAction('LOGIN', credentials.username, { error: 'User not found' })
-          return null
-        }
-
-        // 验证密码
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
-
-        if (!isPasswordValid) {
-          logAuthAction('LOGIN', credentials.username, { error: 'Invalid password' })
-          return null
-        }
-
-        logAuthAction('LOGIN', user.name, { userId: user.id, success: true })
-
-        return {
-          id: user.id,
-          name: user.name,
-        }
-      }
-    }),
+    ...(passwordProvider ? [passwordProvider] : []),
+    ...(phoneProvider ? [phoneProvider] : []),
     ...(googleOAuthProvider ? [googleOAuthProvider] : []),
   ],
   session: {

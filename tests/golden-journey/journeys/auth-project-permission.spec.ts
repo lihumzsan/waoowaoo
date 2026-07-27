@@ -1,5 +1,6 @@
 import { expect, test } from '../browser/test'
 import {
+  expectGoldenAuthenticatedUser,
   registerGoldenUser,
   signInGoldenUser,
   signOutGoldenUser,
@@ -21,6 +22,10 @@ const intruder = {
   username: `golden-intruder-${runtimeSuffix}`,
   password: 'golden-intruder-password',
 }
+const recoveryUser = {
+  username: `golden-recovery-${runtimeSuffix}`,
+  password: 'golden-recovery-password',
+}
 const project = {
   name: `权限边界项目-${runtimeSuffix}`,
   description: '只允许项目所有者访问。',
@@ -39,6 +44,58 @@ test('[GJ-AUTH-UNAUTHENTICATED-DENIAL] new browser cannot open workspace or read
     finalUrl: page.url(),
   })
   browserObservations.assertClean()
+})
+
+test('[GJ-AUTH-SESSION-RECOVERY] unified auth creates then restores the same persistent identity', async ({
+  page,
+  browserObservations,
+}, testInfo) => {
+  await registerGoldenUser(page, recoveryUser)
+  const initialSessionResponse = await page.request.get('/api/auth/session')
+  expect(initialSessionResponse.status()).toBe(200)
+  const initialSession = await initialSessionResponse.json() as {
+    user?: {
+      id?: unknown
+    }
+  }
+  expect(typeof initialSession.user?.id).toBe('string')
+  const initialUserId = initialSession.user?.id
+
+  await page.reload()
+  await expectGoldenAuthenticatedUser(page, recoveryUser.username)
+  await signOutGoldenUser(page)
+
+  await page.goto('/zh/auth/signin')
+  await page.locator('#username').fill(recoveryUser.username)
+  await page.locator('#password').fill('definitely-wrong-password')
+  await page.getByRole('button', { name: '登录 / 注册', exact: true }).click()
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page).toHaveURL(/\/zh\/auth\/signin(?:[/?#]|$)/)
+  expect(await (await page.request.get('/api/auth/session')).json()).toEqual({})
+
+  await page.locator('#password').fill(recoveryUser.password)
+  await page.getByRole('button', { name: '登录 / 注册', exact: true }).click()
+  await expect(page).toHaveURL(/\/zh\/home(?:[/?#]|$)/, { timeout: 30_000 })
+  await expectGoldenAuthenticatedUser(page, recoveryUser.username)
+  const restoredSessionResponse = await page.request.get('/api/auth/session')
+  expect(restoredSessionResponse.status()).toBe(200)
+  const restoredSession = await restoredSessionResponse.json() as {
+    user?: {
+      id?: unknown
+    }
+  }
+  expect(restoredSession.user?.id).toBe(initialUserId)
+
+  await attachGoldenProductEvidence(testInfo, 'golden-auth-session-recovery', {
+    initialUserId,
+    restoredUserId: restoredSession.user?.id,
+  })
+  browserObservations.assertClean({
+    allowedHttpStatuses: new Set([401]),
+    allowedConsoleErrorPatterns: [
+      /Failed to load resource: the server responded with a status of 401 \(Unauthorized\)/,
+    ],
+  })
 })
 
 test('[GJ-PROJECT-CROSS-USER-ISOLATION] second user cannot list read mutate open or delete the owner project', async ({

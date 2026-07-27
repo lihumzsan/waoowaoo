@@ -40,9 +40,9 @@ export default function GoogleSignInButton({
       type="button"
       disabled={loading}
       onClick={handleClick}
-      className="w-full rounded-xl bg-[#4285F4] px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-[#3367D6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4285F4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center justify-center gap-2"
+      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 font-semibold text-black shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
     >
-      <AppIcon name="chrome" className="h-5 w-5 text-white" aria-hidden="true" />
+      <AppIcon name="chrome" className="h-5 w-5 text-black" aria-hidden="true" />
       <span>{loading ? loadingLabel : label}</span>
     </button>
   )

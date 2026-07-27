@@ -11,7 +11,7 @@ const nextAuthHandler = NextAuth(authOptions) as unknown as NextAuthRouteHandler
 
 /**
  * 登录 POST 请求加 IP 限流保护。
- * 仅对 callback/credentials（即实际登录行为）做限流，
+ * 仅对 credentials 与 phone callback（即实际认证行为）做限流，
  * 其他 NextAuth 内部路由（session / csrf 等）不限制。
  *
  * ⚠️ NextAuth 客户端 signIn() 期望响应体包含 { url } 字段，
@@ -20,16 +20,17 @@ const nextAuthHandler = NextAuth(authOptions) as unknown as NextAuthRouteHandler
  */
 async function handlePost(req: NextRequest, ctx: NextAuthRouteContext) {
     const { nextauth: segments } = await ctx.params
-    const isCredentialsCallback =
+    const credentialsProvider =
         segments.length >= 2
         && segments[0] === 'callback'
-        && segments[1] === 'credentials'
+        && (segments[1] === 'credentials' || segments[1] === 'phone')
 
-    if (isCredentialsCallback) {
+    if (credentialsProvider) {
         const ip = getClientIp(req)
-        const rateResult = await checkRateLimit('auth:login', ip, AUTH_LOGIN_LIMIT)
+        const provider = segments[1]
+        const rateResult = await checkRateLimit(`auth:${provider}:verify`, ip, AUTH_LOGIN_LIMIT)
         if (rateResult.limited) {
-            logAuthAction('LOGIN', 'unknown', { error: 'Rate limited', ip })
+            logAuthAction('LOGIN', provider, { error: 'Rate limited', ip })
             // 返回 NextAuth 兼容的错误格式，signIn() 会解析 URL 中的 error 参数
             const origin = req.nextUrl.origin
             return NextResponse.json(

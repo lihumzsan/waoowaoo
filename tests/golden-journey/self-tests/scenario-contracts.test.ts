@@ -13,6 +13,7 @@ describe('Golden Journey scenario contracts', () => {
       'GJ-FREEFORM-ZERO-VIDEO',
       'GJ-ASSISTANT-STOP-REPLY',
       'GJ-AUTH-UNAUTHENTICATED-DENIAL',
+      'GJ-AUTH-SESSION-RECOVERY',
       'GJ-PROJECT-CROSS-USER-ISOLATION',
       'GJ-ASSET-HUB-CROSS-PROJECT-DENIAL',
     ])

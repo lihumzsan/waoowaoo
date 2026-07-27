@@ -186,6 +186,7 @@
     "remotion": "^4.0.491",
     "sharp": "^0.34.5",
     "stripe": "^22.3.2",
+    "tencentcloud-sdk-nodejs-sms": "^4.1.240",
     "undici": "^7.28.0",
     "zod": "^4.4.3"
   },

@@ -11,6 +11,8 @@ export interface DeploymentFeatures {
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
+  enablePhoneAuth: boolean
+  enablePasswordAuth: boolean
   showDownloadLogs: boolean
   showUpdateCheck: boolean
   requireInviteCodeOnSignup: boolean
@@ -28,6 +30,8 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showBilling: false,
   showAccountSecurity: false,
   showGoogleOAuth: false,
+  enablePhoneAuth: false,
+  enablePasswordAuth: true,
   showDownloadLogs: false,
   showUpdateCheck: true,
   requireInviteCodeOnSignup: false,
@@ -40,8 +44,10 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showRecharge: true,
   showInviteCode: true,
   showBilling: true,
-  showAccountSecurity: true,
+  showAccountSecurity: false,
   showGoogleOAuth: true,
+  enablePhoneAuth: true,
+  enablePasswordAuth: false,
   showDownloadLogs: false,
   showUpdateCheck: false,
   requireInviteCodeOnSignup: false,

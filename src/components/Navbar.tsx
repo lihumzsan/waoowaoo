@@ -465,15 +465,9 @@ export default function Navbar({
                 ) : null}
                 <Link
                   href={{ pathname: '/auth/signin' }}
-                  className="glass-selection-control rounded-full px-2.5 py-1.5 text-sm font-medium"
-                >
-                  {t('signin')}
-                </Link>
-                <Link
-                  href={{ pathname: '/auth/signup' }}
                   className="glass-btn-base glass-btn-primary px-4 py-2 text-sm font-medium"
                 >
-                  {t('signup')}
+                  {t('authEntry')}
                 </Link>
                 <LanguageSwitcher />
               </>

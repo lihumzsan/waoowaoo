@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Architecture contract: docs/architecture/modules/product-shell.md (PS-08, PS-11)
+
 import fs from 'fs'
 import path from 'path'
 import process from 'process'
@@ -16,7 +18,7 @@ export const API_HANDLER_ALLOWLIST = new Set([
 
 export const PUBLIC_ROUTE_ALLOWLIST = new Set([
   'src/app/api/auth/[...nextauth]/route.ts',
-  'src/app/api/auth/register/route.ts',
+  'src/app/api/auth/phone/send-code/route.ts',
   'src/app/api/cos/image/route.ts',
   'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',

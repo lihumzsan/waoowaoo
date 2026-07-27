@@ -13,6 +13,7 @@ type PasswordInputProps = {
   showLabel: string
   hideLabel: string
   required?: boolean
+  inputClassName?: string
 }
 
 export default function PasswordInput({
@@ -25,6 +26,7 @@ export default function PasswordInput({
   showLabel,
   hideLabel,
   required = false,
+  inputClassName,
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false)
   const buttonLabel = visible ? hideLabel : showLabel
@@ -40,7 +42,7 @@ export default function PasswordInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
-        className="glass-input-base w-full px-4 py-3 pr-12"
+        className={inputClassName ?? 'glass-input-base w-full px-4 py-3 pr-12'}
         placeholder={placeholder}
       />
       <button

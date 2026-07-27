@@ -15,7 +15,6 @@
         "creditsUnit": "credits"
     },
     "downloadLogs": "Download Logs",
-    "signin": "Sign In",
-    "signup": "Sign Up",
+    "authEntry": "Sign In / Sign Up",
     "logout": "Logout"
 }

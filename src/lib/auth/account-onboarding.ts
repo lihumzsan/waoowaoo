@@ -6,18 +6,31 @@ import { hashInviteCode } from '@/lib/billing/invite-codes'
 import { addBalanceWithTransaction } from '@/lib/billing/ledger'
 import { toMoneyNumber } from '@/lib/billing/money'
 
-export interface RegisterUserInput {
+export interface AuthAccountIdentityInput {
+  type: 'credentials' | 'oauth'
+  provider: 'phone'
+  providerAccountId: string
+}
+
+export interface CreateAuthUserInput {
   name: string
-  hashedPassword: string
+  password?: string | null
+  email?: string | null
+  emailVerified?: Date | null
+  image?: string | null
+  account?: AuthAccountIdentityInput
   inviteCode?: string | null
 }
 
-export interface RegisteredUserResult {
+export interface CreatedAuthUser {
   id: string
   name: string
+  email: string | null
+  emailVerified: Date | null
+  image: string | null
 }
 
-type RegistrationTx = Prisma.TransactionClient
+export type AuthOnboardingTx = Prisma.TransactionClient
 
 function readInviteCode(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -25,7 +38,7 @@ function readInviteCode(value: unknown): string | null {
   return trimmed || null
 }
 
-async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, rawCode: string): Promise<void> {
+async function claimRegistrationInviteCode(tx: AuthOnboardingTx, userId: string, rawCode: string): Promise<void> {
   const codeHash = hashInviteCode(rawCode)
   const inviteCode = await tx.inviteCode.findUnique({
     where: { codeHash },
@@ -103,7 +116,7 @@ async function claimRegistrationInviteCode(tx: RegistrationTx, userId: string, r
   })
 }
 
-export function readRegistrationInviteInput(input: { inviteCode?: unknown }): string | null {
+export function readSignupInviteInput(input: { inviteCode?: unknown }): string | null {
   const features = getDeploymentFeatures(getDeploymentConfig())
   const inviteCode = readInviteCode(input.inviteCode)
 
@@ -116,17 +129,26 @@ export function readRegistrationInviteInput(input: { inviteCode?: unknown }): st
   })
 }
 
-export async function createRegisteredUser(tx: RegistrationTx, input: RegisterUserInput): Promise<RegisteredUserResult> {
-  const inviteCode = readRegistrationInviteInput({ inviteCode: input.inviteCode })
+export async function createAuthUser(
+  tx: AuthOnboardingTx,
+  input: CreateAuthUserInput,
+): Promise<CreatedAuthUser> {
+  const inviteCode = readInviteCode(input.inviteCode)
 
   const user = await tx.user.create({
     data: {
       name: input.name,
-      password: input.hashedPassword,
+      password: input.password ?? null,
+      email: input.email ?? null,
+      emailVerified: input.emailVerified ?? null,
+      image: input.image ?? null,
     },
     select: {
       id: true,
       name: true,
+      email: true,
+      emailVerified: true,
+      image: true,
     },
   })
 
@@ -143,8 +165,16 @@ export async function createRegisteredUser(tx: RegistrationTx, input: RegisterUs
     await claimRegistrationInviteCode(tx, user.id, inviteCode)
   }
 
-  return {
-    id: user.id,
-    name: user.name,
+  if (input.account) {
+    await tx.account.create({
+      data: {
+        userId: user.id,
+        type: input.account.type,
+        provider: input.account.provider,
+        providerAccountId: input.account.providerAccountId,
+      },
+    })
   }
+
+  return user
 }

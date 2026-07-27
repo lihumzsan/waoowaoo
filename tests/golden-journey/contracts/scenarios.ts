@@ -47,6 +47,15 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     zeroPaidProviderCalls: true,
   },
   {
+    id: 'GJ-AUTH-SESSION-RECOVERY',
+    kind: 'security',
+    title: 'one unified auth entry creates a missing account, preserves its session identity across refresh, rejects a wrong password, and restores the same identity',
+    startState: 'outside_workspace',
+    expectedTerminal: 'same_persistent_user_identity_restored',
+    requiresWorkers: false,
+    zeroPaidProviderCalls: true,
+  },
+  {
     id: 'GJ-PROJECT-CROSS-USER-ISOLATION',
     kind: 'security',
     title: 'a second user cannot read or mutate the owner project',

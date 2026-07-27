@@ -12,6 +12,8 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showApiConfig',
   'showAccountSecurity',
   'showGoogleOAuth',
+  'enablePhoneAuth',
+  'enablePasswordAuth',
   'showDownloadLogs',
   'showUpdateCheck',
   'requireInviteCodeOnSignup',

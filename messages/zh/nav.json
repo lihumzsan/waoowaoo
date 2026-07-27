@@ -15,7 +15,6 @@
         "creditsUnit": "额度"
     },
     "downloadLogs": "下载日志",
-    "signin": "登录",
-    "signup": "注册",
+    "authEntry": "登录 / 注册",
     "logout": "退出登录"
 }

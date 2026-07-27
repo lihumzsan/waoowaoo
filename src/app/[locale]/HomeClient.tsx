@@ -56,7 +56,7 @@ export default function HomeClient({ initialDeploymentFeatures }: HomeClientProp
 
               <div className="animate-fade-in flex flex-wrap gap-4 pt-4" style={{ animationDelay: '0.6s' }}>
                 <Link
-                  href={{ pathname: '/auth/signup' }}
+                  href={{ pathname: '/auth/signin' }}
                   className="glass-btn-base glass-btn-primary rounded-xl px-8 py-4 font-semibold transition-all duration-300"
                 >
                   {t('getStarted')}

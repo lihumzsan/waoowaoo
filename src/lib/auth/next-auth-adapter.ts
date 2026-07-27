@@ -1,5 +1,6 @@
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import type { Adapter, AdapterUser } from 'next-auth/adapters'
+import { createAuthUser } from '@/lib/auth/account-onboarding'
 import { prisma } from '@/lib/prisma'
 
 interface AuthUserRecord {
@@ -56,33 +57,12 @@ export function createAuthAdapter(): Adapter {
       const email = normalizeOAuthEmail(user.email)
       const created = await prisma.$transaction(async (tx) => {
         const emailVerified = user.emailVerified ?? new Date()
-        const newUser = await tx.user.create({
-          data: {
-            name: email,
-            email,
-            emailVerified,
-            image: user.image ?? null,
-            password: null,
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            emailVerified: true,
-            image: true,
-          },
+        return await createAuthUser(tx, {
+          name: email,
+          email,
+          emailVerified,
+          image: user.image ?? null,
         })
-
-        await tx.userBalance.create({
-          data: {
-            userId: newUser.id,
-            balance: 0,
-            frozenAmount: 0,
-            totalSpent: 0,
-          },
-        })
-
-        return newUser
       })
 
       return toAdapterUser(created)

@@ -39,8 +39,8 @@ export const AUTH_LOGIN_LIMIT: RateLimitConfig = {
     maxRequests: 5,
 }
 
-/** 注册：60 秒内最多 10 次；仍限制批量滥用，同时避免共享出口误伤正常注册 */
-export const AUTH_REGISTER_LIMIT: RateLimitConfig = {
+/** 验证码发送：单个可信客户端来源 60 秒内最多 10 次，手机号维度另有独立冷却和日限额。 */
+export const AUTH_SMS_SEND_LIMIT: RateLimitConfig = {
     windowSeconds: 60,
     maxRequests: 10,
 }
