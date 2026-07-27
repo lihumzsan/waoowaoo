@@ -46,7 +46,17 @@ export const projectAgentPlanInputSchema = z.object({
 export const projectAgentPlanSnapshotSchema = z.object({
   explanation: z.string().trim().min(1).max(500).nullable(),
   plan: projectAgentPlanItemsSchema,
-}).strict()
+}).strict().superRefine((snapshot, context) => {
+  if (
+    snapshot.plan.length > 0
+    && snapshot.plan.every((item) => item.status === 'completed')
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'PROJECT_AGENT_PLAN_COMPLETED_SNAPSHOT_MUST_BE_CLEARED',
+    })
+  }
+})
 
 interface ProjectAgentPlanIdentity {
   projectId: string
@@ -60,9 +70,11 @@ type ProjectAgentPlanReader = Pick<PrismaClient, 'projectAssistantThread'>
 function normalizeProjectAgentPlanSnapshot(
   input: z.infer<typeof projectAgentPlanInputSchema>,
 ): ProjectAgentPlanSnapshot {
+  const shouldClear = input.plan.length === 0
+    || input.plan.every((item) => item.status === 'completed')
   return projectAgentPlanSnapshotSchema.parse({
-    explanation: input.plan.length === 0 ? null : input.explanation,
-    plan: input.plan,
+    explanation: shouldClear ? null : input.explanation,
+    plan: shouldClear ? [] : input.plan,
   })
 }
 
@@ -72,7 +84,8 @@ export function createProjectAgentPlanSnapshot(input: unknown): ProjectAgentPlan
 
 export function parseProjectAgentPlanSnapshot(value: unknown): ProjectAgentPlanSnapshot | null {
   if (value === null || value === undefined) return null
-  return projectAgentPlanSnapshotSchema.parse(value)
+  const snapshot = normalizeProjectAgentPlanSnapshot(projectAgentPlanInputSchema.parse(value))
+  return snapshot.plan.length === 0 ? null : snapshot
 }
 
 export async function readProjectAgentPlan(

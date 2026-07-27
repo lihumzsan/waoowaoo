@@ -13,7 +13,7 @@ import type {
 
 const UPDATE_PLAN_TOOL_INPUT_SCHEMA = {
   type: 'object',
-  description: 'Replace the current advisory work plan. Use this only for complex or multi-step work. Keep steps concise, keep at most one item in_progress, update immediately after progress changes, and pass an empty plan to clear it. This plan is a notebook: it does not execute work, unlock tools, create tasks, or determine project state.',
+  description: 'Replace the current advisory work plan. Use this only for complex or multi-step work. Keep steps concise, keep at most one item in_progress, and update immediately after progress changes. When every item is completed, the server closes the plan automatically; pass an empty plan to close it explicitly. This plan is a notebook: it does not execute work, unlock tools, create tasks, or determine project state.',
   properties: {
     explanation: {
       type: ['string', 'null'],
@@ -23,7 +23,7 @@ const UPDATE_PLAN_TOOL_INPUT_SCHEMA = {
     plan: {
       type: 'array',
       maxItems: 12,
-      description: 'The complete replacement plan. Pass [] to clear the current plan.',
+      description: 'The complete replacement plan. Completing every item or passing [] closes the current plan.',
       items: {
         type: 'object',
         properties: {
