@@ -21,11 +21,13 @@
 - **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)` Revision；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。生成期间发生较新换绑时保留新 Revision并返回显式 conflict。
 - **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Revision，缺失则按剧本、用户要求和已有角色事实调用 `generate_voice target=character`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Revision 与音色设计描述作为 Worker source material，Worker 用 `@AudioN` 写入唯一最终 Prompt，试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 exact Revision，也不从角色名、最新音色或试听内容推断引用。
 - **AP-10 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未生成中、未绑定且未被 Lineage 引用的音色 Resource；MediaObject 仍由独立生命周期拥有。
+- **AP-12 — 视频条件音乐生成由 capability registry 唯一裁决。** `create_audio` 可在 `mediaReferences` 携带恰好一个 ready 视频 Resource revision 作为音乐模型的画面条件输入；是否允许及上限只由生产 music capability 的 `maxReferenceVideos` 声明（缺失即不支持，提交前原地失败）。视频引用作为 `videoInputPositions` 冻结进 Task payload，worker 回库校验 owner/ready/mediaType 后以签名 URL 交给 provider adapter；soundtrack 的时间边界跟随该视频的真实时长。整片配乐一次生成，不得拆段分别生成再拼接；不存在从"最近视频"或历史消息推断条件输入的路径。
 
 ## 权威入口
 
 - 音乐创意知识与输出：`src/lib/creative-skills/skills/music-direction/**`、`src/lib/creative-worker/output-registry.ts`。
 - 独立音频 Operation：`src/lib/operations/domains/creative-resource/generation-ops.ts` 的 `create_audio`；媒体执行复用通用 Task、Provider Gateway、计费与 Resource materializer。
+- 音乐 Task 执行与视频条件装载：`src/lib/workers/music.worker.ts`；视频条件 soundtrack 的唯一 provider adapter：`src/lib/ai-providers/mureka/**`（上传、soundtrack/instrumental 提交与 `MUREKA:MUSIC` 轮询协议）。
 - 模型时长能力：生产 capability registry 与 provider adapter；调用方不得复制范围。
 - 确定性混音 primitive：`src/lib/video-compose/video-merge-audio.ts`；只由通用 `merge_videos` Resource Task 显式消费，没有固定最终渲染阶段。
 - 角色音色：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts` 与共享 Binding service。

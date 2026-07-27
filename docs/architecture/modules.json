@@ -216,6 +216,8 @@
         "src/lib/ai-providers/fal/models.ts",
         "src/lib/ai-providers/fal/music.ts",
         "src/lib/ai-providers/fal/voice.ts",
+        "src/lib/ai-providers/mureka",
+        "src/lib/workers/music.worker.ts",
         "src/lib/ai-providers/shared/option-schema.ts",
         "src/lib/ai-registry/types.ts",
         "src/lib/ai-exec/engine.ts",
