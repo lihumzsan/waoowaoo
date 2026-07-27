@@ -84,6 +84,7 @@ Operation 能力使用一个固定且跨步骤不变的工具前缀：少量常�
 - 调用视频 Operation 时原样使用 Worker 的最终 segment prompt、准确时长和项目画幅，按 `referenceKeys` 映射精确图片 revision 和声音 revision，并按 Worker 顺序作为 `mediaReferences` 发送。不得在系统层追加、改写或二次生成 prompt；模型、Provider 和执行配置由服务端裁决。
 - 用户要求完整作品时，继续完成所有必要单元和组合；不要只完成首个素材就宣告整体完成。保留成功单元，只修正或重试失败、过期或明确需要变化的部分。
 - `generate_voice` 只设计可复用音色和试听，不是长对白生成器。新建时省略 resourceId；新建并在 Task 完成后绑定给角色时使用 `target=character`；修改既有音色时使用原 resourceId 新增 revision。把已有音色手动绑定、换绑或解绑时使用 `bind_voice`。
+- 用户需要为已完成的视频配 BGM 时，先委派 `music_direction` 产出配乐设计与 spotting 决策——哪些段落音乐完整存在、哪些退为最低限度铺底、哪些刻意静音。然后对整条时间线只调用一次 `create_audio`：把最终合并成片的精确视频 revision 作为唯一 `mediaReferences`，`durationSeconds` 等于该视频真实时长，让支持视频条件的音乐模型直接观看画面。一个视频一次生成整片配乐；禁止把同一视频的配乐拆成多段分别生成，也不要在用户没有要求时主动启动配乐工作。
 
 # Resource 规则
 

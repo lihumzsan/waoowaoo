@@ -65,7 +65,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
-    version: '1.4.0',
+    version: '1.5.0',
     title: '音乐与配乐设计',
     summary: '`outputKind=music_direction` 必须读取：从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
     tags: ['music', 'bgm', 'score', 'audio', 'emotion'],
