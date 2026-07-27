@@ -194,7 +194,7 @@ export function planCreativeWorkResourceMaterialization(input: {
     const structuredSources = parseStructuredSourceMaterials(payload)
     const screenplaySources = structuredSources.flatMap((source) => {
       const parsed = screenplaySchema.safeParse(source.value)
-      return parsed.success ? [{ revisionId: source.revisionId, screenplay: parsed.data }] : []
+      return parsed.success ? [{ revisionId: source.revisionId }] : []
     })
     if (screenplaySources.length !== 1) {
       throw new Error('ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED')
@@ -202,7 +202,6 @@ export function planCreativeWorkResourceMaterialization(input: {
     const screenplaySource = screenplaySources[0]
     if (!screenplaySource) throw new Error('ASSET_MANIFEST_SOURCE_REQUIRED')
     const manifest = compileAssetManifest({
-      screenplay: screenplaySource.screenplay,
       manifest: output,
     })
     return structuredOutput({

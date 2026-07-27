@@ -25,17 +25,10 @@ export const screenplayWorkerOutputSchema = z.object({
 
 export const screenplaySchema = screenplayWorkerOutputSchema
 
-const sourceRefSchema = z.object({
-  sourceExcerpt: z.string().trim().min(1).max(4_000),
-  reason: z.string().trim().min(1).max(2_000),
-}).strict()
-
 const assetManifestItemWorkerSchema = z.object({
   kind: z.enum(ASSET_MANIFEST_KINDS),
   canonicalName,
   aliases: textList(64, 300),
-  sourceRefs: z.array(sourceRefSchema).min(1).max(128)
-    .describe('Exact excerpts from the supplied screenplay that justify producing this reusable visual asset.'),
   stableDescription: z.string().min(1).max(16_000)
     .describe('Stable visible identity and structure only; exclude transient action and project visual-style wording.'),
   generationPrompt: z.string().min(1).max(24_000)
@@ -102,36 +95,15 @@ function validateManifestIdentity(
   }
 }
 
-function validateSourceRefs(input: {
-  readonly screenplay: Screenplay
-  readonly manifest: AssetManifest
-}): void {
-  for (const asset of input.manifest.assets) {
-    const ranges = new Set<string>()
-    for (const sourceRef of asset.sourceRefs) {
-      if (!input.screenplay.screenplayText.includes(sourceRef.sourceExcerpt)) {
-        throw new Error(`ASSET_MANIFEST_SOURCE_REF_INVALID:${asset.manifestAssetId}`)
-      }
-      if (ranges.has(sourceRef.sourceExcerpt)) {
-        throw new Error(`ASSET_MANIFEST_SOURCE_REF_DUPLICATE:${asset.manifestAssetId}`)
-      }
-      ranges.add(sourceRef.sourceExcerpt)
-    }
-  }
-}
-
 export function validateAssetManifest(input: {
-  readonly screenplay: Screenplay
   readonly manifest: unknown
 }): AssetManifest {
   const manifest = assetManifestSchema.parse(input.manifest)
   validateManifestIdentity(manifest.assets)
-  validateSourceRefs({ screenplay: input.screenplay, manifest })
   return manifest
 }
 
 export function compileAssetManifest(input: {
-  readonly screenplay: Screenplay
   readonly manifest: unknown
 }): AssetManifest {
   const workerManifest = assetManifestWorkerOutputSchema.parse(input.manifest)
@@ -142,5 +114,5 @@ export function compileAssetManifest(input: {
       manifestAssetId: stableManifestAssetId(asset.kind, asset.canonicalName),
     })),
   })
-  return validateAssetManifest({ screenplay: input.screenplay, manifest })
+  return validateAssetManifest({ manifest })
 }

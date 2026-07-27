@@ -148,9 +148,8 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
           projectId: context.projectId,
           episodeId: null,
         })
-        const screenplay = screenplaySchema.parse(screenplaySource.contentJson)
+        screenplaySchema.parse(screenplaySource.contentJson)
         const manifest = validateAssetManifest({
-          screenplay,
           manifest: assetManifestSchema.parse(revision.contentJson),
         })
         const assets: Array<{

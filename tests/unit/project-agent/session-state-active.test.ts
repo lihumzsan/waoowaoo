@@ -139,7 +139,7 @@ describe('project agent session-state', () => {
       id: 'creative-task-project-scope',
       status: 'failed',
       payload: {
-        protocol: 'creative_work_v7',
+        protocol: 'creative_work_v8',
         requestKey: 'screenplay-drafting',
         request: {
           outputKind: 'screenplay',

@@ -290,7 +290,7 @@ describe('Creative Task Resource materialization planning', () => {
     })
   })
 
-  it('materializes one source-grounded asset manifest with the server-frozen Creative Direction lineage without generating images', () => {
+  it('materializes one screenplay-derived asset manifest with the server-frozen Creative Direction lineage without generating images', () => {
     const screenplayText = 'INT. STATION — NIGHT\nThe traveler holds a letter.'
     const screenplay = screenplaySchema.parse({
       kind: 'screenplay',
@@ -309,10 +309,6 @@ describe('Creative Task Resource materialization planning', () => {
         kind: 'character',
         canonicalName: 'Traveler',
         aliases: [],
-        sourceRefs: [{
-          sourceExcerpt: 'The traveler holds a letter.',
-          reason: 'The speaking lead needs cross-shot identity continuity.',
-        }],
         stableDescription: 'A tired traveler.',
         generationPrompt: 'Styled design for Traveler',
       }],

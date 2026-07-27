@@ -54,10 +54,6 @@ function buildGoldenAssetManifest(): unknown {
         kind: 'character',
         canonicalName: 'Mara',
         aliases: [],
-        sourceRefs: [{
-          sourceExcerpt: 'Mara crosses the silent circular room',
-          reason: 'Mara performs the visible action throughout the screenplay and needs a stable visual identity.',
-        }],
         stableDescription: 'A solitary adult astronomer with a practical field coat and an observant, composed bearing.',
         generationPrompt: 'Restrained monochrome ink-wash character reference of Mara, a solitary adult astronomer in a practical field coat, with one controlled red accent and clear full-body identity.',
       },
@@ -65,10 +61,6 @@ function buildGoldenAssetManifest(): unknown {
         kind: 'location',
         canonicalName: 'Observatory at Night',
         aliases: ['Observatory'],
-        sourceRefs: [{
-          sourceExcerpt: 'INT. OBSERVATORY - NIGHT',
-          reason: 'The complete visible story takes place in this reusable production location.',
-        }],
         stableDescription: 'A circular observatory interior with a central brass telescope, surrounding windows, and a closable dome.',
         generationPrompt: 'Restrained monochrome ink-wash environment reference of a circular observatory interior at night, central brass telescope, surrounding storm windows, closable dome, cold moonlight, and one controlled red accent.',
       },
@@ -76,10 +68,6 @@ function buildGoldenAssetManifest(): unknown {
         kind: 'prop',
         canonicalName: 'Central Telescope',
         aliases: ['Telescope'],
-        sourceRefs: [{
-          sourceExcerpt: 'The telescope rotates by itself',
-          reason: 'The telescope drives multiple visible actions and must retain a stable construction.',
-        }],
         stableDescription: 'A large brass astronomical telescope on a fixed central rotating mount.',
         generationPrompt: 'Restrained monochrome ink-wash prop reference of a large brass astronomical telescope on a fixed rotating mount, precise mechanical construction, and one controlled red accent.',
       },

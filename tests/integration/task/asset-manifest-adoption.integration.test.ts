@@ -254,7 +254,6 @@ describe('Asset Manifest adoption DB integration', () => {
       },
     })
     const manifest = compileAssetManifest({
-      screenplay,
       manifest: {
         kind: 'asset_manifest',
         overview: 'Exact screenplay-grounded assets.',
@@ -263,10 +262,6 @@ describe('Asset Manifest adoption DB integration', () => {
             kind: 'character',
             canonicalName: 'Lin',
             aliases: [],
-            sourceRefs: [{
-              sourceExcerpt: 'Lin holds a sealed letter',
-              reason: 'The visible protagonist must keep a stable identity.',
-            }],
             stableDescription: 'A tired traveler with a weathered coat and alert posture.',
             generationPrompt: 'Character reference for Lin in the adopted ink realism.',
           },
@@ -274,10 +269,6 @@ describe('Asset Manifest adoption DB integration', () => {
             kind: 'location',
             canonicalName: 'Old Station',
             aliases: ['Station'],
-            sourceRefs: [{
-              sourceExcerpt: 'INT. STATION — NIGHT',
-              reason: 'This independent visual space carries the scene.',
-            }],
             stableDescription: 'An abandoned station interior with worn platforms and iron beams.',
             generationPrompt: 'Environment reference for the old station in the adopted ink realism.',
           },
@@ -285,10 +276,6 @@ describe('Asset Manifest adoption DB integration', () => {
             kind: 'prop',
             canonicalName: 'Sealed Letter',
             aliases: ['Letter'],
-            sourceRefs: [{
-              sourceExcerpt: 'sealed letter',
-              reason: 'The handled story prop must remain recognizable.',
-            }],
             stableDescription: 'A weathered envelope closed by a dark wax seal.',
             generationPrompt: 'Prop reference for the sealed letter in the adopted ink realism.',
           },

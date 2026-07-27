@@ -778,10 +778,27 @@ describe('project agent toolset conformance', () => {
       ...videoOutput,
       globalDirection: { narrativeIntent: 'Legacy parallel planning authority.' },
     }).success).toBe(false)
+    expect(creativeWorkOutputRegistry.asset_manifest.schema.safeParse({
+      kind: 'asset_manifest',
+      overview: 'One reusable character.',
+      assets: [{
+        kind: 'character',
+        canonicalName: 'Traveler',
+        aliases: [],
+        sourceRefs: [{
+          sourceExcerpt: 'The traveler enters.',
+          reason: 'Legacy model-authored evidence.',
+        }],
+        stableDescription: 'A tired traveler.',
+        generationPrompt: 'Character reference for the traveler.',
+      }],
+      assumptions: [],
+      warnings: [],
+    }).success).toBe(false)
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v7')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v8')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,

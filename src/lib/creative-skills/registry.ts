@@ -53,7 +53,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'asset-development',
     version: '2.3.0',
     title: '资产设计与生成提示词',
-    summary: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、提供原文证据、设计外观并生成最终 Prompt；不生图、不写项目。',
+    summary: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、设计外观并生成最终 Prompt；不生图、不写项目。',
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
   }),
   'video-direction': defineSkill({
