@@ -54,7 +54,6 @@ export function readTencentSmsConfig(): TencentSmsConfig {
 export async function sendTencentVerificationSms(input: {
   phoneNumber: string
   code: string
-  ttlMinutes: number
   challengeId: string
 }): Promise<TencentSmsSendResult> {
   const config = readTencentSmsConfig()
@@ -80,7 +79,7 @@ export async function sendTencentVerificationSms(input: {
     SmsSdkAppId: config.sdkAppId,
     SignName: config.signName,
     TemplateId: config.templateId,
-    TemplateParamSet: [input.code, String(input.ttlMinutes)],
+    TemplateParamSet: [input.code],
     SessionContext: input.challengeId,
   })
   const status = response.SendStatusSet?.[0]

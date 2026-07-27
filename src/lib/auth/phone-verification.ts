@@ -16,7 +16,6 @@ import { getPrismaErrorCode } from '@/lib/prisma-error'
 import { redis } from '@/lib/redis'
 
 const PHONE_CODE_TTL_SECONDS = 5 * 60
-const PHONE_CODE_TTL_MINUTES = PHONE_CODE_TTL_SECONDS / 60
 const PHONE_SEND_COOLDOWN_SECONDS = 60
 const PHONE_DAILY_SEND_LIMIT = 10
 const PHONE_CODE_MAX_ATTEMPTS = 5
@@ -227,7 +226,6 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     await sendTencentVerificationSms({
       phoneNumber,
       code,
-      ttlMinutes: PHONE_CODE_TTL_MINUTES,
       challengeId,
     })
   } catch (error) {
