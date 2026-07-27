@@ -149,7 +149,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v8' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v9' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -204,7 +204,6 @@ export const creativeWorkTaskResultSchema = z.object({
     schemaId: z.string().trim().min(1),
     mediaType: z.enum(['text', 'image', 'audio', 'video']),
     name: z.string().trim().min(1),
-    candidateKey: z.string().trim().min(1).nullable(),
   }).strict()).min(1).optional()
     .describe('Exact immutable Resource revisions materialized atomically from this completed result. Absent when this output kind has no persistent Resource projection.'),
 }).strict().superRefine((result, context) => {
@@ -273,9 +272,7 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
     case 'continuity_analysis':
       return output.summary
     case 'creative_direction':
-      return output.design.mode === 'final'
-        ? output.design.creativeDirection.styleSummary
-        : output.design.candidates.map((candidate) => candidate.title).join(' / ')
+      return output.creativeDirection.styleSummary
     case 'asset_manifest':
       return output.overview || output.assets.map((asset) => asset.canonicalName).join(' / ')
     case 'video_prompt_set':

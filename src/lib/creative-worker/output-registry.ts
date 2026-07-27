@@ -43,44 +43,10 @@ const continuityAnalysisOutputSchema = z.object({
   assumptions: textList(64, 2_000),
 }).strict()
 
-const creativeDirectionCandidateKeySchema = z.string()
-  .trim()
-  .min(1)
-  .max(100)
-  .regex(/^[a-z0-9][a-z0-9_-]*$/)
-  .describe('Model-authored stable identity for this candidate. It is not tied to a fixed option count or a predefined A/B/C vocabulary.')
-
-const creativeDirectionCandidatesSchema = z.array(z.object({
-  candidateKey: creativeDirectionCandidateKeySchema,
-  title: z.string().trim().min(1).max(300),
-  summary: z.string().trim().min(1).max(4_000),
-  creativeDirection: creativeDirectionSchema,
-}).strict()).min(2).max(3).superRefine((candidates, context) => {
-  const keys = new Set<string>()
-  for (const [index, candidate] of candidates.entries()) {
-    if (keys.has(candidate.candidateKey)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [index, 'candidateKey'],
-        message: 'CREATIVE_DIRECTION_CANDIDATE_KEY_DUPLICATE',
-      })
-    }
-    keys.add(candidate.candidateKey)
-  }
-})
-
 const creativeDirectionOutputSchema = z.object({
   kind: z.literal('creative_direction'),
-  design: z.discriminatedUnion('mode', [
-    z.object({
-      mode: z.literal('final'),
-      creativeDirection: creativeDirectionSchema,
-    }).strict(),
-    z.object({
-      mode: z.literal('candidates'),
-      candidates: creativeDirectionCandidatesSchema,
-    }).strict(),
-  ]).describe('Return one finalized Creative Direction, or a validated candidate set when the user needs comparison.'),
+  creativeDirection: creativeDirectionSchema
+    .describe('Exactly one complete, final project-level Creative Direction. Resolve alternatives internally; never return multiple versions or candidates.'),
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),
 }).strict()

@@ -77,27 +77,24 @@ function buildGoldenAssetManifest(): unknown {
   }
 }
 
-function buildGoldenStyleBible(): unknown {
+function buildGoldenCreativeDirection(): unknown {
   return {
     kind: 'creative_direction',
-    design: {
-      mode: 'final',
-      creativeDirection: {
-        rawUserStyle: 'restrained ink-wash science fiction',
-        styleSummary: 'Restrained monochrome ink-wash science fiction with one red accent.',
-        visual: {
-          visualStyle: 'Fine ink contours, soft paper grain, measured negative space, and restrained motion.',
-          assetImageStyle: {
-            lighting: 'Low-key moonlight with a single controlled red practical accent.',
-            texture: 'Visible cold-press paper grain and dry-brush shadow edges.',
-          },
+    creativeDirection: {
+      rawUserStyle: 'restrained ink-wash science fiction',
+      styleSummary: 'Restrained monochrome ink-wash science fiction with one red accent.',
+      visual: {
+        visualStyle: 'Fine ink contours, soft paper grain, measured negative space, and restrained motion.',
+        assetImageStyle: {
+          lighting: 'Low-key moonlight with a single controlled red practical accent.',
+          texture: 'Visible cold-press paper grain and dry-brush shadow edges.',
         },
-        narrative: 'Reveal the anomaly through restrained observation and delayed confirmation.',
-        directing: 'Locked frames dominate; motivated movement begins only after the anomaly becomes undeniable.',
-        editing: 'Use evidence-driven hard cuts and no decorative glitch transitions.',
-        sound: 'Preserve observatory room tone, sparse mechanical detail, and silence at the warning reveal.',
-        assetPolicy: 'Keep human and observatory identities naturalistic while the red warning motif remains the only graphic accent.',
       },
+      narrative: 'Reveal the anomaly through restrained observation and delayed confirmation.',
+      directing: 'Locked frames dominate; motivated movement begins only after the anomaly becomes undeniable.',
+      editing: 'Use evidence-driven hard cuts and no decorative glitch transitions.',
+      sound: 'Preserve observatory room tone, sparse mechanical detail, and silence at the warning reveal.',
+      assetPolicy: 'Keep human and observatory identities naturalistic while the red warning motif remains the only graphic accent.',
     },
     assumptions: [],
     warnings: [],
@@ -224,7 +221,7 @@ export function generateGoldenResponseFormatText(responseFormat: unknown): strin
   if (!schema) return null
   if (schemaContainsLiteral(schema, 'screenplay')) return JSON.stringify(buildGoldenScreenplay())
   if (schemaContainsLiteral(schema, 'story_canon')) return JSON.stringify(buildGoldenStoryCanon(schema))
-  if (schemaContainsLiteral(schema, 'creative_direction')) return JSON.stringify(buildGoldenStyleBible())
+  if (schemaContainsLiteral(schema, 'creative_direction')) return JSON.stringify(buildGoldenCreativeDirection())
   if (schemaContainsLiteral(schema, 'asset_manifest')) return JSON.stringify(buildGoldenAssetManifest())
   if (schemaContainsLiteral(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))

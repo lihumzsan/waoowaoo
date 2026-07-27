@@ -798,7 +798,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v8')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v9')
     const lifecycleProjection = {
       requestKey: 'review-1',
       outputKind: 'creative_review' as const,

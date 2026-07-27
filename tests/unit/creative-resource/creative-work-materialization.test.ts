@@ -135,16 +135,10 @@ function taskResult(
 }
 
 describe('Creative Task Resource materialization planning', () => {
-  it('accepts a model-authored variable candidate set without preview-image prompts', () => {
-    const candidates = ['ink', 'paper_cut', 'stylized_3d'].map((candidateKey) => ({
-      candidateKey,
-      title: candidateKey,
-      summary: `${candidateKey} summary`,
-      creativeDirection: { ...creativeDirection, styleSummary: candidateKey },
-    }))
+  it('materializes exactly one final Creative Direction with archived research metadata', () => {
     const output = creativeWorkOutputSchemas.creative_direction.parse({
       kind: 'creative_direction',
-      design: { mode: 'candidates', candidates },
+      creativeDirection,
       assumptions: [],
       warnings: [],
     })
@@ -156,18 +150,19 @@ describe('Creative Task Resource materialization planning', () => {
     })
 
     expect(plan.resourceScope).toBe('project')
-    expect(plan.outputs).toHaveLength(3)
-    expect(plan.outputs.map((candidate) => candidate.candidateKey)).toEqual([
-      'ink',
-      'paper_cut',
-      'stylized_3d',
-    ])
-    expect(plan.outputs).toEqual(expect.arrayContaining([
+    expect(plan.outputs).toEqual([
       expect.objectContaining({
         schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-        candidateSetId: 'style-task',
+        sourceId: 'style-task',
+        name: creativeDirection.styleSummary,
+        candidateSetId: null,
+        candidateIndex: null,
+        content: {
+          kind: 'structured',
+          data: creativeDirection,
+        },
       }),
-    ]))
+    ])
     expect(JSON.stringify(plan)).not.toContain('gridImagePrompt')
     expect(plan.outputs[0]?.generationOptions).toMatchObject({
       research: {
@@ -185,19 +180,26 @@ describe('Creative Task Resource materialization planning', () => {
     })
   })
 
-  it('rejects duplicate model-authored candidate keys', () => {
-    const candidate = {
-      candidateKey: 'ink',
-      title: 'Ink',
-      summary: 'Ink summary',
-      creativeDirection,
-    }
-    expect(() => creativeWorkOutputSchemas.creative_direction.parse({
+  it('rejects the removed multi-candidate Creative Direction contract', () => {
+    expect(creativeWorkOutputSchemas.creative_direction.safeParse({
       kind: 'creative_direction',
-      design: { mode: 'candidates', candidates: [candidate, candidate] },
+      design: {
+        mode: 'candidates',
+        candidates: [{
+          candidateKey: 'ink',
+          title: 'Ink',
+          summary: 'Ink summary',
+          creativeDirection,
+        }, {
+          candidateKey: 'paper-cut',
+          title: 'Paper cut',
+          summary: 'Paper cut summary',
+          creativeDirection,
+        }],
+      },
       assumptions: [],
       warnings: [],
-    })).toThrow('CREATIVE_DIRECTION_CANDIDATE_KEY_DUPLICATE')
+    }).success).toBe(false)
   })
 
   it('projects a screenplay as one exact source-script revision plan with Task lineage', () => {
@@ -231,7 +233,6 @@ describe('Creative Task Resource materialization planning', () => {
         schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         sourceType: 'CreativeWorkResult',
         sourceId: 'screenplay-task',
-        candidateKey: null,
         content: {
           kind: 'structured',
           data: expect.objectContaining({

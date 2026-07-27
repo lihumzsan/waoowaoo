@@ -134,7 +134,6 @@ async function materializeDomainOutputs(
         schemaId: output.schemaId,
         mediaType: output.mediaType,
         name: output.name,
-        candidateKey: output.candidateKey,
       })
   }
   return { resources }

@@ -44,14 +44,14 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
-    version: '3.3.0',
+    version: '4.0.0',
     title: '创作方向',
-    summary: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究转译为视觉、叙事、导演、剪辑、声音和资产六个可执行方向块，可返回最终方向或 2–12 个完整候选。',
+    summary: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究收敛为一份最终的视觉、叙事、导演、剪辑、声音和资产六领域方向。',
     tags: ['creative-direction', 'style', 'narrative', 'directing', 'editing', 'sound', 'assets'],
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '2.3.0',
+    version: '2.4.0',
     title: '资产设计与生成提示词',
     summary: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、设计外观并生成最终 Prompt；不生图、不写项目。',
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],

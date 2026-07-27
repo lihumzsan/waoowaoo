@@ -84,14 +84,27 @@ describe('Creative Worker structured-output transport schema', () => {
     expect(schema.safeParse(normalized).success).toBe(true)
   })
 
-  it('keeps business limits authoritative in the original Zod output schema', () => {
-    const invalidStyleOutput = {
+  it('keeps the single Creative Direction contract authoritative in the original Zod schema', () => {
+    const legacyCandidateOutput = {
       kind: 'creative_direction',
-      design: { mode: 'candidates', candidates: [] },
+      design: {
+        mode: 'candidates',
+        candidates: [{
+          candidateKey: 'one',
+          title: 'One',
+          summary: 'First direction',
+          creativeDirection: {},
+        }, {
+          candidateKey: 'two',
+          title: 'Two',
+          summary: 'Second direction',
+          creativeDirection: {},
+        }],
+      },
       assumptions: [],
       warnings: [],
     }
 
-    expect(creativeWorkOutputSchemas.creative_direction.safeParse(invalidStyleOutput).success).toBe(false)
+    expect(creativeWorkOutputSchemas.creative_direction.safeParse(legacyCandidateOutput).success).toBe(false)
   })
 })

@@ -14,7 +14,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - **AP-04 — 结果与过程分离。** reasoning/stream 只用于运行展示，不拥有领域事实；Task terminal 的 strict result 才能物化正式 Revision。UI 不从 reasoning、markdown 标题或文案推断完成状态。
 - **AP-05 — Choice 完全由模型填写。** Primary 自行填写当前问题、说明、options、labels 与精确 subject；通用 Choice 不包含业务类型、固定按钮或未来步骤。原子 commitment 只能调用 registry 明示的当前非收费事务 Operation。
 - **AP-06 — `>180s` 只是规划信号。** Prompt 可要求 Primary 评估并行、上下文、恢复与连续性；服务端不得把时长变成 Chapter/Story Canon/continuity 分支。Primary 若需要 Chapter，先委派 `chapter_plan`，再显式采用；每单元 180 秒仅是采用时的局部校验。
-- **AP-07 — Creative Direction 默认纯文本/结构化 Resource。** 只有用户明确要求预览时才调用普通图片 Operation；方向 Choice 不隐式生成图片。
+- **AP-07 — Creative Direction 是单一纯文本/结构化 Resource。** 每个 Task 恰好返回并物化一份完整最终 Direction；Worker 内部完成取舍，输出契约不表达候选集合。只有用户明确要求预览时才调用普通图片 Operation，且预览不改变 Direction identity。
 - **AP-08 — 输入只用精确 Revision。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 revisionId 及显式用途；服务端回库解析 Resource、schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。
 - **AP-09 — Provider 约束不升级为创作流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此写固定产品阶段。
 - **AP-10 — 双语语义一致。** System Prompt 与每个 Skill 的中英文版本必须具有相同契约变量、输出语义与禁止项；用户可见内容走 i18n。
@@ -43,7 +43,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - 旧 script intake、Story Canon、核心剪辑、镜头计划、风格预览与 BGM 各有 prompt/schema/worker，和 Creative Skill 形成竞争 writer。当前删除专用模板与 worker，专业结果只经 output registry 物化。
 - 旧结构化 stream projector 把 token 增量当正式领域内容，刷新和并发会造成空窗或串流。当前 stream 只展示运行状态，正式 Revision 在 Task terminal 一次接手。
 - 旧 source script/Story Canon schema 要求模型回传系统 identity、版本标记或重复 persistent facts，服务端再用启发式校验，形成第二事实来源。当前 identity/fingerprint/lineage 由服务端构造，模型只输出创作内容。
-- 风格选择曾默认生成九宫格预览并进入专用 Choice；当前 Creative Direction 是普通 Resource，预览图是用户明确要求时的独立图片 Operation。
+- 风格选择曾默认生成九宫格预览并进入专用 Choice，随后文字输出仍保留 final/candidates 双模式；真实方向任务会为一次请求写多份完整政策并放大 structured output 成本。当前每个 Creative Direction Task 只物化一个普通 Resource，预览图是用户明确要求时的独立图片 Operation。
 - 一分钟内容曾因 Beat 数量被固定估时扩大到数分钟。首次修正只发生在 Prompt 层（约束估时口径、删除逐拍固定时长先验），没有改动请求契约：`video_prompt_set` 仍要求调用方交出一个精确秒数，缺失即拒绝，运行时又强制分段之和精确等于该秒数。用户没有说明时长时，Primary 只能猜一个数，估算误差被下游强制转化为拖慢的表演；随后新增的 `screenplay.estimatedDurationSeconds` 又在无估时方法的新路径上长出第二个休眠时长解释源，构成同一不变量的换路径复发。当前把时长权威显式化为 `durationIntent`：`mode=fixed` 只承载用户明确说明的秒数并保持严格等值校验，`mode=derive` 由导演 Worker 从真实对白语速、可见动作与必要停顿决定总时长；Beat/Chapter 估时降级为规划参考，`screenplay.estimatedDurationSeconds` 已删除。服务端仍不建立时长状态机，也不按时长选择流程。真实模型的估时口径与节奏服从度仍需抽样验证。
 - 完整 Operation registry 上线后，Prompt 的“所有工具可用”与 runtime 的全量 Schema 注入被绑定成同一个概念，导致每一步重复发送所有长描述和严格参数定义。首次按需加载又把“下一步新增具体 Operation tool”当作 Schema 交付方式：虽然减少首步 token，却改变多轮 tools 前缀并破坏缓存，且把所有加载后的复杂 schema 重新交给不同 Provider 的 function validator。旧 Prompt/单测只约束“加载与执行分步”，没有约束顶层工具定义稳定。当前双语 Prompt 统一为“`load_tools` 返回 canonical parameters → 后续调用固定 `execute_operation`”，具体 Schema 只追加在消息尾部；Task 回执与终态读取规则保持不变。
 - 剧本 canonicalization 曾在输出契约中同时拥有剧本文本、scene/entity registry 和生产资产候选；Primary 又被要求复制实体名单给 Asset Worker。真实“坠落到崖底”只在结尾出现一次，被前一 Worker 合并进山顶后，下游 exact coverage 反而禁止补回。Prompt 级地点细化只修正一次启发式，没有修正事实 owner。当前双语 Prompt 与语义 guard 明确：`screenplay` 不登记生产资产，Primary 委派 `asset_manifest` 只传精确 screenplay、用户目标和不可从 Revision 推导的约束，绝不手写名单或手动附带 Creative Direction；已采纳方向由服务端向全部非方向生产者冻结完整精确内容，Asset Worker 自行使用相关政策。资产筛选、设计与 Prompt 在一个 Subagent Task 内完成。终态失败的 `errorCode` 由 Task View 确定性展示，Primary 在任何重派前必须先给出用户可见解释且请求发生真实变化；模型叙述不再承担错误事实本身。

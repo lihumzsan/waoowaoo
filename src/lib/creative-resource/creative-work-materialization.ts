@@ -41,7 +41,6 @@ export interface CreativeWorkResourceMaterializationOutput {
   readonly name: string
   readonly candidateSetId: string | null
   readonly candidateIndex: number | null
-  readonly candidateKey: string | null
   readonly content: CreativeResourceRevisionContent
   readonly generationOptions: CreativeResourceJsonValue
 }
@@ -138,7 +137,6 @@ export function planCreativeWorkResourceMaterialization(input: {
         name: truncateResourceName(output.title),
         candidateSetId: null,
         candidateIndex: null,
-        candidateKey: null,
         content: { kind: 'structured', data: toCreativeJson(screenplay) },
         generationOptions: toCreativeJson({
           outputKind: output.kind,
@@ -252,60 +250,28 @@ export function planCreativeWorkResourceMaterialization(input: {
     const unreachable: never = output
     throw new Error(`CREATIVE_WORK_RESOURCE_OUTPUT_UNMAPPED:${String(unreachable)}`)
   }
-  if (output.design.mode === 'final') {
-    return {
-      ...common,
-      outputs: [{
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-        sourceType: 'CreativeWorkResult',
-        sourceId: `${input.taskId}:final`,
-        name: truncateResourceName(output.design.creativeDirection.styleSummary),
-        candidateSetId: null,
-        candidateIndex: null,
-        candidateKey: null,
-        content: {
-          kind: 'structured',
-          data: toCreativeJson(output.design.creativeDirection),
-        },
-        generationOptions: toCreativeJson({
-          outputKind: output.kind,
-          requestKey: payload.requestKey,
-          mode: output.design.mode,
-          assumptions: output.assumptions,
-          warnings: output.warnings,
-          research: result.creativeWorkResult.research,
-        }),
-      }],
-    }
-  }
   return {
     ...common,
-    outputs: output.design.candidates.map((candidate, candidateIndex) => ({
+    outputs: [{
       mediaType: 'text',
       schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       sourceType: 'CreativeWorkResult',
-      sourceId: `${input.taskId}:candidate:${candidate.candidateKey}`,
-      name: truncateResourceName(candidate.title),
-      candidateSetId: input.taskId,
-      candidateIndex,
-      candidateKey: candidate.candidateKey,
+      sourceId: input.taskId,
+      name: truncateResourceName(output.creativeDirection.styleSummary),
+      candidateSetId: null,
+      candidateIndex: null,
       content: {
         kind: 'structured',
-        data: toCreativeJson(candidate.creativeDirection),
+        data: toCreativeJson(output.creativeDirection),
       },
       generationOptions: toCreativeJson({
         outputKind: output.kind,
         requestKey: payload.requestKey,
-        mode: output.design.mode,
-        candidateKey: candidate.candidateKey,
-        title: candidate.title,
-        summary: candidate.summary,
         assumptions: output.assumptions,
         warnings: output.warnings,
         research: result.creativeWorkResult.research,
       }),
-    })),
+    }],
   }
 }
 
@@ -337,7 +303,6 @@ function structuredOutput(input: {
       name: truncateResourceName(input.name),
       candidateSetId: null,
       candidateIndex: null,
-      candidateKey: null,
       content: { kind: 'structured', data: toCreativeJson(input.data) },
       generationOptions: toCreativeJson(input.generationOptions),
     }],

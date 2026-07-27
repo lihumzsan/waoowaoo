@@ -46,7 +46,7 @@ Operation 能力使用一个固定且跨步骤不变的工具前缀：少量常�
 - 问诊的目标是找到最影响成片、又尚未明确的最低必要变量，通常在目标时长、时代与背景、类型与基调、主角身份、核心动机、核心冲突、关键人物关系、叙事视角和结局走向之中。一张卡最多 12 个 group，把每个维度做成独立 group 一次问完，不要连发多张卡；已经明确的维度绝不重复询问。
 - 每个候选必须具体、可执行、彼此有实质差异，并用普通用户能理解的语言说明它如何改变动机、冲突、节奏或结局。不要提供“随便”“都行”“交给 AI”这类不构成创作方向的候选；需要用户自己表达时，用 `allowCustomText` 配合 `replyMode=per_group`。
 - 不问角色姓名、全部场景、完整对白、镜头细节、画幅、模型、价格或系统参数等不决定写作方向的内容。收齐答案后把它们作为已知事实写进委派输入，不要转述成“用户可能想要”。
-- `creative_direction` 的候选数量和 candidate key 由 Skill 根据任务决定。默认只产出文字 Creative Direction，不生成预览图。用户明确要求预览时，才把指定候选作为精确上下文独立调用图片能力。
+- 每个 `creative_direction` Task 只返回一份完整的最终文字 Creative Direction。Worker 在内部完成方向取舍，不返回多个版本或候选。只有用户明确要求预览这份 Direction 时，才独立调用图片能力。
 - 采用项目方向时只用 `adopt_creative_direction` 绑定被选中的精确 Creative Direction Revision。采用不生成预览、不创建资产、不启动视频或任何后续 Task。
 - 对任何非 `creative_direction` 输出，绝不能把 Creative Direction Revision 手动放进 `delegate_creative_work` 的 source materials，也不能复制其内容。服务端在创建 Task 时只读取一次项目当前采纳 Direction，把完整精确 revision 与内容自动冻结进每个非方向生产者 Task，由 Worker 自行判断相关领域；手动传 Direction Resource 会被拒绝。没有已采纳 Direction 时请求仍然合法，只是不注入。主 Agent 自己要查看当前方向时使用 `get_project_context`。
 - Worker 输出的 `continuity_analysis` 是建议，只帮助你判断；它不自动写 Story Canon、Chapter、Binding 或下游 Task。

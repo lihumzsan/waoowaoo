@@ -13,7 +13,7 @@
 - **CR-01 — 一个稳定 Resource，多次不可变 Revision。** `CreativeResource.id` 是产物 identity；成功生成、修改或重生成只能追加 `CreativeResourceRevision` 并原子推进 `headRevisionId`，不得原地改写历史 Revision。通用候选以 `operationId + requestId + candidateIndex` 形成唯一 origin；专业产物以 `sourceType + sourceId` 形成唯一 origin，同一专业实体不得创建第二个 Resource。
 - **CR-02 — 只有确需结构化查询的事实才进入领域投影。** Creative Worker 成功物化的 `screenplay` Revision 只保存剧本文本及写作元信息；生成、粘贴和导入只改变 `source`，不复制为“正式/确认剧本”，也不登记生产资产、场景范围或第二套叙事实体状态。Story Canon adoption、Chapter adoption 与项目资产可保留严格、可追溯投影；图片、音频、视频、Creative Direction、连续性和 Prompt 结果都只存在于 Resource spine，不建立专用阶段表。
 - **CR-03 — 四种媒体只是 fallback。** 每个 Resource 必须声明一个 `mediaType=text|image|audio|video` 和一个穷尽注册的 `schemaId`。`schemaId` 决定专业语义与首选 presentation；仅在没有专业 renderer 时才使用 mediaType renderer。新增剧本变体、图片角色或其他专业内容主要增加 schema/renderer 声明，不得复制 Resource、Revision、Lineage 或 Binding 模型。
-- **CR-03A — Creative Direction 是结构化文字 Resource。** Creative Task 终态把 final 或每个候选分别物化为 `mediaType=text + schemaId=project.creative_direction` 的不可变 Revision；内容严格为 `styleSummary/rawUserStyle + visual/narrative/directing/editing/sound/assetPolicy`，其中规则与禁止项归入所属领域。Task id/candidate key 构成稳定 origin，实际输入 revisions 构成 lineage。`adopt_creative_direction` 不复制内容，只把被选中的精确 Revision 写入 canonical Binding。Canvas 使用 schema-aware renderer 展示结构化内容，不建立第二实体或默认预览图。
+- **CR-03A — Creative Direction 是单一结构化文字 Resource。** 每个 Creative Task 终态恰好物化一个 `mediaType=text + schemaId=project.creative_direction` 的不可变 Revision；内容严格为 `styleSummary/rawUserStyle + visual/narrative/directing/editing/sound/assetPolicy`，其中规则与禁止项归入所属领域。Task id 构成稳定 origin，实际输入 revisions 构成 lineage；专业输出不声明 candidate key 或候选集合。`adopt_creative_direction` 不复制内容，只把该 Task 产出的精确 Revision 写入 canonical Binding。Canvas 使用 schema-aware renderer 展示结构化内容，不建立第二实体或默认预览图。
 - **CR-04 — Lineage 只记录实际输入 Revision。** 每条 `CreativeResourceLineage` 必须从精确的 `inputRevisionId + role + position` 指向输出 Revision。Revision ID 全局唯一且不可变，调用方不得再附带 resourceId、内容副本或 fingerprint 充当第二身份；服务端从数据库解析 owner、scope、schema 与真实内容。不得从当前 head、最近资源、数组位置、Prompt、历史消息或 Canvas edge 反推输入。
 - **CR-05 — 生成与采用分离。** 生成候选只创建 Resource/Revision；把某个候选用于项目角色、插槽或 canonical 选择，只能通过 `CreativeResourceBinding` 的 `scope + role + slotKey` CAS 更新。选择不得删除、覆盖或重新生成其他候选。Binding 保存精确 `resourceId + revisionId`，刷新后仍指向同一 Revision。
 - **CR-06 — provenance 冻结真实调用。** 每个成功 Revision 必须保存适用的 `operationId`、稳定输入 hash、Task/OperationExecution/executionSegment/toolCall identity、实际 prompt、modelKey 与生成参数。缺失适用来源时必须显式失败；不得用模型事后总结、UI 文案或当前配置补造历史来源。
@@ -47,7 +47,7 @@
 | 项目采用与 canonical 选择 | `CreativeResourceBinding` / Binding service CAS | Agent、Canvas、后续显式读取 |
 | 异步候选 pending | Operation 的 Task 提交事务（预留 Resource + Task + broadcast） | Resource View、Canvas |
 | 异步候选 ready/failed/canceled | `commitTaskTerminal` | Agent continuation、Resource View |
-| Creative Direction final/候选 Revisions | Creative Task terminal materializer | Primary、Canvas、adopt Operation |
+| Creative Direction 最终 Revision | Creative Task terminal materializer；每个 Task 恰好一个 | Primary、Canvas、adopt Operation |
 | 剧本文本与写作元信息 | `screenplay` Task terminal materializer，或 `create_text.current_user_text` 的精确 screenplay 分支 | Primary、Story Canon/Chapter/continuity、Asset Worker、Canvas |
 | 剧本/Story Canon/Creative Direction 的 Project scope | Creative Work output registry + Task terminal materializer | 同 Project 各 Episode 的显式采用/委派 |
 | 当前采纳的 Creative Direction Binding | `adopt_creative_direction` transactional Operation | Project Context、Task 创建时的统一方向注入 |

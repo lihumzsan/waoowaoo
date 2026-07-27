@@ -476,6 +476,7 @@
         "src/lib/operations/domains/assistant/creative-direction-ops.ts",
         "src/lib/workers/handlers/creative-work.ts",
         "src/lib/creative-resource/creative-work-materialization.ts",
+        "src/lib/creative-resource/task-materializer.ts",
         "src/lib/task/definition.ts",
         "src/lib/task/result-projection.ts",
         "src/lib/project-agent/operation-batch.ts",
