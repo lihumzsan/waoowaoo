@@ -6,7 +6,14 @@ import {
   type ReasoningMessagePartProps,
 } from '@assistant-ui/react'
 import { useTranslations } from 'next-intl'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import { MarkdownTextPart } from './MarkdownTextPart'
@@ -14,6 +21,8 @@ import {
   resolveWorkspaceAssistantRunTraceView,
   WORKSPACE_ASSISTANT_RUN_TRACE_GROUP_KEY,
 } from './workspace-assistant-run-trace'
+
+const WorkspaceAssistantRunTraceGroupContext = createContext(false)
 
 function WorkspaceAssistantReasoningDisclosure({
   running,
@@ -137,6 +146,7 @@ export function WorkspaceAssistantReasoningPart({
   status,
 }: ReasoningMessagePartProps) {
   const t = useTranslations('assistantAgent')
+  const inRunTraceGroup = useContext(WorkspaceAssistantRunTraceGroupContext)
   const running = status.type === 'running'
   const [open, setOpen] = useState(running)
   const [touched, setTouched] = useState(false)
@@ -149,6 +159,14 @@ export function WorkspaceAssistantReasoningPart({
   }, [running, touched])
 
   if (!text.trim()) return null
+
+  const content = (
+    <div className="border-l border-[var(--glass-stroke-base)] pl-3 leading-6 text-[var(--glass-text-secondary)]">
+      <MarkdownTextPart text={text} status={status} />
+    </div>
+  )
+
+  if (inRunTraceGroup) return content
 
   return (
     <section className="text-sm text-[var(--glass-text-tertiary)]">
@@ -174,9 +192,7 @@ export function WorkspaceAssistantReasoningPart({
         />
       </button>
       {open ? (
-        <div className="mt-1 border-l border-[var(--glass-stroke-base)] pl-3 leading-6 text-[var(--glass-text-secondary)]">
-          <MarkdownTextPart text={text} status={status} />
-        </div>
+        <div className="mt-1">{content}</div>
       ) : null}
     </section>
   )
@@ -206,9 +222,11 @@ export function WorkspaceAssistantRunTraceGroup({
       running={false}
       label={label}
     >
-      <div className="space-y-3">
-        {children}
-      </div>
+      <WorkspaceAssistantRunTraceGroupContext.Provider value>
+        <div className="space-y-3">
+          {children}
+        </div>
+      </WorkspaceAssistantRunTraceGroupContext.Provider>
     </WorkspaceAssistantReasoningDisclosure>
   )
 }
