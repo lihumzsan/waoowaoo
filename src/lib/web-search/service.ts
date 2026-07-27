@@ -1,3 +1,11 @@
+/**
+ * The single business entry point for web search.
+ *
+ * Every caller — the Primary Operation and the Creative Direction Worker tool —
+ * goes through `searchWeb`. Neither constructs an OpenAI client, an agent, or a
+ * hosted tool of its own, which is what keeps one provider decision, one
+ * credential read and one failure vocabulary for the whole product.
+ */
 import {
   normalizedWebSearchRequestSchema,
   type WebSearchProgressListener,
@@ -34,6 +42,12 @@ export function resolveWebSearchModel(
   return configured
 }
 
+/**
+ * Reads the only supported configuration. A missing key fails here with a typed
+ * error rather than degrading to a keyless call or borrowing the Primary /
+ * analysis provider's credentials — an unconfigured deployment must be obvious,
+ * not quietly worse at research.
+ */
 export function createConfiguredWebSearchProvider(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): WebSearchProvider {
@@ -57,6 +71,12 @@ export function createConfiguredWebSearchProvider(
   }
 }
 
+/**
+ * Validates the request against the public contract before any network call, so
+ * a malformed model-authored brief is a typed request failure instead of a
+ * wasted paid round trip. `provider` is injectable for contract tests only;
+ * production always resolves it from configuration.
+ */
 export async function searchWeb(input: {
   readonly request: WebSearchRequest
   readonly signal: AbortSignal

@@ -1,3 +1,15 @@
+/**
+ * The Primary Agent's research capability.
+ *
+ * Search is exposed as an Operation rather than hung off the Primary model,
+ * because the Primary may run on OpenRouter or Claude while the hosted
+ * `web_search` tool only exists inside OpenAI's Responses boundary. Routing
+ * through the fixed `load_tools + execute_operation` gateway keeps the model
+ * choice independent of the research capability.
+ *
+ * It writes nothing and is not billable at the Task layer; the cost is the
+ * provider call itself.
+ */
 import { ApiError } from '@/lib/api-errors'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
@@ -21,6 +33,13 @@ type SearchWeb = (input: {
   readonly onProgress?: WebSearchProgressListener
 }) => Promise<WebSearchResponse>
 
+/**
+ * Translates the search failure vocabulary into Operation errors the Agent can
+ * act on. A missing or rejected key becomes `MISSING_CONFIG` so the assistant
+ * tells the user the capability is unconfigured instead of retrying forever;
+ * everything else keeps its `retryable` flag so a transient fault can be tried
+ * again while a malformed provider response is not.
+ */
 function toOperationError(error: unknown): never {
   if (!isWebSearchError(error)) throw error
   if (error.code === 'WEB_SEARCH_UNAVAILABLE') {

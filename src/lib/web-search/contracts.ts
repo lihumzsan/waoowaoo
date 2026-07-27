@@ -1,7 +1,22 @@
+/**
+ * The public shape of a research call.
+ *
+ * This is the whole surface every caller sees. Deliberately absent: page bodies,
+ * raw provider payloads, model reasoning, and any provider-specific knob. What
+ * is present is the evidence a caller needs to judge the answer — the report,
+ * the queries the provider actually ran, and the sources it actually cited —
+ * which is also what makes "did it really search?" a verifiable question rather
+ * than a claim.
+ */
 import { z } from 'zod'
 
 export const WEB_SEARCH_PROVIDER_ID = 'openai' as const
 
+/**
+ * A request is one compact research brief. There is no page size, result count,
+ * ranking or freshness knob: the hosted search plans its own subqueries, and
+ * exposing dials here would only let a model tune something it cannot evaluate.
+ */
 export const webSearchRequestSchema = z.object({
   query: z.string().trim().min(1).max(1_000)
     .describe('The exact question or compact research brief. Include the subject, medium, language, region, community, and recency only when they matter.'),
@@ -31,6 +46,12 @@ export const webSearchImageSchema = z.object({
   caption: z.string().trim().min(1).max(1_000).nullable(),
 }).strict()
 
+/**
+ * `sources` is non-empty by contract. A response with a report but no citation
+ * cannot be distinguished from the model answering out of memory, so the
+ * provider fails closed instead of returning one. `images` may legitimately be
+ * empty — most briefs are textual.
+ */
 export const webSearchResponseSchema = z.object({
   provider: z.literal(WEB_SEARCH_PROVIDER_ID),
   query: z.string().trim().min(1).max(1_000),

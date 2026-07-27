@@ -70,6 +70,20 @@ function createReadSkillTool(): Tool<CreativeWorkerRunContext> {
   })
 }
 
+/**
+ * The Creative Direction Worker's research tool.
+ *
+ * Only the `creative_direction` output kind receives it — the output registry is
+ * the single declaration of that. Unlike the Primary Operation this call is
+ * budgeted: `maxWebSearchCalls` is frozen when the Task is created, and an
+ * exhausted budget returns a normal typed result rather than raising, so the
+ * Worker can still finish the direction from user facts and Skills while saying
+ * plainly in its warnings that research was cut short.
+ *
+ * A failed search is likewise not a Task failure. It is an auditable research
+ * degradation, because a direction built without external evidence is still a
+ * valid direction — a direction that silently pretends it had evidence is not.
+ */
 function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
   return tool({
     name: 'web_search',

@@ -1,3 +1,15 @@
+/**
+ * Research evidence for one Creative Direction Task.
+ *
+ * The runtime builds this from what the tool actually returned; the model never
+ * reports its own research. That separation is the point: a model can claim to
+ * have searched, but it cannot fabricate an entry here.
+ *
+ * What is kept is identity only — the outer brief, the queries the provider
+ * really ran, and citation title+url. The synthesized report is deliberately
+ * dropped after the run so page-derived prose cannot become a second, permanent
+ * prompt attached to the project.
+ */
 import { z } from 'zod'
 import type { Locale } from '@/i18n/routing'
 import type { WebSearchRequest, WebSearchResponse } from '@/lib/web-search'
@@ -115,6 +127,14 @@ export function recordResearchFailure(input: {
   return attempt
 }
 
+/**
+ * Collapses the per-attempt record into one status.
+ *
+ * `not_attempted` is a normal, warning-free completion: most directions need no
+ * research and decorating them with a warning would train users to ignore
+ * warnings. Only a search that was actually tried and then failed, partially
+ * completed, or ran out of budget produces a notice.
+ */
 export function projectCreativeWorkerResearchEvidence(input: {
   readonly locale: Locale
   readonly state: CreativeWorkerResearchState

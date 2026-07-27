@@ -1,3 +1,22 @@
+/**
+ * OpenAI hosted Web Search provider.
+ *
+ * This file owns the entire wire contract for one research call: it builds the
+ * Responses request, streams it, and projects the raw output into the public
+ * `WebSearchResponse`. Nothing above it knows about OpenAI, and nothing below
+ * it decides business meaning.
+ *
+ * Two things are deliberate and easy to undo by accident:
+ *
+ * 1. There is no Agent/Runner wrapper. The hosted `web_search` tool plans its
+ *    own subqueries server-side inside a single Responses call, so an agent
+ *    loop added nothing — and the Agents SDK rebuilt the tool from a four-field
+ *    whitelist, silently dropping image settings and the consulted-source list.
+ *    Owning the request shape here is what makes those capabilities reachable.
+ * 2. Everything returned is untrusted. Report text, queries, titles, urls and
+ *    images are source data, never instructions, and are projected through
+ *    explicit readers rather than spread into the public result.
+ */
 import OpenAI, {
   APIConnectionError,
   APIConnectionTimeoutError,
@@ -23,13 +42,27 @@ const logger = createScopedLogger({
   provider: WEB_SEARCH_PROVIDER_ID,
 })
 
+/** One hosted run may plan and execute several searches, so this bounds the
+ *  whole research call rather than a single HTTP request. */
 const OPENAI_WEB_SEARCH_TIMEOUT_MS = 120_000
 const OPENAI_WEB_SEARCH_IMAGE_RESULTS = 8
 
+/**
+ * Ceilings on what one call may return. They exist so a hostile or degenerate
+ * response cannot flood a model context or a Task payload. Hitting one is
+ * logged rather than silently swallowed — see `logTruncation`.
+ */
 const MAX_REPORT_CHARS = 30_000
 const MAX_QUERIES = 32
 const MAX_SOURCES = 32
 const MAX_IMAGES = 16
+
+/**
+ * The dedicated search agent's own instructions. It is a research specialist,
+ * not a second creative author: it may report what sources and images show, but
+ * it must never emit project state or a Creative Direction. The outer caller
+ * has already decided that research is warranted before this runs.
+ */
 
 const OPENAI_WEB_SEARCH_INSTRUCTIONS = `You are a rigorous web-research specialist. You are called only after an outer agent has determined that current external evidence is necessary.
 
@@ -92,6 +125,12 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/**
+ * Every url reaching the public contract passes through here. Anything that is
+ * not a parseable http(s) URL is dropped rather than repaired, so a `file://`,
+ * `javascript:` or malformed value from a page can never reach storage, a
+ * provider, or the browser.
+ */
 function normalizeHttpUrl(value: unknown): string | null {
   const raw = readString(value).slice(0, 2_000)
   if (!raw) return null
@@ -278,6 +317,12 @@ function projectHostedEvidence(output: readonly unknown[]): HostedEvidence {
   }
 }
 
+/**
+ * The brief is handed over as JSON, not prose, so page text that arrives later
+ * cannot be confused with the caller's own instruction. `currentDate` is
+ * injected because the model otherwise has no reliable notion of "now", which
+ * matters for exactly the recency-sensitive questions this tool exists for.
+ */
 function buildSearchInput(request: NormalizedWebSearchRequest): string {
   return JSON.stringify({
     currentDate: new Date().toISOString().slice(0, 10),
@@ -305,6 +350,11 @@ function buildWebSearchTool(
   }
 }
 
+/**
+ * Projects streaming events into user-visible progress. This is presentation
+ * only: no completion, failure or evidence decision may be derived from it, and
+ * a caller that ignores progress entirely still gets identical results.
+ */
 function emitProgressFromEvent(
   onProgress: WebSearchProgressListener | undefined,
   event: UnknownRecord,
@@ -335,6 +385,15 @@ function emitProgressFromEvent(
   })
 }
 
+/**
+ * The one place that talks to OpenAI.
+ *
+ * The run is streamed for two reasons: live `web_search_call` events become
+ * user-visible progress, and the terminal `response.completed` event carries
+ * the full output in the same pass, so no second request is needed. Retries are
+ * disabled at the client because a research call is expensive and the caller
+ * owns the retry decision through the typed error.
+ */
 const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   request,
   model,
@@ -372,6 +431,14 @@ const runOpenAIHostedSearch: OpenAIHostedSearchRunner = async ({
   return { outputText, output }
 }
 
+/**
+ * Maps provider failures onto the four public error codes. The split that
+ * matters: a missing or rejected credential is `WEB_SEARCH_UNAVAILABLE`
+ * (configuration is wrong, retrying will not help), while rate limits, network
+ * faults and 5xx are retryable request failures. A user abort must not be
+ * reported as a provider fault, and the timeout signal is checked before the
+ * abort so a slow search is not mislabelled as a cancellation.
+ */
 function statusFromError(error: unknown): number | null {
   const record = readRecord(error)
   return typeof record?.status === 'number' && Number.isInteger(record.status)
@@ -468,6 +535,9 @@ export function createOpenAIWebSearchProvider(input: {
   return {
     id: WEB_SEARCH_PROVIDER_ID,
     search: async (request, options) => {
+      // Caller cancellation and the research timeout are separate facts that
+      // must stay distinguishable: `mapProviderError` reports the first as an
+      // abort and the second as a retryable failure.
       const timeoutSignal = AbortSignal.timeout(OPENAI_WEB_SEARCH_TIMEOUT_MS)
       const signal = AbortSignal.any([options.signal, timeoutSignal])
       let result: OpenAIHostedSearchRunResult
@@ -493,6 +563,11 @@ export function createOpenAIWebSearchProvider(input: {
         reportChars: rawReport.length,
         limits: evidence.limits,
       })
+      // Fail closed on unevidenced answers. Without this the model could
+      // answer from memory and the result would be indistinguishable from real
+      // research — which is the single failure this capability exists to
+      // prevent. Missing images are NOT a failure: plenty of briefs are purely
+      // textual, and demanding images would make those calls fail spuriously.
       if (
         !report
         || evidence.completedSearchCalls === 0

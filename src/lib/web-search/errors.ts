@@ -1,3 +1,12 @@
+/**
+ * The complete failure vocabulary of web search.
+ *
+ * `UNAVAILABLE` means the capability is not configured or the credential was
+ * rejected — retrying changes nothing and the caller should say so plainly.
+ * `REQUEST_FAILED` is a transport-level fault that may carry `retryable`.
+ * `RESPONSE_INVALID` means the provider answered but without usable evidence.
+ * `ABORTED` is the user's own cancellation and is never a provider fault.
+ */
 export const WEB_SEARCH_ERROR_CODES = [
   'WEB_SEARCH_UNAVAILABLE',
   'WEB_SEARCH_REQUEST_FAILED',
