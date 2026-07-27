@@ -3,8 +3,56 @@
 import React, { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { TextMessagePartProps } from '@assistant-ui/react'
+import {
+  useMessagePartRuntime,
+  type TextMessagePartProps,
+} from '@assistant-ui/react'
 import type { Components } from 'react-markdown'
+import { useWorkspaceAssistantTextPlayback } from './WorkspaceAssistantTextPlayback'
+
+type StreamedHastNode = {
+  type: string
+  tagName?: string
+  value?: string
+  properties?: Record<string, unknown>
+  children?: StreamedHastNode[]
+}
+
+// 逐字动画会把文本节点拆成 <span>。结构性容器的子元素类型由 HTML 规范限定
+// (<table> 只能容纳 <thead>/<tbody>/<tr>,<ul>/<ol> 只能容纳 <li>),
+// 标签之间的换行空白若被包成 <span> 会产生非法嵌套并触发 hydration 失败。
+// 这里只排除容器本身,单元格与列表项内部的文字仍然逐字播放。
+const STREAMED_TEXT_EXCLUDED_TAGS = new Set([
+  'code', 'pre', 'script', 'style',
+  'table', 'thead', 'tbody', 'tfoot', 'tr',
+  'ul', 'ol', 'dl',
+])
+const STREAMED_TEXT_CLASS_NAMES = [
+  'animate-in',
+  'fade-in',
+  'duration-150',
+  'motion-reduce:animate-none',
+] as const
+
+function animateStreamedTextChildren(node: StreamedHastNode): void {
+  if (!node.children || STREAMED_TEXT_EXCLUDED_TAGS.has(node.tagName ?? '')) return
+  node.children = node.children.flatMap((child) => {
+    if (child.type === 'text' && child.value) {
+      return Array.from(child.value).map<StreamedHastNode>((character) => ({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: [...STREAMED_TEXT_CLASS_NAMES] },
+        children: [{ type: 'text', value: character }],
+      }))
+    }
+    animateStreamedTextChildren(child)
+    return [child]
+  })
+}
+
+function rehypeAnimateWorkspaceAssistantStreamedText() {
+  return (tree: StreamedHastNode) => animateStreamedTextChildren(tree)
+}
 
 const markdownComponents: Components = {
   p: ({ children }) => (
@@ -23,7 +71,7 @@ const markdownComponents: Components = {
     const isInline = !className
     if (isInline) {
       return (
-        <code className="rounded bg-[var(--glass-bg-surface)] px-1.5 py-0.5 text-xs font-mono text-[var(--glass-text-primary)]">
+        <code className="whitespace-normal rounded bg-[var(--glass-bg-surface)] px-1.5 py-0.5 text-xs font-mono text-[var(--glass-text-primary)] [overflow-wrap:anywhere]">
           {children}
         </code>
       )
@@ -35,7 +83,7 @@ const markdownComponents: Components = {
     )
   },
   pre: ({ children }) => (
-    <pre className="mb-2 overflow-x-auto rounded-xl bg-[var(--glass-bg-surface)] p-3 text-xs font-mono text-[var(--glass-text-primary)] last:mb-0">
+    <pre className="mb-2 max-w-full overflow-x-auto rounded-xl bg-[var(--glass-bg-surface)] p-3 text-xs font-mono text-[var(--glass-text-primary)] last:mb-0">
       {children}
     </pre>
   ),
@@ -49,7 +97,7 @@ const markdownComponents: Components = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-[var(--glass-accent-from)] underline underline-offset-2"
+      className="break-words text-[var(--glass-accent-from)] underline underline-offset-2 [overflow-wrap:anywhere]"
     >
       {children}
     </a>
@@ -70,7 +118,7 @@ const markdownComponents: Components = {
     <hr className="my-3 border-[var(--glass-stroke-base)]" />
   ),
   table: ({ children }) => (
-    <div className="mb-2 overflow-x-auto last:mb-0">
+    <div className="mb-2 max-w-full overflow-x-auto last:mb-0">
       <table className="w-full text-xs">{children}</table>
     </div>
   ),
@@ -84,16 +132,35 @@ const markdownComponents: Components = {
   ),
 }
 
-function MarkdownTextPartImpl({ text }: Pick<TextMessagePartProps, 'text'>) {
-  if (!text) return null
+function MarkdownTextPartImpl({
+  text,
+  status,
+}: Pick<TextMessagePartProps, 'text' | 'status'>) {
+  const partRuntime = useMessagePartRuntime({ optional: true })
+  const playbackKey = partRuntime
+    ? `message-part:${JSON.stringify({
+        thread: partRuntime.path.threadSelector,
+        message: partRuntime.path.messageSelector,
+        part: partRuntime.path.messagePartSelector,
+      })}`
+    : null
+  const playback = useWorkspaceAssistantTextPlayback({
+    text,
+    running: status.type === 'running',
+    playbackKey,
+  })
+  if (!playback.text) return null
 
   return (
-    <div className="workspace-assistant-markdown">
+    <div className="workspace-assistant-markdown min-w-0 max-w-full [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={playback.animating
+          ? [rehypeAnimateWorkspaceAssistantStreamedText]
+          : []}
         components={markdownComponents}
       >
-        {text}
+        {playback.text}
       </ReactMarkdown>
     </div>
   )

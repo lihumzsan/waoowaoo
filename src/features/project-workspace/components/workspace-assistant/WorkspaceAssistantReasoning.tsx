@@ -48,7 +48,7 @@ function WorkspaceAssistantReasoningDisclosure({
             <AppIcon name="check" className="h-2.5 w-2.5" />
           </span>
         )}
-        <span>{label}</span>
+        <span className={running ? 'assistant-shimmer-text font-medium' : undefined}>{label}</span>
         <AppIcon
           name="chevronDown"
           className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -132,15 +132,12 @@ export function HiddenWorkspaceAssistantReasoning() {
 
 export function WorkspaceAssistantReasoningPart({
   text,
+  status,
 }: ReasoningMessagePartProps) {
-  const t = useTranslations('assistantAgent')
   if (!text.trim()) return null
   return (
-    <div className="space-y-1 text-sm leading-6 text-[var(--glass-text-secondary)]">
-      <div className="text-xs font-medium text-[var(--glass-text-tertiary)]">
-        {t('reasoning.itemLabel')}
-      </div>
-      <MarkdownTextPart text={text} />
+    <div className="text-sm leading-6 text-[var(--glass-text-secondary)]">
+      <MarkdownTextPart text={text} status={status} />
     </div>
   )
 }

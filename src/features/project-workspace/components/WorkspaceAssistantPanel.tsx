@@ -25,10 +25,12 @@ import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/Workspace
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
+import { WorkspaceAssistantTextPlaybackProvider } from './workspace-assistant/WorkspaceAssistantTextPlayback'
 import {
+  WorkspaceAssistantRunningSubagentDock,
   WorkspaceAssistantSubagentTabs,
-  WorkspaceAssistantSubagentView,
 } from './workspace-assistant/WorkspaceAssistantSubagents'
+import { WorkspaceAssistantSubagentView } from './workspace-assistant/WorkspaceAssistantSubagentDetail'
 import {
   buildWorkspaceAssistantPanelLayout,
   WORKSPACE_ASSISTANT_TOP_OFFSET,
@@ -211,7 +213,8 @@ export default function WorkspaceAssistantPanel({
         />
         <div className="h-full opacity-100 transition-opacity duration-200">
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
-            <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
+            <WorkspaceAssistantTextPlaybackProvider key={`${projectId}:${episodeId ?? ''}`}>
+              <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantSettings />
               <WorkspaceAssistantSubagentTabs
                 subagents={visibleSubagents}
@@ -221,7 +224,7 @@ export default function WorkspaceAssistantPanel({
               />
               <ThreadPrimitive.Viewport
                 autoScroll
-                className={`flex-1 overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
+                className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
                 style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
               >
                 {selectedSubagentId ? (
@@ -230,7 +233,7 @@ export default function WorkspaceAssistantPanel({
                     subagent={visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
                   />
                 ) : (
-                  <div>
+                  <div className="min-w-0">
                     <div className="space-y-3">
                       <ThreadPrimitive.Messages>
                         {() => (
@@ -280,6 +283,10 @@ export default function WorkspaceAssistantPanel({
               </ThreadPrimitive.Viewport>
 
               <div className="mx-4 mb-2 shrink-0">
+                <WorkspaceAssistantRunningSubagentDock
+                  subagents={visibleSubagents}
+                  onSelect={setSelectedSubagentId}
+                />
                 {displayedActiveChoiceCard ? (
                   <div className="mb-2">
                     <AssistantChoiceCardView
@@ -312,7 +319,8 @@ export default function WorkspaceAssistantPanel({
                   />
                 </div>
               </div>
-            </ThreadPrimitive.Root>
+              </ThreadPrimitive.Root>
+            </WorkspaceAssistantTextPlaybackProvider>
           </AssistantRuntimeProvider>
         </div>
       </div>

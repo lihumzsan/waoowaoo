@@ -43,7 +43,6 @@
   "reasoning": {
     "running": "思考中",
     "completed": "思考完成",
-    "itemLabel": "思考",
     "executionRunning": "执行中 · 已调用 {count} 次工具",
     "executionCompleted": "执行完成 · 调用 {count} 次工具"
   },
@@ -95,12 +94,26 @@
       "toolCalled": "调用 read_skill：{skill}",
       "toolCompleted": "read_skill 完成：{skill}",
       "toolFailed": "read_skill 失败：{skill}",
+      "researchStarted": "联网研究：{query}",
+      "researchCompleted": "研究完成：{sources} 个来源 · {images} 张图",
+      "researchUnavailable": "联网研究未完成：检索不可用或失败",
       "toolName": "工具",
       "toolResult": "结果",
       "toolUri": "资源",
-      "skillReadResult": "版本 {version} · 已读取 {chars} 字符",
-      "composing": "正在整理结构化结果"
-    }
+      "skillReadResult": "版本 {version} · 已读取 {chars} 字符"
+    },
+    "groupCollapsed": "{count} 个创作模块",
+    "groupExpand": "展开",
+    "groupCollapse": "收起",
+    "steps": "{count} 步",
+    "dockRunning": "{count} 个创作模块运行中"
+  },
+  "webSearch": {
+    "searching": "联网检索：{brief}",
+    "searchingQuery": "正在搜索：{query}",
+    "result": "已参考 {sources} 个来源",
+    "resultWithImages": "已参考 {sources} 个来源 · {images} 张图",
+    "imageAlt": "检索结果图片"
   },
   "attachments": {
     "openUpload": "上传文本文件",

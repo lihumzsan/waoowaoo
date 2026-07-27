@@ -43,7 +43,6 @@
   "reasoning": {
     "running": "Thinking",
     "completed": "Thinking complete",
-    "itemLabel": "Thinking",
     "executionRunning": "Working · {count, plural, one {# tool called} other {# tools called}}",
     "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}"
   },
@@ -95,12 +94,26 @@
       "toolCalled": "Calling read_skill: {skill}",
       "toolCompleted": "read_skill completed: {skill}",
       "toolFailed": "read_skill failed: {skill}",
+      "researchStarted": "Researching: {query}",
+      "researchCompleted": "Research complete: {sources} sources · {images} images",
+      "researchUnavailable": "Research did not complete: search was unavailable or failed",
       "toolName": "Tool",
       "toolResult": "Result",
       "toolUri": "Resource",
-      "skillReadResult": "Version {version} · {chars} characters read",
-      "composing": "Preparing the structured result"
-    }
+      "skillReadResult": "Version {version} · {chars} characters read"
+    },
+    "groupCollapsed": "{count, plural, one {1 creative module} other {# creative modules}}",
+    "groupExpand": "Expand",
+    "groupCollapse": "Collapse",
+    "steps": "{count, plural, one {1 step} other {# steps}}",
+    "dockRunning": "{count, plural, one {1 creative module running} other {# creative modules running}}"
+  },
+  "webSearch": {
+    "searching": "Searching the web: {brief}",
+    "searchingQuery": "Searching: {query}",
+    "result": "Referenced {sources} sources",
+    "resultWithImages": "Referenced {sources} sources · {images} images",
+    "imageAlt": "Web search result image"
   },
   "attachments": {
     "openUpload": "Attach text file",
