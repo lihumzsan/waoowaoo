@@ -85,6 +85,8 @@ export const queryKeys = {
             ['project', projectId, 'canvas-layout', episodeId] as const,
         context: (projectId: string, episodeId?: string | null, contextScope?: string | null) =>
             ['project', projectId, 'context', episodeId ?? '', contextScope ?? ''] as const,
+        creativeResourcesAll: (projectId: string) =>
+            ['project', projectId, 'creative-resources'] as const,
         creativeResources: (projectId: string, episodeId?: string | null) =>
             ['project', projectId, 'creative-resources', episodeId ?? ''] as const,
         assistantThread: (projectId: string, episodeId?: string | null) =>

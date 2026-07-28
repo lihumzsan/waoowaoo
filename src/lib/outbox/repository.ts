@@ -173,3 +173,41 @@ export async function releaseOutboxCommand(params: {
     },
   })
 }
+
+/**
+ * Releases expected delivery contention without consuming the command's
+ * failure budget. The matching lease proves this always balances the delivery
+ * count increment performed by claimOutboxCommand.
+ */
+export async function deferOutboxCommand(params: {
+  id: string
+  leaseOwner: string
+  retryAt: Date
+}): Promise<boolean> {
+  const result = await prisma.outboxCommand.updateMany({
+    where: {
+      id: params.id,
+      leaseOwner: params.leaseOwner,
+      acceptedAt: null,
+      deadAt: null,
+      deliveryCount: { gt: 0 },
+    },
+    data: {
+      availableAt: params.retryAt,
+      enqueuedAt: null,
+      lastError: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      deliveryCount: { decrement: 1 },
+    },
+  })
+  return result.count === 1
+}
+
+export async function isOutboxCommandSettled(id: string): Promise<boolean> {
+  const command = await prisma.outboxCommand.findUnique({
+    where: { id },
+    select: { acceptedAt: true, deadAt: true },
+  })
+  return !command || command.acceptedAt !== null || command.deadAt !== null
+}

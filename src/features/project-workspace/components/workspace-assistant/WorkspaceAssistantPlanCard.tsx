@@ -75,6 +75,7 @@ export function WorkspaceAssistantPlanCard({
   const total = plan.plan.length
   const currentIndex = resolveCurrentPlanIndex(plan)
   const currentItem = plan.plan[currentIndex]
+  const completed = plan.plan.filter((item) => item.status === 'completed').length
 
   const clearCloseTimer = useCallback(() => {
     if (!closeTimerRef.current) return
@@ -177,7 +178,7 @@ export function WorkspaceAssistantPlanCard({
         type="button"
         aria-describedby={open ? 'workspace-assistant-plan-status' : undefined}
         aria-expanded={open}
-        aria-label={`${t('plan.title')} · ${t('plan.stepProgress', { current: currentIndex + 1, total })}`}
+        aria-label={`${t('plan.title')} · ${t('plan.completedProgress', { completed, total })}`}
         className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-2.5 rounded-[22px] border border-[var(--glass-stroke-base)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--glass-text-secondary)] shadow-[0_2px_10px_rgba(15,23,42,0.03)] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--glass-text-secondary)]/20"
         onMouseEnter={showPopover}
         onMouseLeave={hidePopoverSoon}
@@ -196,7 +197,7 @@ export function WorkspaceAssistantPlanCard({
         }}
       >
         <PlanStatusIcon item={currentItem} isRunActive={isRunActive} />
-        <span className="min-w-0 truncate">{t('plan.stepProgress', { current: currentIndex + 1, total })}</span>
+        <span className="min-w-0 truncate">{t('plan.completedProgress', { completed, total })}</span>
       </button>
       {typeof document !== 'undefined' ? createPortal(popover, document.body) : null}
     </div>

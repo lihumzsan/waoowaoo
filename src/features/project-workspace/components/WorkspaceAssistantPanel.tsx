@@ -15,12 +15,12 @@ import {
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
-  AssistantChoiceCardView,
   ConfirmationActionCard,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
+import { AssistantChoiceCardView } from './workspace-assistant/WorkspaceAssistantChoiceCard'
 import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
@@ -231,6 +231,7 @@ export default function WorkspaceAssistantPanel({
                   <WorkspaceAssistantSubagentView
                     projectId={projectId}
                     subagent={visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
+                    structuredOutputText={assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null}
                   />
                 ) : (
                   <div className="min-w-0">
@@ -244,7 +245,13 @@ export default function WorkspaceAssistantPanel({
                           />
                         )}
                       </ThreadPrimitive.Messages>
-                      {showAssistantReplyLoading ? <WorkspaceAssistantPendingTurnPlaceholder /> : null}
+                      {showAssistantReplyLoading ? (
+                        <WorkspaceAssistantPendingTurnPlaceholder
+                          label={assistantRuntime.backgroundFollowUpActive
+                            ? t('panel.backgroundFollowUpRunning')
+                            : undefined}
+                        />
+                      ) : null}
                       {assistantRuntime.sessionStateError ? (
                         <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]">
                           {t('panel.sessionStateError')}
@@ -282,52 +289,55 @@ export default function WorkspaceAssistantPanel({
                 )}
               </ThreadPrimitive.Viewport>
 
-              <div className="mx-4 mb-2 shrink-0">
-                <WorkspaceAssistantRunningSubagentDock
-                  subagents={visibleSubagents}
-                  onSelect={setSelectedSubagentId}
-                />
-                {displayedActiveChoiceCard ? (
-                  <div className="mb-2">
-                    <AssistantChoiceCardView
-                      data={displayedActiveChoiceCard.data}
-                      onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
+              {selectedSubagentId === null ? (
+                <div className="mx-4 mb-2 shrink-0">
+                  <WorkspaceAssistantRunningSubagentDock
+                    subagents={visibleSubagents}
+                    onSelect={setSelectedSubagentId}
+                  />
+                  {displayedActiveChoiceCard ? (
+                    <div className="mb-2">
+                      <AssistantChoiceCardView
+                        data={displayedActiveChoiceCard.data}
+                        onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="relative">
+                    {assistantRuntime.sessionState?.plan ? (
+                      <WorkspaceAssistantPlanCard
+                        plan={assistantRuntime.sessionState.plan}
+                        isRunActive={assistantRuntime.sessionState.currentRun?.status === 'running'}
+                      />
+                    ) : null}
+                    <WorkspaceAssistantComposer
+                      value={composer.text}
+                      error={composerError}
+                      pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                      canStopReply={assistantRuntime.canStopReply}
+                      attachments={composer.attachments}
+                      attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+                      onChange={composer.setText}
+                      onSubmit={async () => {
+                        await composer.submit()
+                      }}
+                      onStopReply={assistantRuntime.stopReply}
+                      onAttachClick={() => composer.setAttachmentDialogOpen(true)}
+                      onRemoveAttachment={composer.removeAttachment}
                     />
                   </div>
-                ) : null}
-                <div className="relative">
-                  {assistantRuntime.sessionState?.plan ? (
-                    <WorkspaceAssistantPlanCard
-                      plan={assistantRuntime.sessionState.plan}
-                      isRunActive={assistantRuntime.sessionState.currentRun?.status === 'running'}
-                    />
-                  ) : null}
-                  <WorkspaceAssistantComposer
-                    value={composer.text}
-                    error={composerError}
-                    pending={assistantRuntime.pending || assistantRuntime.storageLoading}
-                    canStopReply={assistantRuntime.canStopReply}
-                    attachments={composer.attachments}
-                    attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
-                    onChange={composer.setText}
-                    onSubmit={async () => {
-                      await composer.submit()
-                    }}
-                    onStopReply={assistantRuntime.stopReply}
-                    onAttachClick={() => composer.setAttachmentDialogOpen(true)}
-                    onRemoveAttachment={composer.removeAttachment}
-                  />
                 </div>
-              </div>
+              ) : null}
               </ThreadPrimitive.Root>
             </WorkspaceAssistantTextPlaybackProvider>
           </AssistantRuntimeProvider>
         </div>
       </div>
       <TextAttachmentUploadDialog
-        open={composer.attachmentDialogOpen}
+        open={selectedSubagentId === null && composer.attachmentDialogOpen}
         disabled={
-          assistantRuntime.pending
+          selectedSubagentId !== null
+          || assistantRuntime.pending
           || assistantRuntime.storageLoading
           || composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
         }

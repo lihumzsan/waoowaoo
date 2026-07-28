@@ -52,7 +52,9 @@ function queryKeysForResource(ref: WorkspaceResourceRef): QueryKey[] {
   }
 
   if (ref.kind === WORKSPACE_RESOURCE_KIND.CREATIVE_RESOURCES) {
-    return [queryKeys.project.creativeResources(ref.projectId, ref.episodeId)]
+    // Every Episode query includes Project-scope Resources. A Project-scope
+    // change therefore invalidates the complete family, not only the `''` key.
+    return [queryKeys.project.creativeResourcesAll(ref.projectId)]
   }
 
   return []

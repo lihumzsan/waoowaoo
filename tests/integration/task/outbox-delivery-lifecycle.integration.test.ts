@@ -5,6 +5,7 @@ import {
   acceptOutboxCommand,
   claimOutboxCommand,
   createOutboxCommandInTransaction,
+  deferOutboxCommand,
 } from '@/lib/outbox/repository'
 import {
   addOutboxJob,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/outbox/queue'
 import {
   dispatchPendingOutboxCommands,
+  dispatchCommittedOutboxCommands,
   reconcileStaleEnqueuedOutboxCommands,
 } from '@/lib/outbox/dispatcher'
 import { createOutboxWorker } from '@/lib/workers/outbox.worker'
@@ -63,6 +65,18 @@ describe('durable Outbox delivery lifecycle', () => {
     expect(await getOutboxQueue().getJobs(['waiting', 'delayed', 'active'])).toHaveLength(1)
   })
 
+  it('immediately dispatches exact commands after their business transaction commits', async () => {
+    const command = await createValidCommand('outbox-commit-fast-path')
+
+    expect(await dispatchCommittedOutboxCommands([command.id])).toBe(1)
+    await expect(prisma.outboxCommand.findUniqueOrThrow({ where: { id: command.id } }))
+      .resolves.toMatchObject({ enqueuedAt: expect.any(Date), acceptedAt: null })
+    await expect(getOutboxQueue().getJob(command.id)).resolves.toMatchObject({
+      id: command.id,
+      data: { outboxId: command.id },
+    })
+  })
+
   it('resets stale enqueued state only when the Redis job is truly absent', async () => {
     const command = await createValidCommand('outbox-job-lost')
     await prisma.outboxCommand.update({
@@ -90,6 +104,31 @@ describe('durable Outbox delivery lifecycle', () => {
     expect(reclaimed).toMatchObject({ leaseOwner: 'owner-new', deliveryCount: 2 })
     await expect(acceptOutboxCommand({ id: command.id, leaseOwner: 'owner-old' })).resolves.toBe(false)
     await expect(acceptOutboxCommand({ id: command.id, leaseOwner: 'owner-new' })).resolves.toBe(true)
+  })
+
+  it('does not consume the failure budget when expected contention defers delivery', async () => {
+    const command = await createValidCommand('outbox-deferred-contention')
+    await expect(claimOutboxCommand({
+      id: command.id,
+      leaseOwner: 'owner-deferred',
+      leaseMs: 30_000,
+    })).resolves.toMatchObject({ deliveryCount: 1 })
+
+    await expect(deferOutboxCommand({
+      id: command.id,
+      leaseOwner: 'owner-deferred',
+      retryAt: new Date(Date.now() + 2_000),
+    })).resolves.toBe(true)
+    await expect(prisma.outboxCommand.findUniqueOrThrow({ where: { id: command.id } }))
+      .resolves.toMatchObject({
+        deliveryCount: 0,
+        acceptedAt: null,
+        deadAt: null,
+        enqueuedAt: null,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        lastError: null,
+      })
   })
 
   it('dead-letters a poison payload on the first durable delivery attempt', async () => {

@@ -196,9 +196,15 @@ describe('assistant choice offer conformance', () => {
       offer,
       response: { kind: 'text', text: 'Make it more geometric.' },
     })
+    const cancelled = parseProjectAgentChoiceDecision({
+      offer,
+      response: { kind: 'cancelled' },
+    })
 
     expect(resolveProjectAgentChoiceCommitment({ offer, decision: selected })).toEqual(commitments[0])
     expect(resolveProjectAgentChoiceCommitment({ offer, decision: freeText })).toBeNull()
+    expect(cancelled).toEqual({ kind: 'cancelled' })
+    expect(resolveProjectAgentChoiceCommitment({ offer, decision: cancelled })).toBeNull()
   })
 
   it('rejects commitments that are ambiguous or do not correspond to an offered current action', () => {

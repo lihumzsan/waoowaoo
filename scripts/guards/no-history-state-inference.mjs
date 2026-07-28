@@ -68,6 +68,8 @@ for (const retiredPath of [
 
 const runtimePath = 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts'
 const runtime = fs.readFileSync(path.resolve(process.cwd(), runtimePath), 'utf8')
+const interactionPath = 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantInteraction.ts'
+const interaction = fs.readFileSync(path.resolve(process.cwd(), interactionPath), 'utf8')
 const runtimeStatePath = 'src/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state.ts'
 const runtimeState = fs.readFileSync(path.resolve(process.cwd(), runtimeStatePath), 'utf8')
 const renderersPath = 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'
@@ -87,7 +89,7 @@ if (!control.includes('createProjectAgentControlVisibleUserMessageId')) {
   violations.push(`${controlPath} is missing the canonical control visible-message identity authority`)
 }
 if (
-  !runtime.includes('createWorkspaceAssistantControlVisibleUserMessage')
+  !interaction.includes('createWorkspaceAssistantControlVisibleUserMessage')
   || !runtimeState.includes('createProjectAgentControlVisibleUserMessageId({')
   || !commandService.includes('createProjectAgentControlVisibleUserMessageId(params.controlAction)')
 ) {

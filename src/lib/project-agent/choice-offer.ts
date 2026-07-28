@@ -23,7 +23,9 @@ const choiceCardGroupFields = {
   options: z.array(choiceCardOptionSchema).min(1).max(12),
 } as const
 
-function buildChoiceCardGroupSchema(allowCustomText: z.ZodType<boolean | undefined>) {
+function buildChoiceCardGroupSchema<AllowCustomTextSchema extends z.ZodTypeAny>(
+  allowCustomText: AllowCustomTextSchema,
+) {
   return z.object({
     ...choiceCardGroupFields,
     allowCustomText,

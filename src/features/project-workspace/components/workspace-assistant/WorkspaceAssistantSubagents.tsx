@@ -54,7 +54,6 @@ export function WorkspaceAssistantSubagentTabs(props: {
           onClick={() => props.onSelect(null)}
           className={`${tabClassName(props.selectedSubagentId === null)} gap-2 px-3 py-2`}
         >
-          <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-current" aria-hidden="true" />
           <span className="min-w-0 truncate">{t('subagents.primary')}</span>
         </button>
         {props.subagents.map((subagent) => {

@@ -98,6 +98,13 @@ export function resolveWorkspaceAssistantReplyInFlight(input: {
   return input.requestActive || input.controlRunActive || input.serverRunActive || input.chatTransportActive
 }
 
+export function resolveWorkspaceAssistantComposerPending(input: {
+  readonly replyInFlight: boolean
+  readonly trackedRunStatus: WorkspaceAssistantRunStatus | null
+}): boolean {
+  return input.replyInFlight || input.trackedRunStatus === 'running'
+}
+
 export function canStopWorkspaceAssistantReply(input: {
   chatStatus: ChatStatus
   controlRequestActive: boolean

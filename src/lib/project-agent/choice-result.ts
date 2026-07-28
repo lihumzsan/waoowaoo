@@ -21,6 +21,7 @@ export type ProjectAgentChoiceSelection =
 
 export type ProjectAgentChoiceDecision =
   | { kind: 'confirm' }
+  | { kind: 'cancelled' }
   | { kind: 'select'; selections: ProjectAgentChoiceSelection[] }
   | { kind: 'text'; text: string }
 
@@ -105,6 +106,9 @@ export function parseProjectAgentChoiceDecision(params: {
 }): ProjectAgentChoiceDecision {
   if (!isRecord(params.response)) throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
   const kind = params.response.kind
+  if (kind === 'cancelled') {
+    return { kind: 'cancelled' }
+  }
   if (kind === 'confirm') {
     if (params.card.mode !== 'confirm' && params.card.mode !== 'confirm_or_text') {
       throw new Error(`PROJECT_AGENT_CHOICE_DECISION_MODE_INVALID:${params.card.mode}:confirm`)
@@ -138,6 +142,7 @@ export function resolveProjectAgentChoiceCommitment(params: {
   offer: ProjectAgentChoiceOffer
   decision: ProjectAgentChoiceDecision
 }): ProjectAgentChoiceCommitment | null {
+  if (params.decision.kind === 'cancelled') return null
   const matching = params.offer.commitments.filter((commitment) => {
     if (commitment.when.kind === 'confirm') return params.decision.kind === 'confirm'
     const when = commitment.when

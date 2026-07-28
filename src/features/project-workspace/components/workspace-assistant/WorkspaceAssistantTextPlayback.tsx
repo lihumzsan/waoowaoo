@@ -11,9 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 
-const START_BUFFER_GRAPHEMES = 12
 const LOW_WATER_GRAPHEMES = 7
-const PREBUFFER_TIMEOUT_MS = 260
 const PLAYBACK_INTERVAL_MS = 28
 const LOW_WATER_INTERVAL_MS = 38
 const MAX_FADE_GRAPHEMES = 2400
@@ -83,6 +81,34 @@ function resolvePlaybackStep(backlog: number, running: boolean): number {
   return 1
 }
 
+export function resolveWorkspaceAssistantTextPlaybackTick(params: {
+  readonly displayedCount: number
+  readonly targetLength: number
+  readonly running: boolean
+}): {
+  readonly continuePlayback: boolean
+  readonly intervalMs: number
+  readonly nextDisplayedCount: number
+} {
+  const targetLength = Math.max(0, params.targetLength)
+  const displayedCount = Math.min(Math.max(0, params.displayedCount), targetLength)
+  const backlog = targetLength - displayedCount
+  const nextDisplayedCount = backlog > 0
+    ? Math.min(
+        targetLength,
+        displayedCount + resolvePlaybackStep(backlog, params.running),
+      )
+    : displayedCount
+  const remaining = targetLength - nextDisplayedCount
+  return {
+    continuePlayback: params.running || remaining > 0,
+    intervalMs: params.running && remaining <= LOW_WATER_GRAPHEMES
+      ? LOW_WATER_INTERVAL_MS
+      : PLAYBACK_INTERVAL_MS,
+    nextDisplayedCount,
+  }
+}
+
 export function useWorkspaceAssistantTextPlayback(params: {
   readonly text: string
   readonly running: boolean
@@ -110,7 +136,15 @@ export function useWorkspaceAssistantTextPlayback(params: {
   const [displayedCount, setDisplayedCount] = useState(
     initialStateRef.current.displayedCount,
   )
-  const [started, setStarted] = useState(initialStateRef.current.started)
+  const displayedCountRef = useRef(displayedCount)
+  const targetLengthRef = useRef(targetGraphemes.length)
+  const runningRef = useRef(params.running)
+  const timerRef = useRef<number | null>(null)
+  const tickRef = useRef<() => void>(() => undefined)
+
+  displayedCountRef.current = displayedCount
+  targetLengthRef.current = targetGraphemes.length
+  runningRef.current = params.running
 
   useEffect(() => {
     if (params.running) streamedRef.current = true
@@ -120,46 +154,49 @@ export function useWorkspaceAssistantTextPlayback(params: {
     const previousSource = previousSourceRef.current
     previousSourceRef.current = params.text
     if (params.text.startsWith(previousSource)) return
+    displayedCountRef.current = targetGraphemes.length
     setDisplayedCount(targetGraphemes.length)
-    setStarted(true)
   }, [params.text, targetGraphemes.length])
 
   useEffect(() => {
     if (params.running || streamedRef.current) return
+    displayedCountRef.current = targetGraphemes.length
     setDisplayedCount(targetGraphemes.length)
-    setStarted(true)
   }, [params.running, targetGraphemes.length])
 
-  const backlog = Math.max(0, targetGraphemes.length - displayedCount)
-  const hasBacklog = backlog > 0
-
-  useEffect(() => {
-    if (started || !hasBacklog) return
-    if (backlog >= START_BUFFER_GRAPHEMES || !params.running) {
-      setStarted(true)
+  tickRef.current = () => {
+    timerRef.current = null
+    const tick = resolveWorkspaceAssistantTextPlaybackTick({
+      displayedCount: displayedCountRef.current,
+      targetLength: targetLengthRef.current,
+      running: runningRef.current,
+    })
+    if (tick.nextDisplayedCount !== displayedCountRef.current) {
+      const nextCount = tick.nextDisplayedCount
+      displayedCountRef.current = nextCount
+      setDisplayedCount(nextCount)
     }
-  }, [backlog, hasBacklog, params.running, started])
+    if (!tick.continuePlayback) return
+    timerRef.current = window.setTimeout(() => tickRef.current(), tick.intervalMs)
+  }
 
+  // Keep one self-sustaining clock per mounted text part. Incoming deltas only
+  // update refs; they never cancel or restart the pending tick.
   useEffect(() => {
-    if (started || !hasBacklog || !params.running) return
-    const timer = window.setTimeout(() => setStarted(true), PREBUFFER_TIMEOUT_MS)
-    return () => window.clearTimeout(timer)
-  }, [hasBacklog, params.running, started])
+    if (timerRef.current !== null) return
+    const tick = resolveWorkspaceAssistantTextPlaybackTick({
+      displayedCount,
+      targetLength: targetGraphemes.length,
+      running: params.running,
+    })
+    if (!tick.continuePlayback) return
+    timerRef.current = window.setTimeout(() => tickRef.current(), tick.intervalMs)
+  })
 
-  useEffect(() => {
-    if (!started || backlog <= 0) return
-    const interval = params.running && backlog <= LOW_WATER_GRAPHEMES
-      ? LOW_WATER_INTERVAL_MS
-      : PLAYBACK_INTERVAL_MS
-    const step = resolvePlaybackStep(backlog, params.running)
-    const timer = window.setTimeout(() => {
-      setDisplayedCount((current) => Math.min(
-        targetGraphemes.length,
-        current + step,
-      ))
-    }, interval)
-    return () => window.clearTimeout(timer)
-  }, [backlog, params.running, started, targetGraphemes.length])
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }, [])
 
   const boundedDisplayedCount = Math.min(displayedCount, targetGraphemes.length)
   useEffect(() => {
@@ -171,7 +208,7 @@ export function useWorkspaceAssistantTextPlayback(params: {
     registry.set(params.playbackKey, {
       sourceText: params.text,
       displayedCount: boundedDisplayedCount,
-      started,
+      started: true,
       streamed: streamedRef.current,
     })
   }, [
@@ -180,7 +217,6 @@ export function useWorkspaceAssistantTextPlayback(params: {
     params.running,
     params.text,
     registry,
-    started,
     targetGraphemes.length,
   ])
 

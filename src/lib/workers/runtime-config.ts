@@ -79,13 +79,13 @@ export function getOutboxRuntimeConfig(env: RuntimeEnvironment = process.env) {
     staleEnqueuedMs: resolvePositiveIntegerConfig({
       name: 'OUTBOX_STALE_ENQUEUED_MS',
       value: env.OUTBOX_STALE_ENQUEUED_MS,
-      defaultValue: 90_000,
+      defaultValue: 30_000,
       minValue: 1_000,
     }),
     leaseMs: resolvePositiveIntegerConfig({
       name: 'OUTBOX_LEASE_MS',
       value: env.OUTBOX_LEASE_MS,
-      defaultValue: 15 * 60_000,
+      defaultValue: 30_000,
       minValue: 3_000,
     }),
     maxDeliveryAttempts: resolvePositiveIntegerConfig({

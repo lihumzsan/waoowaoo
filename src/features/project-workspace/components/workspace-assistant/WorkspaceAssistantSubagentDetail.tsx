@@ -22,30 +22,24 @@ import {
   type ErrorTranslator,
   type SubagentReasoningEvent,
 } from './WorkspaceAssistantSubagentShared'
+import { resolveWorkspaceAssistantSubagentEventGlyph } from './workspace-assistant-panel-state'
 
 function SubagentEventGlyph(props: {
   part: ProjectAgentSubagentEventPartData
   subagentStatus: ProjectAgentSubagentStatus
   isLast: boolean
 }) {
-  const event = props.part.event
-  const eventIsOpen = event.kind === 'tool_called'
-    || event.kind === 'research_started'
-    || (event.kind === 'reasoning' && event.status === 'running')
-  if (eventIsOpen && props.isLast && props.subagentStatus === 'running') {
+  const glyph = resolveWorkspaceAssistantSubagentEventGlyph(props)
+  if (glyph === 'loader') {
     return <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
   }
-  if (
-    event.kind === 'tool_failed'
-    || (event.kind === 'research_completed' && event.status !== 'completed')
-    || (eventIsOpen && props.subagentStatus !== 'completed')
-  ) {
+  if (glyph === 'alert') {
     return <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
   }
-  if (event.kind === 'research_started' || event.kind === 'research_completed') {
+  if (glyph === 'globe') {
     return <AppIcon name="globe" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
   }
-  if (event.kind === 'tool_called' || event.kind === 'tool_completed') {
+  if (glyph === 'tool') {
     return <AppIcon name="settingsHex" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
   }
   return null
@@ -200,6 +194,7 @@ function SubagentFailureNotice(props: {
 export function WorkspaceAssistantSubagentView(props: {
   projectId: string
   subagent: ProjectAgentSubagentView | null
+  structuredOutputText?: string | null
 }) {
   const t = useTranslations('assistantAgent')
   const tErrors = useTranslations('errors')
@@ -265,6 +260,18 @@ export function WorkspaceAssistantSubagentView(props: {
         subagent={subagent}
         t={t}
       />
+
+      {subagent.status === 'running' && props.structuredOutputText ? (
+        <section className="mt-5" aria-live="polite">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--glass-text-tertiary)]">
+            <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            <span>{t('subagents.structuredOutputRunning')}</span>
+          </div>
+          <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-neutral-950/[0.04] p-3 text-xs leading-5 text-[var(--glass-text-secondary)]">
+            {props.structuredOutputText}
+          </pre>
+        </section>
+      ) : null}
 
       {subagent.status === 'failed' ? (
         <SubagentFailureNotice

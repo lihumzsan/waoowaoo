@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { rollbackTaskBillingInTransaction, settleTaskBillingInTransaction } from '@/lib/billing'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { resolveProjectAgentWaitsForTaskTerminalInTransaction } from '@/lib/project-agent/waits'
 import { projectTaskTargetTerminalInTransaction } from '@/lib/task/target-failure-sync'
@@ -130,8 +131,8 @@ async function loadExistingTerminalBundle(
 }
 
 export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Promise<TaskTerminalCommitResult> {
-  return await prisma.$transaction(
-    async (tx) => {
+  const result = await prisma.$transaction(
+    async (tx): Promise<TaskTerminalCommitResult> => {
       const task = await loadLockedTask(tx, intent.taskId)
       if (!task) throw new Error(`TASK_NOT_FOUND:${intent.taskId}`)
       if (!isActiveStatus(task.status)) return await loadExistingTerminalBundle(tx, task)
@@ -356,4 +357,6 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
     },
     { maxWait: 10_000, timeout: 15_000 },
   )
+  await dispatchCommittedOutboxCommands(result.outboxCommandIds)
+  return result
 }

@@ -7,6 +7,7 @@ import {
   claimProjectAgentWaitContinuation,
   beginProjectAgentWaitContinuationExecution,
   extendProjectAgentWaitContinuationClaim,
+  PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS,
   releaseProjectAgentWaitContinuationClaim,
   startProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUp,
@@ -36,9 +37,12 @@ import { loadProjectAssistantThread } from './persistence'
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
 
 export class ProjectAgentContinuationDeferredError extends Error {
-  constructor(message: string) {
+  readonly retryDelayMs: number
+
+  constructor(message: string, retryDelayMs = 2_000) {
     super(message)
     this.name = 'ProjectAgentContinuationDeferredError'
+    this.retryDelayMs = retryDelayMs
   }
 }
 
@@ -410,10 +414,13 @@ export async function runProjectAgentWaitContinuationCommand(
     expectedEventSeq: command.expectedEventSeq,
     commandId: outboxId,
     claimOwner,
+    claimTtlMs: PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS,
   })
   if (claim.status === 'already_followed') return
   if (claim.status === 'abandoned') return
-  if (claim.status === 'busy') throw new Error(`PROJECT_AGENT_CONTINUATION_BUSY:${command.waitId}`)
+  if (claim.status === 'busy') {
+    throw new ProjectAgentContinuationDeferredError(`PROJECT_AGENT_CONTINUATION_BUSY:${command.waitId}`)
+  }
   if (claim.status === 'stale_or_not_claimable') {
     throw new OutboxPermanentError(
       `PROJECT_AGENT_CONTINUATION_STALE:${command.waitId}:${command.runId}:${String(command.expectedRunVersion)}:${command.expectedEventSeq}`,
@@ -449,13 +456,13 @@ export async function runProjectAgentWaitContinuationCommand(
       waitId: command.waitId,
       commandId: outboxId,
       claimOwner,
-      claimTtlMs: 10 * 60 * 1000,
+      claimTtlMs: PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS,
     }).then((extended) => {
       if (!extended) loseClaimLease()
     }).catch(() => {
       loseClaimLease()
     })
-  }, 60_000)
+  }, Math.floor(PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS / 3))
   try {
     ran = await runClaimedFollowUp({
       projectId: claim.projectId,
@@ -497,6 +504,7 @@ export async function settleProjectAgentWaitContinuationDeliveryExhausted(
     expectedEventSeq: command.expectedEventSeq,
     commandId: outboxId,
     claimOwner,
+    claimTtlMs: PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS,
   })
   if (claim.status === 'already_followed') return 'already_settled'
   if (claim.status === 'abandoned' || claim.status === 'stale_or_not_claimable') {

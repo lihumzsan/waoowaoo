@@ -20,6 +20,7 @@
     "sendErrorInsufficientBalance": "余额不足，消息发送失败。内容已保留，请充值后重试。",
     "cardResponseErrorGeneric": "卡片响应提交失败，请重试该卡片操作。",
     "backgroundFollowUpErrorGeneric": "后台任务跟进中断，请刷新状态或重试当前步骤。",
+    "backgroundFollowUpRunning": "正在整理已完成任务的结果…",
     "sendErrorGeneric": "消息发送失败，内容已保留，请重试。",
     "settings": "助手设置",
     "billingConfirmationTitle": "生成前确认费用",
@@ -38,7 +39,7 @@
   },
   "plan": {
     "title": "执行计划",
-    "stepProgress": "Step {current} / {total}"
+    "completedProgress": "已完成 {completed} / {total}"
   },
   "reasoning": {
     "running": "思考中",
@@ -53,6 +54,7 @@
     "runningSummary": "{count} 个 Subagent 运行中 · 已读取 {skills} 个 Skill",
     "close": "关闭 {title}",
     "result": "创作结果",
+    "structuredOutputRunning": "正在编写结构化结果…",
     "fullResult": "完整结构化结果",
     "fullResultLoading": "正在读取完整结果…",
     "fullResultError": "无法读取完整结果。",
@@ -211,6 +213,7 @@
     "billingQuoteWithoutCredits": "将提交 {count} 个媒体生成任务",
     "confirmContinue": "继续执行",
     "cancelAction": "取消操作",
+    "choiceCancel": "关闭并取消此选择",
     "choiceRequired": "请选择所有必填项后继续。",
     "choiceBack": "返回上一步",
     "choiceSubmitting": "处理中...",

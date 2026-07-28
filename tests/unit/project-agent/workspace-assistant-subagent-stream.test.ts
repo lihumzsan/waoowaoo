@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveWorkspaceAssistantSubagents } from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents'
 import {
-  reduceWorkspaceAssistantSubagentReasoningStream,
+  resolveWorkspaceAssistantSubagents,
+  resolveWorkspaceAssistantSubagentStructuredOutputs,
+} from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents'
+import {
+  reduceWorkspaceAssistantSubagentLiveStream,
   resolveWorkspaceAssistantSubagentTaskEventDisposition,
 } from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-subagent-stream'
 import type { ProjectAgentSubagentView } from '@/lib/project-agent/subagent-events'
@@ -25,6 +28,7 @@ function streamEvent(
     payload: {
       streamRunId: 'stream-1',
       stepId: reasoningId,
+      stepAttempt: 1,
       stream: { kind: 'reasoning', lane: 'reasoning', seq, delta },
     },
   }
@@ -32,9 +36,9 @@ function streamEvent(
 
 describe('Workspace Subagent reasoning stream', () => {
   it('merges ordered Task SSE deltas into the Task-owned durable trace', () => {
-    const first = reduceWorkspaceAssistantSubagentReasoningStream(new Map(), streamEvent(1, 'Live '))
+    const first = reduceWorkspaceAssistantSubagentLiveStream(new Map(), streamEvent(1, 'Live '))
     expect(first.kind).toBe('updated')
-    const second = reduceWorkspaceAssistantSubagentReasoningStream(first.streams, streamEvent(2, 'reasoning'))
+    const second = reduceWorkspaceAssistantSubagentLiveStream(first.streams, streamEvent(2, 'reasoning'))
     const subagent: ProjectAgentSubagentView = {
       subagentId: 'task-1',
       taskId: 'task-1',
@@ -59,7 +63,7 @@ describe('Workspace Subagent reasoning stream', () => {
     }
     const resolved = resolveWorkspaceAssistantSubagents({
       sessionSubagents: [subagent],
-      reasoningStreams: second.streams,
+      liveStreams: second.streams,
     })
     expect(resolved[0]?.events[1]?.event).toEqual({
       kind: 'reasoning',
@@ -71,43 +75,77 @@ describe('Workspace Subagent reasoning stream', () => {
   })
 
   it('fails recovery when the Task stream has a sequence gap', () => {
-    const first = reduceWorkspaceAssistantSubagentReasoningStream(new Map(), streamEvent(1, 'one'))
-    const gap = reduceWorkspaceAssistantSubagentReasoningStream(first.streams, streamEvent(3, 'three'))
+    const first = reduceWorkspaceAssistantSubagentLiveStream(new Map(), streamEvent(1, 'one'))
+    const gap = reduceWorkspaceAssistantSubagentLiveStream(first.streams, streamEvent(3, 'three'))
     expect(gap.kind).toBe('gap')
     expect(gap.streams.size).toBe(0)
 
-    const afterGap = reduceWorkspaceAssistantSubagentReasoningStream(
+    const afterGap = reduceWorkspaceAssistantSubagentLiveStream(
       gap.streams,
       streamEvent(4, 'four'),
-      { invalidatedStreamIdentities: new Set(['task-1|stream-1|1:reasoning:1:block']) },
+      { invalidatedStreamIdentities: new Set(['task-1|stream-1|reasoning|1:reasoning:1:block']) },
     )
     expect(afterGap.kind).toBe('unchanged')
     expect(afterGap.streams.size).toBe(0)
 
-    const nextReasoning = reduceWorkspaceAssistantSubagentReasoningStream(
+    const nextReasoning = reduceWorkspaceAssistantSubagentLiveStream(
       afterGap.streams,
       streamEvent(1, 'new reasoning', null, '2:reasoning:1:block'),
-      { invalidatedStreamIdentities: new Set(['task-1|stream-1|1:reasoning:1:block']) },
+      { invalidatedStreamIdentities: new Set(['task-1|stream-1|reasoning|1:reasoning:1:block']) },
     )
     expect(nextReasoning.kind).toBe('updated')
     expect([...nextReasoning.streams.values()][0]?.text).toBe('new reasoning')
   })
 
   it('uses the Session Subagent task identity instead of the Task output episode', () => {
-    const projectScoped = reduceWorkspaceAssistantSubagentReasoningStream(
+    const projectScoped = reduceWorkspaceAssistantSubagentLiveStream(
       new Map(),
       streamEvent(1, 'project scoped', null),
       { ownedTaskIds: new Set(['task-1']) },
     )
     expect(projectScoped.kind).toBe('updated')
 
-    const foreignSameEpisode = reduceWorkspaceAssistantSubagentReasoningStream(
+    const foreignSameEpisode = reduceWorkspaceAssistantSubagentLiveStream(
       new Map(),
       streamEvent(1, 'foreign', 'episode-1'),
       { ownedTaskIds: new Set(['task-other']) },
     )
     expect(foreignSameEpisode.kind).toBe('unknown_task')
     expect(foreignSameEpisode.streams.size).toBe(0)
+  })
+
+  it('streams whitespace-preserving partial JSON without treating it as a durable result', () => {
+    const first = reduceWorkspaceAssistantSubagentLiveStream(new Map(), {
+      ...streamEvent(1, '{'),
+      payload: {
+        streamRunId: 'stream-output-1',
+        stepId: '1:structured-output',
+        stepAttempt: 1,
+        stream: {
+          kind: 'text',
+          lane: 'structured-output',
+          seq: 1,
+          delta: '{',
+        },
+      },
+    })
+    const second = reduceWorkspaceAssistantSubagentLiveStream(first.streams, {
+      ...streamEvent(2, '\n  "kind": "screenplay"'),
+      payload: {
+        streamRunId: 'stream-output-1',
+        stepId: '1:structured-output',
+        stepAttempt: 1,
+        stream: {
+          kind: 'text',
+          lane: 'structured-output',
+          seq: 2,
+          delta: '\n  "kind": "screenplay"',
+        },
+      },
+    })
+
+    expect(resolveWorkspaceAssistantSubagentStructuredOutputs(second.streams))
+      .toEqual(new Map([['task-1', '{\n  "kind": "screenplay"']]))
   })
 
   it('requests ownership confirmation only once for an unknown Task', () => {

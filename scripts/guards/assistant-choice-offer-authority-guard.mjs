@@ -111,7 +111,7 @@ const files = {
   operationInvocation: read('src/lib/operations/invocation.ts'),
   operationRegistry: read('src/lib/operations/registry.ts'),
   operationTypes: read('src/lib/operations/types.ts'),
-  renderers: read('src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+  choiceRenderer: read('src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantChoiceCard.tsx'),
 }
 
 const violations = []
@@ -137,6 +137,7 @@ requireMarkers('generic Choice decision', files.choiceResult, [
   "| { kind: 'confirm' }",
   "| { kind: 'select'; selections: ProjectAgentChoiceSelection[] }",
   "| { kind: 'text'; text: string }",
+  "| { kind: 'cancelled' }",
   'parseProjectAgentChoiceDecision(',
   'resolveProjectAgentChoiceCommitment(',
 ], violations)
@@ -151,11 +152,12 @@ requireMarkers('Choice-eligible Operation registry contract', `${files.operation
   'choiceCommit?: OperationChoiceCommit',
   'choiceCommit.enabled !== true',
 ], violations)
-requireMarkers('generic Choice renderer', files.renderers, [
+requireMarkers('generic Choice renderer', files.choiceRenderer, [
   'card.mode',
   "kind: 'confirm'",
   "kind: 'select'",
   "kind: 'text'",
+  "kind: 'cancelled'",
 ], violations)
 
 for (const [label, source] of Object.entries(files)) {
@@ -182,7 +184,7 @@ rejectMarkers('Session projection', files.sessionState, [
   'readPersistedScriptIntakeChoiceCard',
   'readPersistedChoiceCard',
 ], violations)
-rejectMarkers('generic Choice renderer', files.renderers, [
+rejectMarkers('generic Choice renderer', files.choiceRenderer, [
   "activeGroup?.key === 'aspectRatio'",
   "activeGroup?.key === 'stylePreviewId'",
 ], violations)

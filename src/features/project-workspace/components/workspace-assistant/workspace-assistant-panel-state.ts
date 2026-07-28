@@ -1,5 +1,9 @@
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
+import type {
+  ProjectAgentSubagentEventPartData,
+  ProjectAgentSubagentStatus,
+} from '@/lib/project-agent/subagent-events'
 import type { ChatStatus } from 'ai'
 
 export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
@@ -42,7 +46,7 @@ export function shouldShowWorkspaceAssistantReplyLoading(params: {
 }): boolean {
   return !params.storageLoading
     && params.replyInFlight
-    && params.chatStatus === 'submitted'
+    && (params.chatStatus === 'submitted' || params.chatStatus === 'ready')
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
 }
@@ -80,4 +84,43 @@ export function resolveWorkspaceAssistantAwaitingExternalTask(params: {
     params.currentRunStatus === 'awaiting_task'
       || Boolean(params.activeExternalTaskOperationId)
   )
+}
+
+export type WorkspaceAssistantSubagentEventGlyph =
+  | 'alert'
+  | 'globe'
+  | 'loader'
+  | 'none'
+  | 'tool'
+
+export function resolveWorkspaceAssistantSubagentEventGlyph(params: {
+  readonly part: ProjectAgentSubagentEventPartData
+  readonly subagentStatus: ProjectAgentSubagentStatus
+  readonly isLast: boolean
+}): WorkspaceAssistantSubagentEventGlyph {
+  const event = params.part.event
+  if (
+    event.kind === 'tool_failed'
+    || (event.kind === 'research_completed' && event.status !== 'completed')
+  ) {
+    return 'alert'
+  }
+
+  const isOpen = event.kind === 'tool_called'
+    || event.kind === 'research_started'
+    || (event.kind === 'reasoning' && event.status === 'running')
+  if (isOpen && params.isLast) {
+    if (params.subagentStatus === 'running') return 'loader'
+    if (params.subagentStatus === 'failed' || params.subagentStatus === 'cancelled') {
+      return 'alert'
+    }
+  }
+
+  if (event.kind === 'research_started' || event.kind === 'research_completed') {
+    return 'globe'
+  }
+  if (event.kind === 'tool_called' || event.kind === 'tool_completed') {
+    return 'tool'
+  }
+  return 'none'
 }

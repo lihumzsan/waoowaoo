@@ -20,6 +20,7 @@
     "sendErrorInsufficientBalance": "Insufficient balance. The message was not sent; your input is kept. Top up and retry.",
     "cardResponseErrorGeneric": "Card response failed. Retry the card action.",
     "backgroundFollowUpErrorGeneric": "Background follow-up was interrupted. Refresh status or retry the current step.",
+    "backgroundFollowUpRunning": "Reviewing completed task results…",
     "sendErrorGeneric": "Failed to send the message. Your input is kept — please retry.",
     "settings": "Assistant settings",
     "billingConfirmationTitle": "Confirm generation charges",
@@ -38,7 +39,7 @@
   },
   "plan": {
     "title": "Plan",
-    "stepProgress": "Step {current} / {total}"
+    "completedProgress": "Completed {completed} / {total}"
   },
   "reasoning": {
     "running": "Thinking",
@@ -53,6 +54,7 @@
     "runningSummary": "{count, plural, one {1 Subagent running} other {# Subagents running}} · {skills, plural, one {1 Skill read} other {# Skills read}}",
     "close": "Close {title}",
     "result": "Creative result",
+    "structuredOutputRunning": "Writing structured result…",
     "fullResult": "Complete structured result",
     "fullResultLoading": "Loading the complete result…",
     "fullResultError": "The complete result could not be loaded.",
@@ -211,6 +213,7 @@
     "billingQuoteWithoutCredits": "{count, plural, one {1 media generation task will be submitted} other {# media generation tasks will be submitted}}",
     "confirmContinue": "Continue",
     "cancelAction": "Cancel",
+    "choiceCancel": "Close and cancel this choice",
     "choiceRequired": "Select all required options to continue.",
     "choiceBack": "Back to previous choice",
     "choiceSubmitting": "Processing...",

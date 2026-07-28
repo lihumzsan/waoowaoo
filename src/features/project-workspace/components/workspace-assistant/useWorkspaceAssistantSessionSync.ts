@@ -19,10 +19,10 @@ import {
 } from '@/lib/project-agent/session-watermark'
 import {
   isWorkspaceAssistantSessionSubagentTask,
-  reduceWorkspaceAssistantSubagentReasoningStream,
-  removeWorkspaceAssistantSubagentReasoningStreams,
+  reduceWorkspaceAssistantSubagentLiveStream,
+  removeWorkspaceAssistantSubagentLiveStreams,
   resolveWorkspaceAssistantSubagentTaskEventDisposition,
-  type WorkspaceAssistantSubagentReasoningStream,
+  type WorkspaceAssistantSubagentLiveStream,
 } from './workspace-assistant-subagent-stream'
 
 interface WorkspaceAssistantSessionStateResponse {
@@ -100,14 +100,14 @@ export function useWorkspaceAssistantSessionSync({
     Map<string, PendingSubagentOwnershipEvents>
   >(new Map())
   const invalidatedSubagentStreamIdentitiesRef = useRef<Set<string>>(new Set())
-  const subagentReasoningStreamsRef = useRef<
-    ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+  const subagentLiveStreamsRef = useRef<
+    ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
   >(new Map())
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [sessionEventWatermark, setSessionEventWatermark] = useState('0')
-  const [subagentReasoningStreams, setSubagentReasoningStreams] = useState<
-    ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+  const [subagentLiveStreams, setSubagentLiveStreams] = useState<
+    ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
   >(() => new Map())
 
   const refreshSessionState = useCallback(async (
@@ -187,29 +187,29 @@ export function useWorkspaceAssistantSessionSync({
     requestedSubagentOwnershipRef.current.clear()
     pendingSubagentOwnershipEventsRef.current.clear()
     invalidatedSubagentStreamIdentitiesRef.current.clear()
-    subagentReasoningStreamsRef.current = new Map()
+    subagentLiveStreamsRef.current = new Map()
     setSessionState(null)
     setSessionStateError(null)
     setSessionEventWatermark('0')
-    setSubagentReasoningStreams(new Map())
+    setSubagentLiveStreams(new Map())
     void refreshSessionState()
     return () => {
       scopeGenerationRef.current += 1
     }
   }, [refreshSessionState])
 
-  const replaceSubagentReasoningStreams = useCallback((
-    streams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>,
+  const replaceSubagentLiveStreams = useCallback((
+    streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>,
   ): void => {
-    if (streams === subagentReasoningStreamsRef.current) return
-    subagentReasoningStreamsRef.current = streams
-    setSubagentReasoningStreams(streams)
+    if (streams === subagentLiveStreamsRef.current) return
+    subagentLiveStreamsRef.current = streams
+    setSubagentLiveStreams(streams)
   }, [])
 
-  const clearSubagentReasoningTask = useCallback((taskId: string): void => {
-    replaceSubagentReasoningStreams(
-      removeWorkspaceAssistantSubagentReasoningStreams(
-        subagentReasoningStreamsRef.current,
+  const clearSubagentLiveTask = useCallback((taskId: string): void => {
+    replaceSubagentLiveStreams(
+      removeWorkspaceAssistantSubagentLiveStreams(
+        subagentLiveStreamsRef.current,
         taskId,
       ),
     )
@@ -219,14 +219,14 @@ export function useWorkspaceAssistantSessionSync({
         invalidatedSubagentStreamIdentitiesRef.current.delete(identity)
       }
     }
-  }, [replaceSubagentReasoningStreams])
+  }, [replaceSubagentLiveStreams])
 
   const applyOwnedSubagentStreamEvent = useCallback((
     event: TaskSSEEvent,
     refreshOnGap = true,
   ): void => {
-    const reduction = reduceWorkspaceAssistantSubagentReasoningStream(
-      subagentReasoningStreamsRef.current,
+    const reduction = reduceWorkspaceAssistantSubagentLiveStream(
+      subagentLiveStreamsRef.current,
       event,
       {
         ownedTaskIds: ownedSubagentTaskIdsRef.current,
@@ -236,12 +236,12 @@ export function useWorkspaceAssistantSessionSync({
     if (reduction.kind === 'unknown_task' || reduction.kind === 'unchanged') return
     if (reduction.kind === 'gap') {
       invalidatedSubagentStreamIdentitiesRef.current.add(reduction.streamIdentity)
-      replaceSubagentReasoningStreams(reduction.streams)
+      replaceSubagentLiveStreams(reduction.streams)
       if (refreshOnGap) void refreshSessionState()
       return
     }
-    replaceSubagentReasoningStreams(reduction.streams)
-  }, [refreshSessionState, replaceSubagentReasoningStreams])
+    replaceSubagentLiveStreams(reduction.streams)
+  }, [refreshSessionState, replaceSubagentLiveStreams])
 
   const isTerminalCreativeTaskEvent = useCallback((event: TaskSSEEvent): boolean => {
     if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return false
@@ -260,11 +260,11 @@ export function useWorkspaceAssistantSessionSync({
     }
     const terminal = isTerminalCreativeTaskEvent(event)
     void refreshSessionState().then((refreshed) => {
-      if (terminal && refreshed) clearSubagentReasoningTask(event.taskId)
+      if (terminal && refreshed) clearSubagentLiveTask(event.taskId)
     })
   }, [
     applyOwnedSubagentStreamEvent,
-    clearSubagentReasoningTask,
+    clearSubagentLiveTask,
     isTerminalCreativeTaskEvent,
     refreshSessionState,
   ])
@@ -307,12 +307,12 @@ export function useWorkspaceAssistantSessionSync({
         }
       }
       if (buffered.events.some(isTerminalCreativeTaskEvent)) {
-        clearSubagentReasoningTask(event.taskId)
+        clearSubagentLiveTask(event.taskId)
       }
     })
   }, [
     applyOwnedSubagentStreamEvent,
-    clearSubagentReasoningTask,
+    clearSubagentLiveTask,
     isTerminalCreativeTaskEvent,
     refreshSessionState,
   ])
@@ -361,7 +361,7 @@ export function useWorkspaceAssistantSessionSync({
     sessionState,
     sessionStateError,
     sessionEventWatermark,
-    subagentReasoningStreams,
+    subagentLiveStreams,
     refreshSessionState,
   }
 }

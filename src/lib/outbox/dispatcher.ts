@@ -11,13 +11,54 @@ import { getOutboxRuntimeConfig } from '@/lib/workers/runtime-config'
 const logger = createScopedLogger({ module: 'outbox.dispatcher' })
 const outboxConfig = getOutboxRuntimeConfig()
 
+async function dispatchOutboxCommand(commandId: string): Promise<void> {
+  await addOutboxJob(commandId)
+  await markOutboxCommandEnqueued(commandId)
+}
+
 export async function dispatchPendingOutboxCommands(limit = 100): Promise<number> {
   const commands = await listOutboxCommandsAwaitingEnqueue(limit)
   let dispatched = 0
   for (const command of commands) {
-    await addOutboxJob(command.id)
-    await markOutboxCommandEnqueued(command.id)
+    await dispatchOutboxCommand(command.id)
     dispatched += 1
+  }
+  return dispatched
+}
+
+/**
+ * Fast path after the transaction that created these durable commands commits.
+ * A transport failure is deliberately non-fatal: the periodic dispatcher owns
+ * crash recovery from the same persisted Outbox rows.
+ */
+export async function dispatchCommittedOutboxCommands(commandIds: readonly string[]): Promise<number> {
+  const uniqueIds = [...new Set(commandIds.filter((id) => id.trim().length > 0))]
+  if (uniqueIds.length === 0) return 0
+  let dispatched = 0
+  for (const commandId of uniqueIds) {
+    try {
+      const command = await prisma.outboxCommand.findFirst({
+        where: {
+          id: commandId,
+          acceptedAt: null,
+          deadAt: null,
+          availableAt: { lte: new Date() },
+        },
+        select: { id: true },
+      })
+      if (!command) continue
+      await dispatchOutboxCommand(command.id)
+      dispatched += 1
+    } catch (error) {
+      logger.error({
+        action: 'outbox.commit_dispatch.failed',
+        message: 'committed outbox command will be recovered by the durable dispatcher',
+        details: { outboxId: commandId },
+        error: error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { message: String(error) },
+      })
+    }
   }
   return dispatched
 }

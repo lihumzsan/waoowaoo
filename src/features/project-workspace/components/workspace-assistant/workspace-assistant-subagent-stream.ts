@@ -4,10 +4,12 @@ import {
   type SSEEvent,
 } from '@/lib/task/types'
 
-export type WorkspaceAssistantSubagentReasoningStream = {
+export type WorkspaceAssistantSubagentLiveStream = {
+  kind: 'reasoning' | 'structured_output'
   taskId: string
-  reasoningId: string
+  streamId: string
   streamRunId: string
+  stepAttempt: number
   lastSeq: number
   text: string
   occurredAt: string
@@ -29,22 +31,22 @@ function readPositiveInteger(value: unknown): number | null {
     : null
 }
 
-export type SubagentReasoningStreamReduction =
-  | { kind: 'unchanged'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream> }
-  | { kind: 'updated'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream> }
+export type SubagentLiveStreamReduction =
+  | { kind: 'unchanged'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream> }
+  | { kind: 'updated'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream> }
   | {
     kind: 'gap'
-    streams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+    streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
     taskId: string
     streamIdentity: string
   }
   | {
     kind: 'unknown_task'
-    streams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+    streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
     taskId: string
   }
 
-export interface WorkspaceAssistantSubagentReasoningStreamPolicy {
+export interface WorkspaceAssistantSubagentLiveStreamPolicy {
   readonly ownedTaskIds?: ReadonlySet<string>
   readonly invalidatedStreamIdentities?: ReadonlySet<string>
 }
@@ -67,11 +69,11 @@ export function resolveWorkspaceAssistantSubagentTaskEventDisposition(params: {
   return params.ownershipRequestedTaskIds.has(params.taskId) ? 'ignore' : 'confirm'
 }
 
-export function reduceWorkspaceAssistantSubagentReasoningStream(
-  current: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>,
+export function reduceWorkspaceAssistantSubagentLiveStream(
+  current: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>,
   event: SSEEvent,
-  policy: WorkspaceAssistantSubagentReasoningStreamPolicy = {},
-): SubagentReasoningStreamReduction {
+  policy: WorkspaceAssistantSubagentLiveStreamPolicy = {},
+): SubagentLiveStreamReduction {
   if (
     event.type !== TASK_SSE_EVENT_TYPE.STREAM
     || event.taskType !== TASK_TYPE.CREATIVE_WORK
@@ -84,17 +86,27 @@ export function reduceWorkspaceAssistantSubagentReasoningStream(
   }
   const payload = readRecord(event.payload)
   const stream = readRecord(payload.stream)
-  if (readString(stream.kind) !== 'reasoning') {
+  const streamKind = readString(stream.kind)
+  const lane = readString(stream.lane)
+  const kind = streamKind === 'reasoning'
+    ? 'reasoning' as const
+    : streamKind === 'text' && lane === 'structured-output'
+      ? 'structured_output' as const
+      : null
+  if (!kind) {
     return { kind: 'unchanged', streams: current }
   }
-  const delta = readString(stream.delta)
-  const reasoningId = readString(payload.stepId)
+  const delta = typeof stream.delta === 'string' && stream.delta.length > 0
+    ? stream.delta
+    : null
+  const streamId = readString(payload.stepId)
   const streamRunId = readString(payload.streamRunId)
+  const stepAttempt = readPositiveInteger(payload.stepAttempt)
   const seq = readPositiveInteger(stream.seq)
-  if (!delta || !reasoningId || !streamRunId || !seq) {
+  if (!delta || !streamId || !streamRunId || !stepAttempt || !seq) {
     return { kind: 'unchanged', streams: current }
   }
-  const key = `${event.taskId}|${streamRunId}|${reasoningId}`
+  const key = `${event.taskId}|${streamRunId}|${kind}|${streamId}`
   if (policy.invalidatedStreamIdentities?.has(key)) {
     return { kind: 'unchanged', streams: current }
   }
@@ -122,9 +134,11 @@ export function reduceWorkspaceAssistantSubagentReasoningStream(
   }
   const next = new Map(current)
   next.set(key, {
+    kind,
     taskId: event.taskId,
-    reasoningId,
+    streamId,
     streamRunId,
+    stepAttempt,
     lastSeq: seq,
     text: `${previous?.text ?? ''}${delta}`,
     occurredAt: previous?.occurredAt ?? event.ts,
@@ -132,10 +146,10 @@ export function reduceWorkspaceAssistantSubagentReasoningStream(
   return { kind: 'updated', streams: next }
 }
 
-export function removeWorkspaceAssistantSubagentReasoningStreams(
-  current: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>,
+export function removeWorkspaceAssistantSubagentLiveStreams(
+  current: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>,
   taskId: string,
-): ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream> {
+): ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream> {
   const next = new Map(current)
   for (const [key, stream] of next) {
     if (stream.taskId === taskId) next.delete(key)

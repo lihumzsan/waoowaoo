@@ -1,7 +1,30 @@
 import {
   type ProjectAgentSubagentView,
 } from '@/lib/project-agent/subagent-events'
-import type { WorkspaceAssistantSubagentReasoningStream } from './workspace-assistant-subagent-stream'
+import type { WorkspaceAssistantSubagentLiveStream } from './workspace-assistant-subagent-stream'
+
+export function resolveWorkspaceAssistantSubagentStructuredOutputs(
+  liveStreams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>,
+): ReadonlyMap<string, string> {
+  const latestByTask = new Map<string, WorkspaceAssistantSubagentLiveStream>()
+  for (const stream of liveStreams.values()) {
+    if (stream.kind !== 'structured_output') continue
+    const current = latestByTask.get(stream.taskId)
+    if (
+      !current
+      || stream.stepAttempt > current.stepAttempt
+      || (
+        stream.stepAttempt === current.stepAttempt
+        && stream.occurredAt > current.occurredAt
+      )
+    ) {
+      latestByTask.set(stream.taskId, stream)
+    }
+  }
+  return new Map(
+    [...latestByTask].map(([taskId, stream]) => [taskId, stream.text]),
+  )
+}
 
 /**
  * SessionState projects the authoritative Task-backed Subagent view. Message
@@ -10,19 +33,19 @@ import type { WorkspaceAssistantSubagentReasoningStream } from './workspace-assi
  */
 export function resolveWorkspaceAssistantSubagents(params: {
   sessionSubagents: readonly ProjectAgentSubagentView[]
-  reasoningStreams: ReadonlyMap<string, WorkspaceAssistantSubagentReasoningStream>
+  liveStreams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
 }): ProjectAgentSubagentView[] {
   return params.sessionSubagents.map((subagent) => {
     if (subagent.status !== 'running') return subagent
-    const streams = [...params.reasoningStreams.values()]
-      .filter((stream) => stream.taskId === subagent.taskId)
+    const streams = [...params.liveStreams.values()]
+      .filter((stream) => stream.kind === 'reasoning' && stream.taskId === subagent.taskId)
       .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))
     if (streams.length === 0) return subagent
     const events = [...subagent.events]
     for (const stream of streams) {
       const index = events.findIndex((entry) => (
         entry.event.kind === 'reasoning'
-        && entry.event.reasoningId === stream.reasoningId
+        && entry.event.reasoningId === stream.streamId
       ))
       if (index < 0) {
         events.push({
@@ -34,7 +57,7 @@ export function resolveWorkspaceAssistantSubagents(params: {
           occurredAt: stream.occurredAt,
           event: {
             kind: 'reasoning',
-            reasoningId: stream.reasoningId,
+            reasoningId: stream.streamId,
             text: stream.text,
             status: 'running',
             truncated: false,
@@ -51,7 +74,7 @@ export function resolveWorkspaceAssistantSubagents(params: {
           ? durableText
           : null
       if (text === null) {
-        throw new Error(`WORKSPACE_SUBAGENT_REASONING_DIVERGED:${stream.reasoningId}`)
+        throw new Error(`WORKSPACE_SUBAGENT_REASONING_DIVERGED:${stream.streamId}`)
       }
       events[index] = {
         ...existing,

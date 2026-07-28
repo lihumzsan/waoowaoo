@@ -959,6 +959,8 @@ export type ProjectAgentContinuationClaimResult =
   | { status: 'busy' }
   | { status: 'stale_or_not_claimable' }
 
+export const PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS = 30_000
+
 export async function claimProjectAgentWaitContinuation(input: {
   waitId: string
   runId: string
@@ -970,7 +972,7 @@ export async function claimProjectAgentWaitContinuation(input: {
 }): Promise<ProjectAgentContinuationClaimResult> {
   const eventSeq = BigInt(input.expectedEventSeq)
   const claimTtlMs = Math.min(
-    Math.max(Math.floor(input.claimTtlMs ?? 10 * 60 * 1000), 30_000),
+    Math.max(Math.floor(input.claimTtlMs ?? PROJECT_AGENT_CONTINUATION_CLAIM_TTL_MS), 30_000),
     30 * 60 * 1000,
   )
   const claimExpiresAt = new Date(Date.now() + claimTtlMs)

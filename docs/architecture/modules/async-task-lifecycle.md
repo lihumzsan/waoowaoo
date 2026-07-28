@@ -9,9 +9,9 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 ## 不变量
 
 - **TL-01 — 单一提交入口。** Task、billing freeze、Created Event 与 `task.enqueue` Outbox 只能由共享 submitter/事务 primitive 创建。route、Operation 和 worker 不得直接写队列或复制提交协议。
-- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task，以及把外部网页图片导入自有存储的 `creative_resource_web_reference` Task。终态是否要求 handler 回传 modelKey 也是 registry 声明（`terminalModelKeyRequirement`），不运行模型的 Task 声明 `none`；materializer 不得按 Task 类型内联特判。
-- **TL-03 — attempt 唯一执行者。** worker 以 DB CAS 领取 `queued → processing`，携带 `taskId + taskAttempt` 写 heartbeat、progress、provider checkpoint 与终态。重复、晚到或旧 attempt 无写权。
-- **TL-04 — 提交失败原子回滚。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；提交后的 Redis 故障由持久 Outbox 恢复，不能把业务 Task 改写为失败。
+- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、execution deadline、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task，以及把外部网页图片导入自有存储的 `creative_resource_web_reference` Task。终态是否要求 handler 回传 modelKey 也是 registry 声明（`terminalModelKeyRequirement`），不运行模型的 Task 声明 `none`；materializer 和 worker handler 不得按 Task 类型内联另一份 deadline 或终态规则。
+- **TL-03 — attempt 唯一执行者。** worker 以 DB CAS 领取 `queued → processing`，携带 `taskId + taskAttempt` 写 heartbeat、progress、provider checkpoint 与终态。只有这个 attempt owner 可以按 TaskDefinition 创建 execution deadline AbortSignal 并传给 handler；重复、晚到或旧 attempt 无写权。
+- **TL-04 — 提交失败原子回滚。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；Terminal transaction 提交后可以立即 enqueue 本次返回的精确 Outbox IDs，运输失败不回滚已提交业务事实，并由持久 Outbox dispatcher 恢复，不能把业务 Task 改写为失败或让周期扫描承担正常路径延迟。
 - **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。
 - **TL-06 — 终态 writer 唯一。** worker 不能自行把 Task 或 Resource 写成最终失败。Terminal Service 负责最终 completed/failed/canceled、billing settlement、Task Event、Resource materialization、workspace impact 与 Assistant continuation。
 - **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Revision/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
@@ -40,6 +40,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - attempt 与恢复：`src/lib/task/claim.ts`、`retry-policy.ts`、`reconcile.ts`、`src/lib/workers/shared.ts`。
 - provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。
 - 终态：`src/lib/task/terminal/**`。
+- 持久 Outbox 与提交后即时运输：`src/lib/outbox/repository.ts`、`dispatcher.ts`、`src/lib/workers/outbox.worker.ts`；dispatcher 只从同一持久命令恢复，不创建第二业务事实。
 - 结果物化：`src/lib/creative-resource/task-materializer.ts`、`creative-work-materialization.ts`。
 - Agent 聚合：`src/lib/project-agent/operation-batch.ts`、`waits.ts`。
 - 资源变化：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`、`src/lib/query/workspace-sse-event-sync.ts`。
@@ -52,6 +53,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts`、`outbox-delivery-lifecycle.integration.test.ts` 验证真实 MySQL/Redis 的原子提交、去重与恢复。
 - `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`provider-invocation-at-most-once.integration.test.ts` 验证 attempt、late/replay 和 provider fence。
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证多 Task Wait seal 与单 continuation。
+- `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 验证提交后精确即时入队、stale 恢复、毒消息与预期 contention 不消耗 delivery failure budget。
 - `tests/integration/task/creative-resource-video-merge-ffmpeg.integration.test.ts` 用真实 FFmpeg 验证通用视频合并的音视频时长与失败边界。
 - `tests/golden-journey/journeys/freeform-resources.spec.ts` 通过真实 UI/API/DB/queue/worker/SSE/刷新验证自由 Resource 创建、失败重试、采用与 lineage；不再使用固定 mainline stage 作为 oracle。
 
@@ -70,6 +72,8 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - 旧最终混音把编码 EOF 与 `-shortest` 当作终止裁判，真实任务会在 99% 停滞。当前通用视频合并使用 canonical duration、PCM 临时原声、显式 `-t` 与 FFmpeg deadline。
 - 旧 style parent Task 及其 migration preflight 在旧表删除后仍作为治理入口存在，反而要求恢复已删除身份。当前这些专用 guard/preflight 一并删除；新 migration 的排空条件由发布流程读取通用 active Task/Run/Wait 事实，不在应用仓保留旧类型统计器。
 - MutationBatch 最初为旧 panel、voice line 和专用媒体 writer 提供整批撤销；这些 writer 删除后，生产代码已经没有创建调用，但两个撤销 Operation、独立 route、SSE event/replay/checkpoint、结果 `canUndo` 投影和 v3 游标水位仍继续声明这项能力。当前这些零 writer 运行时入口和第二状态协议已一起删除，SSE 一次切换为只包含 Task/Assistant/Resource 水位的 v4；数据库模型只为未获迁移授权的历史行暂留，不再有应用 writer、reader 或恢复入口，后续 schema/data 删除需单独迁移和排空授权。
+- 长模型 Task 曾在具体 handler 内各自读取全局 timeout，attempt owner 只无条件写 heartbeat；这使 registry 不知道执行是否有界，也把“worker 进程还活着”误当成“供应商仍有进展”。当前 execution deadline 成为 TaskDefinition 的穷尽字段，只有 `creative_work` 声明 5 分钟上限，通用 attempt owner 创建 AbortSignal 并以 canonical `GENERATION_TIMEOUT` 进入既有 registry retry policy；heartbeat 只证明 attempt owner 存活，不再承担 stall 裁决。
+- Task terminal 曾只写 durable continuation Outbox，正常路径也等待周期 dispatcher；Outbox 与 continuation claim 又使用十分钟级 lease，worker 被重启后虽有完整持久事实却长期无人可领取。预期的前台 Run/Choice contention 还会增加 deliveryCount，最终把可恢复占用误判成 dead delivery。当前 terminal commit 后立即 enqueue 精确 Outbox IDs，失败仍由同一持久 dispatcher 恢复；运输与 continuation claim 使用 30 秒 lease/heartbeat，typed defer 原子撤销本次 deliveryCount。没有新增轮询、第二队列协议或客户端续跑入口。
 
 ## 修改检查表
 

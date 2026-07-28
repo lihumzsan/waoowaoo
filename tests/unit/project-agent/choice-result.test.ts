@@ -71,6 +71,16 @@ describe('generic Project Agent Choice decisions', () => {
     })).toThrow('PROJECT_AGENT_CHOICE_SELECTION_NOT_OFFERED:direction:invented')
   })
 
+  it('treats closing any current Choice as a canonical cancelled result without a commitment', () => {
+    const decision = parseProjectAgentChoiceDecision({
+      card: selectionOffer.card,
+      response: { kind: 'cancelled' },
+    })
+
+    expect(decision).toEqual({ kind: 'cancelled' })
+    expect(resolveProjectAgentChoiceCommitment({ offer: selectionOffer, decision })).toBeNull()
+  })
+
   it('serializes only the canonical current decision into the resumed model segment', () => {
     const result = buildProjectAgentChoiceResultFromDecision({
       decision: { kind: 'text', text: 'Use a quieter palette.' },

@@ -5,7 +5,9 @@ import { createScopedLogger } from '@/lib/logging/core'
 import {
   acceptOutboxCommand,
   claimOutboxCommand,
+  deferOutboxCommand,
   extendOutboxCommandLease,
+  isOutboxCommandSettled,
   releaseOutboxCommand,
 } from '@/lib/outbox/repository'
 import { OUTBOX_QUEUE_NAME, type OutboxJobData } from '@/lib/outbox/queue'
@@ -35,7 +37,10 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
   }
   const leaseOwner = `bullmq:${outboxId}:${randomUUID()}`
   const row = await claimOutboxCommand({ id: outboxId, leaseOwner, leaseMs: outboxConfig.leaseMs })
-  if (!row) return
+  if (!row) {
+    if (await isOutboxCommandSettled(outboxId)) return
+    throw new Error(`OUTBOX_CLAIM_BUSY:${outboxId}`)
+  }
   let payload: ReturnType<typeof parseOutboxCommandPayload> | null = null
   let leaseLost = false
   const leaseHeartbeat = setInterval(() => {
@@ -91,18 +96,17 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
     const currentAttempt = row.deliveryCount
     const attempts = outboxConfig.maxDeliveryAttempts
     if (error instanceof ProjectAgentContinuationDeferredError) {
-      const retryDelayMs = Math.min(60_000, 1_000 * (2 ** Math.max(0, currentAttempt - 1)))
-      await releaseOutboxCommand({
+      const retryDelayMs = error.retryDelayMs
+      const deferred = await deferOutboxCommand({
         id: outboxId,
         leaseOwner,
-        error: error.message,
         retryAt: new Date(Date.now() + retryDelayMs),
-        dead: false,
       })
+      if (!deferred) throw new Error(`OUTBOX_DEFER_CAS_FAILED:${outboxId}`)
       logger.info({
         action: 'outbox.delivery.assistant_deferred',
         message: error.message,
-        details: { outboxId, kind: row.kind, currentAttempt },
+        details: { outboxId, kind: row.kind, retryDelayMs },
       })
       return
     }
