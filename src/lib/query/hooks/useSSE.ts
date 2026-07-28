@@ -48,6 +48,9 @@ function persistCursor(projectId: string, episodeId: string | null | undefined, 
 export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
   const queryClient = useQueryClient()
   const sourceRef = useRef<EventSource | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const stabilityTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
   const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
 
@@ -113,12 +116,25 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     const source = new EventSource(connection.url)
     sourceRef.current = source
 
+    const scheduleResync = (context: string) => {
+      const attempt = reconnectAttemptRef.current + 1
+      reconnectAttemptRef.current = attempt
+      const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5))
+      _ulogWarn(`[useSSE] ${context}; scheduling resync`, { projectId, episodeId, attempt, delayMs })
+      if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null
+        requestSnapshotResync()
+      }, delayMs)
+    }
+
     const handleEvent = (event: MessageEvent) => {
       try {
         handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
       } catch (error) {
         _ulogError('[useSSE] failed to parse event', error)
-        requestSnapshotResync()
+        // 立即重连会撞上 bootstrap 重发的同一条毒事件,形成自激循环;必须退避。
+        scheduleResync('event handling failed')
       }
     }
 
@@ -135,14 +151,34 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.addEventListener(type, handler)
       listeners.push({ type, handler })
     }
+    source.onopen = () => {
+      // 不能在每个事件/每次 open 时立刻清零:毒事件循环里每一轮都会短暂"健康",
+      // 立刻清零会把退避锁死在 1s。只有连接稳定存活 60s 才认为恢复。
+      if (stabilityTimerRef.current !== null) window.clearTimeout(stabilityTimerRef.current)
+      stabilityTimerRef.current = window.setTimeout(() => {
+        stabilityTimerRef.current = null
+        reconnectAttemptRef.current = 0
+      }, 60_000)
+    }
     source.onerror = () => {
+      // EventSource 只对网络类中断自动重连;服务端返回非 2xx(部署重启的 502、
+      // bootstrap 5xx、401)时按规范进入 CLOSED 且永不重试——必须显式重建,
+      // 否则页面在下一次刷新前永久失联("必须刷新才显示"的传输层根因)。
       if (source.readyState !== EventSource.CLOSED) return
-      _ulogWarn('[useSSE] stream closed', { projectId, episodeId })
+      scheduleResync('stream closed')
     }
 
     return () => {
       for (const listener of listeners) {
         source.removeEventListener(listener.type, listener.handler)
+      }
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (stabilityTimerRef.current !== null) {
+        window.clearTimeout(stabilityTimerRef.current)
+        stabilityTimerRef.current = null
       }
       source.close()
       sourceRef.current = null
