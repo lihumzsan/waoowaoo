@@ -119,7 +119,7 @@
     "imageAlt": "Web search result image"
   },
   "attachments": {
-    "openUpload": "Attach text file",
+    "openUpload": "Attach file",
     "dialogTitle": "Attach a text file",
     "dialogDescription": "TXT, Markdown, and DOCX are parsed as text. Max {maxSize} or {maxChars} characters.",
     "closeDialog": "Close file upload",
@@ -131,7 +131,12 @@
     "attach": "Attach",
     "uploading": "Parsing...",
     "fileMeta": "{chars} chars · {size}",
-    "removeFile": "Remove {fileName}"
+    "removeFile": "Remove {fileName}",
+    "dialogTitleWithMedia": "Attach a file",
+    "dialogDescriptionWithMedia": "Text files (TXT, Markdown, DOCX, max {maxSize} or {maxChars} characters) are parsed as text. Images (PNG, JPEG, WebP, max 25 MB) and audio (MP3, WAV, OGG, max 100 MB) become project materials the assistant can use in generation.",
+    "supportedTypesWithMedia": "Supported: .txt, .md, .docx, .png, .jpg, .webp, .mp3, .wav, .ogg",
+    "mediaKindImage": "Image",
+    "mediaKindAudio": "Audio"
   },
   "toolCall": {
     "title": "Tool Call",

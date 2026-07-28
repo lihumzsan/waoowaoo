@@ -12,6 +12,7 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import { PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES } from '@/lib/project-agent/media-attachments'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
@@ -317,7 +318,11 @@ export default function WorkspaceAssistantPanel({
                       pending={assistantRuntime.pending || assistantRuntime.storageLoading}
                       canStopReply={assistantRuntime.canStopReply}
                       attachments={composer.attachments}
-                      attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+                      mediaAttachments={composer.mediaAttachments}
+                      attachDisabled={
+                        composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+                        && composer.mediaAttachments.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+                      }
                       onChange={composer.setText}
                       onSubmit={async () => {
                         await composer.submit()
@@ -325,6 +330,7 @@ export default function WorkspaceAssistantPanel({
                       onStopReply={assistantRuntime.stopReply}
                       onAttachClick={() => composer.setAttachmentDialogOpen(true)}
                       onRemoveAttachment={composer.removeAttachment}
+                      onRemoveMediaAttachment={composer.removeMediaAttachment}
                     />
                   </div>
                 </div>
@@ -340,10 +346,15 @@ export default function WorkspaceAssistantPanel({
           selectedSubagentId !== null
           || assistantRuntime.pending
           || assistantRuntime.storageLoading
-          || composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+          || (
+            composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+            && composer.mediaAttachments.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+          )
         }
+        projectId={projectId}
         onClose={() => composer.setAttachmentDialogOpen(false)}
         onUploaded={composer.addAttachment}
+        onUploadedMedia={composer.addMediaAttachment}
       />
     </aside>
   )

@@ -5,6 +5,10 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
 import type { WorkspaceAssistantSendMessageInput } from './useWorkspaceAssistantRuntime'
 
 export function useWorkspaceAssistantComposer(
@@ -12,21 +16,24 @@ export function useWorkspaceAssistantComposer(
 ) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
+  const [mediaAttachments, setMediaAttachments] = useState<ProjectAssistantMediaAttachment[]>([])
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
 
   const submit = useCallback(async () => {
     const normalizedText = text.trim()
-    if (!normalizedText && attachments.length === 0) return
+    if (!normalizedText && attachments.length === 0 && mediaAttachments.length === 0) return
     setText('')
     setAttachments([])
+    setMediaAttachments([])
     try {
-      await sendMessage({ text: normalizedText, attachments })
+      await sendMessage({ text: normalizedText, attachments, mediaAttachments })
     } catch (error) {
       setText(normalizedText)
       setAttachments([...attachments])
+      setMediaAttachments([...mediaAttachments])
       throw error
     }
-  }, [attachments, sendMessage, text])
+  }, [attachments, mediaAttachments, sendMessage, text])
 
   const addAttachment = useCallback((attachment: ProjectAssistantTextAttachment) => {
     setAttachments((current) => {
@@ -39,14 +46,29 @@ export function useWorkspaceAssistantComposer(
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
   }, [])
 
+  const addMediaAttachment = useCallback((attachment: ProjectAssistantMediaAttachment) => {
+    setMediaAttachments((current) => {
+      if (current.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES) return current
+      if (current.some((item) => item.revisionId === attachment.revisionId)) return current
+      return [...current, attachment]
+    })
+  }, [])
+
+  const removeMediaAttachment = useCallback((revisionId: string) => {
+    setMediaAttachments((current) => current.filter((attachment) => attachment.revisionId !== revisionId))
+  }, [])
+
   return {
     text,
     setText,
     attachments,
+    mediaAttachments,
     attachmentDialogOpen,
     setAttachmentDialogOpen,
     submit,
     addAttachment,
     removeAttachment,
+    addMediaAttachment,
+    removeMediaAttachment,
   } as const
 }

@@ -14,6 +14,11 @@ import {
   buildProjectAssistantTextAttachmentMetadata,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import {
+  buildProjectAssistantMediaAttachmentMetadata,
+  mergeProjectAssistantMessageMetadata,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   canStopWorkspaceAssistantReply,
@@ -42,6 +47,7 @@ interface WorkspaceAssistantReplyActivity {
 export interface WorkspaceAssistantSendMessageInput {
   readonly text: string
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
 }
 interface WorkspaceAssistantInteractionContext {
   readonly locale: string
@@ -132,7 +138,10 @@ export function useWorkspaceAssistantInteraction({
     chat.clearError()
     setControlError(null)
     const activitySequence = beginReplyActivity()
-    const metadata = buildProjectAssistantTextAttachmentMetadata(input.attachments ?? [])
+    const metadata = mergeProjectAssistantMessageMetadata(
+      buildProjectAssistantTextAttachmentMetadata(input.attachments ?? []),
+      buildProjectAssistantMediaAttachmentMetadata(input.mediaAttachments ?? []),
+    )
     try {
       await chat.sendMessage({
         text: input.text.trim(),

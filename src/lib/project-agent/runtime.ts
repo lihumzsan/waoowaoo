@@ -134,6 +134,10 @@ import {
   appendProjectAssistantTextAttachmentsToUserText,
   readProjectAssistantTextAttachmentsFromMessage,
 } from './text-attachments'
+import {
+  appendProjectAssistantMediaAttachmentsToUserText,
+  readProjectAssistantMediaAttachmentsFromMessage,
+} from './media-attachments'
 import { appendProjectAssistantThreadMessages } from './persistence'
 import {
   mergeOperationPlanViewsForApproval,
@@ -291,10 +295,15 @@ function toAgentInputItems(messages: UIMessage[], locale: ReturnType<typeof norm
     const text = readTextFromParts(message.parts)
     if (message.role === 'user') {
       const attachments = readProjectAssistantTextAttachmentsFromMessage(message)
-      const content = appendProjectAssistantTextAttachmentsToUserText({
+      const mediaAttachments = readProjectAssistantMediaAttachmentsFromMessage(message)
+      const content = appendProjectAssistantMediaAttachmentsToUserText({
         locale,
-        userText: text,
-        attachments,
+        userText: appendProjectAssistantTextAttachmentsToUserText({
+          locale,
+          userText: text,
+          attachments,
+        }),
+        attachments: mediaAttachments,
       })
       if (!content.trim()) continue
       items.push({

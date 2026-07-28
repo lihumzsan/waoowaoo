@@ -2,9 +2,10 @@
 
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import { TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
+import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
+import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -12,12 +13,14 @@ interface WorkspaceAssistantComposerProps {
   readonly pending: boolean
   readonly canStopReply: boolean
   readonly attachments: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
   readonly onStopReply: () => Promise<void>
   readonly onAttachClick: () => void
   readonly onRemoveAttachment: (attachmentId: string) => void
+  readonly onRemoveMediaAttachment?: (revisionId: string) => void
 }
 
 /**
@@ -47,12 +50,14 @@ export function WorkspaceAssistantComposer({
   pending,
   canStopReply,
   attachments,
+  mediaAttachments = [],
   attachDisabled = false,
   onChange,
   onSubmit,
   onStopReply,
   onAttachClick,
   onRemoveAttachment,
+  onRemoveMediaAttachment,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
 
@@ -74,6 +79,11 @@ export function WorkspaceAssistantComposer({
           attachments={attachments}
           onRemove={pending ? undefined : onRemoveAttachment}
           className={attachments.length > 0 ? 'mt-2' : undefined}
+        />
+        <MediaAttachmentChips
+          attachments={mediaAttachments}
+          onRemove={pending ? undefined : onRemoveMediaAttachment}
+          className={mediaAttachments.length > 0 ? 'mt-2' : undefined}
         />
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
           <div className="flex items-center">
@@ -102,7 +112,7 @@ export function WorkspaceAssistantComposer({
             <button
               type="button"
               aria-label={t('panel.send')}
-              disabled={(!value.trim() && attachments.length === 0) || pending}
+              disabled={(!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) || pending}
               onClick={() => { void onSubmit() }}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
             >

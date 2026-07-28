@@ -8,6 +8,11 @@ import { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agen
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
+  readProjectAssistantMediaAttachmentsFromMessage,
+  withProjectAssistantMediaAttachments,
+} from '@/lib/project-agent/media-attachments'
+import { resolveProjectAssistantMediaAttachments } from '@/lib/project-agent/media-attachments/resolve'
+import {
   mapProjectAgentCommandError,
   readProjectAgentCommandEpisodeId,
   readProjectAgentCommandHttpBody,
@@ -19,7 +24,10 @@ function readEpisodeIdFromQuery(request: NextRequest): string | null {
   return request.nextUrl.searchParams.get('episodeId')?.trim() || null
 }
 
-async function validateUserMessage(message: unknown): Promise<UIMessage> {
+async function validateUserMessage(
+  message: unknown,
+  scope: { readonly userId: string; readonly projectId: string },
+): Promise<UIMessage> {
   const validation = await safeValidateUIMessages({ messages: [message] })
   if (!validation.success) throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   const [validatedMessage] = ensureUniqueUIMessages(validation.data)
@@ -27,7 +35,17 @@ async function validateUserMessage(message: unknown): Promise<UIMessage> {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
   readProjectAssistantTextAttachmentsFromMessage(validatedMessage)
-  return validatedMessage
+  const mediaRefs = readProjectAssistantMediaAttachmentsFromMessage(validatedMessage)
+  if (mediaRefs.length === 0) return validatedMessage
+  // The client only proposes refs; ownership, readiness, media type and the
+  // visible name are resolved server-side and rewritten into the persisted
+  // metadata before the message enters the thread.
+  const resolved = await resolveProjectAssistantMediaAttachments({
+    userId: scope.userId,
+    projectId: scope.projectId,
+    refs: mediaRefs,
+  })
+  return withProjectAssistantMediaAttachments(validatedMessage, resolved)
 }
 
 function assertChatCommandShape(body: ProjectAgentCommandHttpBody): void {
@@ -97,7 +115,10 @@ export const POST = apiHandler(async (
   try {
     const body = await readProjectAgentCommandHttpBody(request)
     assertChatCommandShape(body)
-    const message = await validateUserMessage(body.message)
+    const message = await validateUserMessage(body.message, {
+      userId: authResult.session.user.id,
+      projectId,
+    })
     return await executeProjectAgentCommand({
       request,
       scope: {

@@ -60,7 +60,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 - Project-agent runtime：`src/lib/project-agent/`。
 - HTTP 用户/审批/选择命令唯一编排入口：`src/lib/project-agent/command-service.ts` 的 `executeProjectAgentCommand`。`/assistant/chat`、`/assistant/runs/:runId/approval`、`/assistant/runs/:runId/choice` 只做鉴权、输入适配与错误映射；`runtime.ts` 只允许由 Command Service 和 Task continuation owner 调用。
-- Assistant 输入事实投影：`src/lib/project-projection/**` 与 `src/lib/project-context/**` 只构造项目事实；`src/app/api/assistant/text-attachments/**` 只解析受限附件。三者不得投影阶段、推荐动作或第二 Run/Workflow 状态机。
+- Assistant 输入事实投影：`src/lib/project-projection/**` 与 `src/lib/project-context/**` 只构造项目事实；`src/app/api/assistant/text-attachments/**` 只解析受限文本附件。三者不得投影阶段、推荐动作或第二 Run/Workflow 状态机。
+- 用户消息媒体附件：客户端 metadata 只携带精确 `resourceId + revisionId`；`/assistant/chat` 在消息接受时经 `src/lib/project-agent/media-attachments/resolve.ts`（复用 assistant-link-view 的 owner/scope/ready 校验）重写权威 name/mediaType 后才持久化，runtime 以 `<uploaded_media>` 块拼入模型可见 user text。素材本体先经 `api_project_upload_media` 物化为上传 Resource（见 creative-resource CR-03C）；消息层不新建第二条上传或引用协议。
 - Task 终态续跑唯一执行入口：`src/lib/workers/outbox.worker.ts` → `runProjectAgentWaitContinuationCommand`。
 - Continuation 唯一交接：`beginProjectAgentWaitContinuationExecution` 建立 running fence；`execution-handoff` 原子结算 terminal 或 `awaiting_approval/awaiting_choice` outcome，并在重放时只调用其 finalize/recovery 入口。续跑中提交 Task 使用新的后台 OperationBatch，不悬挂当前 continuation Run。
 - Choice Offer 契约、fingerprint 与严格解析：`src/lib/project-agent/choice-offer.ts`。

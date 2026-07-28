@@ -11,12 +11,19 @@ import {
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import { uploadProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments/client'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
+import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
 
 interface TextAttachmentUploadDialogProps {
   readonly open: boolean
   readonly disabled?: boolean
+  readonly projectId?: string | null
   readonly onClose: () => void
   readonly onUploaded: (attachment: ProjectAssistantTextAttachment) => void
+  readonly onUploadedMedia?: (attachment: ProjectAssistantMediaAttachment) => void
 }
 
 interface TextAttachmentChipsProps {
@@ -42,6 +49,17 @@ function formatCount(value: number, locale: string): string {
 
 function fileFromList(files: FileList | null): File | null {
   return files && files.length > 0 ? files[0] ?? null : null
+}
+
+/**
+ * Client-side routing only decides which upload endpoint receives the file;
+ * the media endpoint re-sniffs magic bytes server-side and is the sole
+ * acceptance authority.
+ */
+function isMediaAttachmentFile(file: File): boolean {
+  const mimeType = file.type.toLowerCase()
+  if (mimeType.startsWith('image/') || mimeType.startsWith('audio/')) return true
+  return /\.(png|jpe?g|webp|mp3|wav|ogg)$/i.test(file.name)
 }
 
 export function TextAttachmentChips({
@@ -86,11 +104,59 @@ export function TextAttachmentChips({
   )
 }
 
+export function MediaAttachmentChips({
+  attachments,
+  onRemove,
+  className,
+}: {
+  readonly attachments: readonly ProjectAssistantMediaAttachment[]
+  readonly onRemove?: (revisionId: string) => void
+  readonly className?: string
+}) {
+  const t = useTranslations('assistantAgent')
+  if (attachments.length === 0) return null
+  return (
+    <div className={['flex flex-wrap gap-2', className].filter(Boolean).join(' ')}>
+      {attachments.map((attachment) => (
+        <div
+          key={attachment.revisionId}
+          className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm"
+          title={attachment.name}
+        >
+          <AppIcon
+            name={attachment.mediaType === 'image' ? 'image' : 'audioWave'}
+            className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]"
+            aria-hidden="true"
+          />
+          <span className="min-w-0 max-w-[12rem] truncate font-medium text-[var(--glass-text-primary)]">
+            {attachment.name}
+          </span>
+          <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">
+            {t(attachment.mediaType === 'image' ? 'attachments.mediaKindImage' : 'attachments.mediaKindAudio')}
+          </span>
+          {onRemove ? (
+            <button
+              type="button"
+              aria-label={t('attachments.removeFile', { fileName: attachment.name })}
+              onClick={() => onRemove(attachment.revisionId)}
+              className="ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--glass-text-tertiary)] transition hover:bg-slate-100 hover:text-[var(--glass-tone-danger-fg)]"
+            >
+              <AppIcon name="close" className="h-3 w-3" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function TextAttachmentUploadDialog({
   open,
   disabled = false,
+  projectId = null,
   onClose,
   onUploaded,
+  onUploadedMedia,
 }: TextAttachmentUploadDialogProps) {
   const t = useTranslations('assistantAgent')
   const locale = useLocale()
@@ -135,20 +201,33 @@ export function TextAttachmentUploadDialog({
     selectFile(fileFromList(event.dataTransfer.files))
   }, [disabled, selectFile, uploading])
 
+  const mediaUploadEnabled = Boolean(projectId && onUploadedMedia)
+
   const handleUpload = useCallback(async () => {
     if (!selectedFile || disabled || uploading) return
     setUploading(true)
     setError(null)
     try {
-      const attachment = await uploadProjectAssistantTextAttachment({ file: selectedFile })
-      onUploaded(attachment)
+      if (isMediaAttachmentFile(selectedFile)) {
+        if (!projectId || !onUploadedMedia) {
+          throw new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNAVAILABLE')
+        }
+        const mediaAttachment = await uploadProjectAssistantMediaAttachment({
+          projectId,
+          file: selectedFile,
+        })
+        onUploadedMedia(mediaAttachment)
+      } else {
+        const attachment = await uploadProjectAssistantTextAttachment({ file: selectedFile })
+        onUploaded(attachment)
+      }
       onClose()
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : String(uploadError))
     } finally {
       setUploading(false)
     }
-  }, [disabled, onClose, onUploaded, selectedFile, uploading])
+  }, [disabled, onClose, onUploaded, onUploadedMedia, projectId, selectedFile, uploading])
 
   if (!mounted || !open) return null
 
@@ -157,9 +236,11 @@ export function TextAttachmentUploadDialog({
       <div className="w-full max-w-lg rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--glass-text-primary)]">{t('attachments.dialogTitle')}</h2>
+            <h2 className="text-sm font-semibold text-[var(--glass-text-primary)]">
+              {t(mediaUploadEnabled ? 'attachments.dialogTitleWithMedia' : 'attachments.dialogTitle')}
+            </h2>
             <p className="mt-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-              {t('attachments.dialogDescription', {
+              {t(mediaUploadEnabled ? 'attachments.dialogDescriptionWithMedia' : 'attachments.dialogDescription', {
                 maxSize: formatBytes(PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_SIZE_BYTES, locale),
                 maxChars: formatCount(PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_CHARS, locale),
               })}
@@ -199,7 +280,7 @@ export function TextAttachmentUploadDialog({
           <p className="mt-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
             {selectedFile
               ? t('attachments.selectedMeta', { size: formatBytes(selectedFile.size, locale) })
-              : t('attachments.supportedTypes')}
+              : t(mediaUploadEnabled ? 'attachments.supportedTypesWithMedia' : 'attachments.supportedTypes')}
           </p>
           <button
             type="button"
@@ -213,7 +294,9 @@ export function TextAttachmentUploadDialog({
           <input
             ref={inputRef}
             type="file"
-            accept={PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT}
+            accept={mediaUploadEnabled
+              ? `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`
+              : PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT}
             className="hidden"
             disabled={disabled || uploading}
             onChange={(event) => selectFile(fileFromList(event.target.files))}

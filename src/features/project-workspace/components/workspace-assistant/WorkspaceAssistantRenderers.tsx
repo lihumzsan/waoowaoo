@@ -11,7 +11,7 @@ import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import BillingActionButton from '@/components/billing/BillingActionButton'
-import { TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
+import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
@@ -28,6 +28,7 @@ import { MarkdownTextPart } from './MarkdownTextPart'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
+import { readProjectAssistantMediaAttachmentsFromMetadata } from '@/lib/project-agent/media-attachments'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
 import { AssistantChoiceCardView } from './WorkspaceAssistantChoiceCard'
 import {
@@ -319,7 +320,13 @@ function HiddenConversationSummaryMessage(props: { children: React.ReactNode }) 
 function WorkspaceAssistantUserTextAttachments() {
   const metadata = useMessage((state) => state.metadata)
   const attachments = readProjectAssistantTextAttachmentsFromMetadata(metadata)
-  return <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
+  const mediaAttachments = readProjectAssistantMediaAttachmentsFromMetadata(metadata)
+  return (
+    <>
+      <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
+      <MediaAttachmentChips attachments={mediaAttachments} className={mediaAttachments.length > 0 ? 'mt-2' : undefined} />
+    </>
+  )
 }
 
 export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: WorkspaceAssistantMessagePartComponents; subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']; onSelectSubagent: (subagentId: string) => void }) {
