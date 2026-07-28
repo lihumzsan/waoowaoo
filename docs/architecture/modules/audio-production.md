@@ -11,11 +11,11 @@
 ## 不变量
 
 - **AP-01 — 创意方向只有 Skill + Creative Worker。** 不存在 `BGM_DESIGN_PLAN`、固定 BgmDesign writer、`plan_episode_bgm_design` 或“规划完成后生成”链。需要专业音乐方向时，Primary 显式委派 `music_direction`；完整结果保存在 Creative Task/Resource，后续是否生成由 Primary 另一次显式调用决定。
-- **AP-02 — 音乐生成是独立 Operation。** `create_audio` 只消费本次完整输入和显式 context Resources，创建一个或多个音频 Resource/Task；它不要求 Chapter、Creative Direction、最终视频或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
+- **AP-02 — 音乐生成是独立 Operation，且只铸造 BGM。** `create_audio` 只消费本次完整输入和显式 context Resources，每次调用恰好创建一个 `project.bgm_audio` Resource/Task：`schemaId` 不是 Agent 输入，由服务端固定；`generic.audio` 已从词汇表删除；音频请求没有 `count`/候选扇出（`supportsCandidates=false`，候选机制只保留在图片与视频），需要多条音频时由调用方发起多次独立请求。`project.voice_reference` 属于专属入口词汇，只由 `generate_voice` 铸造，通用生成词汇表在 schema registry 用 dedicated-origin 排除集穷尽声明。它不要求 Chapter、Creative Direction、最终视频或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
 - **AP-03 — 没有隐藏媒体分析。** 除非用户明确请求一种分析能力，音乐方向不得观看视频帧、分析原生波形或最终混音来写第二份状态；输入 Resource 只按其显式用途和 lineage 被消费。
 - **AP-04 — Provider 能力不是创作流程。** Agent-facing Operation 不接受 provider/model；模型由服务端配置解析。FAL Lyria 的 120–180 秒连续能力属于单次执行约束：短目标可生成后确定性裁切，范围内按目标生成，超范围调用原地失败或由 Primary 显式拆成多个独立请求。该限制不得被解释为 `>180s` 自动 Chapter/Story Canon/连续性分支。
 - **AP-05 — 最终混音只消费精确输入。** 混音必须显式列出有序视频 Resource ID、可选音乐 Resource ID、时间范围和 automation；stitched video duration 是输出时长权威。所有输入先由服务端回库验证 owner/scope/content，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。不得从“当前 BGM”“最近音乐”或旧 BgmDesign 推断。
-- **AP-06 — 声音能力不产生后续链。** 音乐 Task 终态只恢复 Primary；Choice 只处理当前候选决定；采用某个音频 Resource 不渲染视频。收费 Approval 只授权当前精确媒体计划，不能授权未来混音或渲染。
+- **AP-06 — 声音能力不产生后续链。** 音乐 Task 终态只恢复 Primary；Choice 只处理当前音频选择决定；采用某个音频 Resource 不渲染视频。收费 Approval 只授权当前精确媒体计划，不能授权未来混音或渲染。
 - **AP-07 — 被删除能力不得残留入口。** 旧固定 BGM plan/generate、环境音/音效规划、专用 Canvas stage、TaskType、worker writer、状态字段和 Workflow recommendation 必须删除；历史名字只可出现在迁移删除语句或历史说明。
 - **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice` 每次创建一个新的不可变音色 Resource；Agent 只提交描述、试听文字、语言、显示名与可选绑定目标。服务端解析正式 Voice Design 模型，报价和结算按同一冻结试听文字计算。
 - **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。生成期间发生较新换绑时保留新 Resource 并返回显式 conflict。

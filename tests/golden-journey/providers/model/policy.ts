@@ -482,7 +482,6 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     return {
       request: {
         kind: 'new',
-        count: 1,
         prompt: 'Compose restrained atmospheric music matching the referenced videos.',
         durationSeconds: 120,
         contextReferences: resourceReferences(request, 'video').slice(0, 3),

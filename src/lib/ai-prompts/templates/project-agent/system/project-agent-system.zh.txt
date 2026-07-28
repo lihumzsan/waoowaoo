@@ -96,7 +96,7 @@
 - 用户要求完整作品时，继续完成所有必要单元和组合；不要只完成首个素材就宣告整体完成。保留成功单元，只修正或重试失败、过期或明确需要变化的部分。
 - `generate_voice` 是按需 Operation，不是顶层直连工具：先用 `load_tools` 加载精确 id，再在后续模型步骤通过 `execute_operation` 执行。它只设计可复用音色和试听，不是长对白生成器；试听音频里的文字只用于试听，不是剧情对白。每次生成都使用 `resource.kind=new`（可带 name）并创建新的不可变 Resource；Task 完成后要自动绑定角色时使用 `target.kind=character`。把已有音色手动绑定、换绑或解绑时使用 `bind_voice`。
 - 配乐判断：总时长超过 60 秒的完整成片，配乐默认属于交付范围，不需要用户先提出；用户明确拒绝配乐、成片只是中间产物或独立短素材时不做。先委派 `music_direction` 产出配乐设计与 spotting 决策——哪些段落音乐完整存在、哪些退为最低限度铺底、哪些刻意静音；判断为整片不宜配乐时，如实告知用户并到此为止，不强行生成。
-- 配乐执行：对整条时间线只调用一次 `create_audio`：`schemaId=project.bgm_audio`，把最终合并成片的精确视频 resource 作为 `videoReference`，`durationSeconds` 等于该视频真实时长，让支持视频条件的音乐模型直接观看画面；一个视频一次生成整片配乐，禁止拆成多段分别生成。BGM Task 成功后再调用一次 `merge_videos` 完成混音：`videos` 传成片精确视频 resource，`music` 传 BGM 精确音频 resource，服务端确定性完成响度归一、淡入淡出与对白闪避，得到最终交付视频；混音不委派创作判断。
+- 配乐执行：对整条时间线只调用一次 `create_audio`（服务端固定产出 `project.bgm_audio`，每次恰好一条音频）：把最终合并成片的精确视频 resource 作为 `videoReference`，`durationSeconds` 等于该视频真实时长，让支持视频条件的音乐模型直接观看画面；一个视频一次生成整片配乐，禁止拆成多段分别生成。BGM Task 成功后再调用一次 `merge_videos` 完成混音：`videos` 传成片精确视频 resource，`music` 传 BGM 精确音频 resource，服务端确定性完成响度归一、淡入淡出与对白闪避，得到最终交付视频；混音不委派创作判断。
 
 # Resource 规则
 

@@ -7,7 +7,6 @@ import type {
 export const CREATIVE_RESOURCE_SCHEMA = {
   GENERIC_TEXT: 'generic.text',
   GENERIC_IMAGE: 'generic.image',
-  GENERIC_AUDIO: 'generic.audio',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
   STORY_CANON: 'project.story_canon',
@@ -146,7 +145,6 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.UPLOAD_IMAGE,
   ],
   audio: [
-    CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
     CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO,
     CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
     CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
@@ -172,22 +170,34 @@ const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<CreativeResourceSchemaId> = new Set(
   CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
 ])
 
-function withoutImportOriginSchemas(
+/**
+ * Schemas minted only by their own dedicated operation. The generic create_*
+ * generation operations must never offer or mint these identities: a
+ * music-model output labeled as a voice reference would bypass the single
+ * `generate_voice` entry (AP-08).
+ */
+const DEDICATED_ORIGIN_SCHEMA_IDS: ReadonlySet<CreativeResourceSchemaId> = new Set([
+  CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+])
+
+function generationMintableSchemas(
   schemaIds: readonly CreativeResourceSchemaId[],
 ): readonly CreativeResourceSchemaId[] {
-  return schemaIds.filter((schemaId) => !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId))
+  return schemaIds.filter((schemaId) => (
+    !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId) && !DEDICATED_ORIGIN_SCHEMA_IDS.has(schemaId)
+  ))
 }
 
 /**
- * The subset of the public vocabulary that generation operations may offer as
- * an explicit schemaId. Derived from the same exhaustive registry so tool
- * schemas and conformance evidence share one authority.
+ * The subset of the public vocabulary that the generic generation operations
+ * may mint. Derived from the same exhaustive registry so tool schemas and
+ * conformance evidence share one authority.
  */
 export const CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA = {
-  text: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text),
-  image: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image),
-  audio: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio),
-  video: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video),
+  text: generationMintableSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text),
+  image: generationMintableSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image),
+  audio: generationMintableSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio),
+  video: generationMintableSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video),
 } satisfies Record<CreativeResourceMediaType, readonly CreativeResourceSchemaId[]>
 
 export function isImportOriginCreativeResourceSchema(schemaId: string): boolean {

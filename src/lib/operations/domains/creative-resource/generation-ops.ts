@@ -43,7 +43,6 @@ import {
 import {
   CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
   CREATIVE_RESOURCE_SCHEMA,
-  isImportOriginCreativeResourceSchema,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
 import { creativeWorkOutputSchemas } from '@/lib/creative-worker'
@@ -215,8 +214,6 @@ const createImageInputSchema = z.object({
 const createAudioNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   videoReference: audioVideoReferenceSchema,
-  schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio as [string, ...string[]]).optional()
-    .describe('Professional meaning of the audio Resource. Omit to use generic.audio.'),
   durationSeconds: z.number().int().min(1).max(600)
     .describe('Requested audio duration in seconds.'),
   vocalMode: z.enum(['instrumental', 'vocal']).optional()
@@ -240,6 +237,7 @@ const createAudioInputSchema = z.object({
 
 const createVideoNewRequestBaseShape = {
   ...commonNewMediaGenerationShape,
+  count: candidateCountSchema,
   schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video as [string, ...string[]]).optional()
     .describe('Professional meaning of the video Resource. Omit to use generic.video.'),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
@@ -508,7 +506,10 @@ function requireSchemaForMedia(schemaId: string, mediaType: CreativeResourceMedi
       agentRetryableAfterCorrection: true,
     })
   }
-  if (schema.mediaType !== mediaType || isImportOriginCreativeResourceSchema(schema.schemaId)) {
+  if (
+    schema.mediaType !== mediaType
+    || !CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType].includes(schema.schemaId)
+  ) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CREATIVE_RESOURCE_SCHEMA_MEDIA_MISMATCH',
       field: 'schemaId',
@@ -806,6 +807,7 @@ function createBoundImageInputSchema(
   }
   const newRequest = z.object({
     ...commonNewMediaGenerationShape,
+    count: candidateCountSchema,
     imageReferences: imageReferenceSchema,
     schemaId: createImageNewRequestSchema.shape.schemaId,
     aspectRatio: z.literal(resolveProjectGenerationRatio(state.projectConfig)).optional()
@@ -851,7 +853,6 @@ function createBoundAudioInputSchema(
   }
   const newRequest = z.object({
     ...commonNewMediaGenerationShape,
-    schemaId: createAudioNewRequestSchema.shape.schemaId,
     durationSeconds,
     genre: createAudioNewRequestSchema.shape.genre,
     mood: createAudioNewRequestSchema.shape.mood,
@@ -882,6 +883,7 @@ function createBoundVideoInputSchema(
   }
   const commonShape = {
     ...commonNewMediaGenerationShape,
+    count: candidateCountSchema,
     schemaId: createVideoNewRequestBaseShape.schemaId,
     durationSeconds: durationOptions
       ?? createVideoNewRequestBaseShape.durationSeconds,
@@ -1188,7 +1190,7 @@ async function planNewMediaGeneration(
   }
   const schemaId = input.kind === 'asset'
     ? getAssetImageFormatPolicy(input.assetBinding.assetKind).schemaId
-    : requireSchemaForMedia(input.schemaId ?? config.schemaId, config.mediaType)
+    : requireSchemaForMedia(('schemaId' in input ? input.schemaId : undefined) ?? config.schemaId, config.mediaType)
   const requestedAssetBinding = assetImageRequest?.assetBinding
   const episodeId = input.kind === 'asset' ? null : resolveEpisodeId(input, ctx)
   const assetImageKind = config.mediaType === 'image'
@@ -1361,7 +1363,7 @@ async function planNewMediaGeneration(
     ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
-  const count = input.kind === 'asset' ? 1 : input.count ?? 1
+  const count = 'count' in input ? input.count ?? 1 : 1
   const resources = Array.from({ length: count }, (_, candidateIndex) => ({
     resourceId: buildCreativeResourceId({
       operationId: config.operationId,
@@ -2061,7 +2063,7 @@ const IMAGE_CONFIG: MediaPlanConfig = {
 const AUDIO_CONFIG: MediaPlanConfig = {
   operationId: 'create_audio',
   mediaType: 'audio',
-  schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
+  schemaId: CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO,
   taskType: TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
   modelPurpose: 'music',
   modelPayloadKey: 'musicModel',
@@ -2143,7 +2145,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate independent audio Resources. For new generation, provide the complete prompt and lineage inside request.kind=new. When the server-configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReference and set durationSeconds to that video duration; the model watches the video and composes matching music. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate one project.bgm_audio music Resource per call; the server owns the schema identity and audio has no candidate fan-out. For new generation, provide the complete prompt and lineage inside request.kind=new. When the server-configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReference and set durationSeconds to that video duration; the model watches the video and composes matching music. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -2151,8 +2153,8 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['audio'],
-        outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'audio'),
-        supportsCandidates: true,
+        outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO],
+        supportsCandidates: false,
       },
       confirmation: { kind: 'billable_media', required: true },
       bindToolInputSchema: bindAudioGenerationToolInputSchema,

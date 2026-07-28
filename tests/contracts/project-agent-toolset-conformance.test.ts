@@ -541,9 +541,13 @@ describe('project agent toolset conformance', () => {
         : CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType]
       expect(newBranches.length).toBeGreaterThan(0)
       for (const newBranch of newBranches) {
-        expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
-          enum: [...modelSelectedSchemaIds, null],
-        })
+        if (mediaType === 'audio') {
+          expect(Object.keys(readRecord(newBranch.properties))).not.toContain('schemaId')
+        } else {
+          expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
+            enum: [...modelSelectedSchemaIds, null],
+          })
+        }
         expect(Object.keys(readRecord(newBranch.properties))).not.toEqual(expect.arrayContaining([
           'generationOptions', 'retryResourceIds', 'modelKey',
         ]))
@@ -647,8 +651,19 @@ describe('project agent toolset conformance', () => {
       },
     }).success).toBe(false)
     expect(registry.create_audio.inputSchema.safeParse({
-      request: { kind: 'new', count: 1, prompt: 'Sparse ritual drums.', durationSeconds: 15 },
+      request: { kind: 'new', prompt: 'Sparse ritual drums.', durationSeconds: 15 },
     }).success).toBe(true)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: { kind: 'new', count: 2, prompt: 'Sparse ritual drums.', durationSeconds: 15 },
+    }).success).toBe(false)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: { kind: 'new', prompt: 'Sparse ritual drums.', durationSeconds: 15, schemaId: 'project.bgm_audio' },
+    }).success).toBe(false)
+    expect(registry.create_audio.resourceContract).toMatchObject({
+      supportsCandidates: false,
+      outputSchemaIds: ['project.bgm_audio'],
+    })
+    expect(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio).toEqual(['project.bgm_audio'])
     expect(registry.create_video.inputSchema.safeParse({
       request: {
         kind: 'new',
