@@ -102,7 +102,7 @@ describe('deployment config', () => {
       showInviteCode: true,
       showBilling: true,
       showApiConfig: false,
-      showAccountSecurity: false,
+      showAccountSecurity: true,
       showGoogleOAuth: true,
       enablePhoneAuth: true,
       enablePasswordAuth: false,

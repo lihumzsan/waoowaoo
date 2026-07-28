@@ -16,24 +16,24 @@ function defineSkill(
 export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeSkillDefinition>> = {
   'creative-core': defineSkill({
     id: 'creative-core',
-    version: '1.1.0',
+    version: '1.2.0',
     title: '创作核心',
-    summary: '所有专业创作工作的事实边界、目标忠实性、假设管理与交付自检。',
-    tags: ['core', 'creative', 'reasoning', 'quality'],
+    summary: '所有专业创作工作的事实边界、目标忠实性、假设管理、通用时长估算与交付自检；由 Worker 自动预加载。',
+    tags: ['core', 'creative', 'reasoning', 'quality', 'duration'],
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '2.4.0',
+    version: '2.5.0',
     title: '故事与剧本开发',
     summary: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
     tags: ['story', 'script', 'screenplay', 'writing'],
   }),
   'continuity-memory': defineSkill({
     id: 'continuity-memory',
-    version: '1.5.0',
+    version: '1.6.0',
     title: '连续性记忆',
-    summary: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断；它也拥有全系统唯一的语速与时长估算口径。',
-    tags: ['continuity', 'canon', 'story', 'state', 'analysis', 'duration'],
+    summary: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
+    tags: ['continuity', 'canon', 'story', 'state', 'analysis'],
   }),
   'director-core': defineSkill({
     id: 'director-core',

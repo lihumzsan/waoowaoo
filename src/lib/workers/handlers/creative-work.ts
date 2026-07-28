@@ -6,7 +6,6 @@ import {
   creativeWorkTaskPayloadSchema,
   creativeWorkTaskResultSchema,
   creativeWorkerResultSchema,
-  CreativeWorkerError,
   runCreativeWorker,
   summarizeCreativeWorkOutput,
   type CreativeWorkTaskLifecycleProjection,
@@ -18,8 +17,8 @@ import {
 } from '@/lib/project-agent/model'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
-import { getWorkerExternalTimeoutMs } from '@/lib/workers/runtime-config'
 import { assertTaskActive } from '@/lib/workers/utils'
+import type { TaskAttemptExecutionContext } from '@/lib/workers/task-execution-deadline'
 import {
   createWorkerLLMStreamCallbacks,
   createWorkerLLMStreamContext,
@@ -105,7 +104,10 @@ function applyProgressEvent(
   }
 }
 
-export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
+export async function handleCreativeWorkTask(
+  job: Job<TaskJobData>,
+  execution: TaskAttemptExecutionContext,
+) {
   const payload = creativeWorkTaskPayloadSchema.parse(job.data.payload || {})
   await reportTaskProgress(job, 10, {
     stage: 'creative_work_prepare',
@@ -136,27 +138,19 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
   if (!Number.isInteger(attempt) || (attempt ?? 0) < 1) {
     throw new Error(`CREATIVE_WORK_TASK_ATTEMPT_REQUIRED:${job.data.taskId}`)
   }
-  const streamContext = createWorkerLLMStreamContext(job, 'creative-reasoning')
+  const streamContext = createWorkerLLMStreamContext(job, 'creative-work')
   const streamCallbacks = createWorkerLLMStreamCallbacks(
     job,
     streamContext,
     undefined,
     { maxChunkChars: 64 },
   )
-  const abortController = new AbortController()
-  const timeoutMs = getWorkerExternalTimeoutMs()
-  let timedOut = false
-  const timeout = setTimeout(() => {
-    timedOut = true
-    abortController.abort()
-  }, timeoutMs)
-  timeout.unref()
   let result: Awaited<ReturnType<typeof runCreativeWorker>>
   try {
     result = await runCreativeWorker({
       model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
       locale: job.data.locale,
-      signal: abortController.signal,
+      signal: execution.signal,
       request: payload.request,
       onEvent: async (event) => {
         if (event.kind === 'reasoning_delta') {
@@ -169,6 +163,21 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
               id: reasoningId,
               attempt: attempt!,
               title: 'Creative Worker reasoning',
+              index: 1,
+              total: 1,
+            },
+          })
+          return
+        }
+        if (event.kind === 'output_delta') {
+          streamCallbacks.onChunk?.({
+            kind: 'text',
+            delta: event.delta,
+            lane: 'structured-output',
+            step: {
+              id: `${String(attempt)}:structured-output`,
+              attempt: attempt!,
+              title: 'Creative Worker structured output',
               index: 1,
               total: 1,
             },
@@ -190,13 +199,7 @@ export async function handleCreativeWorkTask(job: Job<TaskJobData>) {
         }
       },
     })
-  } catch (error: unknown) {
-    if (timedOut) {
-      throw new CreativeWorkerError('CREATIVE_WORK_TIMEOUT', { timeoutMs }, { cause: error })
-    }
-    throw error
   } finally {
-    clearTimeout(timeout)
     await streamCallbacks.flush()
   }
 

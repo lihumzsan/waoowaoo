@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { isBillableTaskType } from '@/lib/billing/task-policy'
-import { TASK_DEFINITIONS } from '@/lib/task/definition'
+import {
+  CREATIVE_WORK_EXECUTION_DEADLINE_MS,
+  TASK_DEFINITIONS,
+} from '@/lib/task/definition'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getQueueTypeByTaskType } from '@/lib/task/queues'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
@@ -22,6 +25,10 @@ describe('TaskDefinition conformance', () => {
       expect(definition.terminalResourceImpact).toBe('creative_resources')
       expect(definition.terminalFailureProjector).toBe('none')
       expect(definition.terminalCancelProjector).toBe('none')
+      if (definition.executionDeadlineMs !== null) {
+        expect(Number.isSafeInteger(definition.executionDeadlineMs)).toBe(true)
+        expect(definition.executionDeadlineMs).toBeGreaterThan(0)
+      }
     }
   })
 
@@ -30,7 +37,14 @@ describe('TaskDefinition conformance', () => {
       terminalOutputMaterializer: 'domain_creative_resource',
       continuationResultProjection: 'reference',
       lifecyclePayloadProjection: 'reference',
+      executionDeadlineMs: CREATIVE_WORK_EXECUTION_DEADLINE_MS,
     })
+    expect(CREATIVE_WORK_EXECUTION_DEADLINE_MS).toBe(5 * 60_000)
+    expect(
+      Object.entries(TASK_DEFINITIONS)
+        .filter(([taskType]) => taskType !== TASK_TYPE.CREATIVE_WORK)
+        .every(([, definition]) => definition.executionDeadlineMs === null),
+    ).toBe(true)
     for (const taskType of [
       TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       TASK_TYPE.CREATIVE_RESOURCE_AUDIO,

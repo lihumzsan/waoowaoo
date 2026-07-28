@@ -30,6 +30,8 @@ export type TaskTerminalModelKeyRequirement = 'required' | 'none'
 export type TaskContinuationResultProjection = 'full' | 'reference'
 export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
+export const CREATIVE_WORK_EXECUTION_DEADLINE_MS = 5 * 60_000
+
 export type TaskDefinition<Q extends QueueType = QueueType> = {
   queue: Q
   workerHandler: TaskHandlerByQueue[Q]
@@ -44,6 +46,7 @@ export type TaskDefinition<Q extends QueueType = QueueType> = {
   terminalCancelProjector: TaskTargetTerminalProjector
   continuationResultProjection: TaskContinuationResultProjection
   lifecyclePayloadProjection: TaskLifecyclePayloadProjection
+  executionDeadlineMs: number | null
   /**
    * Whether the terminal handler result must carry the model key that produced
    * the artifact. Declared here so a task type that runs no model is a registry
@@ -65,6 +68,7 @@ function definition<Q extends QueueType>(
   continuationResultProjection: TaskContinuationResultProjection = 'full',
   lifecyclePayloadProjection: TaskLifecyclePayloadProjection = 'full',
   terminalModelKeyRequirement: TaskTerminalModelKeyRequirement = 'required',
+  executionDeadlineMs: number | null = null,
 ): TaskDefinition<Q> {
   return {
     queue,
@@ -77,6 +81,7 @@ function definition<Q extends QueueType>(
     submissionTargetOwnership,
     continuationResultProjection,
     lifecyclePayloadProjection,
+    executionDeadlineMs,
     terminalResourceImpact,
     terminalFailureProjector,
     terminalCancelProjector,
@@ -97,13 +102,15 @@ export const TASK_DEFINITIONS = {
     'domain_creative_resource',
     'reference',
     'reference',
+    'required',
+    CREATIVE_WORK_EXECUTION_DEADLINE_MS,
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
-  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition('image', 'creative_resource_web_reference', 'none', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'full', 'full', 'none'),
-  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition('voice', 'creative_resource_voice', 'voice', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'full', 'full', 'none'),
+  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition('image', 'creative_resource_web_reference', 'none', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
+  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition('voice', 'creative_resource_voice', 'voice', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
 } satisfies Record<TaskType, TaskDefinition>
 
 export function getTaskDefinition(type: TaskType): TaskDefinition {

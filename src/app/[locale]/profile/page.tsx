@@ -347,7 +347,10 @@ export default function ProfilePage() {
                   {tc('loading')}
                 </div>
               ) : activeSection === 'security' ? (
-                <AccountSecurityTab />
+                <AccountSecurityTab
+                  enablePasswordAuth={deploymentFeatures.enablePasswordAuth}
+                  showGoogleOAuth={deploymentFeatures.showGoogleOAuth}
+                />
               ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
                 <ApiConfigTab />
               ) : activeSection === 'overview' && showBilling ? (

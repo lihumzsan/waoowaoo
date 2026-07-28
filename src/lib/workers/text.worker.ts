@@ -6,18 +6,25 @@ import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
 import { handleCreativeWorkTask } from './handlers/creative-work'
+import type { TaskAttemptExecutionContext } from './task-execution-deadline'
 
-type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
+type TextTaskHandler = (
+  job: Job<TaskJobData>,
+  context: TaskAttemptExecutionContext,
+) => Promise<Record<string, unknown> | void>
 
 const TEXT_TASK_HANDLERS = {
   creative_work: handleCreativeWorkTask,
 } satisfies Record<TextTaskHandlerKey, TextTaskHandler>
 
-async function processTextTask(job: Job<TaskJobData>) {
+async function processTextTask(
+  job: Job<TaskJobData>,
+  context: TaskAttemptExecutionContext,
+) {
   await reportTaskProgress(job, 5, { stage: 'received' })
 
   const definition = getTaskDefinitionForQueue(job.data.type, 'text')
-  return await TEXT_TASK_HANDLERS[definition.workerHandler](job)
+  return await TEXT_TASK_HANDLERS[definition.workerHandler](job, context)
 }
 
 export function createTextWorker() {

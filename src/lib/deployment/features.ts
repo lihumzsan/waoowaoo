@@ -44,7 +44,7 @@ const CLOUD_DEPLOYMENT_FEATURES: EditionDeploymentFeatures = {
   showRecharge: true,
   showInviteCode: true,
   showBilling: true,
-  showAccountSecurity: false,
+  showAccountSecurity: true,
   showGoogleOAuth: true,
   enablePhoneAuth: true,
   enablePasswordAuth: false,

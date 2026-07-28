@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
@@ -22,6 +22,11 @@ type AccountSecuritySnapshot = {
 
 type AccountSecurityPayload = {
   security?: AccountSecuritySnapshot
+}
+
+interface AccountSecurityTabProps {
+  enablePasswordAuth: boolean
+  showGoogleOAuth: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,12 +60,19 @@ function readApiFailureReason(payload: unknown, fallback: string): string {
   return parsed.code || parsed.message || fallback
 }
 
-export default function AccountSecurityTab() {
+export default function AccountSecurityTab({
+  enablePasswordAuth,
+  showGoogleOAuth,
+}: AccountSecurityTabProps) {
   const t = useTranslations('profile.accountSecurity')
   const locale = useLocale()
+  const { update: updateSession } = useSession()
   const [security, setSecurity] = useState<AccountSecuritySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState('')
+  const [savingDisplayName, setSavingDisplayName] = useState(false)
+  const [displayNameStatus, setDisplayNameStatus] = useState<string | null>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
@@ -79,6 +91,7 @@ export default function AccountSecurityTab() {
         throw new Error(readApiFailureReason(payload, `HTTP_${response.status}`))
       }
       setSecurity(payload.security)
+      setDisplayName(payload.security.displayName)
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : t('loadFailed'))
     } finally {
@@ -89,6 +102,49 @@ export default function AccountSecurityTab() {
   useEffect(() => {
     void loadSecurity()
   }, [loadSecurity])
+
+  const handleSaveDisplayName = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const nextDisplayName = displayName.trim()
+    setDisplayNameStatus(null)
+
+    if (!nextDisplayName) {
+      setDisplayNameStatus(t('displayNameInvalid'))
+      return
+    }
+
+    setSavingDisplayName(true)
+    try {
+      const response = await apiFetch('/api/user/security', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: nextDisplayName }),
+      })
+      const payload: unknown = await response.json().catch(() => null)
+      if (!response.ok || !isAccountSecurityPayload(payload) || !payload.security) {
+        const reason = readApiFailureReason(payload, `HTTP_${response.status}`)
+        if (reason === 'ACCOUNT_SECURITY_DISPLAY_NAME_TAKEN') {
+          throw new Error(t('displayNameTaken'))
+        }
+        if (
+          reason === 'ACCOUNT_SECURITY_DISPLAY_NAME_INVALID'
+          || reason === 'ACCOUNT_SECURITY_DISPLAY_NAME_PAYLOAD_INVALID'
+        ) {
+          throw new Error(t('displayNameInvalid'))
+        }
+        throw new Error(reason)
+      }
+
+      setSecurity(payload.security)
+      setDisplayName(payload.security.displayName)
+      await updateSession()
+      setDisplayNameStatus(t('displayNameSaved'))
+    } catch (error: unknown) {
+      setDisplayNameStatus(error instanceof Error ? error.message : t('displayNameSaveFailed'))
+    } finally {
+      setSavingDisplayName(false)
+    }
+  }
 
   const resetPasswordForm = () => {
     setCurrentPassword('')
@@ -195,6 +251,42 @@ export default function AccountSecurityTab() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
+          <form
+            onSubmit={handleSaveDisplayName}
+            className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4"
+          >
+            <label
+              htmlFor="account-display-name"
+              className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]"
+            >
+              <AppIcon name="user" className="h-4 w-4" />
+              {t('displayName')}
+            </label>
+            <input
+              id="account-display-name"
+              type="text"
+              autoComplete="nickname"
+              maxLength={50}
+              value={displayName}
+              onChange={(event) => {
+                setDisplayName(event.target.value)
+                setDisplayNameStatus(null)
+              }}
+              className="h-10 w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 text-sm text-[var(--glass-text-primary)] outline-none transition focus:border-slate-400"
+              placeholder={t('displayNamePlaceholder')}
+            />
+            <button
+              type="submit"
+              disabled={savingDisplayName || !displayName.trim() || displayName.trim() === security.displayName}
+              className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingDisplayName ? t('savingDisplayName') : t('saveDisplayName')}
+            </button>
+            {displayNameStatus ? (
+              <p className="mt-2 text-xs text-[var(--glass-text-secondary)]">{displayNameStatus}</p>
+            ) : null}
+          </form>
+
           <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
               <AppIcon name="user" className="h-4 w-4" />
@@ -208,58 +300,62 @@ export default function AccountSecurityTab() {
             </span>
           </div>
 
-          <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
-              <AppIcon name="chrome" className="h-4 w-4" />
-              {t('google')}
+          {showGoogleOAuth ? (
+            <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
+                <AppIcon name="chrome" className="h-4 w-4" />
+                {t('google')}
+              </div>
+              <p className="text-sm text-[var(--glass-text-secondary)]">
+                {googleLinked ? t('googleBound') : t('googleNotBound')}
+              </p>
+              {googleLinked ? (
+                <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-success-fg)]">
+                  {t('bound')}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleBindGoogle()}
+                  disabled={bindingGoogle}
+                  className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <AppIcon name="link" className="h-4 w-4" />
+                  {bindingGoogle ? t('binding') : t('bindGoogle')}
+                </button>
+              )}
             </div>
-            <p className="text-sm text-[var(--glass-text-secondary)]">
-              {googleLinked ? t('googleBound') : t('googleNotBound')}
-            </p>
-            {googleLinked ? (
-              <span className="mt-3 inline-flex rounded-full bg-[var(--glass-tone-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--glass-tone-success-fg)]">
-                {t('bound')}
+          ) : null}
+
+          {enablePasswordAuth ? (
+            <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
+                <AppIcon name="lock" className="h-4 w-4" />
+                {t('password')}
+              </div>
+              <p className="text-sm text-[var(--glass-text-secondary)]">
+                {security.hasPassword ? t('passwordBound') : t('passwordNotSet')}
+              </p>
+              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${security.hasPassword ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'}`}>
+                {security.hasPassword ? t('set') : t('notSet')}
               </span>
-            ) : (
               <button
                 type="button"
-                onClick={() => void handleBindGoogle()}
-                disabled={bindingGoogle}
-                className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => {
+                  resetPasswordForm()
+                  setPasswordFormOpen((open) => !open)
+                }}
+                className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
               >
-                <AppIcon name="link" className="h-4 w-4" />
-                {bindingGoogle ? t('binding') : t('bindGoogle')}
+                <AppIcon name="lock" className="h-4 w-4" />
+                {security.hasPassword ? t('changePassword') : t('setLoginPassword')}
               </button>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--glass-text-primary)]">
-              <AppIcon name="lock" className="h-4 w-4" />
-              {t('password')}
             </div>
-            <p className="text-sm text-[var(--glass-text-secondary)]">
-              {security.hasPassword ? t('passwordBound') : t('passwordNotSet')}
-            </p>
-            <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${security.hasPassword ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'}`}>
-              {security.hasPassword ? t('set') : t('notSet')}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                resetPasswordForm()
-                setPasswordFormOpen((open) => !open)
-              }}
-              className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
-            >
-              <AppIcon name="lock" className="h-4 w-4" />
-              {security.hasPassword ? t('changePassword') : t('setLoginPassword')}
-            </button>
-          </div>
+          ) : null}
         </div>
       </section>
 
-      {passwordFormOpen ? (
+      {enablePasswordAuth && passwordFormOpen ? (
         <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-6">
           <h3 className="mb-4 text-base font-semibold text-[var(--glass-text-primary)]">
             {security.hasPassword ? t('changePasswordTitle') : t('setPasswordTitle')}

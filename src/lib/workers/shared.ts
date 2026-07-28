@@ -12,6 +12,7 @@ import {
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
 import type { TaskStructuredStreamCheckpointWrite } from '@/lib/task/structured-stream-checkpoint'
 import { TASK_EVENT_TYPE, type TaskJobData } from '@/lib/task/types'
+import { getTaskDefinition } from '@/lib/task/definition'
 import {
   getTaskMaxAttempts,
   shouldRetryTaskFailure,
@@ -28,6 +29,10 @@ import {
   loadTaskHandlerCheckpoint,
   saveTaskHandlerCheckpoint,
 } from '@/lib/task/execution-checkpoint'
+import {
+  runWithTaskExecutionDeadline,
+  type TaskAttemptExecutionContext,
+} from './task-execution-deadline'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -191,7 +196,13 @@ async function resolveProjectNameForLogging(projectId: string): Promise<void> {
   }
 }
 
-export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>) {
+export async function withTaskLifecycle(
+  job: Job<TaskJobData>,
+  handler: (
+    job: Job<TaskJobData>,
+    context: TaskAttemptExecutionContext,
+  ) => Promise<Record<string, unknown> | void>,
+) {
   const data = job.data
   const taskId = data.taskId
   const logger = buildWorkerLogger(data, job.queueName)
@@ -273,7 +284,14 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       projectId: data.projectId,
       userId: data.userId,
     }, async () => {
-      const executed = await withTextUsageCollection(async () => await handler(job))
+      const definition = getTaskDefinition(data.type)
+      const executed = await withTextUsageCollection(async () => (
+        await runWithTaskExecutionDeadline({
+          taskType: data.type,
+          executionDeadlineMs: definition.executionDeadlineMs,
+          run: async (context) => await handler(job, context),
+        })
+      ))
       return await saveTaskHandlerCheckpoint({
         taskId,
         inputFingerprint,

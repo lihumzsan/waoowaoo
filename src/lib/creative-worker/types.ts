@@ -164,6 +164,10 @@ export interface CreativeWorkerMetrics {
 
 export type CreativeWorkerEvent = CreativeWorkTraceEvent
   | {
+    kind: 'output_delta'
+    delta: string
+  }
+  | {
     kind: 'reasoning_delta'
     reasoningId: string
     delta: string

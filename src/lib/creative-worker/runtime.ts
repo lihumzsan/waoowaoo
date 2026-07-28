@@ -44,6 +44,7 @@ import {
   type CreativeWorkerRunContext,
   type RunCreativeWorkerInput,
 } from './types'
+import { readCreativeWorkerOutputDelta } from './model-stream'
 
 const COMMON_CREATIVE_SKILL_ID: CreativeSkillId = 'creative-core'
 const REASONING_SNAPSHOT_DELTA_CHARS = 4_096
@@ -447,6 +448,13 @@ export async function runCreativeWorker(
       })
     }
     for await (const event of result) {
+      const outputDelta = readCreativeWorkerOutputDelta(event)
+      if (outputDelta) {
+        await emitEvent({
+          kind: 'output_delta',
+          delta: outputDelta,
+        })
+      }
       for (const reasoningEvent of publicReasoning.accept(event)) {
         await applyReasoningEvent(reasoningEvent)
       }
@@ -515,15 +523,24 @@ export async function runCreativeWorker(
       research,
     }
   } catch (error) {
-    const normalizedError = isCreativeWorkerError(error)
-      ? error
-      : input.signal.aborted
-        ? new CreativeWorkerError('CREATIVE_WORK_ABORTED', {}, { cause: error })
-        : error instanceof MaxTurnsExceededError
-          ? new CreativeWorkerError('CREATIVE_WORK_MAX_TURNS_EXCEEDED', {
-              maxTurns: budgets.maxTurns,
-            }, { cause: error })
-          : new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
+    const signalReason = input.signal.reason
+    const signalTimedOut = (
+      !!signalReason
+      && typeof signalReason === 'object'
+      && 'code' in signalReason
+      && signalReason.code === 'GENERATION_TIMEOUT'
+    )
+    const normalizedError = signalTimedOut
+      ? new CreativeWorkerError('CREATIVE_WORK_TIMEOUT', {}, { cause: error })
+      : isCreativeWorkerError(error)
+        ? error
+        : input.signal.aborted
+          ? new CreativeWorkerError('CREATIVE_WORK_ABORTED', {}, { cause: error })
+          : error instanceof MaxTurnsExceededError
+            ? new CreativeWorkerError('CREATIVE_WORK_MAX_TURNS_EXCEEDED', {
+                maxTurns: budgets.maxTurns,
+              }, { cause: error })
+            : new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {}, { cause: error })
     if (!eventDeliveryFailed) {
       for (const activeToolCall of toolLifecycle.drainActive()) {
         if (activeToolCall.toolName === 'read_skill') {

@@ -7,6 +7,7 @@ import { authorizePasswordIdentity } from '@/lib/auth/password-auth'
 import { authorizePhoneIdentity } from '@/lib/auth/phone-verification'
 import { getDeploymentConfig, isCloudDeployment } from '@/lib/deployment/config'
 import { getDeploymentFeatures } from '@/lib/deployment/features'
+import { prisma } from '@/lib/prisma'
 
 const deploymentConfig = getDeploymentConfig()
 const deploymentFeatures = getDeploymentFeatures(deploymentConfig)
@@ -75,9 +76,18 @@ export const authOptions: NextAuthOptions = {
       logAuthAction('LOGIN', verifiedEmail, { provider: 'google', success: true })
       return true
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
+      }
+      if (trigger === 'update' && typeof token.id === 'string') {
+        const currentUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { name: true },
+        })
+        if (currentUser) {
+          token.name = currentUser.name
+        }
       }
       return token
     },

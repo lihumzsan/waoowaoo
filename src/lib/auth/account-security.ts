@@ -2,11 +2,16 @@ import bcrypt from 'bcryptjs'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
+import { getPrismaErrorCode } from '@/lib/prisma-error'
 
 export const ACCOUNT_SECURITY_PASSWORD_MIN_LENGTH = AUTH_PASSWORD_MIN_LENGTH
+export const ACCOUNT_DISPLAY_NAME_MAX_LENGTH = 50
 
 export const ACCOUNT_SECURITY_RESULT_CODES = {
   bodyParseFailed: 'ACCOUNT_SECURITY_BODY_PARSE_FAILED',
+  displayNamePayloadInvalid: 'ACCOUNT_SECURITY_DISPLAY_NAME_PAYLOAD_INVALID',
+  displayNameInvalid: 'ACCOUNT_SECURITY_DISPLAY_NAME_INVALID',
+  displayNameTaken: 'ACCOUNT_SECURITY_DISPLAY_NAME_TAKEN',
   passwordPayloadInvalid: 'ACCOUNT_SECURITY_PASSWORD_PAYLOAD_INVALID',
   passwordTooShort: 'ACCOUNT_SECURITY_PASSWORD_TOO_SHORT',
   passwordAlreadySet: 'ACCOUNT_SECURITY_PASSWORD_ALREADY_SET',
@@ -72,12 +77,11 @@ export async function getAccountSecurity(userId: string): Promise<AccountSecurit
   }
 
   const email = trimOptional(user.email)
-  const displayName = email || user.name
   const googleLinked = user.accounts.some((account) => account.provider === 'google')
 
   return {
     email,
-    displayName,
+    displayName: user.name,
     hasPassword: user.password !== null,
     providers: {
       google: {
@@ -85,6 +89,45 @@ export async function getAccountSecurity(userId: string): Promise<AccountSecurit
       },
     },
   }
+}
+
+export async function updateAccountDisplayName(input: {
+  userId: string
+  displayName: string
+}): Promise<AccountSecuritySnapshot> {
+  const displayName = input.displayName.trim()
+  if (!displayName || displayName.length > ACCOUNT_DISPLAY_NAME_MAX_LENGTH) {
+    throwInvalidParams(ACCOUNT_SECURITY_RESULT_CODES.displayNameInvalid)
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: {
+      id: true,
+      name: true,
+    },
+  })
+
+  if (!user) {
+    throwNotFound(ACCOUNT_SECURITY_RESULT_CODES.userNotFound)
+  }
+  if (user.name === displayName) {
+    return await getAccountSecurity(input.userId)
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: input.userId },
+      data: { name: displayName },
+    })
+  } catch (error) {
+    if (getPrismaErrorCode(error) === 'P2002') {
+      throwConflict(ACCOUNT_SECURITY_RESULT_CODES.displayNameTaken)
+    }
+    throw error
+  }
+
+  return await getAccountSecurity(input.userId)
 }
 
 export async function setInitialPassword(input: {

@@ -66,10 +66,10 @@ describe('Task structured-stream checkpoint protocol', () => {
       taskId: 'task-1',
       taskType: TASK_TYPE.CREATIVE_WORK,
       payload: {
-        stepId: 'creative-work-output',
+        stepId: '1:structured-output',
         stepAttempt: 1,
         streamRunId: 'run-1',
-        stream: { kind: 'text', lane: 'main', seq: 2, delta: 'tail' },
+        stream: { kind: 'text', lane: 'structured-output', seq: 2, delta: 'tail' },
       },
       checkpoint: { fullDelta: '{"segments":[]}', throughSeq: 2 },
       checkpointedAt: '2026-07-19T00:00:02.000Z',
