@@ -319,8 +319,11 @@
         "src/lib/project-agent/subagent-events.ts",
         "src/lib/edit-chapter/creative-context-service.ts",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagents.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagentDetail.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSubagentShared.tsx",
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts",
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagent-stream.ts",
+        "src/features/project-workspace/components/workspace-assistant/workspace-assistant-panel-state.ts",
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts"
       ]
     },

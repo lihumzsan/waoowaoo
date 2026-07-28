@@ -57,6 +57,7 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 
 ## 历史回归
 
+- Worker research runtime 首次已发出 `research_started/research_completed`，但 Task handler 的持久事件白名单遗漏这两个 kind；结果是外部 Trace 能看到搜索，刷新后的 Subagent 详情却只能看到 Skill。当前同一 trace schema 的研究事件进入既有 lifecycle projection，并按 attempt-scoped `researchId` 用 terminal 事件替换 started；listener、Task.status 与最终 evidence owner 均未改变。
 - Style Bible 只有静态视觉政策，遇到“规则怪谈”“模拟恐怖”等新近或社群定义类别时只能依赖模型记忆；为每种风格新增 Skill 又会制造无限 identity。当前把研究限定为 Creative Direction 的证据输入，再由同一方向契约影响下游。
 - 初始 Web Search 使用 Tavily function Tool：项目自行拥有 query 参数、HTTP wire、结果裁剪和二次模型往返，返回的 ranked snippets 仍需当前 Worker 重新判断检索充分性。真实“规则怪谈”配对测试显示 OpenAI hosted search 可以在一次托管 run 中自主规划多条 query、综合报告并提供结构化 citation，同时延迟更低；当前删除 Tavily adapter 和私有参数，不保留 fallback 双轨。
 - 直接把 `webSearchTool()` 挂到 Primary/Worker 看似更短，但当前 Primary 默认可经 OpenRouter、analysis Worker 也可使用 Claude；hosted tool 只属于 OpenAI Responses 执行边界。当前由统一 `searchWeb → ai-exec` 内部的专用 OpenAI Search Agent 拥有 hosted tool，保留项目模型 resolver 的唯一性，也避免按 output kind 偷换 Worker 模型。

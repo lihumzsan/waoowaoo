@@ -118,7 +118,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 - 同用户跨 Project Binding 曾因只校验 user 而被接受。Binding service 现在验证目标 owner/scope 和 Resource scope，跨 Project/Episode失败关闭。
 - `confirmed_screenplay` 曾与成功 screenplay Resource 并存成为第二状态。确认入口和 Binding 已删除，调用方显式选择一个 screenplay Resource。
 - 角色音色曾把“重新生成”解释为原位追加版本，使当前绑定与生成完成的晚到顺序竞争。现在每次生成创建新 Resource，只有 Binding CAS 决定当前音色。
-- Prompt Set 之外的两条 Worker 产物执行链曾长期依赖 Primary 搬运内容：资产图要求 Primary 逐条把 manifest `generationPrompt` 抄进 `create_image.kind=asset`，配乐要求 Primary 把 `music_direction` cue 时间线压缩改写成一条 `create_audio` prompt——后者本身就是「另一个模型改写同一创作判断」，且「原样使用」只有提示词纪律而无契约保证。参考资产回归（见上）已证明这类 Primary 解释层是漂移面。当前 `manifest_assets`（CR-21）与 `music_direction`（CR-22）补齐引用执行，`music_direction` strict 输出新增必填可空 `score` 字段并把 Creative Work 协议切到 `creative_work_v11`；部署前必须排空 v10 queued/processing Task 与对应 Wait，不保留双 parser，无 `score` 键的旧 music_direction Resource 引用执行时显式失败，由 Primary 重新委派。
+- Prompt Set 之外的两条 Worker 产物执行链曾长期依赖 Primary 搬运内容：资产图要求 Primary 逐条把 manifest `generationPrompt` 抄进 `create_image.kind=asset`，配乐要求 Primary 把 `music_direction` cue 时间线压缩改写成一条 `create_audio` prompt——后者本身就是「另一个模型改写同一创作判断」，且「原样使用」只有提示词纪律而无契约保证。参考资产回归（见上）已证明这类 Primary 解释层是漂移面。`creative_work_v11` 为 `music_direction` strict 输出增加必填可空 `score`，`manifest_assets`（CR-21）与 `music_direction`（CR-22）由此补齐引用执行；当前 v12 只切换 Worker Skill/提交/trace 协议，不改变这些 Resource schema 和执行 owner。无 `score` 键的旧 music_direction Resource 引用执行时仍显式失败，由 Primary 重新委派。
 
 ## 修改检查表
 
