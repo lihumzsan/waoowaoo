@@ -3,6 +3,7 @@
 import { useLocale } from 'next-intl'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -141,6 +142,11 @@ export function useWorkspaceAssistantTextPlayback(params: {
   const runningRef = useRef(params.running)
   const timerRef = useRef<number | null>(null)
   const tickRef = useRef<() => void>(() => undefined)
+  const commitDisplayedCount = useCallback((nextDisplayedCount: number) => {
+    if (displayedCountRef.current === nextDisplayedCount) return
+    displayedCountRef.current = nextDisplayedCount
+    setDisplayedCount(nextDisplayedCount)
+  }, [])
 
   displayedCountRef.current = displayedCount
   targetLengthRef.current = targetGraphemes.length
@@ -154,15 +160,13 @@ export function useWorkspaceAssistantTextPlayback(params: {
     const previousSource = previousSourceRef.current
     previousSourceRef.current = params.text
     if (params.text.startsWith(previousSource)) return
-    displayedCountRef.current = targetGraphemes.length
-    setDisplayedCount(targetGraphemes.length)
-  }, [params.text, targetGraphemes.length])
+    commitDisplayedCount(targetGraphemes.length)
+  }, [commitDisplayedCount, params.text, targetGraphemes.length])
 
   useEffect(() => {
     if (params.running || streamedRef.current) return
-    displayedCountRef.current = targetGraphemes.length
-    setDisplayedCount(targetGraphemes.length)
-  }, [params.running, targetGraphemes.length])
+    commitDisplayedCount(targetGraphemes.length)
+  }, [commitDisplayedCount, params.running, targetGraphemes.length])
 
   tickRef.current = () => {
     timerRef.current = null
@@ -171,11 +175,7 @@ export function useWorkspaceAssistantTextPlayback(params: {
       targetLength: targetLengthRef.current,
       running: runningRef.current,
     })
-    if (tick.nextDisplayedCount !== displayedCountRef.current) {
-      const nextCount = tick.nextDisplayedCount
-      displayedCountRef.current = nextCount
-      setDisplayedCount(nextCount)
-    }
+    commitDisplayedCount(tick.nextDisplayedCount)
     if (!tick.continuePlayback) return
     timerRef.current = window.setTimeout(() => tickRef.current(), tick.intervalMs)
   }
