@@ -40,9 +40,12 @@ export function WorkspaceAssistantSubagentTabs(props: {
   selectedSubagentId: string | null
   onSelect: (subagentId: string | null) => void
   onDismiss: (subagentId: string) => void
+  /** 主对话有待用户处理的 Choice/Approval,且当前不在 Primary 视图时点亮提示点 */
+  primaryNeedsAttention?: boolean
 }) {
   const t = useTranslations('assistantAgent')
   if (props.subagents.length === 0) return null
+  const showAttention = props.primaryNeedsAttention === true && props.selectedSubagentId !== null
 
   return (
     <section className="shrink-0 border-b border-[var(--glass-stroke-base)] bg-white/72 px-4 pr-14 pt-3 backdrop-blur-xl">
@@ -55,6 +58,14 @@ export function WorkspaceAssistantSubagentTabs(props: {
           className={`${tabClassName(props.selectedSubagentId === null)} gap-2 px-3 py-2`}
         >
           <span className="min-w-0 truncate">{t('subagents.primary')}</span>
+          {showAttention ? (
+            <span
+              role="status"
+              aria-label={t('subagents.primaryAttention')}
+              title={t('subagents.primaryAttention')}
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-900"
+            />
+          ) : null}
         </button>
         {props.subagents.map((subagent) => {
           const active = subagent.subagentId === props.selectedSubagentId

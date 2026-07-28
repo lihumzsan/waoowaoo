@@ -221,6 +221,7 @@ export default function WorkspaceAssistantPanel({
                 selectedSubagentId={selectedSubagentId}
                 onSelect={setSelectedSubagentId}
                 onDismiss={dismissSubagent}
+                primaryNeedsAttention={Boolean(displayedActiveChoiceCard || serverPendingApproval)}
               />
               <ThreadPrimitive.Viewport
                 autoScroll

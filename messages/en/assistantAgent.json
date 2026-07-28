@@ -108,7 +108,8 @@
     "groupExpand": "Expand",
     "groupCollapse": "Collapse",
     "steps": "{count, plural, one {1 step} other {# steps}}",
-    "dockRunning": "{count, plural, one {1 creative module running} other {# creative modules running}}"
+    "dockRunning": "{count, plural, one {1 creative module running} other {# creative modules running}}",
+    "primaryAttention": "A decision is waiting in the primary conversation"
   },
   "webSearch": {
     "searching": "Searching the web: {brief}",
@@ -225,5 +226,8 @@
     "choiceCustomOptionPlaceholder": "Other {label}",
     "choiceCustomOptionSubmit": "Select other {label}",
     "contextCompacted": "Condensed {count} earlier messages"
+  },
+  "choiceCard": {
+    "groupProgress": "Question {current} of {total}"
   }
 }

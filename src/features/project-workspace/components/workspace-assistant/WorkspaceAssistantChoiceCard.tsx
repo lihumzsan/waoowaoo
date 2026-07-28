@@ -92,7 +92,10 @@ export function AssistantChoiceCardView(props: {
   )
   const ready = isChoiceCardSubmitReady(choiceGroups, selections)
   const activeGroup = choiceGroups[activeGroupIndex] ?? choiceGroups[0] ?? null
-  const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
+  // 这里是向导游标(当前第几组问题),不是完成度;文案必须显式区分,避免再被读成"已完成 N/M"。
+  const progressLabel = card.groups.length > 1
+    ? t('choiceCard.groupProgress', { current: activeGroupIndex + 1, total: card.groups.length })
+    : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup?.presentation === 'aspect_ratio'
   const isImageGroup = activeGroup?.presentation === 'image'

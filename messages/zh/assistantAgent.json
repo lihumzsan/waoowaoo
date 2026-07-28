@@ -108,7 +108,8 @@
     "groupExpand": "展开",
     "groupCollapse": "收起",
     "steps": "{count} 步",
-    "dockRunning": "{count} 个创作模块运行中"
+    "dockRunning": "{count} 个创作模块运行中",
+    "primaryAttention": "主对话有待处理的选择"
   },
   "webSearch": {
     "searching": "联网检索：{brief}",
@@ -225,5 +226,8 @@
     "choiceCustomOptionPlaceholder": "其他{label}",
     "choiceCustomOptionSubmit": "选择其他{label}",
     "contextCompacted": "已压缩较早的 {count} 条对话"
+  },
+  "choiceCard": {
+    "groupProgress": "第 {current} / {total} 组"
   }
 }
