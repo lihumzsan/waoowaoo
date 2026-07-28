@@ -94,6 +94,9 @@ function schemaAllowsNull(schema: JsonValue): boolean {
 
 const OMIT_NULLISH_MODEL_VALUE = Symbol('omit-nullish-model-value')
 
+/** 单条纠错里回显 schema 的上限;超过则只给字段路径与 issue 文案。 */
+const MAX_CORRECTION_SCHEMA_CHARS = 1_200
+
 function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean {
   if (!isRecord(schema)) return true
   if (Object.prototype.hasOwnProperty.call(schema, 'const')) return value === schema.const
@@ -349,6 +352,13 @@ export function buildProjectAgentToolInputCorrections(params: {
     const issueMessage = typeof rawIssue.message === 'string'
       ? rawIssue.message
       : 'Value does not match the operation input schema.'
+    // 顶层/大分支失败时把整棵 schema 回贴给模型只会淹没有效指令(实测单条可达 8KB)。
+    // 超限时省略 schema 回显,保留精确的字段路径与 issue 文案。
+    const serializedSchemaSize = expectedSchema === undefined
+      ? 0
+      : JSON.stringify(expectedSchema).length
+    const includeSchema = expectedSchema !== undefined
+      && serializedSchemaSize <= MAX_CORRECTION_SCHEMA_CHARS
     corrections.push({
       action: missing ? 'add_required_field' : 'fix_invalid_value',
       fieldPath,
@@ -356,7 +366,7 @@ export function buildProjectAgentToolInputCorrections(params: {
         ? `Add required field ${fieldPath} at this exact path.`
         : `Fix ${fieldPath}: ${issueMessage}`,
       allowedKeys: readAllowedKeys(parentSchema),
-      ...(expectedSchema === undefined ? {} : { expectedSchema }),
+      ...(includeSchema ? { expectedSchema } : {}),
     })
   }
 

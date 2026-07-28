@@ -191,3 +191,28 @@ describe('project agent tool-input corrections', () => {
     ))).toBe(false)
   })
 })
+
+describe('project agent tool-input correction payload budget', () => {
+  it('omits oversized expectedSchema echoes instead of pasting the whole union back', () => {
+    // 真实回归:request_choice 的 card 级失败曾把整个三分支 union(约 8KB)原样回贴,
+    // 有效指令被淹没。超限时只保留字段路径与 issue 文案。
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.request_choice
+    const input = {
+      subject: { kind: 'none' },
+      card: 'not-an-object',
+      commitments: [],
+    }
+    const parsed = operation.inputSchema.safeParse(input)
+    expect(parsed.success).toBe(false)
+    if (parsed.success) throw new Error('expected request_choice input to be rejected')
+    const corrections = buildProjectAgentToolInputCorrections({
+      input,
+      toolInputSchema: operation.toolInputSchema,
+      issues: parsed.error.issues,
+    })
+    const cardCorrection = corrections.find((correction) => correction.fieldPath === '$input.card')
+    expect(cardCorrection).toBeDefined()
+    expect(cardCorrection && 'expectedSchema' in cardCorrection).toBe(false)
+  })
+})

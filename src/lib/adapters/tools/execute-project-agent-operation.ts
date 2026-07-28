@@ -108,12 +108,16 @@ export async function executeProjectAgentOperationFromTool(params: {
                   ? 'OPERATION_OUTPUT_INVALID'
                   : null
       if (mappedCode) {
+        // issues 提升为顶层 typed 字段后必须从 details 里去掉,否则同一份 zod issues
+        // 会以双份出现在发给模型的错误载荷里,纯噪音。
+        const { issues: detailIssues, ...restDetails } = error.details ?? {}
+        const detailsWithoutIssues = Object.keys(restDetails).length > 0 ? restDetails : null
         return failedToolExecution(buildToolError({
             code: mappedCode,
             message: error.message,
             operationId: params.operationId,
-            details: operation ? withOperationErrorDetails(operation, error.details ?? null) : error.details ?? null,
-            ...(error.details?.issues !== undefined ? { issues: error.details.issues } : {}),
+            details: operation ? withOperationErrorDetails(operation, detailsWithoutIssues) : detailsWithoutIssues,
+            ...(detailIssues !== undefined ? { issues: detailIssues } : {}),
         }))
       }
     }
