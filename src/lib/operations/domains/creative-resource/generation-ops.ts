@@ -37,8 +37,9 @@ import {
   validateCreativeResourceInputReferencesInTransaction,
 } from '@/lib/creative-resource/persistence'
 import {
+  CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
   CREATIVE_RESOURCE_SCHEMA,
-  CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA,
+  isImportOriginCreativeResourceSchema,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
 import { matchCurrentUserText } from '@/lib/creative-resource/current-user-text'
@@ -104,7 +105,7 @@ const retryMediaGenerationRequestSchema = z.object({
     .describe('Exact failed Resource IDs whose original frozen generation inputs must be retried.'),
 }).strict()
 
-const independentImageSchemaIds = CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image
+const independentImageSchemaIds = CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image
   .filter((schemaId) => resolveAssetImageKindForSchemaId(schemaId) === null)
 if (independentImageSchemaIds.length === 0) {
   throw new Error('CREATIVE_RESOURCE_INDEPENDENT_IMAGE_SCHEMA_REQUIRED')
@@ -194,7 +195,7 @@ const createImageInputSchema = z.object({
 const createAudioNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   mediaReferences: audioMediaReferenceSchema,
-  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio).optional()
+  schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.audio as [string, ...string[]]).optional()
     .describe('Professional meaning of the audio Resource. Omit to use generic.audio.'),
   durationSeconds: z.number().int().min(1).max(600)
     .describe('Requested audio duration in seconds.'),
@@ -220,7 +221,7 @@ const createAudioInputSchema = z.object({
 const createVideoNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   mediaReferences: videoMediaReferenceSchema,
-  schemaId: z.enum(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video).optional()
+  schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video as [string, ...string[]]).optional()
     .describe('Professional meaning of the video Resource. Omit to use generic.video.'),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
     .describe('Exact duration for this one generated video segment. It must match a duration supported by the server-configured video model and cannot exceed the product ceiling of 15 seconds.'),
@@ -456,16 +457,16 @@ function requireSchemaForMedia(schemaId: string, mediaType: CreativeResourceMedi
       code: 'CREATIVE_RESOURCE_SCHEMA_UNKNOWN',
       field: 'schemaId',
       requestedValue: schemaId,
-      allowedValues: CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType],
+      allowedValues: CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType],
       agentRetryableAfterCorrection: true,
     })
   }
-  if (schema.mediaType !== mediaType) {
+  if (schema.mediaType !== mediaType || isImportOriginCreativeResourceSchema(schema.schemaId)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CREATIVE_RESOURCE_SCHEMA_MEDIA_MISMATCH',
       field: 'schemaId',
       requestedValue: schema.schemaId,
-      allowedValues: CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType],
+      allowedValues: CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType],
       agentRetryableAfterCorrection: true,
     })
   }

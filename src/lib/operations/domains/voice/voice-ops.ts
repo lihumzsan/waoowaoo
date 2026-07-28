@@ -391,7 +391,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
     }),
     bind_voice: defineOperation({
       id: 'bind_voice',
-      summary: 'Bind, replace, or unbind the exact immutable voice revision used by one project character. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
+      summary: 'Bind, replace, or unbind the exact immutable audio revision used as one project character\'s voice. Accepts a designed project.voice_reference revision or a user-uploaded project.upload_audio revision. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
       intent: 'act',
       effects: {
         writes: true,

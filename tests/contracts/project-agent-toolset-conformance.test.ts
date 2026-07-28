@@ -23,7 +23,10 @@ import {
   PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT,
   createProjectAgentToolCatalog,
 } from '@/lib/project-agent/tool-discovery'
-import { CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA } from '@/lib/creative-resource/schema-registry'
+import {
+  CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA,
+  CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA,
+} from '@/lib/creative-resource/schema-registry'
 import { resolveAssetImageKindForSchemaId } from '@/lib/asset-generation'
 import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 
@@ -279,10 +282,10 @@ describe('project agent toolset conformance', () => {
         readRecord(readRecord(branch.properties).kind).const === 'retry'
       ))
       const modelSelectedSchemaIds = mediaType === 'image'
-        ? CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image.filter(
+        ? CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.image.filter(
             (schemaId) => resolveAssetImageKindForSchemaId(schemaId) === null,
           )
-        : CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA[mediaType]
+        : CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType]
       expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
         enum: [...modelSelectedSchemaIds, null],
       })

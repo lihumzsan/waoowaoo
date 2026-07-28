@@ -28,6 +28,8 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   VOICE_REFERENCE: 'project.voice_reference',
   RENDERED_VIDEO: 'project.rendered_video',
   WEB_REFERENCE_IMAGE: 'project.web_reference_image',
+  UPLOAD_IMAGE: 'project.upload_image',
+  UPLOAD_AUDIO: 'project.upload_audio',
 } as const
 
 export type CreativeResourceSchemaId = typeof CREATIVE_RESOURCE_SCHEMA[keyof typeof CREATIVE_RESOURCE_SCHEMA]
@@ -146,11 +148,13 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.LOCATION_IMAGE,
     CREATIVE_RESOURCE_SCHEMA.PROP_IMAGE,
     CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+    CREATIVE_RESOURCE_SCHEMA.UPLOAD_IMAGE,
   ],
   audio: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_AUDIO,
     CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO,
     CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+    CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
   ],
   video: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
@@ -159,6 +163,41 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.RENDERED_VIDEO,
   ],
 } as const satisfies Record<CreativeResourceMediaType, readonly CreativeResourceSchemaId[]>
+
+/**
+ * Schemas whose Revisions may only originate from a dedicated import entry
+ * (web search import, user upload). The generic create_* generation
+ * operations must never mint these identities: a generated Revision claiming
+ * an import schema would fabricate external-material provenance that never
+ * crossed the import boundary.
+ */
+const IMPORT_ORIGIN_SCHEMA_IDS: ReadonlySet<CreativeResourceSchemaId> = new Set([
+  CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+  CREATIVE_RESOURCE_SCHEMA.UPLOAD_IMAGE,
+  CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
+])
+
+function withoutImportOriginSchemas(
+  schemaIds: readonly CreativeResourceSchemaId[],
+): readonly CreativeResourceSchemaId[] {
+  return schemaIds.filter((schemaId) => !IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId))
+}
+
+/**
+ * The subset of the public vocabulary that generation operations may offer as
+ * an explicit schemaId. Derived from the same exhaustive registry so tool
+ * schemas and conformance evidence share one authority.
+ */
+export const CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA = {
+  text: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.text),
+  image: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.image),
+  audio: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.audio),
+  video: withoutImportOriginSchemas(CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA.video),
+} satisfies Record<CreativeResourceMediaType, readonly CreativeResourceSchemaId[]>
+
+export function isImportOriginCreativeResourceSchema(schemaId: string): boolean {
+  return IMPORT_ORIGIN_SCHEMA_IDS.has(schemaId as CreativeResourceSchemaId)
+}
 
 export interface CreativeResourceSchemaDefinition {
   readonly schemaId: CreativeResourceSchemaId

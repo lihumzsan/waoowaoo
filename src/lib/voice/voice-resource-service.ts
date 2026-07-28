@@ -71,7 +71,16 @@ export async function bindCharacterVoiceInTransaction(
         scopeId: input.projectId,
         status: 'ready',
         mediaType: 'audio',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+        // A character voice is either a designed voice or a user-uploaded
+        // audio sample; both bind the same way and feed video generation as
+        // reference audio, so the Binding — not the schema — stays the single
+        // authority for "this character's current voice".
+        schemaId: {
+          in: [
+            CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+            CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
+          ],
+        },
       },
     },
     select: { id: true },

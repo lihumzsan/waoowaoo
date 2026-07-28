@@ -92,7 +92,7 @@ function mapMediaObjectToRef(row: MediaObjectRow): MediaRef {
 
 export async function ensureMediaObjectFromStorageKey(
   rawStorageKey: string,
-  metadata?: Partial<Pick<MediaRef, 'mimeType' | 'sizeBytes' | 'width' | 'height' | 'durationMs'>>,
+  metadata?: Partial<Pick<MediaRef, 'sha256' | 'mimeType' | 'sizeBytes' | 'width' | 'height' | 'durationMs'>>,
   client?: MediaClient,
 ): Promise<MediaRef> {
   const storageKey = normalizeStorageKey(rawStorageKey)
@@ -109,6 +109,7 @@ export async function ensureMediaObjectFromStorageKey(
       where: { publicId },
       update: {
         storageKey,
+        sha256: metadata?.sha256 ?? undefined,
         mimeType: metadata?.mimeType ?? guessMimeTypeFromStorageKey(storageKey),
         sizeBytes: metadata?.sizeBytes == null ? undefined : BigInt(metadata.sizeBytes),
         width: metadata?.width ?? undefined,
@@ -118,6 +119,7 @@ export async function ensureMediaObjectFromStorageKey(
       create: {
         publicId,
         storageKey,
+        sha256: metadata?.sha256 ?? null,
         mimeType: metadata?.mimeType ?? guessMimeTypeFromStorageKey(storageKey),
         sizeBytes: metadata?.sizeBytes == null ? null : BigInt(metadata.sizeBytes),
         width: metadata?.width ?? null,

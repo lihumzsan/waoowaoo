@@ -352,7 +352,7 @@ function toUrlMaybe(value: string): URL | null {
   return null
 }
 
-function detectMimeFromBuffer(buffer: Uint8Array): string | null {
+export function detectMimeFromBuffer(buffer: Uint8Array): string | null {
   if (buffer.length >= 8) {
     const isPng =
       buffer[0] === 0x89
