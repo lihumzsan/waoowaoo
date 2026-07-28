@@ -101,7 +101,10 @@ export function reduceWorkspaceAssistantSubagentLiveStream(
     : null
   const streamId = readString(payload.stepId)
   const streamRunId = readString(payload.streamRunId)
-  const stepAttempt = readPositiveInteger(payload.stepAttempt)
+  // stepAttempt 只服务 structured-output 的跨 attempt 去重;发布端对它是条件展开,
+  // reasoning 缺失该字段时不得整条静默丢弃(回落 attempt=1),否则直播推理会无声消失。
+  const rawStepAttempt = readPositiveInteger(payload.stepAttempt)
+  const stepAttempt = rawStepAttempt ?? (kind === 'reasoning' ? 1 : null)
   const seq = readPositiveInteger(stream.seq)
   if (!delta || !streamId || !streamRunId || !stepAttempt || !seq) {
     return { kind: 'unchanged', streams: current }

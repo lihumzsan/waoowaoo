@@ -67,6 +67,9 @@ export function resolveWorkspaceAssistantSubagents(params: {
       }
       const existing = events[index]
       if (!existing || existing.event.kind !== 'reasoning') continue
+      // completed 是该 reasoning 的终态事实(worker 持久化),晚到的直播尾巴不得把它
+      // 复活成 running——否则已完成的推理会永久显示转圈并保留 28ms 播放定时器。
+      if (existing.event.status === 'completed') continue
       const durableText = existing.event.text
       const text = stream.text.startsWith(durableText)
         ? stream.text

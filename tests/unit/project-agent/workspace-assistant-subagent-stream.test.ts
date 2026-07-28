@@ -166,3 +166,72 @@ describe('Workspace Subagent reasoning stream', () => {
     })).toBe('accept')
   })
 })
+
+describe('Workspace Subagent live-stream robustness', () => {
+  function subagentWith(events: ProjectAgentSubagentView['events']): ProjectAgentSubagentView {
+    return {
+      subagentId: 'task-1',
+      taskId: 'task-1',
+      runId: 'run-1',
+      toolCallId: 'call-1',
+      outputKind: 'creative_direction',
+      goal: 'Design a style',
+      status: 'running',
+      summary: null,
+      errorCode: null,
+      finishedAt: null,
+      skillReads: [],
+      events,
+    }
+  }
+
+  it('keeps live reasoning when the publisher omits stepAttempt', () => {
+    // 发布端对 stepAttempt 是条件展开;缺失时 reasoning 不得被整条静默丢弃。
+    const event = streamEvent(1, 'Live without attempt')
+    const payload = event.payload as { stepAttempt?: number }
+    delete payload.stepAttempt
+    const result = reduceWorkspaceAssistantSubagentLiveStream(new Map(), event)
+    expect(result.kind).toBe('updated')
+    expect([...result.streams.values()][0]?.text).toBe('Live without attempt')
+  })
+
+  it('does not resurrect a completed reasoning event back to running', () => {
+    const first = reduceWorkspaceAssistantSubagentLiveStream(new Map(), streamEvent(1, 'Live '))
+    const subagent = subagentWith([
+      {
+        subagentId: 'task-1',
+        taskId: 'task-1',
+        runId: 'run-1',
+        toolCallId: 'call-1',
+        sequence: 1,
+        occurredAt: '2026-07-22T00:00:00.000Z',
+        event: { kind: 'started', outputKind: 'creative_direction', goal: 'Design a style' },
+      },
+      {
+        subagentId: 'task-1',
+        taskId: 'task-1',
+        runId: 'run-1',
+        toolCallId: 'call-1',
+        sequence: 2,
+        occurredAt: '2026-07-22T00:00:01.000Z',
+        event: {
+          kind: 'reasoning',
+          reasoningId: '1:reasoning:1:block',
+          text: 'Live reasoning finished',
+          status: 'completed',
+          truncated: false,
+        },
+      },
+    ])
+    const resolved = resolveWorkspaceAssistantSubagents({
+      sessionSubagents: [subagent],
+      liveStreams: first.streams,
+    })
+    const reasoning = resolved[0]?.events[1]?.event
+    expect(reasoning?.kind).toBe('reasoning')
+    if (reasoning?.kind === 'reasoning') {
+      expect(reasoning.status).toBe('completed')
+      expect(reasoning.text).toBe('Live reasoning finished')
+    }
+  })
+})
