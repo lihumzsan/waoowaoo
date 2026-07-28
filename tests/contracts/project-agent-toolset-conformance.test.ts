@@ -650,9 +650,65 @@ describe('project agent toolset conformance', () => {
         },
       },
     }).success).toBe(false)
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'manifest_assets',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+      },
+    }).success).toBe(true)
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'manifest_assets',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        manifestAssetIds: ['ASSET_CHAR_0123456789ABCDEF'],
+      },
+    }).success).toBe(true)
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'manifest_assets',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        prompt: 'Primary must not copy the stored generationPrompt.',
+      },
+    }).success).toBe(false)
+    expect(registry.create_image.inputSchema.safeParse({
+      request: {
+        kind: 'manifest_assets',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        imageReferences: [{ resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB' }],
+      },
+    }).success).toBe(false)
     expect(registry.create_audio.inputSchema.safeParse({
       request: { kind: 'new', prompt: 'Sparse ritual drums.', durationSeconds: 15 },
     }).success).toBe(true)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: {
+        kind: 'music_direction',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        videoReference: { resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB' },
+      },
+    }).success).toBe(true)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: {
+        kind: 'music_direction',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+      },
+    }).success).toBe(false)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: {
+        kind: 'music_direction',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        videoReference: { resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB' },
+        prompt: 'Primary must not rewrite the stored score instruction.',
+      },
+    }).success).toBe(false)
+    expect(registry.create_audio.inputSchema.safeParse({
+      request: {
+        kind: 'music_direction',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        videoReference: { resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB' },
+        durationSeconds: 60,
+      },
+    }).success).toBe(false)
     expect(registry.create_audio.inputSchema.safeParse({
       request: { kind: 'new', count: 2, prompt: 'Sparse ritual drums.', durationSeconds: 15 },
     }).success).toBe(false)
@@ -1131,7 +1187,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v10')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v11')
     const lifecycleProjection = {
       requestKey: 'analysis-1',
       outputKind: 'continuity_analysis' as const,

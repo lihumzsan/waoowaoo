@@ -77,7 +77,13 @@ const musicDirectionOutputSchema = z.object({
     purpose: z.string().min(1).max(4_000),
     musicalDirection: z.string().min(1).max(8_000),
     dialogueSafety: nullableText(2_000),
-  }).strict()).max(512),
+  }).strict()).max(512)
+    .describe('Explanatory spotting timeline for humans and mixing. It is never re-read by the music model; every executable decision must also live inside score.generationPrompt.'),
+  score: z.object({
+    generationPrompt: z.string().min(1).max(6_000)
+      .describe('The sole creative instruction sent to the music generation model for the whole timeline in one generation. It must internalize the complete spotting decision: tempo discipline, single-theme continuity, the coarse emotional arc, presence tiers and intentional near-silence, instrumentation, spectral and dynamic design, and dialogue safety.'),
+  }).strict().nullable()
+    .describe('Final executable score decision. Use null only when the work should intentionally carry no generated music; null means no downstream music generation exists for this direction.'),
   globalContinuity: z.string().max(8_000),
   assumptions: textList(64, 2_000),
   warnings: textList(64, 2_000),

@@ -30,6 +30,8 @@
 - **CR-18 — 开放创作文档与不可变内容隔离。** `creativeData` 是 Resource 上单独的 schema-open CAS 文档，仅由 `edit_resource` 按 `creativeDataVersion` 做最小路径 Patch。内嵌 `$resourceRef` 只含 Resource ID并经过 owner/scope 校验。它不能改写 Resource 内容、provenance、Lineage、Binding、Task 或生命周期。
 - **CR-19 — UI 只消费最终 View。** Resource View 是卡片的唯一读模型；pending 摘要只从预留 Resource 和唯一 active Task 的冻结 payload 派生，ready 摘要从同一 Resource 的物化内容派生。Assistant Link View 只接受精确 Resource ID，文件名来自 Resource name，href 来自受保护媒体投影。Canvas edge 只来自持久 Lineage。
 - **CR-20 — Resource 不裁决流程。** Resource 存在、缺失、旧生成结果或 Lineage 都只是事实。Operation 可调用性只由 registry channel、显式 input schema、scope、provider capability、审批和破坏性确认裁决；Workflow step、Canvas 位置或推荐顺序不能成为隐藏门槛。
+- **CR-21 — 清单资产图按引用执行。** `create_image.request.kind=manifest_assets` 只接受当前 adopted `project.asset_manifest` 的精确 Resource ID 与可选 `manifestAssetIds` 子集；服务端校验 adopted Binding、按 `manifestAssetId` 解析项目资产身份与 `project_asset_image` Binding 当前 version、原样读取每项 `generationPrompt`（叠加固定资产版式），一次调用为每个资产创建一个图片 Task，manifest Resource 写入每个 Task 的 Lineage。Primary 不复制 prompt、不重供绑定、不手动附加引用；`request.kind=asset` 只服务清单之外的单个资产图。该窄分支仍在 `create_image` planner 内展开，复用同一 Billing/Approval、Task submitter 与 terminal materializer，不是第二图片执行器；非 adopted 清单、未知/重复 manifestAssetId、缺失资产身份或空清单必须在计划阶段失败。
+- **CR-22 — 配乐按引用执行。** `music_direction` 输出的 `score` 是唯一最终配乐执行指令（null 表示刻意不配乐且不存在下游音乐生成）。`create_audio.request.kind=music_direction` 只接受该方向 Resource ID 与精确目标视频 Resource；服务端原样读取 `score.generationPrompt`、从视频 MediaObject 真实时长导出 duration 并按 music capability 校验，`maxReferenceVideos` 声明允许时把视频冻结为 `videoInputPositions`，否则只作为 Lineage 上下文。方向与视频 Resource 都进入 BGM Task 的 Lineage。null score、时长缺失或超出能力范围必须在计划阶段失败；Primary 不改写、不压缩、不补充配乐指令。
 
 ## 状态与写入者
 
@@ -100,7 +102,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 ## 适用验证
 
 - Logic：短 identity 的分帧确定性、Resource 物化一次性、retry 冻结 payload、引用位置互斥、Prompt Set strict output 和媒体 ID 校验。
-- Conformance：Operation registry 的 `prompt_set` 窄分支、公开 Tool schema、Creative Work output registry、Binding 保留角色和 Assistant Link View。
+- Conformance：Operation registry 的 `prompt_set`、`manifest_assets`、`music_direction` 窄分支、公开 Tool schema、Creative Work output registry、Binding 保留角色和 Assistant Link View。
 - Integration：Task terminal 原子物化、Binding CAS、领域投影、失败恢复和同 Resource replay。
 - Golden：Resource 创建、Task、Lineage、Binding、Assistant/Canvas 读取和刷新组合。
 
@@ -116,6 +118,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 - 同用户跨 Project Binding 曾因只校验 user 而被接受。Binding service 现在验证目标 owner/scope 和 Resource scope，跨 Project/Episode失败关闭。
 - `confirmed_screenplay` 曾与成功 screenplay Resource 并存成为第二状态。确认入口和 Binding 已删除，调用方显式选择一个 screenplay Resource。
 - 角色音色曾把“重新生成”解释为原位追加版本，使当前绑定与生成完成的晚到顺序竞争。现在每次生成创建新 Resource，只有 Binding CAS 决定当前音色。
+- Prompt Set 之外的两条 Worker 产物执行链曾长期依赖 Primary 搬运内容：资产图要求 Primary 逐条把 manifest `generationPrompt` 抄进 `create_image.kind=asset`，配乐要求 Primary 把 `music_direction` cue 时间线压缩改写成一条 `create_audio` prompt——后者本身就是「另一个模型改写同一创作判断」，且「原样使用」只有提示词纪律而无契约保证。参考资产回归（见上）已证明这类 Primary 解释层是漂移面。当前 `manifest_assets`（CR-21）与 `music_direction`（CR-22）补齐引用执行，`music_direction` strict 输出新增必填可空 `score` 字段并把 Creative Work 协议切到 `creative_work_v11`；部署前必须排空 v10 queued/processing Task 与对应 Wait，不保留双 parser，无 `score` 键的旧 music_direction Resource 引用执行时显式失败，由 Primary 重新委派。
 
 ## 修改检查表
 
