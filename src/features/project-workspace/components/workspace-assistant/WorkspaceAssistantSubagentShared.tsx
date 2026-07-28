@@ -6,7 +6,7 @@
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { getCreativeSkillDefinition } from '@/lib/creative-skills/registry'
-import { isCreativeSkillId } from '@/lib/creative-skills'
+import { isCreativeSkillId } from '@/lib/creative-skills/uri'
 import type {
   ProjectAgentSubagentEventPartData,
   ProjectAgentSubagentStatus,
