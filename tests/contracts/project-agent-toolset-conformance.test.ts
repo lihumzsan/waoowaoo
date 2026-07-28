@@ -1047,8 +1047,8 @@ describe('project agent toolset conformance', () => {
     })
     for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
       const definition = creativeWorkOutputRegistry[outputKind]
-      for (const locale of ['zh', 'en'] as const) {
-        const systemPrompt = buildCreativeWorkerSystemPrompt(locale, {
+      {
+        const systemPrompt = buildCreativeWorkerSystemPrompt({
           enableWebSearch: definition.workerTools.length > 0,
         })
         expect(systemPrompt.includes('web_search')).toBe(outputKind === 'creative_direction')

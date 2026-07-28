@@ -197,7 +197,6 @@ export type CreativeWorkerEventListener = (
 
 export interface RunCreativeWorkerInput {
   model: Model
-  locale: Locale
   signal: AbortSignal
   request: CreativeWorkRequest
   budgets?: CreativeWorkerBudgetOverrides
@@ -218,7 +217,6 @@ export interface CreativeWorkerResult<TOutput = CreativeWorkOutput> {
 }
 
 export interface CreativeWorkerRunContext {
-  locale: Locale
   budgets: CreativeWorkerBudgets
   counters: {
     readCalls: number

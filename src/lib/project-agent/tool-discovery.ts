@@ -9,7 +9,6 @@ import type {
 } from '@/lib/operations/types'
 import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 import { stableArgsFingerprint } from './stable-args-hash'
-import type { ProjectAgentLocale } from './locale'
 import type { ProjectAgentToolset } from './toolset'
 
 export const PROJECT_AGENT_TOOL_DISCOVERY_NAME = 'load_tools'
@@ -70,19 +69,14 @@ export interface ProjectAgentToolDiscoveryState {
 export function formatProjectAgentToolNotFound(params: {
   readonly toolName: string
   readonly catalog: readonly ProjectAgentToolCatalogEntry[]
-  readonly locale: ProjectAgentLocale
 }): string {
   const isRegisteredOperation = params.catalog.some((entry) => (
     entry.operationId === params.toolName
   ))
   if (isRegisteredOperation) {
-    return params.locale === 'zh'
-      ? `Operation "${params.toolName}" 已注册，但不能直接作为工具名调用。先用 load_tools 加载这个精确 id，读取返回的完整 parameters，再调用 execute_operation；不要猜测参数。`
-      : `Operation "${params.toolName}" is registered but cannot be called as a tool name. Load this exact id with load_tools, read the returned parameters, then call execute_operation. Do not guess arguments.`
+    return `Operation "${params.toolName}" is registered but cannot be called as a tool name. Load this exact id with load_tools, read the returned parameters, then call execute_operation. Do not guess arguments.`
   }
-  return params.locale === 'zh'
-    ? `工具 "${params.toolName}" 未注册。只调用当前请求直接提供的工具；其余能力先用 load_tools 加载目录中的精确 Operation id，再调用 execute_operation。`
-    : `Tool "${params.toolName}" is not registered. Call only tools provided directly in the current request; for other capabilities, load an exact catalog Operation id with load_tools and then call execute_operation.`
+  return `Tool "${params.toolName}" is not registered. Call only tools provided directly in the current request; for other capabilities, load an exact catalog Operation id with load_tools and then call execute_operation.`
 }
 
 function compactCatalogDescription(value: string): string {
@@ -296,42 +290,31 @@ function readToolIds(input: unknown): string[] {
 
 function buildDiscoveryDescription(
   catalog: readonly ProjectAgentToolCatalogEntry[],
-  locale: ProjectAgentLocale,
 ): string {
   const catalogLines = catalog.map((entry) => (
     `[${entry.groupPath.join('/')}] ${entry.operationId} — ${entry.description}`
   ))
-  const introduction = locale === 'zh'
-    ? `按需读取完成当前目标所需 Operation 的完整参数定义。当前请求中已经直接提供完整 Schema 的常用工具不在下面目录中，应直接调用。下面目录只用于发现其余能力（精确 id + 简介），不是参数契约、工作流或调用顺序。执行前先按精确 id 加载最小充分集合，每次最多 ${PROJECT_AGENT_TOOL_LOAD_LIMIT} 个；读取返回的 parameters 后，在后续模型步骤调用 execute_operation。不得猜测参数，也不得直接把目录中的 Operation id 当工具名。已加载项在当前执行段内持续可用。`
-    : `Read the full parameter definitions for the Operations needed by the current goal. Common tools already provided directly with complete Schemas are omitted from this catalog and should be called directly. The catalog below discovers only the remaining capabilities (exact id plus summary); it is never an argument contract, workflow, or call order. Before execution, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call; after reading the returned parameters, call execute_operation in a later model step. Never guess arguments or call a catalog Operation id as a tool name. Loaded Operations remain available for the current execution segment.`
-  const catalogLabel = locale === 'zh' ? '能力目录：' : 'Capability catalog:'
-  return [introduction, catalogLabel, ...catalogLines].join('\n')
+  const introduction = `Read the full parameter definitions for the Operations needed by the current goal. Common tools already provided directly with complete Schemas are omitted from this catalog and should be called directly. The catalog below discovers only the remaining capabilities (exact id plus summary); it is never an argument contract, workflow, or call order. Before execution, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call; after reading the returned parameters, call execute_operation in a later model step. Never guess arguments or call a catalog Operation id as a tool name. Loaded Operations remain available for the current execution segment.`
+  return [introduction, 'Capability catalog:', ...catalogLines].join('\n')
 }
 
-export function buildProjectAgentOperationGatewayDescription(
-  locale: ProjectAgentLocale,
-): string {
-  return locale === 'zh'
-    ? '执行一个已通过 load_tools 加载的 Operation。operationId 与 contractId 必须精确复制同一条加载结果；argumentsJson 必须是符合返回 parameters 的 JSON 对象字符串。服务端会验证该契约仍属于当前执行段且未过期，再用权威 Operation registry 解析。'
-    : 'Execute one Operation already loaded through load_tools. Copy operationId and contractId exactly from the same load result, and pass argumentsJson as a JSON object string matching its parameters. The server verifies that the contract still belongs to this execution segment and is current before parsing through the authoritative Operation registry.'
+export function buildProjectAgentOperationGatewayDescription(): string {
+  return 'Execute one Operation already loaded through load_tools. Copy operationId and contractId exactly from the same load result, and pass argumentsJson as a JSON object string matching its parameters. The server verifies that the contract still belongs to this execution segment and is current before parsing through the authoritative Operation registry.'
 }
 
 export function createProjectAgentToolDiscoveryTool<Context>(params: {
   readonly state: ProjectAgentToolDiscoveryState
-  readonly locale: ProjectAgentLocale
 }): Tool<Context> {
   const operationIds = params.state.catalog.map((entry) => entry.operationId)
   return tool({
     name: PROJECT_AGENT_TOOL_DISCOVERY_NAME,
-    description: buildDiscoveryDescription(params.state.catalog, params.locale),
+    description: buildDiscoveryDescription(params.state.catalog),
     parameters: {
       type: 'object',
       properties: {
         toolIds: {
           type: 'array',
-          description: params.locale === 'zh'
-            ? '要加载完整调用定义的精确 Operation id。'
-            : 'Exact Operation ids whose full invocation definitions should be loaded.',
+          description: 'Exact Operation ids whose full invocation definitions should be loaded.',
           items: {
             type: 'string',
             enum: operationIds,

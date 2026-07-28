@@ -4,7 +4,6 @@ export { getAiPromptTemplate } from './template-store'
 export { buildAiPrompt, buildAiPromptContent } from './build-prompt'
 export type {
   AiPromptCatalogEntry,
-  AiPromptLocale,
   AiPromptMessageContent,
   AiPromptVariables,
   BuildAiPromptContentInput,

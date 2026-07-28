@@ -51,7 +51,7 @@ function resolvePromptTemplate(input: BuildAiPromptInput) {
     throw new Error(`AI_PROMPT_ID_UNREGISTERED:${input.promptId}`)
   }
 
-  const template = getAiPromptTemplate(input.promptId, input.locale)
+  const template = getAiPromptTemplate(input.promptId)
   const templatePlaceholders = extractPlaceholders(template)
   const declared = new Set(entry.variableKeys)
 

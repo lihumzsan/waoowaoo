@@ -42,7 +42,6 @@ function createDiscoveryState(
       context: {
         runId: 'run-1',
         executionSegmentId: 'segment-1',
-        locale: 'en',
       },
     },
     initiallyLoadedOperationIds,
@@ -56,7 +55,6 @@ describe('project agent tool discovery', () => {
     const state = createDiscoveryState(fixture)
     const loader = createProjectAgentToolDiscoveryTool<Record<string, never>>({
       state,
-      locale: 'en',
     })
     const gateway = tool({
       name: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
@@ -187,7 +185,6 @@ describe('project agent tool discovery', () => {
       context: {
         runId: 'run-1',
         executionSegmentId: 'segment-1',
-        locale: 'en',
       },
       runFence: createInitialProjectAgentRunFence('run-1'),
       operationSignal: new AbortController().signal,
@@ -302,17 +299,14 @@ describe('project agent tool discovery', () => {
     expect(formatProjectAgentToolNotFound({
       toolName: operationId,
       catalog,
-      locale: 'en',
     })).toContain('then call execute_operation')
     expect(formatProjectAgentToolNotFound({
       toolName: operationId,
       catalog,
-      locale: 'zh',
-    })).toContain('读取返回的完整 parameters')
+    })).toContain('read the returned parameters')
     expect(formatProjectAgentToolNotFound({
       toolName: 'invented_operation',
       catalog,
-      locale: 'en',
     })).toContain('is not registered')
   })
 })

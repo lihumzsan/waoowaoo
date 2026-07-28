@@ -1,8 +1,6 @@
-import type { Locale } from '@/i18n/routing'
 import type { AiPromptId } from './ids'
 import type { ChatMessageContent, PromptCacheControl } from '@/lib/ai-registry/message-content'
 
-export type AiPromptLocale = Locale
 export type AiPromptVariables = Record<string, string>
 
 export type AiPromptCatalogEntry = {
@@ -13,7 +11,6 @@ export type AiPromptCatalogEntry = {
 
 export type BuildAiPromptInput = {
   promptId: AiPromptId
-  locale: AiPromptLocale
   variables?: AiPromptVariables
 }
 

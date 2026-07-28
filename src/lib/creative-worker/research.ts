@@ -63,17 +63,10 @@ export interface CreativeWorkerResearchState {
   readonly attempts: CreativeWorkerResearchAttempt[]
 }
 
-function localizedNotice(
-  locale: Locale,
+function researchNotice(
   status: CreativeWorkerResearchEvidence['status'],
 ): string | null {
   if (status === 'completed' || status === 'not_attempted') return null
-  if (locale === 'zh') {
-    if (status === 'partial') return '外部研究仅部分完成；制作方向只使用已归档来源，并明确保留未验证项。'
-    if (status === 'budget_exhausted') return '未做外部研究：联网检索预算已耗尽。'
-    if (status === 'unavailable') return '未做外部研究：联网检索未配置或当前不可用。'
-    return '未做外部研究：联网检索失败，未把推测伪装成检索结论。'
-  }
   if (status === 'partial') {
     return 'External research was only partially completed; the direction uses only archived sources and preserves unverified points.'
   }
@@ -136,7 +129,6 @@ export function recordResearchFailure(input: {
  * completed, or ran out of budget produces a notice.
  */
 export function projectCreativeWorkerResearchEvidence(input: {
-  readonly locale: Locale
   readonly state: CreativeWorkerResearchState
 }): CreativeWorkerResearchEvidence {
   const completed = input.state.attempts.filter((attempt) => attempt.status === 'completed').length
@@ -154,7 +146,7 @@ export function projectCreativeWorkerResearchEvidence(input: {
   return creativeWorkerResearchEvidenceSchema.parse({
     status,
     provider: input.state.provider,
-    notice: localizedNotice(input.locale, status),
+    notice: researchNotice(status),
     budget: {
       maxCalls: input.state.maxCalls,
       usedCalls: input.state.usedCalls,

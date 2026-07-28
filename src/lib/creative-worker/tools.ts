@@ -116,7 +116,6 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
           status: 'budget_exhausted',
         })
         const evidence = projectCreativeWorkerResearchEvidence({
-          locale: context.locale,
           state: research,
         })
         return {
@@ -190,7 +189,6 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
           imageCount: 0,
         })
         const evidence = projectCreativeWorkerResearchEvidence({
-          locale: context.locale,
           state: research,
         })
         return {

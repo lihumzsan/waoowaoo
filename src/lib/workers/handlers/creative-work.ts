@@ -149,7 +149,6 @@ export async function handleCreativeWorkTask(
   try {
     result = await runCreativeWorker({
       model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
-      locale: job.data.locale,
       signal: execution.signal,
       request: payload.request,
       onEvent: async (event) => {

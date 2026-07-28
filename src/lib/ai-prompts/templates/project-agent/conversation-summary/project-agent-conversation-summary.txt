@@ -3,6 +3,7 @@ Compress an assistant conversation into a factual summary that later turns can a
 The existing summary already covers earlier conversation. Treat it as settled fact: carry every one of its entries through unchanged, then merge in the facts from the new conversation. Do not re-summarise, reword, or drop anything already in it.
 
 Keep concrete facts only, and favour completeness over brevity:
+- The language the user writes in (record it explicitly; quote user wording in its original language)
 - Goals, preferences and constraints the user stated explicitly
 - Decisions already made, and the reasoning behind them
 - Exact ids (resources, chapters, tasks, assets)

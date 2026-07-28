@@ -1,4 +1,3 @@
-import type { ProjectAgentLocale } from '../locale'
 import type { ProjectAssistantTextAttachment } from './types'
 
 function normalizeText(value: string): string {
@@ -14,27 +13,16 @@ function escapeTagAttribute(value: string): string {
 }
 
 export function formatProjectAssistantTextAttachmentsForModel(input: {
-  readonly locale: ProjectAgentLocale
   readonly attachments: readonly ProjectAssistantTextAttachment[]
 }): string {
   if (input.attachments.length === 0) return ''
   const blocks = input.attachments.map((attachment, index) => {
     const body = normalizeText(attachment.normalizedText)
     const tagFileName = escapeTagAttribute(attachment.fileName)
-    if (input.locale === 'en') {
-      return [
-        `Uploaded file ${String(index + 1)}:`,
-        `File name: ${attachment.fileName}`,
-        `Content:`,
-        `<uploaded_file name="${tagFileName}">`,
-        body,
-        '</uploaded_file>',
-      ].join('\n')
-    }
     return [
-      `用户上传文件 ${String(index + 1)}：`,
-      `文件名：${attachment.fileName}`,
-      '内容：',
+      `Uploaded file ${String(index + 1)}:`,
+      `File name: ${attachment.fileName}`,
+      `Content:`,
       `<uploaded_file name="${tagFileName}">`,
       body,
       '</uploaded_file>',
@@ -44,13 +32,11 @@ export function formatProjectAssistantTextAttachmentsForModel(input: {
 }
 
 export function appendProjectAssistantTextAttachmentsToUserText(input: {
-  readonly locale: ProjectAgentLocale
   readonly userText: string
   readonly attachments: readonly ProjectAssistantTextAttachment[]
 }): string {
   const userText = normalizeText(input.userText)
   const attachmentText = formatProjectAssistantTextAttachmentsForModel({
-    locale: input.locale,
     attachments: input.attachments,
   })
   return [userText, attachmentText].filter(Boolean).join('\n\n')

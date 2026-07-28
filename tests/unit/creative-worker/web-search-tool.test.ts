@@ -19,7 +19,6 @@ function runContext(input: {
   readonly onEvent?: CreativeWorkerRunContext['onEvent']
 }): CreativeWorkerRunContext {
   return {
-    locale: 'zh',
     ...(input.onEvent ? { onEvent: input.onEvent } : {}),
     budgets: {
       ...defaultCreativeWorkerBudgets,
@@ -100,7 +99,7 @@ describe('Creative Direction Worker web_search tool', () => {
     expect(exhausted).toMatchObject({
       status: 'budget_exhausted',
       sources: [],
-      notice: expect.stringContaining('部分完成'),
+      notice: expect.stringContaining('only partially completed'),
     })
     expect(providerCalls).toBe(1)
     expect(context.counters).toMatchObject({

@@ -47,10 +47,7 @@ import type {
   ProjectAgentRunPartData,
   ProjectAgentStopPartData,
 } from './types'
-import {
-  localizeProjectAgentOperationTitle,
-  localizeSelectableToolDescription,
-} from './copy'
+import { localizeProjectAgentOperationTitle } from './copy'
 import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
@@ -289,7 +286,7 @@ function readTextFromParts(parts: readonly unknown[]): string {
   }).join('\n')
 }
 
-function toAgentInputItems(messages: UIMessage[], locale: ReturnType<typeof normalizeProjectAgentLocale>): AgentInputItem[] {
+function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
   const items: AgentInputItem[] = []
   for (const message of messages) {
     const text = readTextFromParts(message.parts)
@@ -297,9 +294,7 @@ function toAgentInputItems(messages: UIMessage[], locale: ReturnType<typeof norm
       const attachments = readProjectAssistantTextAttachmentsFromMessage(message)
       const mediaAttachments = readProjectAssistantMediaAttachmentsFromMessage(message)
       const content = appendProjectAssistantMediaAttachmentsToUserText({
-        locale,
         userText: appendProjectAssistantTextAttachmentsToUserText({
-          locale,
           userText: text,
           attachments,
         }),
@@ -1009,16 +1004,13 @@ export async function createProjectAgentChatResponse(input: {
     }
     return {
       operation,
-      description: localizeSelectableToolDescription(operationId, operation.summary, locale),
+      description: operation.summary,
     }
   })
   const toolDescriptions = new Map(selectedTools.map((item) => [item.operation.id, item.description]))
   const toolCatalog = createProjectAgentToolCatalog({
     registry: operations,
     toolset,
-    describeOperation: (operationId, fallback) => (
-      localizeSelectableToolDescription(operationId, fallback, locale)
-    ),
   })
   const initiallyLoadedOperationIds = control.kind === 'approval'
     ? Array.from(new Set(
@@ -1064,7 +1056,6 @@ export async function createProjectAgentChatResponse(input: {
         userId: input.userId,
         episodeId: context.episodeId || null,
         assistantId: 'workspace-command',
-        locale,
         messages: runtimeMessages,
         signal: runAbortController.signal,
         onFailure: (error) => {
@@ -1085,10 +1076,10 @@ export async function createProjectAgentChatResponse(input: {
         ...(compaction?.summaryInputItem ? [compaction.summaryInputItem] : []),
         ...(control.kind === 'user_turn'
           ? withDeclinedApprovalsNote(
-              toAgentInputItems(compactedMessages, locale),
+              toAgentInputItems(compactedMessages),
               buildDeclinedApprovalsInputItem(control.declinedInterruptions),
             )
-          : toAgentInputItems(compactedMessages, locale)),
+          : toAgentInputItems(compactedMessages)),
       ]
   const agentPlanInputItem = currentPlan ? buildProjectAgentPlanInputItem(currentPlan) : null
   const agentInput: AgentInputItem[] = control.kind === 'approval'
@@ -1294,7 +1285,7 @@ export async function createProjectAgentChatResponse(input: {
     request: input.request,
     registry: operations,
     discoveryState: toolDiscoveryState,
-    description: buildProjectAgentOperationGatewayDescription(locale),
+    description: buildProjectAgentOperationGatewayDescription(),
     directOperations: toolset.directOperationIds.map((operationId) => {
       const operation = operations[operationId]
       if (!operation) {
@@ -1379,13 +1370,11 @@ export async function createProjectAgentChatResponse(input: {
   const tools: Tool<ProjectAgentAgentsRunContext>[] = [
     createProjectAgentToolDiscoveryTool<ProjectAgentAgentsRunContext>({
       state: toolDiscoveryState,
-      locale,
     }),
     ...operationTools,
   ]
 
   const systemPrompt = buildProjectAgentSystemPrompt({
-    locale,
     projectId: input.projectId,
     episodeId: context.episodeId || 'unknown',
   })
@@ -1487,7 +1476,6 @@ export async function createProjectAgentChatResponse(input: {
           ? formatProjectAgentToolNotFound({
               toolName,
               catalog: toolCatalog,
-              locale,
             })
           : undefined
       ),

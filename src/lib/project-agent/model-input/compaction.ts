@@ -5,7 +5,6 @@ import {
   replaceProjectAssistantThreadSummaryInTransaction,
   type ProjectAssistantThreadIdentity,
 } from '../persistence'
-import type { ProjectAgentLocale } from '../locale'
 import { estimateProjectAgentUnknownTokens } from './estimate'
 import { extendProjectAgentConversationSummary } from './summarizer'
 import {
@@ -39,7 +38,6 @@ export type ProjectAgentConversationCompaction = {
 }
 
 function buildSummaryInputItem(
-  locale: ProjectAgentLocale,
   summary: ProjectAgentConversationSummary,
 ): AgentInputItem {
   // Carried as a user-role item on purpose. The converter that builds model
@@ -47,12 +45,11 @@ function buildSummaryInputItem(
   // lost its summary entirely by using a role that silently fell through.
   return {
     role: 'user',
-    content: buildProjectAgentSummaryText(locale, summary),
+    content: buildProjectAgentSummaryText(summary),
   } as AgentInputItem
 }
 
 export async function compactProjectAgentConversation(input: ProjectAssistantThreadIdentity & {
-  locale: ProjectAgentLocale
   messages: UIMessage[]
   signal?: AbortSignal
   onFailure: (error: unknown) => void
@@ -77,7 +74,7 @@ export async function compactProjectAgentConversation(input: ProjectAssistantThr
   if (plan.toSummarize.length === 0) {
     return {
       messages: [...plan.verbatim],
-      summaryInputItem: storedSummary ? buildSummaryInputItem(input.locale, storedSummary) : null,
+      summaryInputItem: storedSummary ? buildSummaryInputItem(storedSummary) : null,
       compacted: null,
     }
   }
@@ -86,7 +83,6 @@ export async function compactProjectAgentConversation(input: ProjectAssistantThr
   try {
     nextSummary = await extendProjectAgentConversationSummary({
       userId: input.userId,
-      locale: input.locale,
       previous: storedSummary,
       newlySummarized: plan.toSummarize,
       ...(input.signal ? { signal: input.signal } : {}),
@@ -106,7 +102,7 @@ export async function compactProjectAgentConversation(input: ProjectAssistantThr
     })
     return {
       messages: [...verbatim],
-      summaryInputItem: storedSummary ? buildSummaryInputItem(input.locale, storedSummary) : null,
+      summaryInputItem: storedSummary ? buildSummaryInputItem(storedSummary) : null,
       compacted: null,
     }
   }
@@ -128,7 +124,7 @@ export async function compactProjectAgentConversation(input: ProjectAssistantThr
 
   return {
     messages: [...plan.verbatim],
-    summaryInputItem: buildSummaryInputItem(input.locale, nextSummary),
+    summaryInputItem: buildSummaryInputItem(nextSummary),
     compacted: {
       summarizedMessageCount: plan.toSummarize.length,
       summaryText: nextSummary.summaryText,

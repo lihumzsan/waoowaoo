@@ -73,12 +73,11 @@ function resolveCreativeWorkerBudgets(
 }
 
 function createRunContext(
-  input: Pick<RunCreativeWorkerInput, 'locale' | 'onEvent' | 'signal' | 'webSearch'>,
+  input: Pick<RunCreativeWorkerInput, 'onEvent' | 'signal' | 'webSearch'>,
   budgets: CreativeWorkerBudgets,
   enableWebSearch: boolean,
 ): CreativeWorkerRunContext {
   return {
-    locale: input.locale,
     budgets,
     counters: {
       readCalls: 0,
@@ -313,7 +312,7 @@ export async function runCreativeWorker(
 
     const agent = new Agent<CreativeWorkerRunContext>({
       name: 'Creative Worker',
-      instructions: buildCreativeWorkerSystemPrompt(input.locale, { enableWebSearch }),
+      instructions: buildCreativeWorkerSystemPrompt({ enableWebSearch }),
       model: input.model,
       modelSettings: {
         parallelToolCalls: true,
@@ -492,7 +491,6 @@ export async function runCreativeWorker(
     assertProfessionalSkillRead(context)
     const research = context.research
       ? projectCreativeWorkerResearchEvidence({
-          locale: context.locale,
           state: context.research,
         })
       : null

@@ -406,7 +406,6 @@ describe('Creative Worker result submission contract', () => {
     const model = new CorrectingSubmissionModel()
     const result = await runCreativeWorker({
       model,
-      locale: 'en',
       signal: new AbortController().signal,
       request: screenplayRequest,
     })

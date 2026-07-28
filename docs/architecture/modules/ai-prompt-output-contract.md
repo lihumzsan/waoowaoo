@@ -17,7 +17,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - **AP-07 — Creative Direction 是单一纯文本/结构化 Resource。** 每个 Task 恰好返回并物化一份完整最终 Direction；Worker 内部完成取舍，输出契约不表达候选集合。只有用户明确要求预览时才调用普通图片 Operation，且预览不改变 Direction identity。
 - **AP-08 — 输入只用精确 Resource。** Creative Work request 与媒体 Operation 对 Resource 输入只传全局唯一 resourceId 及显式用途；服务端回库解析 schema、owner、scope 和真实内容。禁止附带调用方文本，或从最近记录、数组位置、历史消息与模型输出 offset 推断。下游参考资产生成原样消费 Asset Manifest 的 `generationPrompt`，并把精确 Asset Manifest Resource 与精确 adopted Creative Direction Resource 都作为 `contextReferences`；两份文字 Resource 不得进入只接受真实图片 Resource 的 `imageReferences`。
 - **AP-09 — Provider 约束不升级为运行时流程。** 允许时长、画幅、参考数量与模型能力来自 capability registry；Prompt 可据此规划一次请求，但不能据此建立代码阶段、eligibility 或自动分支。AP-01 的 `>15s` 完整作品纪律是明确的 Primary 产品规划政策，不是由 Provider capability 推导的 Operation 门禁；它不规定段数、逐段时长或 Chapter。
-- **AP-10 — 双语语义一致。** Primary System Prompt 的中英文模板必须具有相同契约变量、输出语义与禁止项；Creative Skill 是不分语言的单份专业文档，Worker 按内容语言交付结果；用户可见内容走 i18n。
+- **AP-10 — 单份模板与显式输出语言。** Primary System Prompt、conversation-summary 模板与 Worker system prompt 都是单份英文的模型侧文本，不按 locale 分叉；Prompt 语言是实现细节，不决定用户可见语言。用户可见语言由显式规则拥有：模型的一切用户可见输出（回复、Choice 卡片文案、失败说明、Resource 显示名）跟随用户在对话中实际使用的语言，当前轮没有语言信号时默认英文；conversation-summary 显式记录用户对话语言并保留原文引用。用户可见创作产物的语言由 creative-core 与各 Skill 的内容语言条款拥有：最终视频提示词与资产 `generationPrompt` 与内容语言一致，`score.generationPrompt` 按音乐模型真实能力固定英文。Creative Skill 仍是不分语言的单份专业文档；UI 文案继续走 i18n（含 `copy.ts` 的 Operation 标题表与 session-state locale），与 Prompt 语言无关。
 - **AP-11 — Tool discovery 只发现能力，固定 gateway 只传输调用。** Primary 的每个模型步骤都只看到 `load_tools` 与 `execute_operation` 两个稳定 SDK tools。`load_tools` 的 registry 派生目录只帮助选择能力；模型按精确 id 加载当前目标的最小充分集合，loader 返回的 canonical `parameters` 才是参数契约，目录简介不能充当 eligibility、工作流、调用顺序或参数说明。加载不代表执行；后续步骤必须精确复制 `operationId`，只按返回 Schema 构造 `argumentsJson` 调用固定 gateway，不得把 Operation id 当工具名或猜测参数。所有具体能力说明都必须遵守同一规则，不能把 `generate_voice` 等按需 Operation 写成顶层直连工具。Gateway envelope 不解释业务参数，服务端仍用同一 runtime schema 校验。未加载/未知 id 是可恢复纠正且绝不执行。Task 提交回执不是终态，当前回合不得立即 `get_task` 或轮询；只在终态 continuation 后按需加载并读取精确 taskId。工具选择仍由 Primary 根据用户目标与当前事实判断。
 
 ## 权威入口
@@ -28,7 +28,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - Creative output registry 与唯一提交校验：`src/lib/creative-worker/output-registry.ts`、`output-submission.ts`、`task-contract.ts`。
 - Resource schema/materialization：`src/lib/creative-resource/schema-registry.ts`、`creative-work-materialization.ts`、`task-materializer.ts`。
 - 通用 Choice：`src/lib/project-agent/choice-offer.ts`、`choice-result.ts`。
-- Primary Tool discovery：`src/lib/project-agent/toolset.ts`、`tool-discovery.ts` 与双语 Primary Prompt。
+- Primary Tool discovery：`src/lib/project-agent/toolset.ts`、`tool-discovery.ts` 与单份 Primary Prompt。
 
 ## 验证
 
@@ -49,6 +49,7 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 - 人物非写实安全规则曾只出现在 Primary Prompt 末尾，但 Creative Worker 不读取 Primary System Prompt；Primary 又必须原样消费 Worker 最终 `generationPrompt`，因此事后改写会产生第二创意 writer。当前 Primary 在委派 `creative_direction` 与 `asset_manifest` 前把“明显风格化、非照片写实的人物身份参考”冻结为请求约束，使 Direction 和 Manifest Prompt 自身合规；环境仍可保留 CCTV/VHS/纪录片质感。该策略按用户决策仅由 Prompt 引导，模型与外部 Provider 服从度仍是生成复验盲区。
 - 剧本 canonicalization 曾在输出契约中同时拥有剧本文本、scene/entity registry 和生产资产候选；Primary 又被要求复制实体名单给 Asset Worker。真实“坠落到崖底”只在结尾出现一次，被前一 Worker 合并进山顶后，下游 exact coverage 反而禁止补回。Prompt 级地点细化只修正一次启发式，没有修正事实 owner。当前双语 Prompt 与语义 guard 明确：`screenplay` 不登记生产资产，Primary 委派 `asset_manifest` 只传精确 screenplay Resource、用户目标和不能从该 Resource 推导的约束，绝不手写名单或手动附带 Creative Direction；已采纳方向由服务端向全部非方向生产者冻结完整精确内容，Asset Worker 自行使用相关政策。资产筛选、设计与 Prompt 在一个 Subagent Task 内完成。终态失败的 `errorCode` 由 Task View 确定性展示，Primary 在任何重派前必须先给出用户可见解释且请求发生真实变化；模型叙述不再承担错误事实本身。
 - Creative Worker 为兼容 Azure/OpenAI Structured Outputs 曾把 canonical schema删除范围、长度、数组数量、pattern 等关键字后交给 Provider；结果是 transport 会接受本地 Zod 必然拒绝的组合，而本地校验只在 run 完成后发生，模型无法纠正。当前 output schema不再进入 Provider output contract：完整文档作为本次输入事实，固定 `submit_result` 在同一 Agents loop 内返回有界字段 issues 并接受纠正；成功前没有 Task result writer，成功后也不再二次解析或 repair。
+- Prompt 语言曾按 UI locale 双份维护：Primary/summary 各两份模板、Worker prompt 三组 zh/en 常量、tool-discovery 与附件包装的双语文案，输出语言只是模板语言的隐性副作用。每条规则要中英各改一遍、parity 只能人工核对，长对话压缩后英文摘要还会丢失用户语言信号。当前全部模型侧文本收敛为单份英文，输出语言由 AP-10 的显式规则拥有（跟随用户实际语言，无信号默认英文），conversation-summary 显式记录用户语言并保留原文引用；用户可见 Operation 标题的 i18n（`copy.ts` 标题表 + session-state locale）不受影响。残留：`ProjectAgentContext.locale → resolveOperationLocale → TaskJobData.locale` 链仍被冻结进 Task payload 但已无消费者，待后续批次连同客户端 locale 传参一并删除。真实模型对“无信号默认英文”的遵循度是发布验证盲区。
 
 ## 修改检查表
 

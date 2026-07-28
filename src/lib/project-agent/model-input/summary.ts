@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import type { UIMessage } from 'ai'
-import type { ProjectAgentLocale } from '../locale'
 
 /**
  * Persisted, incremental summary of conversation that has scrolled out of the
@@ -148,11 +147,7 @@ export function planProjectAgentConversationCompaction(input: {
 }
 
 export function buildProjectAgentSummaryText(
-  locale: ProjectAgentLocale,
   summary: ProjectAgentConversationSummary,
 ): string {
-  const heading = locale === 'en'
-    ? 'Summary of earlier conversation in this thread:'
-    : '本次对话较早部分的摘要：'
-  return `${heading}\n${summary.summaryText}`
+  return `Summary of earlier conversation in this thread:\n${summary.summaryText}`
 }

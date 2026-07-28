@@ -7,7 +7,6 @@ import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import { resolveUtilityModelKey } from '@/lib/ai-exec/utility-model'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getProviderKey } from '@/lib/ai-registry/selection'
-import type { ProjectAgentLocale } from '../locale'
 import {
   PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION,
   buildProjectAgentSummaryTranscript,
@@ -28,7 +27,6 @@ import {
  */
 export async function extendProjectAgentConversationSummary(input: {
   userId: string
-  locale: ProjectAgentLocale
   previous: ProjectAgentConversationSummary | null
   newlySummarized: readonly UIMessage[]
   signal?: AbortSignal
@@ -50,7 +48,6 @@ export async function extendProjectAgentConversationSummary(input: {
 
   const prompt = buildAiPrompt({
     promptId: AI_PROMPT_IDS.PROJECT_AGENT_CONVERSATION_SUMMARY,
-    locale: input.locale,
     variables: {
       previous_summary: input.previous?.summaryText ?? '',
       new_transcript: transcript,

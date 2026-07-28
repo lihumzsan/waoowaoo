@@ -5,57 +5,6 @@ type ProjectAgentOperationTitleCopy = {
   en: string
 }
 
-const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, ProjectAgentOperationTitleCopy> = {
-  request_choice: {
-    zh: '只为当前一个决定发起通用 Choice。由你填写卡片标题、说明、选项、展示方式、按钮和可选回复；没有领域 choiceType，不保存后续步骤。需要立即采用当前结果时，只能冻结 registry 明确允许的一个当前 Operation 完整输入。',
-    en: 'Ask one generic Choice for the current decision only. Author the title, description, options, presentation, buttons, and optional reply. There is no domain choiceType or stored follow-up. To adopt the current result immediately, freeze only one complete input for an Operation explicitly allowed by the registry.',
-  },
-  delegate_creative_work: {
-    zh: '把一个或多个专业创作请求委派成独立 Creative Task。每个请求必须携带完整目标、精确来源 resource 和真实约束；Worker 自主读取相关 Skill，但不能调用业务 Operation、收费或改变项目状态。服务端不自动分 Chapter 或 Worker 组。',
-    en: 'Delegate one or more professional creative requests as independent Creative Tasks. Each request carries a complete goal, exact source resources, and real constraints. The Worker reads relevant Skills autonomously but cannot call business Operations, bill, or change project state. The server never creates Chapter or Worker groups automatically.',
-  },
-  adopt_creative_direction: {
-    zh: '把一个精确的 project.creative_direction Resource 绑定为当前 Creative Direction。必须传真实 resourceId 和替换时的 binding version；服务端回库校验内容，不复制、不生成预览，也不启动任何后续任务。',
-    en: 'Bind one exact project.creative_direction Resource as the current Creative Direction. Pass the real resourceId and current binding version when replacing; the server reloads the Resource, copies no content, generates no preview, and starts no downstream work.',
-  },
-  adopt_asset_manifest: {
-    zh: '采用一个精确的 project.asset_manifest resource，并为其中每个 canonical entity 创建或复用项目资产 identity。只传 resourceId 和替换时的 binding version；不生成图片，也不启动后续任务。',
-    en: 'Adopt one exact project.asset_manifest resource and create or reuse one Project asset identity for every canonical entity. Pass only the resourceId and current binding version when replacing; this generates no images and starts no downstream work.',
-  },
-  update_plan: {
-    zh: '为复杂工作维护简短计划；它只是工作记忆，不执行工作、不创建 Task，也不控制工具。',
-    en: 'Maintain a concise plan for complex work. It is working memory only and never executes work, creates Tasks, or controls tools.',
-  },
-  get_project_context: {
-    zh: '读取当前项目或剧集的领域事实、精简资源工作集和任务摘要；不要从聊天记录或画布外观猜测。',
-    en: 'Read current project or episode domain facts, the compact Resource working set, and Task summaries. Never infer them from chat history or Canvas appearance.',
-  },
-  get_project_snapshot: {
-    zh: '读取项目的结构化事实投影；只在当前问题确实需要项目全貌时调用。',
-    en: 'Read the project factual projection. Call it only when the current question needs the broader project state.',
-  },
-  update_project_config: {
-    zh: '写入用户当前明确要求的项目配置。不得把 Agent 推荐当作用户确认，也不得猜模型或 Provider 参数。',
-    en: 'Persist project configuration explicitly requested by the user now. Never treat an Agent recommendation as user confirmation or guess model/provider parameters.',
-  },
-  delete_asset: {
-    zh: '按真实 identity 删除资产；遵守破坏性确认，仍被绑定或引用时明确失败。',
-    en: 'Delete an asset by exact identity with destructive confirmation; fail explicitly while it remains bound or referenced.',
-  },
-  regenerate_asset: {
-    zh: '在既有资产 identity 下重生成失败或不满意的图片，不创建替代 identity。',
-    en: 'Regenerate failed or unsatisfactory images under the existing asset identity; never create a replacement identity.',
-  },
-  generate_voice: {
-    zh: '用自然语言设计可复用音色并生成短试听；每次生成创建一个新的不可变 Resource。',
-    en: 'Design a reusable voice from natural language and render a short preview as a new immutable Resource.',
-  },
-  bind_voice: {
-    zh: '把精确音色 Resource 绑定、换绑或解绑到角色；不生成音频。',
-    en: 'Bind, replace, or unbind an exact voice Resource for a character; this generates no audio.',
-  },
-}
-
 const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTitleCopy> = {
   request_choice: { zh: '当前选择', en: 'Current choice' },
   delegate_creative_work: { zh: '专业创作', en: 'Creative work' },
@@ -104,14 +53,6 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   asset_hub_get_character: { zh: '读取全局角色', en: 'Read global character' },
   asset_hub_list_locations: { zh: '查看全局场景', en: 'List global locations' },
   asset_hub_get_location: { zh: '读取全局场景', en: 'Read global location' },
-}
-
-export function localizeSelectableToolDescription(
-  operationId: string,
-  fallback: string,
-  locale: ProjectAgentLocale,
-): string {
-  return SELECTABLE_TOOL_DESCRIPTION_COPY[operationId]?.[locale] ?? fallback
 }
 
 export function localizeProjectAgentOperationTitle(

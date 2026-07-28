@@ -40,7 +40,6 @@ describe('Creative Worker external research evidence', () => {
     })
 
     const evidence = projectCreativeWorkerResearchEvidence({
-      locale: 'zh',
       state: research,
     })
     expect(evidence).toEqual({
@@ -65,7 +64,6 @@ describe('Creative Worker external research evidence', () => {
   it('distinguishes no research, unavailable research, and partial research truthfully', () => {
     const untouched = state()
     expect(projectCreativeWorkerResearchEvidence({
-      locale: 'zh',
       state: untouched,
     })).toMatchObject({
       status: 'not_attempted',
@@ -80,11 +78,10 @@ describe('Creative Worker external research evidence', () => {
       status: 'unavailable',
     })
     expect(projectCreativeWorkerResearchEvidence({
-      locale: 'zh',
       state: unavailable,
     })).toMatchObject({
       status: 'unavailable',
-      notice: expect.stringContaining('未做外部研究'),
+      notice: expect.stringContaining('External research was not performed'),
     })
 
     const partial = state()
@@ -110,7 +107,6 @@ describe('Creative Worker external research evidence', () => {
       status: 'failed',
     })
     expect(projectCreativeWorkerResearchEvidence({
-      locale: 'en',
       state: partial,
     })).toMatchObject({
       status: 'partial',
