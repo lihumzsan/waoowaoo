@@ -7,9 +7,22 @@ import {
 
 const videoMergeInputRefSchema = z.object({
   revisionId: z.string().trim().min(1),
-  role: z.literal('source_video'),
+  role: z.enum(['source_video', 'bgm_audio']),
   position: z.number().int().min(0),
 }).strict()
+
+const videoMergeInputsSchema = z.array(videoMergeInputRefSchema).min(2).max(51)
+  .refine(
+    (inputs) => inputs.filter((input) => input.role === 'bgm_audio').length <= 1,
+    { message: 'VIDEO_MERGE_BGM_INPUT_SINGLE' },
+  )
+  .refine(
+    (inputs) => {
+      const sourceCount = inputs.filter((input) => input.role === 'source_video').length
+      return sourceCount >= 1 && sourceCount <= 50
+    },
+    { message: 'VIDEO_MERGE_SOURCE_VIDEO_COUNT_INVALID' },
+  )
 
 export const creativeResourceVideoMergeTaskPayloadSchema = z.object({
   lifecycleProjection: creativeResourceLifecycleProjectionSchema,
@@ -20,7 +33,7 @@ export const creativeResourceVideoMergeTaskPayloadSchema = z.object({
     prompt: z.null(),
     modelKey: z.null(),
     inputHash: z.string().trim().min(1),
-    inputs: z.array(videoMergeInputRefSchema).min(2).max(50),
+    inputs: videoMergeInputsSchema,
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),

@@ -21,9 +21,13 @@ import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-
 const mergeVideosInputSchema = z.object({
   name: z.string().trim().min(1).max(200).optional()
     .describe('Optional display name for the merged ordinary video Resource.'),
-  videos: z.array(creativeResourceInputRefSchema).min(2).max(50)
-    .describe('Exact ready video Resource revisions in playback order. The array order is the merge order.'),
+  videos: z.array(creativeResourceInputRefSchema).min(1).max(50)
+    .describe('Exact ready video Resource revisions in playback order. The array order is the merge order. A single video is only accepted together with music.'),
+  music: creativeResourceInputRefSchema.optional()
+    .describe('Optional exact ready audio Resource revision mixed under the whole merged timeline as background music. The server loudness-normalizes, fades, and ducks it under source dialogue deterministically; the merged video duration trims or pads the music. Never put video or text Resources here.'),
 }).strict()
+
+const MERGE_VIDEOS_BGM_VOLUME = 1
 
 const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
@@ -31,21 +35,26 @@ const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
   }).passthrough(),
 )
 
-function normalizeVideoInputs(
-  videos: z.infer<typeof mergeVideosInputSchema>['videos'],
+function normalizeMergeInputs(
+  input: z.infer<typeof mergeVideosInputSchema>,
 ): CreativeResourceInputRef[] {
-  return videos.map((video, position) => ({
+  const videos: CreativeResourceInputRef[] = input.videos.map((video, position) => ({
     revisionId: video.revisionId,
     role: 'source_video',
     position,
   }))
+  if (!input.music) return videos
+  return [
+    ...videos,
+    { revisionId: input.music.revisionId, role: 'bgm_audio', position: input.videos.length },
+  ]
 }
 
 export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperationRegistryDraft {
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Merge two or more exact ready video Resource revisions into one ordinary video Resource, in the provided order. This preserves source audio, performs no generative model call, and does not require the professional chapter pipeline.',
+      summary: 'Merge one or more exact ready video Resource revisions into one ordinary video Resource, in the provided order, optionally mixing one exact ready audio Resource revision under the whole timeline as background music. This preserves and loudness-normalizes source audio, ducks music under source dialogue, performs no generative model call, and does not require the professional chapter pipeline. A single video is only accepted together with music.',
       intent: 'act',
       effects: {
         writes: true,
@@ -70,8 +79,15 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
       inputSchema: mergeVideosInputSchema,
       outputSchema: mergeVideosOutputSchema,
       execute: async (ctx, input) => {
+        if (input.videos.length < 2 && !input.music) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'VIDEO_MERGE_SINGLE_VIDEO_REQUIRES_MUSIC',
+            field: 'videos',
+            agentRetryableAfterCorrection: true,
+          })
+        }
         const episodeId = ctx.context.episodeId?.trim() || null
-        const references = normalizeVideoInputs(input.videos)
+        const references = normalizeMergeInputs(input)
         const inputHash = stableArgsHash({ operationId: 'merge_videos', references })
         const requestId = [
           'merge-videos',
@@ -88,7 +104,9 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           candidateIndex: 0,
         })
         const resourceName = input.name ?? 'Merged video'
-        const generationOptions = { mergeMode: 'ordered_concat' as const }
+        const generationOptions = input.music
+          ? { mergeMode: 'ordered_concat' as const, bgmVolume: MERGE_VIDEOS_BGM_VOLUME }
+          : { mergeMode: 'ordered_concat' as const }
         const payload = {
           lifecycleProjection: buildCreativeResourceLifecycleProjection([{
             resourceId,
@@ -136,10 +154,11 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
             for (const reference of references) {
               const revision = revisionById.get(reference.revisionId)
               const resource = revision?.resource
-              if (!resource || resource.mediaType !== 'video' || (resource.projectId && resource.projectId !== ctx.projectId)) {
+              const expectedMediaType = reference.role === 'bgm_audio' ? 'audio' : 'video'
+              if (!resource || resource.mediaType !== expectedMediaType || (resource.projectId && resource.projectId !== ctx.projectId)) {
                 throw new ApiError('INVALID_PARAMS', {
                   code: 'VIDEO_MERGE_INPUT_RESOURCE_INVALID',
-                  field: 'videos',
+                  field: reference.role === 'bgm_audio' ? 'music' : 'videos',
                   revisionId: reference.revisionId,
                   agentRetryableAfterCorrection: true,
                 })
