@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { CREATIVE_RESOURCE_MEDIA_TYPES, type CreativeResourceJsonValue } from './contracts'
-import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelope'
+import {
+  creativeResourceLifecycleProjectionSchema,
+  creativeResourceTaskRuntimeEnvelopeShape,
+} from './task-runtime-envelope'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
@@ -22,6 +25,7 @@ export const creativeResourceGenerationOptionsSchema = z.record(
 )
 
 export const creativeResourceGenerationTaskPayloadSchema = z.object({
+  lifecycleProjection: creativeResourceLifecycleProjectionSchema,
   resource: z.object({
     resourceId: z.string().trim().min(1),
     mediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES),
@@ -174,6 +178,7 @@ export function parseCreativeResourceGenerationTaskPayload(
 ): CreativeResourceGenerationTaskPayload {
   const parsed = creativeResourceGenerationTaskEnvelopeSchema.parse(value)
   return creativeResourceGenerationTaskPayloadSchema.parse({
+    lifecycleProjection: parsed.lifecycleProjection,
     resource: parsed.resource,
     imageModel: parsed.imageModel,
     videoModel: parsed.videoModel,

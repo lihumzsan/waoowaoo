@@ -34,6 +34,11 @@ describe('project agent operation registry', () => {
       expect(typeof operation.effects.externalSideEffects).toBe('boolean')
       expect(typeof operation.effects.longRunning).toBe('boolean')
       expect(['none', 'resource']).toContain(operation.resourceContract.kind)
+      if (operation.resourceContract.kind === 'resource') {
+        expect(['none', 'created_resources']).toContain(
+          operation.resourceContract.assistantPresentation,
+        )
+      }
       expect(operation.inputSchema).toBeDefined()
       expect(operation.outputSchema).toBeDefined()
       expect(typeof operation.inputSchema.safeParse).toBe('function')
@@ -181,6 +186,7 @@ describe('project agent operation registry', () => {
     })
     expect(operation.resourceContract).toMatchObject({
       kind: 'resource',
+      assistantPresentation: 'created_resources',
       outputMediaTypes: ['video'],
       supportsCandidates: false,
     })

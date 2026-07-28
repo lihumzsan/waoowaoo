@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import { creativeResourceGenerationOptionsSchema } from './generation-contract'
 import { CREATIVE_RESOURCE_SCHEMA } from './schema-registry'
-import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelope'
+import {
+  creativeResourceLifecycleProjectionSchema,
+  creativeResourceTaskRuntimeEnvelopeShape,
+} from './task-runtime-envelope'
 
 export const WEB_REFERENCE_IMAGE_SOURCE_TYPE = 'web_search_image'
 
@@ -51,6 +54,7 @@ export function readWebReferenceImageUrl(
 }
 
 export const creativeResourceWebReferenceTaskPayloadSchema = z.object({
+  lifecycleProjection: creativeResourceLifecycleProjectionSchema,
   resource: z.object({
     resourceId: z.string().trim().min(1),
     mediaType: z.literal('image'),

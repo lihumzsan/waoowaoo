@@ -8,6 +8,7 @@ import {
   validateCreativeResourceInputReferencesInTransaction,
 } from '@/lib/creative-resource/persistence'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
+import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
@@ -58,6 +59,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['video'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO],
@@ -85,8 +87,15 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           requestId,
           candidateIndex: 0,
         })
+        const resourceName = input.name ?? 'Merged video'
         const generationOptions = { mergeMode: 'ordered_concat' as const }
         const payload = {
+          lifecycleProjection: buildCreativeResourceLifecycleProjection([{
+            resourceId,
+            mediaType: 'video',
+            schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+            name: resourceName,
+          }]),
           resource: {
             resourceId,
             mediaType: 'video' as const,
@@ -146,7 +155,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
               schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId: 'merge_videos',
               requestId,
-              candidates: [{ resourceId, name: input.name ?? 'Merged video', candidateIndex: 0 }],
+              candidates: [{ resourceId, name: resourceName, candidateIndex: 0 }],
             })
             await createWorkspaceResourceBroadcastsInTransaction({
               tx,

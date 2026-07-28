@@ -55,6 +55,15 @@ export interface CreativeResourceRevisionRef {
 
 export interface CreativeResourceMaterializedRef extends CreativeResourceRef, CreativeResourceRevisionRef {}
 
+export interface CreativeResourceLinkView extends CreativeResourceMaterializedRef {
+  readonly mediaType: CreativeResourceMediaType
+  readonly schemaId: string
+  readonly resourceName: string
+  readonly fileName: string
+  readonly href: string | null
+  readonly mimeType: string | null
+}
+
 export interface CreativeResourceInputRef extends CreativeResourceRevisionRef {
   readonly role: string
   readonly position: number
@@ -240,6 +249,7 @@ export type CreativeResourceOperationContract =
     }
   | {
       readonly kind: 'resource'
+      readonly assistantPresentation: 'none' | 'created_resources'
       readonly acceptsReferences: boolean
       readonly outputMediaTypes: readonly CreativeResourceMediaType[]
       readonly outputSchemaIds: readonly string[]

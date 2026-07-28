@@ -56,6 +56,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'none',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST],

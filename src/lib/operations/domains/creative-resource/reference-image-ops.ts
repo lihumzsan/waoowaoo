@@ -6,6 +6,7 @@ import {
 } from '@/lib/creative-resource/identity'
 import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
+import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { buildWebReferenceImageProvenance } from '@/lib/creative-resource/web-reference-contract'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -66,6 +67,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: false,
         outputMediaTypes: ['image'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE],
@@ -98,6 +100,12 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
           candidateIndex: 0,
         })
         const payload = {
+          lifecycleProjection: buildCreativeResourceLifecycleProjection([{
+            resourceId,
+            mediaType: 'image',
+            schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
+            name: input.name,
+          }]),
           resource: {
             resourceId,
             mediaType: 'image' as const,

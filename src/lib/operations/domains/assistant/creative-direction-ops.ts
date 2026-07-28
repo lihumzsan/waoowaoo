@@ -59,6 +59,7 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'none',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION],

@@ -22,6 +22,7 @@ import type {
 } from './event'
 import type { ProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentSubagentEventPartData } from './subagent-events'
+import type { CreativeResourceLinkView } from '@/lib/creative-resource/contracts'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -248,6 +249,10 @@ export interface ProjectAgentContextCompactedPartData {
   summaryText: string
 }
 
+export interface ProjectAgentResourceLinksPartData {
+  resources: readonly CreativeResourceLinkView[]
+}
+
 export interface ProjectAssistantThreadSnapshot {
   id: string
   assistantId: ProjectAssistantId
@@ -274,6 +279,7 @@ export type WorkspaceAssistantPartType =
   | 'data-assistant-context-compacted'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'
+  | 'data-assistant-resource-links'
   | 'data-task-submitted'
   | 'data-task-batch-submitted'
   | 'data-project-context'

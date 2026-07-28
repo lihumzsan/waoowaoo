@@ -12,6 +12,7 @@ const VISIBLE_DATA_PART_NAMES = new Set([
   'agent-operation-plan-preview',
   'agent-stop',
   'assistant-choice-card',
+  'assistant-resource-links',
   'project-context',
 ])
 

@@ -242,6 +242,7 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(textProperties)).not.toContain('schemaId')
     expect(registry.create_text.resourceContract).toEqual({
       kind: 'resource',
+      assistantPresentation: 'created_resources',
       acceptsReferences: true,
       outputMediaTypes: ['text'],
       outputSchemaIds: ['generic.text', 'project.screenplay'],

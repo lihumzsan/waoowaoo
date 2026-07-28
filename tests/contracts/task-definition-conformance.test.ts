@@ -47,12 +47,15 @@ describe('TaskDefinition conformance', () => {
     ).toBe(true)
     for (const taskType of [
       TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+      TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
       TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
       TASK_TYPE.CREATIVE_RESOURCE_VOICE,
       TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
       TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
     ]) {
       expect(TASK_DEFINITIONS[taskType].terminalOutputMaterializer).toBe('creative_resource')
+      expect(TASK_DEFINITIONS[taskType].continuationResultProjection).toBe('reference')
+      expect(TASK_DEFINITIONS[taskType].lifecyclePayloadProjection).toBe('reference')
     }
   })
 })

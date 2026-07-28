@@ -57,6 +57,12 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if (resourceContract.kind === 'none') {
       mustTrimmedString(resourceContract.reason, 'RESOURCE_CONTRACT_REASON')
     } else if (resourceContract.kind === 'resource') {
+      if (
+        resourceContract.assistantPresentation !== 'none'
+        && resourceContract.assistantPresentation !== 'created_resources'
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_PRESENTATION_INVALID:${operationId}`)
+      }
       if (resourceContract.acceptsReferences !== true && resourceContract.acceptsReferences !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_REFERENCES_INVALID:${operationId}`)
       }

@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { creativeResourceGenerationOptionsSchema } from './generation-contract'
-import { creativeResourceTaskRuntimeEnvelopeShape } from './task-runtime-envelope'
+import {
+  creativeResourceLifecycleProjectionSchema,
+  creativeResourceTaskRuntimeEnvelopeShape,
+} from './task-runtime-envelope'
 
 const videoMergeInputRefSchema = z.object({
   revisionId: z.string().trim().min(1),
@@ -9,6 +12,7 @@ const videoMergeInputRefSchema = z.object({
 }).strict()
 
 export const creativeResourceVideoMergeTaskPayloadSchema = z.object({
+  lifecycleProjection: creativeResourceLifecycleProjectionSchema,
   resource: z.object({
     resourceId: z.string().trim().min(1),
     mediaType: z.literal('video'),
@@ -35,5 +39,8 @@ export function parseCreativeResourceVideoMergeTaskPayload(
   value: unknown,
 ): CreativeResourceVideoMergeTaskPayload {
   const parsed = creativeResourceVideoMergeTaskEnvelopeSchema.parse(value)
-  return creativeResourceVideoMergeTaskPayloadSchema.parse({ resource: parsed.resource })
+  return creativeResourceVideoMergeTaskPayloadSchema.parse({
+    lifecycleProjection: parsed.lifecycleProjection,
+    resource: parsed.resource,
+  })
 }

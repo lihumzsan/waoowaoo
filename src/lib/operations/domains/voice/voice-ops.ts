@@ -10,6 +10,7 @@ import {
 } from '@/lib/creative-resource/identity'
 import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
+import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -237,6 +238,12 @@ async function planGenerateVoice(
     } : {}),
   }
   const payload = {
+    lifecycleProjection: buildCreativeResourceLifecycleProjection([{
+      resourceId,
+      mediaType: 'audio',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      name: resourceName,
+    }]),
     resource: resourcePayload,
     voiceModel,
     prompt: input.description,
@@ -370,6 +377,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: false,
         outputMediaTypes: ['audio'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE],

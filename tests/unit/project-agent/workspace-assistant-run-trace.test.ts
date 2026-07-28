@@ -46,6 +46,18 @@ describe('workspace assistant run trace view', () => {
       hasVisibleContent: true,
       visibleToolCallCount: 1,
     })
+
+    expect(resolveWorkspaceAssistantRunTraceView([
+      ...waitingParts,
+      {
+        type: 'data',
+        name: 'assistant-resource-links',
+        data: { resources: [{ resourceId: 'resource-1', revisionId: 'revision-1' }] },
+      },
+    ])).toMatchObject({
+      hasPublicReasoning: false,
+      hasVisibleContent: true,
+    })
   })
 
   it('groups reasoning, tool calls, and pre-tool commentary once in source order', () => {

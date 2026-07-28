@@ -49,6 +49,21 @@ function readRequiredString(record: Record<string, unknown>, key: string, code: 
   return value
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function projectSafeMediaResult(result: Record<string, unknown>): Record<string, number> {
+  const projection: Record<string, number> = {}
+  for (const key of ['width', 'height', 'durationMs'] as const) {
+    const value = result[key]
+    if (typeof value === 'number' && Number.isFinite(value)) projection[key] = value
+  }
+  return projection
+}
+
 /**
  * Every `creative_resource` task type declares its own frozen payload shape.
  * The switch is exhaustive against TaskType so a new type cannot be added
@@ -136,7 +151,13 @@ async function materializeDomainOutputs(
         name: output.name,
       })
   }
-  return { resources }
+  return {
+    resources,
+    continuationProjection: {
+      ...(readRecord(result.continuationProjection) ?? {}),
+      resources,
+    },
+  }
 }
 
 export async function materializeCreativeResourceTaskTerminalInTransaction(
@@ -300,10 +321,32 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
       }
     }
   }
+  const lifecycleResource = payload.lifecycleProjection.resources.find(
+    (resource) => resource.resourceId === revision.resourceId,
+  )
+  if (
+    !lifecycleResource
+    || lifecycleResource.mediaType !== payload.resource.mediaType
+    || lifecycleResource.schemaId !== payload.resource.schemaId
+  ) {
+    throw new Error(`CREATIVE_RESOURCE_LIFECYCLE_PROJECTION_MISMATCH:${input.task.id}`)
+  }
+  const resources = [{
+    resourceId: revision.resourceId,
+    revisionId: revision.revisionId,
+    schemaId: lifecycleResource.schemaId,
+    mediaType: lifecycleResource.mediaType,
+    name: lifecycleResource.name,
+  }]
   return {
     resourceId: revision.resourceId,
     revisionId: revision.revisionId,
+    resources,
     resourceStatus: 'ready',
+    continuationProjection: {
+      resources,
+      media: projectSafeMediaResult(input.result),
+    },
     ...(bindingResult ? { bindingResult } : {}),
   }
 }

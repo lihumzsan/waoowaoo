@@ -21,6 +21,14 @@ type VoiceBindingRequest = {
 
 function buildVoicePayload(resourceId: string, binding?: VoiceBindingRequest) {
   return {
+    lifecycleProjection: {
+      resources: [{
+        resourceId,
+        mediaType: 'audio' as const,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+        name: 'Voice preview',
+      }],
+    },
     resource: {
       resourceId,
       mediaType: 'audio' as const,

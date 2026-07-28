@@ -12,6 +12,10 @@ import {
   CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
   CREATIVE_RESOURCE_MEDIA_TYPES,
   CREATIVE_RESOURCE_STATUSES,
+  type CreativeResourceCardView,
+  type CreativeResourceRevisionView,
+  type CreativeResourceSummaryView,
+  type CreativeResourceView,
 } from '@/lib/creative-resource/contracts'
 import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
 import {
@@ -92,6 +96,70 @@ const adoptResourceInputSchema = z.object({
   expectedVersion: z.number().int().min(0).nullable().optional(),
 }).strict()
 
+export function projectCreativeResourceRevisionForAgent(
+  revision: CreativeResourceRevisionView,
+) {
+  return {
+    ...revision,
+    content: revision.content.kind === 'media'
+      ? {
+          kind: revision.content.kind,
+          mimeType: revision.content.mimeType ?? null,
+          width: revision.content.width ?? null,
+          height: revision.content.height ?? null,
+          durationMs: revision.content.durationMs ?? null,
+        }
+      : revision.content,
+  }
+}
+
+function projectCreativeResourceSummaryForAgent(
+  summary: CreativeResourceSummaryView,
+) {
+  if (summary.kind !== 'media') return summary
+  return {
+    kind: summary.kind,
+    mediaType: summary.mediaType,
+    mimeType: summary.mimeType ?? null,
+    width: summary.width ?? null,
+    height: summary.height ?? null,
+    durationMs: summary.durationMs ?? null,
+  }
+}
+
+function projectCreativeResourceForAgent(
+  resource: CreativeResourceView,
+) {
+  return {
+    ...resource,
+    headRevision: resource.headRevision
+      ? projectCreativeResourceRevisionForAgent(resource.headRevision)
+      : null,
+  }
+}
+
+export function projectCreativeResourceCardForAgent(
+  card: CreativeResourceCardView,
+) {
+  return {
+    resource: projectCreativeResourceForAgent(card.resource),
+    candidates: card.candidates
+      ? {
+          ...card.candidates,
+          resources: card.candidates.resources.map(projectCreativeResourceForAgent),
+          summaries: card.candidates.summaries.map((candidate) => ({
+            ...candidate,
+            summary: projectCreativeResourceSummaryForAgent(candidate.summary),
+          })),
+        }
+      : null,
+    presentation: {
+      ...card.presentation,
+      summary: projectCreativeResourceSummaryForAgent(card.presentation.summary),
+    },
+  }
+}
+
 const resourceCardSchema = z.object({
   resource: z.object({
     resourceId: z.string().min(1),
@@ -134,7 +202,6 @@ const resourceCardSchema = z.object({
       z.object({
         kind: z.literal('media'),
         mediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES),
-        url: z.string().optional(),
         mimeType: z.string().nullable().optional(),
         width: z.number().nullable().optional(),
         height: z.number().nullable().optional(),
@@ -216,7 +283,10 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
           status: input.status,
           limit: input.limit,
         })
-        return listResourcesOutputSchema.parse({ success: true, resources })
+        return listResourcesOutputSchema.parse({
+          success: true,
+          resources: resources.map(projectCreativeResourceCardForAgent),
+        })
       },
     }),
     get_resource: defineOperation({
@@ -272,8 +342,10 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
         }
         return getResourceOutputSchema.parse({
           success: true,
-          resource,
-          revision,
+          resource: projectCreativeResourceCardForAgent(resource),
+          revision: revision
+            ? projectCreativeResourceRevisionForAgent(revision)
+            : null,
           creativeData: creativeData.creativeData,
           creativeDataVersion: creativeData.creativeDataVersion,
         })

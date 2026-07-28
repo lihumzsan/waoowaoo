@@ -42,6 +42,7 @@ import {
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
 import { matchCurrentUserText } from '@/lib/creative-resource/current-user-text'
+import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { resolveSystemModelKey, type SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
@@ -1029,6 +1030,12 @@ async function planNewMediaGeneration(
       } : {}),
     }
     const payload = {
+      lifecycleProjection: buildCreativeResourceLifecycleProjection([{
+        resourceId: resource.resourceId,
+        mediaType: config.mediaType,
+        schemaId,
+        name: resource.name,
+      }]),
       resource: resourcePayload,
       [config.modelPayloadKey]: modelKey,
       prompt,
@@ -1416,6 +1423,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [
@@ -1436,6 +1444,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['image'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'image'),
@@ -1454,6 +1463,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['audio'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'audio'),
@@ -1472,6 +1482,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       effects: MEDIA_EFFECTS,
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'created_resources',
         acceptsReferences: true,
         outputMediaTypes: ['video'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'video'),

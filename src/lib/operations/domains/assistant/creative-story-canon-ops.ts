@@ -67,6 +67,7 @@ export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegi
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'none',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.STORY_CANON],
@@ -112,6 +113,7 @@ export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegi
       },
       resourceContract: {
         kind: 'resource',
+        assistantPresentation: 'none',
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN],

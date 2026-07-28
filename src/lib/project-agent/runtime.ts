@@ -23,6 +23,11 @@ import {
   readProjectCreativeResourceWorkingSet,
   type CreativeResourceWorkingSetView,
 } from '@/lib/creative-resource'
+import {
+  readCreativeResourceMaterializedRefs,
+  readProjectCreativeResourceLinkViews,
+} from '@/lib/creative-resource/assistant-link-view'
+import type { CreativeResourceMaterializedRef } from '@/lib/creative-resource/contracts'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type {
   ProjectAgentOperationOutcome,
@@ -38,6 +43,7 @@ import type {
   ProjectAgentContextCompactedPartData,
   ProjectAgentInterruptionPartData,
   ProjectAgentInterruptionResolvedPartData,
+  ProjectAgentResourceLinksPartData,
   ProjectAgentRunPartData,
   ProjectAgentStopPartData,
 } from './types'
@@ -446,6 +452,17 @@ export function buildTaskFollowUpInputItem(
     role: 'user',
     content: lines.join('\n'),
   } satisfies AgentInputItem
+}
+
+function readTaskFollowUpResourceRefs(
+  followUp: ProjectAgentWaitFollowUp,
+  assistantPresentation: 'none' | 'created_resources',
+): CreativeResourceMaterializedRef[] {
+  if (assistantPresentation !== 'created_resources') return []
+  return followUp.completedTasks.flatMap((task) => {
+    if (!task.result || !Array.isArray(task.result.resources)) return []
+    return readCreativeResourceMaterializedRefs(task.result)
+  })
 }
 
 function formatRuntimeStateValue(value: string | null | undefined): string {
@@ -1179,6 +1196,7 @@ export async function createProjectAgentChatResponse(input: {
   let latestStopPart: ProjectAgentStopPartData | null = null
   const preparedChoiceHandoffs = new Map<string, ProjectAgentChoiceHandoffReceipt>()
   const outcomesByToolCall = new Map<string, ProjectAgentOperationOutcome>()
+  const completedResourceRefs: CreativeResourceMaterializedRef[] = []
   const submittedTaskReceiptsByToolCall = new Map<string, ProjectAgentOperationOutcome & { kind: 'submitted_tasks' }>()
   const operationIdByToolCallId = new Map<string, string>()
   let activeOperationBatch = createProjectAgentOperationBatchCoordinator({ originRunId: input.run.id })
@@ -1300,6 +1318,14 @@ export async function createProjectAgentChatResponse(input: {
         throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_DUPLICATE:${operationId}:${toolCallId}`)
       }
       outcomesByToolCall.set(toolCallId, outcome)
+      const resourceContract = operations[operationId]?.resourceContract
+      if (
+        outcome.kind === 'completed'
+        && resourceContract?.kind === 'resource'
+        && resourceContract.assistantPresentation === 'created_resources'
+      ) {
+        completedResourceRefs.push(...readCreativeResourceMaterializedRefs(outcome.data))
+      }
       if (outcome.kind === 'submitted_tasks') {
         submittedTaskReceiptsByToolCall.set(toolCallId, outcome)
       }
@@ -1538,8 +1564,13 @@ export async function createProjectAgentChatResponse(input: {
     let preparedAssistantMessage: UIMessage | null = null
     let latestRunStatusForPersistence: Pick<ProjectAgentRunPartData, 'status' | 'stopReason'> | null = null
     const persistedAssistantChunks: ProjectAgentUiChunk[] = []
+    const recordedAssistantChunks = new WeakSet<object>()
     const recordAssistantChunk = (chunk: ProjectAgentUiChunk): void => {
       if ((chunk as { type?: unknown }).type === 'finish') return
+      if (typeof chunk === 'object' && chunk !== null) {
+        if (recordedAssistantChunks.has(chunk)) return
+        recordedAssistantChunks.add(chunk)
+      }
       persistedAssistantChunks.push(chunk)
     }
     const createRuntimeStatusChunk = (
@@ -1729,6 +1760,32 @@ export async function createProjectAgentChatResponse(input: {
         })
         if (latestStopPart) {
           chunks.push(createDataChunk('data-agent-stop', latestStopPart))
+        }
+        const followUpResourceContract = control.kind === 'task_follow_up'
+          ? operations[control.followUp.operationId]?.resourceContract
+          : null
+        const resourceRefs = [
+          ...(control.kind === 'task_follow_up'
+            ? readTaskFollowUpResourceRefs(
+                control.followUp,
+                followUpResourceContract?.kind === 'resource'
+                  ? followUpResourceContract.assistantPresentation
+                  : 'none',
+              )
+            : []),
+          ...completedResourceRefs,
+        ]
+        if (resourceRefs.length > 0) {
+          const resources = await readProjectCreativeResourceLinkViews({
+            projectId: input.projectId,
+            userId: input.userId,
+            refs: resourceRefs,
+          })
+          const resourceLinksChunk = createDataChunk('data-assistant-resource-links', {
+            resources,
+          } satisfies ProjectAgentResourceLinksPartData)
+          recordAssistantChunk(resourceLinksChunk)
+          chunks.push(resourceLinksChunk)
         }
 
         if (completionError && !shouldPersistApprovalInterruption) {

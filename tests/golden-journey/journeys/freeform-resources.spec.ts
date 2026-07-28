@@ -611,6 +611,12 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
   await resolveInitialVideoRatioChoice(page, scope)
   await approveOperation(page, scope, 'create_video')
   await waitForResources(scope, 'video', 1)
+  const deliveredVideoLink = page
+    .getByTestId('workspace-assistant-resource-links')
+    .getByRole('link', { name: 'Video 1.mp4', exact: true })
+  await expect(deliveredVideoLink).toBeVisible({ timeout: 60_000 })
+  await expect(deliveredVideoLink).toHaveAttribute('href', /^\/m\/m_[a-f0-9]+$/)
+  await expect(page.getByText(/^\/m\//)).toHaveCount(0)
   const snapshot = await readGoldenOracleSnapshot(scope)
   expect(snapshot.domain.sourceDocuments).toHaveLength(0)
   expect(snapshot.domain.storyCanons).toHaveLength(0)

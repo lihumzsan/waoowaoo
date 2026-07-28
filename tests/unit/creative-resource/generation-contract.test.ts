@@ -4,6 +4,14 @@ import { buildCreativeResourceRetryTaskPayload } from '@/lib/creative-resource/g
 
 function imagePayload() {
   return {
+    lifecycleProjection: {
+      resources: [{
+        resourceId: 'resource:image-1',
+        mediaType: 'image',
+        schemaId: 'project.character_image',
+        name: 'Character reference',
+      }],
+    },
     resource: {
       resourceId: 'resource:image-1',
       mediaType: 'image',
@@ -14,6 +22,7 @@ function imagePayload() {
       inputs: [],
       imageInputPositions: [],
       audioInputPositions: [],
+      videoInputPositions: [],
       generationOptions: {
         aspectRatio: '9:16',
         resolution: '1K',
@@ -23,6 +32,18 @@ function imagePayload() {
       toolCallId: 'call-image-1',
     },
     imageModel: 'fal::gpt-image-2',
+    videoModel: undefined,
+    musicModel: undefined,
+    voiceModel: undefined,
+    prompt: undefined,
+    previewText: undefined,
+    language: undefined,
+    durationSeconds: undefined,
+    vocalMode: undefined,
+    genre: undefined,
+    mood: undefined,
+    bpm: undefined,
+    outputFormat: undefined,
     count: 1,
     generationOptions: {
       aspectRatio: '9:16',
@@ -48,6 +69,14 @@ describe('creative resource generation task contract', () => {
     const payload = imagePayload()
     const parsed = parseCreativeResourceGenerationTaskPayload({
       ...payload,
+      lifecycleProjection: {
+        resources: [{
+          resourceId: 'resource:video-voice-1',
+          mediaType: 'video',
+          schemaId: 'generic.video',
+          name: 'Voice-conditioned video',
+        }],
+      },
       resource: {
         ...payload.resource,
         inputs: [
@@ -124,6 +153,14 @@ describe('creative resource generation task contract', () => {
 
   it('changes only execution identity when rebuilding an exact failed Resource retry', () => {
     const frozenPayload = parseCreativeResourceGenerationTaskPayload({
+      lifecycleProjection: {
+        resources: [{
+          resourceId: 'resource:video-1',
+          mediaType: 'video',
+          schemaId: 'generic.video',
+          name: 'Original video',
+        }],
+      },
       resource: {
         resourceId: 'resource:video-1',
         mediaType: 'video',
