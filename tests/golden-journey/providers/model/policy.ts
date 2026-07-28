@@ -794,7 +794,7 @@ export function decideGoldenModelResponse(input: {
         kind: 'tool_call',
         toolCallId: `golden_call_${input.requestOrdinal}_submit_result`,
         toolName: 'submit_result',
-        argumentsJson: JSON.stringify({ output: JSON.parse(structuredText) as unknown }),
+        argumentsJson: structuredText,
       }
     }
     return { kind: 'text', text: structuredText }

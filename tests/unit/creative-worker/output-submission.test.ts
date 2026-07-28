@@ -90,19 +90,15 @@ class CorrectingSubmissionModel implements Model {
             callId: 'submit-invalid',
             name: 'submit_result',
             arguments: JSON.stringify({
-              output: {
-                ...validScreenplayOutput,
-                title: '',
-              },
+              ...validScreenplayOutput,
+              title: '',
             }),
           }]
         : [{
             type: 'function_call' as const,
             callId: 'submit-corrected',
             name: 'submit_result',
-            arguments: JSON.stringify({
-              output: validScreenplayOutput,
-            }),
+            arguments: JSON.stringify(validScreenplayOutput),
           }]
     yield { type: 'response_started' }
     yield {
@@ -364,6 +360,7 @@ describe('Creative Worker result submission contract', () => {
     }
 
     expect(withoutSearch?.parameters).toEqual(withSearch?.parameters)
+    expect(withoutSearch.parameters.properties).not.toHaveProperty('output')
     expect(withoutSearch).toMatchObject({
       type: 'function',
       name: 'submit_result',
@@ -371,24 +368,48 @@ describe('Creative Worker result submission contract', () => {
       parameters: {
         type: 'object',
         additionalProperties: false,
-        required: ['output'],
+        required: [
+          'kind',
+          'title',
+          'logline',
+          'synopsis',
+          'screenplayText',
+          'source',
+          'assumptions',
+          'openQuestions',
+        ],
         properties: {
-          output: {
-            type: 'object',
-            additionalProperties: false,
-            required: [
-              'kind',
-              'title',
-              'logline',
-              'synopsis',
-              'screenplayText',
-              'source',
-              'assumptions',
-              'openQuestions',
-            ],
-          },
+          kind: expect.any(Object),
+          title: expect.any(Object),
         },
       },
+    })
+  })
+
+  it('rejects the removed output wrapper and records the actual top-level argument shape', () => {
+    const submission = createCreativeWorkerOutputSubmission({
+      request: screenplayRequest,
+      definition: creativeWorkOutputRegistry.screenplay,
+      maxOutputChars: 120_000,
+    })
+    const wrapped = { output: validScreenplayOutput }
+    const rawArguments = JSON.stringify(wrapped)
+
+    expect(submission.submit(wrapped, rawArguments)).toMatchObject({
+      accepted: false,
+      code: 'CREATIVE_WORK_OUTPUT_INVALID',
+      inputDiagnostic: {
+        inputType: 'object',
+        rawArgumentChars: rawArguments.length,
+        topLevelKeyCount: 1,
+        topLevelKeys: ['output'],
+      },
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.kind',
+          code: 'invalid_value',
+        }),
+      ]),
     })
   })
 
@@ -443,10 +464,12 @@ describe('Creative Worker result submission contract', () => {
     const workerInput = JSON.parse(serializedWorkerInput) as {
       outputSubmission?: {
         toolName?: unknown
+        argumentShape?: unknown
         outputSchema?: Record<string, unknown>
       }
     }
     expect(workerInput.outputSubmission?.toolName).toBe('submit_result')
+    expect(workerInput.outputSubmission?.argumentShape).toBe('direct_object')
     expect(workerInput.outputSubmission?.outputSchema).toMatchObject({
       type: 'object',
       additionalProperties: false,
@@ -455,6 +478,12 @@ describe('Creative Worker result submission contract', () => {
     expect(JSON.stringify(model.requests[2]?.input)).toContain('CREATIVE_WORK_OUTPUT_INVALID')
     expect(JSON.stringify(model.requests[2]?.input)).toContain('$.title')
     expect(events.filter((event) => event.kind === 'submission_rejected')).toHaveLength(1)
+    expect(events.find((event) => event.kind === 'submission_rejected')).toMatchObject({
+      inputDiagnostic: {
+        inputType: 'object',
+        topLevelKeys: expect.arrayContaining(['kind', 'title']),
+      },
+    })
     expect(events.filter((event) => event.kind === 'submission_accepted')).toHaveLength(1)
     expect(events.flatMap((event) => (
       event.kind === 'generation' && event.status === 'running'

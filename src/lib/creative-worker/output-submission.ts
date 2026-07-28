@@ -24,6 +24,25 @@ export const creativeWorkerSubmissionIssueSchema = z.object({
 
 export type CreativeWorkerSubmissionIssue = z.infer<typeof creativeWorkerSubmissionIssueSchema>
 
+export const creativeWorkerSubmissionInputDiagnosticSchema = z.object({
+  inputType: z.enum([
+    'undefined',
+    'null',
+    'object',
+    'array',
+    'string',
+    'number',
+    'boolean',
+  ]),
+  rawArgumentChars: z.number().int().nonnegative(),
+  topLevelKeyCount: z.number().int().nonnegative(),
+  topLevelKeys: z.array(z.string().max(200)).max(64),
+}).strict()
+
+export type CreativeWorkerSubmissionInputDiagnostic = z.infer<
+  typeof creativeWorkerSubmissionInputDiagnosticSchema
+>
+
 export type CreativeWorkerSubmissionResult =
   | {
       readonly accepted: true
@@ -36,6 +55,7 @@ export type CreativeWorkerSubmissionResult =
       readonly instruction: string
       readonly issues: readonly CreativeWorkerSubmissionIssue[]
       readonly outputChars: number
+      readonly inputDiagnostic: CreativeWorkerSubmissionInputDiagnostic
     }
 
 function readJsonRecord(value: unknown): JsonRecord | null {
@@ -183,6 +203,7 @@ export function buildCreativeWorkerCanonicalOutputSchema(input: {
 function rejectedSubmission(
   issues: readonly CreativeWorkerSubmissionIssue[],
   outputChars: number,
+  inputDiagnostic: CreativeWorkerSubmissionInputDiagnostic,
 ): CreativeWorkerSubmissionResult {
   return {
     accepted: false,
@@ -190,7 +211,30 @@ function rejectedSubmission(
     instruction: 'Correct every listed issue and call submit_result again in this same run.',
     issues,
     outputChars,
+    inputDiagnostic,
   }
+}
+
+function describeSubmissionInput(input: {
+  readonly output: unknown
+  readonly rawArguments: string
+}): CreativeWorkerSubmissionInputDiagnostic {
+  const output = input.output
+  const inputType = output === undefined
+    ? 'undefined'
+    : output === null
+      ? 'null'
+      : Array.isArray(output)
+        ? 'array'
+        : typeof output
+  const record = readJsonRecord(output)
+  const keys = record ? Object.keys(record) : []
+  return creativeWorkerSubmissionInputDiagnosticSchema.parse({
+    inputType,
+    rawArgumentChars: input.rawArguments.length,
+    topLevelKeyCount: keys.length,
+    topLevelKeys: keys.slice(0, 64).map((key) => key.slice(0, 200)),
+  })
 }
 
 export type CreativeWorkerOutputSubmission = {
@@ -198,9 +242,13 @@ export type CreativeWorkerOutputSubmission = {
   readonly toolSchema: CreativeWorkerSubmissionToolSchema
   readonly reject: (
     output: unknown,
+    rawArguments: string,
     issues: readonly CreativeWorkerSubmissionIssue[],
   ) => CreativeWorkerSubmissionResult
-  readonly submit: (output: unknown) => CreativeWorkerSubmissionResult
+  readonly submit: (
+    output: unknown,
+    rawArguments?: string,
+  ) => CreativeWorkerSubmissionResult
   readonly readAcceptedOutput: () => CreativeWorkOutput | null
 }
 
@@ -227,22 +275,30 @@ export function createCreativeWorkerOutputSubmission(input: {
   return {
     canonicalSchema,
     toolSchema,
-    reject: (output, issues) => rejectedSubmission(issues, measureOutput(output)),
-    submit: (submittedOutput) => {
+    reject: (output, rawArguments, issues) => rejectedSubmission(
+      issues,
+      measureOutput(output),
+      describeSubmissionInput({ output, rawArguments }),
+    ),
+    submit: (submittedOutput, rawArguments = JSON.stringify(submittedOutput) ?? '') => {
       const outputChars = measureOutput(submittedOutput)
+      const inputDiagnostic = describeSubmissionInput({
+        output: submittedOutput,
+        rawArguments,
+      })
       if (acceptedOutput) {
         return rejectedSubmission([{
           path: '$',
           code: 'already_accepted',
           message: 'A valid result has already been accepted for this run.',
-        }], outputChars)
+        }], outputChars, inputDiagnostic)
       }
       if (outputChars > input.maxOutputChars) {
         return rejectedSubmission([{
           path: '$',
           code: 'too_big',
           message: `Serialized output exceeds the ${String(input.maxOutputChars)} character limit.`,
-        }], outputChars)
+        }], outputChars, inputDiagnostic)
       }
 
       const normalizedOutput = normalizeCreativeWorkerSubmissionOutput({
@@ -254,6 +310,7 @@ export function createCreativeWorkerOutputSubmission(input: {
         return rejectedSubmission(
           parsed.error.issues.slice(0, 64).map(normalizeIssue),
           outputChars,
+          inputDiagnostic,
         )
       }
       const output = parsed.data as CreativeWorkOutput
@@ -262,14 +319,14 @@ export function createCreativeWorkerOutputSubmission(input: {
           path: '$.kind',
           code: 'invalid_value',
           message: `Expected output kind "${input.request.outputKind}".`,
-        }], outputChars)
+        }], outputChars, inputDiagnostic)
       }
       const contextualIssues = validateVideoOutputContext({
         request: input.request,
         output,
       })
       if (contextualIssues.length > 0) {
-        return rejectedSubmission(contextualIssues, outputChars)
+        return rejectedSubmission(contextualIssues, outputChars, inputDiagnostic)
       }
 
       acceptedOutput = output

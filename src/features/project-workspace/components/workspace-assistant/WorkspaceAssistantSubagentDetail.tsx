@@ -88,12 +88,22 @@ function SubagentEventBody(props: {
     )
   }
   if (event.kind === 'submission_rejected') {
+    const topLevelKeys = event.inputDiagnostic.topLevelKeys.length > 0
+      ? event.inputDiagnostic.topLevelKeys.join(', ')
+      : props.t('subagents.events.submissionInputNoKeys')
     return (
       <details className="group min-w-0 flex-1">
         <summary className="flex cursor-pointer list-none items-center gap-1.5">
           <span className="min-w-0 break-words">{label}</span>
           <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
         </summary>
+        <div className="mt-1 break-words text-xs leading-5 text-[var(--glass-text-tertiary)]">
+          {props.t('subagents.events.submissionInputDiagnostic', {
+            type: props.t(`subagents.events.submissionInputTypes.${event.inputDiagnostic.inputType}`),
+            chars: event.inputDiagnostic.rawArgumentChars,
+            keys: topLevelKeys,
+          })}
+        </div>
         <ol className="mt-1 space-y-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
           {event.issues.map((issue, index) => (
             <li key={`${event.submissionId}:${String(index)}`} className="break-words">

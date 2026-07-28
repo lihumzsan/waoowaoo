@@ -1214,7 +1214,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v12')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v13')
     const lifecycleProjection = {
       requestKey: 'analysis-1',
       outputKind: 'continuity_analysis' as const,

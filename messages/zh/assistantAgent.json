@@ -107,6 +107,17 @@
       "submissionStarted": "正在校验结构化结果",
       "submissionRejected": "结构化校验未通过，正在修正：{issues} 项",
       "submissionAccepted": "结构化结果已通过校验 · {chars} 字符",
+      "submissionInputDiagnostic": "实际提交：{type} · {chars} 字符 · 顶层字段：{keys}",
+      "submissionInputNoKeys": "无",
+      "submissionInputTypes": {
+        "undefined": "未定义",
+        "null": "空值",
+        "object": "对象",
+        "array": "数组",
+        "string": "字符串",
+        "number": "数字",
+        "boolean": "布尔值"
+      },
       "toolName": "工具",
       "toolResult": "结果",
       "toolUri": "资源",

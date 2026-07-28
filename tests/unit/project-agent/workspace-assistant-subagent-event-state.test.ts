@@ -75,6 +75,12 @@ describe('Workspace Subagent event glyphs', () => {
         kind: 'submission_rejected',
         submissionId: 'submission-1',
         outputChars: 7_450,
+        inputDiagnostic: {
+          inputType: 'object',
+          rawArgumentChars: 7_450,
+          topLevelKeyCount: 1,
+          topLevelKeys: ['output'],
+        },
         issues: [{
           path: '$',
           code: 'invalid_type',

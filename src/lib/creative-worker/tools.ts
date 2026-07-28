@@ -203,21 +203,17 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
   })
 }
 
-function readSubmittedOutput(input: unknown): unknown {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
-  return (input as Record<string, unknown>).output
-}
-
 function createSubmitResultTool(input: {
   readonly toolSchema: CreativeWorkerSubmissionToolSchema
   readonly submitOutput: (input: {
     readonly submissionId: string
     readonly output: unknown
+    readonly rawArguments: string
   }) => CreativeWorkerSubmissionResult | Promise<CreativeWorkerSubmissionResult>
 }): Tool<CreativeWorkerRunContext> {
   return tool({
     name: 'submit_result',
-    description: 'Submit the complete final Creative Worker result directly as the structured output object. Do not serialize it into a string. If validation returns accepted=false, correct every listed field issue and call submit_result again in this same run. A successful submission ends the run.',
+    description: 'Submit the complete final Creative Worker result as this function call’s top-level arguments. Put kind and every other outputSchema field directly in submit_result; do not wrap them under output or outputJson and do not serialize them into a string. If validation returns accepted=false, correct every listed field issue and call submit_result again in this same run. A successful submission ends the run.',
     parameters: input.toolSchema,
     strict: true,
     execute: (rawInput, _runContext, details) => {
@@ -229,7 +225,8 @@ function createSubmitResultTool(input: {
       }
       return input.submitOutput({
         submissionId,
-        output: readSubmittedOutput(rawInput),
+        output: rawInput,
+        rawArguments: details?.toolCall?.arguments ?? '',
       })
     },
   })
@@ -242,6 +239,7 @@ export function createCreativeWorkerTools(input: {
   readonly submitOutput: (input: {
     readonly submissionId: string
     readonly output: unknown
+    readonly rawArguments: string
   }) => CreativeWorkerSubmissionResult | Promise<CreativeWorkerSubmissionResult>
 }): readonly Tool<CreativeWorkerRunContext>[] {
   return [

@@ -71,6 +71,12 @@ describe('Creative Worker durable lifecycle projection', () => {
       kind: 'submission_rejected',
       submissionId: 'submission-1',
       outputChars: 7_450,
+      inputDiagnostic: {
+        inputType: 'object',
+        rawArgumentChars: 7_450,
+        topLevelKeyCount: 1,
+        topLevelKeys: ['output'],
+      },
       issues: [{
         path: '$.creativeDirection.visual',
         code: 'invalid_type',
@@ -119,6 +125,12 @@ describe('Creative Worker durable lifecycle projection', () => {
       kind: 'submission_rejected',
       submissionId: 'submission-1',
       outputChars: 10,
+      inputDiagnostic: {
+        inputType: 'object',
+        rawArgumentChars: 10,
+        topLevelKeyCount: 0,
+        topLevelKeys: [],
+      },
       issues: [{
         path: '$',
         code: 'invalid_type',

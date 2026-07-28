@@ -177,14 +177,14 @@ export function buildCreativeWorkerSubmissionToolSchema(input: {
   if (!outputRecord || outputRecord.type !== 'object') {
     throw new Error(`CREATIVE_WORK_SUBMISSION_SCHEMA_ROOT_INVALID:${input.kind}`)
   }
-  const root: CreativeWorkerSubmissionToolSchema = {
-    type: 'object',
-    properties: {
-      output: outputRecord,
-    },
-    required: ['output'],
-    additionalProperties: false,
+  const properties = readJsonRecord(outputRecord.properties)
+  const required = Array.isArray(outputRecord.required)
+    ? outputRecord.required.filter((entry): entry is string => typeof entry === 'string')
+    : null
+  if (!properties || !required || outputRecord.additionalProperties !== false) {
+    throw new Error(`CREATIVE_WORK_SUBMISSION_SCHEMA_ROOT_INVALID:${input.kind}`)
   }
+  const root = outputRecord as CreativeWorkerSubmissionToolSchema
   assertStrictObjectShapes(root, '$')
   return root
 }

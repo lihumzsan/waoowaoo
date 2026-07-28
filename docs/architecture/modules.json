@@ -324,7 +324,9 @@
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagents.ts",
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-subagent-stream.ts",
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-panel-state.ts",
-        "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts"
+        "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts",
+        "messages/en/assistantAgent.json",
+        "messages/zh/assistantAgent.json"
       ]
     },
     {

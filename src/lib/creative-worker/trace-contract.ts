@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { CREATIVE_WORKER_ERROR_CODES } from './errors'
-import { creativeWorkerSubmissionIssueSchema } from './output-submission'
+import {
+  creativeWorkerSubmissionInputDiagnosticSchema,
+  creativeWorkerSubmissionIssueSchema,
+} from './output-submission'
 
 export const CREATIVE_WORK_REASONING_MAX_CHARS = 64_000
 
@@ -87,6 +90,7 @@ export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('submission_rejected'),
     submissionId: z.string().trim().min(1).max(500),
     outputChars: z.number().int().nonnegative(),
+    inputDiagnostic: creativeWorkerSubmissionInputDiagnosticSchema,
     issues: z.array(creativeWorkerSubmissionIssueSchema).min(1).max(64),
   }).strict(),
   z.object({
