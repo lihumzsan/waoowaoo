@@ -98,7 +98,6 @@ export function AssistantChoiceCardView(props: {
     : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup?.presentation === 'aspect_ratio'
-  const isImageGroup = activeGroup?.presentation === 'image'
 
   const readChoiceRunId = (): string => {
     const runId = card.runId?.trim()
@@ -203,22 +202,17 @@ export function AssistantChoiceCardView(props: {
 
   const renderActiveGroup = () => {
     if (!activeGroup) return null
-    const optionGridClass = isAspectRatioGroup
-      ? 'grid grid-cols-3 gap-2'
-      : isImageGroup
-        ? 'grid grid-cols-1 gap-2'
-        : 'grid grid-cols-2 gap-2'
     return (
       <div className="mt-2 space-y-2">
         <div className="text-xs font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
-        <div className={optionGridClass}>
+        <div className="grid grid-cols-1 gap-2">
           {activeGroup.options.map((option) => {
             const selected = selections[activeGroup.key] === option.value
             return (
               <button
                 key={`${activeGroup.key}:${option.value}`}
                 type="button"
-                className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
+                className={`flex w-full min-w-0 items-stretch overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
                 onClick={() => {
                   const nextSelections = {
                     ...selections,
@@ -240,21 +234,23 @@ export function AssistantChoiceCardView(props: {
                     width={640}
                     height={360}
                     unoptimized
-                    className="h-28 w-full object-cover"
+                    className="h-24 w-28 shrink-0 object-cover sm:w-32"
                   />
                 ) : null}
-                <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-1'}`}>
+                <div className={`min-w-0 flex-1 p-3 ${isAspectRatioGroup ? 'flex items-center gap-3' : 'space-y-1'}`}>
                   {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
-                    {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
+                    </div>
+                    {!isAspectRatioGroup && option.description ? (
+                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                    ) : null}
+                    {!isAspectRatioGroup && option.meta ? (
+                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                    ) : null}
                   </div>
-                  {!isAspectRatioGroup && option.description ? (
-                    <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
-                  ) : null}
-                  {!isAspectRatioGroup && option.meta ? (
-                    <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-tertiary)]">{option.meta}</div>
-                  ) : null}
                 </div>
               </button>
             )
