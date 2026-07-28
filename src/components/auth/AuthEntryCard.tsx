@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
 import PasswordInput from '@/components/auth/PasswordInput'
+import PhoneCaptchaDialog from '@/components/auth/PhoneCaptchaDialog'
 import Navbar from '@/components/Navbar'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
@@ -12,6 +13,7 @@ import {
   PHONE_AUTH_RESULT_CODES,
   readPhoneAuthResultCode,
 } from '@/lib/auth/phone-auth-contract'
+import { normalizePhoneNumber } from '@/lib/auth/phone-number'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 
@@ -54,6 +56,8 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [captchaAnswer, setCaptchaAnswer] = useState('')
   const [captchaImageDataUrl, setCaptchaImageDataUrl] = useState('')
   const [captchaLoading, setCaptchaLoading] = useState(false)
+  const [captchaDialogOpen, setCaptchaDialogOpen] = useState(false)
+  const [captchaError, setCaptchaError] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
@@ -64,7 +68,11 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const router = useRouter()
   const t = useTranslations('auth')
 
-  const loadImageCaptcha = useCallback(async (showError: boolean) => {
+  const loadImageCaptcha = useCallback(async (clearError: boolean) => {
+    if (clearError) setCaptchaError('')
+    setCaptchaId('')
+    setCaptchaAnswer('')
+    setCaptchaImageDataUrl('')
     setCaptchaLoading(true)
     try {
       const response = await apiFetch('/api/auth/phone/captcha', {
@@ -73,23 +81,18 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       const payload: unknown = await response.json()
       const captcha = response.ok ? readImageCaptchaPayload(payload) : null
       if (!captcha) {
-        if (showError) setError(t('imageCaptchaUnavailable'))
+        setCaptchaError(t('imageCaptchaUnavailable'))
         return
       }
       setCaptchaId(captcha.captchaId)
       setCaptchaImageDataUrl(captcha.imageDataUrl)
       setCaptchaAnswer('')
     } catch {
-      if (showError) setError(t('imageCaptchaUnavailable'))
+      setCaptchaError(t('imageCaptchaUnavailable'))
     } finally {
       setCaptchaLoading(false)
     }
   }, [t])
-
-  useEffect(() => {
-    if (!features.enablePhoneAuth) return
-    void loadImageCaptcha(false)
-  }, [features.enablePhoneAuth, loadImageCaptcha])
 
   useEffect(() => {
     if (resendSeconds <= 0) return
@@ -132,11 +135,11 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const handleSendCode = async () => {
     if (pendingAction || resendSeconds > 0) return
     if (!captchaId || captchaAnswer.length !== 4) {
-      setError(t('imageCaptchaRequired'))
+      setCaptchaError(t('imageCaptchaRequired'))
       return
     }
     setPendingAction('send-code')
-    setError('')
+    setCaptchaError('')
     setNotice('')
 
     try {
@@ -153,8 +156,20 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
       })
       const payload: unknown = await response.json()
       if (!response.ok) {
-        setError(resolveSendCodeError(payload))
-        void loadImageCaptcha(false)
+        const code = readPhoneAuthResultCode(payload)
+        const message = resolveSendCodeError(payload)
+        if (
+          code === PHONE_AUTH_RESULT_CODES.humanVerificationInvalid
+          || code === PHONE_AUTH_RESULT_CODES.humanVerificationUnavailable
+        ) {
+          setCaptchaError(message)
+          if (code === PHONE_AUTH_RESULT_CODES.humanVerificationInvalid) {
+            void loadImageCaptcha(false)
+          }
+        } else {
+          setCaptchaDialogOpen(false)
+          setError(message)
+        }
         return
       }
 
@@ -162,14 +177,38 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
         ? Number(Reflect.get(payload, 'retryAfterSeconds'))
         : 0
       setResendSeconds(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60)
+      setCaptchaDialogOpen(false)
+      setCaptchaId('')
+      setCaptchaAnswer('')
+      setCaptchaImageDataUrl('')
       setNotice(t('codeSent'))
-      void loadImageCaptcha(false)
     } catch {
+      setCaptchaDialogOpen(false)
       setError(t('sendCodeFailed'))
-      void loadImageCaptcha(false)
     } finally {
       setPendingAction(null)
     }
+  }
+
+  const handleOpenCaptchaDialog = () => {
+    if (pendingAction || resendSeconds > 0) return
+    if (!normalizePhoneNumber(phoneNumber)) {
+      setError(t('phoneInvalid'))
+      return
+    }
+    setError('')
+    setNotice('')
+    setCaptchaDialogOpen(true)
+    void loadImageCaptcha(true)
+  }
+
+  const handleCloseCaptchaDialog = () => {
+    if (pendingAction === 'send-code') return
+    setCaptchaDialogOpen(false)
+    setCaptchaError('')
+    setCaptchaId('')
+    setCaptchaAnswer('')
+    setCaptchaImageDataUrl('')
   }
 
   const handlePhoneSubmit = async (event: React.FormEvent) => {
@@ -267,55 +306,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
               </div>
 
               <div>
-                <label htmlFor="imageCaptcha" className="mb-2 block text-sm font-semibold text-slate-900">
-                  {t('imageCaptcha')}
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    id="imageCaptcha"
-                    name="imageCaptcha"
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    maxLength={4}
-                    value={captchaAnswer}
-                    onChange={(event) => {
-                      setCaptchaAnswer(
-                        event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4),
-                      )
-                    }}
-                    required
-                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base uppercase tracking-[0.18em] text-black outline-none transition placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                    placeholder={t('imageCaptchaPlaceholder')}
-                  />
-                  <button
-                    type="button"
-                    disabled={captchaLoading || pendingAction !== null}
-                    onClick={() => void loadImageCaptcha(true)}
-                    aria-label={t('refreshImageCaptcha')}
-                    title={t('refreshImageCaptcha')}
-                    className="h-12 w-[140px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-slate-50 shadow-sm transition hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {captchaImageDataUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- the API returns a short-lived inline challenge.
-                      <img
-                        src={captchaImageDataUrl}
-                        alt={t('imageCaptchaAlt')}
-                        width={140}
-                        height={48}
-                        className="h-full w-full"
-                      />
-                    ) : (
-                      <span className="text-xs font-medium text-slate-500">
-                        {captchaLoading ? t('continuing') : t('refreshImageCaptcha')}
-                      </span>
-                    )}
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs text-slate-500">{t('imageCaptchaHint')}</p>
-              </div>
-
-              <div>
                 <label htmlFor="verificationCode" className="mb-2 block text-sm font-semibold text-slate-900">
                   {t('verificationCode')}
                 </label>
@@ -336,7 +326,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   <button
                     type="button"
                     disabled={pendingAction !== null || resendSeconds > 0}
-                    onClick={() => void handleSendCode()}
+                    onClick={handleOpenCaptchaDialog}
                     className="h-12 shrink-0 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-black shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {pendingAction === 'send-code'
@@ -465,6 +455,18 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           </div>
         </section>
       </main>
+      <PhoneCaptchaDialog
+        open={captchaDialogOpen}
+        answer={captchaAnswer}
+        imageDataUrl={captchaImageDataUrl}
+        loading={captchaLoading}
+        submitting={pendingAction === 'send-code'}
+        error={captchaError}
+        onAnswerChange={setCaptchaAnswer}
+        onRefresh={() => void loadImageCaptcha(true)}
+        onClose={handleCloseCaptchaDialog}
+        onConfirm={() => void handleSendCode()}
+      />
     </div>
   )
 }
