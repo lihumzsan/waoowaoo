@@ -9,20 +9,20 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 ## 不变量
 
 - **CN-01 — 节点种类穷尽注册。** 每种 kind 的 identity、layout、renderer、Task-start materialization 与 conformance fixture 只由 `WORKSPACE_CANVAS_NODE_REGISTRY` 声明。新节点不得通过分散 switch 接入。
-- **CN-02 — canonical identity 只来自持久事实。** Creative 结果和媒体使用 `resourceId + revisionId`；可选 Chapter 使用其领域 identity；active Task 只按声明的稳定 target 提前物化同一节点。禁止使用数组位置、最近记录、Prompt、DOM、历史消息或旧 EditScript bridge 推导 identity。
+- **CN-02 — canonical identity 只来自持久事实。** Creative 结果和媒体只使用 `resourceId`；可选 Chapter 使用其领域 identity；active Task 只按声明的稳定 target 提前物化同一节点。禁止使用数组位置、最近记录、Prompt、DOM、历史消息或旧 EditScript bridge 推导 identity。
 - **CN-02A — Task 启动只提供物化与运行事实。** active Task target 已携带稳定资源 ID 时，projector 在正式 Query 到达前也必须物化同一节点。Task target 不得替代最终内容或领域成功事实。
-- **CN-02B — 节点物化单调。** canonical identity 一旦由持久 Resource 或 Task target 建立，不得因 Task 先于 Query 消失而撤销节点。交接只能由相同 owner Task identity 的正式 Revision 完成。
+- **CN-02B — 节点物化单调。** canonical identity 一旦由持久 Resource 或 Task target 建立，不得因 Task 先于 Query 消失而撤销节点。交接只能由相同 owner Task identity 的正式 Resource materialization 完成。
 - **CN-02C — 节点与动作不受流程解释。** 任一持久 CreativeResource 或 active Resource Task 都可按自身 canonical identity 物化；不得恢复 Workflow step、stage rank、`allowedOperationIds`、时长分支或推荐位置。卡片能力只来自节点 registry、Operation channel 与显式 scope/input。
 - **CN-02D — ResourceCard 优先复用专业节点。** `CreativeResource.origin(sourceType, sourceId)` 能与已有专业节点 identity 对齐时，Resource provenance、Lineage、Prompt 和模型信息必须附加到该专业节点，不得再生成一个重复通用节点；无法匹配专业 renderer 时才创建通用 text/image/audio/video ResourceCard。`schemaId` 表达专业语义，`mediaType` 只选择 fallback。
 - **CN-02E — 候选与采用不改变节点事实。** 同一 candidateSet 的多个 Resource 都保持独立 identity；选中项来自持久 Binding，未选候选仍可见且可继续被引用。renderer 不得通过数组位置、当前 head 或本地选中态覆盖 canonical Binding。
-- **CN-03 — 运行展示无裁决权。** Creative reasoning 与 Task progress 只在 Assistant/Task 运行视图展示，不能创建 Canvas 领域节点或写业务状态；正式 Resource Revision 才能接手结果。
+- **CN-03 — 运行展示无裁决权。** Creative reasoning 与 Task progress 只在 Assistant/Task 运行视图展示，不能创建 Canvas 领域节点或写业务状态；正式物化 Resource 才能接手结果。
 - **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据文案、有无字段、timer 或 refetch 推断 succeeded/failed。
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
 - **CN-06 — 视频只作为 Resource 或真实 Task 投影。** Canvas 不存在 Storyboard、Panel、VideoGroup、EditScript stage 或专用 `videoPlan` 流程节点。每个生成结果是独立 video Resource；需要表达 Chapter/镜头语义时由 schema 与真实 Lineage 附加，不能改变 lifecycle 或建立第二生成入口。
 - **CN-07 — 专业文字结果仍是 Resource。** 剧本、Story Canon、continuity analysis、asset/video prompt 与 music direction 通过 schema-aware Resource renderer 展示；不得恢复制作规划、镜头执行或风格预览专用阶段卡。
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 Binding role 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
-- **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputRevisionId → outputRevisionId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。
+- **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。
 
 ## 权威入口
 
@@ -44,7 +44,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 ## 历史回归
 
 - BGM/环境音曾以 planner stream、BgmDesign、MusicScore 和最终节点依次交接，任何 owner 字段或 Query 条件漂移都会制造空窗。当前音乐方向是普通 Creative Resource，生成音乐是普通 audio Resource，最终输出是普通 video Resource；同一 Task 的正式 Revision只接手自己的 presentation，不再跨阶段交接。
-- 旧结构化 accumulator 只存在组件内存，刷新后镜头计划与 BGM presentation 会形成空窗；后续即使补上 stream checkpoint，仍让 Canvas 解释了第二份制作状态。当前结构化 stream 与制作规划节点整体删除：Task 只展示运行事实，持久 Resource Revision 只通过正式 Query 与 `affectedResources` 接手内容，刷新不再依赖内存 delta 或阶段恢复。
+- 旧结构化 accumulator 只存在组件内存，刷新后镜头计划与 BGM presentation 会形成空窗；后续即使补上 stream checkpoint，仍让 Canvas 解释了第二份制作状态。当前结构化 stream 与制作规划节点整体删除：Task 只展示运行事实，持久 Resource 只通过正式 Query 与 `affectedResources` 接手内容，刷新不再依赖内存 delta 或阶段恢复。
 
 - Storyboard/Panel 曾把“文本镜头记录存在”误解释为“图片已成功”，18 个未提交图片 Task 的节点因此同时显示成功。首次修正只分离 Panel 与媒体 lifecycle，仍保留了不再需要的分镜图阶段。当前防线直接删除 Panel/图片节点与全部入口。
 - 多章节“全部”范围曾因 nullable 单实例 `editScript` 而不投影任何 VideoGroup，最终时间线却另外统计到视频；后续修复又依赖 `segmentIndex/gridMode`。当前每个 Chapter/媒体 Resource 都按自身 identity 投影，Canvas 不维护 episode 级 VideoGroup。

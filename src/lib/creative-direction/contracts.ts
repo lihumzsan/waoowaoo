@@ -22,7 +22,7 @@ export const creativeDirectionSchema = z.object({
 export type CreativeDirection = z.infer<typeof creativeDirectionSchema>
 
 export const injectedCreativeDirectionSchema = z.object({
-  revisionId: z.string().trim().min(1),
+  resourceId: z.string().trim().min(1),
   direction: creativeDirectionSchema,
 }).strict()
 

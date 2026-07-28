@@ -72,7 +72,6 @@ function styleCommitments(): ProjectAgentChoiceCommitment[] {
     operationId: 'adopt_creative_direction',
     input: {
       resourceId: 'resource-b',
-      revisionId: 'revision-b',
       fingerprint: 'fingerprint-b',
       expectedVersion: null,
     },
@@ -113,7 +112,7 @@ describe('assistant choice offer conformance', () => {
     const authored = {
       kind: 'confirm',
       title: 'Confirm the screenplay',
-      description: 'Confirm only this screenplay revision.',
+      description: 'Confirm only this screenplay Resource.',
       submitLabel: 'Confirm screenplay',
       commitment: null,
       reply: {
@@ -250,7 +249,7 @@ describe('assistant choice offer conformance', () => {
           meta: null,
           commitment: {
             operationId: 'adopt_creative_direction',
-            inputJson: '{"resourceId":"resource-1","revisionId":"revision-1"}',
+            inputJson: '{"resourceId":"resource-1"}',
           },
         }],
       },

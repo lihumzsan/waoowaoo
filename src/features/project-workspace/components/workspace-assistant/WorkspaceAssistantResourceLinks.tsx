@@ -16,7 +16,7 @@ export function WorkspaceAssistantResourceLinks(
       {props.data.resources.map((resource: CreativeResourceLinkView) => (
         resource.href ? (
           <a
-            key={`${resource.resourceId}:${resource.revisionId}`}
+            key={resource.resourceId}
             href={resource.href}
             target="_blank"
             rel="noopener noreferrer"
@@ -26,7 +26,7 @@ export function WorkspaceAssistantResourceLinks(
           </a>
         ) : (
           <span
-            key={`${resource.resourceId}:${resource.revisionId}`}
+            key={resource.resourceId}
             className="max-w-full break-words text-[var(--glass-text-secondary)] [overflow-wrap:anywhere]"
           >
             {resource.fileName}

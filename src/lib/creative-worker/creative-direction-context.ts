@@ -16,7 +16,7 @@ type CreativeDirectionReadClient = Pick<Prisma.TransactionClient, 'creativeResou
   | typeof prisma
 
 export interface AdoptedCreativeDirectionSnapshot {
-  readonly revisionId: string
+  readonly resourceId: string
   readonly direction: CreativeDirection
 }
 
@@ -38,7 +38,6 @@ export async function readAdoptedCreativeDirectionSnapshot(input: {
       userId: true,
       projectId: true,
       resourceId: true,
-      revisionId: true,
       resource: {
         select: {
           id: true,
@@ -50,12 +49,6 @@ export async function readAdoptedCreativeDirectionSnapshot(input: {
           status: true,
           mediaType: true,
           schemaId: true,
-        },
-      },
-      revision: {
-        select: {
-          id: true,
-          resourceId: true,
           contentJson: true,
         },
       },
@@ -66,8 +59,6 @@ export async function readAdoptedCreativeDirectionSnapshot(input: {
     binding.userId !== input.userId
     || binding.projectId !== input.projectId
     || binding.resourceId !== binding.resource.id
-    || binding.revisionId !== binding.revision.id
-    || binding.revision.resourceId !== binding.resource.id
     || binding.resource.userId !== input.userId
     || binding.resource.projectId !== input.projectId
     || binding.resource.episodeId !== null
@@ -76,13 +67,13 @@ export async function readAdoptedCreativeDirectionSnapshot(input: {
     || binding.resource.status !== 'ready'
     || binding.resource.mediaType !== 'text'
     || binding.resource.schemaId !== CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION
-    || binding.revision.contentJson === null
+    || binding.resource.contentJson === null
   ) {
     throw new Error('CREATIVE_DIRECTION_ADOPTED_BINDING_INVALID')
   }
   return {
-    revisionId: binding.revision.id,
-    direction: creativeDirectionSchema.parse(binding.revision.contentJson),
+    resourceId: binding.resource.id,
+    direction: creativeDirectionSchema.parse(binding.resource.contentJson),
   }
 }
 
@@ -95,7 +86,7 @@ export function projectAdoptedCreativeDirection(input: {
   ).injectCreativeDirection
   if (!input.snapshot || !injectCreativeDirection) return null
   return {
-    revisionId: input.snapshot.revisionId,
+    resourceId: input.snapshot.resourceId,
     direction: input.snapshot.direction,
   }
 }

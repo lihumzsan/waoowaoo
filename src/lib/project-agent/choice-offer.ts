@@ -465,8 +465,8 @@ export function buildProjectAgentChoiceCardFromAuthoring(params: {
   }
 }
 
-const resourceRevisionRequestSchema = z.object({
-  revisionId: z.string().trim().min(1),
+const resourceRequestSchema = z.object({
+  resourceId: z.string().trim().min(1),
 }).strict()
 
 export const projectAgentChoiceSubjectRequestSchema = z.discriminatedUnion('kind', [
@@ -478,9 +478,9 @@ export const projectAgentChoiceSubjectRequestSchema = z.discriminatedUnion('kind
       .describe('Exact completed Task whose current persisted result is being reviewed.'),
   }).strict().describe('Bind the Choice to one exact completed Task result.'),
   z.object({
-    kind: z.literal('resource_revisions'),
-    revisions: z.array(resourceRevisionRequestSchema).min(1).max(24),
-  }).strict().describe('Bind the Choice to exact immutable Resource revisions.'),
+    kind: z.literal('resources'),
+    resources: z.array(resourceRequestSchema).min(1).max(24),
+  }).strict().describe('Bind the Choice to exact immutable Resources.'),
 ])
 
 export type ProjectAgentChoiceSubjectRequest = z.infer<typeof projectAgentChoiceSubjectRequestSchema>
@@ -498,9 +498,9 @@ const projectAgentChoiceSubjectSchema = z.discriminatedUnion('kind', [
     fingerprint: fingerprintSchema,
   }).strict(),
   z.object({
-    kind: z.literal('resource_revisions'),
-    revisions: z.array(z.object({
-      revisionId: z.string().trim().min(1),
+    kind: z.literal('resources'),
+    resources: z.array(z.object({
+      resourceId: z.string().trim().min(1),
     }).strict()).min(1).max(24),
     fingerprint: fingerprintSchema,
   }).strict(),
@@ -582,14 +582,14 @@ function cardDefinitionFromPersistedCard(
   return projectAgentChoiceCardDefinitionSchema.parse(definition)
 }
 
-function assertUniqueResourceRevisionRequests(
-  revisions: readonly { revisionId: string }[],
+function assertUniqueResourceRequests(
+  resources: readonly { resourceId: string }[],
 ): void {
   const identities = new Set<string>()
-  for (const revision of revisions) {
-    const identity = revision.revisionId
+  for (const resource of resources) {
+    const identity = resource.resourceId
     if (identities.has(identity)) {
-      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_DUPLICATE:${identity}`)
+      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_DUPLICATE:${identity}`)
     }
     identities.add(identity)
   }
@@ -626,51 +626,45 @@ async function resolveTaskResultSubject(params: {
   }
 }
 
-async function resolveResourceRevisionsSubject(params: {
+async function resolveResourcesSubject(params: {
   tx: Prisma.TransactionClient
   projectId: string
   userId: string
-  revisions: readonly { revisionId: string }[]
-}): Promise<Extract<ProjectAgentChoiceSubject, { kind: 'resource_revisions' }>> {
-  assertUniqueResourceRevisionRequests(params.revisions)
-  const revisionIds = params.revisions.map((revision) => revision.revisionId)
-  const records = await params.tx.creativeResourceRevision.findMany({
+  resources: readonly { resourceId: string }[]
+}): Promise<Extract<ProjectAgentChoiceSubject, { kind: 'resources' }>> {
+  assertUniqueResourceRequests(params.resources)
+  const resourceIds = params.resources.map((resource) => resource.resourceId)
+  const records = await params.tx.creativeResource.findMany({
     where: {
-      id: { in: revisionIds },
-      resource: {
-        userId: params.userId,
-        status: 'ready',
-        OR: [{ projectId: params.projectId }, { projectId: null }],
-      },
+      id: { in: resourceIds },
+      userId: params.userId,
+      status: 'ready',
+      materializedAt: { not: null },
+      OR: [{ projectId: params.projectId }, { projectId: null }],
     },
     select: {
       id: true,
-      resourceId: true,
-      resource: {
-        select: {
-          projectId: true,
-          episodeId: true,
-          mediaType: true,
-          schemaId: true,
-          status: true,
-        },
-      },
+      projectId: true,
+      episodeId: true,
+      mediaType: true,
+      schemaId: true,
+      status: true,
     },
   })
   const byId = new Map(records.map((record) => [record.id, record]))
-  const ordered = params.revisions.map((requested) => {
-    const record = byId.get(requested.revisionId)
+  const ordered = params.resources.map((requested) => {
+    const record = byId.get(requested.resourceId)
     if (!record) {
-      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_REVISION_MISSING:${requested.revisionId}`)
+      throw new Error(`PROJECT_AGENT_CHOICE_RESOURCE_MISSING:${requested.resourceId}`)
     }
     return record
   })
   return {
-    kind: 'resource_revisions',
-    revisions: ordered.map((record) => ({
-      revisionId: record.id,
+    kind: 'resources',
+    resources: ordered.map((record) => ({
+      resourceId: record.id,
     })),
-    fingerprint: fingerprintProjectAgentChoiceSubject('resource_revisions', ordered),
+    fingerprint: fingerprintProjectAgentChoiceSubject('resources', ordered),
   }
 }
 
@@ -699,11 +693,11 @@ export async function resolveProjectAgentChoiceSubject(params: {
       taskId: params.request.taskId,
     })
   }
-  return await resolveResourceRevisionsSubject({
+  return await resolveResourcesSubject({
     tx: params.tx,
     projectId: params.projectId,
     userId: params.userId,
-    revisions: params.request.revisions,
+    resources: params.request.resources,
   })
 }
 
@@ -810,9 +804,9 @@ export async function assertProjectAgentChoiceOfferCurrent(params: {
     : params.offer.subject.kind === 'task_result'
       ? { kind: 'task_result', taskId: params.offer.subject.taskId }
       : {
-          kind: 'resource_revisions',
-          revisions: params.offer.subject.revisions.map((revision) => ({
-            revisionId: revision.revisionId,
+          kind: 'resources',
+          resources: params.offer.subject.resources.map((resource) => ({
+            resourceId: resource.resourceId,
           })),
         }
   const current = await resolveProjectAgentChoiceSubject({

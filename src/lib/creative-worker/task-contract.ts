@@ -114,10 +114,10 @@ const creativeWorkChapterBatchBaseShape = {
     .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
     .describe('Shared delivery, safety, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
-    revisionId: z.string().trim().min(1),
+    resourceId: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
-    .describe('Exact non-Direction Resource revisions the Context Compiler may copy into every relevant Chapter packet. Adopted Creative Direction is read once and injected only by the central Task input compiler.'),
+    .describe('Exact non-Direction Resources the Context Compiler may copy into every relevant Chapter packet. Adopted Creative Direction is read once and injected only by the central Task input compiler.'),
 } as const
 
 const creativeWorkVideoChapterBatchInputSchema = z.object({
@@ -194,7 +194,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v9' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v10' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -232,7 +232,6 @@ export const creativeWorkTaskPayloadSchema = z.object({
 
 const creativeWorkMaterializedResourceSchema = z.object({
   resourceId: z.string().trim().min(1),
-  revisionId: z.string().trim().min(1),
   schemaId: z.string().trim().min(1),
   mediaType: z.enum(['text', 'image', 'audio', 'video']),
   name: z.string().trim().min(1),
@@ -247,7 +246,7 @@ const creativeWorkContinuationProjectionSchema = z.object({
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
   summary: z.string().trim().min(1).max(4_000),
   resources: creativeWorkMaterializedResourcesSchema.optional()
-    .describe('Exact immutable Resource revisions added by the terminal materializer. Absent before materialization.'),
+    .describe('Exact immutable Resources added by the terminal materializer. Absent before materialization.'),
 }).strict()
 
 export const creativeWorkTaskResultSchema = z.object({
@@ -258,7 +257,7 @@ export const creativeWorkTaskResultSchema = z.object({
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
   creativeWorkResult: creativeWorkerResultSchema,
   resources: creativeWorkMaterializedResourcesSchema.optional()
-    .describe('Exact immutable Resource revisions materialized atomically from this completed result. Absent when this output kind has no persistent Resource projection.'),
+    .describe('Exact immutable Resources materialized atomically from this completed result. Absent when this output kind has no persistent Resource projection.'),
 }).strict().superRefine((result, context) => {
   const mismatches: Array<{ readonly path: readonly PropertyKey[]; readonly code: string }> = []
   if (result.continuationProjection.requestKey !== result.requestKey) {

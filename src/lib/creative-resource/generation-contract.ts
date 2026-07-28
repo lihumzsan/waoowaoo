@@ -8,8 +8,8 @@ import {
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
 
 export const creativeResourceInputRefSchema = z.object({
-  revisionId: z.string().trim().min(1)
-    .describe('Globally unique immutable Resource Revision identity. The server resolves its Resource, schema, owner, and scope.'),
+  resourceId: z.string().trim().min(1)
+    .describe('Globally unique immutable Resource identity. The server resolves its schema, owner, scope, and content.'),
   role: z.string().trim().min(1).optional()
     .describe('Optional semantic role of this reference in the new output, such as character, location, or source_video.'),
 }).strict()
@@ -34,7 +34,7 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
     modelKey: z.string().trim().min(1),
     inputHash: z.string().trim().min(1),
     inputs: z.array(z.object({
-      revisionId: z.string().trim().min(1),
+      resourceId: z.string().trim().min(1),
       role: z.string().trim().min(1),
       position: z.number().int().min(0),
     }).strict()),
@@ -56,9 +56,6 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
           })
         }
       }),
-    // Frozen payloads created before video conditioning existed carry no
-    // videoInputPositions; absent means "no video reference", not a second
-    // interpretation, so retry replays them unchanged.
     videoInputPositions: z.array(z.number().int().min(0)).max(1)
       .superRefine((positions, context) => {
         if (new Set(positions).size !== positions.length) {
@@ -67,8 +64,7 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
             message: 'videoInputPositions must contain unique Resource input positions.',
           })
         }
-      })
-      .default([]),
+      }),
     generationOptions: creativeResourceGenerationOptionsSchema,
     executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),

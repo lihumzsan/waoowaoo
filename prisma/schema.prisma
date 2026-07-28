@@ -170,46 +170,43 @@ model ProjectEditChapter {
 }
 
 model ProjectEpisodeSourceDocument {
-  id                String               @id @default(uuid())
-  episodeId         String
-  normalizedText    String               @db.LongText
-  checksum          String               @db.VarChar(64)
-  version           Int
-  sourceResourceId  String               @db.VarChar(191)
-  sourceRevisionId  String               @db.VarChar(191)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @default(now()) @updatedAt
-  episode           ProjectEpisode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  storyCanons       ProjectStoryCanon[]
-  chapters          ProjectEditChapter[]
+  id               String               @id @default(uuid())
+  episodeId        String
+  normalizedText   String               @db.LongText
+  checksum         String               @db.VarChar(64)
+  version          Int
+  sourceResourceId String               @db.VarChar(32)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @default(now()) @updatedAt
+  episode          ProjectEpisode       @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  storyCanons      ProjectStoryCanon[]
+  chapters         ProjectEditChapter[]
 
   @@unique([episodeId, version])
-  @@unique([episodeId, sourceRevisionId])
+  @@unique([episodeId, sourceResourceId])
   @@index([episodeId])
   @@index([sourceResourceId])
   @@map("project_episode_source_documents")
 }
 
 model ProjectStoryCanon {
-  id                 String                       @id @default(uuid())
-  episodeId          String                       @unique
-  sourceDocumentId   String
-  storyCanonJson     Json
-  beatSheetJson      Json
-  ledgerJson         Json
-  emotionalCurveJson Json
-  storyCanonResourceId String                       @db.VarChar(191)
-  storyCanonRevisionId String                       @db.VarChar(191)
-  version            Int                          @default(1)
-  createdAt          DateTime                     @default(now())
-  updatedAt          DateTime                     @default(now()) @updatedAt
-  episode            ProjectEpisode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  sourceDocument     ProjectEpisodeSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  id                   String                       @id @default(uuid())
+  episodeId            String                       @unique
+  sourceDocumentId     String
+  storyCanonJson       Json
+  beatSheetJson        Json
+  ledgerJson           Json
+  emotionalCurveJson   Json
+  storyCanonResourceId String                       @db.VarChar(32)
+  version              Int                          @default(1)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @default(now()) @updatedAt
+  episode              ProjectEpisode               @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sourceDocument       ProjectEpisodeSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
 
   @@index([episodeId])
   @@index([sourceDocumentId])
   @@index([storyCanonResourceId])
-  @@index([storyCanonRevisionId])
   @@map("project_story_canons")
 }
 
@@ -839,14 +836,14 @@ model Task {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  user                 User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentTask           Task?                      @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
-  childTasks           Task[]                     @relation("TaskChildren")
+  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentTask           Task?                     @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks           Task[]                    @relation("TaskChildren")
   events               TaskEvent[]
   executionCheckpoints TaskExecutionCheckpoint[]
-  approvalGrant        ApprovalGrant?             @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
-  operationExecution   OperationExecution?        @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
-  creativeRevisions    CreativeResourceRevision[]
+  approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  creativeResources    CreativeResource[]
 
   @@unique([operationExecutionId, operationPlanTaskId])
   @@index([status])
@@ -919,25 +916,25 @@ model ApprovalGrant {
 }
 
 model OperationExecution {
-  id                String                     @id @default(uuid())
+  id                String                @id @default(uuid())
   userId            String
-  scopeKind         String                     @db.VarChar(32)
-  scopeId           String                     @db.VarChar(191)
+  scopeKind         String                @db.VarChar(32)
+  scopeId           String                @db.VarChar(191)
   projectId         String?
   episodeId         String?
-  operationId       String                     @db.VarChar(128)
+  operationId       String                @db.VarChar(128)
   planSnapshotId    String
   approvalGrantId   String
-  requestId         String                     @db.VarChar(128)
-  status            String                     @db.VarChar(32)
+  requestId         String                @db.VarChar(128)
+  status            String                @db.VarChar(32)
   output            Json?
   completedAt       DateTime?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  planSnapshot      OperationPlanSnapshot      @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant     ApprovalGrant              @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  planSnapshot      OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  approvalGrant     ApprovalGrant         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   tasks             Task[]
-  creativeRevisions CreativeResourceRevision[]
+  creativeResources CreativeResource[]
 
   @@unique([approvalGrantId])
   @@unique([planSnapshotId, requestId])
@@ -1142,60 +1139,30 @@ model MediaObject {
   globalCharacterAppearancePreviousImgs GlobalCharacterAppearance[] @relation("GlobalCharacterAppearancePreviousImageMedia")
   globalLocationImageImages             GlobalLocationImage[]       @relation("GlobalLocationImageMedia")
   globalLocationImagePreviousImages     GlobalLocationImage[]       @relation("GlobalLocationImagePreviousImageMedia")
-  creativeResourceRevisions             CreativeResourceRevision[]
+  creativeResources                     CreativeResource[]
 
   @@index([createdAt])
   @@map("media_objects")
 }
 
 model CreativeResource {
-  id                  String                     @id @default(uuid())
-  userId              String
-  projectId           String?
-  episodeId           String?
-  scopeKind           String                     @db.VarChar(32)
-  scopeId             String                     @db.VarChar(191)
-  mediaType           String                     @db.VarChar(16)
-  schemaId            String                     @db.VarChar(96)
-  name                String                     @db.VarChar(191)
-  status              String                     @default("pending") @db.VarChar(32)
-  originKey           String                     @unique(map: "creative_resources_origin_key") @db.VarChar(191)
-  sourceType          String?                    @db.VarChar(96)
-  sourceId            String?                    @db.VarChar(191)
-  candidateSetId      String?                    @db.VarChar(191)
-  candidateIndex      Int?
-  headRevisionId      String?                    @unique(map: "creative_resources_head_revision_key")
-  errorCode           String?                    @db.VarChar(128)
-  errorMessage        String?                    @db.Text
-  creativeData        Json?
-  creativeDataVersion Int                        @default(0)
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
-  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project             Project?                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode             ProjectEpisode?            @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  revisions           CreativeResourceRevision[] @relation("CreativeResourceRevisions")
-  headRevision        CreativeResourceRevision?  @relation("CreativeResourceHeadRevision", fields: [headRevisionId], references: [id], onDelete: SetNull)
-  bindings            CreativeResourceBinding[]
-
-  @@unique([sourceType, sourceId], map: "creative_resources_source_key")
-  @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
-  @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
-  @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
-  @@index([candidateSetId, candidateIndex], map: "creative_resources_candidate_idx")
-  @@map("creative_resources")
-}
-
-model CreativeResourceRevision {
-  id                   String                    @id @default(uuid())
-  resourceId           String
-  revision             Int
+  id                   String                    @id @db.VarChar(32)
+  userId               String
+  projectId            String?
+  episodeId            String?
+  scopeKind            String                    @db.VarChar(32)
+  scopeId              String                    @db.VarChar(191)
+  mediaType            String                    @db.VarChar(16)
+  schemaId             String                    @db.VarChar(96)
+  name                 String                    @db.VarChar(191)
+  status               String                    @default("pending") @db.VarChar(32)
+  sourceType           String?                   @db.VarChar(96)
+  sourceId             String?                   @db.VarChar(191)
+  candidateSetId       String?                   @db.VarChar(32)
+  candidateIndex       Int?
   contentText          String?                   @db.LongText
   contentJson          Json?
   mediaId              String?
-  sourceType           String?                   @db.VarChar(96)
-  sourceId             String?                   @db.VarChar(191)
-  sourceRevision       String?                   @db.VarChar(96)
   prompt               String?                   @db.LongText
   modelKey             String?                   @db.VarChar(191)
   generationOptions    Json?
@@ -1205,9 +1172,16 @@ model CreativeResourceRevision {
   operationExecutionId String?
   executionSegmentId   String?                   @db.VarChar(191)
   toolCallId           String?                   @db.VarChar(191)
+  errorCode            String?                   @db.VarChar(128)
+  errorMessage         String?                   @db.Text
+  creativeData         Json?
+  creativeDataVersion  Int                       @default(0)
+  materializedAt       DateTime?
   createdAt            DateTime                  @default(now())
-  resource             CreativeResource          @relation("CreativeResourceRevisions", fields: [resourceId], references: [id], onDelete: Cascade)
-  headedResource       CreativeResource?         @relation("CreativeResourceHeadRevision")
+  updatedAt            DateTime                  @updatedAt
+  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project              Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode              ProjectEpisode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   media                MediaObject?              @relation(fields: [mediaId], references: [id], onDelete: Restrict)
   task                 Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict)
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
@@ -1215,57 +1189,56 @@ model CreativeResourceRevision {
   outputLineage        CreativeResourceLineage[] @relation("CreativeResourceLineageOutput")
   bindings             CreativeResourceBinding[]
 
-  @@unique([resourceId, revision], map: "creative_revisions_resource_revision_key")
-  @@unique([taskId, resourceId], map: "creative_revisions_task_resource_key")
-  @@unique([sourceType, sourceId, sourceRevision], map: "creative_revisions_source_key")
-  @@index([mediaId], map: "creative_revisions_media_idx")
-  @@index([taskId], map: "creative_revisions_task_idx")
-  @@index([operationExecutionId], map: "creative_revisions_execution_idx")
-  @@index([operationId, inputHash], map: "creative_revisions_operation_input_idx")
-  @@map("creative_resource_revisions")
+  @@unique([sourceType, sourceId], map: "creative_resources_source_key")
+  @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
+  @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
+  @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
+  @@index([candidateSetId, candidateIndex], map: "creative_resources_candidate_idx")
+  @@index([mediaId], map: "creative_resources_media_idx")
+  @@index([taskId], map: "creative_resources_task_idx")
+  @@index([operationExecutionId], map: "creative_resources_execution_idx")
+  @@index([operationId, inputHash], map: "creative_resources_operation_input_idx")
+  @@map("creative_resources")
 }
 
 model CreativeResourceLineage {
-  id               String                   @id @default(uuid())
-  outputRevisionId String
-  inputRevisionId  String
-  role             String                   @db.VarChar(64)
+  id               String           @id @default(uuid())
+  outputResourceId String           @db.VarChar(32)
+  inputResourceId  String           @db.VarChar(32)
+  role             String           @db.VarChar(64)
   position         Int
-  createdAt        DateTime                 @default(now())
-  outputRevision   CreativeResourceRevision @relation("CreativeResourceLineageOutput", fields: [outputRevisionId], references: [id], onDelete: Cascade)
-  inputRevision    CreativeResourceRevision @relation("CreativeResourceLineageInput", fields: [inputRevisionId], references: [id], onDelete: Restrict)
+  createdAt        DateTime         @default(now())
+  outputResource   CreativeResource @relation("CreativeResourceLineageOutput", fields: [outputResourceId], references: [id], onDelete: Cascade)
+  inputResource    CreativeResource @relation("CreativeResourceLineageInput", fields: [inputResourceId], references: [id], onDelete: Restrict)
 
-  @@unique([outputRevisionId, role, position], map: "creative_lineage_output_role_position_key")
-  @@index([inputRevisionId], map: "creative_lineage_input_idx")
+  @@unique([outputResourceId, role, position], map: "creative_lineage_output_role_position_key")
+  @@index([inputResourceId], map: "creative_lineage_input_idx")
   @@map("creative_resource_lineage")
 }
 
 model CreativeResourceBinding {
-  id         String                   @id @default(uuid())
+  id         String           @id @default(uuid())
   userId     String
   projectId  String?
   episodeId  String?
-  scopeKind  String                   @db.VarChar(32)
-  scopeId    String                   @db.VarChar(191)
-  role       String                   @db.VarChar(64)
-  slotKey    String                   @db.VarChar(128)
-  resourceId String
-  revisionId String
-  source     String                   @db.VarChar(64)
-  version    Int                      @default(0)
-  createdAt  DateTime                 @default(now())
-  updatedAt  DateTime                 @updatedAt
-  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project    Project?                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode    ProjectEpisode?          @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  resource   CreativeResource         @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  revision   CreativeResourceRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  scopeKind  String           @db.VarChar(32)
+  scopeId    String           @db.VarChar(191)
+  role       String           @db.VarChar(64)
+  slotKey    String           @db.VarChar(128)
+  resourceId String           @db.VarChar(32)
+  source     String           @db.VarChar(64)
+  version    Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode    ProjectEpisode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  resource   CreativeResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
   @@unique([scopeKind, scopeId, role, slotKey], map: "creative_bindings_scope_role_slot_key")
   @@index([userId, scopeKind, scopeId], map: "creative_bindings_user_scope_idx")
   @@index([projectId, episodeId], map: "creative_bindings_project_episode_idx")
   @@index([resourceId], map: "creative_bindings_resource_idx")
-  @@index([revisionId], map: "creative_bindings_revision_idx")
   @@map("creative_resource_bindings")
 }
 

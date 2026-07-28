@@ -135,7 +135,7 @@ describe('project agent operation registry', () => {
     expect(registry.get_project_snapshot.summary).toContain(
       'only when the injected project_state_snapshot and conversation context are insufficient',
     )
-    expect(registry.get_project_context.summary).toContain('exact adopted screenplay and Story Canon revisions')
+    expect(registry.get_project_context.summary).toContain('exact adopted screenplay and Story Canon Resources')
     expect(registry.get_project_context.summary).toContain('optional Chapter context units')
     expect(registry.get_project_context.summary).toContain('never infer current adoption')
   })

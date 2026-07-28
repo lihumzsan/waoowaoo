@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { PLATFORM_VOICE_DESIGN_MODEL_KEY } from '@/lib/ai-registry/voice-design-contract'
 import { CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE } from '@/lib/creative-resource/contracts'
+import { buildCreativeResourceId } from '@/lib/creative-resource/identity'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import { materializeCreativeResourceTaskTerminalInTransaction } from '@/lib/creative-resource/task-materializer'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -39,6 +40,7 @@ function buildVoicePayload(resourceId: string, binding?: VoiceBindingRequest) {
       inputs: [],
       imageInputPositions: [],
       audioInputPositions: [],
+      videoInputPositions: [],
       generationOptions: { language: 'English' },
       executionSegmentId: null,
       toolCallId: null,
@@ -64,7 +66,11 @@ async function reserveVoiceResource(input: {
   readonly projectId: string
   readonly name: string
 }) {
-  const id = randomUUID()
+  const id = buildCreativeResourceId({
+    operationId: 'generate_voice',
+    requestId: randomUUID(),
+    candidateIndex: 0,
+  })
   await prisma.creativeResource.create({
     data: {
       id,
@@ -77,7 +83,6 @@ async function reserveVoiceResource(input: {
       schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
       name: input.name,
       status: 'pending',
-      originKey: `voice-test:${id}`,
     },
   })
   return id
@@ -142,7 +147,7 @@ describe('Creative Resource character voice lifecycle', () => {
     await resetSystemState()
   })
 
-  it('preserves a late voice revision without overwriting a newer binding and only deletes unbound voices', async () => {
+  it('preserves a late voice Resource without overwriting a newer binding and only deletes unbound voices', async () => {
     const user = await createFixtureUser()
     const project = await createFixtureProject(user.id)
     const character = await prisma.projectCharacter.create({
@@ -186,7 +191,7 @@ describe('Creative Resource character voice lifecycle', () => {
       resourceId: manualId,
       payload: buildVoicePayload(manualId),
     })
-    const manualRevisionId = String(manual.result.revisionId)
+    const manualResourceId = String(manual.result.resourceId)
     const newerBinding = await prisma.$transaction(async (tx) =>
       await bindCharacterVoiceInTransaction(tx, {
         userId: user.id,
@@ -194,8 +199,7 @@ describe('Creative Resource character voice lifecycle', () => {
         characterId: character.id,
         selection: {
           kind: 'voice',
-          resourceId: manualId,
-          revisionId: manualRevisionId,
+          resourceId: manualResourceId,
         },
       }))
     expect(newerBinding).toMatchObject({ resourceId: manualId, version: 1 })

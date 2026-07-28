@@ -7,34 +7,34 @@ import {
 } from './tool-input-schema.fixture'
 
 describe('tool input schema domain conformance', () => {
-  it('accepts exact Resource revisions for current Story Canon adoption', () => {
+  it('accepts exact Resources for current Story Canon adoption', () => {
     const operation = createProjectAgentOperationRegistry().adopt_story_canon
 
     expect(operation.inputSchema.safeParse({
       screenplay: {
-        revisionId: 'screenplay-revision-1',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
       },
       storyCanon: {
-        revisionId: 'story-canon-revision-1',
+        resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB',
       },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation.inputSchema.safeParse({
       storyCanon: {
-        revisionId: 'story-canon-revision-1',
+        resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB',
       },
     }).success).toBe(false)
   })
 
-  it('requires exact screenplay and chapter-plan revisions when adopting Chapter units', () => {
+  it('requires exact screenplay and chapter-plan Resources when adopting Chapter units', () => {
     const operation = createProjectAgentOperationRegistry().adopt_chapters
 
     expect(operation.inputSchema.safeParse({
       screenplay: {
-        revisionId: 'screenplay-revision-1',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
       },
       chapterPlan: {
-        revisionId: 'chapter-plan-revision-1',
+        resourceId: 'r_CCCCCCCCCCCCCCCCCCCCCC',
       },
     }).success).toBe(true)
     expect(operation.inputSchema.safeParse({}).success).toBe(false)

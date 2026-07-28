@@ -33,29 +33,32 @@ export async function handleCreativeResourceVideoMergeTask(job: Job<TaskJobData>
   if (payload.resource.resourceId !== job.data.targetId) {
     throw new Error(`CREATIVE_RESOURCE_VIDEO_MERGE_TARGET_MISMATCH:${job.data.taskId}`)
   }
-  const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: payload.resource.inputs.map((input) => input.revisionId) } },
+  const resources = await prisma.creativeResource.findMany({
+    where: { id: { in: payload.resource.inputs.map((input) => input.resourceId) } },
     select: {
       id: true,
       media: { select: { storageKey: true } },
-      resource: { select: { userId: true, projectId: true, mediaType: true, status: true } },
+      userId: true,
+      projectId: true,
+      mediaType: true,
+      status: true,
     },
   })
-  const revisionById = new Map(revisions.map((revision) => [revision.id, revision]))
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
   const resolveInputStorageKey = (input: (typeof payload.resource.inputs)[number]): string => {
-    const revision = revisionById.get(input.revisionId)
-    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${input.revisionId}`)
+    const resource = resourceById.get(input.resourceId)
+    if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${input.resourceId}`)
     const expectedMediaType = input.role === 'bgm_audio' ? 'audio' : 'video'
     if (
-      revision.resource.userId !== job.data.userId
-      || revision.resource.status !== 'ready'
-      || revision.resource.mediaType !== expectedMediaType
-      || (revision.resource.projectId && revision.resource.projectId !== job.data.projectId)
-      || !revision.media?.storageKey
+      resource.userId !== job.data.userId
+      || resource.status !== 'ready'
+      || resource.mediaType !== expectedMediaType
+      || (resource.projectId && resource.projectId !== job.data.projectId)
+      || !resource.media?.storageKey
     ) {
-      throw new Error(`CREATIVE_RESOURCE_VIDEO_MERGE_INPUT_CHANGED:${input.revisionId}`)
+      throw new Error(`CREATIVE_RESOURCE_VIDEO_MERGE_INPUT_CHANGED:${input.resourceId}`)
     }
-    return revision.media.storageKey
+    return resource.media.storageKey
   }
   const ordered = payload.resource.inputs
     .filter((input) => input.role === 'source_video')

@@ -22,7 +22,7 @@ npm run architecture:impact -- --changed
 | --- | --- | --- |
 | AI Prompt、Prompt registry、结构化模型输出字段或 raw output 协议 | [AI Prompt 与模型输出契约](modules/ai-prompt-output-contract.md) | prompt catalog、生产 raw schema、parser/normalizer、stream adapter |
 | 图片、视频、音乐的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
-| 创作产物身份、Revision、Lineage、Binding、通用媒体卡片 | [创作 Resource、Revision 与 Lineage](modules/creative-resource.md) | creative-resource persistence、Task terminal materializer、Resource View |
+| 创作产物身份、Lineage、Binding、通用媒体卡片 | [创作 Resource 与 Lineage](modules/creative-resource.md) | creative-resource persistence、Task terminal materializer、Resource View |
 | 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection、motion presence transition |
 | 章节核心剪辑计划、镜头结构、章节 ledger 事实投影 | [章节核心剪辑规划](modules/chapter-planning.md) | chapter input、strict output schema、ledger facts projector |
 | 整集 BGM 规划、候选与最终混音 | [BGM 规划、生成与最终混音](modules/audio-production.md) | BgmDesign strict contract、candidate QC、design/timeline fence、final mix |

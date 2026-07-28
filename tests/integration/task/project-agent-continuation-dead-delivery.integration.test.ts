@@ -44,7 +44,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
     data: {
       status: TASK_STATUS.COMPLETED,
       progress: 100,
-      result: { resources: [] },
+      result: { continuationProjection: { resources: [] } },
       finishedAt: new Date(),
     },
   })

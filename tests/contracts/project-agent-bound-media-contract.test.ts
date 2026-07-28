@@ -137,23 +137,36 @@ describe('project agent bound media contract conformance', () => {
     const legal = {
       request: {
         ...common,
-        imageReferences: [{ revisionId: 'image-revision', role: 'reference' }],
-        audioReferences: [{ revisionId: 'audio-revision', role: 'reference' }],
+        imageReferences: [{ resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA', role: 'reference' }],
+        audioReferences: [{ resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB', role: 'reference' }],
       },
     }
     expect(validate(legal), JSON.stringify(validate.errors)).toBe(true)
     expect(validate({
       request: {
-        ...common,
-        imageReferences: null,
-        audioReferences: [{ revisionId: 'audio-revision', role: 'reference' }],
+        kind: 'prompt_set',
+        resourceId: 'r_CCCCCCCCCCCCCCCCCCCCCC',
+      },
+    }), JSON.stringify(validate.errors)).toBe(true)
+    expect(validate({
+      request: {
+        kind: 'prompt_set',
+        resourceId: 'r_CCCCCCCCCCCCCCCCCCCCCC',
+        prompt: 'Do not duplicate the Prompt Set payload.',
       },
     })).toBe(false)
     expect(validate({
       request: {
         ...common,
-        imageReferences: [{ revisionId: 'image-revision', role: 'first_frame' }],
-        audioReferences: [{ revisionId: 'audio-revision', role: 'reference' }],
+        imageReferences: null,
+        audioReferences: [{ resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB', role: 'reference' }],
+      },
+    })).toBe(false)
+    expect(validate({
+      request: {
+        ...common,
+        imageReferences: [{ resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA', role: 'first_frame' }],
+        audioReferences: [{ resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB', role: 'reference' }],
       },
     })).toBe(false)
     expect(validate({

@@ -9,7 +9,7 @@ import { isCreativeResourceMediaType } from './contracts'
 
 type CreativeResourceLinkReadClient = Pick<
   Prisma.TransactionClient,
-  'creativeResourceRevision'
+  'creativeResource'
 > | typeof prisma
 
 const FILE_EXTENSION_BY_MIME_TYPE: Readonly<Record<string, string>> = {
@@ -67,11 +67,6 @@ export function readCreativeResourceMaterializedRefs(
         'resourceId',
         `CREATIVE_RESOURCE_ASSISTANT_RESULT_RESOURCE_ID_MISSING:${String(index)}`,
       ),
-      revisionId: readRequiredString(
-        resource,
-        'revisionId',
-        `CREATIVE_RESOURCE_ASSISTANT_RESULT_REVISION_ID_MISSING:${String(index)}`,
-      ),
     }
   })
   if (refs.length === 0) throw new Error('CREATIVE_RESOURCE_ASSISTANT_RESULT_RESOURCES_EMPTY')
@@ -105,64 +100,51 @@ export async function readProjectCreativeResourceLinkViews(input: {
   readonly client?: CreativeResourceLinkReadClient
 }): Promise<CreativeResourceLinkView[]> {
   const orderedRefs = input.refs.filter((ref, index, refs) => (
-    refs.findIndex((candidate) => (
-      candidate.resourceId === ref.resourceId
-      && candidate.revisionId === ref.revisionId
-    )) === index
+    refs.findIndex((candidate) => candidate.resourceId === ref.resourceId) === index
   ))
   if (orderedRefs.length === 0) return []
   const client = input.client ?? prisma
-  const rows = await client.creativeResourceRevision.findMany({
+  const rows = await client.creativeResource.findMany({
     where: {
-      id: { in: orderedRefs.map((ref) => ref.revisionId) },
-      resource: {
-        userId: input.userId,
-        status: 'ready',
-        OR: [
-          { projectId: input.projectId },
-          { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
-        ],
-      },
+      id: { in: orderedRefs.map((ref) => ref.resourceId) },
+      userId: input.userId,
+      status: 'ready',
+      OR: [
+        { projectId: input.projectId },
+        { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+      ],
     },
     select: {
       id: true,
-      resourceId: true,
+      name: true,
+      mediaType: true,
+      schemaId: true,
       media: {
         select: {
           publicId: true,
           mimeType: true,
         },
       },
-      resource: {
-        select: {
-          name: true,
-          mediaType: true,
-          schemaId: true,
-        },
-      },
     },
   })
-  const rowByRevisionId = new Map(rows.map((row) => [row.id, row]))
+  const rowByResourceId = new Map(rows.map((row) => [row.id, row]))
   return orderedRefs.map((ref) => {
-    const row = rowByRevisionId.get(ref.revisionId)
-    if (!row || row.resourceId !== ref.resourceId) {
-      throw new Error(
-        `CREATIVE_RESOURCE_ASSISTANT_REVISION_NOT_FOUND:${ref.resourceId}:${ref.revisionId}`,
-      )
+    const row = rowByResourceId.get(ref.resourceId)
+    if (!row) {
+      throw new Error(`CREATIVE_RESOURCE_ASSISTANT_RESOURCE_NOT_FOUND:${ref.resourceId}`)
     }
-    const mediaType = requireMediaType(row.resource.mediaType)
+    const mediaType = requireMediaType(row.mediaType)
     if (mediaType !== 'text' && !row.media) {
-      throw new Error(`CREATIVE_RESOURCE_ASSISTANT_MEDIA_MISSING:${ref.revisionId}`)
+      throw new Error(`CREATIVE_RESOURCE_ASSISTANT_MEDIA_MISSING:${ref.resourceId}`)
     }
     const mimeType = row.media?.mimeType ?? null
     return {
       resourceId: ref.resourceId,
-      revisionId: ref.revisionId,
       mediaType,
-      schemaId: row.resource.schemaId,
-      resourceName: row.resource.name,
+      schemaId: row.schemaId,
+      resourceName: row.name,
       fileName: projectCreativeResourceFileName({
-        resourceName: row.resource.name,
+        resourceName: row.name,
         mimeType,
       }),
       href: row.media

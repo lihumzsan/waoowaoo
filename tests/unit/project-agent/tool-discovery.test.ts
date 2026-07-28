@@ -133,7 +133,6 @@ describe('project agent tool discovery', () => {
         bindToolInputSchema: async () => ({
           inputSchema: z.object({
             resourceId: z.string().trim().min(1),
-            revisionId: z.string().trim().min(1),
             role: z.literal(role),
             slotKey: z.string().trim().min(1).max(128),
             expectedVersion: z.number().int().nonnegative().nullable(),

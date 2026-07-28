@@ -11,16 +11,16 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, ProjectAgentOperationTitl
     en: 'Ask one generic Choice for the current decision only. Author the title, description, options, presentation, buttons, and optional reply. There is no domain choiceType or stored follow-up. To adopt the current result immediately, freeze only one complete input for an Operation explicitly allowed by the registry.',
   },
   delegate_creative_work: {
-    zh: '把一个或多个专业创作请求委派成独立 Creative Task。每个请求必须携带完整目标、精确来源 revision 和真实约束；Worker 自主读取相关 Skill，但不能调用业务 Operation、收费或改变项目状态。服务端不自动分 Chapter 或 Worker 组。',
-    en: 'Delegate one or more professional creative requests as independent Creative Tasks. Each request carries a complete goal, exact source revisions, and real constraints. The Worker reads relevant Skills autonomously but cannot call business Operations, bill, or change project state. The server never creates Chapter or Worker groups automatically.',
+    zh: '把一个或多个专业创作请求委派成独立 Creative Task。每个请求必须携带完整目标、精确来源 resource 和真实约束；Worker 自主读取相关 Skill，但不能调用业务 Operation、收费或改变项目状态。服务端不自动分 Chapter 或 Worker 组。',
+    en: 'Delegate one or more professional creative requests as independent Creative Tasks. Each request carries a complete goal, exact source resources, and real constraints. The Worker reads relevant Skills autonomously but cannot call business Operations, bill, or change project state. The server never creates Chapter or Worker groups automatically.',
   },
   adopt_creative_direction: {
-    zh: '把一个精确的 project.creative_direction Resource revision 绑定为当前 Creative Direction。必须传真实 revisionId 和替换时的 binding version；服务端回库校验内容，不复制、不生成预览，也不启动任何后续任务。',
-    en: 'Bind one exact project.creative_direction Resource revision as the current Creative Direction. Pass the real revisionId and current binding version when replacing; the server reloads the revision, copies no content, generates no preview, and starts no downstream work.',
+    zh: '把一个精确的 project.creative_direction Resource 绑定为当前 Creative Direction。必须传真实 resourceId 和替换时的 binding version；服务端回库校验内容，不复制、不生成预览，也不启动任何后续任务。',
+    en: 'Bind one exact project.creative_direction Resource as the current Creative Direction. Pass the real resourceId and current binding version when replacing; the server reloads the Resource, copies no content, generates no preview, and starts no downstream work.',
   },
   adopt_asset_manifest: {
-    zh: '采用一个精确的 project.asset_manifest revision，并为其中每个 canonical entity 创建或复用项目资产 identity。只传 revisionId 和替换时的 binding version；不生成图片，也不启动后续任务。',
-    en: 'Adopt one exact project.asset_manifest revision and create or reuse one Project asset identity for every canonical entity. Pass only the revisionId and current binding version when replacing; this generates no images and starts no downstream work.',
+    zh: '采用一个精确的 project.asset_manifest resource，并为其中每个 canonical entity 创建或复用项目资产 identity。只传 resourceId 和替换时的 binding version；不生成图片，也不启动后续任务。',
+    en: 'Adopt one exact project.asset_manifest resource and create or reuse one Project asset identity for every canonical entity. Pass only the resourceId and current binding version when replacing; this generates no images and starts no downstream work.',
   },
   update_plan: {
     zh: '为复杂工作维护简短计划；它只是工作记忆，不执行工作、不创建 Task，也不控制工具。',
@@ -47,12 +47,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, ProjectAgentOperationTitl
     en: 'Regenerate failed or unsatisfactory images under the existing asset identity; never create a replacement identity.',
   },
   generate_voice: {
-    zh: '用自然语言设计可复用音色并生成短试听；修改时在原 Resource 下新增 revision。',
-    en: 'Design a reusable voice from natural language and render a short preview; revisions stay under the original Resource.',
+    zh: '用自然语言设计可复用音色并生成短试听；每次生成创建一个新的不可变 Resource。',
+    en: 'Design a reusable voice from natural language and render a short preview as a new immutable Resource.',
   },
   bind_voice: {
-    zh: '把精确音色 Resource revision 绑定、换绑或解绑到角色；不生成音频。',
-    en: 'Bind, replace, or unbind an exact voice Resource revision for a character; this generates no audio.',
+    zh: '把精确音色 Resource 绑定、换绑或解绑到角色；不生成音频。',
+    en: 'Bind, replace, or unbind an exact voice Resource for a character; this generates no audio.',
   },
 }
 

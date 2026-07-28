@@ -8,7 +8,7 @@ import {
   CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
   CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
 } from './contracts'
-import { bindCreativeResourceRevisionInTransaction } from './binding-service'
+import { bindCreativeResourceInTransaction } from './binding-service'
 import { planCreativeWorkResourceMaterialization } from './creative-work-materialization'
 import {
   parseCreativeResourceGenerationTaskPayload,
@@ -18,7 +18,7 @@ import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contra
 import { parseCreativeResourceWebReferenceTaskPayload } from './web-reference-contract'
 import { buildCreativeResourceScopeRef, resolveProjectCreativeResourceScope } from './identity'
 import {
-  appendCreativeResourceRevisionInTransaction,
+  materializeCreativeResourceInTransaction,
   reserveDomainCreativeResourceInTransaction,
   settleCreativeResourceFailureInTransaction,
 } from './persistence'
@@ -124,7 +124,7 @@ async function materializeDomainOutputs(
         candidateSetId: output.candidateSetId,
         candidateIndex: output.candidateIndex,
       })
-      const revision = await appendCreativeResourceRevisionInTransaction(tx, {
+      const materialized = await materializeCreativeResourceInTransaction(tx, {
         resourceId: reserved.resourceId,
         userId: task.userId,
         mediaType: output.mediaType,
@@ -144,8 +144,7 @@ async function materializeDomainOutputs(
         },
       })
       resources.push({
-        resourceId: revision.resourceId,
-        revisionId: revision.revisionId,
+        resourceId: materialized.resourceId,
         schemaId: output.schemaId,
         mediaType: output.mediaType,
         name: output.name,
@@ -206,7 +205,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
   const actualModelKey = definition.terminalModelKeyRequirement === 'none'
     ? null
     : readRequiredString(input.result, 'modelKey', 'CREATIVE_RESOURCE_TASK_MODEL_KEY_REQUIRED')
-  const revision = await appendCreativeResourceRevisionInTransaction(tx, {
+  const materialized = await materializeCreativeResourceInTransaction(tx, {
     resourceId: payload.resource.resourceId,
     userId: input.task.userId,
     mediaType: payload.resource.mediaType,
@@ -243,7 +242,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
       bindingResult = { status: 'target_missing', binding: null }
     } else {
       try {
-        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
+        const binding = await bindCreativeResourceInTransaction(tx, {
           scope: resolveProjectCreativeResourceScope({
             userId: input.task.userId,
             projectId: input.task.projectId,
@@ -251,8 +250,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
           }),
           role: CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
           slotKey: requestedBinding.characterId,
-          resourceId: revision.resourceId,
-          revisionId: revision.revisionId,
+          resourceId: materialized.resourceId,
           source: 'generate_voice',
           expectedVersion: requestedBinding.expectedVersion,
         })
@@ -298,7 +296,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
       bindingResult = { status: 'target_missing', binding: null }
     } else {
       try {
-        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
+        const binding = await bindCreativeResourceInTransaction(tx, {
           scope: resolveProjectCreativeResourceScope({
             userId: input.task.userId,
             projectId: input.task.projectId,
@@ -306,8 +304,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
           }),
           role: CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
           slotKey: requestedBinding.variantId,
-          resourceId: revision.resourceId,
-          revisionId: revision.revisionId,
+          resourceId: materialized.resourceId,
           source: 'create_image',
           expectedVersion: requestedBinding.expectedVersion,
         })
@@ -322,7 +319,7 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
     }
   }
   const lifecycleResource = payload.lifecycleProjection.resources.find(
-    (resource) => resource.resourceId === revision.resourceId,
+    (resource) => resource.resourceId === materialized.resourceId,
   )
   if (
     !lifecycleResource
@@ -332,15 +329,13 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
     throw new Error(`CREATIVE_RESOURCE_LIFECYCLE_PROJECTION_MISMATCH:${input.task.id}`)
   }
   const resources = [{
-    resourceId: revision.resourceId,
-    revisionId: revision.revisionId,
+    resourceId: materialized.resourceId,
     schemaId: lifecycleResource.schemaId,
     mediaType: lifecycleResource.mediaType,
     name: lifecycleResource.name,
   }]
   return {
-    resourceId: revision.resourceId,
-    revisionId: revision.revisionId,
+    resourceId: materialized.resourceId,
     resources,
     resourceStatus: 'ready',
     continuationProjection: {

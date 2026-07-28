@@ -482,8 +482,8 @@ function formatRuntimeStateValue(value: string | null | undefined): string {
 interface ProjectRuntimeFacts {
   planning: {
     storyCanonVersion: number | null
-    screenplayRevisionId: string | null
-    storyCanonRevisionId: string | null
+    screenplayResourceId: string | null
+    storyCanonResourceId: string | null
     chapterCount: number
   }
 }
@@ -505,9 +505,9 @@ async function readProjectRuntimeFacts(params: {
           },
           select: {
             version: true,
-            storyCanonRevisionId: true,
+            storyCanonResourceId: true,
             sourceDocument: {
-              select: { sourceRevisionId: true },
+              select: { sourceResourceId: true },
             },
           },
         })
@@ -527,8 +527,8 @@ async function readProjectRuntimeFacts(params: {
   return {
     planning: {
       storyCanonVersion: storyCanon?.version ?? null,
-      screenplayRevisionId: storyCanon?.sourceDocument.sourceRevisionId ?? null,
-      storyCanonRevisionId: storyCanon?.storyCanonRevisionId ?? null,
+      screenplayResourceId: storyCanon?.sourceDocument.sourceResourceId ?? null,
+      storyCanonResourceId: storyCanon?.storyCanonResourceId ?? null,
       chapterCount,
     },
   }
@@ -542,10 +542,10 @@ function buildProjectStateVersion(params: {
   return [
     params.videoRatio ?? 'none',
     String(params.facts.planning.storyCanonVersion ?? 'none'),
-    params.facts.planning.screenplayRevisionId ?? 'none',
-    params.facts.planning.storyCanonRevisionId ?? 'none',
+    params.facts.planning.screenplayResourceId ?? 'none',
+    params.facts.planning.storyCanonResourceId ?? 'none',
     String(params.facts.planning.chapterCount),
-    params.creativeWorkingSet.adoptedCreativeDirection?.revisionId ?? 'none',
+    params.creativeWorkingSet.adoptedCreativeDirection?.resourceId ?? 'none',
     ...params.creativeWorkingSet.bindings.map((binding) => `${binding.bindingId}:${String(binding.version)}`),
   ].map(formatRuntimeStateValue).join(':')
 }
@@ -568,8 +568,8 @@ function buildProjectStateInputItem(params: {
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `config.videoRatio=${formatRuntimeStateValue(params.videoRatio)}`,
     `planning.storyCanonVersion=${formatRuntimeStateValue(String(params.facts.planning.storyCanonVersion ?? 'none'))}`,
-    `planning.screenplayRevisionId=${formatRuntimeStateValue(params.facts.planning.screenplayRevisionId)}`,
-    `planning.storyCanonRevisionId=${formatRuntimeStateValue(params.facts.planning.storyCanonRevisionId)}`,
+    `planning.screenplayResourceId=${formatRuntimeStateValue(params.facts.planning.screenplayResourceId)}`,
+    `planning.storyCanonResourceId=${formatRuntimeStateValue(params.facts.planning.storyCanonResourceId)}`,
     `planning.chapterCount=${String(params.facts.planning.chapterCount)}`,
     `creativeWorkingSet.adoptedCreativeDirection=${JSON.stringify(params.creativeWorkingSet.adoptedCreativeDirection)}`,
     `creativeWorkingSet.adoptedAssetManifest=${JSON.stringify(params.creativeWorkingSet.adoptedAssetManifest)}`,
@@ -1805,7 +1805,7 @@ export async function createProjectAgentChatResponse(input: {
           ...completedResourceRefs,
         ]
         if (resourceRefs.length > 0) {
-          // DB 回读竞态(revision 未 ready/已删除)同样只降级为"本轮不显示链接",不失败整轮。
+          // DB 回读竞态(resource 未 ready/已删除)同样只降级为"本轮不显示链接",不失败整轮。
           try {
             const resources = await readProjectCreativeResourceLinkViews({
               projectId: input.projectId,

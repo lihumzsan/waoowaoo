@@ -14,8 +14,8 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - **TL-04 — 提交失败原子回滚。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；Terminal transaction 提交后可以立即 enqueue 本次返回的精确 Outbox IDs，运输失败不回滚已提交业务事实，并由持久 Outbox dispatcher 恢复，不能把业务 Task 改写为失败或让周期扫描承担正常路径延迟。
 - **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。
 - **TL-06 — 终态 writer 唯一。** worker 不能自行把 Task 或 Resource 写成最终失败。Terminal Service 负责最终 completed/failed/canceled、billing settlement、Task Event、Resource materialization、workspace impact 与 Assistant continuation。
-- **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Revision/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
-- **TL-08 — Resource 是媒体目标。** 通用媒体 Task 的 target 是 CreativeResource，输入冻结全局唯一 revisionId，并在提交前回库校验真实内容与 scope。旧 edit script、style preview、video segment、BGM design、final output 等专用 target/writer 不得恢复。
+- **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
+- **TL-08 — Resource 是媒体目标。** 通用媒体 Task 的 target 是 CreativeResource，输入冻结全局唯一 Resource ID，并在提交前回库校验真实内容与 scope。旧 edit script、style preview、video segment、BGM design、final output 等专用 target/writer 不得恢复。
 - **TL-09 — Wait 只聚合，不编排业务。** OperationBatch/Wait 可等待多个独立 Task，并在 seal 后处理早到、重复、失败和取消终态；它不表达固定阶段、WorkerGroup 或下一个 Operation。
 - **TL-10 — UI 不解释生命周期。** SSE 只传递持久事件；断线后按 watermark replay。Canvas 收到终态影响后重新读取正式 Resource/Task View，不能依赖轮询、TTL、历史卡片或本地 overlay 完成业务交接。
 - **TL-11 — 本地媒体进程有界。** 视频合并只经 `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts` 与 `video-merge-audio.ts`。FFmpeg 禁止交互 stdin，deadline 从明确媒体时长派生，音轨按 canonical duration pad/trim/reset PTS，不能用多路 EOF 或 `-shortest` 裁决正确性。
@@ -28,7 +28,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 | Task identity、status、attempt | Task service / Terminal Service | worker、Agent、UI |
 | provider invocation/checkpoint | provider invocation fence | 当前 attempt worker |
 | Task result | 当前 attempt worker，终态后不可变 | Terminal Service/materializer |
-| Resource/Revision/Lineage | Creative Resource materializer 或同步 Resource Operation | Primary、Canvas、后续 Operation |
+| Resource/Lineage | Creative Resource materializer 或同步 Resource Operation | Primary、Canvas、后续 Operation |
 | billing freeze/settlement | billing owner + Terminal Service | profile、审批 UI |
 | Wait 聚合与 continuation | OperationBatch/Wait + Terminal Service | Primary Agent |
 | SSE watermark/event | Task/Outbox/SSE owner | Query sync、UI |
@@ -65,8 +65,8 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 
 - 最初分镜页面把“用户关闭失败提示”实现为 Task `failed → dismissed` 持久状态写入；页面移除后，route、React mutation、Operation 与 service writer 仍保留，并在 Agent 工具面全开后让模型能够改写真实失败终态。该动作不删除或修复 Task，只让 resolver 把失败投影成取消，因此形成了第二种失败解释。当前 `dismiss_failed_tasks` 的 Tool/API/前端入口和唯一 writer 已删除，失败 Task 保持 `failed` 并由 Agent 如实解释或在输入修正后精确重试。数据库枚举与 reader 暂时只为读取既有 `dismissed` 历史行而保留；本次未获数据迁移授权，未回填或删除这些行，彻底移除该状态仍需单独迁移与排空。
 - 旧 edit-first 为每个剧本、风格预览、镜头、BGM、视频段和最终渲染各建 TaskType、target 状态与 terminal projector，形成多套 writer。只删除 UI 卡片无法阻止 worker、投影与 guard 继续解释旧状态。当前整条专用链、表、writer、测试和治理入口一次删除，创作结果统一为 Resource，执行统一为六类通用 Task。
-- 旧 `generationTaskId/renderTaskId` owner fence 把 Task 生命周期复制到每个领域表，随后 target projector 与 reconciler 同时解释失败。当前 Task 是运行事实，Resource status/Revision 是领域事实，终态只由 Terminal Service 交接；不再存在专用 target ownership registry。
-- Creative Worker 初版在同步 Tool call 内返回完整结果，刷新后无法恢复且长片上下文膨胀。当前一个创作请求对应一个 `creative_work` Task，完整结果留在 Task.result，终态只向 continuation 投影引用并物化正式 Revision。
+- 旧 `generationTaskId/renderTaskId` owner fence 把 Task 生命周期复制到每个领域表，随后 target projector 与 reconciler 同时解释失败。当前 Task 是运行事实，Resource status/materialization 是领域事实，终态只由 Terminal Service 交接；不再存在专用 target ownership registry。
+- Creative Worker 初版在同步 Tool call 内返回完整结果，刷新后无法恢复且长片上下文膨胀。当前一个创作请求对应一个 `creative_work` Task，完整结果留在 Task.result，终态只向 continuation 投影引用并物化正式 Resource。
 - 旧前台 suspension 把一个 Task 绑定为当前 Run 的固定下一步，导致用户无法在后台执行时继续创作。当前 OperationBatch/Wait 只聚合独立 Task，用户新 turn 与后台 continuation 互不伪造状态。
 - 旧媒体完成依赖轮询、refetch、target overlay 与 timer 接力。当前 Terminal Event 携带 registry 声明的 resource impact，SSE 可 replay，Query 只重读正式事实。
 - 旧最终混音把编码 EOF 与 `-shortest` 当作终止裁判，真实任务会在 99% 停滞。当前通用视频合并使用 canonical duration、PCM 临时原声、显式 `-t` 与 FFmpeg deadline。
@@ -80,6 +80,6 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 
 1. 新执行是否登记在唯一 Task registry，还是增加了第二提交/worker/终态入口？
 2. Task 与 Resource 的 writer 是否各自唯一，失败、取消、重试、晚到和 replay 是否明确？
-3. 输入是否只冻结精确 Resource revisionId，并由服务端回库校验 scope？
+3. 输入是否只冻结精确 Resource ID，并由服务端回库校验 scope？
 4. 是否删除被替代的 TaskType、target、文案、测试、guard 与查询，而非增加兼容分支？
 5. 是否运行适用 Conformance、Logic、Critical、Golden，并明确 DB/Redis/provider 盲区？

@@ -61,8 +61,8 @@ const videoPromptSetOutputSchema = z.object({
       .describe('Exact independently generated clip duration selected from productionContext.video.allowedSegmentDurationsSeconds.'),
     prompt: z.string().min(1).max(30_000)
       .describe('The sole creative instruction sent to the video model. It must internalize every applicable directing decision, including visible action, performance, camera, continuity, dialogue, synchronized sound, and any motivated transition.'),
-    referenceKeys: textList(64, 300)
-      .describe('Ordered exact source-material labels whose image or audio revisions the primary Agent maps to the independently numbered @ImageN and @AudioN references used by prompt; use an empty list when no provider media reference is needed.'),
+    mediaResourceIds: textList(64, 32)
+      .describe('Ordered exact image or audio Resource IDs copied from source materials and used by this segment. The server validates and resolves them directly; use an empty list when no provider media reference is needed.'),
   }).strict().describe('One independently generated video Resource. Its prompt may contain multiple chronologically ordered camera shots that fit within this segment.')).min(1).max(512)
     .describe('Generation segments, not individual camera shots. Never split one unfinished action across two segments.'),
 }).strict()

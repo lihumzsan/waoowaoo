@@ -9,6 +9,7 @@ import { getVideoQueue, QUEUE_NAME, removeTaskJob } from '@/lib/task/queues'
 import { queueRedis } from '@/lib/redis'
 import { TASK_STATUS, TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { withTaskLifecycle } from '@/lib/workers/shared'
+import { buildCreativeResourceId } from '@/lib/creative-resource/identity'
 
 describe('task reconciler DB and Redis integration', () => {
   const queuedJobIds: string[] = []
@@ -37,7 +38,6 @@ describe('task reconciler DB and Redis integration', () => {
         mediaType: 'video',
         schemaId: 'generic.video',
         name: 'Queued recovery resource',
-        originKey: 'task-reconcile-queued-video-resource',
       },
     })
     const parent = await prisma.task.create({
@@ -173,8 +173,14 @@ describe('task reconciler DB and Redis integration', () => {
         name: 'Episode 1',
       },
     })
+    const resourceId = buildCreativeResourceId({
+      operationId: 'create_video',
+      requestId: `task-reconcile:${episode.id}`,
+      candidateIndex: 0,
+    })
     const resource = await prisma.creativeResource.create({
       data: {
+        id: resourceId,
         userId: user.id,
         projectId: project.id,
         episodeId: episode.id,
@@ -183,7 +189,6 @@ describe('task reconciler DB and Redis integration', () => {
         mediaType: 'video',
         schemaId: 'generic.video',
         name: 'Recovered video resource',
-        originKey: 'task-reconcile-video-resource',
         status: 'processing',
       },
     })
@@ -264,7 +269,7 @@ describe('task reconciler DB and Redis integration', () => {
       })
       expect(recoveredResource).toMatchObject({
         status: 'processing',
-        headRevisionId: null,
+        materializedAt: null,
         errorCode: null,
         errorMessage: null,
       })

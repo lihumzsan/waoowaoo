@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import {
-  buildCreativeResourceOriginKey,
+  buildCreativeResourceId,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource/identity'
 import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
@@ -99,7 +99,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
           episodeId ?? 'project',
           inputHash,
         ].join(':')
-        const resourceId = buildCreativeResourceOriginKey({
+        const resourceId = buildCreativeResourceId({
           operationId: 'import_web_reference_image',
           requestId,
           candidateIndex: 0,

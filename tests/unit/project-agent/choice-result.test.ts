@@ -36,7 +36,6 @@ const selectionOffer: ProjectAgentChoiceOffer = {
     operationId: 'adopt_creative_direction',
     input: {
       resourceId: 'resource-b',
-      revisionId: 'revision-b',
       fingerprint: 'f'.repeat(64),
     },
   }],

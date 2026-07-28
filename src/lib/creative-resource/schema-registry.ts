@@ -160,9 +160,9 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
 } as const satisfies Record<CreativeResourceMediaType, readonly CreativeResourceSchemaId[]>
 
 /**
- * Schemas whose Revisions may only originate from a dedicated import entry
+ * Schemas whose Resources may only originate from a dedicated import entry
  * (web search import, user upload). The generic create_* generation
- * operations must never mint these identities: a generated Revision claiming
+ * operations must never mint these identities: a generated Resource claiming
  * an import schema would fabricate external-material provenance that never
  * crossed the import boundary.
  */

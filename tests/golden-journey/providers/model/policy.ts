@@ -257,11 +257,13 @@ function resourceReferences(
   mediaType: 'image' | 'video',
 ): readonly Record<string, unknown>[] {
   return listedResourceRecords(request).flatMap((resource) => {
-    if (resource.mediaType !== mediaType || resource.status !== 'ready') return []
-    const revision = asRecord(resource.headRevision)
-    if (typeof revision?.revisionId !== 'string') return []
+    if (
+      resource.mediaType !== mediaType
+      || resource.status !== 'ready'
+      || typeof resource.resourceId !== 'string'
+    ) return []
     return [{
-      revisionId: revision.revisionId,
+      resourceId: resource.resourceId,
       role: 'reference',
     }]
   })
@@ -285,17 +287,14 @@ function latestResourceBySchema(
   )).at(-1) ?? null
 }
 
-function exactResourceRevision(resource: Record<string, unknown> | null): {
-  revisionId: string
+function exactResource(resource: Record<string, unknown> | null): {
+  resourceId: string
 } {
-  const revision = asRecord(resource?.headRevision)
-  if (
-    typeof revision?.revisionId !== 'string'
-  ) {
-    throw new Error('GOLDEN_EXACT_RESOURCE_REVISION_MISSING')
+  if (typeof resource?.resourceId !== 'string') {
+    throw new Error('GOLDEN_EXACT_RESOURCE_MISSING')
   }
   return {
-    revisionId: revision.revisionId,
+    resourceId: resource.resourceId,
   }
 }
 
@@ -494,13 +493,11 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     const selected = listedResourceRecords(request)
       .filter((resource) => resource.mediaType === 'image' && resource.status === 'ready')
       .sort((left, right) => Number(left.candidateIndex ?? 0) - Number(right.candidateIndex ?? 0))[1]
-    const revision = asRecord(selected?.headRevision)
-    if (typeof selected?.resourceId !== 'string' || typeof revision?.revisionId !== 'string') {
+    if (typeof selected?.resourceId !== 'string') {
       throw new Error('GOLDEN_FREEFORM_ADOPT_RESOURCE_MISSING')
     }
     return {
       resourceId: selected.resourceId,
-      revisionId: revision.revisionId,
       role: 'primary_image',
       slotKey: 'main',
     }
@@ -528,7 +525,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_STORY_CANON_REQUEST)) {
     const screenplayResource = resourceBySchema(request, 'project.screenplay')
-    const screenplay = exactResourceRevision(screenplayResource)
+    const screenplay = exactResource(screenplayResource)
     return {
       delegation: {
         source: 'requests',
@@ -540,7 +537,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
             userRequest: GOLDEN_FREEFORM_STORY_CANON_REQUEST,
             sourceMaterials: [{
               kind: 'resource',
-              revisionId: screenplay.revisionId,
+              resourceId: screenplay.resourceId,
             }],
             constraints: ['Preserve exact source ranges and project-wide canon.'],
           },
@@ -578,17 +575,17 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'adopt_story_canon' && instruction.includes(GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST)) {
     return {
-      screenplay: exactResourceRevision(resourceBySchema(request, 'project.screenplay')),
-      storyCanon: exactResourceRevision(latestResourceBySchema(request, 'project.story_canon')),
+      screenplay: exactResource(resourceBySchema(request, 'project.screenplay')),
+      storyCanon: exactResource(latestResourceBySchema(request, 'project.story_canon')),
       expectedVersion: null,
     }
   }
   if (toolName === 'request_choice' && instruction.includes(GOLDEN_FREEFORM_STYLE_CHOICE_REQUEST)) {
-    const style = exactResourceRevision(resourceBySchema(request, 'project.creative_direction'))
+    const style = exactResource(resourceBySchema(request, 'project.creative_direction'))
     return {
       subject: {
-        kind: 'resource_revisions',
-        revisions: [{ revisionId: style.revisionId }],
+        kind: 'resources',
+        resources: [{ resourceId: style.resourceId }],
       },
       card: {
         kind: 'select_with_actions',
@@ -620,7 +617,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)) {
     const screenplayResource = resourceBySchema(request, 'project.screenplay')
-    const screenplay = exactResourceRevision(screenplayResource)
+    const screenplay = exactResource(screenplayResource)
     return {
       delegation: {
         source: 'requests',
@@ -633,7 +630,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
             userRequest: GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST,
             sourceMaterials: [{
               kind: 'resource',
-              revisionId: screenplay.revisionId,
+              resourceId: screenplay.resourceId,
             }],
             constraints: [
               'Create exactly two ordered, non-overlapping production units.',
@@ -647,7 +644,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST)) {
     const screenplayResource = resourceBySchema(request, 'project.screenplay')
-    const screenplay = exactResourceRevision(screenplayResource)
+    const screenplay = exactResource(screenplayResource)
     return {
       delegation: {
         source: 'requests',
@@ -660,7 +657,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
             userRequest: GOLDEN_FREEFORM_REPLAN_CHAPTERS_REQUEST,
             sourceMaterials: [{
               kind: 'resource',
-              revisionId: screenplay.revisionId,
+              resourceId: screenplay.resourceId,
             }],
             constraints: ['Create exactly two ordered units of at most 180 seconds each.'],
           },
@@ -692,14 +689,14 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
   if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)) {
     const screenplayResource = resourceBySchema(request, 'project.screenplay')
     return {
-      screenplay: exactResourceRevision(screenplayResource),
-      chapterPlan: exactResourceRevision(resourceBySchema(request, 'project.chapter_plan')),
+      screenplay: exactResource(screenplayResource),
+      chapterPlan: exactResource(resourceBySchema(request, 'project.chapter_plan')),
     }
   }
   if (toolName === 'adopt_chapters' && instruction.includes(GOLDEN_FREEFORM_ADOPT_REPLANNED_CHAPTERS_REQUEST)) {
     return {
-      screenplay: exactResourceRevision(resourceBySchema(request, 'project.screenplay')),
-      chapterPlan: exactResourceRevision(latestResourceBySchema(request, 'project.chapter_plan')),
+      screenplay: exactResource(resourceBySchema(request, 'project.screenplay')),
+      chapterPlan: exactResource(latestResourceBySchema(request, 'project.chapter_plan')),
     }
   }
   const parameters = asRecord(

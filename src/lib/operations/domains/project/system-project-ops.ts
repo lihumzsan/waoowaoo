@@ -128,7 +128,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
                     },
                   },
                   creativeResources: {
-                    where: { mediaType: 'video', status: 'ready', headRevisionId: { not: null } },
+                    where: { mediaType: 'video', status: 'ready', materializedAt: { not: null } },
                     select: { id: true },
                   },
                   episodes: {

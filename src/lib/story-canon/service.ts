@@ -44,9 +44,7 @@ export interface PersistedStoryCanonBundle {
   readonly episodeId: string
   readonly sourceDocumentId: string
   readonly sourceResourceId: string
-  readonly sourceRevisionId: string
   readonly storyCanonResourceId: string
-  readonly storyCanonRevisionId: string
   readonly sourceText: string
   readonly version: number
   readonly updatedAt: Date
@@ -72,14 +70,12 @@ const persistedStoryCanonSelect = {
   ledgerJson: true,
   emotionalCurveJson: true,
   storyCanonResourceId: true,
-  storyCanonRevisionId: true,
   version: true,
   updatedAt: true,
   sourceDocument: {
     select: {
       normalizedText: true,
       sourceResourceId: true,
-      sourceRevisionId: true,
     },
   },
 } as const
@@ -97,26 +93,21 @@ function mapPersistedStoryCanon(record: {
   readonly ledgerJson: Prisma.JsonValue | null
   readonly emotionalCurveJson: Prisma.JsonValue | null
   readonly storyCanonResourceId: string
-  readonly storyCanonRevisionId: string
   readonly version: number
   readonly updatedAt: Date
   readonly sourceDocument: {
     readonly normalizedText: string
     readonly sourceResourceId: string
-    readonly sourceRevisionId: string
   }
 }, projectId: string): PersistedStoryCanonBundle {
   const sourceResourceId = record.sourceDocument.sourceResourceId
-  const sourceRevisionId = record.sourceDocument.sourceRevisionId
   return {
     id: record.id,
     projectId,
     episodeId: record.episodeId,
     sourceDocumentId: record.sourceDocumentId,
     sourceResourceId,
-    sourceRevisionId,
     storyCanonResourceId: record.storyCanonResourceId,
-    storyCanonRevisionId: record.storyCanonRevisionId,
     sourceText: record.sourceDocument.normalizedText,
     version: record.version,
     updatedAt: record.updatedAt,
@@ -170,12 +161,12 @@ export function normalizeStoryCanonResourceBundle(input: {
   })
 }
 
-async function resolveCreativeTextRevision(input: {
+async function resolveCreativeTextResource(input: {
   readonly tx: Prisma.TransactionClient
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly revisionId: string
+  readonly resourceId: string
   readonly schemaId:
     | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
     | typeof CREATIVE_RESOURCE_SCHEMA.STORY_CANON
@@ -183,80 +174,78 @@ async function resolveCreativeTextRevision(input: {
   readonly outputKind: 'screenplay' | 'story_canon' | 'chapter_plan'
   readonly resourceScope: 'project' | 'episode'
 }) {
-  const revision = await input.tx.creativeResourceRevision.findFirst({
+  const resource = await input.tx.creativeResource.findFirst({
     where: {
-      id: input.revisionId,
-      resource: {
-        userId: input.userId,
-        projectId: input.projectId,
-        episodeId: input.resourceScope === 'project' ? null : input.episodeId,
-        status: 'ready',
-        mediaType: 'text',
-        schemaId: input.schemaId,
-        ...(input.outputKind === 'screenplay' ? {} : { sourceType: 'CreativeWorkResult' }),
-      },
+      id: input.resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      episodeId: input.resourceScope === 'project' ? null : input.episodeId,
+      status: 'ready',
+      materializedAt: { not: null },
+      mediaType: 'text',
+      schemaId: input.schemaId,
+      ...(input.outputKind === 'screenplay' ? {} : { sourceType: 'CreativeWorkResult' }),
     },
     select: {
       id: true,
-      resourceId: true,
       contentText: true,
       contentJson: true,
       operationId: true,
       taskId: true,
       task: { select: { type: true, status: true, payload: true } },
-      outputLineage: { select: { inputRevisionId: true, role: true, position: true } },
+      outputLineage: { select: { inputResourceId: true, role: true, position: true } },
     },
   })
-  if (!revision) {
-    throw new ApiError('NOT_FOUND', { code: 'CREATIVE_TEXT_REVISION_NOT_FOUND', field: 'revisionId' })
+  if (!resource) {
+    throw new ApiError('NOT_FOUND', { code: 'CREATIVE_TEXT_RESOURCE_NOT_FOUND', field: 'resourceId' })
   }
   if (
     input.outputKind === 'screenplay'
-    && revision.taskId === null
-    && revision.operationId === 'create_text'
-    && revision.contentJson !== null
+    && resource.taskId === null
+    && resource.operationId === 'create_text'
+    && resource.contentJson !== null
   ) {
-    const screenplay = screenplaySchema.safeParse(revision.contentJson)
-    if (screenplay.success && screenplay.data.source.kind === 'provided') return revision
+    const screenplay = screenplaySchema.safeParse(resource.contentJson)
+    if (screenplay.success && screenplay.data.source.kind === 'provided') return resource
   }
-  if (!revision.taskId || !revision.task) {
+  if (!resource.taskId || !resource.task) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'CREATIVE_TEXT_REVISION_PROVENANCE_INVALID',
-      field: 'revisionId',
+      code: 'CREATIVE_TEXT_RESOURCE_PROVENANCE_INVALID',
+      field: 'resourceId',
       agentRetryableAfterCorrection: true,
     })
   }
-  const payload = revision.task.payload
+  const payload = resource.task.payload
   const request = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as { request?: { outputKind?: unknown } }).request
     : null
   if (
-    revision.task.type !== TASK_TYPE.CREATIVE_WORK
-    || revision.task.status !== TASK_STATUS.COMPLETED
+    resource.task.type !== TASK_TYPE.CREATIVE_WORK
+    || resource.task.status !== TASK_STATUS.COMPLETED
     || request?.outputKind !== input.outputKind
   ) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'CREATIVE_TEXT_REVISION_PROVENANCE_INVALID',
-      field: 'revisionId',
+      code: 'CREATIVE_TEXT_RESOURCE_PROVENANCE_INVALID',
+      field: 'resourceId',
       agentRetryableAfterCorrection: true,
     })
   }
-  return revision
+  return resource
 }
 
 export async function adoptStoryCanonResources(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly screenplay: { readonly revisionId: string }
-  readonly storyCanon: { readonly revisionId: string }
+  readonly screenplay: { readonly resourceId: string }
+  readonly storyCanon: { readonly resourceId: string }
   readonly expectedVersion?: number | null
   readonly client?: Prisma.TransactionClient
 }): Promise<PersistedStoryCanonBundle> {
   const adopt = async (tx: Prisma.TransactionClient): Promise<PersistedStoryCanonBundle> => {
     await assertEpisodeAccess({ ...input, client: tx })
-    const [screenplayRevision, storyCanonRevision] = await Promise.all([
-      resolveCreativeTextRevision({
+    const [screenplayResource, storyCanonResource] = await Promise.all([
+      resolveCreativeTextResource({
         tx,
         ...input,
         ...input.screenplay,
@@ -264,7 +253,7 @@ export async function adoptStoryCanonResources(input: {
         outputKind: 'screenplay',
         resourceScope: 'project',
       }),
-      resolveCreativeTextRevision({
+      resolveCreativeTextResource({
         tx,
         ...input,
         ...input.storyCanon,
@@ -273,17 +262,17 @@ export async function adoptStoryCanonResources(input: {
         resourceScope: 'project',
       }),
     ])
-    if (screenplayRevision.contentJson === null || storyCanonRevision.contentJson === null) {
+    if (screenplayResource.contentJson === null || storyCanonResource.contentJson === null) {
       throw new Error('STORY_CANON_RESOURCE_CONTENT_INVALID')
     }
-    const screenplayText = screenplaySchema.parse(screenplayRevision.contentJson).screenplayText
-    const sourceLineage = storyCanonRevision.outputLineage.filter((lineage) => (
-      lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+    const screenplayText = screenplaySchema.parse(screenplayResource.contentJson).screenplayText
+    const sourceLineage = storyCanonResource.outputLineage.filter((lineage) => (
+      lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
     ))
     if (sourceLineage.length !== 1) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'STORY_CANON_SCREENPLAY_LINEAGE_REQUIRED',
-        field: 'storyCanon.revisionId',
+        field: 'storyCanon.resourceId',
         agentRetryableAfterCorrection: true,
       })
     }
@@ -291,13 +280,12 @@ export async function adoptStoryCanonResources(input: {
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId,
-      resourceId: screenplayRevision.resourceId,
-      revisionId: screenplayRevision.id,
+      resourceId: screenplayResource.id,
       text: screenplayText,
       client: tx,
     })
     const bundle = normalizeStoryCanonResourceBundle({
-      rawBundle: storyCanonRevision.contentJson,
+      rawBundle: storyCanonResource.contentJson,
       sourceText: sourceDocument.normalizedText,
     })
     await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -307,12 +295,11 @@ export async function adoptStoryCanonResources(input: {
       where: { episodeId: input.episodeId },
       select: persistedStoryCanonSelect,
     })
-    if (current?.storyCanonRevisionId === storyCanonRevision.id) {
+    if (current?.storyCanonResourceId === storyCanonResource.id) {
       if (
         current.sourceDocumentId !== sourceDocument.id
-        || current.storyCanonResourceId !== storyCanonRevision.resourceId
       ) {
-        throw new Error(`STORY_CANON_ADOPTION_COLLISION:${storyCanonRevision.id}`)
+        throw new Error(`STORY_CANON_ADOPTION_COLLISION:${storyCanonResource.id}`)
       }
       return mapPersistedStoryCanon(current, input.projectId)
     }
@@ -330,8 +317,7 @@ export async function adoptStoryCanonResources(input: {
       beatSheetJson: toInputJsonValue(bundle.beatSheet),
       ledgerJson: toInputJsonValue(bundle.ledger),
       emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
-      storyCanonResourceId: storyCanonRevision.resourceId,
-      storyCanonRevisionId: storyCanonRevision.id,
+      storyCanonResourceId: storyCanonResource.id,
       version: (current?.version ?? 0) + 1,
     }
     const stored = current
@@ -345,17 +331,15 @@ export async function adoptStoryCanonResources(input: {
   return input.client ? await adopt(input.client) : await prisma.$transaction(adopt)
 }
 
-interface ExactCreativeRevisionRef {
-  readonly revisionId: string
+interface ExactCreativeResourceRef {
+  readonly resourceId: string
 }
 
 interface ChapterPlanProvenance {
   readonly sourceResourceId: string
-  readonly sourceRevisionId: string
   readonly chapterPlanResourceId: string
-  readonly chapterPlanRevisionId: string
-  readonly storyCanon: ExactCreativeRevisionRef | null
-  readonly contextRevisions: readonly (ExactCreativeRevisionRef & { readonly schemaId: string })[]
+  readonly storyCanon: ExactCreativeResourceRef | null
+  readonly contextResources: readonly (ExactCreativeResourceRef & { readonly schemaId: string })[]
   readonly beatIds: readonly string[]
   readonly eventIds: readonly string[]
 }
@@ -442,11 +426,11 @@ async function writeAdoptedChapterPlan(input: {
   return chapters
 }
 
-function exactRevisionRef(input: {
+function exactResourceRef(input: {
   readonly id: string
-}): ExactCreativeRevisionRef {
+}): ExactCreativeResourceRef {
   return {
-    revisionId: input.id,
+    resourceId: input.id,
   }
 }
 
@@ -454,14 +438,14 @@ export async function adoptCreativeChapterPlan(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly screenplay: ExactCreativeRevisionRef
-  readonly chapterPlan: ExactCreativeRevisionRef
+  readonly screenplay: ExactCreativeResourceRef
+  readonly chapterPlan: ExactCreativeResourceRef
   readonly client?: Prisma.TransactionClient
 }): Promise<readonly PersistedEditChapterPlan[]> {
   const adopt = async (tx: Prisma.TransactionClient): Promise<readonly PersistedEditChapterPlan[]> => {
     await assertEpisodeAccess({ ...input, client: tx })
-    const [screenplayRevision, chapterPlanRevision] = await Promise.all([
-      resolveCreativeTextRevision({
+    const [screenplayResource, chapterPlanResource] = await Promise.all([
+      resolveCreativeTextResource({
         tx,
         ...input,
         ...input.screenplay,
@@ -469,7 +453,7 @@ export async function adoptCreativeChapterPlan(input: {
         outputKind: 'screenplay',
         resourceScope: 'project',
       }),
-      resolveCreativeTextRevision({
+      resolveCreativeTextResource({
         tx,
         ...input,
         ...input.chapterPlan,
@@ -478,100 +462,100 @@ export async function adoptCreativeChapterPlan(input: {
         resourceScope: 'episode',
       }),
     ])
-    if (screenplayRevision.contentJson === null || chapterPlanRevision.contentJson === null) {
+    if (screenplayResource.contentJson === null || chapterPlanResource.contentJson === null) {
       throw new Error('CREATIVE_CHAPTER_PLAN_RESOURCE_CONTENT_INVALID')
     }
-    const screenplayText = screenplaySchema.parse(screenplayRevision.contentJson).screenplayText
-    const screenplayLineage = chapterPlanRevision.outputLineage.filter((lineage) => (
-      lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+    const screenplayText = screenplaySchema.parse(screenplayResource.contentJson).screenplayText
+    const screenplayLineage = chapterPlanResource.outputLineage.filter((lineage) => (
+      lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
     ))
     if (screenplayLineage.length !== 1) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_CHAPTER_PLAN_SCREENPLAY_LINEAGE_REQUIRED',
-        field: 'chapterPlan.revisionId',
+        field: 'chapterPlan.resourceId',
         agentRetryableAfterCorrection: true,
       })
     }
-    const lineageRevisionIds = chapterPlanRevision.outputLineage.map((lineage) => lineage.inputRevisionId)
-    const uniqueLineageRevisionIds = [...new Set(lineageRevisionIds)]
-    const scopedLineageRevisions = await tx.creativeResourceRevision.findMany({
+    const lineageResourceIds = chapterPlanResource.outputLineage.map((lineage) => lineage.inputResourceId)
+    const uniqueLineageResourceIds = [...new Set(lineageResourceIds)]
+    const scopedLineageResources = await tx.creativeResource.findMany({
       where: {
-        id: { in: uniqueLineageRevisionIds },
-        resource: {
-          userId: input.userId,
-          projectId: input.projectId,
-          status: 'ready',
-          OR: [{ episodeId: input.episodeId }, { episodeId: null }],
-        },
+        id: { in: uniqueLineageResourceIds },
+        userId: input.userId,
+        projectId: input.projectId,
+        status: 'ready',
+        materializedAt: { not: null },
+        OR: [{ episodeId: input.episodeId }, { episodeId: null }],
       },
       select: {
         id: true,
-        resourceId: true,
         contentJson: true,
         taskId: true,
         task: { select: { type: true, status: true, payload: true } },
-        outputLineage: { select: { inputRevisionId: true, role: true } },
-        resource: { select: { schemaId: true, mediaType: true, sourceType: true } },
+        outputLineage: { select: { inputResourceId: true, role: true } },
+        schemaId: true,
+        mediaType: true,
+        sourceType: true,
       },
     })
-    if (scopedLineageRevisions.length !== uniqueLineageRevisionIds.length) {
+    if (scopedLineageResources.length !== uniqueLineageResourceIds.length) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_CHAPTER_PLAN_CONTEXT_LINEAGE_SCOPE_INVALID',
-        field: 'chapterPlan.revisionId',
+        field: 'chapterPlan.resourceId',
         agentRetryableAfterCorrection: true,
       })
     }
-    const storyCanonCandidates = scopedLineageRevisions.filter((revision) => (
-      revision.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STORY_CANON
-      && revision.resource.mediaType === 'text'
-      && revision.resource.sourceType === 'CreativeWorkResult'
+    const storyCanonCandidates = scopedLineageResources.filter((resource) => (
+      resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STORY_CANON
+      && resource.mediaType === 'text'
+      && resource.sourceType === 'CreativeWorkResult'
     ))
     if (storyCanonCandidates.length > 1) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_CHAPTER_PLAN_STORY_CANON_LINEAGE_AMBIGUOUS',
-        field: 'chapterPlan.revisionId',
+        field: 'chapterPlan.resourceId',
         agentRetryableAfterCorrection: true,
       })
     }
-    const storyCanonRevision = storyCanonCandidates[0] ?? null
-    const contextRevisions = scopedLineageRevisions
-      .filter((revision) => revision.id !== screenplayRevision.id)
-      .map((revision) => ({
-        ...exactRevisionRef(revision),
-        schemaId: revision.resource.schemaId,
+    const storyCanonResource = storyCanonCandidates[0] ?? null
+    const contextResources = scopedLineageResources
+      .filter((resource) => resource.id !== screenplayResource.id)
+      .map((resource) => ({
+        ...exactResourceRef(resource),
+        schemaId: resource.schemaId,
       }))
-      .sort((left, right) => left.revisionId.localeCompare(right.revisionId))
+      .sort((left, right) => left.resourceId.localeCompare(right.resourceId))
     let storyCanonBundle: StoryCanonBundle | null = null
-    let storyCanonRef: ExactCreativeRevisionRef | null = null
-    if (storyCanonRevision) {
-      const payload = storyCanonRevision.task?.payload
+    let storyCanonRef: ExactCreativeResourceRef | null = null
+    if (storyCanonResource) {
+      const payload = storyCanonResource.task?.payload
       const request = payload && typeof payload === 'object' && !Array.isArray(payload)
         ? (payload as { request?: { outputKind?: unknown } }).request
         : null
-      const hasScreenplayLineage = storyCanonRevision.outputLineage.some((lineage) => (
-        lineage.inputRevisionId === screenplayRevision.id && lineage.role === 'source_material'
+      const hasScreenplayLineage = storyCanonResource.outputLineage.some((lineage) => (
+        lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
       ))
       if (
-        !storyCanonRevision.taskId
-        || storyCanonRevision.task?.type !== TASK_TYPE.CREATIVE_WORK
-        || storyCanonRevision.task.status !== TASK_STATUS.COMPLETED
+        !storyCanonResource.taskId
+        || storyCanonResource.task?.type !== TASK_TYPE.CREATIVE_WORK
+        || storyCanonResource.task.status !== TASK_STATUS.COMPLETED
         || request?.outputKind !== 'story_canon'
-        || storyCanonRevision.contentJson === null
+        || storyCanonResource.contentJson === null
         || !hasScreenplayLineage
       ) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_CHAPTER_PLAN_STORY_CANON_LINEAGE_INVALID',
-          field: 'chapterPlan.revisionId',
+          field: 'chapterPlan.resourceId',
           agentRetryableAfterCorrection: true,
         })
       }
       storyCanonBundle = normalizeStoryCanonResourceBundle({
-        rawBundle: storyCanonRevision.contentJson,
+        rawBundle: storyCanonResource.contentJson,
         sourceText: screenplayText,
       })
-      storyCanonRef = exactRevisionRef(storyCanonRevision)
+      storyCanonRef = exactResourceRef(storyCanonResource)
     }
-    const output = creativeChapterPlanOutputSchema.parse(chapterPlanRevision.contentJson)
+    const output = creativeChapterPlanOutputSchema.parse(chapterPlanResource.contentJson)
     assertOrderedNonOverlappingSourceRanges(screenplayText, output.chapters)
     for (const chapter of output.chapters) {
       if (chapter.targetDurationSec > CREATIVE_CHAPTER_MAX_DURATION_SECONDS) {
@@ -593,8 +577,7 @@ export async function adoptCreativeChapterPlan(input: {
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId,
-      resourceId: screenplayRevision.resourceId,
-      revisionId: screenplayRevision.id,
+      resourceId: screenplayResource.id,
       text: screenplayText,
       client: tx,
     })
@@ -608,7 +591,7 @@ export async function adoptCreativeChapterPlan(input: {
     const alreadyAdopted = existing.length === output.chapters.length && existing.every((chapter) => {
       const provenance = chapter.provenanceJson
       return provenance && typeof provenance === 'object' && !Array.isArray(provenance)
-        && (provenance as { chapterPlanRevisionId?: unknown }).chapterPlanRevisionId === chapterPlanRevision.id
+        && (provenance as { chapterPlanResourceId?: unknown }).chapterPlanResourceId === chapterPlanResource.id
     })
     if (alreadyAdopted) {
       return await readEpisodeEditChapters({
@@ -623,12 +606,10 @@ export async function adoptCreativeChapterPlan(input: {
       episodeId: input.episodeId,
       sourceDocumentId: sourceDocument.id,
       provenance: {
-        sourceResourceId: screenplayRevision.resourceId,
-        sourceRevisionId: screenplayRevision.id,
-        chapterPlanResourceId: chapterPlanRevision.resourceId,
-        chapterPlanRevisionId: chapterPlanRevision.id,
+        sourceResourceId: screenplayResource.id,
+        chapterPlanResourceId: chapterPlanResource.id,
         storyCanon: storyCanonRef,
-        contextRevisions,
+        contextResources,
       },
       bundle: storyCanonBundle,
       plans: output.chapters,

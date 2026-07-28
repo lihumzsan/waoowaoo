@@ -21,7 +21,6 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
       targetId: 'resource-1',
       result: {
         resourceId: 'resource-1',
-        revisionId: 'revision-1',
       },
     }],
     terminalStatus: 'completed',
@@ -51,7 +50,7 @@ describe('project agent task follow-up input', () => {
     expect(content).toContain('status=completed')
     expect(content).toContain('total=1 succeeded=1 failed=0')
     expect(content).toContain('completedTasks=')
-    expect(content).toContain('revision-1')
+    expect(content).toContain('resource-1')
     expect(content).not.toContain('本轮在任何工具调用之前')
     expect(content).not.toContain('Do not start this turn with a tool call')
     expect(content).not.toContain('不要重新运行刚刚到达终态')

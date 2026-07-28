@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import {
-  bindCreativeResourceRevisionInTransaction,
+  bindCreativeResourceInTransaction,
   getCreativeResourceBindingInTransaction,
   unbindCreativeResourceInTransaction,
 } from '@/lib/creative-resource/binding-service'
@@ -14,7 +14,7 @@ import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registr
 import { TASK_STATUS } from '@/lib/task/types'
 
 export type CharacterVoiceSelection =
-  | { readonly kind: 'voice'; readonly resourceId: string; readonly revisionId: string }
+  | { readonly kind: 'voice'; readonly resourceId: string }
   | { readonly kind: 'none' }
 
 export async function bindCharacterVoiceInTransaction(
@@ -59,44 +59,41 @@ export async function bindCharacterVoiceInTransaction(
     })
     return null
   }
-  const revision = await tx.creativeResourceRevision.findFirst({
+  const resource = await tx.creativeResource.findFirst({
     where: {
-      id: input.selection.revisionId,
-      resourceId: input.selection.resourceId,
-      resource: {
-        userId: input.userId,
-        projectId: input.projectId,
-        episodeId: null,
-        scopeKind: 'project',
-        scopeId: input.projectId,
-        status: 'ready',
-        mediaType: 'audio',
-        // A character voice is either a designed voice or a user-uploaded
-        // audio sample; both bind the same way and feed video generation as
-        // reference audio, so the Binding — not the schema — stays the single
-        // authority for "this character's current voice".
-        schemaId: {
-          in: [
-            CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-            CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
-          ],
-        },
+      id: input.selection.resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      episodeId: null,
+      scopeKind: 'project',
+      scopeId: input.projectId,
+      status: 'ready',
+      materializedAt: { not: null },
+      mediaType: 'audio',
+      // A character voice is either a designed voice or a user-uploaded
+      // audio sample; both bind the same way and feed video generation as
+      // reference audio, so the Binding — not the schema — stays the single
+      // authority for "this character's current voice".
+      schemaId: {
+        in: [
+          CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+          CREATIVE_RESOURCE_SCHEMA.UPLOAD_AUDIO,
+        ],
       },
     },
     select: { id: true },
   })
-  if (!revision) {
+  if (!resource) {
     throw new ApiError('NOT_FOUND', {
-      code: 'VOICE_RESOURCE_REVISION_NOT_FOUND',
-      field: 'selection.revisionId',
+      code: 'VOICE_RESOURCE_NOT_FOUND',
+      field: 'selection.resourceId',
     })
   }
-  return await bindCreativeResourceRevisionInTransaction(tx, {
+  return await bindCreativeResourceInTransaction(tx, {
     scope,
     role: CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
     slotKey: input.characterId,
     resourceId: input.selection.resourceId,
-    revisionId: input.selection.revisionId,
     source: 'bind_voice',
     expectedVersion: current?.version ?? null,
   })
@@ -125,8 +122,7 @@ export async function deleteVoiceResourceInTransaction(
       id: true,
       status: true,
       _count: { select: { bindings: true } },
-      revisions: {
-        where: { inputLineage: { some: {} } },
+      inputLineage: {
         select: { id: true },
         take: 1,
       },
@@ -144,7 +140,7 @@ export async function deleteVoiceResourceInTransaction(
   if (resource._count.bindings > 0) {
     throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_STILL_BOUND' })
   }
-  if (resource.revisions.length > 0) {
+  if (resource.inputLineage.length > 0) {
     throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_USED_AS_INPUT' })
   }
   const activeTasks = await tx.task.count({

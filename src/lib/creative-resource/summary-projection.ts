@@ -28,7 +28,7 @@ function structuredEntryCount(value: CreativeResourceJsonValue): number | null {
 export function projectCreativeResourceSummary(
   resource: CreativeResourceView,
 ): CreativeResourceSummaryView {
-  const content = resource.headRevision?.content
+  const content = resource.materialization?.content
   if (!content) {
     return summaryText(resource.pendingGeneration?.prompt) ?? { kind: 'empty' }
   }
@@ -54,5 +54,5 @@ export function projectCreativeResourceSummary(
       durationMs: content.durationMs,
     }
   }
-  return { kind: 'domain_snapshot' }
+  return { kind: 'empty' }
 }

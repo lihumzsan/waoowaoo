@@ -58,7 +58,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Read the compact current project working set: exact adopted screenplay and Story Canon revisions, Creative Resource bindings, optional Chapter context units, project configuration, and active work. Use list_resources to browse candidates/history and get_resource to read one exact full revision; never infer current adoption from latest resources, history, Canvas, or chat.',
+      summary: 'Read the compact current project working set: exact adopted screenplay and Story Canon Resources, Creative Resource bindings, optional Chapter context units, project configuration, and active work. Use list_resources to browse candidates/history and get_resource to read one exact full Resource; never infer current adoption from latest resources, history, Canvas, or chat.',
       intent: 'query',
       toolExposure: 'direct',
       effects: EFFECTS_NONE,

@@ -170,7 +170,7 @@ export function withOperationPack(
       confirmation: mergeConfirmation(operation, normalizedDefaults),
       resourceContract: operation.resourceContract ?? {
         kind: 'none' as const,
-        reason: 'operation does not create a Creative Resource revision',
+        reason: 'operation does not create a Creative Resource',
       },
       toolInputSchema: channels.tool
         ? createProjectAgentToolInputSchema({

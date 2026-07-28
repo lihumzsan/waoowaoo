@@ -28,32 +28,31 @@ async function loadVideoImageReferences(
     return reference
   })
   if (imageInputs.length === 0) return []
-  const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: imageInputs.map((reference) => reference.revisionId) } },
+  const resources = await prisma.creativeResource.findMany({
+    where: { id: { in: imageInputs.map((reference) => reference.resourceId) } },
     select: {
       id: true,
       media: { select: { storageKey: true } },
-      resource: { select: { userId: true, mediaType: true, status: true } },
+      userId: true,
+      mediaType: true,
+      status: true,
     },
   })
-  const byId = new Map(revisions.map((revision) => [revision.id, revision]))
+  const byId = new Map(resources.map((resource) => [resource.id, resource]))
   return await Promise.all(imageInputs.map(async (reference, index) => {
-    const revision = byId.get(reference.revisionId)
-    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
-    if (
-      revision.resource.userId !== job.data.userId
-      || revision.resource.status !== 'ready'
-    ) {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+    const resource = byId.get(reference.resourceId)
+    if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
+    if (resource.userId !== job.data.userId || resource.status !== 'ready') {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
     }
-    if (revision.resource.mediaType !== 'image' || !revision.media?.storageKey) {
-      throw new Error(`CREATIVE_RESOURCE_VIDEO_IMAGE_REFERENCE_REQUIRED:${reference.revisionId}`)
+    if (resource.mediaType !== 'image' || !resource.media?.storageKey) {
+      throw new Error(`CREATIVE_RESOURCE_VIDEO_IMAGE_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
     const role: 'first_frame' | 'last_frame' | 'reference' = reference.role === 'first_frame' || reference.role === 'last_frame'
       ? reference.role
       : 'reference'
     return {
-      url: await normalizeOwnedMediaToBase64ForGeneration(revision.media.storageKey, job.data.userId),
+      url: await normalizeOwnedMediaToBase64ForGeneration(resource.media.storageKey, job.data.userId),
       role,
       order: index + 1,
       source: 'generated' as const,
@@ -72,28 +71,27 @@ async function loadVideoAudioReferences(
     return reference
   })
   if (audioInputs.length === 0) return []
-  const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: audioInputs.map((reference) => reference.revisionId) } },
+  const resources = await prisma.creativeResource.findMany({
+    where: { id: { in: audioInputs.map((reference) => reference.resourceId) } },
     select: {
       id: true,
       media: { select: { storageKey: true } },
-      resource: { select: { userId: true, mediaType: true, status: true } },
+      userId: true,
+      mediaType: true,
+      status: true,
     },
   })
-  const byId = new Map(revisions.map((revision) => [revision.id, revision]))
+  const byId = new Map(resources.map((resource) => [resource.id, resource]))
   return await Promise.all(audioInputs.map(async (reference) => {
-    const revision = byId.get(reference.revisionId)
-    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
-    if (
-      revision.resource.userId !== job.data.userId
-      || revision.resource.status !== 'ready'
-    ) {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+    const resource = byId.get(reference.resourceId)
+    if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
+    if (resource.userId !== job.data.userId || resource.status !== 'ready') {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
     }
-    if (revision.resource.mediaType !== 'audio' || !revision.media?.storageKey) {
-      throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.revisionId}`)
+    if (resource.mediaType !== 'audio' || !resource.media?.storageKey) {
+      throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return getSignedUrl(revision.media.storageKey, 3600)
+    return getSignedUrl(resource.media.storageKey, 3600)
   }))
 }
 

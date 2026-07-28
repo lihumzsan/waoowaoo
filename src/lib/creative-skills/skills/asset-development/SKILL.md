@@ -2,7 +2,7 @@
 
 ## 作用
 
-从精确 `screenplay` Revision、用户要求、参考素材，以及项目已采纳时由服务端完整注入的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，并一次性完成资产事实提取、外观设计与最终生成提示词。正式 `asset_manifest` 是生产资产范围的唯一事实；本 Skill 不直接生成图片或写入项目。正式 `asset_manifest` 只强制一个精确 screenplay Revision；Creative Direction 仍然可选。
+从精确 `screenplay` Resource、用户要求、参考素材，以及项目已采纳时由服务端完整注入的 Creative Direction 中筛选值得制作的可复用角色、场景、道具，并一次性完成资产事实提取、外观设计与最终生成提示词。正式 `asset_manifest` 是生产资产范围的唯一事实；本 Skill 不直接生成图片或写入项目。正式 `asset_manifest` 只强制一个精确 screenplay Resource；Creative Direction 仍然可选。
 
 ## 资产筛选
 

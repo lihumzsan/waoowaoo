@@ -6,6 +6,7 @@ import {
   screenplaySchema,
 } from '@/lib/screenplay'
 import {
+  buildDomainCreativeResourceId,
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
 } from '@/lib/creative-resource'
@@ -45,11 +46,11 @@ function creativeTaskPayload(input: {
   toolCallId: string
   sourceMaterials?: readonly {
     label: string
-    revisionId: string
+    resourceId: string
     value: unknown
   }[]
   creativeDirection?: {
-    revisionId: string
+    resourceId: string
     direction: typeof creativeDirection
   } | null
 }) {
@@ -67,7 +68,7 @@ function creativeTaskPayload(input: {
           label: source.label,
           kind: 'structured' as const,
           content: JSON.stringify(source.value),
-          provenance: { kind: 'resource' as const, revisionId: source.revisionId },
+          provenance: { kind: 'resource' as const, resourceId: source.resourceId },
         })),
         constraints: [],
       },
@@ -94,11 +95,11 @@ async function createCompletedCreativeTask(input: {
   toolCallId: string
   sourceMaterials?: readonly {
     label: string
-    revisionId: string
+    resourceId: string
     value: unknown
   }[]
   creativeDirection?: {
-    revisionId: string
+    resourceId: string
     direction: typeof creativeDirection
   } | null
 }) {
@@ -119,7 +120,7 @@ async function createCompletedCreativeTask(input: {
   })
 }
 
-async function createProjectResourceRevision(input: {
+async function createProjectResource(input: {
   userId: string
   projectId: string
   taskId: string
@@ -127,8 +128,13 @@ async function createProjectResourceRevision(input: {
   name: string
   content: unknown
 }) {
-  const resource = await prisma.creativeResource.create({
+  const sourceId = `${input.taskId}:${input.schemaId}`
+  return await prisma.creativeResource.create({
     data: {
+      id: buildDomainCreativeResourceId({
+        sourceType: 'CreativeWorkResult',
+        sourceId,
+      }),
       userId: input.userId,
       projectId: input.projectId,
       episodeId: null,
@@ -138,31 +144,17 @@ async function createProjectResourceRevision(input: {
       schemaId: input.schemaId,
       name: input.name,
       status: 'ready',
-      originKey: `asset-adoption:${input.taskId}:${input.schemaId}`,
       sourceType: 'CreativeWorkResult',
-      sourceId: `${input.taskId}:${input.schemaId}`,
-    },
-  })
-  const revision = await prisma.creativeResourceRevision.create({
-    data: {
-      resourceId: resource.id,
-      revision: 1,
+      sourceId,
       contentJson: input.content as Prisma.InputJsonValue,
-      sourceType: 'CreativeWorkResult',
-      sourceId: input.taskId,
-      sourceRevision: input.schemaId,
       modelKey: 'test:creative-model',
       operationId: 'delegate_creative_work',
       inputHash: 'a'.repeat(64),
       taskId: input.taskId,
       toolCallId: 'asset-adoption:creative-tool',
+      materializedAt: new Date(),
     },
   })
-  await prisma.creativeResource.update({
-    where: { id: resource.id },
-    data: { headRevisionId: revision.id },
-  })
-  return { resource, revision }
 }
 
 describe('Asset Manifest adoption DB integration', () => {
@@ -217,7 +209,7 @@ describe('Asset Manifest adoption DB integration', () => {
       runId: run.id,
       toolCallId,
     })
-    const screenplayRevision = await createProjectResourceRevision({
+    const screenplayResource = await createProjectResource({
       userId: user.id,
       projectId: project.id,
       taskId: screenplayTask.id,
@@ -232,7 +224,7 @@ describe('Asset Manifest adoption DB integration', () => {
       runId: run.id,
       toolCallId,
     })
-    const styleRevision = await createProjectResourceRevision({
+    const styleResource = await createProjectResource({
       userId: user.id,
       projectId: project.id,
       taskId: styleTask.id,
@@ -248,8 +240,7 @@ describe('Asset Manifest adoption DB integration', () => {
         scopeKind: 'project',
         scopeId: project.id,
         ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
-        resourceId: styleRevision.resource.id,
-        revisionId: styleRevision.revision.id,
+        resourceId: styleResource.id,
         source: 'style_adoption',
       },
     })
@@ -293,16 +284,16 @@ describe('Asset Manifest adoption DB integration', () => {
       sourceMaterials: [
         {
           label: 'Canonical screenplay',
-          revisionId: screenplayRevision.revision.id,
+          resourceId: screenplayResource.id,
           value: screenplay,
         },
       ],
       creativeDirection: {
-        revisionId: styleRevision.revision.id,
+        resourceId: styleResource.id,
         direction: creativeDirection,
       },
     })
-    const manifestRevision = await createProjectResourceRevision({
+    const manifestResource = await createProjectResource({
       userId: user.id,
       projectId: project.id,
       taskId: manifestTask.id,
@@ -313,14 +304,14 @@ describe('Asset Manifest adoption DB integration', () => {
     await prisma.creativeResourceLineage.createMany({
       data: [
         {
-          outputRevisionId: manifestRevision.revision.id,
-          inputRevisionId: screenplayRevision.revision.id,
+          outputResourceId: manifestResource.id,
+          inputResourceId: screenplayResource.id,
           role: 'source_material',
           position: 0,
         },
         {
-          outputRevisionId: manifestRevision.revision.id,
-          inputRevisionId: styleRevision.revision.id,
+          outputResourceId: manifestResource.id,
+          inputResourceId: styleResource.id,
           role: 'creative_direction',
           position: 1,
         },
@@ -347,13 +338,13 @@ describe('Asset Manifest adoption DB integration', () => {
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
-      input: { revisionId: manifestRevision.revision.id, expectedVersion: null },
+      input: { resourceId: manifestResource.id, expectedVersion: null },
     })
     expect(first).toMatchObject({
       kind: 'executed',
       data: {
         success: true,
-        revisionId: manifestRevision.revision.id,
+        resourceId: manifestResource.id,
         bindingVersion: 0,
         imageGenerationStarted: false,
         assets: [
@@ -369,7 +360,7 @@ describe('Asset Manifest adoption DB integration', () => {
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
-      input: { revisionId: manifestRevision.revision.id, expectedVersion: 0 },
+      input: { resourceId: manifestResource.id, expectedVersion: 0 },
     })
     expect(second).toMatchObject({
       kind: 'executed',
@@ -407,7 +398,7 @@ describe('Asset Manifest adoption DB integration', () => {
     expect(tasks).toHaveLength(3)
     expect(tasks.every((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(true)
     expect(binding).toMatchObject({
-      revisionId: manifestRevision.revision.id,
+      resourceId: manifestResource.id,
       version: 1,
       scopeKind: 'project',
       scopeId: project.id,
@@ -428,7 +419,7 @@ describe('Asset Manifest adoption DB integration', () => {
       runId: run.id,
       toolCallId,
     })
-    const replacementStyleRevision = await createProjectResourceRevision({
+    const replacementStyleResource = await createProjectResource({
       userId: user.id,
       projectId: project.id,
       taskId: replacementStyleTask.id,
@@ -439,8 +430,7 @@ describe('Asset Manifest adoption DB integration', () => {
     await prisma.creativeResourceBinding.update({
       where: { id: adoptedStyleBinding.id },
       data: {
-        resourceId: replacementStyleRevision.resource.id,
-        revisionId: replacementStyleRevision.revision.id,
+        resourceId: replacementStyleResource.id,
       },
     })
 
@@ -449,7 +439,7 @@ describe('Asset Manifest adoption DB integration', () => {
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
-      input: { revisionId: manifestRevision.revision.id, expectedVersion: 1 },
+      input: { resourceId: manifestResource.id, expectedVersion: 1 },
     })
     expect(afterDirectionReplacement).toMatchObject({
       kind: 'executed',
@@ -462,8 +452,8 @@ describe('Asset Manifest adoption DB integration', () => {
 
     await prisma.creativeResourceLineage.deleteMany({
       where: {
-        outputRevisionId: manifestRevision.revision.id,
-        inputRevisionId: screenplayRevision.revision.id,
+        outputResourceId: manifestResource.id,
+        inputResourceId: screenplayResource.id,
       },
     })
 
@@ -472,12 +462,12 @@ describe('Asset Manifest adoption DB integration', () => {
       channel: 'tool',
       operationId: 'adopt_asset_manifest',
       context,
-      input: { revisionId: manifestRevision.revision.id, expectedVersion: 2 },
+      input: { resourceId: manifestResource.id, expectedVersion: 2 },
     })).rejects.toMatchObject({
       code: 'INVALID_PARAMS',
       details: {
         code: 'ASSET_MANIFEST_EXACT_SCREENPLAY_SOURCE_REQUIRED',
-        field: 'revisionId',
+        field: 'resourceId',
       },
     })
 
@@ -494,7 +484,7 @@ describe('Asset Manifest adoption DB integration', () => {
     expect(finalTasks).toHaveLength(4)
     expect(finalTasks.every((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(true)
     expect(finalBinding).toMatchObject({
-      revisionId: replacementStyleRevision.revision.id,
+      resourceId: replacementStyleResource.id,
       version: 0,
     })
     const adoptedManifest = await prisma.creativeResourceBinding.findUniqueOrThrow({
@@ -507,7 +497,7 @@ describe('Asset Manifest adoption DB integration', () => {
       },
     })
     expect(adoptedManifest).toMatchObject({
-      revisionId: manifestRevision.revision.id,
+      resourceId: manifestResource.id,
       version: 2,
     })
   })

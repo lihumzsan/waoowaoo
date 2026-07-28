@@ -7,7 +7,6 @@ type LockedBindingRow = {
   id: string
   userId: string
   resourceId: string
-  revisionId: string
   source: string
   version: number
 }
@@ -25,7 +24,6 @@ function bindingView(row: LockedBindingRow, scope: CreativeResourceScopeRef, rol
     role,
     slotKey,
     resourceId: row.resourceId,
-    revisionId: row.revisionId,
     version: row.version,
     source: row.source,
   }
@@ -40,7 +38,7 @@ async function lockBinding(
   },
 ): Promise<LockedBindingRow | null> {
   const rows = await tx.$queryRaw<LockedBindingRow[]>(Prisma.sql`
-    SELECT id, userId, resourceId, revisionId, source, version
+    SELECT id, userId, resourceId, source, version
     FROM creative_resource_bindings
     WHERE scopeKind = ${input.scope.kind}
       AND scopeId = ${input.scope.id}
@@ -119,14 +117,13 @@ export async function deleteCreativeResourceBindingSlotInTransaction(
   return deleted.count
 }
 
-export async function bindCreativeResourceRevisionInTransaction(
+export async function bindCreativeResourceInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
     readonly role: string
     readonly slotKey: string
     readonly resourceId: string
-    readonly revisionId: string
     readonly source: string
     readonly expectedVersion: number | null
   },
@@ -134,7 +131,6 @@ export async function bindCreativeResourceRevisionInTransaction(
   const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
   const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
   const resourceId = requireNonEmpty(input.resourceId, 'CREATIVE_RESOURCE_ID_REQUIRED')
-  const revisionId = requireNonEmpty(input.revisionId, 'CREATIVE_RESOURCE_REVISION_ID_REQUIRED')
   const source = requireNonEmpty(input.source, 'CREATIVE_RESOURCE_BINDING_SOURCE_REQUIRED')
   if (input.scope.kind === 'project') {
     const project = await tx.project.findFirst({
@@ -176,19 +172,16 @@ export async function bindCreativeResourceRevisionInTransaction(
       episodeId: input.scope.episodeId,
     })
   }
-  const revision = await tx.creativeResourceRevision.findFirst({
+  const resource = await tx.creativeResource.findFirst({
     where: {
-      id: revisionId,
-      resourceId,
-      resource: {
-        userId: input.scope.userId,
-        status: 'ready',
-        OR: allowedResourceScopes,
-      },
+      id: resourceId,
+      userId: input.scope.userId,
+      status: 'ready',
+      OR: allowedResourceScopes,
     },
     select: { id: true },
   })
-  if (!revision) throw new Error('CREATIVE_RESOURCE_BINDING_REVISION_NOT_OWNED')
+  if (!resource) throw new Error('CREATIVE_RESOURCE_BINDING_RESOURCE_NOT_OWNED')
   const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
   if (!existing) {
     if (input.expectedVersion !== null) {
@@ -205,10 +198,9 @@ export async function bindCreativeResourceRevisionInTransaction(
         role,
         slotKey,
         resourceId,
-        revisionId,
         source,
       },
-      select: { id: true, userId: true, resourceId: true, revisionId: true, source: true, version: true },
+      select: { id: true, userId: true, resourceId: true, source: true, version: true },
     })
     return bindingView(created, input.scope, role, slotKey)
   }
@@ -219,7 +211,6 @@ export async function bindCreativeResourceRevisionInTransaction(
     where: { id: existing.id, version: input.expectedVersion },
     data: {
       resourceId,
-      revisionId,
       source,
       version: { increment: 1 },
     },
@@ -228,7 +219,6 @@ export async function bindCreativeResourceRevisionInTransaction(
   return bindingView({
     ...existing,
     resourceId,
-    revisionId,
     source,
     version: existing.version + 1,
   }, input.scope, role, slotKey)

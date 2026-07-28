@@ -5,7 +5,7 @@ import sharp from 'sharp'
 import { ApiError } from '@/lib/api-errors'
 import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
 import {
-  appendCreativeResourceRevisionInTransaction,
+  materializeCreativeResourceInTransaction,
   reserveDomainCreativeResourceInTransaction,
 } from '@/lib/creative-resource/persistence'
 import {
@@ -63,7 +63,6 @@ const uploadMediaOutputSchema = z.object({
   success: z.literal(true),
   resource: z.object({
     resourceId: z.string().min(1),
-    revisionId: z.string().min(1),
   }).strict(),
   mediaType: z.enum(['image', 'audio']),
   schemaId: z.string().min(1),
@@ -167,7 +166,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
   return {
     api_project_upload_media: defineOperation({
       id: 'api_project_upload_media',
-      summary: 'API-only: Materialize one user-uploaded image or audio file as a ready project upload Resource, consumable through the standard revision reference protocol.',
+      summary: 'API-only: Materialize one user-uploaded image or audio file as a ready project upload Resource, consumable through the standard resource reference protocol.',
       intent: 'act',
       effects: {
         writes: true,
@@ -221,14 +220,14 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
         if (reserved.status === 'ready') {
           const existing = await transaction.creativeResource.findUnique({
             where: { id: reserved.resourceId },
-            select: { headRevisionId: true, name: true },
+            select: { materializedAt: true, name: true },
           })
-          if (!existing?.headRevisionId) {
-            throw new Error(`USER_UPLOAD_READY_HEAD_MISSING:${reserved.resourceId}`)
+          if (!existing?.materializedAt) {
+            throw new Error(`USER_UPLOAD_READY_MATERIALIZATION_MISSING:${reserved.resourceId}`)
           }
           return uploadMediaOutputSchema.parse({
             success: true,
-            resource: { resourceId: reserved.resourceId, revisionId: existing.headRevisionId },
+            resource: { resourceId: reserved.resourceId },
             mediaType: prepared.mediaType,
             schemaId: prepared.schemaId,
             name: existing.name ?? prepared.name,
@@ -236,7 +235,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
             reused: true,
           })
         }
-        const revision = await appendCreativeResourceRevisionInTransaction(transaction, {
+        const resource = await materializeCreativeResourceInTransaction(transaction, {
           resourceId: reserved.resourceId,
           userId: ctx.userId,
           mediaType: prepared.mediaType,
@@ -269,7 +268,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
         })
         return uploadMediaOutputSchema.parse({
           success: true,
-          resource: revision,
+          resource: resource,
           mediaType: prepared.mediaType,
           schemaId: prepared.schemaId,
           name: prepared.name,

@@ -3,14 +3,14 @@ import { prisma } from '@/lib/prisma'
 import type {
   CreativeResourceBindingView,
   CreativeResourceCardView,
+  CreativeResourceContent,
   CreativeResourceDataView,
   CreativeResourceInputRef,
   CreativeResourceJsonObject,
   CreativeResourceJsonValue,
+  CreativeResourceMaterializationView,
   CreativeResourceMediaType,
   CreativeResourcePendingGeneration,
-  CreativeResourceRevisionContent,
-  CreativeResourceRevisionView,
   CreativeResourceScopeRef,
   CreativeResourceStatus,
   CreativeResourceView,
@@ -23,7 +23,10 @@ import {
   isCreativeResourceScopeKind,
   isCreativeResourceStatus,
 } from './contracts'
-import { parseCreativeResourceGenerationTaskPayload, toCreativeResourceJsonValue } from './generation-contract'
+import {
+  parseCreativeResourceGenerationTaskPayload,
+  toCreativeResourceJsonValue,
+} from './generation-contract'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
 import { CREATIVE_RESOURCE_SCHEMA, getCreativeResourceSchema } from './schema-registry'
@@ -31,10 +34,10 @@ import { projectCreativeResourceSummary } from './summary-projection'
 
 type CreativeResourceReadClient = Pick<
   Prisma.TransactionClient,
-  'creativeResource' | 'creativeResourceRevision' | 'creativeResourceBinding' | 'task'
+  'creativeResource' | 'creativeResourceBinding' | 'task'
 > | typeof prisma
 
-const revisionRelationsInclude = {
+const resourceInclude = {
   media: {
     select: {
       id: true,
@@ -48,16 +51,10 @@ const revisionRelationsInclude = {
   outputLineage: {
     orderBy: [{ position: 'asc' as const }, { role: 'asc' as const }],
     include: {
-      inputRevision: {
+      inputResource: {
         select: { id: true },
       },
     },
-  },
-} satisfies Prisma.CreativeResourceRevisionInclude
-
-const resourceInclude = {
-  headRevision: {
-    include: revisionRelationsInclude,
   },
   bindings: {
     orderBy: [{ role: 'asc' as const }, { slotKey: 'asc' as const }],
@@ -79,16 +76,22 @@ function jsonObject(value: Prisma.JsonValue | null): CreativeResourceJsonObject 
 }
 
 function requireMediaType(value: string): CreativeResourceMediaType {
-  if (!isCreativeResourceMediaType(value)) throw new Error(`CREATIVE_RESOURCE_MEDIA_TYPE_INVALID:${value}`)
+  if (!isCreativeResourceMediaType(value)) {
+    throw new Error(`CREATIVE_RESOURCE_MEDIA_TYPE_INVALID:${value}`)
+  }
   return value
 }
 
 function requireStatus(value: string): CreativeResourceStatus {
-  if (!isCreativeResourceStatus(value)) throw new Error(`CREATIVE_RESOURCE_STATUS_INVALID:${value}`)
+  if (!isCreativeResourceStatus(value)) {
+    throw new Error(`CREATIVE_RESOURCE_STATUS_INVALID:${value}`)
+  }
   return value
 }
 
-function scopeFromRow(row: Pick<ResourceRow, 'scopeKind' | 'scopeId' | 'userId' | 'projectId' | 'episodeId'>): CreativeResourceScopeRef {
+function scopeFromRow(
+  row: Pick<ResourceRow, 'scopeKind' | 'scopeId' | 'userId' | 'projectId' | 'episodeId'>,
+): CreativeResourceScopeRef {
   if (!isCreativeResourceScopeKind(row.scopeKind)) {
     throw new Error(`CREATIVE_RESOURCE_SCOPE_KIND_INVALID:${row.scopeKind}`)
   }
@@ -101,7 +104,7 @@ function scopeFromRow(row: Pick<ResourceRow, 'scopeKind' | 'scopeId' | 'userId' 
   }
 }
 
-function revisionContent(row: NonNullable<ResourceRow['headRevision']>): CreativeResourceRevisionContent {
+function resourceContent(row: ResourceRow): CreativeResourceContent {
   if (row.media) {
     return {
       kind: 'media',
@@ -113,30 +116,22 @@ function revisionContent(row: NonNullable<ResourceRow['headRevision']>): Creativ
       durationMs: row.media.durationMs,
     }
   }
-  if (row.sourceType && row.sourceId && row.sourceRevision && row.contentJson !== null) {
-    return {
-      kind: 'domain_snapshot',
-      sourceType: row.sourceType,
-      sourceId: row.sourceId,
-      sourceRevision: row.sourceRevision,
-      snapshot: jsonValue(row.contentJson) ?? null,
-    }
-  }
   if (row.contentText !== null) return { kind: 'text', text: row.contentText }
-  if (row.contentJson !== null) return { kind: 'structured', data: jsonValue(row.contentJson) ?? null }
-  throw new Error(`CREATIVE_RESOURCE_REVISION_CONTENT_MISSING:${row.id}`)
+  if (row.contentJson !== null) {
+    return { kind: 'structured', data: jsonValue(row.contentJson) ?? null }
+  }
+  throw new Error(`CREATIVE_RESOURCE_CONTENT_MISSING:${row.id}`)
 }
 
-function revisionView(row: NonNullable<ResourceRow['headRevision']>): CreativeResourceRevisionView {
+function materializationView(row: ResourceRow): CreativeResourceMaterializationView | null {
+  if (!row.materializedAt) return null
   const inputs: CreativeResourceInputRef[] = row.outputLineage.map((lineage) => ({
-    revisionId: lineage.inputRevision.id,
+    resourceId: lineage.inputResource.id,
     role: lineage.role,
     position: lineage.position,
   }))
   return {
-    revisionId: row.id,
-    revision: row.revision,
-    content: revisionContent(row),
+    content: resourceContent(row),
     provenance: {
       operationId: row.operationId,
       inputHash: row.inputHash,
@@ -149,18 +144,20 @@ function revisionView(row: NonNullable<ResourceRow['headRevision']>): CreativeRe
       generationOptions: jsonValue(row.generationOptions),
     },
     inputs,
-    createdAt: row.createdAt.toISOString(),
+    materializedAt: row.materializedAt.toISOString(),
   }
 }
 
-function bindingView(row: ResourceRow['bindings'][number], scope: CreativeResourceScopeRef): CreativeResourceBindingView {
+function bindingView(
+  row: ResourceRow['bindings'][number],
+  scope: CreativeResourceScopeRef,
+): CreativeResourceBindingView {
   return {
     bindingId: row.id,
     scope,
     role: row.role,
     slotKey: row.slotKey,
     resourceId: row.resourceId,
-    revisionId: row.revisionId,
     version: row.version,
     source: row.source,
   }
@@ -185,7 +182,7 @@ export function projectCreativeResourceView(
     candidateIndex: row.candidateIndex,
     creativeDataVersion: row.creativeDataVersion,
     creativeDataKeys: Object.keys(jsonObject(row.creativeData)).sort(),
-    headRevision: row.headRevision ? revisionView(row.headRevision) : null,
+    materialization: materializationView(row),
     pendingGeneration,
     bindings: row.bindings.map((binding) => bindingView(binding, scope)),
     error: row.errorCode || row.errorMessage
@@ -223,13 +220,15 @@ async function loadPendingGenerations(
       targetType: 'CreativeResource',
       targetId: { in: [...resourceIds] },
       status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      type: { in: [
-        TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
-        TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
-        TASK_TYPE.CREATIVE_RESOURCE_VOICE,
-        TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
-        TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
-      ] },
+      type: {
+        in: [
+          TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
+          TASK_TYPE.CREATIVE_RESOURCE_AUDIO,
+          TASK_TYPE.CREATIVE_RESOURCE_VOICE,
+          TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
+          TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
+        ],
+      },
     },
     select: { id: true, type: true, targetId: true, operationId: true, payload: true },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -307,19 +306,17 @@ export async function listProjectCreativeResourceCards(input: {
     if (!candidateSetId) return view
     const candidateViews = byCandidateSet.get(candidateSetId) ?? [view]
     const resources = candidateViews.map((candidate) => candidate.resource)
-    const summaries = candidateViews.map((candidate) => ({
-      resourceId: candidate.resource.resourceId,
-      summary: candidate.presentation.summary,
-    }))
-    const selectedRevisionId = resources
-      .flatMap((resource) => resource.bindings.map((binding) => binding.revisionId))[0] ?? null
     return {
       ...view,
       candidates: {
         candidateSetId,
         resources,
-        summaries,
-        selectedRevisionId,
+        summaries: candidateViews.map((candidate) => ({
+          resourceId: candidate.resource.resourceId,
+          summary: candidate.presentation.summary,
+        })),
+        selectedResourceId: resources
+          .flatMap((resource) => resource.bindings.map((binding) => binding.resourceId))[0] ?? null,
       },
     }
   })
@@ -364,11 +361,7 @@ export async function getProjectCreativeResourceDataView(input: {
         { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
       ],
     },
-    select: {
-      id: true,
-      creativeData: true,
-      creativeDataVersion: true,
-    },
+    select: { id: true, creativeData: true, creativeDataVersion: true },
   })
   if (!row) return null
   return {
@@ -376,35 +369,6 @@ export async function getProjectCreativeResourceDataView(input: {
     creativeData: jsonObject(row.creativeData),
     creativeDataVersion: row.creativeDataVersion,
   }
-}
-
-export async function getProjectCreativeResourceRevisionView(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly resourceId: string
-  readonly revisionId?: string | null
-  readonly client?: CreativeResourceReadClient
-}): Promise<CreativeResourceRevisionView | null> {
-  const client = input.client ?? prisma
-  if (!input.revisionId?.trim()) {
-    const card = await getProjectCreativeResourceCard(input)
-    return card?.resource.headRevision ?? null
-  }
-  const row = await client.creativeResourceRevision.findFirst({
-    where: {
-      id: input.revisionId.trim(),
-      resourceId: input.resourceId,
-      resource: {
-        userId: input.userId,
-        OR: [
-          { projectId: input.projectId },
-          { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
-        ],
-      },
-    },
-    include: revisionRelationsInclude,
-  })
-  return row ? revisionView(row) : null
 }
 
 function bindingScopeFromRow(row: {
@@ -438,20 +402,12 @@ function workingBindingView(row: {
   readonly source: string
   readonly version: number
   readonly resourceId: string
-  readonly revisionId: string
   readonly resource: {
     readonly name: string
     readonly mediaType: string
     readonly schemaId: string
   }
-  readonly revision: {
-    readonly resourceId: string
-    readonly revision: number
-  }
 }): CreativeResourceWorkingBindingView {
-  if (row.revision.resourceId !== row.resourceId) {
-    throw new Error(`CREATIVE_RESOURCE_BINDING_REVISION_RESOURCE_MISMATCH:${row.id}`)
-  }
   return {
     bindingId: row.id,
     scope: bindingScopeFromRow(row),
@@ -460,8 +416,6 @@ function workingBindingView(row: {
     version: row.version,
     source: row.source,
     resourceId: row.resourceId,
-    revisionId: row.revisionId,
-    revision: row.revision.revision,
     schemaId: row.resource.schemaId,
     mediaType: requireMediaType(row.resource.mediaType),
     name: row.resource.name,
@@ -477,7 +431,9 @@ function canonicalBinding(
     candidate.role === target.role && candidate.slotKey === target.slotKey
   )) ?? null
   if (binding && binding.schemaId !== expectedSchemaId) {
-    throw new Error(`CREATIVE_RESOURCE_CANONICAL_BINDING_SCHEMA_INVALID:${target.role}:${binding.schemaId}`)
+    throw new Error(
+      `CREATIVE_RESOURCE_CANONICAL_BINDING_SCHEMA_INVALID:${target.role}:${binding.schemaId}`,
+    )
   }
   return binding
 }
@@ -517,9 +473,7 @@ export async function readProjectCreativeResourceWorkingSet(input: {
         source: true,
         version: true,
         resourceId: true,
-        revisionId: true,
         resource: { select: { name: true, mediaType: true, schemaId: true } },
-        revision: { select: { resourceId: true, revision: true } },
       },
       orderBy: [{ scopeKind: 'asc' }, { role: 'asc' }, { slotKey: 'asc' }],
     }),

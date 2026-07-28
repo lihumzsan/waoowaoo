@@ -1,7 +1,7 @@
 import type {
   CreativeResourceInputRef,
   CreativeResourceJsonValue,
-  CreativeResourceRevisionContent,
+  CreativeResourceContent,
 } from './contracts'
 import {
   creativeWorkTaskPayloadSchema,
@@ -40,7 +40,7 @@ export interface CreativeWorkResourceMaterializationOutput {
   readonly name: string
   readonly candidateSetId: string | null
   readonly candidateIndex: number | null
-  readonly content: CreativeResourceRevisionContent
+  readonly content: CreativeResourceContent
   readonly generationOptions: CreativeResourceJsonValue
 }
 
@@ -70,14 +70,14 @@ function resourceInputsFromPayload(
   for (const source of payload.request.context.sourceMaterials) {
     if (source.provenance.kind !== 'resource') continue
     inputs.push({
-      revisionId: source.provenance.revisionId,
+      resourceId: source.provenance.resourceId,
       role: 'source_material',
       position: inputs.length,
     })
   }
   if (payload.request.creativeDirection) {
     inputs.push({
-      revisionId: payload.request.creativeDirection.revisionId,
+      resourceId: payload.request.creativeDirection.resourceId,
       role: 'creative_direction',
       position: inputs.length,
     })
@@ -88,15 +88,15 @@ function resourceInputsFromPayload(
 function parseStructuredSourceMaterials(
   payload: ReturnType<typeof creativeWorkTaskPayloadSchema.parse>,
 ): readonly {
-  readonly revisionId: string
+  readonly resourceId: string
   readonly value: unknown
 }[] {
   return payload.request.context.sourceMaterials.flatMap((source) => {
     if (source.kind !== 'structured' || source.provenance.kind !== 'resource') return []
     try {
-      return [{ revisionId: source.provenance.revisionId, value: JSON.parse(source.content) as unknown }]
+      return [{ resourceId: source.provenance.resourceId, value: JSON.parse(source.content) as unknown }]
     } catch {
-      throw new Error(`CREATIVE_WORK_STRUCTURED_SOURCE_INVALID:${source.provenance.revisionId}`)
+      throw new Error(`CREATIVE_WORK_STRUCTURED_SOURCE_INVALID:${source.provenance.resourceId}`)
     }
   })
 }
@@ -191,7 +191,7 @@ export function planCreativeWorkResourceMaterialization(input: {
     const structuredSources = parseStructuredSourceMaterials(payload)
     const screenplaySources = structuredSources.flatMap((source) => {
       const parsed = screenplaySchema.safeParse(source.value)
-      return parsed.success ? [{ revisionId: source.revisionId }] : []
+      return parsed.success ? [{ resourceId: source.resourceId }] : []
     })
     if (screenplaySources.length !== 1) {
       throw new Error('ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED')
@@ -210,8 +210,8 @@ export function planCreativeWorkResourceMaterialization(input: {
       generationOptions: {
         outputKind: output.kind,
         requestKey: payload.requestKey,
-        screenplayRevisionId: screenplaySource.revisionId,
-        creativeDirectionRevisionId: payload.request.creativeDirection?.revisionId ?? null,
+        screenplayResourceId: screenplaySource.resourceId,
+        creativeDirectionResourceId: payload.request.creativeDirection?.resourceId ?? null,
       },
     })
   }

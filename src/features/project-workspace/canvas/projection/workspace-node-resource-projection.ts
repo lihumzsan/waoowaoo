@@ -67,7 +67,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
         targetId: card.resource.resourceId,
         title: card.resource.name,
         eyebrow: translate('nodes.resourceCard.eyebrow', { type: card.resource.mediaType }),
-        body: card.resource.headRevision?.provenance.prompt
+        body: card.resource.materialization?.provenance.prompt
           ?? card.resource.pendingGeneration?.prompt
           ?? translate('nodes.resourceCard.body'),
         meta: card.resource.schemaId,
@@ -83,18 +83,13 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
   })
 
   const edgeIds = new Set(edges.map((edge) => edge.id))
-  const nodeIdByRevisionId = new Map(cards.flatMap((card) => {
-    const revisionId = card.resource.headRevision?.revisionId
-    const nodeId = nodeIdByResourceId.get(card.resource.resourceId)
-    return revisionId && nodeId ? [[revisionId, nodeId] as const] : []
-  }))
   for (const card of cards) {
     const targetNodeId = nodeIdByResourceId.get(card.resource.resourceId)
     if (!targetNodeId) continue
-    for (const input of card.resource.headRevision?.inputs ?? []) {
-      const sourceNodeId = nodeIdByRevisionId.get(input.revisionId)
+    for (const input of card.resource.materialization?.inputs ?? []) {
+      const sourceNodeId = nodeIdByResourceId.get(input.resourceId)
       if (!sourceNodeId || sourceNodeId === targetNodeId) continue
-      const edgeId = `resource-lineage:${input.revisionId}:${targetNodeId}:${input.role}:${String(input.position)}`
+      const edgeId = `resource-lineage:${input.resourceId}:${targetNodeId}:${input.role}:${String(input.position)}`
       if (edgeIds.has(edgeId)) continue
       edgeIds.add(edgeId)
       edges.push(createEdge(edgeId, sourceNodeId, targetNodeId))

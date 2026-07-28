@@ -32,11 +32,11 @@ import {
 } from '@/lib/creative-resource/generation-retry'
 import {
   buildCreativeResourceCandidateSetId,
-  buildCreativeResourceOriginKey,
+  buildCreativeResourceId,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource/identity'
 import {
-  appendCreativeResourceRevisionInTransaction,
+  materializeCreativeResourceInTransaction,
   reserveCreativeResourcesInTransaction,
   validateCreativeResourceInputReferencesInTransaction,
 } from '@/lib/creative-resource/persistence'
@@ -46,6 +46,7 @@ import {
   isImportOriginCreativeResourceSchema,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
+import { creativeWorkOutputSchemas } from '@/lib/creative-worker'
 import { matchCurrentUserText } from '@/lib/creative-resource/current-user-text'
 import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { resolveSystemModelKey, type SystemModelPurpose } from '@/lib/model-access/system-model-resolver'
@@ -77,21 +78,21 @@ import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-
 const contextReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Exact immutable Resource revisions used as creative context and lineage only. Text, Creative Direction, audio, video, and image Resources are allowed here; these references are never sent to an image input channel.')
+  .describe('Exact immutable Resources used as creative context and lineage only. Text, Creative Direction, audio, video, and image Resources are allowed here; these references are never sent to an image input channel.')
 
 const imageReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Exact ready image Resource revisions to send through the provider image-input channel. Never put text, Creative Direction, audio, or video Resources here.')
+  .describe('Exact ready image Resources to send through the provider image-input channel. Never put text, Creative Direction, audio, or video Resources here.')
 
 const videoImageReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
   .optional()
-  .describe('Ordered exact ready image Resource revisions sent to the configured video model and numbered as @ImageN. Never put text, Creative Direction, audio, or video Resources here.')
+  .describe('Ordered exact ready image Resources sent to the configured video model and numbered as @ImageN. Never put text, Creative Direction, audio, or video Resources here.')
 
 const videoAudioCompatibleImageReferenceSchema = z.object({
-  revisionId: z.string().trim().min(1)
-    .describe('Globally unique immutable image Resource Revision identity.'),
+  resourceId: z.string().trim().min(1)
+    .describe('Globally unique immutable image Resource identity.'),
   role: z.string().trim().min(1)
     .regex(/^(?!first_frame$|last_frame$).+$/)
     .optional()
@@ -100,7 +101,7 @@ const videoAudioCompatibleImageReferenceSchema = z.object({
 
 const audioVideoReferenceSchema = creativeResourceInputRefSchema
   .optional()
-  .describe('Exact ready video Resource revision the configured music model watches to compose a matching soundtrack. Only present when the configured music capability supports video conditioning.')
+  .describe('Exact ready video Resource the configured music model watches to compose a matching soundtrack. Only present when the configured music capability supports video conditioning.')
 
 const commonNewMediaGenerationShape = {
   kind: z.literal('new'),
@@ -109,10 +110,13 @@ const commonNewMediaGenerationShape = {
     .describe('Optional display name for the generated Resource or candidate set.'),
   prompt: z.string().trim().min(1)
     .describe('Complete generation instruction for the configured media model.'),
-  count: z.number().int().min(1).max(6).optional()
-    .describe('Number of new candidates to generate. Defaults to 1.'),
   contextReferences: contextReferenceSchema,
 } as const
+
+// Audio is deliberately excluded: create_audio produces exactly one Resource
+// per call, so only image and video requests carry a candidate count.
+const candidateCountSchema = z.number().int().min(1).max(6).optional()
+  .describe('Number of new candidates to generate. Defaults to 1.')
 
 const retryMediaGenerationRequestSchema = z.object({
   kind: z.literal('retry'),
@@ -169,6 +173,7 @@ const createTextInputSchema = z.object({
 
 const createImageNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
+  count: candidateCountSchema,
   imageReferences: imageReferenceSchema,
   schemaId: z.enum(independentImageSchemaIds as [string, ...string[]]).optional()
     .describe('Professional meaning of an independent image Resource. Omit to use generic.image.'),
@@ -264,9 +269,16 @@ const createVideoNewRequestSchema = z.union([
   createVideoWithAudioReferencesRequestSchema,
 ])
 
+const createVideoPromptSetRequestSchema = z.object({
+  kind: z.literal('prompt_set'),
+  resourceId: z.string().trim().min(1).max(32)
+    .describe('Exact ready project.video_prompt_set Resource. The server reads every segment prompt, duration, and media Resource ID directly and creates the video Tasks; do not copy or remap them.'),
+}).strict()
+
 const createVideoInputSchema = z.object({
   request: z.union([
     createVideoNewRequestSchema,
+    createVideoPromptSetRequestSchema,
     retryMediaGenerationRequestSchema,
   ]),
 }).strict()
@@ -279,6 +291,7 @@ type CreateImageNewRequest = z.infer<typeof createImageNewRequestSchema>
 type CreateAssetImageRequest = z.infer<typeof createAssetImageRequestSchema>
 type CreateAudioNewRequest = z.infer<typeof createAudioNewRequestSchema>
 type CreateVideoNewRequest = z.infer<typeof createVideoNewRequestSchema>
+type CreateVideoPromptSetRequest = z.infer<typeof createVideoPromptSetRequestSchema>
 type RetryMediaGenerationRequest = z.infer<typeof retryMediaGenerationRequestSchema>
 type MediaGenerationInput = CreateImageInput | CreateAudioInput | CreateVideoInput
 type CreateImageGenerationRequest = CreateImageNewRequest | CreateAssetImageRequest
@@ -286,7 +299,6 @@ type NewMediaGenerationRequest = CreateImageGenerationRequest | CreateAudioNewRe
 
 const resourceRefOutputSchema = z.object({
   resourceId: z.string().min(1),
-  revisionId: z.string().min(1).optional(),
   candidateIndex: z.number().int().min(0).nullable(),
 }).strict()
 
@@ -347,7 +359,7 @@ function normalizeInputReferences(
   },
 ): CreativeResourceInputRef[] {
   return (references ?? []).map((reference, position) => ({
-    revisionId: reference.revisionId,
+    resourceId: reference.resourceId,
     role: reference.role ?? input.defaultRole,
     position: input.positionOffset + position,
   }))
@@ -372,12 +384,12 @@ function normalizeMediaInputReferences(input: NewMediaGenerationRequest): {
   })
   const seen = new Set<string>()
   for (const reference of [...contextInputs, ...providerInputs]) {
-    const identity = reference.revisionId
+    const identity = reference.resourceId
     if (seen.has(identity)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_RESOURCE_INPUT_REFERENCE_DUPLICATE',
         field: 'contextReferences',
-        revisionId: reference.revisionId,
+        resourceId: reference.resourceId,
         agentRetryableAfterCorrection: true,
       })
     }
@@ -398,17 +410,17 @@ async function assertInputReferences(
   await prisma.$transaction(async (tx) => {
     await validateCreativeResourceInputReferencesInTransaction(tx, userId, references)
     if (!requiredMediaType || references.length === 0) return
-    const revisions = await tx.creativeResourceRevision.findMany({
-      where: { id: { in: references.map((reference) => reference.revisionId) } },
-      select: { id: true, resource: { select: { mediaType: true } } },
+    const resources = await tx.creativeResource.findMany({
+      where: { id: { in: references.map((reference) => reference.resourceId) } },
+      select: { id: true, mediaType: true },
     })
-    const mediaTypeById = new Map(revisions.map((revision) => [revision.id, revision.resource.mediaType]))
+    const mediaTypeById = new Map(resources.map((resource) => [resource.id, resource.mediaType]))
     for (const reference of references) {
-      if (mediaTypeById.get(reference.revisionId) !== requiredMediaType) {
+      if (mediaTypeById.get(reference.resourceId) !== requiredMediaType) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
           field,
-          revisionId: reference.revisionId,
+          resourceId: reference.resourceId,
           allowedValues: [requiredMediaType],
           agentRetryableAfterCorrection: true,
         })
@@ -438,11 +450,11 @@ async function classifyProviderInputReferences(
       videoInputPositions: [],
     }
   }
-  const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: references.map((reference) => reference.revisionId) } },
-    select: { id: true, resource: { select: { mediaType: true } } },
+  const resources = await prisma.creativeResource.findMany({
+    where: { id: { in: references.map((reference) => reference.resourceId) } },
+    select: { id: true, mediaType: true },
   })
-  const mediaTypeById = new Map(revisions.map((revision) => [revision.id, revision.resource.mediaType]))
+  const mediaTypeById = new Map(resources.map((resource) => [resource.id, resource.mediaType]))
   const allowedMediaTypes: readonly CreativeResourceMediaType[] = mediaType === 'video'
     ? ['image', 'audio']
     : mediaType === 'image'
@@ -459,12 +471,12 @@ async function classifyProviderInputReferences(
   const audioInputs: CreativeResourceInputRef[] = []
   const videoInputs: CreativeResourceInputRef[] = []
   for (const reference of references) {
-    const referenceMediaType = mediaTypeById.get(reference.revisionId)
+    const referenceMediaType = mediaTypeById.get(reference.resourceId)
     if (!referenceMediaType || !allowedMediaTypes.some((allowed) => allowed === referenceMediaType)) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_RESOURCE_INPUT_MEDIA_TYPE_INVALID',
         field,
-        revisionId: reference.revisionId,
+        resourceId: reference.resourceId,
         allowedValues: allowedMediaTypes,
         agentRetryableAfterCorrection: true,
       })
@@ -585,10 +597,12 @@ async function createTextResources(
         name: suppliedScreenplayTitle ?? input.name,
         text: currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text,
       }]
-  const candidateSetId = candidates.length > 1 ? randomUUID() : null
   const requestId = ctx.toolCallId?.trim()
     ? `${ctx.context.runId ?? 'run'}:${ctx.toolCallId.trim()}`
     : randomUUID()
+  const candidateSetId = candidates.length > 1
+    ? buildCreativeResourceCandidateSetId({ operationId: 'create_text', requestId })
+    : null
   const reserved = await reserveCreativeResourcesInTransaction(tx, {
     scope,
     mediaType: 'text',
@@ -604,10 +618,10 @@ async function createTextResources(
   const inputHash = stableArgsHash(input)
   const resources = []
   for (const [candidateIndex, candidate] of candidates.entries()) {
-    const resource = reserved[candidateIndex]
-    if (!resource) throw new Error(`CREATIVE_RESOURCE_RESERVATION_MISSING:${String(candidateIndex)}`)
-    const revision = await appendCreativeResourceRevisionInTransaction(tx, {
-      resourceId: resource.resourceId,
+    const reservedResource = reserved[candidateIndex]
+    if (!reservedResource) throw new Error(`CREATIVE_RESOURCE_RESERVATION_MISSING:${String(candidateIndex)}`)
+    const materialized = await materializeCreativeResourceInTransaction(tx, {
+      resourceId: reservedResource.resourceId,
       userId: ctx.userId,
       mediaType: 'text',
       schemaId,
@@ -644,7 +658,7 @@ async function createTextResources(
           : null,
       },
     })
-    resources.push({ ...revision, candidateIndex })
+    resources.push({ ...materialized, candidateIndex })
   }
   return createTextOutputSchema.parse({ success: true, resources })
 }
@@ -883,7 +897,7 @@ function createBoundVideoInputSchema(
   const maxReferenceAudios = capabilities?.video?.maxReferenceAudios ?? 0
   const imageReferences = z.array(creativeResourceInputRefSchema)
     .max(maxReferenceImages)
-    .describe(`At most ${String(maxReferenceImages)} ready image Resource revisions for the configured video capability.`)
+    .describe(`At most ${String(maxReferenceImages)} ready image Resources for the configured video capability.`)
   const noAudioRequest = z.object({
     ...commonShape,
     imageReferences: supportsTextToVideoModel(state.modelKey)
@@ -907,6 +921,7 @@ function createBoundVideoInputSchema(
   return z.object({
     request: z.union([
       ...newRequests,
+      createVideoPromptSetRequestSchema,
       retryMediaGenerationRequestSchema,
     ]),
   }).strict() as unknown as RuntimeSchema<CreateVideoInput>
@@ -1348,7 +1363,7 @@ async function planNewMediaGeneration(
   ].join(':')
   const count = input.kind === 'asset' ? 1 : input.count ?? 1
   const resources = Array.from({ length: count }, (_, candidateIndex) => ({
-    resourceId: buildCreativeResourceOriginKey({
+    resourceId: buildCreativeResourceId({
       operationId: config.operationId,
       requestId,
       candidateIndex,
@@ -1632,14 +1647,328 @@ async function planMediaGenerationRetry(
   }
 }
 
+async function planVideoPromptSetGeneration(
+  ctx: ProjectAgentOperationContext,
+  input: CreateVideoPromptSetRequest,
+): Promise<OperationPlan> {
+  const promptSetResource = await prisma.creativeResource.findFirst({
+    where: {
+      id: input.resourceId,
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      episodeId: { not: null },
+      status: 'ready',
+      materializedAt: { not: null },
+      mediaType: 'text',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
+      sourceType: 'CreativeWorkResult',
+    },
+    select: {
+      id: true,
+      episodeId: true,
+      contentJson: true,
+      outputLineage: {
+        select: {
+          inputResource: {
+            select: {
+              id: true,
+              userId: true,
+              projectId: true,
+              episodeId: true,
+              scopeKind: true,
+              scopeId: true,
+              status: true,
+              materializedAt: true,
+              mediaType: true,
+              mediaId: true,
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!promptSetResource || !promptSetResource.episodeId || promptSetResource.contentJson === null) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'VIDEO_PROMPT_SET_RESOURCE_NOT_FOUND',
+      field: 'request.resourceId',
+    })
+  }
+  const contextEpisodeId = ctx.context.episodeId?.trim() || null
+  if (contextEpisodeId && contextEpisodeId !== promptSetResource.episodeId) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_PROMPT_SET_EPISODE_MISMATCH',
+      field: 'request.resourceId',
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const promptSet = creativeWorkOutputSchemas.video_prompt_set.parse(promptSetResource.contentJson)
+  const sourceById = new Map(
+    promptSetResource.outputLineage.map((lineage) => [
+      lineage.inputResource.id,
+      lineage.inputResource,
+    ]),
+  )
+  const boundState = readMediaGenerationBoundState(
+    ctx.boundToolContractState,
+    VIDEO_CONFIG.operationId,
+  )
+  const modelKey = boundState?.modelKey
+    ?? await resolveGenerationModel({ ctx, purpose: VIDEO_CONFIG.modelPurpose })
+  const capabilities = requireMediaGenerationCapabilities('video', modelKey).video
+  if (!capabilities) throw new Error(`CREATIVE_RESOURCE_VIDEO_CAPABILITY_REQUIRED:${modelKey}`)
+  const maxReferenceImages = requirePositiveCapabilityLimit({
+    field: 'maxReferenceImages',
+    value: capabilities.maxReferenceImages,
+    modelKey,
+  })
+  const maxReferenceAudios = capabilities.maxReferenceAudios ?? 0
+  const projectConfig = boundState?.projectConfig
+    ?? await getProjectModelConfig(ctx.projectId, ctx.userId)
+  const planFingerprint = stableArgsHash({
+    promptSetResourceId: promptSetResource.id,
+    promptSet,
+    modelKey,
+    projectVideoRatio: projectConfig.videoRatio,
+  })
+  const requestId = [
+    'video-prompt-set',
+    ctx.userId,
+    ctx.projectId,
+    promptSetResource.episodeId,
+    ctx.context.runId?.trim() || 'no-run',
+    ctx.toolCallId?.trim() || planFingerprint,
+    planFingerprint,
+  ].join(':')
+  const resources = promptSet.segments.map((segment, candidateIndex) => ({
+    resourceId: buildCreativeResourceId({
+      operationId: VIDEO_CONFIG.operationId,
+      requestId,
+      candidateIndex,
+    }),
+    name: `Video ${segment.key}`.slice(0, 191),
+    candidateIndex,
+  }))
+  const tasks = await Promise.all(promptSet.segments.map(async (segment, candidateIndex) => {
+    const seen = new Set<string>()
+    const mediaSources = segment.mediaResourceIds.map((resourceId) => {
+      if (seen.has(resourceId)) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'VIDEO_PROMPT_SET_MEDIA_RESOURCE_DUPLICATE',
+          field: 'request.resourceId',
+          resourceId,
+          agentRetryableAfterCorrection: false,
+        })
+      }
+      seen.add(resourceId)
+      const source = sourceById.get(resourceId)
+      const sourceScopeAllowed = source
+        ? (
+            (
+              source.scopeKind === 'user'
+              && source.scopeId === ctx.userId
+              && source.projectId === null
+              && source.episodeId === null
+            )
+            || (
+              source.scopeKind === 'project'
+              && source.scopeId === ctx.projectId
+              && source.projectId === ctx.projectId
+              && source.episodeId === null
+            )
+            || (
+              source.scopeKind === 'episode'
+              && source.scopeId === promptSetResource.episodeId
+              && source.projectId === ctx.projectId
+              && source.episodeId === promptSetResource.episodeId
+            )
+          )
+        : false
+      if (
+        !source
+        || source.userId !== ctx.userId
+        || !sourceScopeAllowed
+        || source.status !== 'ready'
+        || source.materializedAt === null
+        || source.mediaId === null
+        || (source.mediaType !== 'image' && source.mediaType !== 'audio')
+      ) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'VIDEO_PROMPT_SET_MEDIA_RESOURCE_INVALID',
+          field: 'request.resourceId',
+          resourceId,
+          agentRetryableAfterCorrection: false,
+        })
+      }
+      return source
+    })
+    const imageSources = mediaSources.filter((source) => source.mediaType === 'image')
+    const audioSources = mediaSources.filter((source) => source.mediaType === 'audio')
+    if (audioSources.length > 0 && imageSources.length === 0) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE',
+        field: 'request.resourceId',
+        modelKey,
+        agentRetryableAfterCorrection: false,
+      })
+    }
+    if (imageSources.length === 0 && !supportsTextToVideoModel(modelKey)) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_TEXT_TO_VIDEO_UNSUPPORTED',
+        field: 'request.resourceId',
+        modelKey,
+        requiredCapability: 'textToVideo',
+        agentRetryableAfterCorrection: false,
+      })
+    }
+    if (imageSources.length > maxReferenceImages) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
+        field: 'request.resourceId',
+        modelKey,
+        requestedValue: imageSources.length,
+        allowedValues: [maxReferenceImages],
+        agentRetryableAfterCorrection: false,
+      })
+    }
+    if (audioSources.length > maxReferenceAudios) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED',
+        field: 'request.resourceId',
+        modelKey,
+        requestedValue: audioSources.length,
+        allowedValues: [maxReferenceAudios],
+        agentRetryableAfterCorrection: false,
+      })
+    }
+    const imageReferences = imageSources.map((source) => ({ resourceId: source.id }))
+    const publicInput: CreateVideoNewRequest = audioSources.length > 0
+      ? {
+          kind: 'new',
+          prompt: segment.prompt,
+          durationSeconds: segment.durationSeconds,
+          contextReferences: [{ resourceId: promptSetResource.id }],
+          imageReferences,
+          audioReferences: audioSources.map((source) => ({ resourceId: source.id })),
+        }
+      : {
+          kind: 'new',
+          prompt: segment.prompt,
+          durationSeconds: segment.durationSeconds,
+          contextReferences: [{ resourceId: promptSetResource.id }],
+          imageReferences,
+        }
+    const generationOptions = await resolveFrozenGenerationOptions({
+      ctx,
+      config: VIDEO_CONFIG,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+      modelKey,
+      publicInput,
+      projectConfig,
+    })
+    const inputs: CreativeResourceInputRef[] = [
+      {
+        resourceId: promptSetResource.id,
+        role: 'video_prompt_set',
+        position: 0,
+      },
+      ...mediaSources.map((source, index) => ({
+        resourceId: source.id,
+        role: 'reference',
+        position: index + 1,
+      })),
+    ]
+    const imageInputPositions = mediaSources.flatMap((source, index) => (
+      source.mediaType === 'image' ? [index + 1] : []
+    ))
+    const audioInputPositions = mediaSources.flatMap((source, index) => (
+      source.mediaType === 'audio' ? [index + 1] : []
+    ))
+    const inputHash = hashTaskInput({
+      operationId: VIDEO_CONFIG.operationId,
+      promptSetResourceId: promptSetResource.id,
+      segmentKey: segment.key,
+      prompt: segment.prompt,
+      modelKey,
+      inputs,
+      imageInputPositions,
+      audioInputPositions,
+      generationOptions,
+    })
+    const resource = resources[candidateIndex]
+    if (!resource) throw new Error(`VIDEO_PROMPT_SET_RESOURCE_PLAN_MISSING:${String(candidateIndex)}`)
+    const payload = {
+      lifecycleProjection: buildCreativeResourceLifecycleProjection([{
+        resourceId: resource.resourceId,
+        mediaType: 'video',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        name: resource.name,
+      }]),
+      resource: {
+        resourceId: resource.resourceId,
+        mediaType: 'video' as const,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+        prompt: segment.prompt,
+        modelKey,
+        inputHash,
+        inputs,
+        imageInputPositions,
+        audioInputPositions,
+        videoInputPositions: [],
+        generationOptions,
+        executionSegmentId: null,
+        toolCallId: ctx.toolCallId?.trim() || null,
+      },
+      videoModel: modelKey,
+      prompt: segment.prompt,
+      count: 1 as const,
+      generationOptions,
+    }
+    return createPlannedTask({
+      id: `${VIDEO_CONFIG.operationId}:${resource.resourceId}`,
+      taskType: VIDEO_CONFIG.taskType,
+      targetType: 'CreativeResource',
+      targetId: resource.resourceId,
+      payload,
+      locale: resolveOperationLocale(ctx.context),
+      episodeId: promptSetResource.episodeId,
+      dedupeKey: `${VIDEO_CONFIG.operationId}:prompt-set:${resource.resourceId}:${inputHash}`,
+      billingInfo: requirePlannedTaskBillingInfo({
+        taskType: VIDEO_CONFIG.taskType,
+        payload,
+        allowedApiTypes: ['video'],
+      }),
+    })
+  }))
+  return {
+    kind: 'task_submission',
+    operationId: VIDEO_CONFIG.operationId,
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    tasks,
+    reservedIdentityIds: resources.map((resource) => resource.resourceId),
+    metadata: {
+      mediaType: 'video',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+      episodeId: promptSetResource.episodeId,
+      requestId,
+      candidateSetId: null,
+      retry: false,
+      resources,
+    },
+  }
+}
+
 async function planMediaGeneration(
   ctx: ProjectAgentOperationContext,
   input: MediaGenerationInput,
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
+  if (config.operationId === 'create_video' && input.request.kind === 'prompt_set') {
+    return await planVideoPromptSetGeneration(ctx, input.request)
+  }
   return input.request.kind === 'retry'
     ? await planMediaGenerationRetry(ctx, input.request, config)
-    : await planNewMediaGeneration(ctx, input.request, config)
+    : await planNewMediaGeneration(ctx, input.request as NewMediaGenerationRequest, config)
 }
 
 async function commitMediaGeneration(
@@ -1764,7 +2093,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text for every other excerpt. Creative authoring and revision still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text for every other excerpt. Creative authoring and resource still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,
@@ -1814,7 +2143,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate independent audio Resources. For new generation, provide the complete prompt and lineage inside request.kind=new. When the server-configured music model supports video-conditioned soundtracks, pass one ready video Resource revision in videoReference and set durationSeconds to that video duration; the model watches the video and composes matching music. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate independent audio Resources. For new generation, provide the complete prompt and lineage inside request.kind=new. When the server-configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReference and set durationSeconds to that video duration; the model watches the video and composes matching music. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -1834,7 +2163,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_video: defineOperation({
       id: 'create_video',
-      summary: 'Generate independent video Resources. For new generation, provide the Worker-authored final prompt plus ordered exact imageReferences and audioReferences; aliases are numbered independently. Audio references require at least one image reference and cannot be combined with first_frame/last_frame roles. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores prompt, references, duration, ratio, audio, and other frozen inputs.',
+      summary: 'Generate video Resources. Use request.kind=prompt_set with one exact project.video_prompt_set Resource to let the server directly validate and execute every stored segment prompt, duration, and media Resource ID without Primary-Agent mapping. Use request.kind=new only for independent one-off video generation. To retry, provide only exact failed Resource IDs; the server restores every frozen input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {

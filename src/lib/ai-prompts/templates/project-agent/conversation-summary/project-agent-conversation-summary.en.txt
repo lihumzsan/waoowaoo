@@ -5,7 +5,7 @@ The existing summary already covers earlier conversation. Treat it as settled fa
 Keep concrete facts only, and favour completeness over brevity:
 - Goals, preferences and constraints the user stated explicitly
 - Decisions already made, and the reasoning behind them
-- Exact ids (resources, revisions, chapters, tasks, assets)
+- Exact ids (resources, chapters, tasks, assets)
 - Questions the user has not answered yet, and pending interactions
 - Errors that occurred and why
 - Work that finished, and work explicitly still outstanding

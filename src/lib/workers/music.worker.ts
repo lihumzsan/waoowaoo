@@ -42,23 +42,25 @@ async function loadMusicVideoReference(
   }
   const reference = videoInputs[0]
   if (!reference) throw new Error('CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED')
-  const revision = await prisma.creativeResourceRevision.findUnique({
-    where: { id: reference.revisionId },
+  const resource = await prisma.creativeResource.findUnique({
+    where: { id: reference.resourceId },
     select: {
       media: { select: { storageKey: true, durationMs: true } },
-      resource: { select: { userId: true, mediaType: true, status: true } },
+      userId: true,
+      mediaType: true,
+      status: true,
     },
   })
-  if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
-  if (revision.resource.userId !== job.data.userId || revision.resource.status !== 'ready') {
-    throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+  if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
+  if (resource.userId !== job.data.userId || resource.status !== 'ready') {
+    throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
   }
-  if (revision.resource.mediaType !== 'video' || !revision.media?.storageKey) {
-    throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.revisionId}`)
+  if (resource.mediaType !== 'video' || !resource.media?.storageKey) {
+    throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.resourceId}`)
   }
   return {
-    url: await getSignedUrl(revision.media.storageKey, 3600),
-    durationMs: revision.media.durationMs ?? null,
+    url: await getSignedUrl(resource.media.storageKey, 3600),
+    durationMs: resource.media.durationMs ?? null,
   }
 }
 

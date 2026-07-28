@@ -194,13 +194,28 @@ describe('Creative Worker result submission contract', () => {
   })
 
   it('uses the same submission boundary for frozen contextual video constraints', () => {
+    const imageResourceId = 'r_AAAAAAAAAAAAAAAAAAAAAA'
+    const audioResourceId = 'r_BBBBBBBBBBBBBBBBBBBBBB'
     const request: CreativeWorkRequest = {
       outputKind: 'video_prompt_set',
       goal: 'Build two executable generation segments.',
       durationIntent: { mode: 'fixed', seconds: 10 },
       context: {
         userRequest: 'Make a ten-second video.',
-        sourceMaterials: [],
+        sourceMaterials: [
+          {
+            label: 'Hero portrait',
+            kind: 'image',
+            content: 'The exact approved hero appearance.',
+            provenance: { kind: 'resource', resourceId: imageResourceId },
+          },
+          {
+            label: 'Hero voice',
+            kind: 'audio',
+            content: 'The exact approved hero voice.',
+            provenance: { kind: 'resource', resourceId: audioResourceId },
+          },
+        ],
         constraints: [],
       },
       creativeDirection: null,
@@ -225,8 +240,8 @@ describe('Creative Worker result submission contract', () => {
       submission.submit(JSON.stringify({
         kind: 'video_prompt_set',
         segments: [
-          { key: 'same-key', durationSeconds: 4, prompt: 'First action.', referenceKeys: [] },
-          { key: 'same-key', durationSeconds: 4, prompt: 'Second action.', referenceKeys: [] },
+          { key: 'same-key', durationSeconds: 4, prompt: 'First action.', mediaResourceIds: [] },
+          { key: 'same-key', durationSeconds: 4, prompt: 'Second action.', mediaResourceIds: [] },
         ],
       }))
       throw new Error('INVALID_VIDEO_SUBMISSION_MUST_FAIL')
@@ -249,13 +264,83 @@ describe('Creative Worker result submission contract', () => {
     expect(submission.submit(JSON.stringify({
       kind: 'video_prompt_set',
       segments: [
-        { key: 'opening', durationSeconds: 4, prompt: 'First action.', referenceKeys: [] },
-        { key: 'ending', durationSeconds: 6, prompt: 'Second action.', referenceKeys: [] },
+        {
+          key: 'opening',
+          durationSeconds: 4,
+          prompt: 'First action.',
+          mediaResourceIds: [imageResourceId, audioResourceId],
+        },
+        {
+          key: 'ending',
+          durationSeconds: 6,
+          prompt: 'Second action.',
+          mediaResourceIds: [imageResourceId],
+        },
       ],
     }))).toEqual({
       accepted: true,
       outputKind: 'video_prompt_set',
     })
+  })
+
+  it('rejects guessed, duplicate, and audio-only Prompt Set Resource references', () => {
+    const imageResourceId = 'r_AAAAAAAAAAAAAAAAAAAAAA'
+    const audioResourceId = 'r_BBBBBBBBBBBBBBBBBBBBBB'
+    const request: CreativeWorkRequest = {
+      outputKind: 'video_prompt_set',
+      goal: 'Build one executable video segment.',
+      durationIntent: { mode: 'fixed', seconds: 4 },
+      context: {
+        userRequest: 'Make a four-second video.',
+        sourceMaterials: [
+          {
+            label: 'Hero portrait',
+            kind: 'image',
+            content: 'The exact approved hero appearance.',
+            provenance: { kind: 'resource', resourceId: imageResourceId },
+          },
+          {
+            label: 'Hero voice',
+            kind: 'audio',
+            content: 'The exact approved hero voice.',
+            provenance: { kind: 'resource', resourceId: audioResourceId },
+          },
+        ],
+        constraints: [],
+      },
+      creativeDirection: null,
+      productionContext: {
+        video: {
+          aspectRatio: '16:9',
+          allowedSegmentDurationsSeconds: [4],
+          minSegmentDurationSeconds: 4,
+          maxSegmentDurationSeconds: 4,
+          maxReferenceImages: 4,
+          maxReferenceAudios: 1,
+        },
+      },
+    }
+
+    for (const mediaResourceIds of [
+      ['r_CCCCCCCCCCCCCCCCCCCCCC'],
+      [imageResourceId, imageResourceId],
+      [audioResourceId],
+    ]) {
+      const submission = createCreativeWorkerOutputSubmission({
+        request,
+        definition: creativeWorkOutputRegistry.video_prompt_set,
+        maxOutputChars: 120_000,
+      })
+      expect(() => submission.submit(JSON.stringify({
+        kind: 'video_prompt_set',
+        segments: [{
+          key: 'only',
+          durationSeconds: 4,
+          prompt: 'One exact executable segment.',
+          mediaResourceIds,
+        }],
+      }))).toThrow(CreativeWorkerSubmissionValidationError)
+    }
   })
 
   it('keeps the provider-facing submit_result parameters fixed across output kinds', () => {

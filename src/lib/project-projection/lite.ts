@@ -8,7 +8,7 @@ async function resolveResourceSummary(projectId: string, episodeId: string | nul
   const [totalCount, readyCount, failedCount] = await Promise.all([
     prisma.creativeResource.count({ where: scope }),
     prisma.creativeResource.count({
-      where: { ...scope, status: 'ready', headRevisionId: { not: null } },
+      where: { ...scope, status: 'ready', materializedAt: { not: null } },
     }),
     prisma.creativeResource.count({ where: { ...scope, status: 'failed' } }),
   ])

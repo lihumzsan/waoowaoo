@@ -97,6 +97,6 @@ Creative Direction 可选。对于 `story_canon` 和 `continuity_analysis`，项
 ## 为 Chapter 规划提供连续性判断
 
 - 当 `outputKind=chapter_plan` 且输入提供本 Skill 时，用剧情状态变化、跨段依赖、实体持续状态和情绪区间帮助判断自然边界；不要把事实提取重新变成固定 splitter。
-- 精确剧本 Revision 始终是分章范围的权威。Story Canon 或连续性材料只能解释剧本中的共享事实，不能新增正文、覆盖原文范围或成为分章前置条件。
+- 精确剧本 Resource 始终是分章范围的权威。Story Canon 或连续性材料只能解释剧本中的共享事实，不能新增正文、覆盖原文范围或成为分章前置条件。
 - 避免在一个仍未完成的持续状态变化中切分。若确需跨 Chapter 延续，在相邻 Chapter 的摘要中清楚指出入口和出口状态，但不要创造另一份全局 canon。
 - 每章不超过 180 秒只是采用 Chapter 后的局部校验；是否需要 Chapter 仍由独立工作价值、并行、上下文与恢复需求共同决定。

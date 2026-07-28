@@ -24,6 +24,14 @@ function buildInput(params: {
     targetId: `resource-${params.suffix}`,
     dedupeKey: `creative-resource-image:${params.projectId}:${params.suffix}`,
     payload: {
+      lifecycleProjection: {
+        resources: [{
+          resourceId: `resource-${params.suffix}`,
+          mediaType: 'image',
+          schemaId: 'generic.image',
+          name: `Resource ${params.suffix}`,
+        }],
+      },
       resourceId: `resource-${params.suffix}`,
       prompt: `prompt-${params.suffix}`,
       meta: { locale: 'en' },
@@ -76,7 +84,18 @@ describe('transactional Task batch dedupe', () => {
       type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
       targetType: 'CreativeResource',
       targetId: 'video-resource-invalid-scope',
-      payload: { resourceId: 'video-resource-invalid-scope', meta: { locale: 'en' } },
+      payload: {
+        lifecycleProjection: {
+          resources: [{
+            resourceId: 'video-resource-invalid-scope',
+            mediaType: 'video',
+            schemaId: 'generic.video',
+            name: 'Invalid scope video',
+          }],
+        },
+        resourceId: 'video-resource-invalid-scope',
+        meta: { locale: 'en' },
+      },
     }
 
     await expect(persistBatch([{ ...input, episodeId: otherEpisode.id }])).rejects.toThrow(
@@ -176,7 +195,19 @@ describe('transactional Task batch dedupe', () => {
 
     await expect(persistBatch([{
       ...input,
-      payload: { resourceId: 'resource-conflict', prompt: 'different', meta: { locale: 'en' } },
+      payload: {
+        lifecycleProjection: {
+          resources: [{
+            resourceId: 'resource-conflict',
+            mediaType: 'image',
+            schemaId: 'generic.image',
+            name: 'Conflicting resource',
+          }],
+        },
+        resourceId: 'resource-conflict',
+        prompt: 'different',
+        meta: { locale: 'en' },
+      },
     }])).rejects.toThrow('TASK_BATCH_IDENTITY_CONFLICT')
   })
 

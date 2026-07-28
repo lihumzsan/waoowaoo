@@ -10,6 +10,17 @@ function requireIdentity(value: string, code: string): string {
   return normalized
 }
 
+function buildShortIdentity(prefix: 'r_' | 'rs_', namespace: string, parts: readonly string[]): string {
+  const digest = createHash('sha256')
+  for (const part of [namespace, ...parts]) {
+    const normalized = requireIdentity(part, 'CREATIVE_RESOURCE_IDENTITY_PART_REQUIRED')
+    digest.update(String(Buffer.byteLength(normalized, 'utf8')))
+    digest.update(':')
+    digest.update(normalized)
+  }
+  return `${prefix}${digest.digest().subarray(0, 16).toString('base64url')}`
+}
+
 export function buildCreativeResourceScopeRef(input: {
   readonly kind: CreativeResourceScopeKind
   readonly id: string
@@ -48,7 +59,7 @@ export function resolveProjectCreativeResourceScope(input: {
   })
 }
 
-export function buildCreativeResourceOriginKey(input: {
+export function buildCreativeResourceId(input: {
   readonly operationId: string
   readonly requestId: string
   readonly candidateIndex: number
@@ -58,14 +69,11 @@ export function buildCreativeResourceOriginKey(input: {
   if (!Number.isSafeInteger(input.candidateIndex) || input.candidateIndex < 0) {
     throw new Error('CREATIVE_RESOURCE_CANDIDATE_INDEX_INVALID')
   }
-  const digest = createHash('sha256')
-    .update(operationId)
-    .update('\n')
-    .update(requestId)
-    .update('\n')
-    .update(String(input.candidateIndex))
-    .digest('hex')
-  return `resource:${digest}`
+  return buildShortIdentity('r_', 'operation', [
+    operationId,
+    requestId,
+    String(input.candidateIndex),
+  ])
 }
 
 export function buildCreativeResourceCandidateSetId(input: {
@@ -74,24 +82,14 @@ export function buildCreativeResourceCandidateSetId(input: {
 }): string {
   const operationId = requireIdentity(input.operationId, 'CREATIVE_RESOURCE_OPERATION_ID_REQUIRED')
   const requestId = requireIdentity(input.requestId, 'CREATIVE_RESOURCE_REQUEST_ID_REQUIRED')
-  const digest = createHash('sha256')
-    .update(operationId)
-    .update('\n')
-    .update(requestId)
-    .digest('hex')
-  return `candidate-set:${digest}`
+  return buildShortIdentity('rs_', 'candidate-set', [operationId, requestId])
 }
 
-export function buildDomainCreativeResourceOriginKey(input: {
+export function buildDomainCreativeResourceId(input: {
   readonly sourceType: string
   readonly sourceId: string
 }): string {
   const sourceType = requireIdentity(input.sourceType, 'CREATIVE_RESOURCE_SOURCE_TYPE_REQUIRED')
   const sourceId = requireIdentity(input.sourceId, 'CREATIVE_RESOURCE_SOURCE_ID_REQUIRED')
-  const digest = createHash('sha256')
-    .update(sourceType)
-    .update('\n')
-    .update(sourceId)
-    .digest('hex')
-  return `domain:${digest}`
+  return buildShortIdentity('r_', 'domain', [sourceType, sourceId])
 }

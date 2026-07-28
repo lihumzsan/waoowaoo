@@ -17,7 +17,10 @@ import {
   readRetryableConsumedProjectAgentChoiceInterruption,
 } from '@/lib/project-agent/interruptions'
 import { resolveProjectAgentChoiceSubject } from '@/lib/project-agent/choice-offer'
-import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource'
+import {
+  buildDomainCreativeResourceId,
+  CREATIVE_RESOURCE_SCHEMA,
+} from '@/lib/creative-resource'
 import { CREATIVE_WORK_TASK_PROTOCOL } from '@/lib/creative-worker'
 import { TASK_TYPE } from '@/lib/task/types'
 
@@ -113,6 +116,10 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
   })
   const resource = await prisma.creativeResource.create({
     data: {
+      id: buildDomainCreativeResourceId({
+        sourceType: 'CreativeWorkResult',
+        sourceId: `${task.id}:restrained`,
+      }),
       userId: user.id,
       projectId: project.id,
       episodeId: null,
@@ -122,17 +129,10 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
       schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
       name: 'Restrained visual direction',
       status: 'ready',
-      originKey: `${TEST_PREFIX}style-resource:${episode.id}`,
       sourceType: 'CreativeWorkResult',
       sourceId: `${task.id}:restrained`,
-      candidateSetId: task.id,
+      candidateSetId: null,
       candidateIndex: 0,
-    },
-  })
-  const revision = await prisma.creativeResourceRevision.create({
-    data: {
-      resourceId: resource.id,
-      revision: 1,
       contentJson: {
         rawUserStyle: null,
         styleSummary: 'Restrained monochrome realism',
@@ -149,20 +149,14 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
         sound: 'Preserve natural room tone and deliberate silence.',
         assetPolicy: 'Keep identities realistic, stable, and free of decorative styling.',
       },
-      sourceType: 'CreativeWorkResult',
-      sourceId: task.id,
-      sourceRevision: 'restrained',
       modelKey: 'golden:creative-model',
       operationId: 'creative_work',
       inputHash: 'a'.repeat(64),
       taskId: task.id,
       executionSegmentId: `segment:${episode.id}`,
       toolCallId,
+      materializedAt: new Date(),
     },
-  })
-  await prisma.creativeResource.update({
-    where: { id: resource.id },
-    data: { headRevisionId: revision.id },
   })
 
   const currentRun = await prisma.projectAgentRun.findUniqueOrThrow({
@@ -182,15 +176,15 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
       label: '视觉方向',
       required: true,
       presentation: 'options' as const,
-      options: [{ value: revision.id, label: '克制写实' }],
+      options: [{ value: resource.id, label: '克制写实' }],
     }],
     submitLabel: '采用这个方向',
   }
   const commitments = [{
-    when: { kind: 'option' as const, groupKey: 'style', optionValue: revision.id },
+    when: { kind: 'option' as const, groupKey: 'style', optionValue: resource.id },
     operationId: 'adopt_creative_direction',
     input: {
-      revisionId: params.validCommitment ? revision.id : `${revision.id}:missing`,
+      resourceId: params.validCommitment ? resource.id : `${resource.id}:missing`,
       expectedVersion: null,
     },
   }]
@@ -199,8 +193,8 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     projectId: project.id,
     userId: user.id,
     request: {
-      kind: 'resource_revisions',
-      revisions: [{ revisionId: revision.id }],
+      kind: 'resources',
+      resources: [{ resourceId: resource.id }],
     },
     card,
     commitments,
@@ -233,7 +227,7 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     },
   })
   if (suspension.kind !== 'choice') throw new Error('EXPECTED_CHOICE_SUSPENSION')
-  return { user, project, episode, resource, revision, run, card: suspension.card, interruptionId: suspension.interruptionId }
+  return { user, project, episode, resource, run, card: suspension.card, interruptionId: suspension.interruptionId }
 }
 
 describe('Project Agent interruption atomic replacement DB integration', () => {
@@ -349,7 +343,7 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       toolCallId: seeded.card.toolCallId,
       response: {
         kind: 'select',
-        selections: [{ groupKey: 'style', kind: 'option', value: seeded.revision.id }],
+        selections: [{ groupKey: 'style', kind: 'option', value: seeded.resource.id }],
       } as const,
       operationSignal: new AbortController().signal,
       locale: 'zh',
@@ -363,8 +357,8 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
         role: 'adopted_creative_direction',
         slotKey: 'primary',
       },
-      select: { resourceId: true, revisionId: true },
-    })).resolves.toEqual({ resourceId: seeded.resource.id, revisionId: seeded.revision.id })
+      select: { resourceId: true },
+    })).resolves.toEqual({ resourceId: seeded.resource.id })
     await expect(prisma.projectAgentInterruption.findUniqueOrThrow({
       where: { id: seeded.interruptionId },
       select: { status: true },
@@ -404,7 +398,7 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       toolCallId: seeded.card.toolCallId,
       response: {
         kind: 'select',
-        selections: [{ groupKey: 'style', kind: 'option', value: seeded.revision.id }],
+        selections: [{ groupKey: 'style', kind: 'option', value: seeded.resource.id }],
       },
       operationSignal: new AbortController().signal,
       locale: 'zh',

@@ -52,7 +52,7 @@ describe('workspace assistant run trace view', () => {
       {
         type: 'data',
         name: 'assistant-resource-links',
-        data: { resources: [{ resourceId: 'resource-1', revisionId: 'revision-1' }] },
+        data: { resources: [{ resourceId: 'resource-1' }] },
       },
     ])).toMatchObject({
       hasPublicReasoning: false,

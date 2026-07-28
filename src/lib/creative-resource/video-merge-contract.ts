@@ -6,7 +6,7 @@ import {
 } from './task-runtime-envelope'
 
 const videoMergeInputRefSchema = z.object({
-  revisionId: z.string().trim().min(1),
+  resourceId: z.string().trim().min(1),
   role: z.enum(['source_video', 'bgm_audio']),
   position: z.number().int().min(0),
 }).strict()

@@ -2,7 +2,7 @@ import {
   CREATIVE_RESOURCE_SCHEMA,
   isCreativeResourceMediaType,
   type CreativeResourceJsonValue,
-  type CreativeResourceRevisionContent,
+  type CreativeResourceContent,
 } from '@/lib/creative-resource'
 import {
   compileCreativeChapterContext,
@@ -16,7 +16,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 export interface CreativeChapterAssetReference {
-  readonly revisionId: string
+  readonly resourceId: string
   readonly entityRef: LedgerEntityRef | null
 }
 
@@ -47,7 +47,7 @@ function requireUnique(values: readonly string[], label: string): void {
 function resourceDescription(input: {
   readonly name: string
   readonly prompt: string | null
-  readonly content: CreativeResourceRevisionContent
+  readonly content: CreativeResourceContent
 }): string {
   const prompt = input.prompt?.trim()
   if (prompt) return prompt
@@ -56,79 +56,72 @@ function resourceDescription(input: {
     const serialized = JSON.stringify(input.content.data)
     if (serialized && serialized !== 'null') return serialized
   }
-  if (input.content.kind === 'domain_snapshot') {
-    const serialized = JSON.stringify(input.content.snapshot)
-    if (serialized && serialized !== 'null') return serialized
-  }
   return input.name
 }
 
 interface ResolvedCreativeContextResource {
   readonly asset: CreativeContextAsset
-  readonly content: CreativeResourceRevisionContent
+  readonly content: CreativeResourceContent
 }
 
-const exactResourceRevisionSchema = z.object({
-  revisionId: z.string().trim().min(1),
+const exactResourceSchema = z.object({
+  resourceId: z.string().trim().min(1),
 }).strict()
 
 const chapterProvenanceSchema = z.object({
   sourceResourceId: z.string().trim().min(1),
-  sourceRevisionId: z.string().trim().min(1),
   chapterPlanResourceId: z.string().trim().min(1),
-  chapterPlanRevisionId: z.string().trim().min(1),
-  storyCanon: exactResourceRevisionSchema.nullable(),
-  contextRevisions: z.array(exactResourceRevisionSchema.extend({
+  storyCanon: exactResourceSchema.nullable(),
+  contextResources: z.array(exactResourceSchema.extend({
     schemaId: z.string().trim().min(1),
   }).strict()),
   beatIds: z.array(z.string().trim().min(1)),
   eventIds: z.array(z.string().trim().min(1)),
 }).strict()
 
-type ExactResourceRevision = z.infer<typeof exactResourceRevisionSchema>
+type ExactResourceRef = z.infer<typeof exactResourceSchema>
 
-function exactReferenceKey(reference: ExactResourceRevision): string {
-  return reference.revisionId
+function exactReferenceKey(reference: ExactResourceRef): string {
+  return reference.resourceId
 }
 
 async function resolveOptionalStoryCanonBundle(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly sourceRevisionId: string
+  readonly sourceResourceId: string
   readonly sourceText: string
-  readonly reference: ExactResourceRevision | null
+  readonly reference: ExactResourceRef | null
 }) {
   if (!input.reference) return null
-  const revision = await prisma.creativeResourceRevision.findFirst({
+  const resource = await prisma.creativeResource.findFirst({
     where: {
-      id: input.reference.revisionId,
-      resource: {
-        userId: input.userId,
-        projectId: input.projectId,
-        episodeId: null,
-        status: 'ready',
-        mediaType: 'text',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
-        sourceType: 'CreativeWorkResult',
-      },
+      id: input.reference.resourceId,
+      userId: input.userId,
+      projectId: input.projectId,
+      episodeId: null,
+      status: 'ready',
+      materializedAt: { not: null },
+      mediaType: 'text',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
+      sourceType: 'CreativeWorkResult',
     },
     select: {
       contentJson: true,
-      outputLineage: { select: { inputRevisionId: true, role: true } },
+      outputLineage: { select: { inputResourceId: true, role: true } },
     },
   })
   if (
-    !revision
-    || revision.contentJson === null
-    || !revision.outputLineage.some((lineage) => (
-      lineage.inputRevisionId === input.sourceRevisionId && lineage.role === 'source_material'
+    !resource
+    || resource.contentJson === null
+    || !resource.outputLineage.some((lineage) => (
+      lineage.inputResourceId === input.sourceResourceId && lineage.role === 'source_material'
     ))
   ) {
-    fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: input.reference.revisionId })
+    fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: input.reference.resourceId })
   }
   return normalizeStoryCanonResourceBundle({
-    rawBundle: revision.contentJson,
+    rawBundle: resource.contentJson,
     sourceText: input.sourceText,
   })
 }
@@ -138,16 +131,15 @@ async function resolveCreativeContextResources(input: {
   readonly userId: string
   readonly references: readonly CreativeChapterAssetReference[]
 }): Promise<ResolvedCreativeContextResource[]> {
-  requireUnique(input.references.map((reference) => reference.revisionId), 'revisionId')
+  requireUnique(input.references.map((reference) => reference.resourceId), 'resourceId')
   return await Promise.all(input.references.map(async (reference) => {
-    const revision = await prisma.creativeResourceRevision.findFirst({
+    const resource = await prisma.creativeResource.findFirst({
       where: {
-        id: reference.revisionId,
-        resource: {
-          userId: input.userId,
-          projectId: input.projectId,
-          status: 'ready',
-        },
+        id: reference.resourceId,
+        userId: input.userId,
+        projectId: input.projectId,
+        status: 'ready',
+        materializedAt: { not: null },
       },
       select: {
         id: true,
@@ -155,7 +147,6 @@ async function resolveCreativeContextResources(input: {
         contentJson: true,
         sourceType: true,
         sourceId: true,
-        sourceRevision: true,
         prompt: true,
         media: {
           select: {
@@ -167,59 +158,50 @@ async function resolveCreativeContextResources(input: {
             durationMs: true,
           },
         },
-        resource: {
-          select: { id: true, mediaType: true, schemaId: true, name: true },
-        },
+        mediaType: true,
+        schemaId: true,
+        name: true,
       },
     })
-    if (!revision) {
-      fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: reference.revisionId })
+    if (!resource) {
+      fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: reference.resourceId })
     }
-    if (revision.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION) {
+    if (resource.schemaId === CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION) {
       fail('CREATIVE_CONTEXT_INPUT_INVALID', {
         label: 'creativeDirectionIsServerInjected',
-        revisionId: reference.revisionId,
+        resourceId: reference.resourceId,
       })
     }
-    if (!isCreativeResourceMediaType(revision.resource.mediaType)) {
+    if (!isCreativeResourceMediaType(resource.mediaType)) {
       fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'resourceMediaType' })
     }
-    const content: CreativeResourceRevisionContent = revision.media
+    const content: CreativeResourceContent = resource.media
       ? {
           kind: 'media',
-          mediaId: revision.media.id,
-          url: `/m/${encodeURIComponent(revision.media.publicId)}`,
-          mimeType: revision.media.mimeType,
-          width: revision.media.width,
-          height: revision.media.height,
-          durationMs: revision.media.durationMs,
+          mediaId: resource.media.id,
+          url: `/m/${encodeURIComponent(resource.media.publicId)}`,
+          mimeType: resource.media.mimeType,
+          width: resource.media.width,
+          height: resource.media.height,
+          durationMs: resource.media.durationMs,
         }
-      : revision.sourceType && revision.sourceId && revision.sourceRevision && revision.contentJson !== null
-        ? {
-            kind: 'domain_snapshot',
-            sourceType: revision.sourceType,
-            sourceId: revision.sourceId,
-            sourceRevision: revision.sourceRevision,
-            snapshot: revision.contentJson as CreativeResourceJsonValue,
-          }
-        : revision.contentText !== null
-          ? { kind: 'text', text: revision.contentText }
-          : revision.contentJson !== null
-            ? { kind: 'structured', data: revision.contentJson as CreativeResourceJsonValue }
-            : fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { revisionId: reference.revisionId })
+      : resource.contentText !== null
+        ? { kind: 'text', text: resource.contentText }
+        : resource.contentJson !== null
+          ? { kind: 'structured', data: resource.contentJson as CreativeResourceJsonValue }
+          : fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: reference.resourceId })
     return {
       asset: {
-        resourceId: revision.resource.id,
-        revisionId: revision.id,
-        mediaType: revision.resource.mediaType,
-        schemaId: revision.resource.schemaId,
-        name: revision.resource.name,
+        resourceId: resource.id,
+        mediaType: resource.mediaType,
+        schemaId: resource.schemaId,
+        name: resource.name,
         description: resourceDescription({
-          name: revision.resource.name,
-          prompt: revision.prompt,
+          name: resource.name,
+          prompt: resource.prompt,
           content,
         }),
-        prompt: revision.prompt,
+        prompt: resource.prompt,
         mediaId: content.kind === 'media' ? content.mediaId : null,
         entityRef: reference.entityRef,
       },
@@ -263,7 +245,6 @@ export async function compileEpisodeChapterContexts(
             id: true,
             normalizedText: true,
             sourceResourceId: true,
-            sourceRevisionId: true,
           },
         },
       },
@@ -286,13 +267,12 @@ export async function compileEpisodeChapterContexts(
     if (
       chapter.sourceDocument.id !== chapter.sourceDocumentId
       || provenance.data.sourceResourceId !== chapter.sourceDocument.sourceResourceId
-      || provenance.data.sourceRevisionId !== chapter.sourceDocument.sourceRevisionId
     ) {
       fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', { chapterId: chapter.id })
     }
     return { chapter, provenance: provenance.data }
   })
-  const storyCanonRefs = new Map<string, ExactResourceRevision>()
+  const storyCanonRefs = new Map<string, ExactResourceRef>()
   const storyCanonRefKeys = new Set<string>()
   for (const parsed of parsedChapters) {
     if (parsed.provenance.storyCanon) {
@@ -304,19 +284,19 @@ export async function compileEpisodeChapterContexts(
     }
   }
   if (storyCanonRefKeys.size > 1) {
-    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterStoryCanonRevisions' })
+    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterStoryCanonResources' })
   }
   const firstChapter = parsedChapters[0]
   if (!firstChapter) fail('CREATIVE_CONTEXT_CHAPTER_NOT_FOUND', { episodeId: input.episodeId })
-  const commonSourceRevisionIds = new Set(parsedChapters.map((parsed) => parsed.provenance.sourceRevisionId))
-  if (commonSourceRevisionIds.size !== 1) {
+  const commonSourceResourceIds = new Set(parsedChapters.map((parsed) => parsed.provenance.sourceResourceId))
+  if (commonSourceResourceIds.size !== 1) {
     fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', { episodeId: input.episodeId })
   }
   const storyCanonBundle = await resolveOptionalStoryCanonBundle({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
-    sourceRevisionId: firstChapter.provenance.sourceRevisionId,
+    sourceResourceId: firstChapter.provenance.sourceResourceId,
     sourceText: firstChapter.chapter.sourceDocument.normalizedText,
     reference: storyCanonRefs.values().next().value ?? null,
   })

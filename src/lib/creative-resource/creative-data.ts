@@ -26,7 +26,7 @@ export type CreativeResourceDataEdit =
     }
 
 interface EmbeddedCreativeResourceRef {
-  readonly revisionId: string
+  readonly resourceId: string
 }
 
 function invalidData(code: string, details: Record<string, unknown> = {}): never {
@@ -177,11 +177,11 @@ function collectEmbeddedRefs(
     }
     const raw = value.$resourceRef
     const keys = Object.keys(raw).sort()
-    if (JSON.stringify(keys) !== JSON.stringify(['revisionId'])) {
+    if (JSON.stringify(keys) !== JSON.stringify(['resourceId'])) {
       invalidData('CREATIVE_RESOURCE_DATA_REFERENCE_INVALID', { field: '$resourceRef' })
     }
     refs.push({
-      revisionId: requireString(raw.revisionId, '$resourceRef.revisionId'),
+      resourceId: requireString(raw.resourceId, '$resourceRef.resourceId'),
     })
     return
   }
@@ -257,36 +257,32 @@ export async function editCreativeResourceDataInTransaction(
   }))
   await validateCreativeResourceInputReferencesInTransaction(tx, input.userId, referenceInputs)
   if (embeddedRefs.length > 0) {
-    const referencedRevisions = await tx.creativeResourceRevision.findMany({
-      where: { id: { in: embeddedRefs.map((reference) => reference.revisionId) } },
+    const referencedResources = await tx.creativeResource.findMany({
+      where: { id: { in: embeddedRefs.map((reference) => reference.resourceId) } },
       select: {
         id: true,
-        resource: {
-          select: {
-            projectId: true,
-            episodeId: true,
-          },
-        },
+        projectId: true,
+        episodeId: true,
       },
     })
-    const referencedById = new Map(referencedRevisions.map((revision) => [revision.id, revision]))
+    const referencedById = new Map(referencedResources.map((referenced) => [referenced.id, referenced]))
     for (const reference of embeddedRefs) {
-      const referenced = referencedById.get(reference.revisionId)
+      const referenced = referencedById.get(reference.resourceId)
       if (!referenced) {
         throw new ApiError('NOT_FOUND', {
           code: 'CREATIVE_RESOURCE_DATA_REFERENCE_NOT_FOUND',
-          field: '$resourceRef.revisionId',
+          field: '$resourceRef.resourceId',
         })
       }
       const sameResourceScope = resource.projectId === null
-        ? referenced.resource.projectId === null
-        : referenced.resource.projectId === null || referenced.resource.projectId === resource.projectId
-      const sameEpisodeScope = referenced.resource.episodeId === null
-        || referenced.resource.episodeId === resource.episodeId
+        ? referenced.projectId === null
+        : referenced.projectId === null || referenced.projectId === resource.projectId
+      const sameEpisodeScope = referenced.episodeId === null
+        || referenced.episodeId === resource.episodeId
       if (!sameResourceScope || !sameEpisodeScope) {
         throw new ApiError('NOT_FOUND', {
           code: 'CREATIVE_RESOURCE_DATA_REFERENCE_SCOPE_INVALID',
-          field: '$resourceRef.revisionId',
+          field: '$resourceRef.resourceId',
         })
       }
     }

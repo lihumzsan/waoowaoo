@@ -11,22 +11,22 @@ import {
   CREATIVE_RESOURCE_SCHEMA,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource'
-import { bindCreativeResourceRevisionInTransaction } from '@/lib/creative-resource/binding-service'
+import { bindCreativeResourceInTransaction } from '@/lib/creative-resource/binding-service'
 import { creativeWorkTaskPayloadSchema } from '@/lib/creative-worker'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 const adoptAssetManifestInputSchema = z.object({
-  revisionId: z.string().trim().min(1)
-    .describe('Exact immutable project.asset_manifest revision to adopt and materialize into project asset identities.'),
+  resourceId: z.string().trim().min(1)
+    .describe('Exact immutable project.asset_manifest resource to adopt and materialize into project asset identities.'),
   expectedVersion: z.number().int().nonnegative().nullable().optional()
     .describe('Use null for first adoption, or the current adopted asset-manifest binding version when replacing it.'),
 }).strict()
 
 const adoptAssetManifestOutputSchema = z.object({
   success: z.literal(true),
-  revisionId: z.string().trim().min(1),
+  resourceId: z.string().trim().min(1),
   bindingVersion: z.number().int().nonnegative(),
   assets: z.array(z.object({
     manifestAssetId: z.string().trim().min(1),
@@ -42,7 +42,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
   return {
     adopt_asset_manifest: defineOperation({
       id: 'adopt_asset_manifest',
-      summary: 'Adopt one exact project.asset_manifest Revision grounded in one exact screenplay, then create or reuse the corresponding Project asset identities. Any adopted Creative Direction was already frozen into the generating Task by the server and is not an adoption gate. This operation never generates images or starts downstream Tasks.',
+      summary: 'Adopt one exact project.asset_manifest Resource grounded in one exact screenplay, then create or reuse the corresponding Project asset identities. Any adopted Creative Direction was already frozen into the generating Task by the server and is not an adoption gate. This operation never generates images or starts downstream Tasks.',
       intent: 'act',
       effects: {
         writes: true,
@@ -66,77 +66,74 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
       inputSchema: adoptAssetManifestInputSchema,
       outputSchema: adoptAssetManifestOutputSchema,
       executeInTransaction: async (context, input, tx) => {
-        const revision = await tx.creativeResourceRevision.findFirst({
+        const resource = await tx.creativeResource.findFirst({
           where: {
-            id: input.revisionId,
+            id: input.resourceId,
             taskId: { not: null },
-            resource: {
-              userId: context.userId,
-              projectId: context.projectId,
-              episodeId: null,
-              status: 'ready',
-              mediaType: 'text',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
-              sourceType: 'CreativeWorkResult',
-            },
+            userId: context.userId,
+            projectId: context.projectId,
+            episodeId: null,
+            status: 'ready',
+            materializedAt: { not: null },
+            mediaType: 'text',
+            schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
+            sourceType: 'CreativeWorkResult',
           },
           select: {
             id: true,
-            resourceId: true,
             contentJson: true,
             taskId: true,
             task: { select: { type: true, status: true, payload: true } },
-            outputLineage: { select: { inputRevisionId: true } },
+            outputLineage: { select: { inputResourceId: true } },
           },
         })
-        const taskPayload = creativeWorkTaskPayloadSchema.safeParse(revision?.task?.payload)
+        const taskPayload = creativeWorkTaskPayloadSchema.safeParse(resource?.task?.payload)
         if (
-          !revision
-          || !revision.taskId
-          || !revision.task
-          || revision.contentJson === null
-          || revision.task.type !== TASK_TYPE.CREATIVE_WORK
-          || revision.task.status !== TASK_STATUS.COMPLETED
+          !resource
+          || !resource.taskId
+          || !resource.task
+          || resource.contentJson === null
+          || resource.task.type !== TASK_TYPE.CREATIVE_WORK
+          || resource.task.status !== TASK_STATUS.COMPLETED
           || !taskPayload.success
           || taskPayload.data.request.outputKind !== 'asset_manifest'
         ) {
           throw new ApiError('INVALID_PARAMS', {
-            code: 'ASSET_MANIFEST_REVISION_PROVENANCE_INVALID',
-            field: 'revisionId',
+            code: 'ASSET_MANIFEST_RESOURCE_PROVENANCE_INVALID',
+            field: 'resourceId',
             agentRetryableAfterCorrection: true,
           })
         }
-        const lineageIds = [...new Set(revision.outputLineage.map((lineage) => lineage.inputRevisionId))]
-        const sources = await tx.creativeResourceRevision.findMany({
+        const lineageIds = [...new Set(resource.outputLineage.map((lineage) => lineage.inputResourceId))]
+        const sources = await tx.creativeResource.findMany({
           where: {
             id: { in: lineageIds },
-            resource: {
-              userId: context.userId,
-              projectId: context.projectId,
-              episodeId: null,
-              status: 'ready',
-            },
+            userId: context.userId,
+            projectId: context.projectId,
+            episodeId: null,
+            status: 'ready',
+            materializedAt: { not: null },
           },
           select: {
             id: true,
             contentJson: true,
-            resource: { select: { schemaId: true } },
+            schemaId: true,
           },
         })
         if (sources.length !== lineageIds.length) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'ASSET_MANIFEST_SOURCE_LINEAGE_INVALID',
-            field: 'revisionId',
+            field: 'resourceId',
             agentRetryableAfterCorrection: true,
           })
         }
         const screenplaySources = sources.filter(
-          (source) => source.resource.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
+          (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         )
         if (screenplaySources.length !== 1) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'ASSET_MANIFEST_EXACT_SCREENPLAY_SOURCE_REQUIRED',
-            field: 'revisionId',
+            field: 'resourceId',
             agentRetryableAfterCorrection: true,
           })
         }
@@ -151,7 +148,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
         })
         screenplaySchema.parse(screenplaySource.contentJson)
         const manifest = validateAssetManifest({
-          manifest: assetManifestSchema.parse(revision.contentJson),
+          manifest: assetManifestSchema.parse(resource.contentJson),
         })
         const assets: Array<{
           manifestAssetId: string
@@ -178,17 +175,16 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
             created: written.created,
           })
         }
-        const binding = await bindCreativeResourceRevisionInTransaction(tx, {
+        const binding = await bindCreativeResourceInTransaction(tx, {
           scope,
           ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest,
-          resourceId: revision.resourceId,
-          revisionId: revision.id,
+          resourceId: resource.id,
           source: 'asset_manifest_adoption',
           expectedVersion: input.expectedVersion ?? null,
         })
         return adoptAssetManifestOutputSchema.parse({
           success: true,
-          revisionId: revision.id,
+          resourceId: resource.id,
           bindingVersion: binding.version,
           assets,
           imageGenerationStarted: false,

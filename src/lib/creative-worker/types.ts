@@ -34,8 +34,8 @@ const creativeWorkHydratedSourceMaterialSchema = z.object({
     z.object({ kind: z.literal('none') }).strict(),
     z.object({
       kind: z.literal('resource'),
-      revisionId: z.string().trim().min(1).max(200)
-        .describe('Globally unique immutable Resource Revision identity; the server resolves all remaining identity and scope facts.'),
+      resourceId: z.string().trim().min(1).max(32)
+        .describe('Globally unique immutable Resource identity; the server resolves all remaining scope and content facts.'),
     }).strict(),
     z.object({
       kind: z.literal('domain'),
@@ -52,8 +52,8 @@ const creativeWorkHydratedSourceMaterialSchema = z.object({
 const creativeWorkDelegationSourceMaterialSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('resource'),
-    revisionId: z.string().trim().min(1).max(200)
-      .describe('Globally unique immutable Resource Revision identity. The server reloads its real content, schema, owner, and scope.'),
+    resourceId: z.string().trim().min(1).max(32)
+      .describe('Globally unique immutable Resource identity. The server reloads its real content, schema, owner, and scope.'),
   }).strict(),
   z.object({
     kind: z.literal('inline'),
@@ -70,7 +70,7 @@ const creativeWorkDelegationSourceMaterialSchema = z.discriminatedUnion('kind', 
       }).strict(),
     ]),
   }).strict(),
-]).describe('Use kind=resource with revisionId only for persisted Resources. Inline material carries its own content and optional exact domain provenance.')
+]).describe('Use kind=resource with resourceId only for persisted Resources. Inline material carries its own content and optional exact domain provenance.')
 
 export const creativeWorkDurationIntentSchema = z.discriminatedUnion('mode', [
   z.object({
@@ -100,7 +100,7 @@ export const creativeWorkDelegationRequestSchema = z.object({
     userRequest: z.string().max(30_000)
       .describe('The relevant original user request, preserved so the worker can remain faithful to user intent.'),
     sourceMaterials: z.array(creativeWorkDelegationSourceMaterialSchema).max(64)
-      .describe('Exact Resource revision IDs or inline non-Resource materials. Persisted Resource content is always reloaded by the server.'),
+      .describe('Exact Resource IDs or inline non-Resource materials. Persisted Resource content is always reloaded by the server.'),
     constraints: z.array(z.string().trim().min(1).max(4_000))
       .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
       .describe('Explicit creative, duration, format, continuity, safety, or delivery constraints that the result must satisfy.'),

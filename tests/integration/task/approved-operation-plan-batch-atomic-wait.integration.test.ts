@@ -50,7 +50,18 @@ async function seedExecution(balance: number) {
     tasks: ['image-1', 'image-2'].map((id) => ({ id: `plan-${id}`,
       taskType: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
       target: { targetType: 'CreativeResource', targetId: id },
-      payload: { resourceId: id, imageModel: 'fal::gpt-image-2' },
+      payload: {
+        lifecycleProjection: {
+          resources: [{
+            resourceId: id,
+            mediaType: 'image',
+            schemaId: 'generic.image',
+            name: `Image ${id}`,
+          }],
+        },
+        resourceId: id,
+        imageModel: 'fal::gpt-image-2',
+      },
       billingInfo: billingInfo(id),
       locale: 'en',
       episodeId: episode.id,

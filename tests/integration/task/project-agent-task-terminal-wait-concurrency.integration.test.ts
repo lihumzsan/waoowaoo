@@ -17,6 +17,7 @@ import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import { commitTaskTerminal } from '@/lib/task/terminal'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { parseOutboxCommandPayload } from '@/lib/outbox/types'
+import { buildCreativeResourceId } from '@/lib/creative-resource/identity'
 
 describe('Project Agent OperationBatch Wait concurrency', () => {
   beforeEach(async () => {
@@ -62,7 +63,11 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
       { operationId: 'create_video', taskType: TASK_TYPE.CREATIVE_RESOURCE_VIDEO, mediaType: 'video' },
     ] as const
     const taskIds = taskSpecs.map((_, index) => `assistant-operation-batch-task-${index + 1}`)
-    const resourceIds = taskSpecs.map((_, index) => `assistant-operation-batch-resource-${index + 1}`)
+    const resourceIds = taskSpecs.map((_, index) => buildCreativeResourceId({
+      operationId: 'operation_batch_test',
+      requestId: originRun.id,
+      candidateIndex: index,
+    }))
     await prisma.creativeResource.createMany({
       data: taskSpecs.map((spec, index) => ({
         id: resourceIds[index]!,
@@ -74,7 +79,6 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
         mediaType: spec.mediaType,
         schemaId: `generic.${spec.mediaType}`,
         name: `Operation batch ${spec.mediaType} ${index + 1}`,
-        originKey: `operation-batch-test:${resourceIds[index]!}`,
       })),
     })
     await prisma.task.createMany({
@@ -89,6 +93,14 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
         status: TASK_STATUS.QUEUED,
         operationId: spec.operationId,
         payload: {
+          lifecycleProjection: {
+            resources: [{
+              resourceId: resourceIds[index]!,
+              mediaType: spec.mediaType,
+              schemaId: `generic.${spec.mediaType}`,
+              name: `Operation batch ${spec.mediaType} ${index + 1}`,
+            }],
+          },
           resource: {
             resourceId: resourceIds[index]!,
             mediaType: spec.mediaType,
@@ -99,6 +111,7 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
             inputs: [],
             imageInputPositions: [],
             audioInputPositions: [],
+            videoInputPositions: [],
             generationOptions: {},
             executionSegmentId: null,
             toolCallId: `assistant-operation-batch-tool-call-${index + 1}`,

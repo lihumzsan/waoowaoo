@@ -90,7 +90,7 @@
     {
       "id": "creative-resource",
       "document": "docs/architecture/modules/creative-resource.md",
-      "title": "创作 Resource、Revision 与 Lineage",
+      "title": "创作 Resource 与 Lineage",
       "sourcePaths": [
         "src/lib/creative-resource",
         "src/lib/creative-direction",
@@ -118,7 +118,8 @@
         "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql",
         "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql",
         "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql",
-        "prisma/migrations/20260724223000_creative_direction_cutover/migration.sql"
+        "prisma/migrations/20260724223000_creative_direction_cutover/migration.sql",
+        "prisma/migrations/20260729090000_collapse_creative_resource_identity/migration.sql"
       ]
     },
     {

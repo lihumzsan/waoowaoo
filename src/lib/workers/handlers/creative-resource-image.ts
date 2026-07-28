@@ -25,28 +25,27 @@ async function loadImageReferences(
     return reference
   })
   if (imageInputs.length === 0) return []
-  const revisions = await prisma.creativeResourceRevision.findMany({
-    where: { id: { in: imageInputs.map((reference) => reference.revisionId) } },
+  const resources = await prisma.creativeResource.findMany({
+    where: { id: { in: imageInputs.map((reference) => reference.resourceId) } },
     select: {
       id: true,
       media: { select: { storageKey: true } },
-      resource: { select: { userId: true, mediaType: true, status: true } },
+      userId: true,
+      mediaType: true,
+      status: true,
     },
   })
-  const byId = new Map(revisions.map((revision) => [revision.id, revision]))
+  const byId = new Map(resources.map((resource) => [resource.id, resource]))
   return await Promise.all(imageInputs.map(async (reference) => {
-    const revision = byId.get(reference.revisionId)
-    if (!revision) throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_NOT_FOUND:${reference.revisionId}`)
-    if (
-      revision.resource.userId !== job.data.userId
-      || revision.resource.status !== 'ready'
-    ) {
-      throw new Error(`CREATIVE_RESOURCE_INPUT_REVISION_CHANGED:${reference.revisionId}`)
+    const resource = byId.get(reference.resourceId)
+    if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
+    if (resource.userId !== job.data.userId || resource.status !== 'ready') {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
     }
-    if (revision.resource.mediaType !== 'image' || !revision.media?.storageKey) {
-      throw new Error(`CREATIVE_RESOURCE_IMAGE_REFERENCE_REQUIRED:${reference.revisionId}`)
+    if (resource.mediaType !== 'image' || !resource.media?.storageKey) {
+      throw new Error(`CREATIVE_RESOURCE_IMAGE_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return await normalizeOwnedMediaToBase64ForGeneration(revision.media.storageKey, job.data.userId)
+    return await normalizeOwnedMediaToBase64ForGeneration(resource.media.storageKey, job.data.userId)
   }))
 }
 

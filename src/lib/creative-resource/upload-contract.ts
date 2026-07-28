@@ -73,7 +73,7 @@ export function buildUserUploadSourceId(input: {
 }
 
 /**
- * Upload provenance is frozen into the Revision: the original file name and
+ * Upload provenance is frozen into the Resource: the original file name and
  * content hash are the only durable answer to "where did this material come
  * from", since no prompt, model, or task exists for a user upload.
  */

@@ -1,133 +1,129 @@
 <!-- architecture-module: creative-resource -->
 
-# 创作 Resource、Revision 与 Lineage
+# 创作 Resource 与 Lineage
 
-## 设计理念
+## 目标与边界
 
-创作系统需要一个可被 Agent、Canvas 和后续生成共同引用的统一产物身份，但不需要把所有专业领域压成一张通用 JSON 表。`CreativeResource` 是跨领域的创作产物脊柱：它给文字、图片、音频、视频以及剧本、Story Canon、剪辑表、角色图、场景图、BGM、章节视频等专业产物提供稳定身份、不可变 Revision、真实生成来源和显式血缘。已有专业领域表继续保存可查询、可编辑的结构化业务事实；ResourceRevision 保存一次生成所交付的不可变内容或当时的领域快照。
+`CreativeResource` 是文字、图片、音频、视频以及剧本、Story Canon、Creative Direction、资产清单、视频 Prompt Set 等创作产物的统一不可变身份。一个 Resource 表示一次具体交付；它同时保存内容、媒体、执行来源和物化状态。专业领域表仍只保存需要结构化查询的当前业务投影，不成为第二份产物内容。
 
-`text / image / audio / video` 只回答“没有专业 renderer 时如何展示和处理媒体”，不是四套业务实体，也不限制专业语义。剧本与剪辑表仍由 `schemaId`、领域 origin 和专业 renderer 区分；最终成片只是 `video` Resource，不拥有专用最终成片卡片。
+本模块不决定创作顺序、模型选择、计费批准或专业创作判断。Operation registry、Provider capability、Billing/Approval 和 Creative Skill 各自继续拥有这些事实。
 
 ## 不变量
 
-- **CR-01 — 一个稳定 Resource，多次不可变 Revision。** `CreativeResource.id` 是产物 identity；成功生成、修改或重生成只能追加 `CreativeResourceRevision` 并原子推进 `headRevisionId`，不得原地改写历史 Revision。通用候选以 `operationId + requestId + candidateIndex` 形成唯一 origin；专业产物以 `sourceType + sourceId` 形成唯一 origin，同一专业实体不得创建第二个 Resource。
-- **CR-02 — 只有确需结构化查询的事实才进入领域投影。** Creative Worker 成功物化的 `screenplay` Revision 只保存剧本文本及写作元信息；生成、粘贴和导入只改变 `source`，不复制为“正式/确认剧本”，也不登记生产资产、场景范围或第二套叙事实体状态。Story Canon adoption、Chapter adoption 与项目资产可保留严格、可追溯投影；图片、音频、视频、Creative Direction、连续性和 Prompt 结果都只存在于 Resource spine，不建立专用阶段表。
-- **CR-03 — 四种媒体只是 fallback。** 每个 Resource 必须声明一个 `mediaType=text|image|audio|video` 和一个穷尽注册的 `schemaId`。`schemaId` 决定专业语义与首选 presentation；仅在没有专业 renderer 时才使用 mediaType renderer。新增剧本变体、图片角色或其他专业内容主要增加 schema/renderer 声明，不得复制 Resource、Revision、Lineage 或 Binding 模型。
-- **CR-03A — Creative Direction 是单一结构化文字 Resource。** 每个 Creative Task 终态恰好物化一个 `mediaType=text + schemaId=project.creative_direction` 的不可变 Revision；内容严格为 `styleSummary/rawUserStyle + visual/narrative/directing/editing/sound/assetPolicy`，其中规则与禁止项归入所属领域。Task id 构成稳定 origin，实际输入 revisions 构成 lineage；专业输出不声明 candidate key 或候选集合。`adopt_creative_direction` 不复制内容，只把该 Task 产出的精确 Revision 写入 canonical Binding。Canvas 使用 schema-aware renderer 展示结构化内容，不建立第二实体或默认预览图。
-- **CR-04 — Lineage 只记录实际输入 Revision。** 每条 `CreativeResourceLineage` 必须从精确的 `inputRevisionId + role + position` 指向输出 Revision。Revision ID 全局唯一且不可变，调用方不得再附带 resourceId、内容副本或 fingerprint 充当第二身份；服务端从数据库解析 owner、scope、schema 与真实内容。不得从当前 head、最近资源、数组位置、Prompt、历史消息或 Canvas edge 反推输入。
-- **CR-05 — 生成与采用分离。** 生成候选只创建 Resource/Revision；把某个候选用于项目角色、插槽或 canonical 选择，只能通过 `CreativeResourceBinding` 的 `scope + role + slotKey` CAS 更新。选择不得删除、覆盖或重新生成其他候选。Binding 保存精确 `resourceId + revisionId`，刷新后仍指向同一 Revision。
-- **CR-06 — provenance 冻结真实调用。** 每个成功 Revision 必须保存适用的 `operationId`、稳定输入 hash、Task/OperationExecution/executionSegment/toolCall identity、实际 prompt、modelKey 与生成参数。缺失适用来源时必须显式失败；不得用模型事后总结、UI 文案或当前配置补造历史来源。
-- **CR-07 — 一个异步终态 writer。** 异步创作输出只由 `commitTaskTerminal` 的同一事务调用 production Task materializer；该事务在领域 success projector 之后写 Revision/Lineage，并把真实 Resource refs 合并进 Task result、Task terminal Event 和 Agent continuation。重放同一 Task 只能返回同一 Revision；失败/取消只结算本次预留候选，不覆盖专业 Resource 的上一个成功 head。
-- **CR-08 — 通用生成与专业采用/执行不重复动作。** `create_text/create_image/create_audio/create_video` 从空项目或显式 Resource revisions 创建通用产物；`create_text.current_user_text` 还可在事务内验证并原样保存当前用户消息的精确连续片段，不经过模型改写；`merge_videos` 只按显式顺序合成精确 video revisions，并可把一个显式 BGM 音频 revision 确定性混入整条时间线（响度归一、淡入淡出、对白闪避），单个视频仅在携带 music 时合法。专业创作判断全部进入 Skill + `creative_work`，确定性的 Story Canon/Chapter/Creative Direction 采用、资产媒体生成与渲染仍可保留独立 Operation，但不得恢复旧 LLM writer、固定顺序或专用确认卡。全部入口复用同一个 Operation invocation、Task、计费和 Resource materializer。
-- **CR-09 — 引用必须先证明 owner 与 scope。** 任一输入 Revision、Binding 或 API Query 必须由服务端按 revisionId 回库验证 user、project、episode scope、status 与 schema；跨项目或错误 scope 原地失败。用户级通用资产可被显式采用到项目，但不得通过 bridge row、名称或最近记录推断归属。
-- **CR-10 — Canvas 只投影持久 Resource View。** Resource API/View service 是 ResourceCard 的唯一查询投影；卡片摘要只能从 head Revision content 或 pending Resource 的冻结 prompt 纯派生，structured content 的语义字段选择由 Resource schema registry 声明，Canvas renderer 只消费最终 summary View，不解释领域 JSON，也不持久化摘要。Canvas 优先把 origin 与既有专业节点 identity 对齐并复用专业 renderer，再使用通用 ResourceCard。节点只来自持久 Resource、当前 Task 或 structured stream 的真实事实，边只来自 Lineage。Resource change envelope 以 projectId 为权威失效范围时，Query owner 必须失效该 Project 下所有 episode 参数变体，不能只命中一条不同 key shape 的缓存；重新读取正式 Resource View 才决定 pending/ready/failed 节点。最终渲染完成后显示普通 VideoCard；任何阶段都不得投影专用 final timeline，进行中或失败的渲染仍由通用 Task/Assistant 生命周期表达。
-- **CR-11 — 候选是同一调用的独立资源。** 一次 count=N 的调用必须产生 N 个稳定 candidate Resource，并共享 candidateSetId；成功候选不会因兄弟失败而重提。Agent 重试必须显式引用失败 resourceId，只提交失败候选；retry Tool 分支不得接收 prompt、references、时长、画幅、声音或 provider 参数，服务端只能从该 Resource 第一次 `request.kind=new` 的失败 Task 恢复完整冻结 payload，并以新的执行 identity 重提同一内容。同一 provider invocation 的至多一次保证继续由 Task checkpoint 负责，不建立第二套 logicalInvocationId 或 outcome 协议。
-- **CR-12 — Resource 不裁决创作顺序。** Resource 存在、缺失、旧 Revision 或 Lineage 仅是可读事实。Operation 是否可调用由 registry channel、显式输入 schema、owner/scope、provider capability、计费批准和破坏性确认裁决；Workflow step、Canvas 位置和“上游是否推荐完成”不得成为硬门。
-- **CR-03B — 网页参考图是外部素材 Resource。** 从搜索导入的第三方图片物化为 `mediaType=image + schemaId=project.web_reference_image` 的 Revision，identity 来自图片 URL 的稳定哈希，因此同一张图重复导入收敛到同一 Resource。出处（origin/imageUrl/sourceWebsiteUrl/caption）冻结在 Revision 的 generation provenance 中且不可缺失。它是外部参考素材，不是项目原创美术，也不承载故事事实；下游只经既有 `revisionId` 参考协议消费，不新增第二条参考图链路。
-- **CR-03C — 用户上传是同步物化的外部素材 Resource，导入族 schema 不可由生成入口铸造。** 用户上传的图片/音频只经 `api_project_upload_media`（multipart route `POST /api/projects/[projectId]/upload-media`）按 prepare/commit/compensate 物化为 `project.upload_image|upload_audio` 的 ready Resource：接受与否只由 magic-bytes 嗅探裁决（PNG/JPEG/WebP、MP3/WAV/OGG，视频不开放），存储 key 按内容 sha256 寻址，domain origin 为 `user_upload + projectId:sha256`，同项目同内容收敛到同一 Resource，重复上传幂等返回既有 head。原始文件名、sha256、MIME 与大小冻结在 Revision provenance，MediaObject 在同一事务登记，失败补偿只在该 key 无已提交 MediaObject 行时删除对象。下游（`imageReferences`/`audioReferences`/`videoReference`/`contextReferences`/音色绑定）只经既有 `revisionId` 协议消费。导入族 schema（`web_reference_image`/`upload_image`/`upload_audio`）由 registry 的 import-origin 集合穷尽声明，`create_*` 的 schemaId enum 与运行时校验从同一集合派生排除；生成入口不得铸造导入身份、伪造外部素材 provenance。
-- **CR-13 — Resource Tool 参数只表达产品语义。** `schemaId` 必须从按 mediaType 穷尽分组的生产 Resource registry 生成 enum；通用语义用对应 `generic.*`，不得允许模型发明新 identity。文本结果以 `single|candidates` 分支表达；异步媒体的全部新创作参数只存在于 `request.kind=new`，`request.kind=retry` 只接受失败 Resource identity。Agent-facing 图片/视频/音乐字段使用跨 provider 产品名，且不得包含 `modelKey`、`*Model` 或 provider 参数；实际模型由服务端正式配置唯一解析。三个媒体 Operation 通过 registry binder 把所选模型的 resolution/quality/duration/audio/format、项目画幅与引用上限投影为当前 execution segment 的窄 runtime schema；公开 schema revision 变化必须拒绝旧 contract，planner 使用校验时同一 server-only capability/config 快照，收费计划继续由既有 PlanSnapshot 冻结。`generationOptions` 只是在批准计划与 Revision provenance 中冻结的内部执行快照，不是公开 Tool 参数。服务端解析出的 modelKey 对应 capability registry 是允许字段和值的唯一裁判，不支持必须 typed-fail，禁止跨模型默认或 provider 参数透传。
-- **CR-14 — pending 卡片显示冻结提交事实。** 异步 Resource Operation 必须在提交 Task 的同一事务预留 pending Resource，并写入可 replay 的 Resource broadcast；Resource View 从该 Resource 当前唯一 active Task 的冻结 payload 投影 prompt、model、options 与精确 inputs。它只负责让卡片和原始提示词立即可见，不得把 pending 当成成功 Revision，也不得由客户端从工具文案补造。ready/failed/canceled 仍只由 Task Terminal writer 结算。
-- **CR-15 — 剧本无需确认状态，风格采用使用唯一 Binding。** 任意成功 `screenplay` Revision 都是可精确引用的剧本；系统不保存 `confirmed_screenplay` Binding，也不创建同内容副本。项目当前采用的风格只由 `adopt_creative_direction` 写 `scope=project + role=adopted_creative_direction + slotKey=primary`，绑定精确不可变 Revision；通用 `adopt_resource` 必须拒绝该保留角色。Creative Direction 默认是文字 Resource，采用不生成预览图或下游产物。
-- **CR-16 — 语义上下文与 provider 媒体引用分离。** `contextReferences` 只表达会进入 lineage 和专业推理上下文的精确 Resource Revision，可以是文字、图片、音频或视频；`create_image.imageReferences` 只表达图片 provider 输入；`create_video.imageReferences` 与 `audioReferences` 分别表达并保持两类 provider 输入顺序；`create_audio.videoReference` 只表达一个视频条件输入。视频声音分支在 Schema 中要求至少一个图片且排除 `first_frame/last_frame` 角色，所选模型的两类上限由 Bound Contract分别投影。提交前仍必须按 Resource 的真实 owner/scope/ready/mediaType 校验，并在严格 Task payload 中冻结 `imageInputPositions`、`audioInputPositions` 与 `videoInputPositions`；这些数据库事实不能伪装成模型 Schema。Worker 按各自序列保持顺序，adapter 只能收到规范化后的 `referenceImages`、`referenceAudios` 或视频条件输入。不得把 Creative Direction、剧本或其他文字 Resource 当作 provider 媒体发送，也不得为了兼容旧 `references`/`mediaReferences` 猜测媒体语义。
-- **CR-17 — 读取工具各自只有一种职责。** `get_project_context` 返回紧凑事实与当前正式 Binding；它不指定当前剧本或下一步。`list_resources` 有界浏览候选、历史与可复用 Resource；精确跨层输入只传 revisionId，服务端解析所属 Resource。Primary Agent 必须显式选择所需剧本 Revision，不得从最近记录、历史消息或 head 推断。
-- **CR-18 — Revision 记录实际执行路由。** Agent 和业务 Operation 不选择 provider/model，但每个成功媒体 Revision 的 provenance 必须保存本次 Task invocation 最终实际使用的 `modelKey`。当 Provider Gateway 在同一等价 route set 内进行受控 pre-accept 路由切换时，materializer 只能读取 durable invocation route checkpoint，不能继续记录初始配置、当前配置或模型事后文字。
-- **CR-19 — Resource 提供开放但隔离的创作文档。** 每个 Resource 可以持有一份 schema-open、版本化的 `creativeData` JSON 文档，供用户和 Agent 保存任意当前创作资料；新增创作概念不要求新增数据库字段或 Operation 分支。它只由 `edit_resource` 以 `creativeDataVersion` CAS 和最小 object-path Patch 写入，嵌入的 `$resourceRef` 只能包含 revisionId，并由服务端验证 owner 与 scope。`creativeData` 不是 Revision、provenance、Lineage、Binding、Task 或生命周期事实。
-- **CR-20 — 角色音色使用保留动态 Binding。** `project.voice_reference` 是项目级 audio Resource；新建与原位重生成只由 `generate_voice` 追加 Revision。角色当前音色只由 Binding service 写入 `scope=project + role=character_voice + slotKey=characterId`，产品入口只有 `bind_voice` 以及 `generate_voice target=character` 的 Task 终态 CAS。`bind_voice` 接受设计音色（`project.voice_reference`）或用户上传音频（`project.upload_audio`）的 ready project-scope revision；Binding 而非 schema 是"角色当前音色"的唯一权威，绑定的音频经 `create_video.audioReferences` 作为参考音进入视频生成，系统不做 TTS 或音色克隆。通用 `adopt_resource` 必须拒绝该 role。绑定冻结精确 Revision；生成期间发生的较新绑定造成显式冲突但不丢弃已生成音频。删除音色必须拒绝 active Task、任意 Binding 和下游 Lineage，且不删除共享 MediaObject；上传音频 Resource 不进入 `delete_asset(kind=voice)` 词表。
-- **CR-21 — Project 级剧本与 Episode 投影分离。** `screenplay`、`story_canon`、`creative_direction` 和 `asset_manifest` 的 Resource scope 由 Creative Work 输出 registry 穷尽声明为 Project；同一 Project 的任意 Episode 可以显式引用同一精确 Revision。`ProjectEpisodeSourceDocument` 和 `ProjectStoryCanon` 仍是 Episode-scope 查询投影，identity 分别是 `(episodeId, sourceRevisionId)` 与 `episodeId`。Chapter Plan、连续性和执行性创作结果继续按 registry 声明保持 Episode scope。
-- **CR-22 — 剧本与资产清单分权。** 用户在当前消息提供的完整剧本可由 `create_text.current_user_text` 以 `classification.kind=screenplay` 直接保存为项目级 `project.screenplay` Revision；这一步只做精确来源捕获，不创作、不改写、不确认，也不自动委派 Worker。从零创作或修改剧本由 `story-development + creative_work(outputKind=screenplay)` 完成，结果同样只拥有文本和写作元信息。`asset-development` 独占生产资产范围：它在一个 `asset_manifest` Subagent Task 内读取精确 screenplay，并在存在 adopted Creative Direction 时由服务端自动接收完整方向、自行判断与资产相关的政策，完成必要角色、地点、道具的筛选、归一、外观设计和最终媒体 Prompt；方向缺失不构成失败。精确 screenplay Revision 与 Resource Lineage 记录本次判断实际消费的来源，服务端只编译稳定 `manifestAssetId` 并验证名称与别名歧义，不要求 Worker 回传逐字 excerpt、字符区间或逐项来源证明，也不建立 screenplay entity registry、scene ranges、独立 extraction 输出或第二套资产状态。
-- **CR-23 — 资产采用与图片生成分离。** `adopt_asset_manifest` 是项目资产 identity 的唯一批量采用入口；它通过共享 Project asset writer 创建或复用 `ProjectCharacter/ProjectLocation`，只写 `adopted_asset_manifest` Binding，不创建图片 Task。图片仍只能由 `create_image` 生成；`project.character_image/location_image/prop_image` 在计划阶段由单一 asset-image format policy 强制 4:3 固定后缀，完成后才以 `project_asset_image + variantId` Binding 关联目标资产。Creative Direction 不包含 composition，generic image 不消费该 policy。
-- **CR-24 — Assistant 资源交付只消费精确 Link View。** 同步创建或异步终态交付给 Assistant 的 Resource 必须先规范化为 `resourceId + revisionId`，再由 `assistant-link-view.ts` 按 owner/project scope 读取 Resource、精确 Revision 与 MediaObject，投影唯一 `CreativeResourceLinkView`。可见名称只来自 `CreativeResource.name`，文件扩展名只从媒体 MIME 映射，实际地址只作为受保护的 `/m/[publicId]` href；UI 和模型不得显示或从 Markdown、URL、publicId、storageKey、Task target、最近 Resource 或输出文本反推名称与关联。pending/failed/canceled 不产生文件链接，缺少精确 Revision、名称、媒体或 scope 必须失败关闭。
+- **CR-01 — 一个短 Resource ID 只表示一个不可变产物。** `CreativeResource.id` 是唯一跨层身份，格式为 `r_` 加 128-bit SHA-256 base64url 摘要，总长 24 字符。通用生成由 `operationId + requestId + candidateIndex` 确定，领域导入由 `sourceType + sourceId` 确定；两者都经带长度分帧的共享 identity builder 生成。名称只用于显示，不能参与解析。禁止恢复 Revision、head、originKey、内容 hash identity 或调用方自造长 UUID。
+- **CR-02 — Resource 预留与物化分离，但身份不变。** 异步提交事务先创建 pending Resource 和 Task；唯一 terminal materializer 在成功时把内容、媒体、provenance 与 `materializedAt` 一次写入同一 Resource。已物化 Resource 不得再次写内容。失败或取消只可结算未物化 Resource 的状态。
+- **CR-03 — retry 与 regenerate 是两种动作。** retry 只接受 failed Resource ID，重放该 Resource 首次提交时冻结的 prompt、模型路由、参数和输入，并只允许同一 Resource 从未物化状态完成；它不接收任何可改写生成事实的字段。重新生成、修改、角色状态变化或用户需要另一方案时必须创建一个新 Resource，并用 Lineage 表达来源。角色的晴天、雨夜、战损等状态是多个 Resource，不是同一 identity 的版本。
+- **CR-04 — Lineage 只连接精确 Resource。** `CreativeResourceLineage` 的唯一事实是 `inputResourceId + role + position → outputResourceId`。服务端按 Resource ID 回库验证 owner、scope、schema、status 和真实内容。禁止从名称、当前 Binding、最近记录、数组位置、历史消息、Prompt、Canvas edge 或模型输出重新猜关联。
+- **CR-05 — Binding 只保存一个 Resource ID。** 当前采用关系的唯一 key 是 `scope + role + slotKey`，值只有 `resourceId`，由 Binding service 以 version CAS 写入。Binding 不复制内容，不保存第二 identity，不改变或删除被换下的 Resource。Creative Direction、Asset Manifest、角色音色和资产图片继续由各自保留入口写其命名空间。
+- **CR-06 — 引用协议只传 Resource ID。** Creative Work request、媒体 Operation、消息附件、Assistant Link View、Choice subject、Canvas 与领域投影都只传 `resourceId`。可选 `role` 只表达该输入在新输出中的语义，不参与定位。调用方不得同时传名称、短 key、origin、hash 或内容副本充当第二关联协议。
+- **CR-07 — Video Prompt Set 直接拥有精确媒体引用。** `video_prompt_set.segments[].mediaResourceIds` 保存 Worker 已读取的图片/音频 Resource ID。Primary Agent 只把 Prompt Set 自身的 `resourceId` 提交给 `create_video.request.kind=prompt_set`；服务端读取 strict Prompt Set，验证每个媒体 Resource 必须存在于该 Prompt Set 的持久 Lineage、属于同一 owner/scope、已物化且类型合法，再按顺序冻结成视频 Task。Primary 不复制 prompt、时长或媒体 ID，也不执行名称到 ID 的映射。
+- **CR-08 — Prompt Set 执行仍走唯一媒体入口。** `request.kind=prompt_set` 只是在 `create_video` planner 内展开多个 segment；每段仍经当前项目模型配置、同一 capability、PlanSnapshot、Billing/Approval、Task submitter 和 Resource materializer。它不是第二个视频执行器。文本生视频、重复媒体 ID、只有声音没有图片、超出图片/声音数量或非法时长必须在计划阶段失败。
+- **CR-09 — 媒体语义输入与 provider 通道分离。** `contextReferences` 只进入 Lineage 和创作上下文；图片、音频和视频 provider 引用分别冻结为 `imageInputPositions`、`audioInputPositions`、`videoInputPositions`。三组位置必须存在、互斥、有序并符合模型 capability。Creative Direction、剧本和其他文字 Resource 不得伪装为 provider 媒体。
+- **CR-10 — scope 与 owner 必须由服务端证明。** 用户级 Resource 可被显式采用；Project/Episode Resource 只能在允许的同 Project/Episode 范围使用。跨用户、跨 Project、非法跨 Episode、错误 schema、非 ready 或未物化引用原地失败。名称、bridge row 和“最近使用”都不能绕过该检查。
+- **CR-11 — provenance 属于 Resource。** 每个成功 Resource 保存适用的 `operationId`、`inputHash`、Task/OperationExecution/executionSegment/toolCall identity、真实 prompt、最终 provider route `modelKey` 与执行参数。`inputHash` 只用于幂等与审计，不是 Resource identity。
+- **CR-12 — 一个异步终态 writer。** `commitTaskTerminal` 的同一事务先执行适用领域 success projector，再调用 production Resource materializer，最后把精确 Resource refs 合并到 Task result、terminal event 和 Agent continuation。同一 Task 重放只能返回同一 Resource。timer、refetch、SSE 到达顺序和 UI 文案不承担正确性。
+- **CR-13 — candidate 是独立 Resource。** 一次 `count=N` 预留 N 个短 Resource ID，可共享一个 `rs_…` candidateSetId。兄弟候选成功或失败互不覆盖；retry 显式列出失败 Resource ID。candidateSetId 只表达同批浏览关系，不是内容 identity。
+- **CR-14 — `mediaType` 是 fallback，`schemaId` 是专业语义。** 每个 Resource 必须声明 `text|image|audio|video` 和生产 registry 中的 schemaId。专业 renderer 优先，缺失时才使用媒体 renderer。新增专业结果优先增加 registry 声明，不得复制 Resource、Lineage、Binding 或生命周期。
+- **CR-15 — 专业投影不复制产物身份。** `ProjectEpisodeSourceDocument.sourceResourceId` 和 `ProjectStoryCanon.storyCanonResourceId` 只保存精确 Resource ID；结构化字段是其领域查询投影。screenplay、Story Canon、Creative Direction 和 Asset Manifest 的 Resource scope 由 Creative Work output registry 裁决。成功 screenplay Resource 可直接使用，不存在 confirmed screenplay 或“正式版本”副本。
+- **CR-16 — 外部素材也只创建 Resource。** 网页导入和用户上传经各自唯一入口完成安全抓取/嗅探、MediaObject 登记和同步或异步物化；同一外部来源通过领域 identity 收敛。出处、sha256、MIME、大小和原文件名属于 provenance/执行参数。下游仍只使用 Resource ID，生成入口不能铸造 import schema。
+- **CR-17 — 当前角色音色由 Binding 裁决。** 每次 `generate_voice` 都创建新的音频 Resource；`bind_voice` 或生成终态 CAS 只更新 `character_voice` Binding。新生成不是原位写入。删除必须拒绝 active Task、任何 Binding 和下游 Lineage，并且不能删除共享 MediaObject。
+- **CR-18 — 开放创作文档与不可变内容隔离。** `creativeData` 是 Resource 上单独的 schema-open CAS 文档，仅由 `edit_resource` 按 `creativeDataVersion` 做最小路径 Patch。内嵌 `$resourceRef` 只含 Resource ID并经过 owner/scope 校验。它不能改写 Resource 内容、provenance、Lineage、Binding、Task 或生命周期。
+- **CR-19 — UI 只消费最终 View。** Resource View 是卡片的唯一读模型；pending 摘要只从预留 Resource 和唯一 active Task 的冻结 payload 派生，ready 摘要从同一 Resource 的物化内容派生。Assistant Link View 只接受精确 Resource ID，文件名来自 Resource name，href 来自受保护媒体投影。Canvas edge 只来自持久 Lineage。
+- **CR-20 — Resource 不裁决流程。** Resource 存在、缺失、旧生成结果或 Lineage 都只是事实。Operation 可调用性只由 registry channel、显式 input schema、scope、provider capability、审批和破坏性确认裁决；Workflow step、Canvas 位置或推荐顺序不能成为隐藏门槛。
 
-## 状态所有权
+## 状态与写入者
 
-| 事实 | 唯一 owner / writer | 消费者 |
+| 事实 | 唯一 owner / writer | 主要消费者 |
 | --- | --- | --- |
-| 当前专业结构化业务状态 | 对应领域 table / 既有领域 service 或 Task success projector | 专业 Query、Operation、专业 renderer |
-| 跨领域产物 identity 与当前 head | `CreativeResource` / Resource persistence service | Agent tools、Resource View、Canvas |
-| 一次不可变交付 | `CreativeResourceRevision` / 同步 Resource Operation 或 Task Terminal materializer | Lineage、Binding、审计、后续生成 |
-| 精确生成输入关系 | `CreativeResourceLineage` / Revision append transaction | Agent、Canvas edge、来源诊断 |
-| 项目采用与 canonical 选择 | `CreativeResourceBinding` / Binding service CAS | Agent、Canvas、后续显式读取 |
-| 异步候选 pending | Operation 的 Task 提交事务（预留 Resource + Task + broadcast） | Resource View、Canvas |
-| 异步候选 ready/failed/canceled | `commitTaskTerminal` | Agent continuation、Resource View |
-| Creative Direction 最终 Revision | Creative Task terminal materializer；每个 Task 恰好一个 | Primary、Canvas、adopt Operation |
-| 剧本文本与写作元信息 | `screenplay` Task terminal materializer，或 `create_text.current_user_text` 的精确 screenplay 分支 | Primary、Story Canon/Chapter/continuity、Asset Worker、Canvas |
-| 剧本/Story Canon/Creative Direction 的 Project scope | Creative Work output registry + Task terminal materializer | 同 Project 各 Episode 的显式采用/委派 |
-| 当前采纳的 Creative Direction Binding | `adopt_creative_direction` transactional Operation | Project Context、Task 创建时的统一方向注入 |
-| Task 冻结的完整方向 revision 与内容 | `delegate_creative_work` server compiler + output registry | 全部非方向生产者 Creative Worker、Resource lineage |
-| 当前 Asset Manifest 与 Project asset identity | `adopt_asset_manifest` + shared Project asset writer | Project assets、Primary、图片生成 |
-| 资产图片固定版式与绑定 | asset-image format policy + `create_image` terminal materializer | 图片 provider、Project asset consumers |
-| 当前角色音色 Binding | Binding service；产品入口 `bind_voice` 或 `generate_voice` 终态 CAS | Project Context、Agent、Resource View |
-| 用户上传素材 Resource 与 Revision | `api_project_upload_media` 同步物化（经 persistence 唯一入口） | 类型化媒体引用（`imageReferences`/`audioReferences`/`videoReference`）、音色绑定、Resource View、Canvas |
-| Resource 当前开放创作文档 | `CreativeResource.creativeData` / `edit_resource` CAS transaction | Agent、Resource View、通用或专业 renderer |
-| ResourceCard 最终 View | `view-service.ts` 从上述持久事实纯投影 | API、React Query、Canvas renderer |
-| Assistant 交付文件名与链接 | `assistant-link-view.ts` 从精确 Resource Revision 与 MediaObject 纯投影 | `data-assistant-resource-links`、Assistant renderer |
+| Resource identity、scope、schema、pending 状态 | Operation 提交事务 / Resource persistence | Task、Resource View、Canvas |
+| Resource 不可变内容、媒体与 provenance | 同步 Operation 或 Task terminal materializer | Lineage、后续生成、Assistant |
+| failed / canceled | Task terminal writer，仅限未物化 Resource | retry、Resource View |
+| 精确依赖 | Resource materialization transaction 写 Lineage | planner、Canvas、诊断 |
+| 当前采用 | Binding service CAS | Project Context、后续 Task |
+| 专业当前结构 | 领域 service / terminal success projector | 领域 Query 与 renderer |
+| Prompt Set 内容和媒体 ID | Creative Worker strict submission + terminal materializer | `create_video` planner |
+| provider invocation 至多一次 | Task checkpoint / Provider Gateway | Worker、reconciler |
 
 ## 权威入口
 
-- 共享类型与 schema registry：`src/lib/creative-resource/contracts.ts`、`schema-registry.ts`。
-- origin、scope 与输入 hash：`src/lib/creative-resource/identity.ts`。
-- Resource/Revision/Lineage 唯一持久化入口：`src/lib/creative-resource/persistence.ts`。
-- Binding 唯一写入入口：`src/lib/creative-resource/binding-service.ts`。
-- 异步 Task 终态物化：`src/lib/creative-resource/task-materializer.ts`，只由 `src/lib/task/terminal/service.ts` 调用。
-- ResourceCard 查询投影：`src/lib/creative-resource/view-service.ts` 与 `src/app/api/projects/[projectId]/resources/route.ts`。
-- Assistant Resource Link 查询投影：`src/lib/creative-resource/assistant-link-view.ts`；它只接受 exact materialized refs，`runtime.ts` 只把其最终 View 写入结构化消息 part。
-- Agent 通用生成与读/采用工具：`src/lib/operations/domains/creative-resource/**`；仍通过全局 Operation registry/invocation。
-- 失败 Resource 的精确重试输入解析：`src/lib/creative-resource/generation-retry.ts`；它只按 target Resource、Task type/operation 与持久 OperationPlan 的 `request.kind=new` 选择唯一原始失败 Task，不按最近记录或历史消息猜测。
-- Creative Direction 专业采用：`src/lib/operations/domains/assistant/creative-direction-ops.ts`；它只更新 adopted Binding，Resource Revision 已由 Task terminal materializer 写入。
-- Screenplay 与 Asset Manifest 契约、服务端 manifest identity/来源证据校验：`src/lib/screenplay/**`；资产采用：`creative-asset-ops.ts` 与 `project-asset-writer.ts`。
-- 资产图片固定版式：`src/lib/asset-generation/asset-image-format.ts`；它只由 `create_image` planning 使用。
-- 剧本 Task 终态物化与“无确认副本”约束：`src/lib/creative-resource/creative-work-materialization.ts`、`task-materializer.ts`、`contracts.ts`。
-- 角色音色生成、绑定与删除策略：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts`；全部关系写入仍复用 `binding-service.ts`。
-- 用户上传素材物化：`src/lib/creative-resource/upload-contract.ts`（接受词表、内容寻址 key、domain origin、provenance）与 `src/lib/operations/api-only/media-upload-api-ops.ts`（唯一 writer，prepare/commit/compensate）；`src/app/api/projects/[projectId]/upload-media` route 只做鉴权与转发。导入族 schema 的生成入口排除由 `schema-registry.ts` 的 import-origin 集合唯一声明。
-- Resource 开放创作文档的唯一写入入口：`src/lib/creative-resource/creative-data.ts` 与 `edit_resource`；任意键只存在于隔离的 `creativeData`，系统字段不进入 Patch namespace。
-- 当前工作集与精确 Revision 查询：`src/lib/creative-resource/view-service.ts`；`get_project_context`、`list_resources`、`get_resource` 只投影该唯一服务的不同 View。
-- Canvas Resource 投影和 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；专业 renderer 仍由 Canvas registry 选择。
-- Resource SSE 到 Query 的失效入口：`src/lib/query/resource-change-sync.ts` 与 `keys.ts`；只能按 envelope 的 project scope 失效正式 Resource 查询前缀，不得从当前 Episode 猜目标缓存。
-- 数据表：`prisma/schema.prisma` 的 `CreativeResource*`；`20260717120000_add_creative_resource_spine` 创建 Resource 脊柱，`20260720190000_add_creative_resource_data` additive 增加开放创作文档及 CAS version，`20260722230000_canonical_screenplay_asset_manifest` 将 Resource 精确身份收敛为全局唯一 `revisionId`，`20260724190000_decouple_screenplay_asset_manifest` 把 Project 资产关联切换为 manifest-owned identity；`20260724223000_creative_direction_cutover` 显式作废不满足六领域契约的旧视觉 Bible Resource/Revision/Binding/Lineage。本任务只提交 migration 文件，不执行共享数据 migration。
+- 同步创建：`create_text`、上传 Operation、领域导入 service。
+- 异步创建：`create_image`、`create_audio`、`create_video`、`merge_videos`、`creative_work` 以及外部图片导入；全部复用 Operation plan/commit、Task 和 terminal materializer。
+- 采用：Binding service 及其 `adopt_creative_direction`、`adopt_asset_manifest`、`bind_voice`、资产图片终态入口。
+- 读取：Resource View、Assistant Link View、`list_resources`、Project Context 和领域投影。
+- 编辑开放文档：`edit_resource`，只写 `creativeData`。
 
-## 验证
+同一动作不得从 route、Primary Agent 或 UI 另建 writer。
 
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 Operation/Resource registry 证明所有 tool-visible Operation 对 Agent 可见、不再存在 Workflow allowlist，并穷尽校验 Resource schemaId、new/retry、Agent 模型配置入口为零、nullable enum 与无匿名 permissive schema。
-- `tests/unit/creative-resource/creative-data.test.ts` 以纯 Patch 函数为 oracle，反证新增字段要求领域分支、无关字段被覆盖及原型路径污染；Tool conformance 同时证明开放值通过 JSON string 边界表达，不能越过到系统字段。
-- `tests/contracts/{task-definition,canvas-node}-conformance.test.ts` 穷尽验证 Task materializer 声明和 ResourceCard/专业 renderer 接线。
-- `tests/golden-journey/journeys/freeform-resources.spec.ts` 从空项目通过真实 UI、Agent SDK、Operation、Approval、Task、worker、DB、Outbox、SSE 与 Canvas 验证多候选、部分失败精确重试、显式 Lineage、Binding、刷新恢复和直接文字转视频。
-- 自由组合 Golden 应证明专业 Resource 可被 Primary 以精确 Revision 任意组合，剧本无需确认卡、Creative Direction 默认无预览，最终成片只显示普通 VideoCard。
-- 同一自由组合 Golden 还应证明 Project-scope screenplay/Story Canon Revision 可被第二个 Episode 显式采用，而两个 Episode 分别拥有自己的严格领域投影。
-- Provider/Task/Billing Critical suites 继续证明同 attempt 至多一次、quote approval、原子 Task terminal 和失败恢复；Resource 层不得 mock 这些生产 owner。
-- `tests/unit/workspace-resource/resource-change-sync.test.ts` 反证 project-scope Resource event 只失效某个 episode key、导致刷新前 Canvas 缺少 pending/terminal 节点。
-- `tests/unit/creative-resource/assistant-link-view.test.ts` 验证精确 Resource/Revision 引用解析、权威名称到文件名的 MIME 映射以及内部媒体地址不进入可见名称；Freeform Golden 的零基础视频场景验证真实 continuation 只显示文件名蓝链。
+## 正常、失败与并发时序
+
+1. planner 解析所有显式 Resource ID，验证 scope、状态、schema、媒体类型和 capability。
+2. plan snapshot 冻结 model/config、输入顺序、报价和审批事实。
+3. commit 事务按 `operationId + requestId + candidateIndex` 预留短 Resource ID，创建 Task 与 outbox。
+4. Worker 只消费冻结 payload；provider 受理 identity 由 Task checkpoint 保存。
+5. terminal success 在一个事务中投影领域事实、物化 Resource、写 Lineage、结算 Task/event/continuation。
+6. 重复 terminal 或 replay 必须返回相同事实；不同 Task 不能物化已成功的 Resource。
+7. 单次尝试失败由 Task retry owner 处理；业务最终失败才把未物化 Resource 设为 failed。用户 retry 创建新执行、沿用同一 Resource 和冻结输入。
+8. regenerate 创建新 Resource；Binding 更新以 version CAS 拒绝晚到覆盖。旧 Resource 仍可被 Lineage、历史消息或其他 Binding 引用。
+
+## Video Prompt Set 直连
+
+```text
+video_prompt_set Resource ID
+          │ server reads strict segments + lineage
+          ▼
+validate exact media Resource IDs and model capability
+          │
+          ├─ segment 1 → pending video Resource + Task
+          ├─ segment 2 → pending video Resource + Task
+          └─ segment N → pending video Resource + Task
+```
+
+Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Lineage。模型不提交 alias、role 映射或可见名称；`@ImageN` / `@AudioN` 只由执行层按已验证顺序构造。
+
+## 一次性切换
+
+`20260729090000_collapse_creative_resource_identity` 删除 `CreativeResourceRevision`、`headRevisionId`、`originKey`、Binding 的第二 identity 以及旧 Lineage 字段，把内容和 provenance 移到 Resource，并把领域投影切成单一 Resource ID。该 migration 通过一次性 guard key 在发现任何旧 Resource、Source Document 或 Story Canon 数据时立即失败；它不猜测、复制或覆盖数据。
+
+部署前必须排空旧协议 queued/processing Creative Resource Task、Creative Work Task 与对应 Agent Wait，并在明确授权下清理预发布旧数据后再执行 migration。本任务只提交 migration 文件，不执行 migration 或数据清理。协议直接切到 `creative_work_v10`，不保留旧 parser、双读或兼容字段。
+
+## 复杂度变化
+
+| 指标 | 修改前 | 修改后 |
+| --- | ---: | ---: |
+| 跨层 Resource identity | `resourceId + revisionId + originKey/hash` 三类 | 一个短 `resourceId` |
+| 内容持久实体 | Resource + Revision | Resource |
+| 引用关系解释者 | Primary 名称映射 + 服务端校验 | 服务端校验 |
+| Binding value identity | 两个 | 一个 |
+| Lineage 端点 identity | Revision | Resource |
+| Video Prompt Set 到视频执行 | Prompt 复制、引用重选、再提交 | Prompt Set ID 一次提交 |
+
+## 适用验证
+
+- Logic：短 identity 的分帧确定性、Resource 物化一次性、retry 冻结 payload、引用位置互斥、Prompt Set strict output 和媒体 ID 校验。
+- Conformance：Operation registry 的 `prompt_set` 窄分支、公开 Tool schema、Creative Work output registry、Binding 保留角色和 Assistant Link View。
+- Integration：Task terminal 原子物化、Binding CAS、领域投影、失败恢复和同 Resource replay。
+- Golden：Resource 创建、Task、Lineage、Binding、Assistant/Canvas 读取和刷新组合。
+
+真实 provider 对 Prompt Set 多段视频的外部受理、计费和最终媒体仍是环境型盲区；未运行对应真实组合时不得宣称架构完成。
 
 ## 历史回归
 
-- 通用视频第一次失败后，Primary 曾把“Retry the four exact frozen video-segment generations”作为四条新 prompt 再次调用 `create_video`，而旧 retry schema 同时允许模型填写新 prompt/references；系统因此给原 Resource 创建了四条内容相同、无参考图的新 Task，并把错误结果推进为 head。原 Golden 的 retry provider 也重新提交了同一句 prompt，只证明失败 identity 被复用，没有反证创作输入是否被改写。当前 `retry` 分支只能提交失败 Resource identity，服务端从唯一原始 `request.kind=new` 失败 Task 克隆冻结 payload，仅替换本次执行 identity；缺失、歧义、内容不匹配或引用失效均 typed-fail，不再允许模型重写。Freeform Golden 同时核验 retry 后 Revision 仍保存原 prompt。
-- 通用异步图片首次真实并行调用时，provider 已成功且媒体 checkpoint 已持久化，但外部轮询把 `externalId` 写入 Task 的显式运行 envelope 后，Creative Resource 终态 parser 因漏登记该字段而 strict-reject，三条 Task 反复恢复并停在估算 99%。既有 Golden 只覆盖同步测试 provider，没有执行“异步 externalId 已持久化后再重放 handler checkpoint 并物化 Revision”的组合，因此未能反证。当前生成契约显式登记 `externalId` 运行字段，解析结果仍只返回冻结业务输入；真实终态仍由 checkpoint + `commitTaskTerminal` 唯一物化，不允许前端补完成或再次调用 provider。异步 provider 的完整真实组合仍由后续 Golden 复验。
-- `merge_videos` 上线时另建了一份只登记 `ui/meta/externalId/sync` 的严格 Task envelope；统一 submitter 与 progress writer 持久化 `flow*/stage/message/displayMode` 后，Worker、Resource View 和 Terminal materializer 都 strict-reject。同一异常还使失败与用户取消事务在物化 Resource 终态时回滚，reconciler 因而持续恢复同一 processing Task。上一版只修复生成 Task 的 `externalId` 单字段，未把运行 envelope 收敛成所有 Creative Resource Task 共用的唯一契约，所以新 Task kind 换形式复发。当前生成与合并 parser 共同扩展 `task-runtime-envelope.ts` 的穷尽运行字段，仍严格剥离后只向领域返回冻结业务 payload；禁止每个 Task kind 再维护私有运行字段清单。真实多段合并从提交、进度、终态到 Canvas 刷新的组合仍是未验证盲区。
-- Task terminal 已把真实 Resource refs 合并进 continuation，但普通媒体 TaskDefinition 仍选择 `full` projection，模型因而收到 `videoUrl/storageKey/mediaId`；模型又自行缩写标题并把 `/m/...` 写进 Markdown code，React Markdown 只能按文本原样显示。`4ec58db4a` 删除了 Canvas/客户端按输出推断资源的旁路，却没有覆盖 Assistant 对话交付，因此同一“展示层解释原始输出”不变量换路径复发。当前所有 Creative Resource Task 的 lifecycle/continuation 都切为 reference projection，Terminal materializer 统一提供 exact `resources` 与安全尺寸/时长摘要；同步 Resource Operation 由 registry 的 `assistantPresentation` 穷尽声明，runtime 在消息结算前统一投影 `data-assistant-resource-links`。旧 Markdown 不做文本反查或双读；部署前必须排空旧版本 queued/processing Creative Resource Task 与对应 Wait，历史消息回填需单独授权。
-- 通用媒体 Task 曾只有终态 Resource broadcast；Task 已提交并持有冻结 prompt，但 Canvas 必须等终态或偶然 refetch 才出现节点，导致用户无法确认是否已经提交。当前 Task 提交事务原子写 pending Resource、Task 和 Resource broadcast，Resource View 只从唯一 active Task 投影原始 prompt；终态 Revision writer 未改变。
-- pending Resource 与终态 broadcast 已经正确到达浏览器后，Query 同步层曾用 `creativeResources(projectId, episodeId)` 的具体 key 去失效实际以另一 episode 参数缓存的列表；事件未命中时 Canvas 在提交和完成两个阶段都保持旧快照，刷新页面才读取到正式 Resource。当前 Resource change resolver 失效 `creativeResourcesAll(projectId)` 前缀，覆盖同一 Project 的所有 episode 变体，再由每条正式 Query 自己重读 scope View；不引入 refetch timer或第二资源状态。
-- Canvas 曾把专业源剧本的桥接 ID 当作节点 identity，匹配失败后创建 raw JSON 重复卡，又仅凭剧本存在投影制作规划与主链连线。当前 screenplay Revision 直接作为文字 Resource 投影；Story Canon/Chapter/规划只在各自真实事实存在时出现，边只来自持久 Lineage。
-- 旧系统把产物依赖编码为 Workflow 的 `allowedOperationIds`、推荐 step 和固定 continuation；首次修正只删除 gating，却保留 WorkflowView、固定 Choice 和专业 writer，仍会强迫剧本进入确认/制作规划链。当前连推荐投影也一并删除；工具资格只来自完整 Operation registry 与 Operation 自身显式契约，Canvas 只显示持久 Resource/领域 View。
-- 仅删除 Workflow 而不先让 Operation 自足会把“轮到此步骤时上游必然存在”的隐含假设暴露为错误执行。当前所有开放 Operation 仍经 registry schema/prerequisite、owner/scope、provider capability 和 plan/commit fail closed；缺少必要输入不会静默跳过或伪造产物。
-- 把专业领域全部改成通用 JSON 会丢失关系查询、类型安全和既有卡片；保留两套独立资产系统又会产生双 writer。当前专业 table 与 Resource 脊柱拥有不同事实：前者保存当前领域结构，后者保存不可变跨领域交付、provenance、Lineage 与 Binding；Task terminal 是二者异步交接的同一事务边界。
-- Binding service 曾只验证 Resource 属于同一用户，允许把 project A/episode A 的 Resource 写入 project B Binding；CR-09 文档和同用户正常 Golden 没有覆盖跨项目同用户攻击。当前 Binding 先验证 target project/episode owner，再只允许用户级 Resource 显式采用、同 project 或同 episode Resource；跨项目和跨 episode 原地 NOT_FOUND。跨项目同用户负向组合仍需在真实 Resource Golden 中持续保留。
-- 自由剧本曾继续调用旧专业确认 Operation；随后虽改成精确 Resource Revision，仍保存 `confirmed_screenplay` Binding，导致“成功 Revision”和“正式剧本”双轨。当前彻底删除确认入口与 Binding：成功 Revision 就是剧本，Primary 在每个调用中显式引用所需代次。
-- Creative Direction 是文字 Resource，早期通用媒体输入却只有一组 `references`，业务层把 Creative Direction revision 当作图片引用送进图片 provider，三张资产在外部请求前一起失败。当前契约把语义上下文与真实图片引用拆开，lineage 同时保留两者，provider 只接收图片；旧 payload 不兼容，部署前必须排空旧版本 queued/processing Creative Resource 媒体 Task，禁止双读 fallback。
-- OpenRouter GPT Image 2 曾在上游账户硬限额时直接失败，即使系统还声明了等价的 FAL GPT Image 2 能力；若业务层或 Agent 自行改 provider，会产生第二执行入口、第二报价和重复 Resource。当前只允许 Provider Gateway 在同一声明式等价 route set 内、确认首路由未受理且没有 external id 时切换，并把最终路由写入同一 invocation checkpoint；Resource materializer 据此记录真实 modelKey。同一路由已受理、结果不确定或异步 external id 已存在时绝不切换。
-- 固定流程切换后，screenplay/Story Canon Resource 虽属于同一 Project，Episode 投影表却把 `sourceRevisionId`/`storyCanonRevisionId` 设为全局唯一，第二个 Episode 显式采用同一 canon 会被数据库约束拒绝；同时 Creative Task 仍把这三类全局 canon 物化为 Episode Resource，使 `list_resources` 在其他 Episode 看不到它们。当前输出 registry 是 scope 唯一裁判，这三类产物物化为 Project Resource；投影唯一性改为 Episode scope，跨 Project 仍由 owner/scope 校验失败关闭。
-- 2026-07-23 的 canonical screenplay 重构把生产资产候选登记进剧本契约，并要求后续 manifest 对登记实体 exact-once 覆盖；一次只出现但真实承载坠落结尾的“崖底”被剧本 Worker 归为“山顶延伸空间”后，资产 Worker 与 fail-closed materializer 都无法合法补回。2026-07-24 首次纠正只增强 canonicalization 的地点提示，仍让错误 owner 决定生产资产范围，因而无法消除同根因复发。当前删除该分析输出和 Skill：`screenplay` 只拥有文本/写作元信息，`asset_manifest` 在一个 Task 内独占资产筛选、设计和 Prompt；服务端只校验名称/别名歧义并编译稳定 manifest identity，精确 screenplay Revision 与 Lineage 记录真实输入。旧 canonical Revision 保留为不可变历史但不能进入新输出契约；`creative_work_v6` 部署前必须排空 v5 queued/processing Task/Wait，不保留双 parser。真实模型对一次性关键空间和资产范围的判断质量仍需真实生成复验。
-- 剧本与资产分权的第一版要求 Worker 为每项资产重新抄写逐字 `sourceExcerpt`，终态再用字符串 `includes` 证明原文存在。该检查既不能证明所引句子在语义上支持对应资产，又会因模型改变引号、标点、空格或换行而让整份 manifest 失败；旧 Logic 只断言虚构字符串会被拒绝，Golden 与集成夹具则手写了保证匹配的 excerpt，因此全部通过也没有反证真实复制漂移。当前完整删除 `sourceRefs/sourceExcerpt/reason`、逐字校验和 Skill 要求；资产筛选语义只由读取精确 screenplay 的 `asset-development` Worker 裁决，服务端继续拥有 Revision/Lineage、manifest identity 和歧义校验。`creative_work_v8` 与 v7 不兼容，部署前必须排空 v7 queued/processing Task 与 Wait；旧 v7 asset manifest Revision 保留为不可变历史，不增加双 schema 采用分支。
-- 旧视觉 Bible 最初只拥有视觉字段，资产清单又通过显式 source material 与当前 Binding 二次核对，视频、音乐、剧本和章节路径则依赖 Primary 是否记得传递，形成多个注入者和不一致门槛。仅让所有 Subagent 主动读取 Project Context 仍会扩大权限、复制版本判断并让运行中 Task 受换绑影响；按工种裁剪六领域又会让服务端替模型静态判断影视工种之间的关联。当前唯一 writer 仍是 `adopt_creative_direction`，唯一 Task 输入编译者仍是 `delegate_creative_work` 服务端：它一次读取 adopted Binding，向全部非方向生产者冻结完整精确 Direction 与 revisionId，Worker 在自身专业边界内判断相关内容；Primary 手动传方向、Chapter conditional style、Asset 当前 Binding 核对、领域裁剪和“方向必需”门槛全部删除。Conformance 从生产 registry 穷尽反证漏接；`creative_work_v7` 部署前必须排空 v6 queued/processing Task/Wait，不保留双 parser。
-- 通用 `adopt_resource` 最初允许任意 `role + slotKey` 进入模型 Schema，再由 executor 拒绝 `character_voice`、`project_asset_image` 和两个 canonical adoption 组合；这既让模型生成已知必败调用，也把专用 writer 的所有权缩成若干局部 slot 特判。当前这四个专用 role 的完整命名空间由共享常量直接排除在通用 adoption Schema 外，runtime 使用同一个 Schema 解析，旧 executor 特判已删除；Creative Direction、Asset Manifest、角色音色和资产图片仍只能通过各自唯一入口写入。
+- 初始 Resource spine 同时保存 Resource、Revision、head 和 origin；跨层又逐步只认 Revision，形成多个可合法出现但语义重叠的 identity。修补调用方只能减少某一种不一致，不能消除组合错误。本次直接删除 Revision/head/origin 协议。
+- 参考资产回归的直接症状是视频生成未消费用户已选资产。上一版只保证 `request.kind=retry` 从旧 Task 恢复冻结引用，但初次 `video_prompt_set` 仍只输出自然语言 `referenceKeys`，Primary 必须根据名称、资源列表和历史上下文重新选择 ID；因此初次生成完全绕过 retry 防线，且曾把 Resource hash 当成执行需要的 ID。当前 Prompt Set 保存精确 `mediaResourceIds`，服务端只允许其持久 Lineage 中的真实 Resource，Primary 不再解释引用。
+- 语义上下文与 provider 图片曾共用 `references`，导致 Creative Direction 文字被送入图片 provider。当前三种 provider 引用由冻结位置明确区分，旧 payload 不兼容。
+- 通用媒体 Task 曾在提交后没有 pending Resource，Canvas 只能等终态或刷新；随后 SSE 失效又只命中一个 episode key。当前提交事务预留 Resource，Project 级失效覆盖所有 episode 参数变体，UI 仍只重读正式 View。
+- Task terminal 曾把 storageKey/URL 等原始结果交给模型，Assistant 再从 Markdown 猜文件链接。当前 terminal 只交付 Resource refs，唯一 Link View 投影安全名称和地址。
+- 同用户跨 Project Binding 曾因只校验 user 而被接受。Binding service 现在验证目标 owner/scope 和 Resource scope，跨 Project/Episode失败关闭。
+- `confirmed_screenplay` 曾与成功 screenplay Resource 并存成为第二状态。确认入口和 Binding 已删除，调用方显式选择一个 screenplay Resource。
+- 角色音色曾把“重新生成”解释为原位追加版本，使当前绑定与生成完成的晚到顺序竞争。现在每次生成创建新 Resource，只有 Binding CAS 决定当前音色。
 
 ## 修改检查表
 
-1. 新产物的 Resource identity、schemaId、scope、唯一 writer 和专业 origin 是否明确？
-2. 是否追加 Revision 而非改写历史，并保存真实 prompt/model/输入 Revision？
-3. 专业领域表与 Resource 是否各自只拥有一种事实，没有第二 writer？
-4. 候选失败重试是否只提交失败 resourceId，成功候选与 provider invocation 不重复？
-5. Canvas 是否优先专业 renderer，fallback 是否只依赖 mediaType，edge 是否只来自 Lineage？
-6. 是否错误地用 Workflow、Canvas 位置、旧 head 或 stale 诊断阻止 Agent 调用？
-7. 剧本是否只保存文本/写作元信息且直接使用成功 Revision、没有确认或生产资产 registry；正式风格是否只来自 adopted Creative Direction Binding 且采用不产生预览或下游副作用？
-8. `contextReferences`、`create_image.imageReferences`、`create_video.imageReferences/audioReferences` 与 `create_audio.videoReference` 是否在 Task、按类型冻结的位置、provider 输入、lineage 和 provenance 中保持各自语义？
-9. 成功 Revision 是否记录 durable invocation 的实际 provider route，而不是初始或当前配置？
-10. `character_voice` 是否只经保留入口写入，自动绑定是否用冻结 version 拒绝旧覆盖，删除是否拒绝 Binding/Lineage/active Task？
+1. 是否只传一个短 Resource ID，且名称、hash、alias 没有成为第二身份？
+2. 成功 Resource 是否只物化一次；retry 是否只完成同一未物化 Resource，regenerate 是否创建新 Resource？
+3. Lineage、Binding、领域投影、Assistant、Canvas 和 Task 是否都使用同一 Resource ID？
+4. scope、schema、ready/materialized、媒体类型和 capability 是否在服务端统一验证？
+5. Prompt Set 是否直接保存精确媒体 Resource ID，并且 Primary 只提交 Prompt Set Resource ID？
+6. 是否复用既有 Operation、Billing/Approval、Task、Provider Gateway 和 terminal materializer，而非新增执行入口？
+7. 是否删除旧 Revision/head/origin/referenceKeys parser、writer、fallback 和测试语义？
+8. migration 是否 fail closed；旧 Task 是否在部署前排空；未验证环境盲区是否明确？

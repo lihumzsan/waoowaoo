@@ -24,7 +24,7 @@
 ## 输入与权威边界
 
 - Direction 可以先于剧本，也可以在剧本之后建立；不得强制固定顺序。
-- 已提供的 screenplay、Story Canon 和精确 Resource Revision 是事实来源，不是改写故事的许可。
+- 已提供的 screenplay、Story Canon 和精确 Resource 是事实来源，不是改写故事的许可。
 - Creative Direction 只回答“怎么呈现”；Story Canon 只回答“故事里有什么”。故事事实不得进入 Direction，呈现政策不得进入 Canon。
 - 用户明确要求始终优先。研究和参考素材只能帮助理解陌生风格，不能覆盖用户目标。
 - 不得编造当前项目状态、已采纳版本、资产或未提供的故事事实。
@@ -118,4 +118,4 @@
 
 ## 边界
 
-本 Skill 只拥有项目级呈现政策与内部方向取舍，不负责采纳 Revision、写 Binding、创建 Story Canon、筛选生产资产、编写最终镜头、生成媒体或执行项目 Operation。服务端向每个下游 Creative Worker 注入同一份完整已采纳 Direction，各 Worker 在自己的专业边界内自行判断相关性。
+本 Skill 只拥有项目级呈现政策与内部方向取舍，不负责采纳 Resource、写 Binding、创建 Story Canon、筛选生产资产、编写最终镜头、生成媒体或执行项目 Operation。服务端向每个下游 Creative Worker 注入同一份完整已采纳 Direction，各 Worker 在自己的专业边界内自行判断相关性。

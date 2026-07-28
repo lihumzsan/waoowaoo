@@ -18,7 +18,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-03 — Provider 隔离。** provider 专属模型常量、option 和条件分支只能留在自身 `ai-providers/<provider>/` 实现内；跨 provider 分支属于 registry/engine 的职责。
 - **PG-04 — 异步协议完整。** external id、轮询状态、成功结果、失败原因和 `retryable | permanent` 终态分类必须由共享 discriminated union 与唯一 normalizer 明确归一化；`failed` 缺少 disposition、非失败状态携带 disposition、未知 provider 状态或失败状态被映射为完成都必须原地失败。网络/查询异常直接抛出并恢复同一 external id，不得伪装成 provider 终态。
 - **PG-05 — 零未声明降级。** 不支持的模型、能力、输出或 provider 故障必须显式失败。唯一允许的跨 provider 路由切换必须来自生产 registry 的穷尽等价 route set，并同时满足：同一产品能力、同一 canonical options、同一冻结报价、同一 Task/Resource/logical invocation，上一条路由返回 typed pre-accept rejection，且没有 external id、媒体结果或受理不确定性。accepted、`outcome_unknown`、超时/断连、异步 external id、poll/result 失败、permanent 内容拒绝和普通 retryable 失败均不得前进路由。业务层、Agent、provider adapter 不得自行 fallback。
-- **PG-05A — 路由进度是 durable invocation 事实。** route set identity、当前 route index、每次 typed rejection 与最终实际 modelKey 必须写入同一 provider invocation checkpoint；Task retry/replay 从该 checkpoint 恢复，不能重新从第一路由开始。成功 Revision 只从 checkpoint 读取实际 modelKey。route set 不创建第二 Task、第二报价、第二 Resource 或第二 invocation，且 route 成员价格不等价时 registry 必须拒绝声明。
+- **PG-05A — 路由进度是 durable invocation 事实。** route set identity、当前 route index、每次 typed rejection 与最终实际 modelKey 必须写入同一 provider invocation checkpoint；Task retry/replay 从该 checkpoint 恢复，不能重新从第一路由开始。成功 Resource 只从 checkpoint 读取实际 modelKey。route set 不创建第二 Task、第二报价、第二 Resource 或第二 invocation，且 route 成员价格不等价时 registry 必须拒绝声明。
 - **PG-06 — 提交与查询重试分离。** 媒体、LLM 与 vision POST 每个逻辑 invocation 在同一 DB Task attempt 只能发送一次，调用必须先经过 durable provider fence。明确未受理、结构化结果不可用或 external job 明确终态失败时，fence 才允许更高 attempt 原子重取该 invocation 的一次新提交权；成功的兄弟 invocation 继续重放。断连、超时、无类型 `success:false` 或无法证明是否受理的响应必须进入 `outcome_unknown`，禁止自动重提。获得 external id 后的 poll、结果下载和存储读取可以按各自策略重试，但 pending job 只能恢复；只有明确终态失败才能重建 provider job。本地持久化失败重放 provider 结果与稳定 artifact key，不重新生成。
 - **PG-07 — LLM stream 与最终结果同源。** 唯一 AI SDK runner 必须把同一次 `streamText` 的 delta 与 SDK final promise 归一为同一个项目结果。若 final text/reasoning 是已发内容的严格前缀扩展，runner 必须在 `onComplete` 前补发确定 suffix；若此前没有对应 delta，则补发完整 final 内容。final 与已发内容分叉时必须原地失败，禁止拼接、猜测、重发整份内容、改走 `generateText`、跨 provider fallback 或发起第二次模型调用。
 - **PG-08 — LLM 推理强度精确归一。** 推理强度 identity 由 `ai-registry/reasoning-effort.ts` 唯一定义，具体模型支持集合由生产 capability registry 穷尽声明，运行时只经 `ai-exec/reasoning-effort.ts` 合并显式调用参数、用户/项目 capability 配置或平台角色环境变量。Primary Agent 使用 `assistant` 角色，Creative Worker 与其他后台专业文本 Task 使用 `analysis` 角色；调用方必须显式传递角色，禁止从模型名、Task 名或默认值猜测。最终值必须在持久化 invocation 前冻结，并由 provider adapter 原样写入外部请求；未知值、不受模型支持的值或 SDK 无法精确表达的值必须原地失败，禁止就近映射、静默默认或由不同调用链自行解释。
@@ -52,7 +52,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 ## 发布边界
 
-视频生成 `fps` 字段从 Tool Schema、capability、Task payload、执行 option 与 provider adapter 一次性删除，不提供旧字段双读或静默忽略。Seedance 2 token 报价公式中的固定帧率常量与本地视频合并转码的固定帧率归一化属于内部算法/编码事实，不是生成输入。部署前必须排空旧版本仍可能携带该字段的 pending Approval、queued/processing Creative Resource video Task 与对应 Wait；历史终态 Revision/plan 保持不可变，不执行数据回填。
+视频生成 `fps` 字段从 Tool Schema、capability、Task payload、执行 option 与 provider adapter 一次性删除，不提供旧字段双读或静默忽略。Seedance 2 token 报价公式中的固定帧率常量与本地视频合并转码的固定帧率归一化属于内部算法/编码事实，不是生成输入。部署前必须排空旧版本仍可能携带该字段的 pending Approval、queued/processing Creative Resource video Task 与对应 Wait；历史终态 Resource/plan 保持不可变，不执行数据回填。
 
 ## 验证
 

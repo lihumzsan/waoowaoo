@@ -5,16 +5,15 @@ import { createAssistantCreativeDirectionOperations } from '@/lib/operations/dom
 import { createCreativeResourceOperations } from '@/lib/operations/domains/creative-resource/resource-ops'
 
 describe('creative result Resource conformance', () => {
-  it('adopts an asset manifest by one exact revision without accepting caller-supplied content identity', () => {
+  it('adopts an asset manifest by one exact Resource without accepting caller-supplied content identity', () => {
     const operation = createAssistantCreativeAssetOperations().adopt_asset_manifest
     expect(operation).toBeDefined()
     expect(operation?.inputSchema.safeParse({
-      revisionId: 'asset-manifest-r1',
+      resourceId: 'asset-manifest-r1',
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation?.inputSchema.safeParse({
       resourceId: 'asset-manifest-resource',
-      revisionId: 'asset-manifest-r1',
       fingerprint: 'caller-supplied-fingerprint',
       content: { assets: [] },
       expectedVersion: null,
@@ -22,11 +21,11 @@ describe('creative result Resource conformance', () => {
     expect(operation?.choiceCommit).toBeUndefined()
   })
 
-  it('adopts an exact materialized Creative Direction revision instead of copying a Task candidate', () => {
+  it('adopts an exact materialized Creative Direction Resource instead of copying a Task candidate', () => {
     const operation = createAssistantCreativeDirectionOperations().adopt_creative_direction
     expect(operation).toBeDefined()
     expect(operation?.inputSchema.safeParse({
-      revisionId: 'style-revision',
+      resourceId: 'r_style',
       expectedVersion: null,
     }).success).toBe(true)
     expect(operation?.inputSchema.safeParse({
@@ -43,18 +42,18 @@ describe('creative result Resource conformance', () => {
     expect(Object.keys(operations).sort()).toEqual(['adopt_chapters', 'adopt_story_canon'])
     expect(operations.adopt_story_canon?.choiceCommit).toEqual({ enabled: true })
     expect(operations.adopt_story_canon?.inputSchema.safeParse({
-      screenplay: { revisionId: 'screenplay-r1' },
-      storyCanon: { revisionId: 'story-canon-r1' },
+      screenplay: { resourceId: 'screenplay-r1' },
+      storyCanon: { resourceId: 'story-canon-r1' },
       expectedVersion: null,
     }).success).toBe(true)
     expect(operations.adopt_chapters?.choiceCommit).toEqual({ enabled: true })
     expect(operations.adopt_chapters?.inputSchema.safeParse({
-      screenplay: { revisionId: 'screenplay-r1' },
-      chapterPlan: { revisionId: 'chapter-plan-r1' },
+      screenplay: { resourceId: 'screenplay-r1' },
+      chapterPlan: { resourceId: 'chapter-plan-r1' },
     }).success).toBe(true)
     expect(operations.adopt_chapters?.inputSchema.safeParse({
       episodeId: 'episode',
-      storyCanonRevisionId: 'story-canon-r1',
+      storyCanonResourceId: 'story-canon-r1',
     }).success).toBe(false)
   })
 })

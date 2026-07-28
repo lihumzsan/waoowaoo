@@ -129,9 +129,7 @@ export interface ProjectStoryCanon {
   episodeId: string
   sourceDocumentId: string
   sourceResourceId: string
-  sourceRevisionId: string
   storyCanonResourceId: string
-  storyCanonRevisionId: string
   sourceText: string
   version: number
   storyCanon: unknown

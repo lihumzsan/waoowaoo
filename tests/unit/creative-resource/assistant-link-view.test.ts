@@ -3,7 +3,7 @@ import {
   projectCreativeResourceFileName,
   readCreativeResourceMaterializedRefs,
 } from '@/lib/creative-resource/assistant-link-view'
-import { projectCreativeResourceRevisionForAgent } from '@/lib/operations/domains/creative-resource/resource-ops'
+import { projectCreativeResourceMaterializationForAgent } from '@/lib/operations/domains/creative-resource/resource-ops'
 
 describe('Assistant Resource link projection', () => {
   it('uses the canonical Resource name as the visible file name without exposing media identity', () => {
@@ -17,26 +17,22 @@ describe('Assistant Resource link projection', () => {
     })).toBe('Final Cut.MP4')
   })
 
-  it('requires exact Resource and Revision identities before presentation', () => {
+  it('requires one exact Resource identity before presentation', () => {
     expect(readCreativeResourceMaterializedRefs({
       resources: [{
         resourceId: 'resource-1',
-        revisionId: 'revision-1',
         videoUrl: '/m/internal-id',
       }],
     })).toEqual([{
       resourceId: 'resource-1',
-      revisionId: 'revision-1',
     }])
     expect(() => readCreativeResourceMaterializedRefs({
-      resources: [{ resourceId: 'resource-1' }],
-    })).toThrow('CREATIVE_RESOURCE_ASSISTANT_RESULT_REVISION_ID_MISSING:0')
+      resources: [{ name: 'missing identity' }],
+    })).toThrow('CREATIVE_RESOURCE_ASSISTANT_RESULT_RESOURCE_ID_MISSING:0')
   })
 
   it('keeps media facts available to the Agent without exposing an internal media address', () => {
-    const projected = projectCreativeResourceRevisionForAgent({
-      revisionId: 'revision-1',
-      revision: 1,
+    const projected = projectCreativeResourceMaterializationForAgent({
       content: {
         kind: 'media',
         mediaId: 'internal-media-id',
@@ -58,7 +54,7 @@ describe('Assistant Resource link projection', () => {
         generationOptions: null,
       },
       inputs: [],
-      createdAt: '2026-07-28T00:00:00.000Z',
+      materializedAt: '2026-07-28T00:00:00.000Z',
     })
 
     expect(projected.content).toEqual({

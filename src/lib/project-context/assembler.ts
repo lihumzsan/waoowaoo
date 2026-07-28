@@ -108,9 +108,7 @@ export async function assembleProjectContext(params: {
       storyCanon: storyCanon ? {
         id: storyCanon.id,
         sourceResourceId: storyCanon.sourceResourceId,
-        sourceRevisionId: storyCanon.sourceRevisionId,
         storyCanonResourceId: storyCanon.storyCanonResourceId,
-        storyCanonRevisionId: storyCanon.storyCanonRevisionId,
         version: storyCanon.version,
         updatedAt: storyCanon.updatedAt.toISOString(),
       } : null,

@@ -5,7 +5,7 @@ import {
   CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
 } from '@/lib/creative-resource/contracts'
 import {
-  buildCreativeResourceOriginKey,
+  buildCreativeResourceId,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource/identity'
 import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
@@ -30,7 +30,7 @@ import type {
 } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
-import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   bindCharacterVoiceInTransaction,
   type CharacterVoiceSelection,
@@ -42,22 +42,15 @@ const voiceTargetSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('character'),
     characterId: z.string().trim().min(1)
-      .describe('Exact project character ID. The completed voice revision will be bound to this character.'),
+      .describe('Exact project character ID. The completed voice resource will be bound to this character.'),
   }).strict(),
 ])
 
-const voiceResourceCommandSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('new'),
-    name: z.string().trim().min(1).max(191).optional()
-      .describe('Optional display name for the new voice Resource.'),
-  }).strict(),
-  z.object({
-    kind: z.literal('regenerate'),
-    resourceId: z.string().trim().min(1)
-      .describe('Exact existing project.voice_reference Resource ID to regenerate in place.'),
-  }).strict(),
-])
+const voiceResourceCommandSchema = z.object({
+  kind: z.literal('new'),
+  name: z.string().trim().min(1).max(191).optional()
+    .describe('Optional display name for the new immutable voice Resource.'),
+}).strict()
 
 const generateVoiceInputSchema = z.object({
   description: z.string().trim().min(1).max(4_000)
@@ -76,7 +69,6 @@ const bindVoiceInputSchema = z.object({
     z.object({
       kind: z.literal('voice'),
       resourceId: z.string().trim().min(1),
-      revisionId: z.string().trim().min(1),
     }).strict(),
     z.object({ kind: z.literal('none') }).strict(),
   ]),
@@ -94,7 +86,6 @@ const voiceBindingOutputSchema = z.object({
   role: z.literal(CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE),
   slotKey: z.string().min(1),
   resourceId: z.string().min(1),
-  revisionId: z.string().min(1),
   version: z.number().int().min(0),
   source: z.string().min(1),
 }).strict()
@@ -108,7 +99,6 @@ const bindVoiceOutputSchema = z.object({
 const generateVoiceOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
     resourceId: z.string().min(1),
-    regenerating: z.boolean(),
     bindingRequested: z.boolean(),
   }).passthrough(),
 )
@@ -117,9 +107,6 @@ const voicePlanMetadataSchema = z.object({
   resourceId: z.string().min(1),
   resourceName: z.string().min(1),
   requestId: z.string().min(1),
-  isNew: z.boolean(),
-  expectedStatus: z.enum(['ready', 'failed', 'canceled']).nullable(),
-  expectedHeadRevisionId: z.string().nullable(),
 }).strict()
 
 type GenerateVoiceInput = z.infer<typeof generateVoiceInputSchema>
@@ -167,48 +154,12 @@ async function planGenerateVoice(
     purpose: 'voice-design',
   })
   const expectedBindingVersion = await requireCharacterAndBindingVersion(ctx, input.target)
-  const existing = input.resource.kind === 'regenerate'
-    ? await prisma.creativeResource.findFirst({
-        where: {
-          id: input.resource.resourceId,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: null,
-          scopeKind: 'project',
-          scopeId: ctx.projectId,
-          mediaType: 'audio',
-          schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-          status: { in: ['ready', 'failed', 'canceled'] },
-        },
-        select: { id: true, name: true, status: true, headRevisionId: true },
-      })
-    : null
-  if (input.resource.kind === 'regenerate' && !existing) {
-    throw new ApiError('NOT_FOUND', {
-      code: 'VOICE_RESOURCE_NOT_FOUND',
-      field: 'resource.resourceId',
-    })
-  }
-  if (existing) {
-    const activeTasks = await prisma.task.count({
-      where: {
-        projectId: ctx.projectId,
-        targetType: 'CreativeResource',
-        targetId: existing.id,
-        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      },
-    })
-    if (activeTasks > 0) {
-      throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_GENERATION_PENDING' })
-    }
-  }
   const inputHash = stableArgsHash({
     operationId: 'generate_voice',
     projectId: ctx.projectId,
     input,
     voiceModel,
     expectedBindingVersion,
-    expectedHeadRevisionId: existing?.headRevisionId ?? null,
   })
   const requestId = [
     'generate_voice',
@@ -218,13 +169,12 @@ async function planGenerateVoice(
     ctx.toolCallId?.trim() ?? inputHash,
     inputHash,
   ].join(':')
-  const resourceId = existing?.id ?? buildCreativeResourceOriginKey({
+  const resourceId = buildCreativeResourceId({
     operationId: 'generate_voice',
     requestId,
     candidateIndex: 0,
   })
-  const resourceName = existing?.name
-    ?? (input.resource.kind === 'new' ? input.resource.name : undefined)
+  const resourceName = input.resource.name
     ?? input.description.slice(0, 80)
   const generationOptions = { language: input.language }
   const resourcePayload = {
@@ -285,14 +235,11 @@ async function planGenerateVoice(
     projectId: ctx.projectId,
     userId: ctx.userId,
     tasks: [task],
-    reservedIdentityIds: existing ? [] : [resourceId],
+    reservedIdentityIds: [resourceId],
     metadata: {
       resourceId,
       resourceName,
       requestId,
-      isNew: !existing,
-      expectedStatus: existing?.status ?? null,
-      expectedHeadRevisionId: existing?.headRevisionId ?? null,
     },
   }
 }
@@ -301,54 +248,22 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
   const authorization = ctx.executionAuthorization
   if (!authorization) throw new Error('OPERATION_EXECUTION_AUTHORIZATION_REQUIRED')
   const metadata = voicePlanMetadataSchema.parse(plan.metadata)
-  if (metadata.isNew) {
-    await reserveCreativeResourcesInTransaction(authorization.transaction, {
-      scope: resolveProjectCreativeResourceScope({
-        userId: ctx.userId,
-        projectId: ctx.projectId,
-        episodeId: null,
-      }),
-      mediaType: 'audio',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-      operationId: 'generate_voice',
-      requestId: metadata.requestId,
-      candidates: [{
-        resourceId: metadata.resourceId,
-        name: metadata.resourceName,
-        candidateIndex: 0,
-      }],
-    })
-  } else {
-    const activeTasks = await authorization.transaction.task.count({
-      where: {
-        projectId: ctx.projectId,
-        targetType: 'CreativeResource',
-        targetId: metadata.resourceId,
-        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      },
-    })
-    if (activeTasks > 0) {
-      throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_GENERATION_PENDING' })
-    }
-    const changed = await authorization.transaction.creativeResource.updateMany({
-      where: {
-        id: metadata.resourceId,
-        userId: ctx.userId,
-        projectId: ctx.projectId,
-        episodeId: null,
-        scopeKind: 'project',
-        scopeId: ctx.projectId,
-        mediaType: 'audio',
-        schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-        status: metadata.expectedStatus ?? undefined,
-        headRevisionId: metadata.expectedHeadRevisionId,
-      },
-      data: { status: 'pending', errorCode: null, errorMessage: null },
-    })
-    if (changed.count !== 1) {
-      throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_CHANGED_AFTER_APPROVAL' })
-    }
-  }
+  await reserveCreativeResourcesInTransaction(authorization.transaction, {
+    scope: resolveProjectCreativeResourceScope({
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      episodeId: null,
+    }),
+    mediaType: 'audio',
+    schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+    operationId: 'generate_voice',
+    requestId: metadata.requestId,
+    candidates: [{
+      resourceId: metadata.resourceId,
+      name: metadata.resourceName,
+      candidateIndex: 0,
+    }],
+  })
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
   await createWorkspaceResourceBroadcastsInTransaction({
     tx: authorization.transaction,
@@ -364,7 +279,6 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
   return generateVoiceOutputSchema.parse({
     ...result,
     resourceId: metadata.resourceId,
-    regenerating: !metadata.isNew,
     bindingRequested: Boolean(task.payload.resource && (
       task.payload.resource as Record<string, unknown>
     ).binding),
@@ -375,14 +289,14 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design one reusable voice from a natural-language voice description and render one short preview audio. Use resource.kind=new to create or resource.kind=regenerate with one exact existing voice Resource ID to add a revision under the same identity. Choose standalone for an unbound voice, or character to bind the completed revision automatically without overwriting a newer manual binding.',
+      summary: 'Design one reusable voice from a natural-language voice description and render one short preview audio as a new immutable Resource. Regeneration creates another Resource; choose standalone for an unbound voice, or character to bind the completed Resource automatically without overwriting a newer manual binding.',
       intent: 'act',
       effects: {
         writes: true,
         workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
-        overwrite: true,
+        overwrite: false,
         bulk: false,
         externalSideEffects: true,
         longRunning: true,
@@ -403,7 +317,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
     }),
     bind_voice: defineOperation({
       id: 'bind_voice',
-      summary: 'Bind, replace, or unbind the exact immutable audio revision used as one project character\'s voice. Accepts a designed project.voice_reference revision or a user-uploaded project.upload_audio revision. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
+      summary: 'Bind, replace, or unbind the exact immutable audio Resource used as one project character\'s voice. Accepts a designed project.voice_reference Resource or a user-uploaded project.upload_audio Resource. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
       intent: 'act',
       effects: {
         writes: true,
@@ -417,7 +331,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       },
       resourceContract: {
         kind: 'none',
-        reason: 'updates only the canonical character voice Binding and never creates a Resource revision',
+        reason: 'updates only the canonical character voice Binding and never creates a Resource',
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: bindVoiceInputSchema,

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { bindCreativeResourceRevisionInTransaction } from '@/lib/creative-resource/binding-service'
+import { bindCreativeResourceInTransaction } from '@/lib/creative-resource/binding-service'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
@@ -12,8 +12,8 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 const adoptCreativeDirectionInputSchema = z.object({
-  revisionId: z.string().trim().min(1)
-    .describe('Exact immutable Creative Direction revision selected by the current choice.'),
+  resourceId: z.string().trim().min(1)
+    .describe('Exact immutable Creative Direction resource selected by the current choice.'),
   expectedVersion: z.number().int().min(0).nullable().optional()
     .describe('Pass null for the first adoption; pass the current adopted Creative Direction binding version when replacing it.'),
 }).strict()
@@ -21,7 +21,6 @@ const adoptCreativeDirectionInputSchema = z.object({
 const adoptCreativeDirectionOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().trim().min(1),
-  revisionId: z.string().trim().min(1),
   schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION),
   binding: z.object({
     bindingId: z.string().trim().min(1),
@@ -35,7 +34,6 @@ const adoptCreativeDirectionOutputSchema = z.object({
     role: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.role),
     slotKey: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.slotKey),
     resourceId: z.string().trim().min(1),
-    revisionId: z.string().trim().min(1),
     version: z.number().int().min(0),
     source: z.string().trim().min(1),
   }).strict(),
@@ -45,7 +43,7 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
   return {
     adopt_creative_direction: defineOperation({
       id: 'adopt_creative_direction',
-      summary: 'Adopt one exact immutable project.creative_direction Resource revision selected by the current action. The Creative Task already materialized the revision; this operation only updates the canonical adopted_creative_direction Binding and starts no downstream work.',
+      summary: 'Adopt one exact immutable project.creative_direction Resource selected by the current action. The Creative Task already materialized it; this operation only updates the canonical adopted_creative_direction Binding and starts no downstream work.',
       intent: 'act',
       effects: {
         writes: true,
@@ -70,25 +68,23 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
       inputSchema: adoptCreativeDirectionInputSchema,
       outputSchema: adoptCreativeDirectionOutputSchema,
       executeInTransaction: async (context, input, transaction) => {
-        const revision = await transaction.creativeResourceRevision.findFirst({
+        const resource = await transaction.creativeResource.findFirst({
           where: {
-            id: input.revisionId,
+            id: input.resourceId,
             taskId: { not: null },
-            resource: {
-              userId: context.userId,
-              projectId: context.projectId,
-              episodeId: null,
-              scopeKind: 'project',
-              scopeId: context.projectId,
-              status: 'ready',
-              mediaType: 'text',
-              schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-              sourceType: 'CreativeWorkResult',
-            },
+            userId: context.userId,
+            projectId: context.projectId,
+            episodeId: null,
+            scopeKind: 'project',
+            scopeId: context.projectId,
+            status: 'ready',
+            materializedAt: { not: null },
+            mediaType: 'text',
+            schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
+            sourceType: 'CreativeWorkResult',
           },
           select: {
             id: true,
-            resourceId: true,
             taskId: true,
             task: {
               select: {
@@ -99,22 +95,22 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
             },
           },
         })
-        if (!revision || !revision.taskId || !revision.task) {
+        if (!resource || !resource.taskId || !resource.task) {
           throw new ApiError('NOT_FOUND', {
-            code: 'CREATIVE_DIRECTION_REVISION_NOT_FOUND',
-            field: 'revisionId',
+            code: 'CREATIVE_DIRECTION_RESOURCE_NOT_FOUND',
+            field: 'resourceId',
           })
         }
-        const payload = creativeWorkTaskPayloadSchema.safeParse(revision.task.payload)
+        const payload = creativeWorkTaskPayloadSchema.safeParse(resource.task.payload)
         if (
-          revision.task.type !== TASK_TYPE.CREATIVE_WORK
-          || revision.task.status !== TASK_STATUS.COMPLETED
+          resource.task.type !== TASK_TYPE.CREATIVE_WORK
+          || resource.task.status !== TASK_STATUS.COMPLETED
           || !payload.success
           || payload.data.request.outputKind !== 'creative_direction'
         ) {
           throw new ApiError('INVALID_PARAMS', {
-            code: 'CREATIVE_DIRECTION_REVISION_PROVENANCE_INVALID',
-            field: 'revisionId',
+            code: 'CREATIVE_DIRECTION_RESOURCE_PROVENANCE_INVALID',
+            field: 'resourceId',
             agentRetryableAfterCorrection: true,
           })
         }
@@ -123,18 +119,16 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
           projectId: context.projectId,
           episodeId: null,
         })
-        const binding = await bindCreativeResourceRevisionInTransaction(transaction, {
+        const binding = await bindCreativeResourceInTransaction(transaction, {
           scope,
           ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
-          resourceId: revision.resourceId,
-          revisionId: revision.id,
+          resourceId: resource.id,
           source: 'creative_direction_adoption',
           expectedVersion: input.expectedVersion ?? null,
         })
         return adoptCreativeDirectionOutputSchema.parse({
           success: true,
-          resourceId: revision.resourceId,
-          revisionId: revision.id,
+          resourceId: resource.id,
           schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
           binding,
         })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type {
-  CreativeResourceRevisionContent,
+  CreativeResourceContent,
   CreativeResourceView,
 } from '@/lib/creative-resource/contracts'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
@@ -8,7 +8,7 @@ import { projectCreativeResourceSummary } from '@/lib/creative-resource/summary-
 
 function resourceView(input: {
   readonly schemaId: string
-  readonly content: CreativeResourceRevisionContent | null
+  readonly content: CreativeResourceContent | null
   readonly pendingPrompt?: string | null
   readonly mediaType?: CreativeResourceView['mediaType']
 }): CreativeResourceView {
@@ -30,10 +30,8 @@ function resourceView(input: {
     candidateIndex: null,
     creativeDataVersion: 0,
     creativeDataKeys: [],
-    headRevision: input.content
+    materialization: input.content
       ? {
-          revisionId: 'revision-1',
-          revision: 1,
           content: input.content,
           provenance: {
             operationId: null,
@@ -47,7 +45,7 @@ function resourceView(input: {
             generationOptions: null,
           },
           inputs: [],
-          createdAt: '2026-07-24T00:00:00.000Z',
+          materializedAt: '2026-07-24T00:00:00.000Z',
         }
       : null,
     pendingGeneration: input.pendingPrompt
@@ -125,7 +123,7 @@ describe('Creative Resource summary projection', () => {
     })
   })
 
-  it('uses the frozen prompt while a Resource has no head Revision', () => {
+  it('uses the frozen prompt while a Resource is still pending materialization', () => {
     const resource = resourceView({
       schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       mediaType: 'image',

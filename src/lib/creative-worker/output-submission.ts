@@ -65,6 +65,21 @@ function validateVideoOutputContext(input: {
 
   const issues: CreativeWorkerSubmissionIssue[] = []
   const allowedDurations = new Set(production.allowedSegmentDurationsSeconds)
+  const mediaSources = input.request.context.sourceMaterials.filter((source) => (
+    source.provenance.kind === 'resource'
+    && (source.kind === 'image' || source.kind === 'audio')
+  ))
+  const mediaByResourceId = new Map(
+    mediaSources.map((source) => [source.provenance.kind === 'resource'
+      ? source.provenance.resourceId
+      : '', source] as const),
+  )
+  if (mediaByResourceId.size !== mediaSources.length) {
+    throw new CreativeWorkerError('CREATIVE_WORK_REQUEST_INVALID', {
+      outputKind: input.output.kind,
+      reason: 'media source resource IDs must be unique',
+    })
+  }
   const segmentKeys = new Set<string>()
   let totalDurationSeconds = 0
   input.output.segments.forEach((segment, index) => {
@@ -76,6 +91,53 @@ function validateVideoOutputContext(input: {
       })
     }
     segmentKeys.add(segment.key)
+    const segmentResourceIds = new Set<string>()
+    let imageCount = 0
+    let audioCount = 0
+    segment.mediaResourceIds.forEach((resourceId, resourceIndex) => {
+      const path = `$.segments[${String(index)}].mediaResourceIds[${String(resourceIndex)}]`
+      if (segmentResourceIds.has(resourceId)) {
+        issues.push({
+          path,
+          code: 'duplicate',
+          message: `Resource "${resourceId}" is duplicated in this segment.`,
+        })
+        return
+      }
+      segmentResourceIds.add(resourceId)
+      const source = mediaByResourceId.get(resourceId)
+      if (!source) {
+        issues.push({
+          path,
+          code: 'unknown_resource',
+          message: `Resource "${resourceId}" is not an image or audio source material in this frozen task.`,
+        })
+        return
+      }
+      if (source.kind === 'image') imageCount += 1
+      if (source.kind === 'audio') audioCount += 1
+    })
+    if (imageCount > production.maxReferenceImages) {
+      issues.push({
+        path: `$.segments[${String(index)}].mediaResourceIds`,
+        code: 'too_many_images',
+        message: `Use at most ${String(production.maxReferenceImages)} image Resources.`,
+      })
+    }
+    if (audioCount > production.maxReferenceAudios) {
+      issues.push({
+        path: `$.segments[${String(index)}].mediaResourceIds`,
+        code: 'too_many_audios',
+        message: `Use at most ${String(production.maxReferenceAudios)} audio Resources.`,
+      })
+    }
+    if (audioCount > 0 && imageCount === 0) {
+      issues.push({
+        path: `$.segments[${String(index)}].mediaResourceIds`,
+        code: 'audio_requires_image',
+        message: 'Audio-conditioned video requires at least one image Resource in the same segment.',
+      })
+    }
     if (!allowedDurations.has(segment.durationSeconds)) {
       issues.push({
         path: `$.segments[${String(index)}].durationSeconds`,

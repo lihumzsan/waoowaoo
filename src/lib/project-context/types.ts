@@ -16,9 +16,7 @@ export interface ProjectPolicyOverrideInput {
 export interface ProjectContextStoryCanonSnapshot {
   id: string
   sourceResourceId: string
-  sourceRevisionId: string
   storyCanonResourceId: string
-  storyCanonRevisionId: string
   version: number
   updatedAt: string
 }

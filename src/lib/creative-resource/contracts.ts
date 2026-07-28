@@ -49,11 +49,7 @@ export interface CreativeResourceRef {
   readonly resourceId: string
 }
 
-export interface CreativeResourceRevisionRef {
-  readonly revisionId: string
-}
-
-export interface CreativeResourceMaterializedRef extends CreativeResourceRef, CreativeResourceRevisionRef {}
+export type CreativeResourceMaterializedRef = CreativeResourceRef
 
 export interface CreativeResourceLinkView extends CreativeResourceMaterializedRef {
   readonly mediaType: CreativeResourceMediaType
@@ -64,7 +60,7 @@ export interface CreativeResourceLinkView extends CreativeResourceMaterializedRe
   readonly mimeType: string | null
 }
 
-export interface CreativeResourceInputRef extends CreativeResourceRevisionRef {
+export interface CreativeResourceInputRef extends CreativeResourceRef {
   readonly role: string
   readonly position: number
 }
@@ -90,7 +86,7 @@ export interface CreativeResourcePendingGeneration {
   readonly inputs: readonly CreativeResourceInputRef[]
 }
 
-export type CreativeResourceRevisionContent =
+export type CreativeResourceContent =
   | {
       readonly kind: 'text'
       readonly text: string
@@ -108,20 +104,12 @@ export type CreativeResourceRevisionContent =
       readonly height?: number | null
       readonly durationMs?: number | null
     }
-  | {
-      readonly kind: 'domain_snapshot'
-      readonly sourceType: string
-      readonly sourceId: string
-      readonly sourceRevision: string
-      readonly snapshot: CreativeResourceJsonValue
-    }
 
-export interface CreativeResourceRevisionView extends CreativeResourceRevisionRef {
-  readonly revision: number
-  readonly content: CreativeResourceRevisionContent
+export interface CreativeResourceMaterializationView {
+  readonly content: CreativeResourceContent
   readonly provenance: CreativeResourceGenerationProvenance
   readonly inputs: readonly CreativeResourceInputRef[]
-  readonly createdAt: string
+  readonly materializedAt: string
 }
 
 export interface CreativeResourceBindingView {
@@ -130,7 +118,6 @@ export interface CreativeResourceBindingView {
   readonly role: string
   readonly slotKey: string
   readonly resourceId: string
-  readonly revisionId: string
   readonly version: number
   readonly source: string
 }
@@ -150,7 +137,7 @@ export interface CreativeResourceView {
   readonly candidateIndex: number | null
   readonly creativeDataVersion: number
   readonly creativeDataKeys: readonly string[]
-  readonly headRevision: CreativeResourceRevisionView | null
+  readonly materialization: CreativeResourceMaterializationView | null
   readonly pendingGeneration: CreativeResourcePendingGeneration | null
   readonly bindings: readonly CreativeResourceBindingView[]
   readonly error: {
@@ -186,9 +173,6 @@ export type CreativeResourceSummaryView =
       readonly durationMs?: number | null
     }
   | {
-      readonly kind: 'domain_snapshot'
-    }
-  | {
       readonly kind: 'empty'
     }
 
@@ -201,7 +185,7 @@ export interface CreativeResourceCandidateView {
   readonly candidateSetId: string
   readonly resources: readonly CreativeResourceView[]
   readonly summaries: readonly CreativeResourceCandidateSummaryView[]
-  readonly selectedRevisionId: string | null
+  readonly selectedResourceId: string | null
 }
 
 export interface CreativeResourceWorkingBindingView {
@@ -212,8 +196,6 @@ export interface CreativeResourceWorkingBindingView {
   readonly version: number
   readonly source: string
   readonly resourceId: string
-  readonly revisionId: string
-  readonly revision: number
   readonly schemaId: string
   readonly mediaType: CreativeResourceMediaType
   readonly name: string

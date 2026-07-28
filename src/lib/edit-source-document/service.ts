@@ -15,7 +15,6 @@ export interface EditSourceDocumentRecord {
   readonly checksum: string
   readonly version: number
   readonly sourceResourceId: string
-  readonly sourceRevisionId: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }
@@ -31,7 +30,6 @@ const editSourceDocumentSelect = {
   checksum: true,
   version: true,
   sourceResourceId: true,
-  sourceRevisionId: true,
   createdAt: true,
   updatedAt: true,
 } as const
@@ -47,7 +45,6 @@ function mapSourceDocument(record: {
   readonly checksum: string
   readonly version: number
   readonly sourceResourceId: string
-  readonly sourceRevisionId: string
   readonly createdAt: Date
   readonly updatedAt: Date
 }): EditSourceDocumentRecord {
@@ -73,8 +70,8 @@ async function assertEpisodeAccess(input: {
 
 /**
  * Builds the immutable source-range projection used by Story Canon and Chapter
- * algorithms from one exact screenplay Resource revision. The Resource
- * revision remains the screenplay authority; this row is only its indexed
+ * algorithms from one exact screenplay Resource. The Resource remains the
+ * screenplay authority; this row is only its indexed
  * text projection and can never be confirmed or edited independently.
  */
 export async function materializeScreenplayResourceProjection(input: {
@@ -82,7 +79,6 @@ export async function materializeScreenplayResourceProjection(input: {
   readonly userId: string
   readonly episodeId: string
   readonly resourceId: string
-  readonly revisionId: string
   readonly text: string
   readonly client: Prisma.TransactionClient
 }): Promise<CreatedEditSourceDocument> {
@@ -102,9 +98,9 @@ export async function materializeScreenplayResourceProjection(input: {
   `
   const existing = await input.client.projectEpisodeSourceDocument.findUnique({
     where: {
-      episodeId_sourceRevisionId: {
+      episodeId_sourceResourceId: {
         episodeId: input.episodeId,
-        sourceRevisionId: input.revisionId,
+        sourceResourceId: input.resourceId,
       },
     },
     select: editSourceDocumentSelect,
@@ -114,7 +110,7 @@ export async function materializeScreenplayResourceProjection(input: {
       existing.sourceResourceId !== input.resourceId
       || existing.normalizedText !== normalizedText
     ) {
-      throw new Error(`SCREENPLAY_RESOURCE_PROJECTION_COLLISION:${input.revisionId}`)
+      throw new Error(`SCREENPLAY_RESOURCE_PROJECTION_COLLISION:${input.resourceId}`)
     }
     return { ...mapSourceDocument(existing), estimatedInputTokens }
   }
@@ -130,7 +126,6 @@ export async function materializeScreenplayResourceProjection(input: {
       checksum,
       version: (latest?.version ?? 0) + 1,
       sourceResourceId: input.resourceId,
-      sourceRevisionId: input.revisionId,
     },
     select: editSourceDocumentSelect,
   })

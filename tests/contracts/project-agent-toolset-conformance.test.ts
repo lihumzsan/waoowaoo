@@ -456,14 +456,14 @@ describe('project agent toolset conformance', () => {
       description: 'Warm, mature, low register, calm and precise.',
       previewText: 'Welcome back.',
       language: 'English',
-      resource: { kind: 'regenerate', resourceId: 'voice-resource-1' },
+      resource: { kind: 'new', name: 'Warm narrator' },
       target: { kind: 'standalone' },
     }).success).toBe(true)
     expect(registry.generate_voice.inputSchema.safeParse({
       description: 'Warm voice',
       previewText: 'Hello.',
       language: 'English',
-      resource: { kind: 'regenerate', resourceId: 'voice-resource-1', name: 'ignored' },
+      resource: { kind: 'regenerate', resourceId: 'voice-resource-1' },
       target: { kind: 'standalone' },
     }).success).toBe(false)
     expect(registry.generate_voice.inputSchema.safeParse({
@@ -485,7 +485,6 @@ describe('project agent toolset conformance', () => {
       selection: {
         kind: 'voice',
         resourceId: 'voice-resource-1',
-        revisionId: 'voice-revision-1',
       },
     }).success).toBe(true)
     expect(registry.bind_voice.inputSchema.safeParse({
@@ -660,6 +659,26 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(true)
     expect(registry.create_video.inputSchema.safeParse({
       request: {
+        kind: 'prompt_set',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+      },
+    }).success).toBe(true)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: {
+        kind: 'prompt_set',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        prompt: 'Primary must not copy the stored segment prompt.',
+      },
+    }).success).toBe(false)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: {
+        kind: 'prompt_set',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+        imageReferences: [{ resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB' }],
+      },
+    }).success).toBe(false)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: {
         kind: 'new',
         count: 1,
         prompt: 'A slow push toward a moonlit shrine.',
@@ -698,7 +717,7 @@ describe('project agent toolset conformance', () => {
     const requestSchema = readRecord(registry.create_video.toolInputSchema.properties.request)
     const requestKinds = collectDiscriminatorBranches(requestSchema, 'kind')
       .map((branch) => readRecord(readRecord(branch.properties).kind).const)
-    expect(Array.from(new Set(requestKinds))).toEqual(['new', 'retry'])
+    expect(Array.from(new Set(requestKinds))).toEqual(['new', 'prompt_set', 'retry'])
 
     expect(Object.keys(registry.list_tasks.toolInputSchema.properties)).toEqual(expect.arrayContaining([
       'targetType', 'targetId', 'status', 'type', 'limit',
@@ -720,7 +739,7 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
   })
 
-  it('uses exact immutable revisions for Story Canon and Creative Direction adoption', () => {
+  it('uses exact immutable Resources for Story Canon and Creative Direction adoption', () => {
     const registry = createProjectAgentOperationRegistry()
 
     expect(registry.adopt_story_canon.channels.tool).toBe(true)
@@ -729,21 +748,21 @@ describe('project agent toolset conformance', () => {
     ])
     expect(registry.adopt_story_canon.inputSchema.safeParse({
       screenplay: {
-        revisionId: 'revision:screenplay',
+        resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
       },
       storyCanon: {
-        revisionId: 'revision:story-canon',
+        resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB',
       },
       expectedVersion: null,
     }).success).toBe(true)
 
     expect(registry.adopt_creative_direction.inputSchema.safeParse({
-      revisionId: 'revision:style',
+      resourceId: 'r_CCCCCCCCCCCCCCCCCCCCCC',
       expectedVersion: null,
     }).success).toBe(true)
     expect(registry.adopt_creative_direction.inputSchema.safeParse({
       resourceId: 'resource:style',
-      revisionId: 'revision:style',
+      fingerprint: 'caller-owned',
       expectedVersion: null,
     }).success).toBe(false)
   })
@@ -844,7 +863,7 @@ describe('project agent toolset conformance', () => {
           goal: 'Revise the supplied screenplay.',
           context: {
             userRequest: 'Use my screenplay.',
-            sourceMaterials: [{ kind: 'resource' as const, revisionId: 'revision:provided-script' }],
+            sourceMaterials: [{ kind: 'resource' as const, resourceId: 'r_DDDDDDDDDDDDDDDDDDDDDD' }],
             constraints: [],
           },
         }],
@@ -861,7 +880,7 @@ describe('project agent toolset conformance', () => {
             ...exactResourceRequest.delegation.requests[0]?.context,
             sourceMaterials: [{
               kind: 'resource',
-              revisionId: 'revision:provided-script',
+              resourceId: 'r_DDDDDDDDDDDDDDDDDDDDDD',
               content: 'Caller-authored content must not be accepted for a Resource source.',
             }],
           },
@@ -1024,7 +1043,7 @@ describe('project agent toolset conformance', () => {
       }
     }
     const adoptedDirection = {
-      revisionId: 'direction-revision-1',
+      resourceId: 'r_EEEEEEEEEEEEEEEEEEEEEE',
       direction: {
         styleSummary: 'Restrained procedural observation',
         rawUserStyle: '规则怪谈',
@@ -1064,7 +1083,7 @@ describe('project agent toolset conformance', () => {
         key: 'clip-1',
         durationSeconds: 10,
         prompt: '10-second 16:9 cinematic video. 0-10s: slow push toward a lantern that ignites as the shrine doors open; preserve the shrine layout and generate synchronized wind, timber creaks, and one ignition pulse.',
-        referenceKeys: [],
+        mediaResourceIds: [],
       }],
     }
     expect(creativeWorkOutputRegistry.video_prompt_set.schema.safeParse(videoOutput).success).toBe(true)
@@ -1097,7 +1116,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v9')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v10')
     const lifecycleProjection = {
       requestKey: 'analysis-1',
       outputKind: 'continuity_analysis' as const,
@@ -1149,7 +1168,7 @@ describe('project agent toolset conformance', () => {
       request: {
         ...payload.request,
         creativeDirection: {
-          revisionId: 'direction-r1',
+          resourceId: 'direction-r1',
           direction: {
             narrative: 'A partial projection is no longer a valid task input.',
           },
@@ -1162,7 +1181,7 @@ describe('project agent toolset conformance', () => {
         ...payload.request,
         outputKind: 'creative_direction',
         creativeDirection: {
-          revisionId: 'direction-r1',
+          resourceId: 'direction-r1',
           direction: {
             styleSummary: 'Complete direction',
             rawUserStyle: null,
@@ -1235,7 +1254,6 @@ describe('project agent toolset conformance', () => {
     expect(creativeWorkTaskResultSchema.safeParse(result).success).toBe(true)
     const materializedResources = [{
       resourceId: 'resource-1',
-      revisionId: 'revision-1',
       schemaId: 'project.continuity_analysis',
       mediaType: 'text' as const,
       name: 'Continuity analysis',
@@ -1255,7 +1273,7 @@ describe('project agent toolset conformance', () => {
         ...result.continuationProjection,
         resources: [{
           ...materializedResources[0],
-          revisionId: 'different-revision',
+          resourceId: 'different-revision',
         }],
       },
     }).success).toBe(false)

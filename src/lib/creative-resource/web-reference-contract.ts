@@ -12,7 +12,7 @@ export const WEB_REFERENCE_IMAGE_SOURCE_TYPE = 'web_search_image'
  * Provenance is not optional metadata here: importing third-party material
  * without recording where it came from leaves nobody able to answer that
  * question later, so the origin page travels with the payload and is frozen
- * into the Revision.
+ * into the immutable Resource.
  */
 export const webReferenceImageProvenanceSchema = creativeResourceGenerationOptionsSchema
   .superRefine((options, context) => {

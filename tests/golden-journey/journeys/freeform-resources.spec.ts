@@ -220,9 +220,9 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(imageTasks.filter((task) => task.targetId === successfulBeforeRetry)).toHaveLength(1)
   for (const failedResourceId of failedBeforeRetry) {
     expect(imageTasks.filter((task) => task.targetId === failedResourceId)).toHaveLength(2)
-    expect(afterRetry.resourceRevisions
-      .filter((revision) => revision.resourceId === failedResourceId)
-      .map((revision) => revision.prompt)).toEqual([
+    expect(afterRetry.resources
+      .filter((resource) => resource.id === failedResourceId)
+      .map((resource) => resource.prompt)).toEqual([
       'A cinematic midnight shrine in mist, wide composition.',
     ])
   }
@@ -256,11 +256,11 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_SCREENPLAY_REQUEST)
   const screenplayResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.SCREENPLAY)
   const afterScreenplay = await readGoldenOracleSnapshot(scope)
-  const screenplayRevision = afterScreenplay.resourceRevisions.find((revision) => (
-    revision.resourceId === screenplayResource.id
+  const screenplayRecord = afterScreenplay.resources.find((resource) => (
+    resource.id === screenplayResource.id
   ))
   const screenplayTask = afterScreenplay.tasks.find((task) => (
-    task.id === screenplayRevision?.taskId && task.type === TASK_TYPE.CREATIVE_WORK
+    task.id === screenplayRecord?.taskId && task.type === TASK_TYPE.CREATIVE_WORK
   ))
   expect(screenplayResource).toMatchObject({
     episodeId: null,
@@ -269,12 +269,12 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   })
   expect(screenplayTask).toMatchObject({ status: 'completed', operationId: 'delegate_creative_work' })
   expect(screenplayTask?.episodeId).toBeNull()
-  expect(screenplayRevision).toMatchObject({
-    resourceId: screenplayResource.id,
+  expect(screenplayRecord).toMatchObject({
+    id: screenplayResource.id,
     generationOptions: { outputKind: 'screenplay' },
     contentJson: { kind: 'screenplay', title: 'The Red Observatory' },
   })
-  const screenplayContent = asRecord(screenplayRevision?.contentJson)
+  const screenplayContent = asRecord(screenplayRecord?.contentJson)
   expect(screenplayContent).not.toHaveProperty('entities')
   expect(screenplayContent).not.toHaveProperty('scenes')
   expect(afterScreenplay.domain.sourceDocuments).toHaveLength(0)
@@ -287,14 +287,14 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_STORY_CANON_REQUEST)
   const storyCanonResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.STORY_CANON)
   const afterStoryCanonGeneration = await readGoldenOracleSnapshot(scope)
-  const storyCanonRevision = afterStoryCanonGeneration.resourceRevisions.find((revision) => (
-    revision.resourceId === storyCanonResource.id
+  const storyCanonRecord = afterStoryCanonGeneration.resources.find((resource) => (
+    resource.id === storyCanonResource.id
   ))
   expect(storyCanonResource.episodeId).toBeNull()
   expect(afterStoryCanonGeneration.resourceLineage.filter((lineage) => (
-    lineage.outputRevisionId === storyCanonRevision?.id
+    lineage.outputResourceId === storyCanonRecord?.id
   ))).toEqual([expect.objectContaining({
-    inputRevisionId: screenplayRevision?.id,
+    inputResourceId: screenplayRecord?.id,
     role: 'source_material',
   })])
   expect(afterStoryCanonGeneration.domain.storyCanons).toHaveLength(0)
@@ -313,20 +313,19 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   const afterStoryCanonAdoption = await readGoldenOracleSnapshot(scope)
   expect(afterStoryCanonAdoption.domain.storyCanons[0]).toMatchObject({
     storyCanonResourceId: storyCanonResource.id,
-    storyCanonRevisionId: storyCanonRevision?.id,
   })
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_CREATIVE_DIRECTION_REQUEST)
   const styleResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION)
   const afterStyle = await readGoldenOracleSnapshot(scope)
-  const styleRevision = afterStyle.resourceRevisions.find((revision) => revision.resourceId === styleResource.id)
+  const styleRecord = afterStyle.resources.find((resource) => resource.id === styleResource.id)
   expect(styleResource).toMatchObject({
     episodeId: null,
     scopeKind: 'project',
     scopeId: scope.projectId,
   })
-  expect(styleRevision).toMatchObject({
-    resourceId: styleResource.id,
+  expect(styleRecord).toMatchObject({
+    id: styleResource.id,
     generationOptions: { outputKind: 'creative_direction' },
   })
   expect(afterStyle.tasks.filter((task) => task.type === TASK_TYPE.CREATIVE_RESOURCE_IMAGE))
@@ -356,8 +355,8 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     submitLabel: '提交本次视觉风格选择',
   })
   expect(choiceSubject).toMatchObject({
-    kind: 'resource_revisions',
-    revisions: [{ revisionId: styleRevision?.id }],
+    kind: 'resources',
+    resources: [{ resourceId: styleRecord?.id }],
   })
   expect(choiceCommitments).toEqual([expect.objectContaining({
     when: { kind: 'option', groupKey: 'group_1', optionValue: 'option_1' },
@@ -380,7 +379,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     return snapshot.resourceBindings.filter((binding) => binding.role === 'adopted_creative_direction').length
   }, {
     timeout: 60_000,
-    message: 'the selected Choice commitment must atomically adopt only the exact Creative Direction revision',
+    message: 'the selected Choice commitment must atomically adopt only the exact Creative Direction Resource',
   }).toBe(1)
   await waitForAgentRunSettlement(scope)
   const afterStyleChoice = await readGoldenOracleSnapshot(scope)
@@ -390,7 +389,6 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     scopeId: scope.projectId,
     slotKey: 'primary',
     resourceId: styleResource.id,
-    revisionId: styleRevision?.id,
   })
   expect(afterStyleChoice.tasks.map((task) => task.id)).toEqual(taskIdsBeforeChoice)
   expect(afterStyleChoice.resources.map((resource) => resource.id)).toEqual(resourceIdsBeforeChoice)
@@ -404,26 +402,26 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)
   const chapterPlanResource = await waitForSchemaResource(scope, CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN)
   const afterChapterPlan = await readGoldenOracleSnapshot(scope)
-  const chapterPlanRevision = afterChapterPlan.resourceRevisions.find((revision) => (
-    revision.resourceId === chapterPlanResource.id
+  const chapterPlanRecord = afterChapterPlan.resources.find((resource) => (
+    resource.id === chapterPlanResource.id
   ))
-  expect(afterChapterPlan.tasks.find((task) => task.id === chapterPlanRevision?.taskId)).toMatchObject({
+  expect(afterChapterPlan.tasks.find((task) => task.id === chapterPlanRecord?.taskId)).toMatchObject({
     type: TASK_TYPE.CREATIVE_WORK,
     status: 'completed',
     operationId: 'delegate_creative_work',
   })
   const chapterPlanLineage = afterChapterPlan.resourceLineage.filter((lineage) => (
-    lineage.outputRevisionId === chapterPlanRevision?.id
+    lineage.outputResourceId === chapterPlanRecord?.id
   ))
   expect(chapterPlanLineage).toHaveLength(2)
   expect(chapterPlanLineage).toEqual(expect.arrayContaining([
     expect.objectContaining({
-      inputRevisionId: screenplayRevision?.id,
+      inputResourceId: screenplayRecord?.id,
       role: 'source_material',
       position: 0,
     }),
     expect.objectContaining({
-      inputRevisionId: styleRevision?.id,
+      inputResourceId: styleRecord?.id,
       role: 'creative_direction',
       position: 1,
     }),
@@ -451,7 +449,6 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(afterChapterAdoption.domain.sourceDocuments).toHaveLength(1)
   expect(afterChapterAdoption.domain.sourceDocuments[0]).toMatchObject({
     sourceResourceId: screenplayResource.id,
-    sourceRevisionId: screenplayRevision?.id,
   })
   expect(afterChapterAdoption.domain.storyCanons).toHaveLength(1)
   expect(afterChapterAdoption.domain.chapters).toEqual([
@@ -508,8 +505,8 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   const afterChapterDelegation = await readGoldenOracleSnapshot(scope)
   const chapterTasks = afterChapterDelegation.tasks.filter((task) => !taskIdsBeforeChapterDelegation.has(task.id))
   const chapterWaits = afterChapterDelegation.waits.filter((wait) => !waitIdsBeforeChapterDelegation.has(wait.id))
-  const continuityRevisions = afterChapterDelegation.resourceRevisions.filter((revision) => (
-    asRecord(revision.generationOptions)?.outputKind === 'continuity_analysis'
+  const continuityResources = afterChapterDelegation.resources.filter((resource) => (
+    asRecord(resource.generationOptions)?.outputKind === 'continuity_analysis'
   ))
   expect(chapterTasks).toEqual([
     expect.objectContaining({ type: TASK_TYPE.CREATIVE_WORK, operationId: 'delegate_creative_work' }),
@@ -519,28 +516,24 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(chapterWaits).toHaveLength(1)
   expect(Array.isArray(chapterWaits[0]?.taskIds) ? chapterWaits[0]?.taskIds : []).toHaveLength(2)
   expect(chapterWaits[0]?.status).toBe('followed')
-  expect(continuityRevisions).toHaveLength(2)
+  expect(continuityResources).toHaveLength(2)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   const finalSnapshot = await readGoldenOracleSnapshot(scope)
-  const imageRevisionIds = new Set(finalSnapshot.resourceRevisions
-    .filter((revision) => readyImages.some((resource) => resource.id === revision.resourceId))
-    .map((revision) => revision.id))
-  const videoRevisionIds = new Set(finalSnapshot.resourceRevisions
-    .filter((revision) => videoResources.some((resource) => resource.id === revision.resourceId))
-    .map((revision) => revision.id))
-  const videoLineage = finalSnapshot.resourceLineage.filter((lineage) => videoRevisionIds.has(lineage.outputRevisionId))
-  const audioRevisionIds = new Set(finalSnapshot.resourceRevisions
-    .filter((revision) => audioResources.some((resource) => resource.id === revision.resourceId))
-    .map((revision) => revision.id))
-  const audioLineage = finalSnapshot.resourceLineage.filter((lineage) => audioRevisionIds.has(lineage.outputRevisionId))
+  const imageResourceIds = new Set(readyImages.map((resource) => resource.id))
+  const videoResourceIds = new Set(videoResources.map((resource) => resource.id))
+  const videoLineage = finalSnapshot.resourceLineage.filter((lineage) => videoResourceIds.has(lineage.outputResourceId))
+  const audioResourceIds = new Set(audioResources.map((resource) => resource.id))
+  const audioLineage = finalSnapshot.resourceLineage.filter((lineage) => audioResourceIds.has(lineage.outputResourceId))
   expect(videoLineage.length).toBeGreaterThanOrEqual(2)
-  expect(videoLineage.every((lineage) => imageRevisionIds.has(lineage.inputRevisionId))).toBe(true)
+  expect(videoLineage.every((lineage) => imageResourceIds.has(lineage.inputResourceId))).toBe(true)
   expect(audioLineage).toHaveLength(2)
-  expect(audioLineage.every((lineage) => videoRevisionIds.has(lineage.inputRevisionId))).toBe(true)
-  expect(finalSnapshot.resourceRevisions.every((revision) => (
-    typeof revision.operationId === 'string'
-    && typeof revision.inputHash === 'string'
+  expect(audioLineage.every((lineage) => videoResourceIds.has(lineage.inputResourceId))).toBe(true)
+  expect(finalSnapshot.resources
+    .filter((resource) => resource.materializedAt !== null)
+    .every((resource) => (
+    typeof resource.operationId === 'string'
+    && typeof resource.inputHash === 'string'
   ))).toBe(true)
   expect(finalSnapshot.resourceBindings.map((binding) => binding.role).sort()).toEqual([
     'adopted_creative_direction',
@@ -582,18 +575,18 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     const snapshot = await readGoldenOracleSnapshot(secondEpisodeScope)
     return {
       runStatus: snapshot.runs.at(-1)?.status ?? null,
-      sourceRevisionIds: snapshot.domain.sourceDocuments.map((document) => document.sourceRevisionId),
-      storyCanonRevisionIds: snapshot.domain.storyCanons.map((storyCanon) => (
-        storyCanon.storyCanonRevisionId
+      sourceResourceIds: snapshot.domain.sourceDocuments.map((document) => document.sourceResourceId),
+      storyCanonResourceIds: snapshot.domain.storyCanons.map((storyCanon) => (
+        storyCanon.storyCanonResourceId
       )),
     }
   }, {
     timeout: 60_000,
-    message: 'the same project-scoped screenplay and Story Canon revisions must be adoptable by another Episode',
+    message: 'the same project-scoped screenplay and Story Canon Resources must be adoptable by another Episode',
   }).toEqual({
     runStatus: 'completed',
-    sourceRevisionIds: [screenplayRevision?.id],
-    storyCanonRevisionIds: [storyCanonRevision?.id],
+    sourceResourceIds: [screenplayRecord?.id],
+    storyCanonResourceIds: [storyCanonRecord?.id],
   })
   const secondEpisodeSnapshot = await readGoldenOracleSnapshot(secondEpisodeScope)
   expect(secondEpisodeSnapshot.resources.filter((resource) => (
@@ -654,14 +647,14 @@ test('[GJ-PROVIDED-SCREENPLAY] supplied screenplay text is persisted directly wi
 
   const snapshot = await readGoldenOracleSnapshot(scope)
   const resource = resources[0]
-  const revision = snapshot.resourceRevisions.find((candidate) => candidate.resourceId === resource?.id)
+  const materializedResource = snapshot.resources.find((candidate) => candidate.id === resource?.id)
   expect(resource).toMatchObject({
     schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
     episodeId: null,
     scopeKind: 'project',
     scopeId: scope.projectId,
   })
-  expect(revision).toMatchObject({
+  expect(materializedResource).toMatchObject({
     contentText: null,
     contentJson: {
       kind: 'screenplay',
@@ -675,7 +668,7 @@ test('[GJ-PROVIDED-SCREENPLAY] supplied screenplay text is persisted directly wi
     generationOptions: { source: 'current_user_turn' },
     taskId: null,
   })
-  const providedScreenplayContent = asRecord(revision?.contentJson)
+  const providedScreenplayContent = asRecord(materializedResource?.contentJson)
   expect(providedScreenplayContent).not.toHaveProperty('entities')
   expect(providedScreenplayContent).not.toHaveProperty('scenes')
   expect(snapshot.tasks.some((task) => task.type === TASK_TYPE.CREATIVE_WORK)).toBe(false)

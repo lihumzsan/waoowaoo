@@ -35,7 +35,7 @@ function taskPayload(
     content: 'source text',
     provenance: {
       kind: 'resource',
-      revisionId: 'source-revision',
+      resourceId: 'r_source',
     },
   }],
   injectedDirection: CreativeWorkRequest['creativeDirection'] = null,
@@ -202,7 +202,7 @@ describe('Creative Task Resource materialization planning', () => {
     }).success).toBe(false)
   })
 
-  it('projects a screenplay as one exact source-script revision plan with Task lineage', () => {
+  it('projects a screenplay as one exact source-script Resource plan with Task lineage', () => {
     const screenplayText = 'INT. STATION — NIGHT\nThe doors close behind the traveler.'
     const output = creativeWorkOutputSchemas.screenplay.parse({
       kind: 'screenplay',
@@ -227,7 +227,7 @@ describe('Creative Task Resource materialization planning', () => {
       modelKey: 'provider:model',
       toolCallId: 'tool-call-1',
       inputs: [{
-        revisionId: 'source-revision',
+        resourceId: 'r_source',
       }],
       outputs: [{
         schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
@@ -279,7 +279,7 @@ describe('Creative Task Resource materialization planning', () => {
     expect(plan).toMatchObject({
       resourceScope: 'episode',
       inputs: [{
-        revisionId: 'source-revision',
+        resourceId: 'r_source',
       }],
       outputs: [{
         schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
@@ -322,10 +322,10 @@ describe('Creative Task Resource materialization planning', () => {
           label: 'Screenplay',
           kind: 'structured',
           content: JSON.stringify(screenplay),
-          provenance: { kind: 'resource', revisionId: 'screenplay-r1' },
+          provenance: { kind: 'resource', resourceId: 'screenplay-r1' },
         },
       ], {
-        revisionId: 'direction-r1',
+        resourceId: 'direction-r1',
         direction: creativeDirection,
       }),
       result: taskResult('asset_manifest', output),
@@ -334,8 +334,8 @@ describe('Creative Task Resource materialization planning', () => {
     expect(plan).toMatchObject({
       resourceScope: 'project',
       inputs: [
-        { revisionId: 'screenplay-r1', role: 'source_material' },
-        { revisionId: 'direction-r1', role: 'creative_direction' },
+        { resourceId: 'screenplay-r1', role: 'source_material' },
+        { resourceId: 'direction-r1', role: 'creative_direction' },
       ],
       outputs: [{
         schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
@@ -351,8 +351,8 @@ describe('Creative Task Resource materialization planning', () => {
           }),
         },
         generationOptions: {
-          screenplayRevisionId: 'screenplay-r1',
-          creativeDirectionRevisionId: 'direction-r1',
+          screenplayResourceId: 'screenplay-r1',
+          creativeDirectionResourceId: 'direction-r1',
         },
       }],
     })

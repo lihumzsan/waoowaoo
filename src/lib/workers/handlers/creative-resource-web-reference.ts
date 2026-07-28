@@ -15,7 +15,7 @@ import { uploadImageSourceToCos } from '@/lib/workers/utils'
  * The external URL never reaches a generation provider: it is fetched through
  * the shared outbound image boundary, which enforces the http(s) scheme, refuses
  * private and loopback destinations, bounds redirects and caps the byte size.
- * Only the resulting owned media becomes a Resource Revision, which is what
+ * Only the resulting owned media becomes a Resource, which is what
  * downstream image and video references consume.
  */
 export async function handleCreativeResourceWebReferenceTask(job: Job<TaskJobData>) {

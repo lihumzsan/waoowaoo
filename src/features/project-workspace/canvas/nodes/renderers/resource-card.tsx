@@ -87,18 +87,11 @@ function ResourceSummary({
   if (summary.kind === 'media') {
     return <MediaOutput resource={resource} media={summary} />
   }
-  if (summary.kind === 'domain_snapshot') {
-    return (
-      <div className="rounded-2xl bg-slate-50 p-4">
-        <ClampedText text={labels('domainSnapshotSummary')} />
-      </div>
-    )
-  }
   return <EmptyOutput />
 }
 
 function ResourceOutput({ resource }: { readonly resource: CreativeResourceView }) {
-  const content = resource.headRevision?.content ?? null
+  const content = resource.materialization?.content ?? null
   if (!content) return <EmptyOutput />
   if (content.kind === 'media') {
     return (
@@ -118,11 +111,7 @@ function ResourceOutput({ resource }: { readonly resource: CreativeResourceView 
   }
   const text = content.kind === 'text'
     ? content.text
-    : content.kind === 'structured'
-      ? formatStructured(content.data)
-      : content.kind === 'domain_snapshot'
-        ? formatStructured(content.snapshot)
-        : ''
+    : formatStructured(content.data)
   return (
     <pre className={`${SELECTABLE_TEXT_CLASS} max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-700`}>
       {text}
@@ -133,8 +122,8 @@ function ResourceOutput({ resource }: { readonly resource: CreativeResourceView 
 export function ResourceProvenanceContent({ data, labels }: WorkspaceCanvasNodeRendererProps) {
   const resource = data.resourceDetails?.resource
   if (!resource) return null
-  const provenance = resource.headRevision?.provenance ?? resource.pendingGeneration
-  const inputs = resource.headRevision?.inputs ?? resource.pendingGeneration?.inputs ?? []
+  const provenance = resource.materialization?.provenance ?? resource.pendingGeneration
+  const inputs = resource.materialization?.inputs ?? resource.pendingGeneration?.inputs ?? []
   if (!provenance) return null
   return (
     <div className="space-y-2">
@@ -155,7 +144,7 @@ export function ResourceProvenanceContent({ data, labels }: WorkspaceCanvasNodeR
             <div className="flex flex-wrap gap-1.5">
               {inputs.map((reference) => (
                 <span key={`${reference.role}:${reference.position}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
-                  {reference.role} · {reference.revisionId.slice(0, 8)}
+                  {reference.role} · {reference.resourceId}
                 </span>
               ))}
             </div>

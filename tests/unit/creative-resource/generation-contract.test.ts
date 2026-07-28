@@ -81,12 +81,12 @@ describe('creative resource generation task contract', () => {
         ...payload.resource,
         inputs: [
           {
-            revisionId: 'revision:style',
+            resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
             role: 'style_context',
             position: 0,
           },
           {
-            revisionId: 'revision:image',
+            resourceId: 'r_BBBBBBBBBBBBBBBBBBBBBB',
             role: 'reference',
             position: 1,
           },
@@ -123,12 +123,12 @@ describe('creative resource generation task contract', () => {
         modelKey: 'openrouter::bytedance/seedance-2.0-fast',
         inputs: [
           {
-            revisionId: 'revision:character-image',
+            resourceId: 'r_CCCCCCCCCCCCCCCCCCCCCC',
             role: 'character',
             position: 0,
           },
           {
-            revisionId: 'revision:character-voice',
+            resourceId: 'r_DDDDDDDDDDDDDDDDDDDDDD',
             role: 'character_voice',
             position: 1,
           },
@@ -169,12 +169,13 @@ describe('creative resource generation task contract', () => {
         modelKey: 'fal::video-model',
         inputHash: 'frozen-input-hash',
         inputs: [{
-          revisionId: 'revision:image-1',
+          resourceId: 'r_EEEEEEEEEEEEEEEEEEEEEE',
           role: 'reference',
           position: 0,
         }],
         imageInputPositions: [0],
         audioInputPositions: [],
+        videoInputPositions: [],
         generationOptions: {
           duration: 15,
           aspectRatio: '16:9',

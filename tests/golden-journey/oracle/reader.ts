@@ -321,7 +321,6 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       outboxCommands,
       threads,
       resources,
-      resourceRevisions,
       resourceLineage,
       resourceBindings,
       sourceDocuments,
@@ -357,10 +356,9 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       `, [scope.projectId, scope.projectId, scope.projectId, scope.projectId]),
       queryRows(connection, 'SELECT * FROM project_assistant_threads WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM creative_resources WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT r.* FROM creative_resource_revisions r JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT l.* FROM creative_resource_lineage l JOIN creative_resource_revisions r ON r.id = l.outputRevisionId JOIN creative_resources c ON c.id = r.resourceId WHERE c.projectId = ? AND (c.episodeId = ? OR c.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT l.* FROM creative_resource_lineage l JOIN creative_resources r ON r.id = l.outputResourceId WHERE r.projectId = ? AND (r.episodeId = ? OR r.episodeId IS NULL)', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM creative_resource_bindings WHERE projectId = ? AND (episodeId = ? OR episodeId IS NULL)', [scope.projectId, scope.episodeId]),
-      queryRows(connection, 'SELECT id, episodeId, version, normalizedText, sourceResourceId, sourceRevisionId, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
+      queryRows(connection, 'SELECT id, episodeId, version, normalizedText, sourceResourceId, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_story_canons WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
     ])
@@ -392,8 +390,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       operationExecutions: sortOracleRows(operationExecutions, 'createdAt', 'id').map((item) => ({ ...item, output: parseJson(item.output) })),
       outboxCommands: outboxCommands.map((item) => ({ ...item, payload: parseJson(item.payload) })),
       threads: sortOracleRows(parsedThreads, 'createdAt', 'id'),
-      resources: sortOracleRows(resources, 'createdAt', 'id'),
-      resourceRevisions: sortOracleRows(resourceRevisions, 'createdAt', 'id').map((item) => ({
+      resources: sortOracleRows(resources, 'createdAt', 'id').map((item) => ({
         ...item,
         contentJson: parseJson(item.contentJson),
         generationOptions: parseJson(item.generationOptions),

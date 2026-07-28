@@ -163,22 +163,21 @@ async function hydrateExactResourceMaterials(input: {
   readonly projectId: string
   readonly userId: string
 }): Promise<CreativeWorkHydratedItem[]> {
-  const revisionIds = [...new Set(input.requests.flatMap((request) => (
+  const resourceIds = [...new Set(input.requests.flatMap((request) => (
     request.context.sourceMaterials.flatMap((source) => (
-      source.kind === 'resource' ? [source.revisionId] : []
+      source.kind === 'resource' ? [source.resourceId] : []
     ))
   )))]
-  const revisions = revisionIds.length > 0 ? await prisma.creativeResourceRevision.findMany({
+  const resources = resourceIds.length > 0 ? await prisma.creativeResource.findMany({
       where: {
-        id: { in: revisionIds },
-        resource: {
-          userId: input.userId,
-          status: 'ready',
-          OR: [
-            { projectId: input.projectId },
-            { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
-          ],
-        },
+        id: { in: resourceIds },
+        userId: input.userId,
+        status: 'ready',
+        materializedAt: { not: null },
+        OR: [
+          { projectId: input.projectId },
+          { scopeKind: 'user', scopeId: input.userId, projectId: null, episodeId: null },
+        ],
       },
       select: {
         id: true,
@@ -186,36 +185,30 @@ async function hydrateExactResourceMaterials(input: {
         contentJson: true,
         sourceType: true,
         sourceId: true,
-        sourceRevision: true,
         prompt: true,
         media: { select: { mimeType: true, width: true, height: true, durationMs: true } },
-        resource: {
-          select: {
-            id: true,
-            name: true,
-            mediaType: true,
-            schemaId: true,
-            creativeData: true,
-            projectId: true,
-            episodeId: true,
-          },
-        },
+        name: true,
+        mediaType: true,
+        schemaId: true,
+        creativeData: true,
+        projectId: true,
+        episodeId: true,
       },
     }) : []
-  if (revisions.length !== revisionIds.length) {
-    const found = new Set(revisions.map((revision) => revision.id))
-    const missing = revisionIds.find((revisionId) => !found.has(revisionId)) ?? 'unknown'
+  if (resources.length !== resourceIds.length) {
+    const found = new Set(resources.map((resource) => resource.id))
+    const missing = resourceIds.find((resourceId) => !found.has(resourceId)) ?? 'unknown'
     throw new ApiError('INVALID_PARAMS', {
-      code: 'CREATIVE_WORK_RESOURCE_REVISION_NOT_FOUND',
-      field: 'sourceMaterials.provenance.revisionId',
-      revisionId: missing,
+      code: 'CREATIVE_WORK_RESOURCE_NOT_FOUND',
+      field: 'sourceMaterials.resourceId',
+      resourceId: missing,
       agentRetryableAfterCorrection: true,
     })
   }
-  const revisionById = new Map(revisions.map((revision) => [revision.id, revision]))
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
   return input.requests.map((request) => {
-    const usedRevisionIds = new Set<string>()
-    const resourceSchemas: Array<{ revisionId: string; schemaId: string }> = []
+    const usedResourceIds = new Set<string>()
+    const resourceSchemas: Array<{ resourceId: string; schemaId: string }> = []
     const sourceMaterials = request.context.sourceMaterials.map((source) => {
       if (source.kind === 'inline') {
         return {
@@ -225,50 +218,49 @@ async function hydrateExactResourceMaterials(input: {
           provenance: source.provenance,
         }
       }
-      const revisionId = source.revisionId
-      if (usedRevisionIds.has(revisionId)) {
+      const resourceId = source.resourceId
+      if (usedResourceIds.has(resourceId)) {
         throw new ApiError('INVALID_PARAMS', {
-          code: 'CREATIVE_WORK_RESOURCE_REVISION_DUPLICATE',
-          field: 'sourceMaterials.provenance.revisionId',
-          revisionId,
+          code: 'CREATIVE_WORK_RESOURCE_DUPLICATE',
+          field: 'sourceMaterials.resourceId',
+          resourceId,
           agentRetryableAfterCorrection: true,
         })
       }
-      usedRevisionIds.add(revisionId)
-      const revision = revisionById.get(revisionId)
-      if (!revision) throw new Error(`CREATIVE_WORK_RESOURCE_REVISION_MISSING:${revisionId}`)
-      if (!isCreativeResourceMediaType(revision.resource.mediaType)) {
-        throw new Error(`CREATIVE_WORK_RESOURCE_MEDIA_TYPE_INVALID:${revisionId}`)
+      usedResourceIds.add(resourceId)
+      const resource = resourceById.get(resourceId)
+      if (!resource) throw new Error(`CREATIVE_WORK_RESOURCE_MISSING:${resourceId}`)
+      if (!isCreativeResourceMediaType(resource.mediaType)) {
+        throw new Error(`CREATIVE_WORK_RESOURCE_MEDIA_TYPE_INVALID:${resourceId}`)
       }
-      resourceSchemas.push({ revisionId, schemaId: revision.resource.schemaId })
-      const kind = revision.contentJson !== null
+      resourceSchemas.push({ resourceId, schemaId: resource.schemaId })
+      const kind = resource.contentJson !== null
         ? 'structured' as const
-        : revision.contentText !== null
+        : resource.contentText !== null
           ? 'text' as const
-          : revision.resource.mediaType
-      const content = revision.contentJson !== null
-        ? JSON.stringify(revision.contentJson)
-        : revision.contentText !== null
-          ? revision.contentText
+          : resource.mediaType
+      const content = resource.contentJson !== null
+        ? JSON.stringify(resource.contentJson)
+        : resource.contentText !== null
+          ? resource.contentText
           : JSON.stringify({
-              name: revision.resource.name,
-              schemaId: revision.resource.schemaId,
-              prompt: revision.prompt,
-              creativeData: revision.resource.creativeData,
-              media: revision.media,
-              domainSource: revision.sourceType && revision.sourceId && revision.sourceRevision
+              name: resource.name,
+              schemaId: resource.schemaId,
+              prompt: resource.prompt,
+              creativeData: resource.creativeData,
+              media: resource.media,
+              domainSource: resource.sourceType && resource.sourceId
                 ? {
-                    sourceType: revision.sourceType,
-                    sourceId: revision.sourceId,
-                    sourceRevision: revision.sourceRevision,
+                    sourceType: resource.sourceType,
+                    sourceId: resource.sourceId,
                   }
                 : null,
             })
       return {
-        label: revision.resource.name,
+        label: resource.name,
         kind,
         content,
-        provenance: { kind: 'resource' as const, revisionId },
+        provenance: { kind: 'resource' as const, resourceId },
       }
     })
     const manuallySuppliedDirection = resourceSchemas.find(
@@ -278,7 +270,7 @@ async function hydrateExactResourceMaterials(input: {
       throw new ApiError('INVALID_PARAMS', {
         code: 'CREATIVE_DIRECTION_MANUAL_REFERENCE_FORBIDDEN',
         field: 'sourceMaterials',
-        revisionId: manuallySuppliedDirection.revisionId,
+        resourceId: manuallySuppliedDirection.resourceId,
         agentRetryableAfterCorrection: true,
       })
     }

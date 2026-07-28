@@ -410,7 +410,7 @@ describe('Golden local model provider', () => {
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
             resourceId: 'style-resource', schemaId: 'project.creative_direction', status: 'ready',
-            headRevision: { revisionId: 'style-revision' },
+            materialization: { content: { kind: 'structured', data: {} } },
           } }] }) },
         ],
         tools: [
@@ -421,8 +421,8 @@ describe('Golden local model provider', () => {
     })
     expect(readOperationArguments(decision, 'request_choice')).toMatchObject({
       subject: {
-        kind: 'resource_revisions',
-        revisions: [{ revisionId: 'style-revision' }],
+        kind: 'resources',
+        resources: [{ resourceId: 'style-resource' }],
       },
       card: {
         kind: 'select_with_actions',
@@ -500,7 +500,7 @@ describe('Golden local model provider', () => {
     readOperationArguments(afterRatio, 'create_image')
   })
 
-  it('passes the exact screenplay revision into chapter_plan Creative Work', () => {
+  it('passes the exact screenplay Resource into chapter_plan Creative Work', () => {
     const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 7,
@@ -511,8 +511,7 @@ describe('Golden local model provider', () => {
           { role: 'assistant', tool_calls: [{ function: { name: 'list_resources' } }] },
           { role: 'tool', content: JSON.stringify({ success: true, resources: [{ resource: {
             resourceId: 'screenplay-resource', schemaId: 'project.screenplay', status: 'ready',
-            headRevision: {
-              revisionId: 'screenplay-revision',
+            materialization: {
               content: {
                 kind: 'structured',
                 data: { screenplayText: 'A sufficiently long screenplay source.' },
@@ -532,7 +531,7 @@ describe('Golden local model provider', () => {
           outputKind: 'chapter_plan',
           context: { sourceMaterials: [{
             kind: 'resource',
-            revisionId: 'screenplay-revision',
+            resourceId: 'screenplay-resource',
           }] },
         }],
       },
@@ -578,7 +577,7 @@ describe('Golden local model provider', () => {
     })
   })
 
-  it('adopts exact screenplay and chapter_plan revisions without a workflow stage', () => {
+  it('adopts exact screenplay and chapter_plan Resources without a workflow stage', () => {
     const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 8,
@@ -591,12 +590,12 @@ describe('Golden local model provider', () => {
             { resource: {
               resourceId: 'screenplay-resource', schemaId: 'project.screenplay', status: 'ready',
               scope: { episodeId: 'episode-1' },
-              headRevision: { revisionId: 'screenplay-revision' },
+              materialization: { content: { kind: 'structured', data: {} } },
             } },
             { resource: {
               resourceId: 'chapter-resource', schemaId: 'project.chapter_plan', status: 'ready',
               scope: { episodeId: 'episode-1' },
-              headRevision: { revisionId: 'chapter-revision' },
+              materialization: { content: { kind: 'structured', data: {} } },
             } },
           ] }) },
         ],
@@ -608,10 +607,10 @@ describe('Golden local model provider', () => {
     })
     expect(readOperationArguments(decision, 'adopt_chapters')).toEqual({
       screenplay: {
-        revisionId: 'screenplay-revision',
+        resourceId: 'screenplay-resource',
       },
       chapterPlan: {
-        revisionId: 'chapter-revision',
+        resourceId: 'chapter-resource',
       },
     })
   })
@@ -693,7 +692,7 @@ describe('Golden local model provider', () => {
           {
             role: 'tool',
             content: JSON.stringify({ success: true, resources: [{ resource: {
-              resourceId: 'failed-resource-1', mediaType: 'image', status: 'failed', headRevision: null,
+              resourceId: 'failed-resource-1', mediaType: 'image', status: 'failed', materialization: null,
             } }] }),
           },
         ],
@@ -708,7 +707,7 @@ describe('Golden local model provider', () => {
     })
   })
 
-  it('passes exact listed image revisions into video generation', () => {
+  it('passes exact listed image Resources into video generation', () => {
     const decision = decideWithLoadedOperationSchemas({
       scenarioId: 'free-composition',
       requestOrdinal: 6,
@@ -721,7 +720,7 @@ describe('Golden local model provider', () => {
             role: 'tool',
             content: JSON.stringify({ success: true, resources: [{ resource: {
               resourceId: 'image-resource-1', mediaType: 'image', status: 'ready',
-              headRevision: { revisionId: 'image-revision-1' },
+              materialization: { content: { kind: 'media' } },
             } }] }),
           },
         ],
@@ -736,7 +735,7 @@ describe('Golden local model provider', () => {
         kind: 'new',
         count: 2,
         imageReferences: [{
-          revisionId: 'image-revision-1',
+          resourceId: 'image-resource-1',
           role: 'reference',
         }],
       },
