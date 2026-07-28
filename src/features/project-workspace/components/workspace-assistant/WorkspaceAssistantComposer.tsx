@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
+import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/AttachmentChips'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'

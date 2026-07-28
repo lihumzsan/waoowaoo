@@ -17,7 +17,6 @@ export function useWorkspaceAssistantComposer(
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [mediaAttachments, setMediaAttachments] = useState<ProjectAssistantMediaAttachment[]>([])
-  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
 
   const submit = useCallback(async () => {
     const normalizedText = text.trim()
@@ -63,8 +62,6 @@ export function useWorkspaceAssistantComposer(
     setText,
     attachments,
     mediaAttachments,
-    attachmentDialogOpen,
-    setAttachmentDialogOpen,
     submit,
     addAttachment,
     removeAttachment,

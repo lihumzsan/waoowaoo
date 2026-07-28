@@ -119,25 +119,12 @@
   },
   "attachments": {
     "openUpload": "Attach file",
-    "dialogTitle": "Attach a text file",
-    "dialogDescription": "TXT, Markdown, and DOCX are parsed as text. Max {maxSize} or {maxChars} characters.",
-    "closeDialog": "Close file upload",
-    "dropTitle": "Drop a file here",
-    "supportedTypes": "Supported: .txt, .md, .docx",
-    "selectedMeta": "Ready to parse · {size}",
-    "chooseFile": "Choose file",
-    "cancel": "Cancel",
-    "attach": "Attach",
-    "uploading": "Parsing...",
     "fileMeta": "{chars} chars · {size}",
     "removeFile": "Remove {fileName}",
-    "dialogTitleWithMedia": "Attach a file",
-    "dialogDescriptionWithMedia": "Text files (TXT, Markdown, DOCX, max {maxSize} or {maxChars} characters) are parsed as text. Images (PNG, JPEG, WebP, max 25 MB) and audio (MP3, WAV, OGG, max 100 MB) become project materials the assistant can use in generation.",
-    "supportedTypesWithMedia": "Supported: .txt, .md, .docx, .png, .jpg, .webp, .mp3, .wav, .ogg",
     "mediaKindImage": "Image",
     "mediaKindAudio": "Audio",
-    "mediaUploading": "Uploading media...",
-    "mediaUploadFailed": "Media upload failed."
+    "mediaUploading": "Uploading attachment...",
+    "mediaUploadFailed": "Attachment upload failed."
   },
   "toolCall": {
     "title": "Tool Call",

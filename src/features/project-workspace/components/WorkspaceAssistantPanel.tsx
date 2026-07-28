@@ -4,19 +4,25 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
-import { TextAttachmentUploadDialog } from '@/components/project-assistant/TextAttachmentUploadDialog'
+import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import { uploadProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments/client'
 import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
   type ProjectAssistantMediaAttachment,
 } from '@/lib/project-agent/media-attachments'
-import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
+import {
+  isProjectAssistantMediaFile,
+  uploadProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
@@ -121,15 +127,22 @@ export default function WorkspaceAssistantPanel({
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
   const [mediaUploadPending, setMediaUploadPending] = useState(false)
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null)
-  const pasteMediaFiles = async (files: readonly File[]): Promise<void> => {
+  const uploadAttachmentFiles = async (files: readonly File[]): Promise<void> => {
     if (mediaUploadPending) return
     setMediaUploadError(null)
     setMediaUploadPending(true)
     try {
-      const remaining = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
-      for (const file of files.slice(0, Math.max(remaining, 0))) {
+      const mediaFiles = files.filter(isProjectAssistantMediaFile)
+      const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
+      const mediaRoom = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
+      for (const file of mediaFiles.slice(0, Math.max(mediaRoom, 0))) {
         const attachment = await uploadProjectAssistantMediaAttachment({ projectId, file })
         composer.addMediaAttachment(attachment)
+      }
+      const textRoom = PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES - composer.attachments.length
+      for (const file of textFiles.slice(0, Math.max(textRoom, 0))) {
+        const attachment = await uploadProjectAssistantTextAttachment({ file })
+        composer.addAttachment(attachment)
       }
     } catch (error) {
       setMediaUploadError(error instanceof Error ? error.message : String(error))
@@ -137,6 +150,11 @@ export default function WorkspaceAssistantPanel({
       setMediaUploadPending(false)
     }
   }
+  const attachmentPicker = useAttachmentFilePicker({
+    accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,
+    disabled: assistantRuntime.pending || assistantRuntime.storageLoading,
+    onFiles: (files) => { void uploadAttachmentFiles(files) },
+  })
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
   const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(() => new Set())
   const visibleSubagents = useMemo(() => assistantRuntime.subagents.filter(
@@ -354,10 +372,10 @@ export default function WorkspaceAssistantPanel({
                         await composer.submit()
                       }}
                       onStopReply={assistantRuntime.stopReply}
-                      onAttachClick={() => composer.setAttachmentDialogOpen(true)}
+                      onAttachClick={attachmentPicker.open}
                       onRemoveAttachment={composer.removeAttachment}
                       onRemoveMediaAttachment={composer.removeMediaAttachment}
-                      onPasteMediaFiles={(files) => { void pasteMediaFiles(files) }}
+                      onPasteMediaFiles={(files) => { void uploadAttachmentFiles(files) }}
                     />
                   </div>
                 </div>
@@ -367,22 +385,7 @@ export default function WorkspaceAssistantPanel({
           </AssistantRuntimeProvider>
         </div>
       </div>
-      <TextAttachmentUploadDialog
-        open={selectedSubagentId === null && composer.attachmentDialogOpen}
-        disabled={
-          selectedSubagentId !== null
-          || assistantRuntime.pending
-          || assistantRuntime.storageLoading
-          || (
-            composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
-            && composer.mediaAttachments.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
-          )
-        }
-        projectId={projectId}
-        onClose={() => composer.setAttachmentDialogOpen(false)}
-        onUploaded={composer.addAttachment}
-        onUploadedMedia={composer.addMediaAttachment}
-      />
+      {attachmentPicker.input}
     </aside>
   )
 }

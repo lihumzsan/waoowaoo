@@ -119,25 +119,12 @@
   },
   "attachments": {
     "openUpload": "上传文件",
-    "dialogTitle": "上传文本文件",
-    "dialogDescription": "支持 TXT、Markdown 和 DOCX，会解析为纯文本。上限 {maxSize} 或 {maxChars} 字。",
-    "closeDialog": "关闭文件上传",
-    "dropTitle": "把文件拖到这里",
-    "supportedTypes": "支持：.txt、.md、.docx",
-    "selectedMeta": "待解析 · {size}",
-    "chooseFile": "选择文件",
-    "cancel": "取消",
-    "attach": "添加",
-    "uploading": "解析中...",
     "fileMeta": "{chars} 字 · {size}",
     "removeFile": "移除 {fileName}",
-    "dialogTitleWithMedia": "上传文件",
-    "dialogDescriptionWithMedia": "文本文件（TXT、Markdown、DOCX，上限 {maxSize} 或 {maxChars} 字）会解析为纯文本。图片（PNG、JPEG、WebP，上限 25 MB）和音频（MP3、WAV、OGG，上限 100 MB）会成为项目素材，助手可在生成中引用。",
-    "supportedTypesWithMedia": "支持：.txt、.md、.docx、.png、.jpg、.webp、.mp3、.wav、.ogg",
     "mediaKindImage": "图片",
     "mediaKindAudio": "音频",
-    "mediaUploading": "素材上传中...",
-    "mediaUploadFailed": "素材上传失败。"
+    "mediaUploading": "附件上传中...",
+    "mediaUploadFailed": "附件上传失败。"
   },
   "toolCall": {
     "title": "工具调用",

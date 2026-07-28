@@ -11,7 +11,7 @@ import { useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import BillingActionButton from '@/components/billing/BillingActionButton'
-import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
+import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/AttachmentChips'
 import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,

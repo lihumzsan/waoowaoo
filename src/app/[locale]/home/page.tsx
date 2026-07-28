@@ -16,19 +16,24 @@ import HomeVideoRatioSelect from '@/components/home/HomeVideoRatioSelect'
 import {
   PendingMediaFileChips,
   TextAttachmentChips,
-  TextAttachmentUploadDialog,
   type PendingMediaFileChip,
-} from '@/components/project-assistant/TextAttachmentUploadDialog'
+} from '@/components/project-assistant/AttachmentChips'
+import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
 import { submitHomeQuickStartLaunch } from '@/lib/home/quick-start-submit'
 import { formatDefaultProjectTimestamp } from '@/lib/projects/default-name'
 import { HOME_QUICK_START_MIN_ROWS } from '@/lib/ui/textarea-height'
 import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
-import { PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES } from '@/lib/project-agent/media-attachments'
+import { uploadProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments/client'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
+} from '@/lib/project-agent/media-attachments'
 import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 
@@ -67,7 +72,8 @@ export default function HomePage() {
   const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [pendingMediaFiles, setPendingMediaFiles] = useState<PendingHomeMediaFile[]>([])
-  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
+  const [attachUploading, setAttachUploading] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -187,6 +193,33 @@ export default function HomePage() {
     event.preventDefault()
     addPendingMediaFiles(files)
   }, [addPendingMediaFiles, createLoading])
+
+  // Picker files route by kind: media stays local until the project exists,
+  // text files parse immediately through the text-attachment endpoint.
+  const handlePickedFiles = useCallback(async (files: readonly File[]) => {
+    setAttachError(null)
+    const mediaFiles = files.filter(isProjectAssistantMediaFile)
+    if (mediaFiles.length > 0) addPendingMediaFiles(mediaFiles)
+    const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
+    if (textFiles.length === 0) return
+    setAttachUploading(true)
+    try {
+      for (const file of textFiles) {
+        const attachment = await uploadProjectAssistantTextAttachment({ file })
+        handleAttachmentUploaded(attachment)
+      }
+    } catch (error) {
+      setAttachError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAttachUploading(false)
+    }
+  }, [addPendingMediaFiles, handleAttachmentUploaded])
+
+  const attachmentPicker = useAttachmentFilePicker({
+    accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,
+    disabled: createLoading,
+    onFiles: (files) => { void handlePickedFiles(files) },
+  })
 
   const createDisabled = (
     !inputValue.trim() && attachments.length === 0 && pendingMediaFiles.length === 0
@@ -426,11 +459,11 @@ export default function HomePage() {
                     type="button"
                     aria-label={ta('attachments.openUpload')}
                     title={ta('attachments.openUpload')}
-                    disabled={createLoading || (
+                    disabled={createLoading || attachUploading || (
                       attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
                       && pendingMediaFiles.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
                     )}
-                    onClick={() => setAttachmentDialogOpen(true)}
+                    onClick={attachmentPicker.open}
                     className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[rgba(15,17,23,0.55)] transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <AppIcon name="plus" className="h-[18px] w-[18px]" />
@@ -445,13 +478,24 @@ export default function HomePage() {
                   />
                 </div>
               )}
-              footer={attachments.length > 0 || pendingMediaFiles.length > 0 || createError ? (
+              footer={attachments.length > 0 || pendingMediaFiles.length > 0 || attachUploading || attachError || createError ? (
                 <div className="space-y-3">
                   <TextAttachmentChips attachments={attachments} onRemove={createLoading ? undefined : handleRemoveAttachment} />
                   <PendingMediaFileChips
                     files={pendingMediaFiles}
                     onRemove={createLoading ? undefined : handleRemovePendingMediaFile}
                   />
+                  {attachUploading ? (
+                    <div className="inline-flex items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm">
+                      <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]" aria-hidden="true" />
+                      {ta('attachments.mediaUploading')}
+                    </div>
+                  ) : null}
+                  {attachError ? (
+                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                      {attachError}
+                    </p>
+                  ) : null}
                   {createError ? (
                     <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
                       {createError}
@@ -550,16 +594,7 @@ export default function HomePage() {
           </div>
         )}
       </section>
-      <TextAttachmentUploadDialog
-        open={attachmentDialogOpen}
-        disabled={createLoading || (
-          attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
-          && pendingMediaFiles.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
-        )}
-        onClose={() => setAttachmentDialogOpen(false)}
-        onUploaded={handleAttachmentUploaded}
-        onMediaFileSelected={(file) => addPendingMediaFiles([file])}
-      />
+      {attachmentPicker.input}
     </div>
   )
 }
