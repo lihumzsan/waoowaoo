@@ -54,7 +54,6 @@ export type AiImageExecutionOptions = {
 export type AiVideoExecutionOptions = {
   prompt?: string
   duration?: number
-  fps?: number
   resolution?: string
   aspectRatio?: string
   generateAudio?: boolean

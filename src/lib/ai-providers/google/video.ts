@@ -57,7 +57,6 @@ function assertAllowedGoogleVideoOptions(options: GoogleVeoOptions) {
     'duration',
     'lastFrameImageUrl',
     'prompt',
-    'fps',
   ])
   for (const [key, value] of Object.entries(options)) {
     if (value === undefined) continue

@@ -101,7 +101,6 @@ export type AiProviderVideoExecutionContext = {
   options?: {
     prompt?: string
     duration?: number
-    fps?: number
     resolution?: string
     aspectRatio?: string
     generateAudio?: boolean

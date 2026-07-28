@@ -228,8 +228,6 @@ const createVideoNewRequestSchema = z.object({
     .describe('Requested output aspect ratio such as 9:16 or 16:9. Omit to use the project ratio.'),
   resolution: z.string().trim().min(1).optional()
     .describe('Optional resolution supported by the configured video generation capability, such as 720p or 1080p.'),
-  fps: z.number().int().min(1).max(240).optional()
-    .describe('Optional frame rate supported by the configured video generation capability.'),
   generateAudio: z.boolean().optional()
     .describe('Whether the configured video generation capability should generate synchronized native audio.'),
 }).strict()
@@ -701,7 +699,6 @@ async function resolveFrozenGenerationOptions(input: {
     const selections = {
       duration: publicInput.durationSeconds,
       resolution: publicInput.resolution,
-      fps: publicInput.fps,
       generateAudio: publicInput.generateAudio,
     } as const
     for (const [field, value] of Object.entries(selections)) {
@@ -801,9 +798,7 @@ async function resolveFrozenGenerationOptions(input: {
     frozen.aspectRatio = resolvedAspectRatio as string
     if (publicInput.kind === 'new' && publicInput.size) frozen.size = publicInput.size
   } else if (input.config.mediaType === 'video') {
-    const publicInput = input.publicInput as CreateVideoNewRequest
     frozen.aspectRatio = resolvedAspectRatio as string
-    if (typeof publicInput.fps === 'number') frozen.fps = publicInput.fps
   } else {
     const publicInput = input.publicInput as CreateAudioNewRequest
     frozen.durationSeconds = publicInput.durationSeconds

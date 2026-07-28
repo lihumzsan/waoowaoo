@@ -106,7 +106,6 @@ function shouldUseSelectControl(field: string, options: CapabilityValue[]): bool
     if (options.length <= 3) return false
     if (field === 'reasoningEffort') return true
     if (field.toLowerCase().includes('duration')) return true
-    if (field.toLowerCase().includes('fps')) return true
     return options.every((item) => typeof item === 'number')
 }
 

@@ -13,7 +13,6 @@ const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {
     'generateAudioOptions',
     'containsVideoInputOptions',
     'durationOptions',
-    'fpsOptions',
     'resolutionOptions',
     'firstlastframe',
     'supportGenerateAudio',
@@ -30,7 +29,6 @@ const CAPABILITY_NAMESPACE_I18N_FIELDS = {
     generateAudio: 'generateAudioOptions',
     containsVideoInput: 'containsVideoInputOptions',
     duration: 'durationOptions',
-    fps: 'fpsOptions',
     resolution: 'resolutionOptions',
   },
   music: {
@@ -225,9 +223,6 @@ function validateCapabilitiesForModelType(issues, file, index, modelType, capabi
       }
       if (video.durationOptions !== undefined && !isNumberArray(video.durationOptions)) {
         pushIssue(issues, file, index, 'capabilities.video.durationOptions', 'must be number array')
-      }
-      if (video.fpsOptions !== undefined && !isNumberArray(video.fpsOptions)) {
-        pushIssue(issues, file, index, 'capabilities.video.fpsOptions', 'must be number array')
       }
       if (video.resolutionOptions !== undefined && !isStringArray(video.resolutionOptions)) {
         pushIssue(issues, file, index, 'capabilities.video.resolutionOptions', 'must be string array')

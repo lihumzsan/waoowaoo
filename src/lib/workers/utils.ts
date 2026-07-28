@@ -527,7 +527,6 @@ export async function resolveVideoSourceFromGeneration(
     options?: {
       prompt?: string
       duration?: number
-      fps?: number
       resolution?: string
       aspectRatio?: string
       generateAudio?: boolean

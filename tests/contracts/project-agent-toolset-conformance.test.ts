@@ -306,6 +306,7 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(videoNewProperties)).toContain('mediaReferences')
     expect(Object.keys(videoNewProperties)).not.toContain('imageReferences')
     expect(Object.keys(videoNewProperties)).not.toContain('voiceReferenceKeys')
+    expect(Object.keys(videoNewProperties)).not.toContain('fps')
 
     expect(registry.create_text.inputSchema.safeParse({
       prompt: 'Write one line.',
@@ -392,6 +393,14 @@ describe('project agent toolset conformance', () => {
         durationSeconds: 15,
       },
     }).success).toBe(true)
+    expect(registry.create_video.inputSchema.safeParse({
+      request: {
+        kind: 'new',
+        count: 1,
+        prompt: 'A slow push toward a moonlit shrine.',
+        fps: 24,
+      },
+    }).success).toBe(false)
     expect(registry.create_video.inputSchema.safeParse({
       request: { kind: 'retry', resourceIds: ['failed-video-resource'] },
     }).success).toBe(true)

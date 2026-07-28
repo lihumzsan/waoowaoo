@@ -6,7 +6,6 @@
     "capabilities": {
       "video": {
         "durationOptions": [5, 10, 15],
-        "fpsOptions": [24, 30],
         "resolutionOptions": ["720p", "1080p"],
         "firstlastframe": true,
         "supportGenerateAudio": true,
@@ -14,10 +13,6 @@
           "duration": {
             "labelKey": "video.capability.duration",
             "unitKey": "video.unit.second"
-          },
-          "fps": {
-            "labelKey": "video.capability.fps",
-            "unitKey": "video.unit.fps"
           },
           "resolution": {
             "labelKey": "video.capability.resolution"

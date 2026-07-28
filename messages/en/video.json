@@ -2,7 +2,6 @@
   "capability": {
     "generationMode": "Generation mode",
     "duration": "Duration",
-    "fps": "Frame rate",
     "resolution": "Resolution",
     "quality": "Image quality",
     "aspectRatio": "Aspect ratio",

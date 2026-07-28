@@ -129,7 +129,6 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'modelKey',
       'prompt',
       'duration',
-      'fps',
       'resolution',
       'aspectRatio',
       'generateAudio',

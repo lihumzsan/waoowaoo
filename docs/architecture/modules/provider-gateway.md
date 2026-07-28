@@ -12,7 +12,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 - **PG-01 — 服务端显式选择。** provider 与 model 必须由统一 registry/selection 或 registry 声明的等价 route set 解析；Agent-facing 媒体工具不得接收 provider/model。禁止按模型名、媒体类型、错误文本或临时可用性猜测 provider。
 - **PG-01B — OpenRouter LLM 一次声明。** OpenRouter 普通 LLM 共用同一 adapter 和 `openrouter-chat` 协议，但每个具体 model identity 的名称、价格、公开 reasoning 模式、推理强度集合与平台可见性必须在 provider-owned definition registry 声明一次，再自动派生 capability、pricing、API config 与 platform catalog。未知 model id 必须显式失败；不得把任意字符串直通 provider，也不得为同一 LLM 手工维护四份平行数组。图片、视频等媒体能力继续按具体模型显式声明。
-- **PG-01A — 公共生成参数服从所选模型能力。** Agent/业务 Operation 只接收稳定产品字段和精确 `provider::modelId`；允许字段、枚举、范围与默认值只从该模型的生产 capability registry 解析。动态默认/覆盖通过显式 `modelKey + field + value` command 进入同一 validator。`durationSeconds` 等公共字段到 provider `duration`/wire option 的转换只发生在统一内部 mapper/adapter，报价、Task payload 与 provenance 冻结映射后的执行快照；不得把 provider 原始 object 暴露给模型、猜 provider、静默丢字段或用另一模型的允许值通过校验。
+- **PG-01A — 公共生成参数服从所选模型能力。** Agent/业务 Operation 只接收稳定产品字段和精确 `provider::modelId`；允许字段、枚举、范围与默认值只从该模型的生产 capability registry 解析。动态默认/覆盖通过显式 `modelKey + field + value` command 进入同一 validator。`durationSeconds` 等公共字段到 provider `duration`/wire option 的转换只发生在统一内部 mapper/adapter，报价、Task payload 与 provenance 冻结映射后的执行快照；不得把 provider 原始 object 暴露给模型、猜 provider、静默丢字段或用另一模型的允许值通过校验。统一视频生成产品契约不暴露 `fps`，输出帧率由所选 provider/model 决定；能力、配置、Task payload、执行 option 和 adapter 均不得重新声明或透传该字段。
 - **PG-02 — 单一网关。** route、worker 和业务 operation 不得直连 provider SDK、旧入口或 generator factory。普通 LLM/Vision 与媒体调用必须经由 `ai-exec` 与 provider adapter；专用托管能力必须由自己的业务 service 作为唯一入口，并把 SDK 执行完全封装在 `ai-providers/<provider>/` adapter 内，不得让调用方创建 provider client 或 tool。
 - **PG-02A — OpenAI hosted Web Search 是受限的专用托管能力。** `searchWeb` 是唯一业务入口，`src/lib/ai-exec/hosted-web-search.ts` 是唯一执行边界，`src/lib/ai-providers/openai/hosted-web-search.ts` 是唯一 OpenAI Agents SDK adapter。该 adapter 可用专用 Search Agent + `webSearchTool()` 完成一次有界研究，因为 hosted tool 的模型循环不是普通 LLM/Vision final-result 协议；Primary Operation 和 Creative Worker Tool 只能调用 `searchWeb`，不得直连 SDK。Search Agent 不进入产品模型 registry、不替换 Primary/analysis 模型、不写项目事实，也不得成为 Creative Direction writer。
 - **PG-03 — Provider 隔离。** provider 专属模型常量、option 和条件分支只能留在自身 `ai-providers/<provider>/` 实现内；跨 provider 分支属于 registry/engine 的职责。
@@ -49,6 +49,10 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - 用户 provider 配置的严格解析与写入：`src/lib/user-api/**`；运行时选择入口为 `src/lib/user-api/runtime-config.ts`。
 - Provider 可选出站代理：`src/lib/http/outbound-proxy.ts`；请求/响应体积入口：`src/lib/http/body-limits.ts`。部署模式与用户 Provider 配置可用性的唯一裁决分别是 `src/lib/deployment/config.ts` 与 `src/lib/user-api/availability.ts`。
 - `standards/capabilities/**` 与 `standards/pricing/**` 当前分别由 catalog 检查脚本读取，不是生产 runtime registry 的 writer；运行时仍从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力或价格已切换。
+
+## 发布边界
+
+视频生成 `fps` 字段从 Tool Schema、capability、Task payload、执行 option 与 provider adapter 一次性删除，不提供旧字段双读或静默忽略。Seedance 2 token 报价公式中的固定帧率常量与本地视频合并转码的固定帧率归一化属于内部算法/编码事实，不是生成输入。部署前必须排空旧版本仍可能携带该字段的 pending Approval、queued/processing Creative Resource video Task 与对应 Wait；历史终态 Revision/plan 保持不可变，不执行数据回填。
 
 ## 验证
 

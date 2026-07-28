@@ -187,7 +187,6 @@ function assertAllowedArkVideoOptions(options: ArkVideoOptions) {
     'cameraFixed',
     'watermark',
     'prompt',
-    'fps',
     'referenceImages',
     'referenceAudios',
   ])

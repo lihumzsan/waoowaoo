@@ -323,7 +323,6 @@ function assertAllowedFalVideoOptions(options: FalVideoOptions) {
     'resolution',
     'aspectRatio',
     'prompt',
-    'fps',
     'generateAudio',
     'lastFrameImageUrl',
     'referenceImages',

@@ -149,7 +149,6 @@ export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
     options: {
       prompt: payload.resource.prompt,
       ...(typeof options.duration === 'number' ? { duration: options.duration } : {}),
-      ...(typeof options.fps === 'number' ? { fps: options.fps } : {}),
       ...(typeof options.resolution === 'string' ? { resolution: options.resolution } : {}),
       ...(typeof options.aspectRatio === 'string' ? { aspectRatio: options.aspectRatio } : {}),
       ...(typeof options.generateAudio === 'boolean' ? { generateAudio: options.generateAudio } : {}),
