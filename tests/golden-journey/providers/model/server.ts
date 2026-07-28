@@ -28,7 +28,9 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
   const requestCountByScenario = new Map<string, number>()
   let streamPacing: { readonly chunkSize: number; readonly delayMs: number } | null = null
   let holdTextResponses = false
+  let holdToolCallsAfterPreamble = false
   const heldTextResponseReleases = new Set<() => void>()
+  const heldToolCallReleases = new Set<() => void>()
   const releaseHeldTextResponses = (): void => {
     for (const release of [...heldTextResponseReleases]) release()
   }
@@ -44,13 +46,30 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
       response.once('close', release)
     })
   }
+  const releaseHeldToolCalls = (): void => {
+    for (const release of [...heldToolCallReleases]) release()
+  }
+  const waitForToolCallRelease = async (response: Parameters<typeof writeGoldenJsonResponse>[0]['response']): Promise<void> => {
+    if (!holdToolCallsAfterPreamble) return
+    await new Promise<void>((resolve) => {
+      const release = (): void => {
+        heldToolCallReleases.delete(release)
+        response.off('close', release)
+        resolve()
+      }
+      heldToolCallReleases.add(release)
+      response.once('close', release)
+    })
+  }
   const writeControlSnapshot = (response: Parameters<typeof writeGoldenJsonResponse>[0]['response']): void => {
     response.writeHead(200, { 'content-type': 'application/json' })
     response.end(JSON.stringify({
       ok: true,
       streamPacing,
       holdTextResponses,
+      holdToolCallsAfterPreamble,
       heldTextResponseCount: heldTextResponseReleases.size,
+      heldToolCallCount: heldToolCallReleases.size,
     }))
   }
   const server = createServer(async (request, response) => {
@@ -87,6 +106,13 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
           holdTextResponses = record.holdTextResponses
           if (!holdTextResponses) releaseHeldTextResponses()
         }
+        if (Object.prototype.hasOwnProperty.call(record, 'holdToolCallsAfterPreamble')) {
+          if (typeof record.holdToolCallsAfterPreamble !== 'boolean') {
+            throw new Error('GOLDEN_TOOL_CALL_PREAMBLE_HOLD_INVALID')
+          }
+          holdToolCallsAfterPreamble = record.holdToolCallsAfterPreamble
+          if (!holdToolCallsAfterPreamble) releaseHeldToolCalls()
+        }
         writeControlSnapshot(response)
         return
       }
@@ -113,6 +139,7 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
           request: completionRequest,
           decision,
           pacing: streamPacing,
+          waitAfterToolPreamble: async () => await waitForToolCallRelease(response),
         })
       } else {
         writeGoldenJsonResponse({ response, request: completionRequest, decision })
@@ -141,7 +168,9 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
     server,
     close: async () => await new Promise<void>((resolve, reject) => {
       holdTextResponses = false
+      holdToolCallsAfterPreamble = false
       releaseHeldTextResponses()
+      releaseHeldToolCalls()
       server.close((error) => error ? reject(error) : resolve())
     }),
   }

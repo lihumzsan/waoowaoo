@@ -22,7 +22,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-FREEFORM-ZERO-VIDEO',
     kind: 'freeform',
-    title: 'the model resolves a missing ratio with one current Choice, then an empty project submits text-to-video without workflow artifacts',
+    title: 'the foreground Run stays visibly live while the model authors a missing-ratio Choice, then an empty project submits text-to-video without workflow artifacts',
     startState: 'empty_project',
     expectedTerminal: 'independent_video_ready',
     requiresWorkers: true,

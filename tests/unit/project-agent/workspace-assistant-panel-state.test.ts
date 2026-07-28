@@ -4,6 +4,7 @@ import {
 } from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-panel-state'
 import {
   resolveWorkspaceAssistantComposerPending,
+  resolveWorkspaceAssistantReplyInFlight,
 } from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state'
 
 describe('Workspace Assistant foreground and background presentation', () => {
@@ -21,23 +22,39 @@ describe('Workspace Assistant foreground and background presentation', () => {
     })).toBe(true)
   })
 
-  it('shows a pending reply when a server continuation runs without a chat transport', () => {
+  it.each([
+    ['chat transport', {
+      requestActive: false,
+      chatTransportActive: true,
+      controlRunActive: false,
+      serverRunActive: false,
+    }],
+    ['control stream', {
+      requestActive: false,
+      chatTransportActive: false,
+      controlRunActive: true,
+      serverRunActive: false,
+    }],
+    ['server continuation', {
+      requestActive: false,
+      chatTransportActive: false,
+      controlRunActive: false,
+      serverRunActive: true,
+    }],
+  ] as const)('uses the same panel-tail liveness for an active %s', (_label, sources) => {
+    const replyInFlight = resolveWorkspaceAssistantReplyInFlight(sources)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
-      replyInFlight: true,
-      chatStatus: 'ready',
-      awaitingUserInput: false,
-      awaitingExternalTask: false,
+      replyInFlight,
+      hasPendingInteraction: false,
     })).toBe(true)
   })
 
-  it('does not duplicate the placeholder once response content is streaming', () => {
+  it('stops foreground liveness when the durable Choice is current', () => {
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
       replyInFlight: true,
-      chatStatus: 'streaming',
-      awaitingUserInput: false,
-      awaitingExternalTask: false,
+      hasPendingInteraction: true,
     })).toBe(false)
   })
 })

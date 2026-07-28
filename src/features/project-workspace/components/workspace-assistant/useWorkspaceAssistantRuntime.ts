@@ -3,10 +3,7 @@
 import { useChat } from '@ai-sdk/react'
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import type { AssistantRuntime } from '@assistant-ui/react'
-import {
-  type ChatStatus,
-  type UIMessage,
-} from 'ai'
+import type { UIMessage } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useProjectAssistantThread } from '@/lib/query/hooks'
@@ -63,7 +60,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   runtime: AssistantRuntime
   messages: UIMessage[]
   messageCount: number
-  status: ChatStatus
   pending: boolean
   canStopReply: boolean
   replyInFlight: boolean
@@ -266,7 +262,6 @@ export function useWorkspaceAssistantRuntime({
     runtime,
     messages: chat.messages,
     messageCount: chat.messages.length,
-    status: chat.status,
     pending: composerPending,
     canStopReply,
     replyInFlight,

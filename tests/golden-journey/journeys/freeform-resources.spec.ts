@@ -6,11 +6,16 @@ import {
   type GoldenWorkspaceScope,
 } from '../browser/pages/home'
 import {
+  readGoldenAssistantRunStatus,
   readGoldenPendingInteractionOperationId,
   submitGoldenApproval,
 } from '../browser/pages/workspace'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
-import { failNextGoldenFalRequests, setGoldenStreamPacing } from '../providers/control'
+import {
+  failNextGoldenFalRequests,
+  setGoldenStreamPacing,
+  setGoldenToolCallAfterPreambleHold,
+} from '../providers/control'
 import {
   GOLDEN_FREEFORM_ADOPT_REQUEST,
   GOLDEN_FREEFORM_ADOPT_STORY_CANON_REQUEST,
@@ -610,7 +615,18 @@ test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly w
     password: 'golden-zero-video-password',
   })
   const scope = await launchGoldenProjectWithoutHomeRatio(page)
-  await sendNaturalLanguage(page, GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)
+  await setGoldenToolCallAfterPreambleHold(true)
+  try {
+    await sendNaturalLanguage(page, GOLDEN_FREEFORM_ZERO_VIDEO_REQUEST)
+    await expect(page.getByText('I will prepare the complete choices now.', { exact: true })).toBeVisible({
+      timeout: 60_000,
+    })
+    await expect(page.getByRole('status').filter({ visible: true })).toHaveCount(1)
+    expect(await readGoldenAssistantRunStatus(page, scope)).toBe('running')
+    expect(await readGoldenPendingInteractionOperationId(page, scope)).toBeNull()
+  } finally {
+    await setGoldenToolCallAfterPreambleHold(false)
+  }
   await resolveInitialVideoRatioChoice(page, scope)
   await approveOperation(page, scope, 'create_video')
   await waitForResources(scope, 'video', 1)

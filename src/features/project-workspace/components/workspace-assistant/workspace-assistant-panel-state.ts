@@ -4,7 +4,6 @@ import type {
   ProjectAgentSubagentEventPartData,
   ProjectAgentSubagentStatus,
 } from '@/lib/project-agent/subagent-events'
-import type { ChatStatus } from 'ai'
 
 export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
 } as const
@@ -40,15 +39,11 @@ export function resolveWorkspaceAssistantExternalTaskOperationId(
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
   replyInFlight: boolean
-  chatStatus: ChatStatus
-  awaitingUserInput: boolean
-  awaitingExternalTask: boolean
+  hasPendingInteraction: boolean
 }): boolean {
   return !params.storageLoading
     && params.replyInFlight
-    && (params.chatStatus === 'submitted' || params.chatStatus === 'ready')
-    && !params.awaitingUserInput
-    && !params.awaitingExternalTask
+    && !params.hasPendingInteraction
 }
 
 export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
@@ -66,24 +61,6 @@ export function resolveWorkspaceAssistantRunFailureDetail(params: {
   fallback: string
 }): string {
   return params.localizedError?.trim() || params.fallback
-}
-
-export function resolveWorkspaceAssistantAwaitingUserInput(params: {
-  replyInFlight: boolean
-  hasPendingInteraction: boolean
-}): boolean {
-  return !params.replyInFlight && params.hasPendingInteraction
-}
-
-export function resolveWorkspaceAssistantAwaitingExternalTask(params: {
-  replyInFlight: boolean
-  currentRunStatus?: ProjectAgentRunPartData['status'] | null
-  activeExternalTaskOperationId?: string | null
-}): boolean {
-  return !params.replyInFlight && (
-    params.currentRunStatus === 'awaiting_task'
-      || Boolean(params.activeExternalTaskOperationId)
-  )
 }
 
 export type WorkspaceAssistantSubagentEventGlyph =

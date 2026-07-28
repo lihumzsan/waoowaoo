@@ -32,6 +32,7 @@ export type GoldenModelDecision =
     readonly toolCallId: string
     readonly toolName: string
     readonly argumentsJson: string
+    readonly preambleText?: string
   }
   | {
     readonly kind: 'tool_calls'

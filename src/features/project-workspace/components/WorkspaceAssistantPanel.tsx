@@ -38,6 +38,9 @@ import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssis
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import { WorkspaceAssistantTextPlaybackProvider } from './workspace-assistant/WorkspaceAssistantTextPlayback'
 import {
+  WorkspaceAssistantRunningSurfaceProvider,
+} from './workspace-assistant/WorkspaceAssistantReasoning'
+import {
   WorkspaceAssistantRunningSubagentDock,
   WorkspaceAssistantSubagentTabs,
 } from './workspace-assistant/WorkspaceAssistantSubagents'
@@ -52,8 +55,6 @@ import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useW
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import {
-  resolveWorkspaceAssistantAwaitingExternalTask,
-  resolveWorkspaceAssistantAwaitingUserInput,
   resolveWorkspaceAssistantRunFailureDetail,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldShowWorkspaceAssistantReplyLoading,
@@ -202,15 +203,6 @@ export default function WorkspaceAssistantPanel({
     hideChoiceCards: true,
     onSubmitChoiceResponse: assistantRuntime.submitChoiceResponse,
   })
-  const awaitingUserInput = resolveWorkspaceAssistantAwaitingUserInput({
-    replyInFlight: assistantRuntime.replyInFlight,
-    hasPendingInteraction: Boolean(pendingInteraction),
-  })
-  const awaitingExternalTask = resolveWorkspaceAssistantAwaitingExternalTask({
-    replyInFlight: assistantRuntime.replyInFlight,
-    currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
-    activeExternalTaskOperationId,
-  })
   const showExternalTaskRunCard = shouldShowWorkspaceAssistantExternalTaskRunCard({
     storageLoading: assistantRuntime.storageLoading,
     operationId: activeExternalTaskOperationId,
@@ -218,9 +210,7 @@ export default function WorkspaceAssistantPanel({
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
     replyInFlight: assistantRuntime.replyInFlight,
-    chatStatus: assistantRuntime.status,
-    awaitingUserInput,
-    awaitingExternalTask,
+    hasPendingInteraction: Boolean(pendingInteraction),
   })
   const showRunFailureNotice = shouldShowWorkspaceAssistantRunFailureNotice({
     storageLoading: assistantRuntime.storageLoading,
@@ -277,58 +267,60 @@ export default function WorkspaceAssistantPanel({
                     structuredOutputText={assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null}
                   />
                 ) : (
-                  <div className="min-w-0">
-                    <div className="space-y-3">
-                      <ThreadPrimitive.Messages>
-                        {() => (
-                          <WorkspaceAssistantThreadMessage
-                            messagePartComponents={partComponents}
-                            subagents={visibleSubagents}
-                            onSelectSubagent={setSelectedSubagentId}
+                  <WorkspaceAssistantRunningSurfaceProvider>
+                    <div className="min-w-0">
+                      <div className="space-y-3">
+                        <ThreadPrimitive.Messages>
+                          {() => (
+                            <WorkspaceAssistantThreadMessage
+                              messagePartComponents={partComponents}
+                              subagents={visibleSubagents}
+                              onSelectSubagent={setSelectedSubagentId}
+                            />
+                          )}
+                        </ThreadPrimitive.Messages>
+                        {showAssistantReplyLoading ? (
+                          <WorkspaceAssistantPendingTurnPlaceholder
+                            label={assistantRuntime.backgroundFollowUpActive
+                              ? t('panel.backgroundFollowUpRunning')
+                              : undefined}
                           />
-                        )}
-                      </ThreadPrimitive.Messages>
-                      {showAssistantReplyLoading ? (
-                        <WorkspaceAssistantPendingTurnPlaceholder
-                          label={assistantRuntime.backgroundFollowUpActive
-                            ? t('panel.backgroundFollowUpRunning')
-                            : undefined}
-                        />
-                      ) : null}
-                      {assistantRuntime.sessionStateError ? (
-                        <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]">
-                          {t('panel.sessionStateError')}
-                        </div>
-                      ) : null}
-                      {showRunFailureNotice ? (
-                        <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />
-                      ) : null}
-                      {showExternalTaskRunCard && activeExternalTaskOperationId && activeExternalTasks.length > 0 ? (
-                        <WorkspaceAssistantActiveRunCard
-                          operationIds={activeExternalTaskOperationIds.length > 0
-                            ? activeExternalTaskOperationIds
-                            : [activeExternalTaskOperationId]}
-                          taskCount={activeExternalTasks.length}
-                        />
-                      ) : null}
-                      {serverPendingApproval ? (
-                        <ConfirmationActionCard
-                          operationId={serverPendingApproval.operationId}
-                          title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
-                          subtitle={t('cards.confirmationRequired')}
-                          operationPlan={serverPendingApproval.operationPlan}
-                          onConfirm={() => assistantRuntime.addRunApprovalResponse({
-                            ...serverPendingApproval,
-                            approved: true,
-                          })}
-                          onCancel={() => assistantRuntime.addRunApprovalResponse({
-                            ...serverPendingApproval,
-                            approved: false,
-                          })}
-                        />
-                      ) : null}
+                        ) : null}
+                        {assistantRuntime.sessionStateError ? (
+                          <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]">
+                            {t('panel.sessionStateError')}
+                          </div>
+                        ) : null}
+                        {showRunFailureNotice ? (
+                          <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />
+                        ) : null}
+                        {showExternalTaskRunCard && activeExternalTaskOperationId && activeExternalTasks.length > 0 ? (
+                          <WorkspaceAssistantActiveRunCard
+                            operationIds={activeExternalTaskOperationIds.length > 0
+                              ? activeExternalTaskOperationIds
+                              : [activeExternalTaskOperationId]}
+                            taskCount={activeExternalTasks.length}
+                          />
+                        ) : null}
+                        {serverPendingApproval ? (
+                          <ConfirmationActionCard
+                            operationId={serverPendingApproval.operationId}
+                            title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
+                            subtitle={t('cards.confirmationRequired')}
+                            operationPlan={serverPendingApproval.operationPlan}
+                            onConfirm={() => assistantRuntime.addRunApprovalResponse({
+                              ...serverPendingApproval,
+                              approved: true,
+                            })}
+                            onCancel={() => assistantRuntime.addRunApprovalResponse({
+                              ...serverPendingApproval,
+                              approved: false,
+                            })}
+                          />
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
+                  </WorkspaceAssistantRunningSurfaceProvider>
                 )}
               </ThreadPrimitive.Viewport>
 

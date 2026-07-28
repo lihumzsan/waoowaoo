@@ -6,6 +6,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
+import { useWorkspaceAssistantRunningSurface } from './WorkspaceAssistantReasoning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -38,6 +39,10 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
   const toolStatus = props.status.type
+  useWorkspaceAssistantRunningSurface(
+    `tool:${props.toolCallId}`,
+    toolStatus === 'running' || toolStatus === 'requires-action',
+  )
   const failureMessage = readToolResultFailureMessage(props.result)
   const submissionState = toolStatus === 'complete' ? readOperationSubmissionState(props.result) : null
   const summaryText = toolStatus === 'complete'

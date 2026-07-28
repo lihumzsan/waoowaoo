@@ -35,6 +35,18 @@ export async function setGoldenTextResponseHold(holdTextResponses: boolean): Pro
   if (!response.ok) throw new Error(`GOLDEN_TEXT_RESPONSE_HOLD_HTTP_${String(response.status)}`)
 }
 
+export async function setGoldenToolCallAfterPreambleHold(
+  holdToolCallsAfterPreamble: boolean,
+): Promise<void> {
+  const descriptor = await readGoldenEnvironmentDescriptor()
+  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/control`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ holdToolCallsAfterPreamble }),
+  })
+  if (!response.ok) throw new Error(`GOLDEN_TOOL_CALL_PREAMBLE_HOLD_HTTP_${String(response.status)}`)
+}
+
 export async function setGoldenMediaStatusDelay(delayMs: number): Promise<void> {
   const descriptor = await readGoldenEnvironmentDescriptor()
   const response = await fetch(`${descriptor.providerBaseUrl}/__golden/media-delay`, {

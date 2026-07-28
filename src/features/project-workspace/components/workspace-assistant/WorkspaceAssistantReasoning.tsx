@@ -2,20 +2,21 @@
 
 import {
   useMessage,
-  type DataMessagePartProps,
   type ReasoningMessagePartProps,
 } from '@assistant-ui/react'
 import { useTranslations } from 'next-intl'
 import {
   createContext,
+  useCallback,
   useContext,
+  useId,
+  useLayoutEffect,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
-import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   resolveWorkspaceAssistantRunTraceView,
@@ -23,6 +24,49 @@ import {
 } from './workspace-assistant-run-trace'
 
 const WorkspaceAssistantRunTraceGroupContext = createContext(false)
+type SetWorkspaceAssistantRunningSurface = (key: string, active: boolean) => void
+const WorkspaceAssistantRunningSurfaceSetterContext = createContext<SetWorkspaceAssistantRunningSurface | null>(null)
+const WorkspaceAssistantRunningSurfaceCountContext = createContext(0)
+
+export function WorkspaceAssistantRunningSurfaceProvider({
+  children,
+}: {
+  readonly children: ReactNode
+}) {
+  const [activeSurfaceKeys, setActiveSurfaceKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const setRunningSurface = useCallback<SetWorkspaceAssistantRunningSurface>((key, active) => {
+    setActiveSurfaceKeys((current) => {
+      const alreadyActive = current.has(key)
+      if (alreadyActive === active) return current
+      const next = new Set(current)
+      if (active) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+  const activeSurfaceCount = activeSurfaceKeys.size
+
+  return (
+    <WorkspaceAssistantRunningSurfaceSetterContext.Provider value={setRunningSurface}>
+      <WorkspaceAssistantRunningSurfaceCountContext.Provider value={activeSurfaceCount}>
+        {children}
+      </WorkspaceAssistantRunningSurfaceCountContext.Provider>
+    </WorkspaceAssistantRunningSurfaceSetterContext.Provider>
+  )
+}
+
+export function useWorkspaceAssistantRunningSurface(key: string, active: boolean): void {
+  const setRunningSurface = useContext(WorkspaceAssistantRunningSurfaceSetterContext)
+  useLayoutEffect(() => {
+    if (!setRunningSurface) return
+    setRunningSurface(key, active)
+    return () => setRunningSurface(key, false)
+  }, [active, key, setRunningSurface])
+}
+
+export function useWorkspaceAssistantHasRunningSurface(): boolean {
+  return useContext(WorkspaceAssistantRunningSurfaceCountContext) > 0
+}
 
 function WorkspaceAssistantReasoningDisclosure({
   running,
@@ -123,18 +167,6 @@ export function WorkspaceAssistantWaitDots() {
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isProjectAgentRunPartData(value: unknown): value is ProjectAgentRunPartData {
-  if (!isRecord(value)) return false
-  return typeof value.runId === 'string'
-    && typeof value.requestId === 'string'
-    && typeof value.controlKind === 'string'
-    && typeof value.status === 'string'
-}
-
 export function HiddenWorkspaceAssistantReasoning() {
   return null
 }
@@ -148,6 +180,8 @@ export function WorkspaceAssistantReasoningPart({
   const t = useTranslations('assistantAgent')
   const inRunTraceGroup = useContext(WorkspaceAssistantRunTraceGroupContext)
   const running = status.type === 'running'
+  const runningSurfaceId = useId()
+  useWorkspaceAssistantRunningSurface(`reasoning:${runningSurfaceId}`, running && text.trim().length > 0)
   const [open, setOpen] = useState(running)
   const [touched, setTouched] = useState(false)
   const previousRunning = useRef(running)
@@ -229,37 +263,4 @@ export function WorkspaceAssistantRunTraceGroup({
       </WorkspaceAssistantRunTraceGroupContext.Provider>
     </WorkspaceAssistantReasoningDisclosure>
   )
-}
-
-export function WorkspaceAssistantRunReasoningStatus({
-  data,
-}: DataMessagePartProps<ProjectAgentRunPartData>) {
-  const running = useMessage((state) => state.status?.type === 'running')
-  const hasVisibleRunContent = useMessage((state) => {
-    const view = resolveWorkspaceAssistantRunTraceView(state.content)
-    return view.hasPublicReasoning || view.hasVisibleContent
-  })
-  const isFirstRunPart = useMessage((state) => {
-    const firstRunPart = state.content.find((part) => (
-      part.type === 'data'
-      && part.name === 'agent-run'
-      && isProjectAgentRunPartData(part.data)
-    ))
-    return Boolean(
-      firstRunPart
-      && firstRunPart.type === 'data'
-      && isProjectAgentRunPartData(firstRunPart.data)
-      && firstRunPart.data.runId === data.runId
-      && firstRunPart.data.requestId === data.requestId,
-    )
-  })
-
-  if (
-    !isFirstRunPart
-    || data.status !== 'running'
-    || !running
-    || hasVisibleRunContent
-  ) return null
-
-  return <WorkspaceAssistantWaitDots />
 }

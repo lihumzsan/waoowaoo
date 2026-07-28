@@ -726,6 +726,9 @@ function buildGatewayToolDecision(input: {
       toolCallId: `golden_call_${input.requestOrdinal}_${input.operationId}`,
       toolName: input.operationId,
       argumentsJson: JSON.stringify(input.operationArguments),
+      ...(input.operationId === 'request_choice'
+        ? { preambleText: 'I will prepare the complete choices now.' }
+        : {}),
     }
   }
   if (!loadedOperationDefinitions(input.request).has(input.operationId)) {

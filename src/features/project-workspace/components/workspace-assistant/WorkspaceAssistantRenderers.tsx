@@ -34,9 +34,9 @@ import { AssistantChoiceCardView } from './WorkspaceAssistantChoiceCard'
 import {
   HiddenWorkspaceAssistantReasoning,
   WorkspaceAssistantReasoningPart,
-  WorkspaceAssistantRunReasoningStatus,
   WorkspaceAssistantRunTraceGroup,
   WorkspaceAssistantWaitDots,
+  useWorkspaceAssistantHasRunningSurface,
 } from './WorkspaceAssistantReasoning'
 import {
   groupWorkspaceAssistantMessageParts,
@@ -262,7 +262,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     }
     const data = {
       by_name: {
-        'agent-run': WorkspaceAssistantRunReasoningStatus,
+        'agent-run': HiddenRuntimeContextDataCard,
         'agent-operation-start': HiddenRuntimeContextDataCard,
         'agent-subagent-event': HiddenRuntimeContextDataCard,
         'agent-operation-plan-preview': OperationPlanPreviewDataCard,
@@ -371,6 +371,9 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
 export function WorkspaceAssistantPendingTurnPlaceholder(props: {
   readonly label?: string
 }) {
+  const hasRunningSurface = useWorkspaceAssistantHasRunningSurface()
+  if (hasRunningSurface) return null
+
   return (
     <div className="space-y-1">
       <div className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>

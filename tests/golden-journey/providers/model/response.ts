@@ -25,6 +25,7 @@ export function writeGoldenStreamingResponse(input: {
     readonly chunkSize: number
     readonly delayMs: number
   } | null
+  readonly waitAfterToolPreamble?: () => Promise<void>
 }): Promise<void> {
   return writeGoldenStreamingResponseAsync(input)
 }
@@ -37,6 +38,7 @@ async function writeGoldenStreamingResponseAsync(input: {
     readonly chunkSize: number
     readonly delayMs: number
   } | null
+  readonly waitAfterToolPreamble?: () => Promise<void>
 }): Promise<void> {
   input.response.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
@@ -72,6 +74,17 @@ async function writeGoldenStreamingResponseAsync(input: {
       choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
     })
   } else if (input.decision.kind === 'tool_call') {
+    if (input.decision.preambleText) {
+      writeSse(input.response, {
+        ...baseChunk(input.request),
+        choices: [{
+          index: 0,
+          delta: { content: input.decision.preambleText },
+          finish_reason: null,
+        }],
+      })
+      await input.waitAfterToolPreamble?.()
+    }
     writeSse(input.response, {
       ...baseChunk(input.request),
       choices: [{
@@ -142,7 +155,7 @@ export function writeGoldenJsonResponse(input: {
     ? { role: 'assistant', content: input.decision.text }
     : input.decision.kind === 'tool_call' ? {
       role: 'assistant',
-      content: null,
+      content: input.decision.preambleText ?? null,
       tool_calls: [{
         id: input.decision.toolCallId,
         type: 'function',
