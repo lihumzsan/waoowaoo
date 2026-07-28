@@ -1324,7 +1324,21 @@ export async function createProjectAgentChatResponse(input: {
         && resourceContract?.kind === 'resource'
         && resourceContract.assistantPresentation === 'created_resources'
       ) {
-        completedResourceRefs.push(...readCreativeResourceMaterializedRefs(outcome.data))
+        // 链接是已持久化 Operation 结果的只读展示投影;形状异常记录错误并跳过该结果,
+        // 不允许把展示层失败升级为整轮 chat response 失败(权威事实仍在 Task/Resource)。
+        try {
+          completedResourceRefs.push(...readCreativeResourceMaterializedRefs(outcome.data))
+        } catch (error) {
+          projectAgentLogger.error({
+            action: 'assistant.resource_links.refs_invalid',
+            message: 'created_resources outcome could not be projected into links',
+            details: {
+              operationId,
+              toolCallId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+        }
       }
       if (outcome.kind === 'submitted_tasks') {
         submittedTaskReceiptsByToolCall.set(toolCallId, outcome)
@@ -1776,16 +1790,28 @@ export async function createProjectAgentChatResponse(input: {
           ...completedResourceRefs,
         ]
         if (resourceRefs.length > 0) {
-          const resources = await readProjectCreativeResourceLinkViews({
-            projectId: input.projectId,
-            userId: input.userId,
-            refs: resourceRefs,
-          })
-          const resourceLinksChunk = createDataChunk('data-assistant-resource-links', {
-            resources,
-          } satisfies ProjectAgentResourceLinksPartData)
-          recordAssistantChunk(resourceLinksChunk)
-          chunks.push(resourceLinksChunk)
+          // DB 回读竞态(revision 未 ready/已删除)同样只降级为"本轮不显示链接",不失败整轮。
+          try {
+            const resources = await readProjectCreativeResourceLinkViews({
+              projectId: input.projectId,
+              userId: input.userId,
+              refs: resourceRefs,
+            })
+            const resourceLinksChunk = createDataChunk('data-assistant-resource-links', {
+              resources,
+            } satisfies ProjectAgentResourceLinksPartData)
+            recordAssistantChunk(resourceLinksChunk)
+            chunks.push(resourceLinksChunk)
+          } catch (error) {
+            projectAgentLogger.error({
+              action: 'assistant.resource_links.view_failed',
+              message: 'resource link views could not be read; links omitted for this turn',
+              details: {
+                refCount: resourceRefs.length,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          }
         }
 
         if (completionError && !shouldPersistApprovalInterruption) {
