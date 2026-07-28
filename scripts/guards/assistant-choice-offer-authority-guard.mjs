@@ -112,6 +112,9 @@ const files = {
   operationRegistry: read('src/lib/operations/registry.ts'),
   operationTypes: read('src/lib/operations/types.ts'),
   choiceRenderer: read('src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantChoiceCard.tsx'),
+  // Renderers 仍持有 choice part 的注册与分发,必须留在扫描面内,
+  // 防止固定 choiceType 分发在拆分后从这里悄悄回归。
+  messageRenderers: read('src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
 }
 
 const violations = []

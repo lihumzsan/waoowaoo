@@ -85,6 +85,10 @@ if (/activeControlRun\s*\?\?\s*serverOperationRun/.test(runtime)) {
 if (/setTimeout\([\s\S]{0,240}refreshSessionState/.test(runtime)) {
   violations.push(`${runtimePath} restores timer-driven session-state correctness polling`)
 }
+// refreshSessionState 的全部调用点已搬到 interaction hook,该不变量必须跟着执行对象走。
+if (/setTimeout\([\s\S]{0,240}refreshSessionState|setInterval\([\s\S]{0,240}refreshSessionState/.test(interaction)) {
+  violations.push(`${interactionPath} restores timer-driven session-state correctness polling`)
+}
 if (!control.includes('createProjectAgentControlVisibleUserMessageId')) {
   violations.push(`${controlPath} is missing the canonical control visible-message identity authority`)
 }
