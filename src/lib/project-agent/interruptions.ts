@@ -539,17 +539,21 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
       ) {
         throw new Error('PROJECT_AGENT_CHOICE_OFFER_IDENTITY_MISMATCH')
       }
-      await assertProjectAgentChoiceOfferCurrent({
-        tx,
-        projectId: params.projectId,
-        userId: params.userId,
-        episodeId: params.episodeId,
-        offer,
-      })
       const parsedResponse = parseProjectAgentChoiceDecision({
         offer,
         response: params.response,
       })
+      // cancelled 不执行任何 commitment、不消费 subject,必须在 offer 过期时依然可用:
+      // 它正是清除 stale pending Choice(否则会无限期 defer 同 scope 续跑)的唯一用户出口。
+      if (parsedResponse.kind !== 'cancelled') {
+        await assertProjectAgentChoiceOfferCurrent({
+          tx,
+          projectId: params.projectId,
+          userId: params.userId,
+          episodeId: params.episodeId,
+          offer,
+        })
+      }
       const executionSegment = createProjectAgentExecutionSegment({
         kind: 'choice_response',
         interruptionId: record.id,
@@ -737,7 +741,7 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
           select: { operationId: true },
         })
       : null
-    if (!appliedActivity) {
+    if (!appliedActivity && parsedResponse.kind !== 'cancelled') {
       await assertProjectAgentChoiceOfferCurrent({
         tx,
         projectId: params.projectId,
