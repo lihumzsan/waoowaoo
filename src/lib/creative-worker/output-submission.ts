@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { CreativeWorkerError } from './errors'
+import {
+  buildCreativeWorkerSubmissionToolSchema,
+  normalizeCreativeWorkerSubmissionOutput,
+  type CreativeWorkerSubmissionToolSchema,
+} from './submission-transport'
 import type {
   CreativeWorkOutput,
   CreativeWorkOutputDefinition,
@@ -11,21 +16,27 @@ import type {
 
 type JsonRecord = Record<string, unknown>
 
-export type CreativeWorkerSubmissionIssue = {
-  readonly path: string
-  readonly code: string
-  readonly message: string
-}
+export const creativeWorkerSubmissionIssueSchema = z.object({
+  path: z.string().trim().min(1).max(1_000),
+  code: z.string().trim().min(1).max(120),
+  message: z.string().trim().min(1).max(500),
+}).strict()
 
-export class CreativeWorkerSubmissionValidationError extends Error {
-  readonly issues: readonly CreativeWorkerSubmissionIssue[]
+export type CreativeWorkerSubmissionIssue = z.infer<typeof creativeWorkerSubmissionIssueSchema>
 
-  constructor(issues: readonly CreativeWorkerSubmissionIssue[]) {
-    super('CREATIVE_WORK_OUTPUT_INVALID')
-    this.name = 'CreativeWorkerSubmissionValidationError'
-    this.issues = issues
-  }
-}
+export type CreativeWorkerSubmissionResult =
+  | {
+      readonly accepted: true
+      readonly outputKind: CreativeWorkOutputKind
+      readonly outputChars: number
+    }
+  | {
+      readonly accepted: false
+      readonly code: 'CREATIVE_WORK_OUTPUT_INVALID'
+      readonly instruction: string
+      readonly issues: readonly CreativeWorkerSubmissionIssue[]
+      readonly outputChars: number
+    }
 
 function readJsonRecord(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -169,22 +180,27 @@ export function buildCreativeWorkerCanonicalOutputSchema(input: {
   return root
 }
 
-export function formatCreativeWorkerSubmissionError(error: unknown): string {
-  if (!(error instanceof CreativeWorkerSubmissionValidationError)) throw error
-  return JSON.stringify({
+function rejectedSubmission(
+  issues: readonly CreativeWorkerSubmissionIssue[],
+  outputChars: number,
+): CreativeWorkerSubmissionResult {
+  return {
     accepted: false,
     code: 'CREATIVE_WORK_OUTPUT_INVALID',
     instruction: 'Correct every listed issue and call submit_result again in this same run.',
-    issues: error.issues,
-  })
+    issues,
+    outputChars,
+  }
 }
 
 export type CreativeWorkerOutputSubmission = {
   readonly canonicalSchema: JsonRecord
-  readonly submit: (outputJson: string) => {
-    readonly accepted: true
-    readonly outputKind: CreativeWorkOutputKind
-  }
+  readonly toolSchema: CreativeWorkerSubmissionToolSchema
+  readonly reject: (
+    output: unknown,
+    issues: readonly CreativeWorkerSubmissionIssue[],
+  ) => CreativeWorkerSubmissionResult
+  readonly submit: (output: unknown) => CreativeWorkerSubmissionResult
   readonly readAcceptedOutput: () => CreativeWorkOutput | null
 }
 
@@ -198,62 +214,69 @@ export function createCreativeWorkerOutputSubmission(input: {
     kind: input.request.outputKind,
     schema: input.definition.schema,
   })
+  const toolSchema = buildCreativeWorkerSubmissionToolSchema({
+    kind: input.request.outputKind,
+    schema: input.definition.schema,
+  })
+
+  const measureOutput = (output: unknown): number => {
+    const serialized = JSON.stringify(output)
+    return serialized?.length ?? 0
+  }
 
   return {
     canonicalSchema,
-    submit: (outputJson) => {
+    toolSchema,
+    reject: (output, issues) => rejectedSubmission(issues, measureOutput(output)),
+    submit: (submittedOutput) => {
+      const outputChars = measureOutput(submittedOutput)
       if (acceptedOutput) {
-        throw new CreativeWorkerSubmissionValidationError([{
+        return rejectedSubmission([{
           path: '$',
           code: 'already_accepted',
           message: 'A valid result has already been accepted for this run.',
-        }])
+        }], outputChars)
       }
-      if (outputJson.length > input.maxOutputChars) {
-        throw new CreativeWorkerSubmissionValidationError([{
+      if (outputChars > input.maxOutputChars) {
+        return rejectedSubmission([{
           path: '$',
           code: 'too_big',
           message: `Serialized output exceeds the ${String(input.maxOutputChars)} character limit.`,
-        }])
+        }], outputChars)
       }
 
-      let raw: unknown
-      try {
-        raw = JSON.parse(outputJson) as unknown
-      } catch {
-        throw new CreativeWorkerSubmissionValidationError([{
-          path: '$',
-          code: 'invalid_json',
-          message: 'outputJson must contain one complete valid JSON value.',
-        }])
-      }
-
-      const parsed = input.definition.schema.safeParse(raw)
+      const normalizedOutput = normalizeCreativeWorkerSubmissionOutput({
+        schema: input.definition.schema,
+        value: submittedOutput,
+      })
+      const parsed = input.definition.schema.safeParse(normalizedOutput)
       if (!parsed.success) {
-        throw new CreativeWorkerSubmissionValidationError(
+        return rejectedSubmission(
           parsed.error.issues.slice(0, 64).map(normalizeIssue),
+          outputChars,
         )
       }
       const output = parsed.data as CreativeWorkOutput
       if (output.kind !== input.request.outputKind) {
-        throw new CreativeWorkerSubmissionValidationError([{
+        return rejectedSubmission([{
           path: '$.kind',
           code: 'invalid_value',
           message: `Expected output kind "${input.request.outputKind}".`,
-        }])
+        }], outputChars)
       }
       const contextualIssues = validateVideoOutputContext({
         request: input.request,
         output,
       })
       if (contextualIssues.length > 0) {
-        throw new CreativeWorkerSubmissionValidationError(contextualIssues)
+        return rejectedSubmission(contextualIssues, outputChars)
       }
 
       acceptedOutput = output
       return {
         accepted: true,
         outputKind: output.kind,
+        outputChars,
       }
     },
     readAcceptedOutput: () => acceptedOutput,

@@ -39,7 +39,7 @@ describe('TaskDefinition conformance', () => {
       lifecyclePayloadProjection: 'reference',
       executionDeadlineMs: CREATIVE_WORK_EXECUTION_DEADLINE_MS,
     })
-    expect(CREATIVE_WORK_EXECUTION_DEADLINE_MS).toBe(5 * 60_000)
+    expect(CREATIVE_WORK_EXECUTION_DEADLINE_MS).toBe(20 * 60_000)
     expect(
       Object.entries(TASK_DEFINITIONS)
         .filter(([taskType]) => taskType !== TASK_TYPE.CREATIVE_WORK)

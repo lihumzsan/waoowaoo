@@ -431,7 +431,7 @@ export function createAssistantCreativeOperations(): ProjectAgentOperationRegist
   return {
     delegate_creative_work: defineOperation({
       id: 'delegate_creative_work',
-      summary: 'Delegate one or more bounded professional creative reasoning requests to background Subagents. Set delegation.source=requests with a one-or-more requests list for caller-supplied contexts, or delegation.source=chapters to compile persisted Chapter contexts server-side. Every request becomes one independent Creative Task; the Worker sees the complete registered Skill catalog, autonomously reads relevant Skills, and returns structured advice until a normal project Operation adopts or executes it.',
+      summary: 'Delegate one or more bounded professional creative reasoning requests to background Subagents. Set delegation.source=requests with a one-or-more requests list for caller-supplied contexts, or delegation.source=chapters to compile persisted Chapter contexts server-side. Every request becomes one independent Creative Task; its output kind binds exactly one professional Skill, while frozen project resources remain context rather than Skills. The Worker returns structured advice until a normal project Operation adopts or executes it.',
       intent: 'act',
       effects: EFFECTS_CREATIVE_TASK,
       assistantWriteAuthority: { kind: 'transactional_task_submission' },

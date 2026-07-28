@@ -21,8 +21,7 @@ export { runCreativeWorker } from './runtime'
 export {
   buildCreativeWorkerCanonicalOutputSchema,
   createCreativeWorkerOutputSubmission,
-  CreativeWorkerSubmissionValidationError,
-  formatCreativeWorkerSubmissionError,
+  creativeWorkerSubmissionIssueSchema,
 } from './output-submission'
 export {
   compileCreativeWorkSystemConstraints,

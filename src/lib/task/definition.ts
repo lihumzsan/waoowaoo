@@ -30,7 +30,7 @@ export type TaskTerminalModelKeyRequirement = 'required' | 'none'
 export type TaskContinuationResultProjection = 'full' | 'reference'
 export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
-export const CREATIVE_WORK_EXECUTION_DEADLINE_MS = 5 * 60_000
+export const CREATIVE_WORK_EXECUTION_DEADLINE_MS = 20 * 60_000
 
 export type TaskDefinition<Q extends QueueType = QueueType> = {
   queue: Q

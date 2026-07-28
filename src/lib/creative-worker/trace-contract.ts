@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CREATIVE_WORKER_ERROR_CODES } from './errors'
+import { creativeWorkerSubmissionIssueSchema } from './output-submission'
 
 export const CREATIVE_WORK_REASONING_MAX_CHARS = 64_000
 
@@ -37,6 +38,12 @@ export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
     truncated: z.boolean(),
   }).strict(),
   z.object({
+    kind: z.literal('generation'),
+    generationId: z.string().trim().min(1).max(500),
+    phase: z.enum(['preparing', 'creating_output', 'correcting_output']),
+    status: z.enum(['running', 'completed']),
+  }).strict(),
+  z.object({
     kind: z.literal('tool_called'),
     toolCallId: z.string().trim().min(1).max(500),
     toolName: z.literal('read_skill'),
@@ -71,6 +78,22 @@ export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
     status: z.enum(['completed', 'unavailable', 'failed', 'budget_exhausted']),
     sourceCount: z.number().int().nonnegative(),
     imageCount: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    kind: z.literal('submission_started'),
+    submissionId: z.string().trim().min(1).max(500),
+  }).strict(),
+  z.object({
+    kind: z.literal('submission_rejected'),
+    submissionId: z.string().trim().min(1).max(500),
+    outputChars: z.number().int().nonnegative(),
+    issues: z.array(creativeWorkerSubmissionIssueSchema).min(1).max(64),
+  }).strict(),
+  z.object({
+    kind: z.literal('submission_accepted'),
+    submissionId: z.string().trim().min(1).max(500),
+    outputKind: z.string().trim().min(1).max(64),
+    outputChars: z.number().int().nonnegative(),
   }).strict(),
 ])
 

@@ -65,6 +65,7 @@ export function resolveWorkspaceAssistantRunFailureDetail(params: {
 
 export type WorkspaceAssistantSubagentEventGlyph =
   | 'alert'
+  | 'check'
   | 'globe'
   | 'loader'
   | 'none'
@@ -78,6 +79,7 @@ export function resolveWorkspaceAssistantSubagentEventGlyph(params: {
   const event = params.part.event
   if (
     event.kind === 'tool_failed'
+    || event.kind === 'submission_rejected'
     || (event.kind === 'research_completed' && event.status !== 'completed')
   ) {
     return 'alert'
@@ -85,6 +87,8 @@ export function resolveWorkspaceAssistantSubagentEventGlyph(params: {
 
   const isOpen = event.kind === 'tool_called'
     || event.kind === 'research_started'
+    || event.kind === 'submission_started'
+    || (event.kind === 'generation' && event.status === 'running')
     || (event.kind === 'reasoning' && event.status === 'running')
   if (isOpen && params.isLast) {
     if (params.subagentStatus === 'running') return 'loader'
@@ -96,6 +100,7 @@ export function resolveWorkspaceAssistantSubagentEventGlyph(params: {
   if (event.kind === 'research_started' || event.kind === 'research_completed') {
     return 'globe'
   }
+  if (event.kind === 'submission_accepted') return 'check'
   if (event.kind === 'tool_called' || event.kind === 'tool_completed') {
     return 'tool'
   }

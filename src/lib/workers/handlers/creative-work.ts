@@ -8,10 +8,11 @@ import {
   creativeWorkerResultSchema,
   runCreativeWorker,
   summarizeCreativeWorkOutput,
-  type CreativeWorkTaskLifecycleProjection,
-  type CreativeWorkTraceEvent,
-  type CreativeWorkerEvent,
 } from '@/lib/creative-worker'
+import {
+  applyCreativeWorkerLifecycleEvent,
+  isDurableCreativeWorkerTraceEvent,
+} from '@/lib/creative-worker/lifecycle-projection'
 import {
   resolveProjectAgentLanguageModel,
 } from '@/lib/project-agent/model'
@@ -23,86 +24,6 @@ import {
   createWorkerLLMStreamCallbacks,
   createWorkerLLMStreamContext,
 } from './llm-stream'
-
-type PersistedCreativeWorkerEvent = CreativeWorkTraceEvent
-
-function isPersistedCreativeWorkerEvent(
-  event: CreativeWorkerEvent,
-): event is PersistedCreativeWorkerEvent {
-  return event.kind === 'started'
-    || event.kind === 'skill_read'
-    || event.kind === 'reasoning'
-    || event.kind === 'tool_called'
-    || event.kind === 'tool_completed'
-    || event.kind === 'tool_failed'
-}
-
-function withAttemptIdentity(
-  event: PersistedCreativeWorkerEvent,
-  attempt: number,
-): PersistedCreativeWorkerEvent {
-  if (event.kind === 'reasoning') {
-    return { ...event, reasoningId: `${String(attempt)}:${event.reasoningId}` }
-  }
-  if (
-    event.kind === 'tool_called'
-    || event.kind === 'tool_completed'
-    || event.kind === 'tool_failed'
-  ) return { ...event, toolCallId: `${String(attempt)}:${event.toolCallId}` }
-  return event
-}
-
-function applyProgressEvent(
-  lifecycle: CreativeWorkTaskLifecycleProjection,
-  rawEvent: PersistedCreativeWorkerEvent,
-  attempt: number,
-): CreativeWorkTaskLifecycleProjection {
-  const event = withAttemptIdentity(rawEvent, attempt)
-  if (event.kind === 'started') return lifecycle
-  if (event.kind === 'reasoning') {
-    const existingIndex = lifecycle.events.findIndex((entry) => (
-      entry.event.kind === 'reasoning'
-      && entry.event.reasoningId === event.reasoningId
-    ))
-    if (existingIndex >= 0) {
-      return {
-        ...lifecycle,
-        events: lifecycle.events.map((entry, index) => (
-          index === existingIndex ? { ...entry, event } : entry
-        )),
-      }
-    }
-  }
-  if (event.kind === 'tool_completed' || event.kind === 'tool_failed') {
-    const existingIndex = lifecycle.events.findIndex((entry) => (
-      entry.event.kind === 'tool_called'
-      && entry.event.toolCallId === event.toolCallId
-    ))
-    if (existingIndex < 0) {
-      throw new Error(`CREATIVE_WORK_TOOL_CALL_PROJECTION_MISSING:${event.toolCallId}`)
-    }
-    return {
-      ...lifecycle,
-      events: lifecycle.events.map((entry, index) => (
-        index === existingIndex ? { ...entry, event } : entry
-      )),
-    }
-  }
-  if (lifecycle.events.length >= 64) {
-    throw new Error('CREATIVE_WORK_LIFECYCLE_PROJECTION_EXHAUSTED')
-  }
-  return {
-    ...lifecycle,
-    events: [
-      ...lifecycle.events,
-      {
-        sequence: lifecycle.events.length + 1,
-        occurredAt: new Date().toISOString(),
-        event,
-      },
-    ],
-  }
-}
 
 export async function handleCreativeWorkTask(
   job: Job<TaskJobData>,
@@ -183,10 +104,15 @@ export async function handleCreativeWorkTask(
           })
           return
         }
-        if (!isPersistedCreativeWorkerEvent(event)) return
+        if (!isDurableCreativeWorkerTraceEvent(event)) return
         if (event.kind === 'started') return
         if (event.kind === 'skill_read' && event.trace.source === 'tool') return
-        lifecycle = applyProgressEvent(lifecycle, event, attempt!)
+        lifecycle = applyCreativeWorkerLifecycleEvent({
+          lifecycle,
+          rawEvent: event,
+          attempt: attempt!,
+          occurredAt: new Date().toISOString(),
+        })
         const progress = Math.min(85, 20 + lifecycle.events.length * 5)
         await reportTaskProgress(job, progress, {
           stage: 'creative_work_reasoning',

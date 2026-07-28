@@ -194,7 +194,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v11' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v12' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),

@@ -775,7 +775,13 @@ export function decideGoldenModelResponse(input: {
         ? 'creative-direction'
         : text.includes('asset_manifest')
           ? 'asset-development'
-          : 'story-development'
+          : text.includes('story_canon') || text.includes('continuity_analysis')
+            ? 'continuity-memory'
+            : text.includes('video_prompt_set')
+              ? 'video-direction'
+              : text.includes('music_direction')
+                ? 'music-direction'
+                : 'story-development'
       return {
         kind: 'tool_call',
         toolCallId: `golden_call_${input.requestOrdinal}_read_skill`,
@@ -788,7 +794,7 @@ export function decideGoldenModelResponse(input: {
         kind: 'tool_call',
         toolCallId: `golden_call_${input.requestOrdinal}_submit_result`,
         toolName: 'submit_result',
-        argumentsJson: JSON.stringify({ outputJson: structuredText }),
+        argumentsJson: JSON.stringify({ output: JSON.parse(structuredText) as unknown }),
       }
     }
     return { kind: 'text', text: structuredText }

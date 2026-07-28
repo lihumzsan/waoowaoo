@@ -1,6 +1,6 @@
 import { tool, type Tool } from '@openai/agents'
 import { z } from 'zod'
-import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills'
+import type { CreativeSkillId } from '@/lib/creative-skills'
 import {
   readCreativeWorkerSkillResource,
 } from './skill-access'
@@ -15,23 +15,14 @@ import {
   recordCompletedResearchAttempt,
   recordResearchFailure,
 } from './research'
-import {
-  formatCreativeWorkerSubmissionError,
+import type {
+  CreativeWorkerSubmissionResult,
 } from './output-submission'
+import type { CreativeWorkerSubmissionToolSchema } from './submission-transport'
 import type { CreativeWorkTraceEvent } from './trace-contract'
 import type {
   CreativeWorkerRunContext,
 } from './types'
-
-const readSkillInputSchema = z.object({
-  skillId: z.enum(CREATIVE_SKILL_IDS)
-    .describe('Exact registered Skill ID from the complete skillCatalog supplied in the Worker input.'),
-}).strict()
-
-export const creativeWorkerSubmitResultInputSchema = z.object({
-  outputJson: z.string()
-    .describe('One complete JSON serialization of the final result. It must satisfy the canonical outputSchema supplied in this run input.'),
-}).strict()
 
 function requireRunContext(
   runContext: { context: CreativeWorkerRunContext } | undefined,
@@ -55,7 +46,13 @@ async function emitResearchEvent(
   await context.onEvent(event)
 }
 
-function createReadSkillTool(): Tool<CreativeWorkerRunContext> {
+function createReadSkillTool(
+  professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>,
+): Tool<CreativeWorkerRunContext> {
+  const readSkillInputSchema = z.object({
+    skillId: z.literal(professionalSkillId)
+      .describe('The one professional Skill bound to this output kind by the output registry.'),
+  }).strict()
   return tool({
     name: 'read_skill',
     description: 'Read one registered Creative Skill selected from the complete skillCatalog already supplied for this run. This tool is read-only and cannot access arbitrary files.',
@@ -206,34 +203,53 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
   })
 }
 
+function readSubmittedOutput(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  return (input as Record<string, unknown>).output
+}
+
 function createSubmitResultTool(input: {
-  readonly submitOutputJson: (outputJson: string) => {
-    readonly accepted: true
-    readonly outputKind: string
-  }
+  readonly toolSchema: CreativeWorkerSubmissionToolSchema
+  readonly submitOutput: (input: {
+    readonly submissionId: string
+    readonly output: unknown
+  }) => CreativeWorkerSubmissionResult | Promise<CreativeWorkerSubmissionResult>
 }): Tool<CreativeWorkerRunContext> {
   return tool({
     name: 'submit_result',
-    description: 'Submit the final Creative Worker result for canonical validation. Pass exactly one JSON serialization in outputJson. If validation returns accepted=false, correct every listed field issue and call submit_result again in this same run. A successful submission ends the run.',
-    parameters: creativeWorkerSubmitResultInputSchema,
+    description: 'Submit the complete final Creative Worker result directly as the structured output object. Do not serialize it into a string. If validation returns accepted=false, correct every listed field issue and call submit_result again in this same run. A successful submission ends the run.',
+    parameters: input.toolSchema,
     strict: true,
-    execute: ({ outputJson }) => input.submitOutputJson(outputJson),
-    errorFunction: (_runContext, error) => formatCreativeWorkerSubmissionError(error),
+    execute: (rawInput, _runContext, details) => {
+      const submissionId = details?.toolCall?.callId.trim() ?? ''
+      if (!submissionId) {
+        throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {
+          reason: 'submit_result tool identity is missing',
+        })
+      }
+      return input.submitOutput({
+        submissionId,
+        output: readSubmittedOutput(rawInput),
+      })
+    },
   })
 }
 
 export function createCreativeWorkerTools(input: {
   readonly workerTools: readonly 'web_search'[]
-  readonly submitOutputJson: (outputJson: string) => {
-    readonly accepted: true
-    readonly outputKind: string
-  }
+  readonly professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>
+  readonly submissionToolSchema: CreativeWorkerSubmissionToolSchema
+  readonly submitOutput: (input: {
+    readonly submissionId: string
+    readonly output: unknown
+  }) => CreativeWorkerSubmissionResult | Promise<CreativeWorkerSubmissionResult>
 }): readonly Tool<CreativeWorkerRunContext>[] {
   return [
-    createReadSkillTool(),
+    createReadSkillTool(input.professionalSkillId),
     ...(input.workerTools.includes('web_search') ? [createWebSearchTool()] : []),
     createSubmitResultTool({
-      submitOutputJson: input.submitOutputJson,
+      toolSchema: input.submissionToolSchema,
+      submitOutput: input.submitOutput,
     }),
   ]
 }

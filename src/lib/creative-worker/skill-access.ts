@@ -1,5 +1,4 @@
 import {
-  CREATIVE_SKILLS,
   getCreativeSkillDefinition,
   readCreativeSkillResource,
   type CreativeSkillDiscovery,
@@ -69,15 +68,18 @@ export async function readCreativeWorkerSkillResource(input: {
   return resource
 }
 
-export function listCreativeWorkerSkillCatalog(): readonly CreativeSkillDiscovery[] {
-  return CREATIVE_SKILLS.map((definition) => ({
+export function listCreativeWorkerSkillCatalog(
+  professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>,
+): readonly CreativeSkillDiscovery[] {
+  const definition = getCreativeSkillDefinition(professionalSkillId)
+  return [{
     id: definition.id,
     version: definition.version,
     title: definition.title,
     summary: definition.summary,
     tags: definition.tags,
     entryUri: definition.entryUri,
-  }))
+  }]
 }
 
 export async function loadPreloadedCreativeSkills(input: {

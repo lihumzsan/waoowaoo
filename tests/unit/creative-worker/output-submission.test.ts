@@ -9,13 +9,14 @@ import type {
 import {
   buildCreativeWorkerCanonicalOutputSchema,
   createCreativeWorkerOutputSubmission,
-  CreativeWorkerSubmissionValidationError,
   creativeWorkOutputRegistry,
-  formatCreativeWorkerSubmissionError,
   runCreativeWorker,
 } from '@/lib/creative-worker'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
-import type { CreativeWorkRequest } from '@/lib/creative-worker/types'
+import type {
+  CreativeWorkerEvent,
+  CreativeWorkRequest,
+} from '@/lib/creative-worker/types'
 
 const screenplayRequest: CreativeWorkRequest = {
   outputKind: 'screenplay',
@@ -89,10 +90,10 @@ class CorrectingSubmissionModel implements Model {
             callId: 'submit-invalid',
             name: 'submit_result',
             arguments: JSON.stringify({
-              outputJson: JSON.stringify({
+              output: {
                 ...validScreenplayOutput,
                 title: '',
-              }),
+              },
             }),
           }]
         : [{
@@ -100,7 +101,7 @@ class CorrectingSubmissionModel implements Model {
             callId: 'submit-corrected',
             name: 'submit_result',
             arguments: JSON.stringify({
-              outputJson: JSON.stringify(validScreenplayOutput),
+              output: validScreenplayOutput,
             }),
           }]
     yield { type: 'response_started' }
@@ -165,30 +166,22 @@ describe('Creative Worker result submission contract', () => {
       maxOutputChars: 120_000,
     })
 
-    expect(() => submission.submit(JSON.stringify({
+    expect(submission.submit({
       ...validScreenplayOutput,
       title: '',
-    }))).toThrow(CreativeWorkerSubmissionValidationError)
+    })).toMatchObject({
+      accepted: false,
+      code: 'CREATIVE_WORK_OUTPUT_INVALID',
+      issues: [{
+        path: '$.title',
+        code: 'too_small',
+      }],
+    })
 
-    try {
-      submission.submit(JSON.stringify({
-        ...validScreenplayOutput,
-        title: '',
-      }))
-    } catch (error) {
-      expect(JSON.parse(formatCreativeWorkerSubmissionError(error))).toMatchObject({
-        accepted: false,
-        code: 'CREATIVE_WORK_OUTPUT_INVALID',
-        issues: [{
-          path: '$.title',
-          code: 'too_small',
-        }],
-      })
-    }
-
-    expect(submission.submit(JSON.stringify(validScreenplayOutput))).toEqual({
+    expect(submission.submit(validScreenplayOutput)).toEqual({
       accepted: true,
       outputKind: 'screenplay',
+      outputChars: JSON.stringify(validScreenplayOutput).length,
     })
     expect(submission.readAcceptedOutput()).toEqual(validScreenplayOutput)
   })
@@ -236,32 +229,27 @@ describe('Creative Worker result submission contract', () => {
       maxOutputChars: 120_000,
     })
 
-    try {
-      submission.submit(JSON.stringify({
-        kind: 'video_prompt_set',
-        segments: [
-          { key: 'same-key', durationSeconds: 4, prompt: 'First action.', mediaResourceIds: [] },
-          { key: 'same-key', durationSeconds: 4, prompt: 'Second action.', mediaResourceIds: [] },
-        ],
-      }))
-      throw new Error('INVALID_VIDEO_SUBMISSION_MUST_FAIL')
-    } catch (error) {
-      expect(JSON.parse(formatCreativeWorkerSubmissionError(error))).toMatchObject({
-        accepted: false,
-        issues: expect.arrayContaining([
-          expect.objectContaining({
-            path: '$.segments[1].key',
-            code: 'duplicate',
-          }),
-          expect.objectContaining({
-            path: '$.segments',
-            code: 'duration_total_mismatch',
-          }),
-        ]),
-      })
-    }
+    expect(submission.submit({
+      kind: 'video_prompt_set',
+      segments: [
+        { key: 'same-key', durationSeconds: 4, prompt: 'First action.', mediaResourceIds: [] },
+        { key: 'same-key', durationSeconds: 4, prompt: 'Second action.', mediaResourceIds: [] },
+      ],
+    })).toMatchObject({
+      accepted: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: '$.segments[1].key',
+          code: 'duplicate',
+        }),
+        expect.objectContaining({
+          path: '$.segments',
+          code: 'duration_total_mismatch',
+        }),
+      ]),
+    })
 
-    expect(submission.submit(JSON.stringify({
+    const validVideoOutput = {
       kind: 'video_prompt_set',
       segments: [
         {
@@ -277,9 +265,11 @@ describe('Creative Worker result submission contract', () => {
           mediaResourceIds: [imageResourceId],
         },
       ],
-    }))).toEqual({
+    } as const
+    expect(submission.submit(validVideoOutput)).toEqual({
       accepted: true,
       outputKind: 'video_prompt_set',
+      outputChars: JSON.stringify(validVideoOutput).length,
     })
   })
 
@@ -331,7 +321,7 @@ describe('Creative Worker result submission contract', () => {
         definition: creativeWorkOutputRegistry.video_prompt_set,
         maxOutputChars: 120_000,
       })
-      expect(() => submission.submit(JSON.stringify({
+      expect(submission.submit({
         kind: 'video_prompt_set',
         segments: [{
           key: 'only',
@@ -339,22 +329,35 @@ describe('Creative Worker result submission contract', () => {
           prompt: 'One exact executable segment.',
           mediaResourceIds,
         }],
-      }))).toThrow(CreativeWorkerSubmissionValidationError)
+      })).toMatchObject({
+        accepted: false,
+        code: 'CREATIVE_WORK_OUTPUT_INVALID',
+      })
     }
   })
 
-  it('keeps the provider-facing submit_result parameters fixed across output kinds', () => {
+  it('gives submit_result a direct structured output object derived from the canonical schema', () => {
     const accept = () => ({
       accepted: true as const,
-      outputKind: 'test',
+      outputKind: 'screenplay' as const,
+      outputChars: 1,
+    })
+    const screenplaySubmission = createCreativeWorkerOutputSubmission({
+      request: screenplayRequest,
+      definition: creativeWorkOutputRegistry.screenplay,
+      maxOutputChars: 120_000,
     })
     const withoutSearch = createCreativeWorkerTools({
       workerTools: [],
-      submitOutputJson: accept,
+      professionalSkillId: 'story-development',
+      submissionToolSchema: screenplaySubmission.toolSchema,
+      submitOutput: accept,
     }).find((tool) => tool.name === 'submit_result')
     const withSearch = createCreativeWorkerTools({
       workerTools: ['web_search'],
-      submitOutputJson: accept,
+      professionalSkillId: 'story-development',
+      submissionToolSchema: screenplaySubmission.toolSchema,
+      submitOutput: accept,
     }).find((tool) => tool.name === 'submit_result')
     if (withoutSearch?.type !== 'function' || withSearch?.type !== 'function') {
       throw new Error('SUBMIT_RESULT_FUNCTION_TOOL_REQUIRED')
@@ -368,9 +371,22 @@ describe('Creative Worker result submission contract', () => {
       parameters: {
         type: 'object',
         additionalProperties: false,
-        required: ['outputJson'],
+        required: ['output'],
         properties: {
-          outputJson: { type: 'string' },
+          output: {
+            type: 'object',
+            additionalProperties: false,
+            required: [
+              'kind',
+              'title',
+              'logline',
+              'synopsis',
+              'screenplayText',
+              'source',
+              'assumptions',
+              'openQuestions',
+            ],
+          },
         },
       },
     })
@@ -386,28 +402,29 @@ describe('Creative Worker result submission contract', () => {
       maxOutputChars: 120_000,
     })
 
-    try {
-      submission.submit(JSON.stringify({
-        kind: 'asset_manifest',
-        overview: 'Manifest overview.',
-        assets: Array.from({ length: 100 }, () => ({})),
-        assumptions: [],
-        warnings: [],
-      }))
-      throw new Error('INVALID_MANIFEST_SUBMISSION_MUST_FAIL')
-    } catch (error) {
-      if (!(error instanceof CreativeWorkerSubmissionValidationError)) throw error
-      expect(error.issues).toHaveLength(64)
-      expect(error.issues.every((issue) => issue.message.length <= 500)).toBe(true)
-    }
+    const result = submission.submit({
+      kind: 'asset_manifest',
+      overview: 'Manifest overview.',
+      assets: Array.from({ length: 100 }, () => ({})),
+      assumptions: [],
+      warnings: [],
+    })
+    expect(result.accepted).toBe(false)
+    if (result.accepted) return
+    expect(result.issues).toHaveLength(64)
+    expect(result.issues.every((issue) => issue.message.length <= 500)).toBe(true)
   })
 
   it('returns canonical field errors to the model and accepts its correction in the same Worker run', async () => {
     const model = new CorrectingSubmissionModel()
+    const events: CreativeWorkerEvent[] = []
     const result = await runCreativeWorker({
       model,
       signal: new AbortController().signal,
       request: screenplayRequest,
+      onEvent: (event) => {
+        events.push(event)
+      },
     })
 
     expect(result.output).toEqual(validScreenplayOutput)
@@ -437,5 +454,16 @@ describe('Creative Worker result submission contract', () => {
 
     expect(JSON.stringify(model.requests[2]?.input)).toContain('CREATIVE_WORK_OUTPUT_INVALID')
     expect(JSON.stringify(model.requests[2]?.input)).toContain('$.title')
+    expect(events.filter((event) => event.kind === 'submission_rejected')).toHaveLength(1)
+    expect(events.filter((event) => event.kind === 'submission_accepted')).toHaveLength(1)
+    expect(events.flatMap((event) => (
+      event.kind === 'generation' && event.status === 'running'
+        ? [event.phase]
+        : []
+    ))).toEqual([
+      'preparing',
+      'creating_output',
+      'correcting_output',
+    ])
   })
 })

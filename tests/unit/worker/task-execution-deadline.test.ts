@@ -50,13 +50,13 @@ describe('Task attempt execution deadline', () => {
 
   it('routes the typed timeout through the existing Task retry policy', () => {
     const normalized = normalizeAnyError(
-      new TaskExecutionDeadlineExceededError('creative_work', 300_000),
+      new TaskExecutionDeadlineExceededError('creative_work', 1_200_000),
       { context: 'worker' },
     )
     expect(normalized).toMatchObject({
       code: 'GENERATION_TIMEOUT',
       retryable: true,
-      details: { taskType: 'creative_work', timeoutMs: 300_000 },
+      details: { taskType: 'creative_work', timeoutMs: 1_200_000 },
     })
     expect(shouldRetryTaskFailure({
       taskType: 'creative_work',

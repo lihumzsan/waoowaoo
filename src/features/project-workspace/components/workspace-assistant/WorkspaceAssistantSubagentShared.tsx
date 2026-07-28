@@ -58,6 +58,20 @@ export function localizeEvent(
       return event.status === 'running'
         ? t('subagents.events.reasoningRunning')
         : t('subagents.events.reasoningCompleted')
+    case 'generation':
+      if (event.phase === 'preparing') {
+        return event.status === 'running'
+          ? t('subagents.events.generationPreparing')
+          : t('subagents.events.generationPrepared')
+      }
+      if (event.phase === 'correcting_output') {
+        return event.status === 'running'
+          ? t('subagents.events.generationCorrecting')
+          : t('subagents.events.generationCorrected')
+      }
+      return event.status === 'running'
+        ? t('subagents.events.generationCreating')
+        : t('subagents.events.generationCreated')
     case 'tool_called':
       return t('subagents.events.toolCalled', {
         skill: creativeSkillTitle(event.skillId),
@@ -79,6 +93,16 @@ export function localizeEvent(
             images: event.imageCount,
           })
         : t('subagents.events.researchUnavailable')
+    case 'submission_started':
+      return t('subagents.events.submissionStarted')
+    case 'submission_rejected':
+      return t('subagents.events.submissionRejected', {
+        issues: event.issues.length,
+      })
+    case 'submission_accepted':
+      return t('subagents.events.submissionAccepted', {
+        chars: event.outputChars,
+      })
   }
 }
 

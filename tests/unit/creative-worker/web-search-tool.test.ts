@@ -1,6 +1,8 @@
 import { RunContext } from '@openai/agents'
 import { describe, expect, it } from 'vitest'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
+import { creativeWorkOutputRegistry } from '@/lib/creative-worker/output-registry'
+import { buildCreativeWorkerSubmissionToolSchema } from '@/lib/creative-worker/submission-transport'
 import {
   defaultCreativeWorkerBudgets,
   type CreativeWorkerRunContext,
@@ -10,8 +12,19 @@ import { WebSearchError } from '@/lib/web-search'
 
 const acceptTestSubmission = () => ({
   accepted: true as const,
-  outputKind: 'creative_direction',
+  outputKind: 'creative_direction' as const,
+  outputChars: 1,
 })
+
+function createDirectionTools(workerTools: readonly 'web_search'[]) {
+  const definition = creativeWorkOutputRegistry.creative_direction
+  return createCreativeWorkerTools({
+    workerTools,
+    professionalSkillId: definition.professionalSkillId,
+    submissionToolSchema: buildCreativeWorkerSubmissionToolSchema(definition),
+    submitOutput: acceptTestSubmission,
+  })
+}
 
 function runContext(input: {
   readonly maxCalls: number
@@ -72,10 +85,8 @@ describe('Creative Direction Worker web_search tool', () => {
         }
       },
     })
-    const tool = createCreativeWorkerTools({
-      workerTools: ['web_search'],
-      submitOutputJson: acceptTestSubmission,
-    }).find((candidate) => candidate.name === 'web_search')
+    const tool = createDirectionTools(['web_search'])
+      .find((candidate) => candidate.name === 'web_search')
     if (tool?.type !== 'function') throw new Error('WEB_SEARCH_TOOL_REQUIRED')
     const agentContext = new RunContext(context)
 
@@ -125,10 +136,7 @@ describe('Creative Direction Worker web_search tool', () => {
   })
 
   it('does not create the search tool for output kinds whose registry declaration is empty', () => {
-    expect(createCreativeWorkerTools({
-      workerTools: [],
-      submitOutputJson: acceptTestSubmission,
-    }).map((tool) => tool.name)).toEqual([
+    expect(createDirectionTools([]).map((tool) => tool.name)).toEqual([
       'read_skill',
       'submit_result',
     ])
@@ -163,10 +171,7 @@ describe('Creative Direction Worker web_search tool', () => {
         }
       },
     })
-    const tool = createCreativeWorkerTools({
-      workerTools: ['web_search'],
-      submitOutputJson: acceptTestSubmission,
-    })
+    const tool = createDirectionTools(['web_search'])
       .find((candidate) => candidate.name === 'web_search')
     if (!tool || tool.type !== 'function') throw new Error('WEB_SEARCH_TOOL_MISSING')
     const runner = new RunContext(context)

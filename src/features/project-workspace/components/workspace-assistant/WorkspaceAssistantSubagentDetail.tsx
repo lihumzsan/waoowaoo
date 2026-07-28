@@ -42,6 +42,9 @@ function SubagentEventGlyph(props: {
   if (glyph === 'tool') {
     return <AppIcon name="settingsHex" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
   }
+  if (glyph === 'check') {
+    return <AppIcon name="check" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+  }
   return null
 }
 
@@ -81,6 +84,27 @@ function SubagentEventBody(props: {
           <dt>{props.t('subagents.events.toolUri')}</dt>
           <dd className="break-all">{event.trace.uri}</dd>
         </dl>
+      </details>
+    )
+  }
+  if (event.kind === 'submission_rejected') {
+    return (
+      <details className="group min-w-0 flex-1">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5">
+          <span className="min-w-0 break-words">{label}</span>
+          <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <ol className="mt-1 space-y-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
+          {event.issues.map((issue, index) => (
+            <li key={`${event.submissionId}:${String(index)}`} className="break-words">
+              <span className="font-mono">{issue.path}</span>
+              {' · '}
+              <span className="font-mono">{issue.code}</span>
+              {' · '}
+              <span>{issue.message}</span>
+            </li>
+          ))}
+        </ol>
       </details>
     )
   }

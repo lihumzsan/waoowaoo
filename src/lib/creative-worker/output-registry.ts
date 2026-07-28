@@ -8,6 +8,7 @@ import {
   assetManifestWorkerOutputSchema,
   screenplayWorkerOutputSchema,
 } from '@/lib/screenplay'
+import type { CreativeSkillId } from '@/lib/creative-skills'
 import type { CreativeWorkSystemConstraintId } from './system-constraints'
 import type { CreativeWorkOutputKind } from './types'
 
@@ -106,6 +107,7 @@ export type CreativeWorkOutput = {
 
 export interface CreativeWorkOutputDefinition {
   kind: CreativeWorkOutputKind
+  professionalSkillId: Exclude<CreativeSkillId, 'creative-core'>
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
   injectCreativeDirection: boolean
@@ -116,6 +118,7 @@ export interface CreativeWorkOutputDefinition {
 export const creativeWorkOutputRegistry = {
   screenplay: {
     kind: 'screenplay',
+    professionalSkillId: 'story-development',
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
     injectCreativeDirection: true,
@@ -124,6 +127,7 @@ export const creativeWorkOutputRegistry = {
   },
   story_canon: {
     kind: 'story_canon',
+    professionalSkillId: 'continuity-memory',
     schema: creativeWorkOutputSchemas.story_canon,
     resourceScope: 'project',
     injectCreativeDirection: true,
@@ -132,6 +136,7 @@ export const creativeWorkOutputRegistry = {
   },
   chapter_plan: {
     kind: 'chapter_plan',
+    professionalSkillId: 'story-development',
     schema: creativeWorkOutputSchemas.chapter_plan,
     resourceScope: 'episode',
     injectCreativeDirection: true,
@@ -140,6 +145,7 @@ export const creativeWorkOutputRegistry = {
   },
   continuity_analysis: {
     kind: 'continuity_analysis',
+    professionalSkillId: 'continuity-memory',
     schema: creativeWorkOutputSchemas.continuity_analysis,
     resourceScope: 'episode',
     injectCreativeDirection: true,
@@ -148,6 +154,7 @@ export const creativeWorkOutputRegistry = {
   },
   creative_direction: {
     kind: 'creative_direction',
+    professionalSkillId: 'creative-direction',
     schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
     injectCreativeDirection: false,
@@ -156,6 +163,7 @@ export const creativeWorkOutputRegistry = {
   },
   asset_manifest: {
     kind: 'asset_manifest',
+    professionalSkillId: 'asset-development',
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
     injectCreativeDirection: true,
@@ -164,6 +172,7 @@ export const creativeWorkOutputRegistry = {
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
+    professionalSkillId: 'video-direction',
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
     injectCreativeDirection: true,
@@ -172,6 +181,7 @@ export const creativeWorkOutputRegistry = {
   },
   music_direction: {
     kind: 'music_direction',
+    professionalSkillId: 'music-direction',
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
     injectCreativeDirection: true,

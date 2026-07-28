@@ -18,6 +18,7 @@ import {
 } from '@/lib/creative-worker'
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
 import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-access'
+import { buildCreativeWorkerSubmissionToolSchema } from '@/lib/creative-worker/submission-transport'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
@@ -1043,25 +1044,20 @@ describe('project agent toolset conformance', () => {
     }
   })
 
-  it('gives every Creative Worker the complete Skill catalog and only registry-declared tools', () => {
-    const catalog = listCreativeWorkerSkillCatalog()
-    expect(catalog.map((skill) => skill.id)).toEqual([
-      ...CREATIVE_SKILL_IDS,
-    ])
-    expect(catalog.every((skill) => (
-      skill.title.length > 0 && skill.summary.length > 0 && skill.entryUri.startsWith('skill://')
-    ))).toBe(true)
+  it('binds every Creative Worker output kind to one professional Skill and registry-declared tools', () => {
     expect(Object.keys(creativeWorkOutputRegistry)).toEqual([...CREATIVE_WORK_OUTPUT_KINDS])
-    for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
-      const catalogToken = `outputKind=${outputKind}`
-      expect(
-        catalog.some((skill) => skill.summary.includes(catalogToken)),
-        `Skill catalog must route ${outputKind}`,
-      ).toBe(true)
-    }
-    expect(Object.values(creativeWorkOutputRegistry).every((definition) => (
-      !('requiredSkillIds' in definition)
-    ))).toBe(true)
+    expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
+      [kind, definition.professionalSkillId]
+    )))).toEqual({
+      screenplay: 'story-development',
+      story_canon: 'continuity-memory',
+      chapter_plan: 'story-development',
+      continuity_analysis: 'continuity-memory',
+      creative_direction: 'creative-direction',
+      asset_manifest: 'asset-development',
+      video_prompt_set: 'video-direction',
+      music_direction: 'music-direction',
+    })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, definition.resourceScope]
     )))).toEqual({
@@ -1089,7 +1085,13 @@ describe('project agent toolset conformance', () => {
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, createCreativeWorkerTools({
         workerTools: definition.workerTools,
-        submitOutputJson: () => ({ accepted: true, outputKind: kind }),
+        professionalSkillId: definition.professionalSkillId,
+        submissionToolSchema: buildCreativeWorkerSubmissionToolSchema(definition),
+        submitOutput: () => ({
+          accepted: true,
+          outputKind: definition.kind,
+          outputChars: 1,
+        }),
       }).map((tool) => tool.name)]
     )))).toEqual({
       screenplay: ['read_skill', 'submit_result'],
@@ -1103,6 +1105,31 @@ describe('project agent toolset conformance', () => {
     })
     for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
       const definition = creativeWorkOutputRegistry[outputKind]
+      const catalog = listCreativeWorkerSkillCatalog(definition.professionalSkillId)
+      expect(catalog).toHaveLength(1)
+      expect(catalog[0]).toMatchObject({
+        id: definition.professionalSkillId,
+        entryUri: `skill://${definition.professionalSkillId}/SKILL.md`,
+      })
+      const readSkillTool = createCreativeWorkerTools({
+        workerTools: definition.workerTools,
+        professionalSkillId: definition.professionalSkillId,
+        submissionToolSchema: buildCreativeWorkerSubmissionToolSchema(definition),
+        submitOutput: () => ({
+          accepted: true,
+          outputKind: definition.kind,
+          outputChars: 1,
+        }),
+      }).find((tool) => tool.name === 'read_skill')
+      expect(readSkillTool).toMatchObject({
+        parameters: {
+          properties: {
+            skillId: {
+              const: definition.professionalSkillId,
+            },
+          },
+        },
+      })
       {
         const systemPrompt = buildCreativeWorkerSystemPrompt({
           enableWebSearch: definition.workerTools.length > 0,
@@ -1187,7 +1214,7 @@ describe('project agent toolset conformance', () => {
   })
 
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
-    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v11')
+    expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v12')
     const lifecycleProjection = {
       requestKey: 'analysis-1',
       outputKind: 'continuity_analysis' as const,

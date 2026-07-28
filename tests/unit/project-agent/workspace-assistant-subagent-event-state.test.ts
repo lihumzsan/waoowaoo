@@ -58,4 +58,41 @@ describe('Workspace Subagent event glyphs', () => {
       isLast: true,
     })).toBe('alert')
   })
+
+  it('shows generation and submission validation phases from persisted facts', () => {
+    expect(resolveWorkspaceAssistantSubagentEventGlyph({
+      part: eventPart({
+        kind: 'generation',
+        generationId: 'generation-2',
+        phase: 'correcting_output',
+        status: 'running',
+      }),
+      subagentStatus: 'running',
+      isLast: true,
+    })).toBe('loader')
+    expect(resolveWorkspaceAssistantSubagentEventGlyph({
+      part: eventPart({
+        kind: 'submission_rejected',
+        submissionId: 'submission-1',
+        outputChars: 7_450,
+        issues: [{
+          path: '$',
+          code: 'invalid_type',
+          message: 'Expected object.',
+        }],
+      }),
+      subagentStatus: 'running',
+      isLast: true,
+    })).toBe('alert')
+    expect(resolveWorkspaceAssistantSubagentEventGlyph({
+      part: eventPart({
+        kind: 'submission_accepted',
+        submissionId: 'submission-2',
+        outputKind: 'creative_direction',
+        outputChars: 7_500,
+      }),
+      subagentStatus: 'completed',
+      isLast: true,
+    })).toBe('check')
+  })
 })
