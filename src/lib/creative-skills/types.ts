@@ -7,7 +7,6 @@ export const CREATIVE_SKILL_IDS = [
   'asset-development',
   'video-direction',
   'music-direction',
-  'quality-review',
 ] as const
 
 export type CreativeSkillId = (typeof CREATIVE_SKILL_IDS)[number]

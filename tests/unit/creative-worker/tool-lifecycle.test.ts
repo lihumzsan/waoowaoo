@@ -59,16 +59,16 @@ describe('Creative Worker read_skill lifecycle', () => {
     lifecycle.begin({
       toolCallId: 'call-1',
       toolName: 'read_skill',
-      skillId: 'quality-review',
+      skillId: 'video-direction',
     })
     lifecycle.begin({
       toolCallId: 'call-2',
       toolName: 'read_skill',
-      skillId: 'quality-review',
+      skillId: 'video-direction',
     })
     const traces = [
-      trace(1, 'quality-review'),
-      trace(2, 'quality-review'),
+      trace(1, 'video-direction'),
+      trace(2, 'video-direction'),
     ]
 
     const first = lifecycle.complete('call-1', traces)
@@ -83,7 +83,7 @@ describe('Creative Worker read_skill lifecycle', () => {
     const toolCall = {
       toolCallId: 'call-1',
       toolName: 'read_skill' as const,
-      skillId: 'quality-review' as const,
+      skillId: 'video-direction' as const,
     }
     lifecycle.begin(toolCall)
 

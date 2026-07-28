@@ -1,14 +1,18 @@
 import { z } from 'zod'
-import { CREATIVE_SKILL_IDS } from '@/lib/creative-skills'
-import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
 import { CREATIVE_WORKER_ERROR_CODES } from './errors'
 
 export const CREATIVE_WORK_REASONING_MAX_CHARS = 64_000
 
+// Trace events are persisted historical facts. skillId/outputKind record what
+// existed when the run happened, so they must parse independently of the
+// current registry; live membership is enforced at the tool-call and request
+// boundaries instead.
+const historicalSkillIdSchema = z.string().trim().min(1).max(64)
+
 export const creativeSkillReadTraceEntrySchema = z.object({
   ordinal: z.number().int().positive(),
   source: z.enum(['preloaded', 'tool']),
-  skillId: z.enum(CREATIVE_SKILL_IDS),
+  skillId: historicalSkillIdSchema,
   version: z.string().trim().min(1),
   uri: z.string().trim().min(1),
   checksum: z.string().trim().min(1),
@@ -18,7 +22,7 @@ export const creativeSkillReadTraceEntrySchema = z.object({
 export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('started'),
-    outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
+    outputKind: z.string().trim().min(1).max(64),
     goal: z.string().trim().min(1),
   }).strict(),
   z.object({
@@ -36,20 +40,20 @@ export const creativeWorkTraceEventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('tool_called'),
     toolCallId: z.string().trim().min(1).max(500),
     toolName: z.literal('read_skill'),
-    skillId: z.enum(CREATIVE_SKILL_IDS),
+    skillId: historicalSkillIdSchema,
   }).strict(),
   z.object({
     kind: z.literal('tool_completed'),
     toolCallId: z.string().trim().min(1).max(500),
     toolName: z.literal('read_skill'),
-    skillId: z.enum(CREATIVE_SKILL_IDS),
+    skillId: historicalSkillIdSchema,
     trace: creativeSkillReadTraceEntrySchema,
   }).strict(),
   z.object({
     kind: z.literal('tool_failed'),
     toolCallId: z.string().trim().min(1).max(500),
     toolName: z.literal('read_skill'),
-    skillId: z.enum(CREATIVE_SKILL_IDS),
+    skillId: historicalSkillIdSchema,
     code: z.enum(CREATIVE_WORKER_ERROR_CODES),
   }).strict(),
   // Research visibility. Without these a user cannot tell a direction that was

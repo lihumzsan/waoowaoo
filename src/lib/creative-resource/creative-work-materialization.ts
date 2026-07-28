@@ -35,7 +35,6 @@ export interface CreativeWorkResourceMaterializationOutput {
     | typeof CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST
     | typeof CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET
     | typeof CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION
-    | typeof CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW
   readonly sourceType: 'CreativeWorkResult'
   readonly sourceId: string
   readonly name: string
@@ -232,16 +231,6 @@ export function planCreativeWorkResourceMaterialization(input: {
       taskId: input.taskId,
       schemaId: CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
       name: output.overview,
-      data: output,
-      generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
-    })
-  }
-  if (output.kind === 'creative_review') {
-    return structuredOutput({
-      ...common,
-      taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW,
-      name: output.summary,
       data: output,
       generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
     })

@@ -84,8 +84,7 @@
       "creativeDirection": "创作方向",
       "assetManifest": "资产设计清单",
       "videoPromptSet": "视频生成设计",
-      "musicDirection": "配乐设计",
-      "creativeReview": "创作质量审查"
+      "musicDirection": "配乐设计"
     },
     "events": {
       "started": "已接收委派目标",

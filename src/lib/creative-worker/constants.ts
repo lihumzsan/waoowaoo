@@ -7,7 +7,6 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
   'asset_manifest',
   'video_prompt_set',
   'music_direction',
-  'creative_review',
 ] as const
 
 // Skill resources are authored in this repository and reviewed with the code

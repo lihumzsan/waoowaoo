@@ -82,20 +82,6 @@ const musicDirectionOutputSchema = z.object({
   warnings: textList(64, 2_000),
 }).strict()
 
-const creativeReviewOutputSchema = z.object({
-  kind: z.literal('creative_review'),
-  verdict: z.enum(['pass', 'revise']),
-  summary: z.string().min(1).max(12_000),
-  findings: z.array(z.object({
-    severity: z.enum(['info', 'warning', 'error']),
-    scope: z.string().min(1).max(1_000),
-    issue: z.string().min(1).max(4_000),
-    recommendation: z.string().min(1).max(4_000),
-  }).strict()).max(512),
-  preservedStrengths: textList(128, 2_000),
-  assumptions: textList(64, 2_000),
-}).strict()
-
 export const creativeWorkOutputSchemas = {
   screenplay: screenplayWorkerOutputSchema,
   story_canon: storyCanonBundleOutputSchema,
@@ -105,7 +91,6 @@ export const creativeWorkOutputSchemas = {
   asset_manifest: assetManifestWorkerOutputSchema,
   video_prompt_set: videoPromptSetOutputSchema,
   music_direction: musicDirectionOutputSchema,
-  creative_review: creativeReviewOutputSchema,
 } as const satisfies Record<CreativeWorkOutputKind, z.ZodObject>
 
 export type CreativeWorkOutput = {
@@ -173,13 +158,6 @@ export const creativeWorkOutputRegistry = {
   music_direction: {
     kind: 'music_direction',
     schema: creativeWorkOutputSchemas.music_direction,
-    resourceScope: 'episode',
-    injectCreativeDirection: true,
-    workerTools: [],
-  },
-  creative_review: {
-    kind: 'creative_review',
-    schema: creativeWorkOutputSchemas.creative_review,
     resourceScope: 'episode',
     injectCreativeDirection: true,
     workerTools: [],

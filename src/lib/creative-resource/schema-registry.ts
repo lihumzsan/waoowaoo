@@ -17,7 +17,6 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   ASSET_MANIFEST: 'project.asset_manifest',
   VIDEO_PROMPT_SET: 'project.video_prompt_set',
   MUSIC_DIRECTION: 'project.music_direction',
-  CREATIVE_REVIEW: 'project.creative_review',
   STYLE: 'project.style',
   CHARACTER_IMAGE: 'project.character_image',
   LOCATION_IMAGE: 'project.location_image',
@@ -117,9 +116,6 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
   [CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION]: (data) => (
     stringValue(objectValue(data), 'overview')
   ),
-  [CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW]: (data) => (
-    stringValue(objectValue(data), 'summary')
-  ),
 }
 
 /**
@@ -139,7 +135,6 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
     CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,
     CREATIVE_RESOURCE_SCHEMA.MUSIC_DIRECTION,
-    CREATIVE_RESOURCE_SCHEMA.CREATIVE_REVIEW,
   ],
   image: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,

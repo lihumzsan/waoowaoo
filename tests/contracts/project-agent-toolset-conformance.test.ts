@@ -516,7 +516,6 @@ describe('project agent toolset conformance', () => {
       'project.asset_manifest',
       'project.video_prompt_set',
       'project.music_direction',
-      'project.creative_review',
     ])
     expect(Object.keys(textProperties)).not.toContain('generationOptions')
     expect(Object.keys(textProperties)).not.toContain('modelKey')
@@ -923,8 +922,8 @@ describe('project agent toolset conformance', () => {
         source: 'requests',
         requests: [{
           requestKey: 'legacy-null-branches',
-          outputKind: 'creative_review',
-          goal: 'Review the supplied result.',
+          outputKind: 'music_direction',
+          goal: 'Score the supplied result.',
           context: { userRequest: '', sourceMaterials: [], constraints: [] },
         }],
         request: null,
@@ -984,7 +983,6 @@ describe('project agent toolset conformance', () => {
       asset_manifest: 'project',
       video_prompt_set: 'episode',
       music_direction: 'episode',
-      creative_review: 'episode',
     })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, definition.injectCreativeDirection]
@@ -997,7 +995,6 @@ describe('project agent toolset conformance', () => {
       asset_manifest: true,
       video_prompt_set: true,
       music_direction: true,
-      creative_review: true,
     })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
       [kind, createCreativeWorkerTools({
@@ -1013,7 +1010,6 @@ describe('project agent toolset conformance', () => {
       asset_manifest: ['read_skill', 'submit_result'],
       video_prompt_set: ['read_skill', 'submit_result'],
       music_direction: ['read_skill', 'submit_result'],
-      creative_review: ['read_skill', 'submit_result'],
     })
     for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
       const definition = creativeWorkOutputRegistry[outputKind]
@@ -1103,25 +1099,25 @@ describe('project agent toolset conformance', () => {
   it('keeps the Creative Task protocol explicit and its repeated result projections consistent', () => {
     expect(CREATIVE_WORK_TASK_PROTOCOL).toBe('creative_work_v9')
     const lifecycleProjection = {
-      requestKey: 'review-1',
-      outputKind: 'creative_review' as const,
-      goal: 'Review the supplied result.',
+      requestKey: 'analysis-1',
+      outputKind: 'continuity_analysis' as const,
+      goal: 'Analyze continuity of the supplied result.',
       events: [{
         sequence: 1,
         occurredAt: '2026-07-20T00:00:00.000Z',
         event: {
           kind: 'started' as const,
-          outputKind: 'creative_review' as const,
-          goal: 'Review the supplied result.',
+          outputKind: 'continuity_analysis' as const,
+          goal: 'Analyze continuity of the supplied result.',
         },
       }],
     }
     const payload = {
       protocol: CREATIVE_WORK_TASK_PROTOCOL,
-      requestKey: 'review-1',
+      requestKey: 'analysis-1',
       request: {
-        outputKind: 'creative_review' as const,
-        goal: 'Review the supplied result.',
+        outputKind: 'continuity_analysis' as const,
+        goal: 'Analyze continuity of the supplied result.',
         context: { userRequest: '', sourceMaterials: [], constraints: [] },
         creativeDirection: null,
         productionContext: { video: null },
@@ -1192,31 +1188,31 @@ describe('project agent toolset conformance', () => {
     }).success).toBe(false)
 
     const result = {
-      requestKey: 'review-1',
-      outputKind: 'creative_review' as const,
+      requestKey: 'analysis-1',
+      outputKind: 'continuity_analysis' as const,
       summary: 'The result is coherent.',
       continuationProjection: {
-        requestKey: 'review-1',
-        outputKind: 'creative_review' as const,
+        requestKey: 'analysis-1',
+        outputKind: 'continuity_analysis' as const,
         summary: 'The result is coherent.',
       },
       lifecycleProjection,
       creativeWorkResult: {
-        outputKind: 'creative_review' as const,
+        outputKind: 'continuity_analysis' as const,
         output: {
-          kind: 'creative_review' as const,
-          verdict: 'pass' as const,
+          kind: 'continuity_analysis' as const,
           summary: 'The result is coherent.',
-          findings: [],
-          preservedStrengths: [],
+          canonFacts: [],
+          stateTransitions: [],
+          unresolved: [],
           assumptions: [],
         },
         skillTrace: [{
           ordinal: 1,
           source: 'tool' as const,
-          skillId: 'quality-review' as const,
+          skillId: 'continuity-memory' as const,
           version: '1',
-          uri: 'skill://quality-review/SKILL.md',
+          uri: 'skill://continuity-memory/SKILL.md',
           checksum: 'checksum',
           contentChars: 100,
         }],
@@ -1240,9 +1236,9 @@ describe('project agent toolset conformance', () => {
     const materializedResources = [{
       resourceId: 'resource-1',
       revisionId: 'revision-1',
-      schemaId: 'project.creative_review',
+      schemaId: 'project.continuity_analysis',
       mediaType: 'text' as const,
-      name: 'Creative review',
+      name: 'Continuity analysis',
     }]
     expect(creativeWorkTaskResultSchema.safeParse({
       ...result,
@@ -1270,13 +1266,16 @@ describe('project agent toolset conformance', () => {
         summary: 'Contradictory summary.',
       },
     }).success).toBe(false)
+    // skillId in a persisted trace is a historical fact, so registry membership
+    // is enforced at the read_skill tool boundary, not here; the projection
+    // still rejects a structurally empty identity.
     expect(creativeWorkTaskResultSchema.safeParse({
       ...result,
       creativeWorkResult: {
         ...result.creativeWorkResult,
         skillTrace: [{
           ...result.creativeWorkResult.skillTrace[0],
-          skillId: 'invented-skill',
+          skillId: '',
         }],
       },
     }).success).toBe(false)

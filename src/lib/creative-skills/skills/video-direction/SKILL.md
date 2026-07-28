@@ -6,8 +6,8 @@
 
 ## Skill 读取组合
 
-- 当任务的 `outputKind=video_prompt_set` 时，在创作前必须真实读取 `director-core`、`video-direction` 和 `quality-review`。目录摘要已经提供这一适用关系，不因其中一份知识看似足够而跳过其余两份。
-- 在同一次通用 Worker 推理中先完成导演规划，再写每段唯一最终提示词，最后按质量规则自检。不要把三份知识拆成串行 Subagent、平行过程字段或多份结果。
+- 当任务的 `outputKind=video_prompt_set` 时，在创作前必须真实读取 `director-core` 和 `video-direction`。目录摘要已经提供这一适用关系，不因其中一份知识看似足够而跳过另一份。
+- 在同一次通用 Worker 推理中先完成导演规划，再写每段唯一最终提示词，最后按「最终片段检查」自检。不要把两份知识拆成串行 Subagent、平行过程字段或多份结果。
 
 ## 何时直接设计视频
 
@@ -192,6 +192,8 @@
 > 8 seconds, 9:16, grounded slice-of-life short. Preserve the courier's face, cap, and grey jacket from image 1, and the street stall from image 2, with the counter always at frame right. 0–3s, medium three-quarter: he stands in the left third at the counter, body toward the counter at his right, gaze on the paper bag being handed over, <street traffic, oil sizzle>. 3–6s, four fast cuts on one continuous action — taking the bag and turning to run — with the counter staying at frame right throughout: close-up, his hand closes on the bag; close-up, the bag lifts clear of the counter; medium, his shoulder swings left as he turns; wide, his back enters the crowd. <four short beats of paper, footsteps, and a shouted thanks>. 6–8s, medium-wide landing shot: he threads between two scooters and glances at the phone strapped to his arm, <traffic swelling, breath audible>. Each cut carries a different beat of the same action and no beat is shown twice. Character gaze stays on a specific in-scene object and never meets the lens. No dissolves, cross-dissolves, fade-ins, or fade-outs between shots; outgoing and incoming images must never overlap transparently.
 
 ## 最终片段检查
+
+自检只能评价提示词文字设计本身，不得声称尚未生成的视频画面或声音已经合格。
 
 - 每个图片和声音参考编号是否精确指向对应人物、场景、道具、UI 或角色锁定音色？
 - 引用了声音的 Segment 是否同时至少引用一张图片，并且没有与首帧/末帧定格用途的图片参考共存？

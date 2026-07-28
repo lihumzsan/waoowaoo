@@ -106,10 +106,10 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
           protocol: CREATIVE_WORK_TASK_PROTOCOL,
           requestKey,
           request: {
-            outputKind: 'creative_review',
+            outputKind: 'continuity_analysis',
             goal,
             context: {
-              userRequest: 'Review these independent creative work items.',
+              userRequest: 'Analyze these independent creative work items.',
               sourceMaterials: [],
               constraints: [],
             },
@@ -121,7 +121,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
           origin: { runId: run.id, toolCallId },
           lifecycleProjection: {
             requestKey,
-            outputKind: 'creative_review',
+            outputKind: 'continuity_analysis',
             goal,
             events: [],
           },

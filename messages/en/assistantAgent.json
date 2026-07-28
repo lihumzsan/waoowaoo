@@ -84,8 +84,7 @@
       "creativeDirection": "Creative Direction",
       "assetManifest": "Asset Manifest",
       "videoPromptSet": "Video Generation Design",
-      "musicDirection": "Music Direction",
-      "creativeReview": "Creative Quality Review"
+      "musicDirection": "Music Direction"
     },
     "events": {
       "started": "Delegation received",

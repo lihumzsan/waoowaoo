@@ -28,7 +28,6 @@ const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.asset_manifest,
   creativeWorkOutputSchemas.video_prompt_set,
   creativeWorkOutputSchemas.music_direction,
-  creativeWorkOutputSchemas.creative_review,
 ])
 
 export const creativeWorkerResultSchema = z.object({
@@ -186,7 +185,9 @@ const creativeWorkTaskProgressEventSchema = z.object({
 
 export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   requestKey: z.string().trim().min(1).max(200),
-  outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
+  // Historical fact: lifecycle projections persist across registry evolution,
+  // so the recorded kind must parse even after an output kind is removed.
+  outputKind: z.string().trim().min(1).max(64),
   goal: z.string().trim().min(1).max(8_000),
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
@@ -342,7 +343,5 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
       return output.segments.map((segment) => segment.key).join(' / ').slice(0, 4_000)
     case 'music_direction':
       return output.overview
-    case 'creative_review':
-      return output.summary
   }
 }

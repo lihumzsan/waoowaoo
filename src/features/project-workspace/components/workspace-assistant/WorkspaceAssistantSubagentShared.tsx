@@ -6,6 +6,7 @@
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { getCreativeSkillDefinition } from '@/lib/creative-skills/registry'
+import { isCreativeSkillId } from '@/lib/creative-skills'
 import type {
   ProjectAgentSubagentEventPartData,
   ProjectAgentSubagentStatus,
@@ -32,8 +33,14 @@ export function localizeOutputKind(
     case 'asset_manifest': return t('subagents.outputKinds.assetManifest')
     case 'video_prompt_set': return t('subagents.outputKinds.videoPromptSet')
     case 'music_direction': return t('subagents.outputKinds.musicDirection')
-    case 'creative_review': return t('subagents.outputKinds.creativeReview')
+    // Historical tasks may record kinds removed from the registry.
+    default: return outputKind
   }
+}
+
+function creativeSkillTitle(skillId: string): string {
+  // Historical traces may reference skills removed from the registry.
+  return isCreativeSkillId(skillId) ? getCreativeSkillDefinition(skillId).title : skillId
 }
 
 export function localizeEvent(
@@ -45,7 +52,7 @@ export function localizeEvent(
     case 'started': return t('subagents.events.started')
     case 'skill_read':
       return t('subagents.events.skillRead', {
-        skill: getCreativeSkillDefinition(event.trace.skillId).title,
+        skill: creativeSkillTitle(event.trace.skillId),
       })
     case 'reasoning':
       return event.status === 'running'
@@ -53,15 +60,15 @@ export function localizeEvent(
         : t('subagents.events.reasoningCompleted')
     case 'tool_called':
       return t('subagents.events.toolCalled', {
-        skill: getCreativeSkillDefinition(event.skillId).title,
+        skill: creativeSkillTitle(event.skillId),
       })
     case 'tool_completed':
       return t('subagents.events.toolCompleted', {
-        skill: getCreativeSkillDefinition(event.skillId).title,
+        skill: creativeSkillTitle(event.skillId),
       })
     case 'tool_failed':
       return t('subagents.events.toolFailed', {
-        skill: getCreativeSkillDefinition(event.skillId).title,
+        skill: creativeSkillTitle(event.skillId),
       })
     case 'research_started':
       return t('subagents.events.researchStarted', { query: event.query })

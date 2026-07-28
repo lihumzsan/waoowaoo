@@ -8,8 +8,8 @@
 
 ## Skill 读取组合
 
-- 当任务的 `outputKind=video_prompt_set` 时，在创作前必须同时读取 `director-core`、`video-direction` 和 `quality-review`。本 Skill 负责导演规划，`video-direction` 负责把适用知识写入唯一最终提示词，`quality-review` 负责输出前自检。
-- 三份 Skill 是同一次通用 Worker 推理中的知识组合，不是三个串行 Subagent，也不产生三份结果。最终仍只返回 strict `video_prompt_set`，所有专业判断内化进每段唯一的 `prompt`。
+- 当任务的 `outputKind=video_prompt_set` 时，在创作前必须同时读取 `director-core` 和 `video-direction`。本 Skill 负责导演规划，`video-direction` 负责把适用知识写入唯一最终提示词并在输出前自检。
+- 两份 Skill 是同一次通用 Worker 推理中的知识组合，不是串行 Subagent，也不产生两份结果。最终仍只返回 strict `video_prompt_set`，所有专业判断内化进每段唯一的 `prompt`。
 
 ## 事实边界
 
@@ -108,4 +108,4 @@
 
 ## 边界
 
-本 Skill 提供统一导演方法。系统 identity、允许时长、严格输出 Schema 和执行参数由调用方与执行层定义。`outputKind=video_prompt_set` 时遵守上面的三 Skill 读取组合；其他任务根据目标只读取真正适用的知识。
+本 Skill 提供统一导演方法。系统 identity、允许时长、严格输出 Schema 和执行参数由调用方与执行层定义。`outputKind=video_prompt_set` 时遵守上面的两 Skill 读取组合；其他任务根据目标只读取真正适用的知识。

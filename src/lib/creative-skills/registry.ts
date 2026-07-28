@@ -39,7 +39,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'director-core',
     version: '1.4.0',
     title: '导演与制作时间线核心',
-    summary: '把剧情事实组织成镜头、分段、场面调度与音画时间线；`outputKind=video_prompt_set` 时必须与 `video-direction`、`quality-review` 一起读取。',
+    summary: '把剧情事实组织成镜头、分段、场面调度与音画时间线；`outputKind=video_prompt_set` 时必须与 `video-direction` 一起读取。',
     tags: ['director', 'editing', 'timeline', 'shot', 'camera'],
   }),
   'creative-direction': defineSkill({
@@ -60,7 +60,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     id: 'video-direction',
     version: '1.7.0',
     title: '视频导演与生成设计',
-    summary: '`outputKind=video_prompt_set` 的核心 Skill；必须同时读取 `director-core` 与 `quality-review`，把全部适用知识内化为唯一最终提示词。',
+    summary: '`outputKind=video_prompt_set` 的核心 Skill；必须与 `director-core` 一起读取，把全部适用知识内化为唯一最终提示词并在输出前自检。',
     tags: ['video', 'director', 'prompt', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
@@ -69,13 +69,6 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     title: '音乐与配乐设计',
     summary: '`outputKind=music_direction` 必须读取：从情绪诊断到整片连续配乐、配器、动态、留白和对白安全混音的设计方法。',
     tags: ['music', 'bgm', 'score', 'audio', 'emotion'],
-  }),
-  'quality-review': defineSkill({
-    id: 'quality-review',
-    version: '1.5.0',
-    title: '创作质量审查',
-    summary: '`outputKind=creative_review` 必须读取；`outputKind=video_prompt_set` 时必须与 `director-core`、`video-direction` 一起读取并在输出前自检。',
-    tags: ['quality', 'review', 'continuity', 'validation', 'retry'],
   }),
 }
 

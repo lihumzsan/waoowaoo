@@ -295,22 +295,21 @@ describe('Creative Worker result submission contract', () => {
     const submission = createCreativeWorkerOutputSubmission({
       request: {
         ...screenplayRequest,
-        outputKind: 'creative_review',
+        outputKind: 'asset_manifest',
       },
-      definition: creativeWorkOutputRegistry.creative_review,
+      definition: creativeWorkOutputRegistry.asset_manifest,
       maxOutputChars: 120_000,
     })
 
     try {
       submission.submit(JSON.stringify({
-        kind: 'creative_review',
-        verdict: 'pass',
-        summary: 'Review summary.',
-        findings: Array.from({ length: 100 }, () => ({})),
-        preservedStrengths: [],
+        kind: 'asset_manifest',
+        overview: 'Manifest overview.',
+        assets: Array.from({ length: 100 }, () => ({})),
         assumptions: [],
+        warnings: [],
       }))
-      throw new Error('INVALID_REVIEW_SUBMISSION_MUST_FAIL')
+      throw new Error('INVALID_MANIFEST_SUBMISSION_MUST_FAIL')
     } catch (error) {
       if (!(error instanceof CreativeWorkerSubmissionValidationError)) throw error
       expect(error.issues).toHaveLength(64)
