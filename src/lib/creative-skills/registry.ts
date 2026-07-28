@@ -35,13 +35,6 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
     summary: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
     tags: ['continuity', 'canon', 'story', 'state', 'analysis'],
   }),
-  'director-core': defineSkill({
-    id: 'director-core',
-    version: '1.4.0',
-    title: '导演与制作时间线核心',
-    summary: '把剧情事实组织成镜头、分段、场面调度与音画时间线；`outputKind=video_prompt_set` 时必须与 `video-direction` 一起读取。',
-    tags: ['director', 'editing', 'timeline', 'shot', 'camera'],
-  }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
     version: '4.0.0',
@@ -58,10 +51,10 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '1.7.0',
+    version: '2.0.0',
     title: '视频导演与生成设计',
-    summary: '`outputKind=video_prompt_set` 的核心 Skill；必须与 `director-core` 一起读取，把全部适用知识内化为唯一最终提示词并在输出前自检。',
-    tags: ['video', 'director', 'prompt', 'continuity', 'audio'],
+    summary: '`outputKind=video_prompt_set` 的唯一专业 Skill：导演规划、镜头与分段设计、唯一最终提示词写法与输出前自检的完整方法。',
+    tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
     id: 'music-direction',
