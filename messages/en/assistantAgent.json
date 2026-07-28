@@ -136,7 +136,9 @@
     "dialogDescriptionWithMedia": "Text files (TXT, Markdown, DOCX, max {maxSize} or {maxChars} characters) are parsed as text. Images (PNG, JPEG, WebP, max 25 MB) and audio (MP3, WAV, OGG, max 100 MB) become project materials the assistant can use in generation.",
     "supportedTypesWithMedia": "Supported: .txt, .md, .docx, .png, .jpg, .webp, .mp3, .wav, .ogg",
     "mediaKindImage": "Image",
-    "mediaKindAudio": "Audio"
+    "mediaKindAudio": "Audio",
+    "mediaUploading": "Uploading media...",
+    "mediaUploadFailed": "Media upload failed."
   },
   "toolCall": {
     "title": "Tool Call",

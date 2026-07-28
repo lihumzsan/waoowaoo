@@ -68,6 +68,7 @@ const uploadMediaOutputSchema = z.object({
   mediaType: z.enum(['image', 'audio']),
   schemaId: z.string().min(1),
   name: z.string().min(1),
+  href: z.string().startsWith('/m/'),
   reused: z.boolean(),
 }).strict()
 
@@ -231,6 +232,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
             mediaType: prepared.mediaType,
             schemaId: prepared.schemaId,
             name: existing.name ?? prepared.name,
+            href: media.url,
             reused: true,
           })
         }
@@ -271,6 +273,7 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
           mediaType: prepared.mediaType,
           schemaId: prepared.schemaId,
           name: prepared.name,
+          href: media.url,
           reused: false,
         })
       },

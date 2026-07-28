@@ -27,6 +27,7 @@ export async function resolveProjectAssistantMediaAttachments(input: {
       revisionId: view.revisionId,
       mediaType: view.mediaType,
       name: view.resourceName,
+      href: view.href,
     }
   })
 }

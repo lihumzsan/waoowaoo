@@ -13,6 +13,7 @@ import {
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import { PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES } from '@/lib/project-agent/media-attachments'
+import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
@@ -114,6 +115,24 @@ export default function WorkspaceAssistantPanel({
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
+  const [mediaUploadPending, setMediaUploadPending] = useState(false)
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null)
+  const pasteMediaFiles = async (files: readonly File[]): Promise<void> => {
+    if (mediaUploadPending) return
+    setMediaUploadError(null)
+    setMediaUploadPending(true)
+    try {
+      const remaining = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
+      for (const file of files.slice(0, Math.max(remaining, 0))) {
+        const attachment = await uploadProjectAssistantMediaAttachment({ projectId, file })
+        composer.addMediaAttachment(attachment)
+      }
+    } catch (error) {
+      setMediaUploadError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setMediaUploadPending(false)
+    }
+  }
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
   const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(() => new Set())
   const visibleSubagents = useMemo(() => assistantRuntime.subagents.filter(
@@ -323,14 +342,18 @@ export default function WorkspaceAssistantPanel({
                         composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
                         && composer.mediaAttachments.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
                       }
+                      mediaUploadPending={mediaUploadPending}
+                      mediaUploadError={mediaUploadError}
                       onChange={composer.setText}
                       onSubmit={async () => {
+                        setMediaUploadError(null)
                         await composer.submit()
                       }}
                       onStopReply={assistantRuntime.stopReply}
                       onAttachClick={() => composer.setAttachmentDialogOpen(true)}
                       onRemoveAttachment={composer.removeAttachment}
                       onRemoveMediaAttachment={composer.removeMediaAttachment}
+                      onPasteMediaFiles={(files) => { void pasteMediaFiles(files) }}
                     />
                   </div>
                 </div>

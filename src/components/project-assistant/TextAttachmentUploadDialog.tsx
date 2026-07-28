@@ -15,7 +15,10 @@ import {
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
   type ProjectAssistantMediaAttachment,
 } from '@/lib/project-agent/media-attachments'
-import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
+import {
+  isProjectAssistantMediaFile,
+  uploadProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments/client'
 
 interface TextAttachmentUploadDialogProps {
   readonly open: boolean
@@ -51,16 +54,6 @@ function fileFromList(files: FileList | null): File | null {
   return files && files.length > 0 ? files[0] ?? null : null
 }
 
-/**
- * Client-side routing only decides which upload endpoint receives the file;
- * the media endpoint re-sniffs magic bytes server-side and is the sole
- * acceptance authority.
- */
-function isMediaAttachmentFile(file: File): boolean {
-  const mimeType = file.type.toLowerCase()
-  if (mimeType.startsWith('image/') || mimeType.startsWith('audio/')) return true
-  return /\.(png|jpe?g|webp|mp3|wav|ogg)$/i.test(file.name)
-}
 
 export function TextAttachmentChips({
   attachments,
@@ -104,6 +97,30 @@ export function TextAttachmentChips({
   )
 }
 
+function MediaAttachmentRemoveButton({
+  name,
+  onRemove,
+  floating,
+}: {
+  readonly name: string
+  readonly onRemove: () => void
+  readonly floating: boolean
+}) {
+  const t = useTranslations('assistantAgent')
+  return (
+    <button
+      type="button"
+      aria-label={t('attachments.removeFile', { fileName: name })}
+      onClick={onRemove}
+      className={floating
+        ? 'absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/65 text-white transition hover:bg-slate-900/85'
+        : 'ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--glass-text-tertiary)] transition hover:bg-slate-100 hover:text-[var(--glass-tone-danger-fg)]'}
+    >
+      <AppIcon name="close" className="h-3 w-3" aria-hidden="true" />
+    </button>
+  )
+}
+
 export function MediaAttachmentChips({
   attachments,
   onRemove,
@@ -116,35 +133,56 @@ export function MediaAttachmentChips({
   const t = useTranslations('assistantAgent')
   if (attachments.length === 0) return null
   return (
-    <div className={['flex flex-wrap gap-2', className].filter(Boolean).join(' ')}>
+    <div className={['flex flex-wrap items-center gap-2', className].filter(Boolean).join(' ')}>
       {attachments.map((attachment) => (
-        <div
-          key={attachment.revisionId}
-          className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm"
-          title={attachment.name}
-        >
-          <AppIcon
-            name={attachment.mediaType === 'image' ? 'image' : 'audioWave'}
-            className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]"
-            aria-hidden="true"
-          />
-          <span className="min-w-0 max-w-[12rem] truncate font-medium text-[var(--glass-text-primary)]">
-            {attachment.name}
-          </span>
-          <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">
-            {t(attachment.mediaType === 'image' ? 'attachments.mediaKindImage' : 'attachments.mediaKindAudio')}
-          </span>
-          {onRemove ? (
-            <button
-              type="button"
-              aria-label={t('attachments.removeFile', { fileName: attachment.name })}
-              onClick={() => onRemove(attachment.revisionId)}
-              className="ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[var(--glass-text-tertiary)] transition hover:bg-slate-100 hover:text-[var(--glass-tone-danger-fg)]"
-            >
-              <AppIcon name="close" className="h-3 w-3" aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
+        attachment.mediaType === 'image' && attachment.href ? (
+          <div
+            key={attachment.revisionId}
+            className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-slate-100 shadow-sm"
+            title={attachment.name}
+          >
+            {/* Protected same-origin media route; the session cookie authorizes the read. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={attachment.href}
+              alt={attachment.name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            {onRemove ? (
+              <MediaAttachmentRemoveButton
+                name={attachment.name}
+                floating
+                onRemove={() => onRemove(attachment.revisionId)}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div
+            key={attachment.revisionId}
+            className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm"
+            title={attachment.name}
+          >
+            <AppIcon
+              name={attachment.mediaType === 'image' ? 'image' : 'audioWave'}
+              className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 max-w-[12rem] truncate font-medium text-[var(--glass-text-primary)]">
+              {attachment.name}
+            </span>
+            <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">
+              {t(attachment.mediaType === 'image' ? 'attachments.mediaKindImage' : 'attachments.mediaKindAudio')}
+            </span>
+            {onRemove ? (
+              <MediaAttachmentRemoveButton
+                name={attachment.name}
+                floating={false}
+                onRemove={() => onRemove(attachment.revisionId)}
+              />
+            ) : null}
+          </div>
+        )
       ))}
     </div>
   )
@@ -208,7 +246,7 @@ export function TextAttachmentUploadDialog({
     setUploading(true)
     setError(null)
     try {
-      if (isMediaAttachmentFile(selectedFile)) {
+      if (isProjectAssistantMediaFile(selectedFile)) {
         if (!projectId || !onUploadedMedia) {
           throw new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNAVAILABLE')
         }

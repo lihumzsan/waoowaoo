@@ -21,12 +21,14 @@ function readAttachment(value: unknown): ProjectAssistantMediaAttachment | null 
   const resourceId = typeof value.resourceId === 'string' ? value.resourceId.trim() : ''
   const revisionId = typeof value.revisionId === 'string' ? value.revisionId.trim() : ''
   const name = typeof value.name === 'string' ? value.name.trim() : ''
+  const href = typeof value.href === 'string' && value.href.startsWith('/m/') ? value.href : null
   if (!resourceId || !revisionId || !name || !isMediaType(value.mediaType)) return null
   return {
     resourceId,
     revisionId,
     mediaType: value.mediaType,
     name,
+    href,
   }
 }
 

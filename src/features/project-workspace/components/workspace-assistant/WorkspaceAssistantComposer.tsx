@@ -6,6 +6,7 @@ import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
+import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -15,12 +16,15 @@ interface WorkspaceAssistantComposerProps {
   readonly attachments: readonly ProjectAssistantTextAttachment[]
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
+  readonly mediaUploadPending?: boolean
+  readonly mediaUploadError?: string | null
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
   readonly onStopReply: () => Promise<void>
   readonly onAttachClick: () => void
   readonly onRemoveAttachment: (attachmentId: string) => void
   readonly onRemoveMediaAttachment?: (revisionId: string) => void
+  readonly onPasteMediaFiles?: (files: readonly File[]) => void
 }
 
 /**
@@ -52,12 +56,15 @@ export function WorkspaceAssistantComposer({
   attachments,
   mediaAttachments = [],
   attachDisabled = false,
+  mediaUploadPending = false,
+  mediaUploadError = null,
   onChange,
   onSubmit,
   onStopReply,
   onAttachClick,
   onRemoveAttachment,
   onRemoveMediaAttachment,
+  onPasteMediaFiles,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
 
@@ -73,6 +80,13 @@ export function WorkspaceAssistantComposer({
           onKeyDown={(event) => {
             submitFromEnterKey(event, () => { void onSubmit() })
           }}
+          onPaste={(event) => {
+            if (!onPasteMediaFiles || pending) return
+            const files = Array.from(event.clipboardData?.files ?? []).filter(isProjectAssistantMediaFile)
+            if (files.length === 0) return
+            event.preventDefault()
+            onPasteMediaFiles(files)
+          }}
           className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-base leading-6 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         />
         <TextAttachmentChips
@@ -85,6 +99,18 @@ export function WorkspaceAssistantComposer({
           onRemove={pending ? undefined : onRemoveMediaAttachment}
           className={mediaAttachments.length > 0 ? 'mt-2' : undefined}
         />
+        {mediaUploadPending ? (
+          <div className="mt-2 inline-flex items-center gap-2 self-start rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm">
+            <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]" aria-hidden="true" />
+            {t('attachments.mediaUploading')}
+          </div>
+        ) : null}
+        {mediaUploadError ? (
+          <p role="alert" className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]">
+            {t('attachments.mediaUploadFailed')}
+            <span className="ml-1 break-all opacity-75">{mediaUploadError}</span>
+          </p>
+        ) : null}
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
           <div className="flex items-center">
             <button

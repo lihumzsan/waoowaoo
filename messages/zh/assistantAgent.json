@@ -136,7 +136,9 @@
     "dialogDescriptionWithMedia": "文本文件（TXT、Markdown、DOCX，上限 {maxSize} 或 {maxChars} 字）会解析为纯文本。图片（PNG、JPEG、WebP，上限 25 MB）和音频（MP3、WAV、OGG，上限 100 MB）会成为项目素材，助手可在生成中引用。",
     "supportedTypesWithMedia": "支持：.txt、.md、.docx、.png、.jpg、.webp、.mp3、.wav、.ogg",
     "mediaKindImage": "图片",
-    "mediaKindAudio": "音频"
+    "mediaKindAudio": "音频",
+    "mediaUploading": "素材上传中...",
+    "mediaUploadFailed": "素材上传失败。"
   },
   "toolCall": {
     "title": "工具调用",
