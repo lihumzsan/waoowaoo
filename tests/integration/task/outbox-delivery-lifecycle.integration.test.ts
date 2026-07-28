@@ -118,6 +118,7 @@ describe('durable Outbox delivery lifecycle', () => {
       id: command.id,
       leaseOwner: 'owner-deferred',
       retryAt: new Date(Date.now() + 2_000),
+      reason: 'PROJECT_AGENT_CONTINUATION_DECISION_PENDING:test-run',
     })).resolves.toBe(true)
     await expect(prisma.outboxCommand.findUniqueOrThrow({ where: { id: command.id } }))
       .resolves.toMatchObject({
@@ -127,7 +128,8 @@ describe('durable Outbox delivery lifecycle', () => {
         enqueuedAt: null,
         leaseOwner: null,
         leaseExpiresAt: null,
-        lastError: null,
+        // defer 不是失败,但原因必须留痕供事后诊断;最终 accept 时才清空。
+        lastError: 'PROJECT_AGENT_CONTINUATION_DECISION_PENDING:test-run',
       })
   })
 

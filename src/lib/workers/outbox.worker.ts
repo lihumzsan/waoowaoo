@@ -101,6 +101,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         id: outboxId,
         leaseOwner,
         retryAt: new Date(Date.now() + retryDelayMs),
+        reason: error.message,
       })
       if (!deferred) throw new Error(`OUTBOX_DEFER_CAS_FAILED:${outboxId}`)
       logger.info({

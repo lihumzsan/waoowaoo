@@ -183,6 +183,7 @@ export async function deferOutboxCommand(params: {
   id: string
   leaseOwner: string
   retryAt: Date
+  reason: string
 }): Promise<boolean> {
   const result = await prisma.outboxCommand.updateMany({
     where: {
@@ -195,7 +196,9 @@ export async function deferOutboxCommand(params: {
     data: {
       availableAt: params.retryAt,
       enqueuedAt: null,
-      lastError: null,
+      // defer 不是失败,但原因必须留痕:上一次饿死事故正是靠这里的原因串定位的。
+      // 最终成功时 acceptOutboxCommand 仍会清空该字段。
+      lastError: params.reason,
       leaseOwner: null,
       leaseExpiresAt: null,
       deliveryCount: { decrement: 1 },
