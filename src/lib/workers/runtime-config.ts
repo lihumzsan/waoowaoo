@@ -7,10 +7,11 @@ export { resolvePositiveIntegerConfig } from '@/lib/runtime-config/positive-inte
 
 const WORKER_CONCURRENCY_CONFIG = {
   image: { env: 'QUEUE_CONCURRENCY_IMAGE', defaultValue: 20 },
-  video: { env: 'QUEUE_CONCURRENCY_VIDEO', defaultValue: 4 },
-  music: { env: 'QUEUE_CONCURRENCY_MUSIC', defaultValue: 3 },
-  voice: { env: 'QUEUE_CONCURRENCY_VOICE', defaultValue: 3 },
-  text: { env: 'QUEUE_CONCURRENCY_TEXT', defaultValue: 10 },
+  video: { env: 'QUEUE_CONCURRENCY_VIDEO', defaultValue: 20 },
+  // BGM is one-per-film by contract (AP-02); serialize provider calls.
+  music: { env: 'QUEUE_CONCURRENCY_MUSIC', defaultValue: 1 },
+  voice: { env: 'QUEUE_CONCURRENCY_VOICE', defaultValue: 20 },
+  text: { env: 'QUEUE_CONCURRENCY_TEXT', defaultValue: 20 },
   outbox: { env: 'QUEUE_CONCURRENCY_OUTBOX', defaultValue: 10 },
 } as const satisfies Record<WorkerRuntimeTarget, {
   readonly env: string
