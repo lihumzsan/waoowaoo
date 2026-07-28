@@ -215,9 +215,13 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
   }
 }
 
-async function getRuntimeModels(userId: string): Promise<CustomModel[]> {
+async function getRuntimeModels(userId: string, mediaType?: ModelMediaType): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
-  if (isPlatformProviderCredentialMode(deployment)) {
+  // PG-16:voice 是平台固定模态,模型 identity 在任何凭证模式下都由平台目录唯一声明
+  // (用户配置面不存在 voice 类型)。provider 凭证仍按部署模式解析:
+  // user-key 部署用用户自己的 FAL provider key,缺失时报 PROVIDER_NOT_FOUND/API_KEY_MISSING,
+  // 而不是误导性的 MODEL_NOT_FOUND。
+  if (mediaType === 'voice' || isPlatformProviderCredentialMode(deployment)) {
     return getPlatformModels()
   }
 
@@ -237,12 +241,12 @@ export async function resolveModelSelection(
   model: string,
   mediaType: ModelMediaType,
 ): Promise<ModelSelection> {
-  const models = await getRuntimeModels(userId)
+  const models = await getRuntimeModels(userId, mediaType)
   return resolveRuntimeModelSelection(models, model, mediaType)
 }
 
 async function resolveSingleModelSelection(userId: string, mediaType: ModelMediaType): Promise<ModelSelection> {
-  const models = await getRuntimeModels(userId)
+  const models = await getRuntimeModels(userId, mediaType)
   return resolveSingleRuntimeModelSelection(models, mediaType)
 }
 
