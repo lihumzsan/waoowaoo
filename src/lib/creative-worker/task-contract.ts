@@ -18,6 +18,7 @@ import {
   creativeWorkTraceEventSchema,
 } from './trace-contract'
 import { creativeWorkerResearchEvidenceSchema } from './research'
+import { CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT } from './system-constraints'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay,
@@ -109,7 +110,8 @@ const creativeWorkChapterBatchBaseShape = {
     .describe('Shared professional objective; each Worker also receives its exact compiled Chapter context.'),
   userRequest: z.string().max(30_000)
     .describe('Relevant original user request preserved for every Chapter Worker.'),
-  constraints: z.array(z.string().trim().min(1).max(4_000)).max(64)
+  constraints: z.array(z.string().trim().min(1).max(4_000))
+    .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
     .describe('Shared delivery, safety, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
     revisionId: z.string().trim().min(1),

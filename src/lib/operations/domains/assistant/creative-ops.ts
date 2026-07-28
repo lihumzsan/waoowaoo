@@ -8,6 +8,7 @@ import {
 } from '@/lib/creative-resource'
 import {
   buildCreativeWorkInputFingerprint,
+  compileCreativeWorkSystemConstraints,
   CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskPayloadSchema,
@@ -309,6 +310,22 @@ type HydratedCreativeWorkDelegationItem<
 type CreativeWorkHydratedItem = HydratedCreativeWorkDelegationItem<CreativeWorkDelegationItem>
 type CreativeWorkTaskItem = CreativeWorkTaskRequest & { readonly requestKey: string }
 
+function injectCreativeWorkSystemConstraints(
+  request: CreativeWorkHydratedItem,
+): CreativeWorkHydratedItem {
+  const definition = readCreativeWorkOutputDefinition(request.outputKind)
+  return {
+    ...request,
+    context: {
+      ...request.context,
+      constraints: compileCreativeWorkSystemConstraints({
+        callerConstraints: request.context.constraints,
+        systemConstraintIds: definition.systemConstraints,
+      }),
+    },
+  }
+}
+
 function canComposeDuration(target: number, options: readonly number[]): boolean {
   const reachable = new Uint8Array(target + 1)
   reachable[0] = 1
@@ -326,9 +343,10 @@ async function resolveTaskRequests(input: {
   readonly userId: string
   readonly adoptedCreativeDirection: AdoptedCreativeDirectionSnapshot | null
 }): Promise<CreativeWorkTaskItem[]> {
-  const needsVideoProduction = input.requests.some((request) => request.outputKind === 'video_prompt_set')
+  const requests = input.requests.map(injectCreativeWorkSystemConstraints)
+  const needsVideoProduction = requests.some((request) => request.outputKind === 'video_prompt_set')
   if (!needsVideoProduction) {
-    return input.requests.map((request) => ({
+    return requests.map((request) => ({
       ...request,
       creativeDirection: projectAdoptedCreativeDirection({
         snapshot: input.adoptedCreativeDirection,
@@ -373,7 +391,7 @@ async function resolveTaskRequests(input: {
     })
   }
 
-  return input.requests.map((request) => {
+  return requests.map((request) => {
     if (request.outputKind !== 'video_prompt_set') {
       return {
         ...request,

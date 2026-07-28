@@ -8,6 +8,7 @@ import {
   assetManifestWorkerOutputSchema,
   screenplayWorkerOutputSchema,
 } from '@/lib/screenplay'
+import type { CreativeWorkSystemConstraintId } from './system-constraints'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
@@ -102,6 +103,7 @@ export interface CreativeWorkOutputDefinition {
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
   injectCreativeDirection: boolean
+  systemConstraints: readonly CreativeWorkSystemConstraintId[]
   workerTools: readonly ('web_search')[]
 }
 
@@ -111,6 +113,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
     injectCreativeDirection: true,
+    systemConstraints: [],
     workerTools: [],
   },
   story_canon: {
@@ -118,6 +121,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.story_canon,
     resourceScope: 'project',
     injectCreativeDirection: true,
+    systemConstraints: [],
     workerTools: [],
   },
   chapter_plan: {
@@ -125,6 +129,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.chapter_plan,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    systemConstraints: [],
     workerTools: [],
   },
   continuity_analysis: {
@@ -132,6 +137,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.continuity_analysis,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    systemConstraints: [],
     workerTools: [],
   },
   creative_direction: {
@@ -139,6 +145,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
     injectCreativeDirection: false,
+    systemConstraints: ['human_visual_safety'],
     workerTools: ['web_search'],
   },
   asset_manifest: {
@@ -146,6 +153,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
     injectCreativeDirection: true,
+    systemConstraints: ['human_visual_safety'],
     workerTools: [],
   },
   video_prompt_set: {
@@ -153,6 +161,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    systemConstraints: ['human_visual_safety'],
     workerTools: [],
   },
   music_direction: {
@@ -160,6 +169,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    systemConstraints: [],
     workerTools: [],
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>
