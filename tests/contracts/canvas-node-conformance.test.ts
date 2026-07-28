@@ -24,6 +24,7 @@ describe('workspace Canvas node registry conformance', () => {
       TASK_TYPE.CREATIVE_RESOURCE_VOICE,
       TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
       TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE,
+      TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
     ])
   })
 })
