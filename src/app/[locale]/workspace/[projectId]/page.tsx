@@ -13,6 +13,7 @@ import ProjectWorkspace from '@/features/project-workspace/ProjectWorkspace'
 import { resolveSelectedEpisodeId } from './episode-selection'
 import { useRouter } from '@/i18n/navigation'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import type { ProjectUpdateInput } from '@/lib/projects/validation'
 import { resolveWorkspacePageState } from './workspace-page-state'
 import {
   HOME_ASSISTANT_AUTOSTART_QUERY,
@@ -198,13 +199,16 @@ export default function ProjectDetailPage() {
       throw new Error(t('projectNotFound'))
     }
 
+    const input = {
+      command: {
+        kind: 'name',
+        name: newName,
+      },
+    } satisfies ProjectUpdateInput
     const res = await apiFetch(`/api/projects/${projectId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newName,
-        description: project.description ?? null,
-      }),
+      body: JSON.stringify(input),
     })
 
     if (!res.ok) {

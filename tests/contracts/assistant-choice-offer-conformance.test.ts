@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {
   assertProjectAgentChoiceCommitmentsMatchCard,
+  buildProjectAgentChoiceCardFromAuthoring,
   buildProjectAgentChoiceOffer,
   fingerprintProjectAgentChoiceSubject,
   parseProjectAgentChoiceDecision,
@@ -19,6 +20,25 @@ const REMOVED_FIXED_CHOICE_OPERATIONS = [
   'request_edit_style_choice',
   'request_edit_asset_review_choice',
 ] as const
+
+type JsonRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is JsonRecord {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function collectPropertyKeys(value: unknown, keys = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectPropertyKeys(item, keys))
+    return keys
+  }
+  if (!isRecord(value)) return keys
+  if (isRecord(value.properties)) {
+    Object.keys(value.properties).forEach((key) => keys.add(key))
+  }
+  Object.values(value).forEach((item) => collectPropertyKeys(item, keys))
+  return keys
+}
 
 function selectCard(): ProjectAgentChoiceCardDefinition {
   return {
@@ -79,7 +99,6 @@ describe('assistant choice offer conformance', () => {
     expect(Object.keys(operations.request_choice?.toolInputSchema.properties ?? {})).toEqual([
       'subject',
       'card',
-      'commitments',
     ])
     const modelSurface = JSON.stringify(operations.request_choice?.toolInputSchema)
     expect(modelSurface).not.toContain('choiceType')
@@ -92,15 +111,16 @@ describe('assistant choice offer conformance', () => {
 
   it('lets the model author all visible content but rejects model-authored server identity', () => {
     const authored = {
-      mode: 'confirm_or_text',
-      replyMode: 'whole_card',
+      kind: 'confirm',
       title: 'Confirm the screenplay',
       description: 'Confirm only this screenplay revision.',
-      groups: [],
       submitLabel: 'Confirm screenplay',
-      replyLabel: 'Request changes',
-      replyPlaceholder: 'Describe screenplay changes',
-      replySubmitLabel: 'Send changes',
+      commitment: null,
+      reply: {
+        replyLabel: 'Request changes',
+        replyPlaceholder: 'Describe screenplay changes',
+        replySubmitLabel: 'Send changes',
+      },
     }
     expect(projectAgentChoiceCardAuthoringSchema.safeParse(authored).success).toBe(true)
     expect(projectAgentChoiceCardAuthoringSchema.safeParse({
@@ -109,37 +129,286 @@ describe('assistant choice offer conformance', () => {
     }).success).toBe(false)
   })
 
-  it('makes per-group custom text impossible outside per_group reply mode', () => {
+  it('omits absent optional option fields before the server fingerprints its canonical card', () => {
+    const authoring = projectAgentChoiceCardAuthoringSchema.parse({
+      kind: 'select_with_actions',
+      title: 'Choose a ratio',
+      description: null,
+      submitLabel: 'Save ratio',
+      group: {
+        label: 'Ratio',
+        required: true,
+        presentation: 'aspect_ratio',
+        options: [{
+          ratio: '16:9',
+          label: '16:9',
+          commitment: {
+            operationId: 'update_project_config',
+            inputJson: JSON.stringify({ videoRatio: '16:9' }),
+          },
+        }],
+      },
+      reply: null,
+    })
+    const built = buildProjectAgentChoiceCardFromAuthoring({
+      authoring,
+      cardId: 'choice-card',
+      toolCallId: 'choice-tool',
+    })
+
+    expect(built.card.groups[0]?.options[0]).toEqual({
+      value: '16:9',
+      label: '16:9',
+    })
+    expect(() => fingerprintProjectAgentChoiceSubject('none', built)).not.toThrow()
+  })
+
+  it('projects exhaustive model branches that cannot express hidden Choice combinations', () => {
+    const operation = createProjectAgentOperationRegistry().request_choice
+    const cardSchema = operation.toolInputSchema.properties.card
+    expect(isRecord(cardSchema) && Array.isArray(cardSchema.oneOf)).toBe(true)
+    if (!isRecord(cardSchema) || !Array.isArray(cardSchema.oneOf)) {
+      throw new Error('request_choice card must expose kind branches')
+    }
+    const branches = new Map(cardSchema.oneOf.flatMap((branch) => {
+      if (!isRecord(branch) || !isRecord(branch.properties)) return []
+      const kind = branch.properties.kind
+      if (!isRecord(kind) || typeof kind.const !== 'string') return []
+      return [[kind.const, branch] as const]
+    }))
+    expect([...branches.keys()]).toEqual([
+      'confirm',
+      'select',
+      'select_with_actions',
+      'select_per_group_text',
+    ])
+    const confirmBranch = branches.get('confirm')
+    expect(isRecord(confirmBranch) && isRecord(confirmBranch.properties)).toBe(true)
+    if (isRecord(confirmBranch) && isRecord(confirmBranch.properties)) {
+      expect(confirmBranch.properties).not.toHaveProperty('groups')
+      expect(confirmBranch.properties).not.toHaveProperty('group')
+    }
+    const selectBranch = branches.get('select')
+    expect(
+      isRecord(selectBranch)
+      && isRecord(selectBranch.properties)
+      && isRecord(selectBranch.properties.groups)
+      && selectBranch.properties.groups.minItems,
+    ).toBe(1)
+    const perGroupBranch = branches.get('select_per_group_text')
+    expect(
+      isRecord(perGroupBranch)
+      && Array.isArray(perGroupBranch.required)
+      && perGroupBranch.required,
+    ).toEqual(expect.arrayContaining(['customTextGroup']))
+
+    const propertyKeys = collectPropertyKeys(operation.toolInputSchema)
+    for (const serverOwnedKey of ['mode', 'replyMode', 'allowCustomText', 'key', 'value', 'when', 'groupKey', 'optionValue']) {
+      expect(propertyKeys, serverOwnedKey).not.toContain(serverOwnedKey)
+    }
+    const imageGroupBranches: JsonRecord[] = []
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit)
+        return
+      }
+      if (!isRecord(value)) return
+      if (
+        isRecord(value.properties)
+        && isRecord(value.properties.presentation)
+        && value.properties.presentation.const === 'image'
+      ) {
+        imageGroupBranches.push(value)
+      }
+      Object.values(value).forEach(visit)
+    }
+    visit(cardSchema)
+    expect(imageGroupBranches.length).toBeGreaterThan(0)
+    for (const branch of imageGroupBranches) {
+      const options = isRecord(branch.properties) ? branch.properties.options : null
+      const items = isRecord(options) ? options.items : null
+      expect(
+        isRecord(items)
+        && Array.isArray(items.required)
+        && items.required,
+      ).toContain('imageUrl')
+    }
+  })
+
+  it('builds canonical group, option, reply, and commitment identities from structural authoring', () => {
     const authored = {
-      mode: 'select_or_text',
-      replyMode: 'whole_card',
+      kind: 'select_with_actions' as const,
       title: 'Choose a direction',
-      description: 'Choose or describe the current direction.',
-      groups: [{
-        key: 'direction',
+      description: 'Choose the current direction.',
+      group: {
         label: 'Direction',
         required: true,
         presentation: 'options',
-        allowCustomText: true,
         options: [{
-          value: 'folk_horror',
           label: 'Folk horror',
           description: null,
-          imageUrl: null,
           meta: null,
+          commitment: {
+            operationId: 'adopt_creative_direction',
+            inputJson: '{"resourceId":"resource-1","revisionId":"revision-1"}',
+          },
         }],
-      }],
+      },
       submitLabel: 'Confirm',
-      replyLabel: 'Other direction',
-      replyPlaceholder: 'Describe another direction',
-      replySubmitLabel: 'Send direction',
+      reply: null,
     }
+    expect(projectAgentChoiceCardAuthoringSchema.safeParse(authored).success).toBe(true)
+    const parsed = projectAgentChoiceCardAuthoringSchema.parse(authored)
+    const canonical = buildProjectAgentChoiceCardFromAuthoring({
+      authoring: parsed,
+      cardId: 'card-1',
+      toolCallId: 'tool-1',
+    })
+    expect(canonical).toMatchObject({
+      card: {
+        mode: 'select',
+        replyMode: 'none',
+        groups: [{
+          key: 'group_1',
+          allowCustomText: false,
+          options: [{ value: 'option_1', label: 'Folk horror' }],
+        }],
+      },
+      commitments: [{
+        when: { kind: 'option', groupKey: 'group_1', optionValue: 'option_1' },
+        operationId: 'adopt_creative_direction',
+      }],
+    })
+  })
 
-    expect(projectAgentChoiceCardAuthoringSchema.safeParse(authored).success).toBe(false)
-    expect(projectAgentChoiceCardAuthoringSchema.safeParse({
-      ...authored,
-      replyMode: 'per_group',
-    }).success).toBe(true)
+  it('rejects every formerly model-visible invalid static combination at the authoring boundary', () => {
+    const option = {
+      label: 'First',
+      description: null,
+      meta: null,
+    }
+    const group = {
+      label: 'Direction',
+      required: true,
+      presentation: 'options' as const,
+      options: [option],
+    }
+    const base = {
+      title: 'Current decision',
+      description: null,
+      submitLabel: 'Submit',
+    }
+    const invalid = [
+      { subject: { kind: 'none' }, card: { ...base, kind: 'confirm', commitment: null, reply: null, groups: [group] } },
+      { subject: { kind: 'none' }, card: { ...base, kind: 'select', groups: [], reply: null } },
+      {
+        subject: { kind: 'none' },
+        card: {
+          ...base,
+          kind: 'select',
+          groups: [{
+            ...group,
+            presentation: 'image',
+          }],
+          reply: null,
+        },
+      },
+      {
+        subject: { kind: 'none' },
+        card: {
+          ...base,
+          kind: 'select',
+          groups: [{
+            ...group,
+            options: [
+              { ...option, value: 'duplicate' },
+              { ...option, value: 'duplicate' },
+            ],
+          }],
+          reply: null,
+        },
+      },
+      {
+        subject: { kind: 'none' },
+        card: {
+          ...base,
+          kind: 'select_per_group_text',
+          groups: [group],
+          additionalGroups: [],
+          reply: {
+            replyLabel: 'Other',
+            replyPlaceholder: 'Describe another direction',
+            replySubmitLabel: 'Send',
+          },
+        },
+      },
+      {
+        subject: { kind: 'none' },
+        card: { ...base, kind: 'select', groups: [group], reply: null },
+        commitments: [{
+          when: { kind: 'option', groupKey: 'missing', optionValue: 'missing' },
+          operationId: 'update_project_config',
+          inputJson: '{"videoRatio":"16:9"}',
+        }],
+      },
+    ]
+    const operation = createProjectAgentOperationRegistry().request_choice
+    for (const input of invalid) {
+      expect(operation.inputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false)
+    }
+  })
+
+  it('preserves repeated aspect-ratio options with distinct server-owned identities', () => {
+    const parsed = projectAgentChoiceCardAuthoringSchema.parse({
+      kind: 'select_with_actions',
+      title: 'Choose framing',
+      description: null,
+      submitLabel: 'Use framing',
+      reply: null,
+      group: {
+        label: 'Framing',
+        required: true,
+        presentation: 'aspect_ratio',
+        options: [
+          {
+            ratio: '16:9',
+            label: 'Wide',
+            description: null,
+            meta: null,
+            commitment: null,
+          },
+          {
+            ratio: '16:9',
+            label: 'Wide alternate',
+            description: null,
+            meta: null,
+            commitment: {
+              operationId: 'update_project_config',
+              inputJson: '{"videoRatio":"16:9"}',
+            },
+          },
+        ],
+      },
+    })
+    const canonical = buildProjectAgentChoiceCardFromAuthoring({
+      authoring: parsed,
+      cardId: 'card-ratio',
+      toolCallId: 'tool-ratio',
+    })
+
+    expect(canonical.card.groups[0]?.options.map((option) => option.value)).toEqual([
+      '16:9',
+      '32:18',
+    ])
+    expect(canonical.commitments).toEqual([
+      expect.objectContaining({
+        when: {
+          kind: 'option',
+          groupKey: 'group_1',
+          optionValue: '32:18',
+        },
+      }),
+    ])
   })
 
   it('persists generic card, subject, commitment, run, interruption, and tool identities without choiceType', () => {

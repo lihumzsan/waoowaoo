@@ -21,6 +21,7 @@ import type {
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
 import {
+  type ProjectAgentResolvedToolContract,
   PROJECT_AGENT_OPERATION_GATEWAY_NAME,
   type ProjectAgentToolDiscoveryState,
 } from './tool-discovery'
@@ -113,8 +114,11 @@ export interface CreateProjectAgentOperationToolsParams {
 
 export interface ProjectAgentOperationGatewayInput {
   readonly operationId: string
+  readonly contractId: string
   readonly arguments: Record<string, unknown>
 }
+
+const PROJECT_AGENT_DIRECT_OPERATION_CONTRACT_ID = 'direct-operation'
 
 export const PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA: ProjectAgentToolInputSchema = {
   type: 'object',
@@ -123,12 +127,16 @@ export const PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA: ProjectAgentToolInput
       type: 'string',
       description: 'Exact loaded Operation id returned by load_tools.',
     },
+    contractId: {
+      type: 'string',
+      description: 'Exact opaque contract id returned beside the loaded Operation.',
+    },
     argumentsJson: {
       type: 'string',
       description: 'A JSON object serialized as a string and matching the loaded Operation parameters exactly.',
     },
   },
-  required: ['operationId', 'argumentsJson'],
+  required: ['operationId', 'contractId', 'argumentsJson'],
   additionalProperties: false,
 }
 
@@ -148,6 +156,10 @@ export function readProjectAgentOperationGatewayInput(
 ): ProjectAgentOperationGatewayInput {
   const operationId = readProjectAgentOperationGatewayOperationId(input)
   if (!isRecord(input)) throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_INPUT_INVALID')
+  const contractId = typeof input.contractId === 'string' ? input.contractId.trim() : ''
+  if (!contractId) {
+    throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_CONTRACT_ID_REQUIRED:${operationId}`)
+  }
   if (typeof input.argumentsJson !== 'string' || !input.argumentsJson.trim()) {
     throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_REQUIRED:${operationId}`)
   }
@@ -162,6 +174,7 @@ export function readProjectAgentOperationGatewayInput(
   }
   return {
     operationId,
+    contractId,
     arguments: parsedArguments,
   }
 }
@@ -183,13 +196,14 @@ export function createProjectAgentOperationTools(
     }
     return normalizedToolCallId
   }
-  const resolveOperation = (
+  const resolveOperation = async (
     input: unknown,
     toolCallId?: string | null,
-  ): {
+  ): Promise<{
     invocation: ProjectAgentOperationGatewayInput
     operation: ProjectAgentOperationDefinition
-  } => {
+    contract: ProjectAgentResolvedToolContract | null
+  }> => {
     const invocation = readProjectAgentOperationGatewayInput(input)
     const operation = params.registry[invocation.operationId]
     if (!operation?.channels.tool) {
@@ -197,26 +211,40 @@ export function createProjectAgentOperationTools(
     }
     if (
       operation.toolExposure === 'direct'
-      && (!toolCallId || directOperationIdByToolCallId.get(toolCallId) !== operation.id)
+      && (
+        invocation.contractId !== PROJECT_AGENT_DIRECT_OPERATION_CONTRACT_ID
+        || !toolCallId
+        || directOperationIdByToolCallId.get(toolCallId) !== operation.id
+      )
     ) {
       throw new Error(`PROJECT_AGENT_OPERATION_DIRECT_TOOL_REQUIRED:${invocation.operationId}`)
     }
-    if (
-      operation.toolExposure === 'on_demand'
-      && !params.discoveryState.isLoaded(invocation.operationId)
-    ) {
+    if (operation.toolExposure === 'direct') {
+      return { invocation, operation, contract: null }
+    }
+    const persistedApprovedInvocation = toolCallId
+      ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
+      : null
+    if (persistedApprovedInvocation) {
+      return { invocation, operation, contract: null }
+    }
+    if (!params.discoveryState.isLoaded(invocation.operationId)) {
       throw new Error(`PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_NOT_LOADED:${invocation.operationId}`)
     }
-    return { invocation, operation }
+    const contract = await params.discoveryState.resolveContract(
+      invocation.operationId,
+      invocation.contractId,
+    )
+    return { invocation, operation, contract }
   }
   const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
-    let resolved: ReturnType<typeof resolveOperation>
+    let resolved: Awaited<ReturnType<typeof resolveOperation>>
     try {
-      resolved = resolveOperation(toolInput, toolCallId)
+      resolved = await resolveOperation(toolInput, toolCallId)
     } catch {
       return false
     }
-    const { invocation, operation } = resolved
+    const { invocation, operation, contract } = resolved
     const requiresApproval = shouldRequireInteractiveToolApproval({
       operation,
       billingConfirmationRequired: params.billingConfirmationRequired,
@@ -227,6 +255,11 @@ export function createProjectAgentOperationTools(
       throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)
     }
     if (!params.approvalPreflightStore) return true
+    const normalizedInput = normalizeProjectAgentToolInput({
+      input: invocation.arguments,
+      inputSchema: contract?.inputSchema ?? operation.inputSchema,
+      toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
+    })
     return await preflightProjectAgentToolApproval({
       request: params.request,
       operation,
@@ -234,7 +267,8 @@ export function createProjectAgentOperationTools(
       userId: params.userId,
       context: params.context,
       source: 'assistant-panel',
-      input: invocation.arguments,
+      input: normalizedInput,
+      boundToolContractState: contract?.state,
       toolCallId: identifiedToolCallId,
       store: params.approvalPreflightStore,
     })
@@ -248,9 +282,9 @@ export function createProjectAgentOperationTools(
     needsApproval,
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       const rawToolCallId = readToolCallId(details)
-      let resolved: ReturnType<typeof resolveOperation>
+      let resolved: Awaited<ReturnType<typeof resolveOperation>>
       try {
-        resolved = resolveOperation(toolInput, rawToolCallId)
+        resolved = await resolveOperation(toolInput, rawToolCallId)
       } catch (error) {
         const operationId = (() => {
           try {
@@ -263,7 +297,10 @@ export function createProjectAgentOperationTools(
         const outcome: ProjectAgentOperationOutcome = {
           kind: 'failed',
           error: buildToolError({
-            code: 'OPERATION_INPUT_INVALID',
+            code: error instanceof Error
+              && error.message.startsWith('PROJECT_AGENT_OPERATION_CONTRACT_STALE:')
+              ? 'OPERATION_CONTRACT_STALE'
+              : 'OPERATION_INPUT_INVALID',
             message: error instanceof Error ? error.message : String(error),
             operationId,
           }),
@@ -271,7 +308,7 @@ export function createProjectAgentOperationTools(
         params.onExecutionSettled?.({ toolCallId, operationId, outcome })
         return { ok: false, error: outcome.error }
       }
-      const { invocation, operation } = resolved
+      const { invocation, operation, contract } = resolved
       const automaticallyAuthorizeBilling = operation.confirmation.kind === 'billable_media'
         && !params.billingConfirmationRequired
       let executionSettlementReported = false
@@ -285,8 +322,8 @@ export function createProjectAgentOperationTools(
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
       const normalizedInput = normalizeProjectAgentToolInput({
         input: invocation.arguments,
-        inputSchema: operation.inputSchema,
-        toolInputSchema: operation.toolInputSchema,
+        inputSchema: contract?.inputSchema ?? operation.inputSchema,
+        toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
       })
       const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
         operationId: operation.id,
@@ -339,6 +376,7 @@ export function createProjectAgentOperationTools(
             context: params.context,
             source: 'assistant-panel',
             input: normalizedInput,
+            boundToolContractState: contract?.state,
             toolCallId,
           })
         } catch (error) {
@@ -436,6 +474,7 @@ export function createProjectAgentOperationTools(
             executionFence,
             taskBatchBinding,
             approvedInvocation: automaticApprovedInvocation,
+            boundToolContractState: contract?.state,
           })
           reportExecutionSettled(execution.outcome)
           return execution.result
@@ -506,6 +545,7 @@ export function createProjectAgentOperationTools(
           executionFence,
           taskBatchBinding,
           approvedInvocation: automaticApprovedInvocation,
+          boundToolContractState: contract?.state,
         })
         const result = execution.result
         const settledActivity = !operationActivityId ? null : await appendProjectAgentEvents({
@@ -580,9 +620,11 @@ export function createProjectAgentOperationTools(
   const directTools = params.directOperations.map(({ operation, description }) => {
     const createGatewayInput = (input: unknown): {
       operationId: string
+      contractId: string
       argumentsJson: string
     } => ({
       operationId: operation.id,
+      contractId: PROJECT_AGENT_DIRECT_OPERATION_CONTRACT_ID,
       argumentsJson: JSON.stringify(input),
     })
     const markDirectInvocation = (toolCallId: string | null): string => {

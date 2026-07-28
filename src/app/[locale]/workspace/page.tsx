@@ -13,7 +13,7 @@ import { shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
-import { validateProjectDraft } from '@/lib/projects/validation'
+import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/validation'
 import {
   mergeWorkspaceProjectListItemUpdate,
   type WorkspaceProjectListItem,
@@ -256,12 +256,19 @@ export default function WorkspacePage() {
     setEditError(null)
     setCreateLoading(true)
     try {
+      const input = {
+        command: {
+          kind: 'details',
+          name: editFormData.name,
+          description: editFormData.description,
+        },
+      } satisfies ProjectUpdateInput
       const response = await apiFetch(`/api/projects/${editingProject.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(editFormData)
+        body: JSON.stringify(input)
       })
 
       if (response.ok) {

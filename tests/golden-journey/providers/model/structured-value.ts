@@ -4,11 +4,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function readSchemaFromResponseFormat(value: unknown): unknown {
+function readSchemaFromResponseFormat(value: unknown): Record<string, unknown> | null {
   const format = asRecord(value)
   if (!format || format.type !== 'json_schema') return null
   const jsonSchema = asRecord(format.json_schema)
-  return jsonSchema?.schema ?? null
+  return asRecord(jsonSchema?.schema)
 }
 
 function schemaContainsLiteral(value: unknown, expected: string): boolean {
@@ -216,13 +216,16 @@ export function generateGoldenStructuredValue(schemaValue: unknown): unknown {
   return 'golden-test-value'
 }
 
-export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
-  const schema = readSchemaFromResponseFormat(responseFormat)
-  if (!schema) return null
+export function generateGoldenOutputSchemaText(schema: Record<string, unknown>): string {
   if (schemaContainsLiteral(schema, 'screenplay')) return JSON.stringify(buildGoldenScreenplay())
   if (schemaContainsLiteral(schema, 'story_canon')) return JSON.stringify(buildGoldenStoryCanon(schema))
   if (schemaContainsLiteral(schema, 'creative_direction')) return JSON.stringify(buildGoldenCreativeDirection())
   if (schemaContainsLiteral(schema, 'asset_manifest')) return JSON.stringify(buildGoldenAssetManifest())
   if (schemaContainsLiteral(schema, 'chapter_plan')) return JSON.stringify(buildGoldenChapterPlan())
   return JSON.stringify(generateGoldenStructuredValue(schema))
+}
+
+export function generateGoldenResponseFormatText(responseFormat: unknown): string | null {
+  const schema = readSchemaFromResponseFormat(responseFormat)
+  return schema ? generateGoldenOutputSchemaText(schema) : null
 }

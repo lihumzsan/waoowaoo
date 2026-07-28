@@ -4,6 +4,7 @@ import type {
 } from './protocol'
 import {
   generateGoldenResponseFormatText,
+  generateGoldenOutputSchemaText,
   generateGoldenStructuredValue,
 } from './structured-value'
 
@@ -172,6 +173,20 @@ function loadedOperationDefinitions(
     .filter((message) => message.role === 'tool')
     .forEach((message) => collectLoadedOperationDefinitions(parseMessageJson(message), definitions))
   return definitions
+}
+
+function readCreativeWorkerOutputSchema(
+  request: GoldenChatCompletionRequest,
+): Record<string, unknown> | null {
+  for (let index = request.messages.length - 1; index >= 0; index -= 1) {
+    const message = request.messages[index]
+    if (message?.role !== 'user') continue
+    const parsed = parseMessageJson(message)
+    const outputSubmission = asRecord(asRecord(parsed)?.outputSubmission)
+    const outputSchema = asRecord(outputSubmission?.outputSchema)
+    if (outputSchema) return outputSchema
+  }
+  return null
 }
 
 function containsSubmittedTaskReceipt(value: unknown): boolean {
@@ -371,24 +386,27 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
     return {
       subject: { kind: 'none' },
       card: {
-        mode: 'select',
-        replyMode: 'none',
+        kind: 'select_with_actions',
         title: '请选择当前项目的画面比例',
         description: '这个选择只会保存当前项目的画面比例。',
-        groups: [{
-          key: 'videoRatio',
+        group: {
           label: '画面比例',
           required: true,
           presentation: 'aspect_ratio',
-          options: ratios,
-        }],
+          options: ratios.map((ratio) => ({
+            ratio: ratio.value,
+            label: ratio.label,
+            description: ratio.description,
+            meta: null,
+            commitment: {
+              operationId: 'update_project_config',
+              inputJson: JSON.stringify({ videoRatio: ratio.value }),
+            },
+          })),
+        },
         submitLabel: '保存本次画面比例',
+        reply: null,
       },
-      commitments: ratios.map((ratio) => ({
-        when: { kind: 'option', groupKey: 'videoRatio', optionValue: ratio.value },
-        operationId: 'update_project_config',
-        inputJson: JSON.stringify({ videoRatio: ratio.value }),
-      })),
     }
   }
   if (toolName === 'create_text' && instruction.includes(GOLDEN_FREEFORM_TEXT_REQUEST)) {
@@ -456,7 +474,7 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
         kind: 'new',
         count: 2,
         prompt: 'Animate the referenced image with slow drifting mist and a gentle camera push.',
-        mediaReferences: resourceReferences(request, 'image').slice(0, 1),
+        imageReferences: resourceReferences(request, 'image').slice(0, 1),
         durationSeconds: 15,
       },
     }
@@ -573,35 +591,31 @@ function buildToolArguments(request: GoldenChatCompletionRequest, toolName: stri
         revisions: [{ revisionId: style.revisionId }],
       },
       card: {
-        mode: 'select',
-        replyMode: 'none',
+        kind: 'select_with_actions',
         title: '是否采用当前 Creative Direction？',
         description: '这里只决定当前视觉规则是否成为项目采用版本。',
-        groups: [{
-          key: 'styleDecision',
+        group: {
           label: '当前决定',
           required: true,
           presentation: 'options',
           options: [
             {
-              value: 'adopt',
               label: '采用这份 Creative Direction',
               description: '仅更新当前项目的视觉规则绑定。',
+              commitment: {
+                operationId: 'adopt_creative_direction',
+                inputJson: JSON.stringify({ ...style, expectedVersion: null }),
+              },
             },
             {
-              value: 'keep_unadopted',
               label: '暂不采用',
               description: '保留为普通创作资源。',
             },
           ],
-        }],
+        },
         submitLabel: '提交本次视觉风格选择',
+        reply: null,
       },
-      commitments: [{
-        when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
-        operationId: 'adopt_creative_direction',
-        inputJson: JSON.stringify({ ...style, expectedVersion: null }),
-      }],
     }
   }
   if (toolName === 'delegate_creative_work' && instruction.includes(GOLDEN_FREEFORM_CHAPTER_PLAN_REQUEST)) {
@@ -726,12 +740,18 @@ function buildGatewayToolDecision(input: {
       argumentsJson: JSON.stringify({ toolIds: [input.operationId] }),
     }
   }
+  const loaded = loadedOperationDefinitions(input.request).get(input.operationId)
+  const contractId = typeof loaded?.contractId === 'string' ? loaded.contractId : ''
+  if (!contractId) {
+    throw new Error(`GOLDEN_BOUND_CONTRACT_ID_MISSING:${input.operationId}`)
+  }
   return {
     kind: 'tool_call',
     toolCallId: `golden_call_${input.requestOrdinal}_${input.operationId}`,
     toolName: 'execute_operation',
     argumentsJson: JSON.stringify({
       operationId: input.operationId,
+      contractId,
       argumentsJson: JSON.stringify(input.operationArguments),
     }),
   }
@@ -742,7 +762,11 @@ export function decideGoldenModelResponse(input: {
   readonly request: GoldenChatCompletionRequest
   readonly requestOrdinal: number
 }): GoldenModelDecision {
-  const structuredText = generateGoldenResponseFormatText(input.request.responseFormat)
+  const creativeWorkerOutputSchema = readCreativeWorkerOutputSchema(input.request)
+  const responseFormatText = generateGoldenResponseFormatText(input.request.responseFormat)
+  const structuredText = creativeWorkerOutputSchema
+    ? generateGoldenOutputSchemaText(creativeWorkerOutputSchema)
+    : responseFormatText
   if (structuredText) {
     const available = availableToolNames(input.request)
     const called = allCalledTools(input.request)
@@ -758,6 +782,14 @@ export function decideGoldenModelResponse(input: {
         toolCallId: `golden_call_${input.requestOrdinal}_read_skill`,
         toolName: 'read_skill',
         argumentsJson: JSON.stringify({ skillId }),
+      }
+    }
+    if (creativeWorkerOutputSchema && available.has('submit_result') && !called.has('submit_result')) {
+      return {
+        kind: 'tool_call',
+        toolCallId: `golden_call_${input.requestOrdinal}_submit_result`,
+        toolName: 'submit_result',
+        argumentsJson: JSON.stringify({ outputJson: structuredText }),
       }
     }
     return { kind: 'text', text: structuredText }
@@ -800,6 +832,11 @@ export function decideGoldenModelResponse(input: {
       'An empty stylized mountain shrine at night with red lanterns and dense mist.',
       'A single ancient bronze ritual bell isolated on a plain dark background.',
     ]
+    const createImageDefinition = loadedOperationDefinitions(input.request).get('create_image')
+    const createImageContractId = typeof createImageDefinition?.contractId === 'string'
+      ? createImageDefinition.contractId
+      : ''
+    if (!createImageContractId) throw new Error('GOLDEN_BOUND_CONTRACT_ID_MISSING:create_image')
     return {
       kind: 'tool_calls',
       calls: prompts.map((prompt, index) => ({
@@ -807,6 +844,7 @@ export function decideGoldenModelResponse(input: {
         toolName: 'execute_operation',
         argumentsJson: JSON.stringify({
           operationId: 'create_image',
+          contractId: createImageContractId,
           argumentsJson: JSON.stringify({
             request: { kind: 'new', count: 1, prompt },
           }),

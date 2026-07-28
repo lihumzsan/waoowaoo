@@ -157,16 +157,13 @@ describe('project agent tool-input corrections', () => {
     const input = {
       card: {
         subject: { kind: 'none' },
-        mode: 'confirm',
-        replyMode: 'none',
+        kind: 'confirm',
         title: 'Use this direction?',
-        groups: [],
+        description: null,
         submitLabel: 'Confirm',
-        replyLabel: null,
-        replyPlaceholder: null,
-        replySubmitLabel: null,
+        commitment: null,
+        reply: null,
       },
-      commitments: [],
     }
     const parsed = operation.inputSchema.safeParse(input)
     expect(parsed.success).toBe(false)
@@ -194,14 +191,13 @@ describe('project agent tool-input corrections', () => {
 
 describe('project agent tool-input correction payload budget', () => {
   it('omits oversized expectedSchema echoes instead of pasting the whole union back', () => {
-    // 真实回归:request_choice 的 card 级失败曾把整个三分支 union(约 8KB)原样回贴,
+    // 真实回归:request_choice 的 card 级失败曾把整个多分支 union 原样回贴,
     // 有效指令被淹没。超限时只保留字段路径与 issue 文案。
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.request_choice
     const input = {
       subject: { kind: 'none' },
       card: 'not-an-object',
-      commitments: [],
     }
     const parsed = operation.inputSchema.safeParse(input)
     expect(parsed.success).toBe(false)

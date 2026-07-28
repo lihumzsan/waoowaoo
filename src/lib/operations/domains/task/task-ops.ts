@@ -27,11 +27,17 @@ const listTasksInputSchema = z.object({
 
 const getTaskInputSchema = z.object({
   taskId: z.string().trim().min(1).describe('Exact task ID.'),
-  includeEvents: z.boolean().optional()
-    .describe('Whether to include persisted lifecycle events. Defaults to false.'),
-  eventsLimit: z.number().int().min(1).max(5000).optional()
-    .describe('Maximum lifecycle events to return when includeEvents is true. Defaults to 500.'),
+  events: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('none') }).strict(),
+    z.object({
+      kind: z.literal('include'),
+      limit: z.number().int().min(1).max(5000).optional()
+        .describe('Maximum lifecycle events to return. Defaults to 500.'),
+    }).strict(),
+  ]).describe('Choose whether persisted lifecycle events are returned.'),
 }).strict()
+
+export type GetTaskInput = z.infer<typeof getTaskInputSchema>
 
 function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
   const error = normalizeTaskError(task.errorCode, task.errorMessage)
@@ -96,8 +102,8 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND')
         }
 
-        const events = input.includeEvents
-          ? await listTaskLifecycleEvents(input.taskId, input.eventsLimit ?? 500)
+        const events = input.events.kind === 'include'
+          ? await listTaskLifecycleEvents(input.taskId, input.events.limit ?? 500)
           : null
 
         return {

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { PROJECT_VIDEO_RATIOS } from '@/lib/projects/video-ratio'
 import { parseProjectAgentChoiceDecision as parseChoiceDecision } from './choice-result'
 import type { ProjectAgentChoiceDecision } from './choice-result'
 
@@ -56,10 +57,82 @@ const choiceCardGroupSchema = buildChoiceCardGroupSchema(
     .describe('Enable only with replyMode=per_group when the user may replace an offered option with text.'),
 )
 
-const choiceCardGroupWithoutCustomTextSchema = buildChoiceCardGroupSchema(
-  z.literal(false).optional()
-    .describe('Must be false because this reply mode does not collect text per group.'),
-)
+const projectAgentChoiceCommitmentTargetRequestSchema = z.object({
+  operationId: z.string().trim().min(1).max(128)
+    .describe('Exact Choice-eligible operation to invoke for this one answer.'),
+  inputJson: z.string().trim().min(2).max(100_000)
+    .describe('Complete frozen operation input as one JSON object string; the server validates it against the target schema.'),
+}).strict()
+
+const choiceOptionAuthoringFields = {
+  label: z.string().trim().min(1).max(300)
+    .describe('User-visible option label in the current conversation language.'),
+  description: z.string().trim().max(1200).nullable().optional(),
+  meta: z.string().trim().max(500).nullable().optional(),
+} as const
+
+const choiceOptionWithCommitmentAuthoringFields = {
+  ...choiceOptionAuthoringFields,
+  commitment: projectAgentChoiceCommitmentTargetRequestSchema.nullable().optional()
+    .describe('Optional command frozen directly on this exact option; null means selecting it only resumes reasoning.'),
+} as const
+
+const choiceGroupAuthoringFields = {
+  label: z.string().trim().min(1).max(300),
+  required: z.boolean(),
+} as const
+
+const choiceCardGroupAuthoringSchema = z.discriminatedUnion('presentation', [
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('options'),
+    options: z.array(z.object(choiceOptionAuthoringFields).strict()).min(1).max(12),
+  }).strict(),
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('aspect_ratio'),
+    options: z.array(z.object({
+      ...choiceOptionAuthoringFields,
+      ratio: z.enum(PROJECT_VIDEO_RATIOS)
+        .describe('Exact aspect ratio represented by this option.'),
+    }).strict()).min(1).max(PROJECT_VIDEO_RATIOS.length),
+  }).strict(),
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('image'),
+    options: z.array(z.object({
+      ...choiceOptionAuthoringFields,
+      imageUrl: z.string().trim().min(1).max(4096)
+        .describe('Required image URL for this image option.'),
+    }).strict()).min(1).max(12),
+  }).strict(),
+])
+
+const choiceCardGroupWithCommitmentsAuthoringSchema = z.discriminatedUnion('presentation', [
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('options'),
+    options: z.array(z.object(choiceOptionWithCommitmentAuthoringFields).strict()).min(1).max(12),
+  }).strict(),
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('aspect_ratio'),
+    options: z.array(z.object({
+      ...choiceOptionWithCommitmentAuthoringFields,
+      ratio: z.enum(PROJECT_VIDEO_RATIOS)
+        .describe('Exact aspect ratio represented by this option.'),
+    }).strict()).min(1).max(PROJECT_VIDEO_RATIOS.length),
+  }).strict(),
+  z.object({
+    ...choiceGroupAuthoringFields,
+    presentation: z.literal('image'),
+    options: z.array(z.object({
+      ...choiceOptionWithCommitmentAuthoringFields,
+      imageUrl: z.string().trim().min(1).max(4096)
+        .describe('Required image URL for this image option.'),
+    }).strict()).min(1).max(12),
+  }).strict(),
+])
 
 const choiceCardContentFields = {
   mode: z.enum(['confirm', 'confirm_or_text', 'select', 'select_or_text'])
@@ -80,20 +153,19 @@ const choiceCardContentFields = {
 } as const
 
 const choiceCardAuthoringBaseFields = {
-  mode: choiceCardContentFields.mode,
   title: choiceCardContentFields.title,
   description: choiceCardContentFields.description,
   submitLabel: choiceCardContentFields.submitLabel,
 } as const
 
-const enabledReplyAuthoringFields = {
+const choiceCardReplyAuthoringSchema = z.object({
   replyLabel: z.string().trim().min(1).max(300)
-    .describe('Required user-visible label whenever replyMode is whole_card or per_group.'),
+    .describe('User-visible label for the free-text reply.'),
   replyPlaceholder: z.string().trim().min(1).max(1000)
-    .describe('Required user-visible placeholder whenever replyMode is whole_card or per_group.'),
+    .describe('User-visible placeholder for the free-text reply.'),
   replySubmitLabel: z.string().trim().min(1).max(200)
-    .describe('Required submission label whenever replyMode is whole_card or per_group.'),
-} as const
+    .describe('User-visible submission label for the free-text reply.'),
+}).strict()
 
 const choiceCardDefinitionFields = {
   cardId: z.string().trim().min(1).max(191),
@@ -164,32 +236,44 @@ export const projectAgentChoiceCardDefinitionSchema = z.object(choiceCardDefinit
   .strict()
   .superRefine(validateChoiceCard)
 
-export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('replyMode', [
+export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('kind', [
   z.object({
     ...choiceCardAuthoringBaseFields,
-    groups: z.array(choiceCardGroupWithoutCustomTextSchema).max(12),
-    replyMode: z.literal('none')
-      .describe('Use only when this card accepts no free-text answer.'),
-    replyLabel: z.null().describe('Must be null when replyMode is none.'),
-    replyPlaceholder: z.null().describe('Must be null when replyMode is none.'),
-    replySubmitLabel: z.null().describe('Must be null when replyMode is none.'),
+    kind: z.literal('confirm')
+      .describe('Ask for confirmation; set reply to a complete object to also accept one whole-card free-text answer, otherwise null.'),
+    commitment: projectAgentChoiceCommitmentTargetRequestSchema.nullable().optional()
+      .describe('Optional command frozen directly on confirmation; null means confirmation only resumes reasoning.'),
+    reply: choiceCardReplyAuthoringSchema.nullable()
+      .describe('Complete whole-card free-text reply copy, or null to accept confirmation only.'),
   }).strict(),
   z.object({
     ...choiceCardAuthoringBaseFields,
-    groups: z.array(choiceCardGroupWithoutCustomTextSchema).max(12),
-    replyMode: z.literal('whole_card')
-      .describe('Collect one free-text answer for the whole card.'),
-    ...enabledReplyAuthoringFields,
+    kind: z.literal('select')
+      .describe('Ask the user to select from one or more option groups; selecting only resumes reasoning.'),
+    groups: z.array(choiceCardGroupAuthoringSchema).min(1).max(12),
+    reply: choiceCardReplyAuthoringSchema.nullable()
+      .describe('Complete whole-card free-text reply copy, or null to accept offered options only.'),
   }).strict(),
   z.object({
     ...choiceCardAuthoringBaseFields,
-    groups: z.array(choiceCardGroupSchema).max(12),
-    replyMode: z.literal('per_group')
-      .describe('Collect free text only for groups with allowCustomText=true; at least one group must enable it.'),
-    ...enabledReplyAuthoringFields,
+    kind: z.literal('select_with_actions')
+      .describe('Ask one option-group question whose individual options may freeze a current Choice-eligible command.'),
+    group: choiceCardGroupWithCommitmentsAuthoringSchema,
+    reply: choiceCardReplyAuthoringSchema.nullable()
+      .describe('Complete whole-card free-text reply copy, or null to accept offered options only; free text never executes a command.'),
+  }).strict(),
+  z.object({
+    ...choiceCardAuthoringBaseFields,
+    kind: z.literal('select_per_group_text')
+      .describe('Ask grouped option questions and allow text for the required customTextGroup.'),
+    customTextGroup: choiceCardGroupAuthoringSchema
+      .describe('Required group that permits the user to replace an offered option with text.'),
+    additionalGroups: z.array(choiceCardGroupAuthoringSchema).max(11)
+      .describe('Optional additional groups that accept offered options only.'),
+    reply: choiceCardReplyAuthoringSchema
+      .describe('Required copy for the per-group free-text input.'),
   }).strict(),
 ])
-  .superRefine(validateChoiceCard)
 
 export const projectAgentChoiceCardSchema = z.object({
   ...choiceCardDefinitionFields,
@@ -200,6 +284,186 @@ export const projectAgentChoiceCardSchema = z.object({
 export type ProjectAgentChoiceCardDefinition = z.infer<typeof projectAgentChoiceCardDefinitionSchema>
 export type ProjectAgentChoiceCardPartData = z.infer<typeof projectAgentChoiceCardSchema>
 export type ProjectAgentChoiceCardAuthoring = z.infer<typeof projectAgentChoiceCardAuthoringSchema>
+
+type ProjectAgentChoiceCommitmentTargetRequest = z.infer<
+  typeof projectAgentChoiceCommitmentTargetRequestSchema
+>
+
+type ChoiceCardGroupAuthoring = z.infer<typeof choiceCardGroupAuthoringSchema>
+type ChoiceCardGroupWithCommitmentsAuthoring = z.infer<
+  typeof choiceCardGroupWithCommitmentsAuthoringSchema
+>
+
+type ChoiceCardOptionAuthoring =
+  | ChoiceCardGroupAuthoring['options'][number]
+  | ChoiceCardGroupWithCommitmentsAuthoring['options'][number]
+
+function readChoiceOptionCommitment(
+  option: ChoiceCardOptionAuthoring,
+): ProjectAgentChoiceCommitmentTargetRequest | null {
+  return 'commitment' in option ? option.commitment ?? null : null
+}
+
+function buildCanonicalChoiceGroup(params: {
+  group: ChoiceCardGroupAuthoring | ChoiceCardGroupWithCommitmentsAuthoring
+  groupIndex: number
+  allowCustomText: boolean
+}): {
+  group: z.infer<typeof choiceCardGroupSchema>
+  commitments: ProjectAgentChoiceCommitmentRequest[]
+} {
+  const groupKey = `group_${String(params.groupIndex + 1)}`
+  const ratioOccurrences = new Map<string, number>()
+  const canonicalOptions = params.group.options.map((option, optionIndex) => {
+    let value = `option_${String(optionIndex + 1)}`
+    if ('ratio' in option) {
+      const occurrence = ratioOccurrences.get(option.ratio) ?? 0
+      ratioOccurrences.set(option.ratio, occurrence + 1)
+      if (occurrence === 0) {
+        value = option.ratio
+      } else {
+        const [width, height] = option.ratio.split(':').map(Number)
+        const multiplier = occurrence + 1
+        value = `${String(width * multiplier)}:${String(height * multiplier)}`
+      }
+    }
+    return {
+      source: option,
+      value,
+      persisted: {
+        value,
+        label: option.label,
+        ...(option.description !== undefined ? { description: option.description } : {}),
+        ...('imageUrl' in option ? { imageUrl: option.imageUrl } : {}),
+        ...(option.meta !== undefined ? { meta: option.meta } : {}),
+      },
+    }
+  })
+  const group = choiceCardGroupSchema.parse({
+    key: groupKey,
+    label: params.group.label,
+    required: params.group.required,
+    presentation: params.group.presentation,
+    options: canonicalOptions.map((option) => option.persisted),
+    allowCustomText: params.allowCustomText,
+  })
+  const commitments = canonicalOptions.flatMap((option) => {
+    const commitment = readChoiceOptionCommitment(option.source)
+    if (!commitment) return []
+    return [{
+      when: {
+        kind: 'option' as const,
+        groupKey,
+        optionValue: option.value,
+      },
+      ...commitment,
+    }]
+  })
+  return { group, commitments }
+}
+
+export function buildProjectAgentChoiceCardFromAuthoring(params: {
+  authoring: ProjectAgentChoiceCardAuthoring
+  cardId: string
+  toolCallId: string
+}): {
+  card: ProjectAgentChoiceCardDefinition
+  commitments: ProjectAgentChoiceCommitmentRequest[]
+} {
+  const base = {
+    cardId: params.cardId,
+    toolCallId: params.toolCallId,
+    title: params.authoring.title,
+    description: params.authoring.description,
+    submitLabel: params.authoring.submitLabel,
+  }
+  if (params.authoring.kind === 'confirm') {
+    const hasReply = params.authoring.reply !== null
+    const card = projectAgentChoiceCardDefinitionSchema.parse({
+      ...base,
+      mode: hasReply ? 'confirm_or_text' : 'confirm',
+      replyMode: hasReply ? 'whole_card' : 'none',
+      groups: [],
+      replyLabel: params.authoring.reply?.replyLabel ?? null,
+      replyPlaceholder: params.authoring.reply?.replyPlaceholder ?? null,
+      replySubmitLabel: params.authoring.reply?.replySubmitLabel ?? null,
+    })
+    return {
+      card,
+      commitments: params.authoring.commitment
+        ? [{
+            when: { kind: 'confirm' },
+            ...params.authoring.commitment,
+          }]
+        : [],
+    }
+  }
+  if (params.authoring.kind === 'select_with_actions') {
+    const canonical = buildCanonicalChoiceGroup({
+      group: params.authoring.group,
+      groupIndex: 0,
+      allowCustomText: false,
+    })
+    const hasReply = params.authoring.reply !== null
+    return {
+      card: projectAgentChoiceCardDefinitionSchema.parse({
+        ...base,
+        mode: hasReply ? 'select_or_text' : 'select',
+        replyMode: hasReply ? 'whole_card' : 'none',
+        groups: [canonical.group],
+        replyLabel: params.authoring.reply?.replyLabel ?? null,
+        replyPlaceholder: params.authoring.reply?.replyPlaceholder ?? null,
+        replySubmitLabel: params.authoring.reply?.replySubmitLabel ?? null,
+      }),
+      commitments: canonical.commitments,
+    }
+  }
+  if (params.authoring.kind === 'select_per_group_text') {
+    const authoredGroups = [
+      params.authoring.customTextGroup,
+      ...params.authoring.additionalGroups,
+    ]
+    const canonicalGroups = authoredGroups.map((group, groupIndex) => (
+      buildCanonicalChoiceGroup({
+        group,
+        groupIndex,
+        allowCustomText: groupIndex === 0,
+      })
+    ))
+    return {
+      card: projectAgentChoiceCardDefinitionSchema.parse({
+        ...base,
+        mode: 'select_or_text',
+        replyMode: 'per_group',
+        groups: canonicalGroups.map((entry) => entry.group),
+        replyLabel: params.authoring.reply.replyLabel,
+        replyPlaceholder: params.authoring.reply.replyPlaceholder,
+        replySubmitLabel: params.authoring.reply.replySubmitLabel,
+      }),
+      commitments: [],
+    }
+  }
+  const hasReply = params.authoring.reply !== null
+  const canonicalGroups = params.authoring.groups.map((group, groupIndex) => (
+    buildCanonicalChoiceGroup({
+      group,
+      groupIndex,
+      allowCustomText: false,
+    })
+  ))
+  return {
+    card: projectAgentChoiceCardDefinitionSchema.parse({
+      ...base,
+      mode: hasReply ? 'select_or_text' : 'select',
+      replyMode: hasReply ? 'whole_card' : 'none',
+      groups: canonicalGroups.map((entry) => entry.group),
+      replyLabel: params.authoring.reply?.replyLabel ?? null,
+      replyPlaceholder: params.authoring.reply?.replyPlaceholder ?? null,
+      replySubmitLabel: params.authoring.reply?.replySubmitLabel ?? null,
+    }),
+    commitments: [],
+  }
+}
 
 const resourceRevisionRequestSchema = z.object({
   revisionId: z.string().trim().min(1),

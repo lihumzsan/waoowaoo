@@ -103,7 +103,7 @@ async function resolveDelegationRequests(input: {
     referencedAssets: operationInput.referencedAssets,
     maxCharsPerChapter: CREATIVE_CHAPTER_CONTEXT_MAX_CHARS,
   })
-  const requests = compiled.map((result, index) => {
+  const buildChapterRequestBase = (result: (typeof compiled)[number], index: number) => {
     const requestedChapter = operationInput.chapters[index]
     if (!requestedChapter || requestedChapter.chapterId !== result.context.chapter.chapterId) {
       throw new Error(`CREATIVE_WORK_CHAPTER_CONTEXT_ORDER_MISMATCH:${String(index)}`)
@@ -112,9 +112,7 @@ async function resolveDelegationRequests(input: {
     const sourceEnd = result.context.source.sourceEnd
     return {
       requestKey: requestedChapter.requestKey,
-      outputKind: operationInput.outputKind,
       goal: `${operationInput.goal}\nChapter ${String(result.context.chapter.chapterIndex + 1)}: ${result.context.chapter.title}`,
-      durationIntent: requestedChapter.durationIntent,
       context: {
         userRequest: operationInput.userRequest,
         sourceMaterials: [
@@ -134,7 +132,24 @@ async function resolveDelegationRequests(input: {
         constraints: operationInput.constraints,
       },
     }
-  })
+  }
+  const requests: CreativeWorkDelegationItem[] = operationInput.outputKind === 'video_prompt_set'
+    ? compiled.map((result, index) => {
+        const requestedChapter = operationInput.chapters[index]
+        if (!requestedChapter) {
+          throw new Error(`CREATIVE_WORK_CHAPTER_CONTEXT_ORDER_MISMATCH:${String(index)}`)
+        }
+        return {
+          ...buildChapterRequestBase(result, index),
+          outputKind: 'video_prompt_set',
+          durationIntent: requestedChapter.durationIntent,
+        }
+      })
+    : compiled.map((result, index) => ({
+        ...buildChapterRequestBase(result, index),
+        outputKind: operationInput.outputKind,
+        durationIntent: operationInput.chapters[index]?.durationIntent,
+      }))
   return await hydrateExactResourceMaterials({
     requests,
     projectId: input.projectId,
@@ -285,7 +300,13 @@ async function hydrateExactResourceMaterials(input: {
   })
 }
 
-type CreativeWorkHydratedItem = CreativeWorkHydratedRequest & { readonly requestKey: string }
+type HydratedCreativeWorkDelegationItem<
+  Item extends CreativeWorkDelegationItem,
+> = Item extends CreativeWorkDelegationItem
+  ? Omit<Item, 'context'> & { context: CreativeWorkHydratedRequest['context'] }
+  : never
+
+type CreativeWorkHydratedItem = HydratedCreativeWorkDelegationItem<CreativeWorkDelegationItem>
 type CreativeWorkTaskItem = CreativeWorkTaskRequest & { readonly requestKey: string }
 
 function canComposeDuration(target: number, options: readonly number[]): boolean {
@@ -364,14 +385,6 @@ async function resolveTaskRequests(input: {
       }
     }
     const durationIntent = request.durationIntent
-    if (durationIntent === undefined) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
-        field: 'durationIntent',
-        allowedValues: allowedSegmentDurationsSeconds,
-        agentRetryableAfterCorrection: true,
-      })
-    }
     if (
       durationIntent.mode === 'fixed'
       && !canComposeDuration(durationIntent.seconds, allowedSegmentDurationsSeconds)

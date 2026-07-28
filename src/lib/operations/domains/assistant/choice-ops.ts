@@ -7,24 +7,22 @@ import type {
 } from '@/lib/operations/types'
 import {
   assertProjectAgentChoiceCommitmentsMatchCard,
+  buildProjectAgentChoiceCardFromAuthoring,
   parseProjectAgentChoiceCommitmentInputJson,
   projectAgentChoiceCardAuthoringSchema,
-  projectAgentChoiceCardDefinitionSchema,
-  projectAgentChoiceCommitmentRequestSchema,
   projectAgentChoiceSubjectRequestSchema,
   resolveProjectAgentChoiceSubject,
   type ProjectAgentChoiceCommitment,
+  type ProjectAgentChoiceCommitmentRequest,
 } from '@/lib/project-agent/choice-offer'
 import { prepareProjectAgentChoiceExecutionHandoff } from '@/lib/project-agent/execution-handoff'
 import { prisma } from '@/lib/prisma'
 
 const requestChoiceInputSchema = z.object({
   subject: projectAgentChoiceSubjectRequestSchema
-    .describe('Required top-level field, alongside card and commitments. Use {kind:"none"} when no mutable fact is being reviewed. Never place subject inside card.'),
+    .describe('Required top-level field alongside card. Use {kind:"none"} when no mutable fact is being reviewed. Never place subject inside card.'),
   card: projectAgentChoiceCardAuthoringSchema
-    .describe('Required top-level Choice content only. It never contains subject or commitments; the server adds all identities.'),
-  commitments: z.array(projectAgentChoiceCommitmentRequestSchema).max(12)
-    .describe('Usually empty. Add only deterministic mutations that are fully decided by this answer.'),
+    .describe('Required top-level Choice content. Put an optional commitment directly on its confirmation or exact option; the server adds all identities and canonical references.'),
 }).strict()
 
 const requestChoiceOutputSchema = z.object({
@@ -77,7 +75,7 @@ function createChoiceCardId(params: {
 }
 
 async function validateChoiceCommitments(
-  requests: RequestChoiceInput['commitments'],
+  requests: readonly ProjectAgentChoiceCommitmentRequest[],
 ): Promise<ProjectAgentChoiceCommitment[]> {
   if (requests.length === 0) return []
   // Delayed import avoids making the operation registry construct itself while
@@ -133,12 +131,13 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
         if (context.executionFence.runFence.runId !== identity.runId) {
           throw new Error(`PROJECT_AGENT_CHOICE_RUN_FENCE_MISMATCH:${identity.runId}`)
         }
-        const card = projectAgentChoiceCardDefinitionSchema.parse({
-          ...input.card,
+        const authored = buildProjectAgentChoiceCardFromAuthoring({
+          authoring: input.card,
           cardId: createChoiceCardId({ ...identity, input }),
           toolCallId: identity.toolCallId,
         })
-        const commitments = await validateChoiceCommitments(input.commitments)
+        const card = authored.card
+        const commitments = await validateChoiceCommitments(authored.commitments)
         assertProjectAgentChoiceCommitmentsMatchCard({ card, commitments })
         const subject = await prisma.$transaction(async (tx) => (
           await resolveProjectAgentChoiceSubject({

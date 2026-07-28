@@ -63,49 +63,41 @@ describe('tool input schema compatibility', () => {
     expect(Object.keys(operation.toolInputSchema.properties)).toEqual([
       'subject',
       'card',
-      'commitments',
     ])
-    expect(operation.toolInputSchema.required).toEqual(['subject', 'card', 'commitments'])
+    expect(operation.toolInputSchema.required).toEqual(['subject', 'card'])
     expect(operation.inputSchema.safeParse({
       subject: { kind: 'none' },
       card: {
-        mode: 'confirm',
-        replyMode: 'none',
+        kind: 'confirm',
         title: 'Use this direction?',
-        groups: [],
+        description: null,
         submitLabel: 'Confirm',
-        replyLabel: null,
-        replyPlaceholder: null,
-        replySubmitLabel: null,
+        commitment: null,
+        reply: null,
       },
-      commitments: [],
     }).success).toBe(true)
 
     const cardSchema = operation.toolInputSchema.properties.card
     expect(isRecord(cardSchema) && Array.isArray(cardSchema.oneOf)).toBe(true)
     if (!isRecord(cardSchema) || !Array.isArray(cardSchema.oneOf)) {
-      throw new Error('request_choice card must expose replyMode branches')
+      throw new Error('request_choice card must expose kind branches')
     }
     const branches = new Map(cardSchema.oneOf.flatMap((branch) => {
       if (!isRecord(branch) || !isRecord(branch.properties)) return []
-      const replyMode = branch.properties.replyMode
-      if (!isRecord(replyMode) || typeof replyMode.const !== 'string') return []
-      return [[replyMode.const, branch] as const]
+      const kind = branch.properties.kind
+      if (!isRecord(kind) || typeof kind.const !== 'string') return []
+      return [[kind.const, branch] as const]
     }))
-    expect([...branches.keys()]).toEqual(['none', 'whole_card', 'per_group'])
-    for (const replyMode of ['none', 'whole_card', 'per_group']) {
-      const branch = branches.get(replyMode)
-      expect(branch?.required).toEqual(expect.arrayContaining([
-        'replyLabel',
-        'replyPlaceholder',
-        'replySubmitLabel',
-      ]))
-      if (!branch || !isRecord(branch.properties)) continue
-      for (const key of ['replyLabel', 'replyPlaceholder', 'replySubmitLabel']) {
-        const property = branch.properties[key]
-        expect(isRecord(property) ? property.type : undefined)
-          .toBe(replyMode === 'none' ? 'null' : 'string')
-      }
-    }
+    expect([...branches.keys()]).toEqual([
+      'confirm',
+      'select',
+      'select_with_actions',
+      'select_per_group_text',
+    ])
+    expect(branches.get('confirm')?.required).toContain('reply')
+    expect(branches.get('select_per_group_text')?.required).toEqual(expect.arrayContaining([
+      'customTextGroup',
+      'reply',
+    ]))
   })
 })

@@ -25,10 +25,14 @@ export interface ProjectAgentPlanSnapshot {
   plan: ProjectAgentPlanItem[]
 }
 
-const projectAgentPlanItemsSchema = z.array(z.object({
+const projectAgentPlanStepSchema = z.string().trim().min(1).max(160)
+
+const projectAgentPlanItemSchema = z.object({
   step: z.string().trim().min(1).max(160),
   status: z.enum(PROJECT_AGENT_PLAN_STATUSES),
-}).strict()).max(12).superRefine((items, context) => {
+}).strict()
+
+const projectAgentPlanItemsSchema = z.array(projectAgentPlanItemSchema).max(25).superRefine((items, context) => {
   const inProgressCount = items.filter((item) => item.status === 'in_progress').length
   if (inProgressCount > 1) {
     context.addIssue({
@@ -38,10 +42,41 @@ const projectAgentPlanItemsSchema = z.array(z.object({
   }
 })
 
+const projectAgentPlanAuthoringSchema = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('active'),
+    completed: z.array(projectAgentPlanStepSchema).max(12)
+      .describe('Completed steps, in display order.'),
+    active: projectAgentPlanStepSchema
+      .describe('The single step currently in progress.'),
+    pending: z.array(projectAgentPlanStepSchema).max(12)
+      .describe('Pending steps, in display order.'),
+  }).strict()
+    .describe('An open plan with exactly one active step.'),
+  z.object({
+    state: z.literal('pending'),
+    completed: z.array(projectAgentPlanStepSchema).max(12)
+      .describe('Completed steps, in display order.'),
+    pending: z.array(projectAgentPlanStepSchema).min(1).max(12)
+      .describe('One or more pending steps, in display order.'),
+  }).strict()
+    .describe('An open plan with pending work and no active step.'),
+  z.object({
+    state: z.literal('completed'),
+    completed: z.array(projectAgentPlanStepSchema).min(1).max(12)
+      .describe('The completed steps. The server closes the plan instead of persisting them.'),
+  }).strict()
+    .describe('Close the current plan because every step is completed.'),
+  z.object({
+    state: z.literal('clear'),
+  }).strict()
+    .describe('Explicitly close and clear the current plan.'),
+]).describe('Choose exactly one complete plan state. The structure makes more than one active step impossible.')
+
 export const projectAgentPlanInputSchema = z.object({
   explanation: z.string().trim().min(1).max(500).nullable(),
-  plan: projectAgentPlanItemsSchema,
-}).strict()
+  plan: projectAgentPlanAuthoringSchema,
+}).strict().describe('Replace the current advisory work plan. This notebook never executes work or controls project state.')
 
 export const projectAgentPlanSnapshotSchema = z.object({
   explanation: z.string().trim().min(1).max(500).nullable(),
@@ -70,11 +105,23 @@ type ProjectAgentPlanReader = Pick<PrismaClient, 'projectAssistantThread'>
 function normalizeProjectAgentPlanSnapshot(
   input: z.infer<typeof projectAgentPlanInputSchema>,
 ): ProjectAgentPlanSnapshot {
-  const shouldClear = input.plan.length === 0
-    || input.plan.every((item) => item.status === 'completed')
+  const plan = input.plan.state === 'active'
+    ? [
+        ...input.plan.completed.map((step) => ({ step, status: 'completed' as const })),
+        { step: input.plan.active, status: 'in_progress' as const },
+        ...input.plan.pending.map((step) => ({ step, status: 'pending' as const })),
+      ]
+    : input.plan.state === 'pending'
+      ? [
+          ...input.plan.completed.map((step) => ({ step, status: 'completed' as const })),
+          ...input.plan.pending.map((step) => ({ step, status: 'pending' as const })),
+        ]
+      : []
+  const shouldClear = input.plan.state === 'clear'
+    || input.plan.state === 'completed'
   return projectAgentPlanSnapshotSchema.parse({
     explanation: shouldClear ? null : input.explanation,
-    plan: shouldClear ? [] : input.plan,
+    plan: shouldClear ? [] : plan,
   })
 }
 
@@ -84,8 +131,14 @@ export function createProjectAgentPlanSnapshot(input: unknown): ProjectAgentPlan
 
 export function parseProjectAgentPlanSnapshot(value: unknown): ProjectAgentPlanSnapshot | null {
   if (value === null || value === undefined) return null
-  const snapshot = normalizeProjectAgentPlanSnapshot(projectAgentPlanInputSchema.parse(value))
-  return snapshot.plan.length === 0 ? null : snapshot
+  const stored = z.object({
+    explanation: z.string().trim().min(1).max(500).nullable(),
+    plan: projectAgentPlanItemsSchema,
+  }).strict().parse(value)
+  if (stored.plan.length === 0 || stored.plan.every((item) => item.status === 'completed')) {
+    return null
+  }
+  return projectAgentPlanSnapshotSchema.parse(stored)
 }
 
 export async function readProjectAgentPlan(

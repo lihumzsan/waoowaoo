@@ -1,6 +1,7 @@
 import { Agent, RunContext, tool, type Tool } from '@openai/agents'
 import { NextRequest } from 'next/server'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {
   PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA,
@@ -28,10 +29,31 @@ function createFixture() {
   return { registry, toolset, catalog }
 }
 
+function createDiscoveryState(
+  fixture: ReturnType<typeof createFixture>,
+  initiallyLoadedOperationIds: readonly string[] = [],
+) {
+  return createProjectAgentToolDiscoveryState({
+    catalog: fixture.catalog,
+    registry: fixture.registry,
+    bindingContext: {
+      userId: 'user-1',
+      projectId: 'project-1',
+      context: {
+        runId: 'run-1',
+        executionSegmentId: 'segment-1',
+        locale: 'en',
+      },
+    },
+    initiallyLoadedOperationIds,
+  })
+}
+
 describe('project agent tool discovery', () => {
   it('keeps the model-visible tool list fixed while returning exact registry schemas as results', async () => {
-    const { catalog } = createFixture()
-    const state = createProjectAgentToolDiscoveryState({ catalog })
+    const fixture = createFixture()
+    const { catalog } = fixture
+    const state = createDiscoveryState(fixture)
     const loader = createProjectAgentToolDiscoveryTool<Record<string, never>>({
       state,
       locale: 'en',
@@ -71,31 +93,82 @@ describe('project agent tool discovery', () => {
 
     const thirdOperationId = catalog[2]?.operationId
     if (!thirdOperationId) throw new Error('TOOL_OPERATION_REQUIRED')
-    const result = state.load([thirdOperationId])
+    const result = await state.load([thirdOperationId])
     expect((await agent.getAllTools(runContext)).map((candidate) => candidate.name)).toEqual([
       PROJECT_AGENT_TOOL_DISCOVERY_NAME,
       PROJECT_AGENT_OPERATION_GATEWAY_NAME,
     ])
-    expect(result.operations).toEqual([{
+    expect(result.operations).toEqual([expect.objectContaining({
       operationId: thirdOperationId,
       description: catalog[2]?.description,
       parameters: catalog[2]?.parameters,
-    }])
+      contractId: expect.any(String),
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    })])
     expect(result.executeWith.toolName).toBe(PROJECT_AGENT_OPERATION_GATEWAY_NAME)
   })
 
   it('preloads exact approval-resume operations without opening the rest of the catalog', () => {
-    const { catalog } = createFixture()
+    const fixture = createFixture()
+    const { catalog } = fixture
     const approvalOperationId = catalog[1]?.operationId
     if (!approvalOperationId) throw new Error('APPROVAL_OPERATION_REQUIRED')
-    const state = createProjectAgentToolDiscoveryState({
-      catalog,
-      initiallyLoadedOperationIds: [approvalOperationId],
-    })
+    const state = createDiscoveryState(fixture, [approvalOperationId])
 
     expect(state.loadedOperationIds()).toEqual([approvalOperationId])
     expect(state.isLoaded(approvalOperationId)).toBe(true)
     expect(catalog.filter((entry) => state.isLoaded(entry.operationId))).toHaveLength(1)
+  })
+
+  it('keeps immutable bound contracts and rejects stale, crossed, or unknown identities', async () => {
+    const fixture = createFixture()
+    const operationId = 'adopt_resource'
+    const operation = fixture.registry[operationId]
+    if (!operation) throw new Error(`TEST_OPERATION_MISSING:${operationId}`)
+    let role: 'story_binding' | 'chapter_binding' = 'story_binding'
+    const registry = {
+      ...fixture.registry,
+      [operationId]: {
+        ...operation,
+        bindToolInputSchema: async () => ({
+          inputSchema: z.object({
+            resourceId: z.string().trim().min(1),
+            revisionId: z.string().trim().min(1),
+            role: z.literal(role),
+            slotKey: z.string().trim().min(1).max(128),
+            expectedVersion: z.number().int().nonnegative().nullable(),
+          }).strict(),
+          state: { role },
+        }),
+      },
+    }
+    const state = createDiscoveryState({ ...fixture, registry })
+    const first = await state.load([operationId])
+    const firstContract = first.operations[0]
+    if (!firstContract) throw new Error('TEST_BOUND_CONTRACT_REQUIRED')
+    const repeated = await state.load([operationId])
+    expect(repeated.operations[0]?.contractId).toBe(firstContract.contractId)
+    expect((await state.resolveContract(
+      operationId,
+      firstContract.contractId,
+    )).state).toEqual({ role: 'story_binding' })
+
+    role = 'chapter_binding'
+    await expect(state.resolveContract(
+      operationId,
+      firstContract.contractId,
+    )).rejects.toThrow(`PROJECT_AGENT_OPERATION_CONTRACT_STALE:${operationId}`)
+    const rebound = await state.load([operationId])
+    expect(rebound.operations[0]?.contractId).not.toBe(firstContract.contractId)
+    expect(rebound.operations[0]?.revision).not.toBe(firstContract.revision)
+    await expect(state.resolveContract(
+      'list_resources',
+      rebound.operations[0]?.contractId ?? '',
+    )).rejects.toThrow('PROJECT_AGENT_OPERATION_CONTRACT_MISMATCH:list_resources')
+    await expect(state.resolveContract(
+      operationId,
+      'unknown-contract',
+    )).rejects.toThrow(`PROJECT_AGENT_OPERATION_CONTRACT_UNKNOWN:${operationId}`)
   })
 
   it('exposes the registry-declared direct baseline once and rejects its gateway alias', async () => {
@@ -103,7 +176,7 @@ describe('project agent tool discovery', () => {
     const operationTools = createProjectAgentOperationTools({
       request: new NextRequest('http://localhost/api/project-agent'),
       registry,
-      discoveryState: createProjectAgentToolDiscoveryState({ catalog }),
+      discoveryState: createDiscoveryState({ registry, toolset, catalog }),
       description: 'test gateway',
       directOperations: toolset.directOperationIds.map((operationId) => {
         const operation = registry[operationId]
@@ -146,6 +219,7 @@ describe('project agent tool discovery', () => {
       new RunContext({}),
       JSON.stringify({
         operationId: 'update_plan',
+        contractId: 'not-a-direct-contract',
         argumentsJson: JSON.stringify({ explanation: null, plan: [] }),
       }),
       {
@@ -166,21 +240,22 @@ describe('project agent tool discovery', () => {
     })
   })
 
-  it('fails explicitly for unknown, duplicate, or oversized load requests', () => {
-    const { catalog } = createFixture()
-    const state = createProjectAgentToolDiscoveryState({ catalog })
+  it('fails explicitly for unknown, duplicate, or oversized load requests', async () => {
+    const fixture = createFixture()
+    const { catalog } = fixture
+    const state = createDiscoveryState(fixture)
     const firstOperationId = catalog[0]?.operationId
     if (!firstOperationId) throw new Error('TOOL_OPERATION_REQUIRED')
 
-    expect(() => state.load(['unknown_operation'])).toThrow(
+    await expect(state.load(['unknown_operation'])).rejects.toThrow(
       'PROJECT_AGENT_TOOL_LOAD_ID_UNKNOWN:unknown_operation',
     )
-    expect(() => state.load([firstOperationId, firstOperationId])).toThrow(
+    await expect(state.load([firstOperationId, firstOperationId])).rejects.toThrow(
       'PROJECT_AGENT_TOOL_LOAD_ID_DUPLICATE',
     )
-    expect(() => state.load(
+    await expect(state.load(
       catalog.slice(0, PROJECT_AGENT_TOOL_LOAD_LIMIT + 1).map((entry) => entry.operationId),
-    )).toThrow(`PROJECT_AGENT_TOOL_LOAD_COUNT_INVALID:${PROJECT_AGENT_TOOL_LOAD_LIMIT + 1}`)
+    )).rejects.toThrow(`PROJECT_AGENT_TOOL_LOAD_COUNT_INVALID:${PROJECT_AGENT_TOOL_LOAD_LIMIT + 1}`)
   })
 
   it('keeps the execution envelope provider-safe and parses only JSON objects', () => {
@@ -188,25 +263,30 @@ describe('project agent tool discovery', () => {
       type: 'object',
       properties: {
         operationId: expect.objectContaining({ type: 'string' }),
+        contractId: expect.objectContaining({ type: 'string' }),
         argumentsJson: expect.objectContaining({ type: 'string' }),
       },
-      required: ['operationId', 'argumentsJson'],
+      required: ['operationId', 'contractId', 'argumentsJson'],
       additionalProperties: false,
     })
     expect(JSON.stringify(PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA)).not.toContain('"oneOf"')
     expect(readProjectAgentOperationGatewayInput({
       operationId: 'get_project_context',
+      contractId: 'contract-1',
       argumentsJson: '{"scope":"project"}',
     })).toEqual({
       operationId: 'get_project_context',
+      contractId: 'contract-1',
       arguments: { scope: 'project' },
     })
     expect(() => readProjectAgentOperationGatewayInput({
       operationId: 'get_project_context',
+      contractId: 'contract-1',
       argumentsJson: '[]',
     })).toThrow('PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_OBJECT_REQUIRED:get_project_context')
     expect(() => readProjectAgentOperationGatewayInput({
       operationId: 'get_project_context',
+      contractId: 'contract-1',
       argumentsJson: '{',
     })).toThrow('PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_JSON_INVALID:get_project_context')
     expect(readProjectAgentOperationGatewayOperationId({

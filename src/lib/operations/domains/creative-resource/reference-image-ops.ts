@@ -20,10 +20,15 @@ import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
 import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
+const httpUrlSchema = z.union([
+  z.url().startsWith('http://').max(2_000),
+  z.url().startsWith('https://').max(2_000),
+])
+
 const importWebReferenceImageInputSchema = z.object({
-  imageUrl: z.string().url().max(2_000)
+  imageUrl: httpUrlSchema
     .describe('Exact http(s) image URL copied verbatim from one web_search image result. Never a page URL, a guessed URL, or a URL from anywhere else.'),
-  sourceWebsiteUrl: z.string().url().max(2_000)
+  sourceWebsiteUrl: httpUrlSchema
     .describe('Exact http(s) page URL the same image result was found on. Provenance is mandatory and is stored with the imported material.'),
   name: z.string().trim().min(1).max(200)
     .describe('Short display name for this reference material, in the conversation language.'),

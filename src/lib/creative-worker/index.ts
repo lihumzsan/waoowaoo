@@ -19,9 +19,11 @@ export {
 } from './output-registry'
 export { runCreativeWorker } from './runtime'
 export {
-  buildCreativeWorkerOutputTransportSchema,
-  normalizeCreativeWorkerOutputFromTransport,
-} from './output-transport-schema'
+  buildCreativeWorkerCanonicalOutputSchema,
+  createCreativeWorkerOutputSubmission,
+  CreativeWorkerSubmissionValidationError,
+  formatCreativeWorkerSubmissionError,
+} from './output-submission'
 export { buildCreativeWorkerSystemPrompt } from './system-prompt'
 export {
   CREATIVE_CONTEXT_COMPILER_ERROR_CODES,

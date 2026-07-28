@@ -8,16 +8,31 @@ import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
   formatProjectValidationIssue,
   normalizeProjectDraft,
+  PROJECT_DESCRIPTION_MAX_LENGTH,
+  PROJECT_NAME_MAX_LENGTH,
   validateProjectDraft,
   type ProjectDraftInput,
+  type ProjectUpdateInput,
 } from '@/lib/projects/validation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
-const updateProjectInputSchema = z.object({
-  name: z.string().optional().describe('New project name. Omit to keep the current name.'),
-  description: z.string().nullable().optional()
-    .describe('New project description, null to clear it, or omit to keep it unchanged.'),
+const updateProjectInputSchema: z.ZodType<ProjectUpdateInput> = z.object({
+  command: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('name'),
+      name: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
+    }).strict(),
+    z.object({
+      kind: z.literal('description'),
+      description: z.string().trim().max(PROJECT_DESCRIPTION_MAX_LENGTH).nullable(),
+    }).strict(),
+    z.object({
+      kind: z.literal('details'),
+      name: z.string().trim().min(1).max(PROJECT_NAME_MAX_LENGTH),
+      description: z.string().trim().max(PROJECT_DESCRIPTION_MAX_LENGTH).nullable(),
+    }).strict(),
+  ]).describe('Choose exactly one project update command.'),
 }).strict()
 
 async function requireOwnedProject(
@@ -81,20 +96,24 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       inputSchema: updateProjectInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        if (input.name === undefined && input.description === undefined) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'PROJECT_UPDATE_EMPTY',
-            field: 'body',
-          })
-        }
         const existing = await requireOwnedProject(
           { projectId: ctx.projectId, userId: ctx.userId },
           transaction,
         )
-        const draft: ProjectDraftInput = {
-          name: input.name ?? existing.name,
-          description: input.description === undefined ? existing.description : input.description,
-        }
+        const draft: ProjectDraftInput = input.command.kind === 'name'
+          ? {
+              name: input.command.name,
+              description: existing.description,
+            }
+          : input.command.kind === 'description'
+            ? {
+                name: existing.name,
+                description: input.command.description,
+              }
+            : {
+                name: input.command.name,
+                description: input.command.description,
+              }
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
           const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'

@@ -3,9 +3,12 @@ import { z } from 'zod'
 import { withOperationPack } from '@/lib/operations/pack'
 import type { OperationPackDefaults } from '@/lib/operations/pack'
 import type {
+  OperationChannels,
   OperationEffects,
+  OperationToolExposure,
   ProjectAgentOperationDefinitionBase,
   ProjectAgentOperationRegistryDraft,
+  ProjectAgentToolInputSchema,
 } from '@/lib/operations/types'
 
 const NOOP_EFFECTS: OperationEffects = {
@@ -21,12 +24,26 @@ const NOOP_EFFECTS: OperationEffects = {
 function createNoopOperation(params: {
   id: string
   groupPath?: string[]
+  channels?: OperationChannels
+  toolExposure?: OperationToolExposure
+  bindToolInputSchema?: boolean
+  toolInputSchema?: ProjectAgentToolInputSchema
 }): ProjectAgentOperationDefinitionBase<unknown, unknown> {
   return {
     id: params.id,
     summary: params.id,
     intent: 'act',
     groupPath: params.groupPath,
+    channels: params.channels,
+    toolExposure: params.toolExposure,
+    ...(params.bindToolInputSchema
+      ? {
+          bindToolInputSchema: async () => ({
+            inputSchema: z.object({}).strict(),
+          }),
+        }
+      : {}),
+    toolInputSchema: params.toolInputSchema,
     effects: NOOP_EFFECTS,
     confirmation: { kind: 'none', required: false },
     inputSchema: z.unknown(),
@@ -102,5 +119,59 @@ describe('withOperationPack', () => {
       () => withOperationPack(draft, defaults),
       'If this fails, it likely means a refactor accidentally moved an operation into the wrong groupPath, causing tools to be injected under the wrong prompt section.',
     ).toThrow(/reason=operation groupPath must start with pack groupPath/)
+  })
+
+  it('allows dynamic schema binders only on tool-visible on-demand operations', () => {
+    const defaults: OperationPackDefaults = {
+      groupPath: ['asset', 'edit'],
+      channels: { tool: true, api: false },
+      prerequisites: { episodeId: 'optional' },
+      confirmation: { kind: 'none', required: false },
+    }
+
+    expect(() => withOperationPack({
+      no_tool_channel: createNoopOperation({
+        id: 'no_tool_channel',
+        channels: { tool: false, api: true },
+        bindToolInputSchema: true,
+      }),
+    }, defaults)).toThrow(
+      'PROJECT_AGENT_OPERATION_BOUND_TOOL_CHANNEL_REQUIRED:no_tool_channel',
+    )
+
+    expect(() => withOperationPack({
+      direct_tool: createNoopOperation({
+        id: 'direct_tool',
+        toolExposure: 'direct',
+        bindToolInputSchema: true,
+      }),
+    }, defaults)).toThrow(
+      'PROJECT_AGENT_OPERATION_BOUND_TOOL_ON_DEMAND_REQUIRED:direct_tool',
+    )
+  })
+
+  it('rejects a second hand-authored JSON schema beside a dynamic runtime binder', () => {
+    const defaults: OperationPackDefaults = {
+      groupPath: ['asset', 'edit'],
+      channels: { tool: true, api: false },
+      prerequisites: { episodeId: 'optional' },
+      confirmation: { kind: 'none', required: false },
+    }
+    const explicitSchema: ProjectAgentToolInputSchema = {
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    }
+
+    expect(() => withOperationPack({
+      ambiguous: createNoopOperation({
+        id: 'ambiguous',
+        bindToolInputSchema: true,
+        toolInputSchema: explicitSchema,
+      }),
+    }, defaults)).toThrow(
+      'PROJECT_AGENT_OPERATION_BOUND_TOOL_SCHEMA_AMBIGUOUS:ambiguous',
+    )
   })
 })

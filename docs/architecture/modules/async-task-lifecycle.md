@@ -74,6 +74,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - MutationBatch 最初为旧 panel、voice line 和专用媒体 writer 提供整批撤销；这些 writer 删除后，生产代码已经没有创建调用，但两个撤销 Operation、独立 route、SSE event/replay/checkpoint、结果 `canUndo` 投影和 v3 游标水位仍继续声明这项能力。当前这些零 writer 运行时入口和第二状态协议已一起删除，SSE 一次切换为只包含 Task/Assistant/Resource 水位的 v4；数据库模型只为未获迁移授权的历史行暂留，不再有应用 writer、reader 或恢复入口，后续 schema/data 删除需单独迁移和排空授权。
 - 长模型 Task 曾在具体 handler 内各自读取全局 timeout，attempt owner 只无条件写 heartbeat；这使 registry 不知道执行是否有界，也把“worker 进程还活着”误当成“供应商仍有进展”。当前 execution deadline 成为 TaskDefinition 的穷尽字段，只有 `creative_work` 声明 5 分钟上限，通用 attempt owner 创建 AbortSignal 并以 canonical `GENERATION_TIMEOUT` 进入既有 registry retry policy；heartbeat 只证明 attempt owner 存活，不再承担 stall 裁决。
 - Task terminal 曾只写 durable continuation Outbox，正常路径也等待周期 dispatcher；Outbox 与 continuation claim 又使用十分钟级 lease，worker 被重启后虽有完整持久事实却长期无人可领取。预期的前台 Run/Choice contention 还会增加 deliveryCount，最终把可恢复占用误判成 dead delivery。当前 terminal commit 后立即 enqueue 精确 Outbox IDs，失败仍由同一持久 dispatcher 恢复；运输与 continuation claim 使用 30 秒 lease/heartbeat，typed defer 原子撤销本次 deliveryCount。没有新增轮询、第二队列协议或客户端续跑入口。
+- `get_task` 首次公开严格字段 Schema 时仍用 `includeEvents` 与独立可选 `eventsLimit` 表达事件读取；关闭或省略 events 时携带 limit 在 Schema 中合法，却被 executor 静默忽略。当前输入改为 `events.kind=none|include`，只有 include 分支拥有可选 limit，Task route 也拒绝 limit 与关闭事件的矛盾查询后再构造同一 canonical 分支。Task 生命周期和事件 writer 均未改变；本次只收敛读取命令语义。
 
 ## 修改检查表
 

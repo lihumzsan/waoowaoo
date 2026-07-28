@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto'
 import { tool, type Tool } from '@openai/agents'
 import type {
   ProjectAgentOperationRegistry,
   ProjectAgentToolInputSchema,
+  ProjectAgentToolInputBinding,
+  ProjectAgentToolInputBindingContext,
+  RuntimeSchema,
 } from '@/lib/operations/types'
+import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
+import { stableArgsFingerprint } from './stable-args-hash'
 import type { ProjectAgentLocale } from './locale'
 import type { ProjectAgentToolset } from './toolset'
 
@@ -10,6 +16,7 @@ export const PROJECT_AGENT_TOOL_DISCOVERY_NAME = 'load_tools'
 export const PROJECT_AGENT_OPERATION_GATEWAY_NAME = 'execute_operation'
 export const PROJECT_AGENT_TOOL_LOAD_LIMIT = 4
 export const PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT = 160
+const PROJECT_AGENT_BOUND_TOOL_PROTOCOL_VERSION = 'project-agent-bound-tool-v1'
 
 export interface ProjectAgentToolCatalogEntry {
   readonly operationId: string
@@ -20,6 +27,8 @@ export interface ProjectAgentToolCatalogEntry {
 
 export interface ProjectAgentLoadedOperationDefinition {
   readonly operationId: string
+  readonly contractId: string
+  readonly revision: string
   readonly description: string
   readonly parameters: ProjectAgentToolInputSchema
 }
@@ -32,15 +41,29 @@ export interface ProjectAgentToolLoadResult {
     readonly toolName: typeof PROJECT_AGENT_OPERATION_GATEWAY_NAME
     readonly arguments: {
       readonly operationId: 'Copy operations[].operationId exactly'
+      readonly contractId: 'Copy operations[].contractId exactly'
       readonly argumentsJson: 'JSON object matching operations[].parameters'
     }
   }
 }
 
+export interface ProjectAgentResolvedToolContract {
+  readonly operationId: string
+  readonly contractId: string
+  readonly revision: string
+  readonly inputSchema: RuntimeSchema<unknown>
+  readonly toolInputSchema: ProjectAgentToolInputSchema
+  readonly state?: unknown
+}
+
 export interface ProjectAgentToolDiscoveryState {
   readonly catalog: readonly ProjectAgentToolCatalogEntry[]
   isLoaded: (operationId: string) => boolean
-  load: (operationIds: readonly string[]) => ProjectAgentToolLoadResult
+  load: (operationIds: readonly string[]) => Promise<ProjectAgentToolLoadResult>
+  resolveContract: (
+    operationId: string,
+    contractId: string,
+  ) => Promise<ProjectAgentResolvedToolContract>
   loadedOperationIds: () => readonly string[]
 }
 
@@ -126,6 +149,8 @@ function validateRequestedOperationIds(params: {
 
 export function createProjectAgentToolDiscoveryState(params: {
   readonly catalog: readonly ProjectAgentToolCatalogEntry[]
+  readonly registry: ProjectAgentOperationRegistry
+  readonly bindingContext: ProjectAgentToolInputBindingContext
   readonly initiallyLoadedOperationIds?: readonly string[]
 }): ProjectAgentToolDiscoveryState {
   const catalog = [...params.catalog]
@@ -140,43 +165,118 @@ export function createProjectAgentToolDiscoveryState(params: {
     }
   }
   const loaded = new Set(initialIds)
+  type BoundContract = ProjectAgentResolvedToolContract
+  const contractsById = new Map<string, BoundContract>()
+  const latestContractIdByOperation = new Map<string, string>()
   const listLoaded = (): string[] => catalog
     .filter((entry) => loaded.has(entry.operationId))
     .map((entry) => entry.operationId)
+
+  const bindOperation = async (
+    operationId: string,
+  ): Promise<Omit<BoundContract, 'contractId'>> => {
+    const operation = params.registry[operationId]
+    if (
+      !operation
+      || !operation.channels.tool
+      || operation.toolExposure !== 'on_demand'
+    ) {
+      throw new Error(`PROJECT_AGENT_TOOL_BOUND_OPERATION_INVALID:${operationId}`)
+    }
+    const binding: ProjectAgentToolInputBinding<unknown> = operation.bindToolInputSchema
+      ? await operation.bindToolInputSchema(params.bindingContext)
+      : { inputSchema: operation.inputSchema }
+    const toolInputSchema = operation.bindToolInputSchema
+      ? createProjectAgentToolInputSchema({
+          operationId,
+          inputSchema: binding.inputSchema,
+        })
+      : operation.toolInputSchema
+    const revision = stableArgsFingerprint({
+      protocolVersion: PROJECT_AGENT_BOUND_TOOL_PROTOCOL_VERSION,
+      operationId,
+      toolInputSchema,
+    })
+    return {
+      operationId,
+      revision,
+      inputSchema: binding.inputSchema,
+      toolInputSchema,
+      ...(binding.state === undefined ? {} : { state: binding.state }),
+    }
+  }
+
+  const loadContract = async (operationId: string): Promise<BoundContract> => {
+    const current = await bindOperation(operationId)
+    const latestId = latestContractIdByOperation.get(operationId)
+    const latest = latestId ? contractsById.get(latestId) : null
+    if (latest?.revision === current.revision) return latest
+    const contract: BoundContract = {
+      ...current,
+      contractId: randomUUID(),
+    }
+    contractsById.set(contract.contractId, contract)
+    latestContractIdByOperation.set(operationId, contract.contractId)
+    return contract
+  }
 
   return {
     catalog,
     isLoaded(operationId) {
       return loaded.has(operationId)
     },
-    load(operationIds) {
+    async load(operationIds) {
       const normalized = validateRequestedOperationIds({ operationIds, knownOperationIds })
       const newlyLoaded = new Set<string>()
       for (const operationId of normalized) {
         if (!loaded.has(operationId)) newlyLoaded.add(operationId)
         loaded.add(operationId)
       }
+      const boundContracts = await Promise.all(normalized.map(loadContract))
       return {
         newlyLoadedOperationIds: catalog
           .filter((entry) => newlyLoaded.has(entry.operationId))
           .map((entry) => entry.operationId),
         loadedOperationIds: listLoaded(),
-        operations: normalized.map((operationId) => {
+        operations: boundContracts.map((contract) => {
+          const operationId = contract.operationId
           const entry = catalog.find((candidate) => candidate.operationId === operationId)
           if (!entry) throw new Error(`PROJECT_AGENT_TOOL_LOAD_ID_UNKNOWN:${operationId}`)
           return {
             operationId: entry.operationId,
+            contractId: contract.contractId,
+            revision: contract.revision,
             description: entry.description,
-            parameters: entry.parameters,
+            parameters: contract.toolInputSchema,
           }
         }),
         executeWith: {
           toolName: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
           arguments: {
             operationId: 'Copy operations[].operationId exactly',
+            contractId: 'Copy operations[].contractId exactly',
             argumentsJson: 'JSON object matching operations[].parameters',
           },
         },
+      }
+    },
+    async resolveContract(operationId, contractId) {
+      const contract = contractsById.get(contractId)
+      if (!contract) {
+        throw new Error(`PROJECT_AGENT_OPERATION_CONTRACT_UNKNOWN:${operationId}`)
+      }
+      if (contract.operationId !== operationId) {
+        throw new Error(`PROJECT_AGENT_OPERATION_CONTRACT_MISMATCH:${operationId}`)
+      }
+      const current = await bindOperation(operationId)
+      if (current.revision !== contract.revision) {
+        throw new Error(`PROJECT_AGENT_OPERATION_CONTRACT_STALE:${operationId}`)
+      }
+      return {
+        ...contract,
+        inputSchema: current.inputSchema,
+        toolInputSchema: current.toolInputSchema,
+        state: current.state,
       }
     },
     loadedOperationIds: listLoaded,
@@ -212,8 +312,8 @@ export function buildProjectAgentOperationGatewayDescription(
   locale: ProjectAgentLocale,
 ): string {
   return locale === 'zh'
-    ? '执行一个已通过 load_tools 加载的 Operation。operationId 必须精确复制加载结果；argumentsJson 必须是符合返回 parameters 的 JSON 对象字符串。服务端会用权威 Operation registry 再次解析和校验。'
-    : 'Execute one Operation already loaded through load_tools. Copy operationId exactly from the load result and pass argumentsJson as a JSON object string matching the returned parameters. The server parses and validates it again with the authoritative Operation registry.'
+    ? '执行一个已通过 load_tools 加载的 Operation。operationId 与 contractId 必须精确复制同一条加载结果；argumentsJson 必须是符合返回 parameters 的 JSON 对象字符串。服务端会验证该契约仍属于当前执行段且未过期，再用权威 Operation registry 解析。'
+    : 'Execute one Operation already loaded through load_tools. Copy operationId and contractId exactly from the same load result, and pass argumentsJson as a JSON object string matching its parameters. The server verifies that the contract still belongs to this execution segment and is current before parsing through the authoritative Operation registry.'
 }
 
 export function createProjectAgentToolDiscoveryTool<Context>(params: {
@@ -244,6 +344,8 @@ export function createProjectAgentToolDiscoveryTool<Context>(params: {
       additionalProperties: false,
     } as never,
     strict: true,
-    execute: (input: unknown): ProjectAgentToolLoadResult => params.state.load(readToolIds(input)),
+    execute: async (input: unknown): Promise<ProjectAgentToolLoadResult> => (
+      await params.state.load(readToolIds(input))
+    ),
   }) as Tool<Context>
 }

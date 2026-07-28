@@ -15,6 +15,9 @@ import {
   recordCompletedResearchAttempt,
   recordResearchFailure,
 } from './research'
+import {
+  formatCreativeWorkerSubmissionError,
+} from './output-submission'
 import type { CreativeWorkTraceEvent } from './trace-contract'
 import type {
   CreativeWorkerRunContext,
@@ -23,6 +26,11 @@ import type {
 const readSkillInputSchema = z.object({
   skillId: z.enum(CREATIVE_SKILL_IDS)
     .describe('Exact registered Skill ID from the complete skillCatalog supplied in the Worker input.'),
+}).strict()
+
+export const creativeWorkerSubmitResultInputSchema = z.object({
+  outputJson: z.string()
+    .describe('One complete JSON serialization of the final result. It must satisfy the canonical outputSchema supplied in this run input.'),
 }).strict()
 
 function requireRunContext(
@@ -200,11 +208,34 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
   })
 }
 
+function createSubmitResultTool(input: {
+  readonly submitOutputJson: (outputJson: string) => {
+    readonly accepted: true
+    readonly outputKind: string
+  }
+}): Tool<CreativeWorkerRunContext> {
+  return tool({
+    name: 'submit_result',
+    description: 'Submit the final Creative Worker result for canonical validation. Pass exactly one JSON serialization in outputJson. If validation returns accepted=false, correct every listed field issue and call submit_result again in this same run. A successful submission ends the run.',
+    parameters: creativeWorkerSubmitResultInputSchema,
+    strict: true,
+    execute: ({ outputJson }) => input.submitOutputJson(outputJson),
+    errorFunction: (_runContext, error) => formatCreativeWorkerSubmissionError(error),
+  })
+}
+
 export function createCreativeWorkerTools(input: {
   readonly workerTools: readonly 'web_search'[]
+  readonly submitOutputJson: (outputJson: string) => {
+    readonly accepted: true
+    readonly outputKind: string
+  }
 }): readonly Tool<CreativeWorkerRunContext>[] {
   return [
     createReadSkillTool(),
     ...(input.workerTools.includes('web_search') ? [createWebSearchTool()] : []),
+    createSubmitResultTool({
+      submitOutputJson: input.submitOutputJson,
+    }),
   ]
 }

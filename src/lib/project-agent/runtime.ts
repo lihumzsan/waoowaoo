@@ -1030,6 +1030,12 @@ export async function createProjectAgentChatResponse(input: {
     : []
   const toolDiscoveryState = createProjectAgentToolDiscoveryState({
     catalog: toolCatalog,
+    registry: operations,
+    bindingContext: {
+      userId: input.userId,
+      projectId: input.projectId,
+      context,
+    },
     initiallyLoadedOperationIds,
   })
   const projectStateInputItem = buildProjectStateInputItem({

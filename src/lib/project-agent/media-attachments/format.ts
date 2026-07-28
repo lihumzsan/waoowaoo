@@ -22,8 +22,8 @@ export function formatProjectAssistantMediaAttachmentsForModel(input: {
     return `用户上传素材 ${String(index + 1)}：\n${tag}`
   })
   const hint = input.locale === 'en'
-    ? 'These are ready Resource revisions owned by the user. To use one in generation, pass its revisionId into the matching reference parameter (for example create_video.mediaReferences or create_image.imageReferences).'
-    : '以上是用户已拥有的 ready Resource revision。如需在生成中使用，请把对应 revisionId 传入相应引用参数（例如 create_video.mediaReferences 或 create_image.imageReferences）。'
+    ? 'These are ready Resource revisions owned by the user. To use one in generation, pass its revisionId into the matching typed reference parameter (for example create_video.imageReferences, create_video.audioReferences, create_audio.videoReference, or create_image.imageReferences).'
+    : '以上是用户已拥有的 ready Resource revision。如需在生成中使用，请把对应 revisionId 传入相应的类型化引用参数（例如 create_video.imageReferences、create_video.audioReferences、create_audio.videoReference 或 create_image.imageReferences）。'
   return [...blocks, hint].join('\n\n')
 }
 

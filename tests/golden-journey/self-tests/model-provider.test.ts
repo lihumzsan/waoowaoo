@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type { GoldenModelServer } from '../providers/model/server'
 import { startGoldenModelServer } from '../providers/model/server'
 import type {
@@ -59,15 +60,28 @@ const GOLDEN_FIXED_OPERATION_TOOLS: readonly GoldenChatTool[] = [
       parameters: {
         type: 'object',
         additionalProperties: false,
-        required: ['operationId', 'argumentsJson'],
+        required: ['operationId', 'contractId', 'argumentsJson'],
         properties: {
           operationId: { type: 'string' },
+          contractId: { type: 'string' },
           argumentsJson: { type: 'string' },
         },
       },
     },
   },
 ]
+
+function requestChoiceGoldenTool(): GoldenChatTool {
+  const operation = createProjectAgentOperationRegistry().request_choice
+  return {
+    type: 'function',
+    function: {
+      name: operation.id,
+      description: operation.summary,
+      parameters: operation.toolInputSchema,
+    },
+  }
+}
 
 function withFixedOperationTools(
   request: GoldenChatCompletionRequest,
@@ -112,6 +126,7 @@ function withLoadedOperationSchemas(
           loadedOperationIds: operationIds,
           operations: operationTools.map((tool) => ({
             operationId: tool.function.name,
+            contractId: `golden-contract-${tool.function.name}`,
             parameters: tool.function.parameters ?? { type: 'object' },
           })),
         }),
@@ -140,9 +155,11 @@ function readOperationArguments(
   expect(decision.toolName).toBe('execute_operation')
   const envelope = JSON.parse(decision.argumentsJson) as {
     operationId?: unknown
+    contractId?: unknown
     argumentsJson?: unknown
   }
   expect(envelope.operationId).toBe(expectedOperationId)
+  expect(envelope.contractId).toBe(`golden-contract-${expectedOperationId}`)
   if (typeof envelope.argumentsJson !== 'string') {
     throw new Error('GOLDEN_OPERATION_ARGUMENTS_JSON_REQUIRED')
   }
@@ -169,42 +186,23 @@ describe('Golden local model provider', () => {
     expect(first.appPort).not.toBe(first.coordinatorPort)
   })
 
-  it('serves a streamed generic Choice through the fixed Operation gateway over HTTP', async () => {
+  it('accepts and calls the production direct Choice schema over streamed HTTP', async () => {
     runningServer = await startGoldenModelServer()
-    const request = withLoadedOperationSchemas({
+    const request: GoldenChatCompletionRequest = {
       model: 'golden-model',
       stream: true,
-      messages: [{ role: 'user', content: 'Ask one current question.' }],
-      tools: [{
-        type: 'function',
-        function: {
-          name: 'request_choice',
-          parameters: {
-            type: 'object',
-            required: ['subject', 'card', 'commitments'],
-            properties: {
-              subject: {
-                type: 'object',
-                required: ['kind'],
-                properties: { kind: { type: 'string', enum: ['none'] } },
-              },
-              card: {
-                type: 'object',
-                required: ['mode', 'replyMode', 'title', 'groups', 'submitLabel'],
-                properties: {
-                  mode: { type: 'string', enum: ['confirm'] },
-                  replyMode: { type: 'string', enum: ['none'] },
-                  title: { type: 'string' },
-                  groups: { type: 'array', items: { type: 'object' } },
-                  submitLabel: { type: 'string' },
-                },
-              },
-              commitments: { type: 'array', items: { type: 'object' } },
-            },
-          },
+      messages: [
+        {
+          role: 'system',
+          content: [{
+            type: 'text',
+            text: '[project_state_snapshot]\nconfig.videoRatio=none\n[/project_state_snapshot]',
+          }],
         },
-      }],
-    })
+        { role: 'user', content: GOLDEN_FREEFORM_IMAGE_REQUEST },
+      ],
+      tools: [...GOLDEN_FIXED_OPERATION_TOOLS, requestChoiceGoldenTool()],
+    }
     const response = await fetch(`${runningServer.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -217,8 +215,8 @@ describe('Golden local model provider', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/event-stream')
-    expect(body).toContain('execute_operation')
     expect(body).toContain('request_choice')
+    expect(body).toContain('select_with_actions')
     expect(body).toContain('finish_reason')
     expect(body).toContain('data: [DONE]')
   })
@@ -417,7 +415,7 @@ describe('Golden local model provider', () => {
         ],
         tools: [
           { type: 'function', function: { name: 'list_resources', parameters: { type: 'object' } } },
-          { type: 'function', function: { name: 'request_choice', parameters: { type: 'object' } } },
+          requestChoiceGoldenTool(),
         ],
       },
     })
@@ -426,14 +424,22 @@ describe('Golden local model provider', () => {
         kind: 'resource_revisions',
         revisions: [{ revisionId: 'style-revision' }],
       },
-      card: { title: '是否采用当前 Creative Direction？' },
-      commitments: [{ operationId: 'adopt_creative_direction' }],
+      card: {
+        kind: 'select_with_actions',
+        title: '是否采用当前 Creative Direction？',
+        group: {
+          options: [
+            { commitment: { operationId: 'adopt_creative_direction' } },
+            { label: '暂不采用' },
+          ],
+        },
+      },
     })
   })
 
   it('authors one current ratio Choice and resumes the original media request from the committed fact', () => {
     const tools = [
-      { type: 'function' as const, function: { name: 'request_choice', parameters: { type: 'object' } } },
+      requestChoiceGoldenTool(),
       { type: 'function' as const, function: { name: 'create_image', parameters: { type: 'object' } } },
     ]
     const awaitingRatio = decideWithLoadedOperationSchemas({
@@ -457,15 +463,18 @@ describe('Golden local model provider', () => {
     expect(readOperationArguments(awaitingRatio, 'request_choice')).toMatchObject({
       subject: { kind: 'none' },
       card: {
+        kind: 'select_with_actions',
         title: '请选择当前项目的画面比例',
-        groups: [{ key: 'videoRatio', presentation: 'aspect_ratio' }],
+        group: {
+          presentation: 'aspect_ratio',
+          options: [
+            { ratio: '16:9', commitment: { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '16:9' }) } },
+            { ratio: '9:16', commitment: { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '9:16' }) } },
+            { ratio: '21:9', commitment: { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '21:9' }) } },
+          ],
+        },
         submitLabel: '保存本次画面比例',
       },
-      commitments: [
-        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '16:9' }) },
-        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '9:16' }) },
-        { operationId: 'update_project_config', inputJson: JSON.stringify({ videoRatio: '21:9' }) },
-      ],
     })
 
     const afterRatio = decideWithLoadedOperationSchemas({
@@ -726,7 +735,7 @@ describe('Golden local model provider', () => {
       request: {
         kind: 'new',
         count: 2,
-        mediaReferences: [{
+        imageReferences: [{
           revisionId: 'image-revision-1',
           role: 'reference',
         }],

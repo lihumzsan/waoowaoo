@@ -46,6 +46,19 @@ const voiceTargetSchema = z.discriminatedUnion('kind', [
   }).strict(),
 ])
 
+const voiceResourceCommandSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('new'),
+    name: z.string().trim().min(1).max(191).optional()
+      .describe('Optional display name for the new voice Resource.'),
+  }).strict(),
+  z.object({
+    kind: z.literal('regenerate'),
+    resourceId: z.string().trim().min(1)
+      .describe('Exact existing project.voice_reference Resource ID to regenerate in place.'),
+  }).strict(),
+])
+
 const generateVoiceInputSchema = z.object({
   description: z.string().trim().min(1).max(4_000)
     .describe('Natural-language design of the voice identity, such as age, timbre, accent, pace, energy, and emotional texture.'),
@@ -53,10 +66,7 @@ const generateVoiceInputSchema = z.object({
     .describe('Short multilingual sample to render with the designed voice. This exact text is billed by character count.'),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS)
     .describe('Language of previewText. Use Auto only when language cannot be determined reliably.'),
-  name: z.string().trim().min(1).max(191).optional()
-    .describe('Optional Resource display name for a new standalone voice.'),
-  resourceId: z.string().trim().min(1).optional()
-    .describe('Existing project.voice_reference Resource ID to regenerate in place. Omit to create a new voice Resource.'),
+  resource: voiceResourceCommandSchema,
   target: voiceTargetSchema,
 }).strict()
 
@@ -157,10 +167,10 @@ async function planGenerateVoice(
     purpose: 'voice-design',
   })
   const expectedBindingVersion = await requireCharacterAndBindingVersion(ctx, input.target)
-  const existing = input.resourceId
+  const existing = input.resource.kind === 'regenerate'
     ? await prisma.creativeResource.findFirst({
         where: {
-          id: input.resourceId,
+          id: input.resource.resourceId,
           userId: ctx.userId,
           projectId: ctx.projectId,
           episodeId: null,
@@ -173,10 +183,10 @@ async function planGenerateVoice(
         select: { id: true, name: true, status: true, headRevisionId: true },
       })
     : null
-  if (input.resourceId && !existing) {
+  if (input.resource.kind === 'regenerate' && !existing) {
     throw new ApiError('NOT_FOUND', {
       code: 'VOICE_RESOURCE_NOT_FOUND',
-      field: 'resourceId',
+      field: 'resource.resourceId',
     })
   }
   if (existing) {
@@ -213,7 +223,9 @@ async function planGenerateVoice(
     requestId,
     candidateIndex: 0,
   })
-  const resourceName = existing?.name ?? input.name ?? input.description.slice(0, 80)
+  const resourceName = existing?.name
+    ?? (input.resource.kind === 'new' ? input.resource.name : undefined)
+    ?? input.description.slice(0, 80)
   const generationOptions = { language: input.language }
   const resourcePayload = {
     resourceId,
@@ -363,7 +375,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design one reusable voice from a natural-language voice description and render one short preview audio. Omit resourceId to create; pass an existing voice Resource ID to regenerate under the same identity. Choose standalone for an unbound voice, or character to bind the completed revision automatically without overwriting a newer manual binding.',
+      summary: 'Design one reusable voice from a natural-language voice description and render one short preview audio. Use resource.kind=new to create or resource.kind=regenerate with one exact existing voice Resource ID to add a revision under the same identity. Choose standalone for an unbound voice, or character to bind the completed revision automatically without overwriting a newer manual binding.',
       intent: 'act',
       effects: {
         writes: true,

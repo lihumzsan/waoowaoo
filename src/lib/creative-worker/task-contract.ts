@@ -69,32 +69,43 @@ export const creativeWorkerResultSchema = z.object({
   }
 })
 
-export const creativeWorkDelegationItemSchema = creativeWorkDelegationRequestSchema.extend({
+type CreativeWorkNonVideoOutputKind = Exclude<
+  (typeof CREATIVE_WORK_OUTPUT_KINDS)[number],
+  'video_prompt_set'
+>
+
+const CREATIVE_WORK_NON_VIDEO_OUTPUT_KINDS = CREATIVE_WORK_OUTPUT_KINDS.filter(
+  (outputKind): outputKind is CreativeWorkNonVideoOutputKind => outputKind !== 'video_prompt_set',
+) as [CreativeWorkNonVideoOutputKind, ...CreativeWorkNonVideoOutputKind[]]
+
+const creativeWorkDelegationItemBaseSchema = creativeWorkDelegationRequestSchema.extend({
   requestKey: z.string().trim().min(1).max(200)
     .describe('Caller-owned stable identity for this one logical Subagent request. It must be unique inside a batch and reused only for an explicit retry of the same logical item.'),
-}).strict().superRefine((request, context) => {
-  if (request.outputKind === 'video_prompt_set' && request.durationIntent === undefined) {
-    context.addIssue({
-      code: 'custom',
-      message: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
-      path: ['durationIntent'],
-    })
-  }
-})
+}).strict()
 
-export const creativeWorkChapterBatchInputSchema = z.object({
+export const creativeWorkDelegationItemSchema = z.discriminatedUnion('outputKind', [
+  creativeWorkDelegationItemBaseSchema.extend({
+    outputKind: z.literal('video_prompt_set'),
+    durationIntent: creativeWorkDurationIntentSchema
+      .describe('Required duration authority for this video-prompt delegation.'),
+  }).strict(),
+  creativeWorkDelegationItemBaseSchema.extend({
+    outputKind: z.enum(CREATIVE_WORK_NON_VIDEO_OUTPUT_KINDS),
+    durationIntent: creativeWorkDurationIntentSchema.optional()
+      .describe('Optional delivery-duration context for a non-video creative result.'),
+  }).strict(),
+])
+
+const creativeWorkChapterIdentitySchema = z.object({
+  chapterId: z.string().trim().min(1)
+    .describe('Exact persisted Chapter identity.'),
+  requestKey: z.string().trim().min(1).max(200)
+    .describe('Caller-owned stable identity for this Chapter Subagent request.'),
+}).strict()
+
+const creativeWorkChapterBatchBaseShape = {
   source: z.literal('chapters')
     .describe('Compile the persisted Chapter identities below into independent Creative Worker requests.'),
-  chapters: z.array(z.object({
-    chapterId: z.string().trim().min(1)
-      .describe('Exact persisted Chapter identity.'),
-    requestKey: z.string().trim().min(1).max(200)
-      .describe('Caller-owned stable identity for this Chapter Subagent request.'),
-    durationIntent: creativeWorkDurationIntentSchema.optional()
-      .describe('Required for video_prompt_set. Use mode=fixed with this Chapter\'s allocated seconds only when the user stated the total duration being allocated; the adopted Chapter targetDurationSec is a planning estimate and must not be resent as mode=fixed on its own.'),
-  }).strict()).min(1).max(64),
-  outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS)
-    .describe('Strict structured output contract requested from every Chapter Subagent.'),
   goal: z.string().trim().min(1).max(7_500)
     .describe('Shared professional objective; each Worker also receives its exact compiled Chapter context.'),
   userRequest: z.string().max(30_000)
@@ -106,18 +117,49 @@ export const creativeWorkChapterBatchInputSchema = z.object({
     entityRef: ledgerEntityRefSchema.nullable(),
   }).strict()).max(128)
     .describe('Exact non-Direction Resource revisions the Context Compiler may copy into every relevant Chapter packet. Adopted Creative Direction is read once and injected only by the central Task input compiler.'),
-}).strict().superRefine((batch, context) => {
-  if (batch.outputKind !== 'video_prompt_set') return
-  for (const [index, chapter] of batch.chapters.entries()) {
-    if (chapter.durationIntent === undefined) {
-      context.addIssue({
-        code: 'custom',
-        message: 'CREATIVE_VIDEO_DURATION_INTENT_REQUIRED',
-        path: ['chapters', index, 'durationIntent'],
-      })
-    }
-  }
-})
+} as const
+
+const creativeWorkVideoChapterBatchInputSchema = z.object({
+  ...creativeWorkChapterBatchBaseShape,
+  chapters: z.array(creativeWorkChapterIdentitySchema.extend({
+    durationIntent: creativeWorkDurationIntentSchema
+      .describe('Required duration authority for this Chapter video-prompt delegation. Use mode=fixed only for the Chapter share of a user-stated total; do not convert a Chapter planning estimate into mode=fixed.'),
+  }).strict()).min(1).max(64),
+  outputKind: z.literal('video_prompt_set'),
+}).strict()
+
+const creativeWorkNonVideoChapterBatchInputSchema = z.object({
+  ...creativeWorkChapterBatchBaseShape,
+  chapters: z.array(creativeWorkChapterIdentitySchema.extend({
+    durationIntent: creativeWorkDurationIntentSchema.optional()
+      .describe('Optional delivery-duration context for a non-video creative result.'),
+  }).strict()).min(1).max(64),
+  outputKind: z.enum(CREATIVE_WORK_NON_VIDEO_OUTPUT_KINDS),
+}).strict()
+
+function createCreativeWorkNonVideoChapterBatchInputSchema<
+  const OutputKind extends CreativeWorkNonVideoOutputKind,
+>(outputKind: OutputKind) {
+  return creativeWorkNonVideoChapterBatchInputSchema.extend({
+    outputKind: z.literal(outputKind),
+  }).strict()
+}
+
+const creativeWorkNonVideoChapterBatchInputSchemas = CREATIVE_WORK_NON_VIDEO_OUTPUT_KINDS.map(
+  createCreativeWorkNonVideoChapterBatchInputSchema,
+)
+
+const creativeWorkChapterBatchInputSchemas = [
+  creativeWorkVideoChapterBatchInputSchema,
+  ...creativeWorkNonVideoChapterBatchInputSchemas,
+] as [
+  typeof creativeWorkVideoChapterBatchInputSchema,
+  ...typeof creativeWorkNonVideoChapterBatchInputSchemas,
+]
+
+export const creativeWorkChapterBatchInputSchema = z.discriminatedUnion('outputKind', [
+  ...creativeWorkChapterBatchInputSchemas,
+])
 
 const creativeWorkRequestBatchInputSchema = z.object({
   source: z.literal('requests')
@@ -126,9 +168,9 @@ const creativeWorkRequestBatchInputSchema = z.object({
     .describe('One request is one Subagent Task. Multiple independent requests run through the existing Task batch and collecting Wait.'),
 }).strict()
 
-const creativeWorkDelegationSourceSchema = z.discriminatedUnion('source', [
+const creativeWorkDelegationSourceSchema = z.union([
   creativeWorkRequestBatchInputSchema,
-  creativeWorkChapterBatchInputSchema,
+  ...creativeWorkChapterBatchInputSchemas,
 ])
 
 export const creativeWorkDelegationInputSchema = z.object({
@@ -185,10 +227,24 @@ export const creativeWorkTaskPayloadSchema = z.object({
   })
 })
 
+const creativeWorkMaterializedResourceSchema = z.object({
+  resourceId: z.string().trim().min(1),
+  revisionId: z.string().trim().min(1),
+  schemaId: z.string().trim().min(1),
+  mediaType: z.enum(['text', 'image', 'audio', 'video']),
+  name: z.string().trim().min(1),
+}).strict()
+
+const creativeWorkMaterializedResourcesSchema = z.array(
+  creativeWorkMaterializedResourceSchema,
+).min(1)
+
 const creativeWorkContinuationProjectionSchema = z.object({
   requestKey: z.string().trim().min(1).max(200),
   outputKind: z.enum(CREATIVE_WORK_OUTPUT_KINDS),
   summary: z.string().trim().min(1).max(4_000),
+  resources: creativeWorkMaterializedResourcesSchema.optional()
+    .describe('Exact immutable Resource revisions added by the terminal materializer. Absent before materialization.'),
 }).strict()
 
 export const creativeWorkTaskResultSchema = z.object({
@@ -198,13 +254,7 @@ export const creativeWorkTaskResultSchema = z.object({
   continuationProjection: creativeWorkContinuationProjectionSchema,
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
   creativeWorkResult: creativeWorkerResultSchema,
-  resources: z.array(z.object({
-    resourceId: z.string().trim().min(1),
-    revisionId: z.string().trim().min(1),
-    schemaId: z.string().trim().min(1),
-    mediaType: z.enum(['text', 'image', 'audio', 'video']),
-    name: z.string().trim().min(1),
-  }).strict()).min(1).optional()
+  resources: creativeWorkMaterializedResourcesSchema.optional()
     .describe('Exact immutable Resource revisions materialized atomically from this completed result. Absent when this output kind has no persistent Resource projection.'),
 }).strict().superRefine((result, context) => {
   const mismatches: Array<{ readonly path: readonly PropertyKey[]; readonly code: string }> = []
@@ -231,6 +281,19 @@ export const creativeWorkTaskResultSchema = z.object({
     mismatches.push({
       path: ['continuationProjection', 'summary'],
       code: 'CREATIVE_WORK_RESULT_SUMMARY_MISMATCH',
+    })
+  }
+  const continuationResources = result.continuationProjection.resources
+  if (
+    (continuationResources === undefined) !== (result.resources === undefined)
+    || (
+      continuationResources !== undefined
+      && stableArgsHash(continuationResources) !== stableArgsHash(result.resources)
+    )
+  ) {
+    mismatches.push({
+      path: ['continuationProjection', 'resources'],
+      code: 'CREATIVE_WORK_RESULT_RESOURCES_MISMATCH',
     })
   }
   for (const mismatch of mismatches) {

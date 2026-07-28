@@ -30,18 +30,23 @@ import {
   CREATIVE_RESOURCE_SCHEMAS,
 } from '@/lib/creative-resource/schema-registry'
 
-function isReservedCreativeResourceBinding(input: {
-  readonly role: string
-  readonly slotKey: string
-}): boolean {
-  const role = input.role.trim()
-  const slotKey = input.slotKey.trim()
-  if (role === CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE) return true
-  if (role === CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE) return true
-  return Object.values(CREATIVE_RESOURCE_CANONICAL_BINDINGS).some(
-    (binding) => binding.role === role && binding.slotKey === slotKey,
-  )
-}
+const RESERVED_CREATIVE_RESOURCE_BINDING_ROLES = [
+  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
+  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
+  ...Object.values(CREATIVE_RESOURCE_CANONICAL_BINDINGS).map((binding) => binding.role),
+] as const
+const RESERVED_CREATIVE_RESOURCE_BINDING_ROLE_PATTERN = RESERVED_CREATIVE_RESOURCE_BINDING_ROLES
+  .map((role) => role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .join('|')
+
+const adoptableCreativeResourceBindingRoleSchema = z.string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(new RegExp(
+    `^(?!(?:${RESERVED_CREATIVE_RESOURCE_BINDING_ROLE_PATTERN})$).+$`,
+  ))
+  .describe('A non-reserved project or episode binding role. Character voice, project asset image, Creative Direction, and Asset Manifest roles use their dedicated operations.')
 
 const creativeResourceSchemaIds = CREATIVE_RESOURCE_SCHEMAS.map((definition) => definition.schemaId)
 
@@ -91,7 +96,7 @@ const adoptResourceInputSchema = z.object({
   episodeId: z.string().trim().min(1).nullable().optional(),
   resourceId: z.string().trim().min(1),
   revisionId: z.string().trim().min(1),
-  role: z.string().trim().min(1).max(64),
+  role: adoptableCreativeResourceBindingRoleSchema,
   slotKey: z.string().trim().min(1).max(128),
   expectedVersion: z.number().int().min(0).nullable().optional(),
 }).strict()
@@ -408,15 +413,6 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       inputSchema: adoptResourceInputSchema,
       outputSchema: adoptResourceOutputSchema,
       executeInTransaction: async (ctx, input, tx) => {
-        if (isReservedCreativeResourceBinding(input)) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'CREATIVE_RESOURCE_RESERVED_BINDING_OPERATION_REQUIRED',
-            field: 'role',
-            requestedValue: `${input.role}:${input.slotKey}`,
-            allowedValues: ['adopt_creative_direction', 'bind_voice'],
-            agentRetryableAfterCorrection: true,
-          })
-        }
         const episodeId = input.episodeId === undefined ? (ctx.context.episodeId ?? null) : input.episodeId
         const binding = await bindCreativeResourceRevisionInTransaction(tx, {
           scope: resolveProjectCreativeResourceScope({

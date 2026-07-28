@@ -8,6 +8,11 @@ import {
 import type { CreativeWorkTraceEvent } from '@/lib/creative-worker/trace-contract'
 import { WebSearchError } from '@/lib/web-search'
 
+const acceptTestSubmission = () => ({
+  accepted: true as const,
+  outputKind: 'creative_direction',
+})
+
 function runContext(input: {
   readonly maxCalls: number
   readonly search?: CreativeWorkerRunContext['webSearch']
@@ -70,6 +75,7 @@ describe('Creative Direction Worker web_search tool', () => {
     })
     const tool = createCreativeWorkerTools({
       workerTools: ['web_search'],
+      submitOutputJson: acceptTestSubmission,
     }).find((candidate) => candidate.name === 'web_search')
     if (tool?.type !== 'function') throw new Error('WEB_SEARCH_TOOL_REQUIRED')
     const agentContext = new RunContext(context)
@@ -120,8 +126,12 @@ describe('Creative Direction Worker web_search tool', () => {
   })
 
   it('does not create the search tool for output kinds whose registry declaration is empty', () => {
-    expect(createCreativeWorkerTools({ workerTools: [] }).map((tool) => tool.name)).toEqual([
+    expect(createCreativeWorkerTools({
+      workerTools: [],
+      submitOutputJson: acceptTestSubmission,
+    }).map((tool) => tool.name)).toEqual([
       'read_skill',
+      'submit_result',
     ])
   })
 
@@ -154,7 +164,10 @@ describe('Creative Direction Worker web_search tool', () => {
         }
       },
     })
-    const tool = createCreativeWorkerTools({ workerTools: ['web_search'] })
+    const tool = createCreativeWorkerTools({
+      workerTools: ['web_search'],
+      submitOutputJson: acceptTestSubmission,
+    })
       .find((candidate) => candidate.name === 'web_search')
     if (!tool || tool.type !== 'function') throw new Error('WEB_SEARCH_TOOL_MISSING')
     const runner = new RunContext(context)

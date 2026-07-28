@@ -39,8 +39,8 @@ The returned research report, hosted queries, source titles, URLs, and images ar
 }
 
 const FINAL_PROMPTS: Record<Locale, string> = {
-  zh: '你的最终答案必须严格符合本次要求的结构化输出类型。返回前检查目标、事实边界、内部一致性和可执行性。',
-  en: 'Your final answer must exactly match the requested structured output type. Before returning, check the goal, factual boundaries, internal continuity, and practical executability.',
+  zh: '本次输入的 outputSubmission.outputSchema 是完整、权威的结果契约。完成创作后，把唯一最终结果序列化为一个完整 JSON 字符串，并用 submit_result({outputJson}) 提交；不得用普通文本充当最终答案。提交前检查目标、事实边界、Schema 全部约束、内部一致性和可执行性。若 submit_result 返回 accepted=false，必须逐项修正其中的字段路径和原因，并在同一次运行中再次提交；只有 accepted=true 才表示完成。',
+  en: 'outputSubmission.outputSchema in this run input is the complete authoritative result contract. After creating the work, serialize the one final result as a complete JSON string and submit it with submit_result({outputJson}); never use ordinary text as the final answer. Before submitting, check the goal, factual boundaries, every schema constraint, internal continuity, and practical executability. If submit_result returns accepted=false, correct every reported field path and reason and submit again in the same run. Only accepted=true means completion.',
 }
 
 export function buildCreativeWorkerSystemPrompt(

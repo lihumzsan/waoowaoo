@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import Ajv from 'ajv'
 import { describe, expect, it } from 'vitest'
 import {
   CREATIVE_SKILL_IDS,
@@ -18,6 +19,7 @@ import {
 import { createCreativeWorkerTools } from '@/lib/creative-worker/tools'
 import { listCreativeWorkerSkillCatalog } from '@/lib/creative-worker/skill-access'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
+import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 import {
   PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT,
@@ -33,6 +35,26 @@ import { ASPECT_RATIO_CONFIGS } from '@/lib/constants'
 function readRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, unknown>
+}
+
+function collectDiscriminatorBranches(
+  value: unknown,
+  key: string,
+): Record<string, unknown>[] {
+  const branches: Record<string, unknown>[] = []
+  const visit = (candidate: unknown): void => {
+    const record = readRecord(candidate)
+    const properties = readRecord(record.properties)
+    if (Object.prototype.hasOwnProperty.call(readRecord(properties[key]), 'const')) {
+      branches.push(record)
+    }
+    for (const unionKey of ['oneOf', 'anyOf'] as const) {
+      const union = record[unionKey]
+      if (Array.isArray(union)) union.forEach(visit)
+    }
+  }
+  visit(value)
+  return branches
 }
 
 function collectUnboundedSchemaNodes(value: unknown, path: string, out: string[]): void {
@@ -160,6 +182,224 @@ describe('project agent toolset conformance', () => {
     }
   })
 
+  it('keeps structural plan and creative-delegation model inputs inside their runtime contracts', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const ajv = new Ajv({ allErrors: true, jsonPointers: true })
+    const acceptedSamples = [
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: 'Track the remaining implementation work.',
+          plan: {
+            state: 'active',
+            completed: ['Inspect the canonical contract'],
+            active: 'Replace the hidden refinement',
+            pending: ['Run conformance'],
+          },
+        },
+      },
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: null,
+          plan: {
+            state: 'pending',
+            completed: [],
+            pending: ['Wait for the required external input'],
+          },
+        },
+      },
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: 'Everything is complete.',
+          plan: {
+            state: 'completed',
+            completed: ['Implement the contract', 'Verify the contract'],
+          },
+        },
+      },
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: null,
+          plan: { state: 'clear' },
+        },
+      },
+      {
+        operationId: 'delegate_creative_work',
+        input: {
+          delegation: {
+            source: 'requests',
+            requests: [{
+              requestKey: 'video-request',
+              outputKind: 'video_prompt_set',
+              goal: 'Design the executable video prompts.',
+              durationIntent: { mode: 'derive' },
+              context: {
+                userRequest: 'Create this scene.',
+                sourceMaterials: [],
+                constraints: [],
+              },
+            }],
+          },
+        },
+      },
+      {
+        operationId: 'delegate_creative_work',
+        input: {
+          delegation: {
+            source: 'chapters',
+            chapters: [{
+              chapterId: 'chapter-1',
+              requestKey: 'chapter-video',
+              durationIntent: { mode: 'fixed', seconds: 60 },
+            }],
+            outputKind: 'video_prompt_set',
+            goal: 'Design this Chapter as executable video prompts.',
+            userRequest: 'Create the complete story.',
+            constraints: [],
+            referencedAssets: [],
+          },
+        },
+      },
+      {
+        operationId: 'delegate_creative_work',
+        input: {
+          delegation: {
+            source: 'requests',
+            requests: [{
+              requestKey: 'screenplay-request',
+              outputKind: 'screenplay',
+              goal: 'Write the screenplay.',
+              durationIntent: null,
+              context: {
+                userRequest: 'Write a short screenplay.',
+                sourceMaterials: [],
+                constraints: [],
+              },
+            }],
+          },
+        },
+      },
+    ] as const
+
+    for (const sample of acceptedSamples) {
+      const operation = registry[sample.operationId]
+      const validateModelInput = ajv.compile(operation.toolInputSchema)
+      expect(
+        validateModelInput(sample.input),
+        `${sample.operationId}: ${JSON.stringify(validateModelInput.errors)}`,
+      ).toBe(true)
+      const normalized = normalizeProjectAgentToolInput({
+        input: sample.input,
+        inputSchema: operation.inputSchema,
+        toolInputSchema: operation.toolInputSchema,
+      })
+      expect(operation.inputSchema.safeParse(normalized).success, sample.operationId).toBe(true)
+    }
+
+    const rejectedCounterexamples = [
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: 'The former shape could express two active steps.',
+          plan: [
+            { step: 'First active step', status: 'in_progress' },
+            { step: 'Second active step', status: 'in_progress' },
+          ],
+        },
+      },
+      {
+        operationId: 'update_plan',
+        input: {
+          explanation: '',
+          plan: { state: 'clear' },
+        },
+      },
+      {
+        operationId: 'delegate_creative_work',
+        input: {
+          delegation: {
+            source: 'requests',
+            requests: [{
+              requestKey: 'missing-request-duration',
+              outputKind: 'video_prompt_set',
+              goal: 'Design the video.',
+              context: { userRequest: 'Create it.', sourceMaterials: [], constraints: [] },
+            }],
+          },
+        },
+      },
+      {
+        operationId: 'delegate_creative_work',
+        input: {
+          delegation: {
+            source: 'chapters',
+            chapters: [{ chapterId: 'chapter-1', requestKey: 'missing-chapter-duration' }],
+            outputKind: 'video_prompt_set',
+            goal: 'Design the Chapter video.',
+            userRequest: 'Create it.',
+            constraints: [],
+            referencedAssets: [],
+          },
+        },
+      },
+    ] as const
+
+    for (const sample of rejectedCounterexamples) {
+      const operation = registry[sample.operationId]
+      const validateModelInput = ajv.compile(operation.toolInputSchema)
+      expect(validateModelInput(sample.input), sample.operationId).toBe(false)
+    }
+  })
+
+  it('publishes the runtime http(s) URL contract for web-reference imports', () => {
+    const operation = createProjectAgentOperationRegistry().import_web_reference_image
+    const imageUrlSchema = readRecord(operation.toolInputSchema.properties.imageUrl)
+    const protocolBranches = Array.isArray(imageUrlSchema.anyOf)
+      ? imageUrlSchema.anyOf.map(readRecord)
+      : []
+
+    expect(protocolBranches).toHaveLength(2)
+    expect(protocolBranches.map((branch) => branch.format)).toEqual(['uri', 'uri'])
+    expect(protocolBranches.map((branch) => branch.maxLength)).toEqual([2_000, 2_000])
+    expect(protocolBranches.map((branch) => branch.pattern)).toEqual([
+      '^http:\\/\\/.*',
+      '^https:\\/\\/.*',
+    ])
+
+    const validateModelInput = new Ajv({ allErrors: true, jsonPointers: true })
+      .compile(operation.toolInputSchema)
+    const httpsInput = {
+      imageUrl: 'https://images.example.test/reference.png',
+      sourceWebsiteUrl: 'https://example.test/source',
+      name: 'Reference image',
+      caption: null,
+    }
+    const ftpInput = {
+      ...httpsInput,
+      imageUrl: 'ftp://images.example.test/reference.png',
+    }
+    const malformedHttpInput = {
+      ...httpsInput,
+      imageUrl: 'https://invalid host.example/reference.png',
+    }
+    const oversizedHttpInput = {
+      ...httpsInput,
+      imageUrl: `https://images.example.test/${'a'.repeat(2_000)}`,
+    }
+
+    expect(validateModelInput(httpsInput)).toBe(true)
+    expect(operation.inputSchema.safeParse(httpsInput).success).toBe(true)
+    expect(validateModelInput(ftpInput)).toBe(false)
+    expect(operation.inputSchema.safeParse(ftpInput).success).toBe(false)
+    expect(validateModelInput(malformedHttpInput)).toBe(false)
+    expect(operation.inputSchema.safeParse(malformedHttpInput).success).toBe(false)
+    expect(validateModelInput(oversizedHttpInput)).toBe(false)
+    expect(operation.inputSchema.safeParse(oversizedHttpInput).success).toBe(false)
+  })
+
   it('can suppress only explicitly named continuation-local tools without changing registry authority', () => {
     const registry = createProjectAgentOperationRegistry()
     const disabledOperationId = Object.values(registry)
@@ -194,9 +434,8 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(generateProperties).sort()).toEqual([
       'description',
       'language',
-      'name',
       'previewText',
-      'resourceId',
+      'resource',
       'target',
     ])
     expect(Object.keys(generateProperties)).not.toEqual(expect.arrayContaining([
@@ -210,12 +449,28 @@ describe('project agent toolset conformance', () => {
       description: 'Warm, mature, low register, calm and precise.',
       previewText: '欢迎回来。',
       language: 'Chinese',
+      resource: { kind: 'new' },
       target: { kind: 'character', characterId: 'character-1' },
+    }).success).toBe(true)
+    expect(registry.generate_voice.inputSchema.safeParse({
+      description: 'Warm, mature, low register, calm and precise.',
+      previewText: 'Welcome back.',
+      language: 'English',
+      resource: { kind: 'regenerate', resourceId: 'voice-resource-1' },
+      target: { kind: 'standalone' },
     }).success).toBe(true)
     expect(registry.generate_voice.inputSchema.safeParse({
       description: 'Warm voice',
       previewText: 'Hello.',
       language: 'English',
+      resource: { kind: 'regenerate', resourceId: 'voice-resource-1', name: 'ignored' },
+      target: { kind: 'standalone' },
+    }).success).toBe(false)
+    expect(registry.generate_voice.inputSchema.safeParse({
+      description: 'Warm voice',
+      previewText: 'Hello.',
+      language: 'English',
+      resource: { kind: 'new' },
       modelKey: 'fal::other-model',
       target: { kind: 'standalone' },
     }).success).toBe(false)
@@ -274,8 +529,8 @@ describe('project agent toolset conformance', () => {
       const properties = registry[operationId].toolInputSchema.properties
       expect(Object.keys(properties)).toEqual(['request'])
       const requestSchema = readRecord(properties.request)
-      const branches = Array.isArray(requestSchema.oneOf) ? requestSchema.oneOf.map(readRecord) : []
-      const newBranch = branches.find((branch) => (
+      const branches = collectDiscriminatorBranches(requestSchema, 'kind')
+      const newBranches = branches.filter((branch) => (
         readRecord(readRecord(branch.properties).kind).const === 'new'
       ))
       const retryBranch = branches.find((branch) => (
@@ -286,13 +541,16 @@ describe('project agent toolset conformance', () => {
             (schemaId) => resolveAssetImageKindForSchemaId(schemaId) === null,
           )
         : CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA[mediaType]
-      expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
-        enum: [...modelSelectedSchemaIds, null],
-      })
+      expect(newBranches.length).toBeGreaterThan(0)
+      for (const newBranch of newBranches) {
+        expect(readRecord(readRecord(newBranch).properties).schemaId).toMatchObject({
+          enum: [...modelSelectedSchemaIds, null],
+        })
+        expect(Object.keys(readRecord(newBranch.properties))).not.toEqual(expect.arrayContaining([
+          'generationOptions', 'retryResourceIds', 'modelKey',
+        ]))
+      }
       expect(Object.keys(readRecord(readRecord(retryBranch).properties))).toEqual(['kind', 'resourceIds'])
-      expect(Object.keys(readRecord(readRecord(newBranch).properties))).not.toEqual(expect.arrayContaining([
-        'generationOptions', 'retryResourceIds', 'modelKey',
-      ]))
     }
 
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('content')
@@ -300,16 +558,21 @@ describe('project agent toolset conformance', () => {
     expect(Object.keys(registry.create_audio.toolInputSchema.properties)).toContain('request')
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).toContain('contextReferences')
     expect(Object.keys(registry.create_text.toolInputSchema.properties)).not.toContain('imageReferences')
-    const videoNewBranch = (Array.isArray(readRecord(registry.create_video.toolInputSchema.properties.request).oneOf)
-      ? readRecord(registry.create_video.toolInputSchema.properties.request).oneOf as unknown[]
-      : [])
-      .map(readRecord)
-      .find((branch) => readRecord(readRecord(branch.properties).kind).const === 'new')
-    const videoNewProperties = readRecord(readRecord(videoNewBranch).properties)
-    expect(Object.keys(videoNewProperties)).toContain('mediaReferences')
-    expect(Object.keys(videoNewProperties)).not.toContain('imageReferences')
-    expect(Object.keys(videoNewProperties)).not.toContain('voiceReferenceKeys')
-    expect(Object.keys(videoNewProperties)).not.toContain('fps')
+    const videoNewBranches = collectDiscriminatorBranches(
+      registry.create_video.toolInputSchema.properties.request,
+      'kind',
+    ).filter((branch) => readRecord(readRecord(branch.properties).kind).const === 'new')
+    expect(videoNewBranches).toHaveLength(2)
+    expect(videoNewBranches.some((branch) => (
+      Object.keys(readRecord(branch.properties)).includes('audioReferences')
+    ))).toBe(true)
+    for (const branch of videoNewBranches) {
+      const videoNewProperties = readRecord(branch.properties)
+      expect(Object.keys(videoNewProperties)).toContain('imageReferences')
+      expect(Object.keys(videoNewProperties)).not.toContain('mediaReferences')
+      expect(Object.keys(videoNewProperties)).not.toContain('voiceReferenceKeys')
+      expect(Object.keys(videoNewProperties)).not.toContain('fps')
+    }
 
     expect(registry.create_text.inputSchema.safeParse({
       prompt: 'Write one line.',
@@ -412,7 +675,7 @@ describe('project agent toolset conformance', () => {
         kind: 'retry',
         resourceIds: ['failed-video-resource'],
         prompt: 'This must never replace the frozen video prompt.',
-        mediaReferences: [],
+        imageReferences: [],
       },
     }).success).toBe(false)
     expect(registry.create_video.inputSchema.safeParse({
@@ -434,16 +697,28 @@ describe('project agent toolset conformance', () => {
   it('publishes exact retry and task branches without Agent model configuration', () => {
     const registry = createProjectAgentOperationRegistry()
     const requestSchema = readRecord(registry.create_video.toolInputSchema.properties.request)
-    const requestKinds = (Array.isArray(requestSchema.oneOf) ? requestSchema.oneOf : [])
-      .map((branch) => readRecord(readRecord(readRecord(branch).properties).kind).const)
-    expect(requestKinds).toEqual(['new', 'retry'])
+    const requestKinds = collectDiscriminatorBranches(requestSchema, 'kind')
+      .map((branch) => readRecord(readRecord(branch.properties).kind).const)
+    expect(Array.from(new Set(requestKinds))).toEqual(['new', 'retry'])
 
     expect(Object.keys(registry.list_tasks.toolInputSchema.properties)).toEqual(expect.arrayContaining([
       'targetType', 'targetId', 'status', 'type', 'limit',
     ]))
     expect(Object.keys(registry.get_task.toolInputSchema.properties)).toEqual([
-      'taskId', 'includeEvents', 'eventsLimit',
+      'taskId', 'events',
     ])
+    expect(registry.get_task.inputSchema.safeParse({
+      taskId: 'task-1',
+      events: { kind: 'none' },
+    }).success).toBe(true)
+    expect(registry.get_task.inputSchema.safeParse({
+      taskId: 'task-1',
+      events: { kind: 'include', limit: 10 },
+    }).success).toBe(true)
+    expect(registry.get_task.inputSchema.safeParse({
+      taskId: 'task-1',
+      events: { kind: 'none', limit: 10 },
+    }).success).toBe(false)
   })
 
   it('uses exact immutable revisions for Story Canon and Creative Direction adoption', () => {
@@ -527,9 +802,21 @@ describe('project agent toolset conformance', () => {
     })
     expect(Object.keys(operation.toolInputSchema.properties)).toEqual(['delegation'])
     const delegationSchema = readRecord(operation.toolInputSchema.properties.delegation)
-    const sourceBranches = (Array.isArray(delegationSchema.oneOf) ? delegationSchema.oneOf : [])
-      .map((branch) => readRecord(readRecord(readRecord(branch).properties).source).const)
-    expect(sourceBranches).toEqual(['requests', 'chapters'])
+    const sourceBranches = Array.isArray(delegationSchema.anyOf) ? delegationSchema.anyOf.map(readRecord) : []
+    expect(readRecord(readRecord(sourceBranches[0]).properties).source).toMatchObject({
+      const: 'requests',
+    })
+    const chapterBranches = sourceBranches.slice(1)
+    expect(chapterBranches).toHaveLength(CREATIVE_WORK_OUTPUT_KINDS.length)
+    expect(chapterBranches.every((branch) => (
+      readRecord(readRecord(branch.properties).source).const === 'chapters'
+    ))).toBe(true)
+    expect(chapterBranches.map((branch) => (
+      readRecord(readRecord(branch.properties).outputKind).const
+    ))).toEqual([
+      'video_prompt_set',
+      ...CREATIVE_WORK_OUTPUT_KINDS.filter((kind) => kind !== 'video_prompt_set'),
+    ])
     expect(operation.inputSchema.safeParse({
       delegation: {
         source: 'requests',
@@ -713,17 +1000,20 @@ describe('project agent toolset conformance', () => {
       creative_review: true,
     })
     expect(Object.fromEntries(Object.entries(creativeWorkOutputRegistry).map(([kind, definition]) => (
-      [kind, createCreativeWorkerTools({ workerTools: definition.workerTools }).map((tool) => tool.name)]
+      [kind, createCreativeWorkerTools({
+        workerTools: definition.workerTools,
+        submitOutputJson: () => ({ accepted: true, outputKind: kind }),
+      }).map((tool) => tool.name)]
     )))).toEqual({
-      screenplay: ['read_skill'],
-      story_canon: ['read_skill'],
-      chapter_plan: ['read_skill'],
-      continuity_analysis: ['read_skill'],
-      creative_direction: ['read_skill', 'web_search'],
-      asset_manifest: ['read_skill'],
-      video_prompt_set: ['read_skill'],
-      music_direction: ['read_skill'],
-      creative_review: ['read_skill'],
+      screenplay: ['read_skill', 'submit_result'],
+      story_canon: ['read_skill', 'submit_result'],
+      chapter_plan: ['read_skill', 'submit_result'],
+      continuity_analysis: ['read_skill', 'submit_result'],
+      creative_direction: ['read_skill', 'web_search', 'submit_result'],
+      asset_manifest: ['read_skill', 'submit_result'],
+      video_prompt_set: ['read_skill', 'submit_result'],
+      music_direction: ['read_skill', 'submit_result'],
+      creative_review: ['read_skill', 'submit_result'],
     })
     for (const outputKind of CREATIVE_WORK_OUTPUT_KINDS) {
       const definition = creativeWorkOutputRegistry[outputKind]
@@ -947,6 +1237,32 @@ describe('project agent toolset conformance', () => {
       },
     }
     expect(creativeWorkTaskResultSchema.safeParse(result).success).toBe(true)
+    const materializedResources = [{
+      resourceId: 'resource-1',
+      revisionId: 'revision-1',
+      schemaId: 'project.creative_review',
+      mediaType: 'text' as const,
+      name: 'Creative review',
+    }]
+    expect(creativeWorkTaskResultSchema.safeParse({
+      ...result,
+      resources: materializedResources,
+      continuationProjection: {
+        ...result.continuationProjection,
+        resources: materializedResources,
+      },
+    }).success).toBe(true)
+    expect(creativeWorkTaskResultSchema.safeParse({
+      ...result,
+      resources: materializedResources,
+      continuationProjection: {
+        ...result.continuationProjection,
+        resources: [{
+          ...materializedResources[0],
+          revisionId: 'different-revision',
+        }],
+      },
+    }).success).toBe(false)
     expect(creativeWorkTaskResultSchema.safeParse({
       ...result,
       continuationProjection: {

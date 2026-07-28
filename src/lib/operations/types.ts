@@ -29,6 +29,12 @@ export interface ProjectAgentOperationContext {
   executionAuthorization?: OperationExecutionAuthorization | null
   executionFence?: ProjectAgentOperationExecutionFence | null
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
+  /**
+   * Ephemeral server-only state produced while binding the model-visible
+   * input contract for this exact execution. It is never serialized into the
+   * tool schema or approval payload.
+   */
+  boundToolContractState?: unknown
 }
 
 export interface ProjectAgentOperationTaskBatchBinding {
@@ -181,6 +187,28 @@ export type RuntimeSchema<T> = FlexibleSchema<T> & {
   safeParse: (input: unknown) => RuntimeSchemaSafeParseResult<T>
 }
 
+export interface ProjectAgentToolInputBindingContext {
+  readonly userId: string
+  readonly projectId: string
+  readonly context: ProjectAgentContext
+}
+
+export interface ProjectAgentToolInputBinding<Input> {
+  readonly inputSchema: RuntimeSchema<Input>
+  /**
+   * Server-only facts resolved together with the public schema. The Operation
+   * may consume these facts so configuration cannot race between contract
+   * verification and planning.
+   */
+  readonly state?: unknown
+}
+
+type BivariantToolInputSchemaBinder<Input> = {
+  bivarianceHack(
+    context: ProjectAgentToolInputBindingContext,
+  ): Promise<ProjectAgentToolInputBinding<Input>>
+}['bivarianceHack']
+
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
 export interface JsonObject {
@@ -202,6 +230,7 @@ export type ProjectAgentToolErrorCode =
   | 'OPERATION_EXECUTION_FAILED'
   | 'OPERATION_INPUT_INVALID'
   | 'OPERATION_NOT_FOUND'
+  | 'OPERATION_CONTRACT_STALE'
   | 'OPERATION_PLAN_CHANGED'
   | 'OPERATION_PREREQUISITE_MISSING'
   | 'OPERATION_OUTPUT_INVALID'
@@ -266,6 +295,13 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
    * schema still validates every invocation.
    */
   toolInputSchema?: ProjectAgentToolInputSchema
+  /**
+   * Bind current public product capabilities into one execution-segment
+   * contract. Only on-demand tools may declare a binder. The returned runtime
+   * schema remains the sole source from which its strict JSON Schema is
+   * generated; binders must not author a second JSON Schema.
+   */
+  bindToolInputSchema?: BivariantToolInputSchemaBinder<Input>
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
 }

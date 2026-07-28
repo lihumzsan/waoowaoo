@@ -93,23 +93,23 @@ async function resolveInitialVideoRatioChoice(
     submitLabel: '保存本次画面比例',
   })
   expect(groups).toEqual([expect.objectContaining({
-    key: 'videoRatio',
+    key: 'group_1',
     required: true,
     presentation: 'aspect_ratio',
   })])
   expect(commitments).toEqual([
     expect.objectContaining({
-      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '16:9' },
+      when: { kind: 'option', groupKey: 'group_1', optionValue: '16:9' },
       operationId: 'update_project_config',
       input: { videoRatio: '16:9' },
     }),
     expect.objectContaining({
-      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '9:16' },
+      when: { kind: 'option', groupKey: 'group_1', optionValue: '9:16' },
       operationId: 'update_project_config',
       input: { videoRatio: '9:16' },
     }),
     expect.objectContaining({
-      when: { kind: 'option', groupKey: 'videoRatio', optionValue: '21:9' },
+      when: { kind: 'option', groupKey: 'group_1', optionValue: '21:9' },
       operationId: 'update_project_config',
       input: { videoRatio: '21:9' },
     }),
@@ -360,7 +360,7 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     revisions: [{ revisionId: styleRevision?.id }],
   })
   expect(choiceCommitments).toEqual([expect.objectContaining({
-    when: { kind: 'option', groupKey: 'styleDecision', optionValue: 'adopt' },
+    when: { kind: 'option', groupKey: 'group_1', optionValue: 'option_1' },
     operationId: 'adopt_creative_direction',
   })])
   const pendingStyleChoiceId = pendingStyleChoice?.id
@@ -412,12 +412,22 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
     status: 'completed',
     operationId: 'delegate_creative_work',
   })
-  expect(afterChapterPlan.resourceLineage.filter((lineage) => (
+  const chapterPlanLineage = afterChapterPlan.resourceLineage.filter((lineage) => (
     lineage.outputRevisionId === chapterPlanRevision?.id
-  ))).toEqual([expect.objectContaining({
-    inputRevisionId: screenplayRevision?.id,
-    role: 'source_material',
-  })])
+  ))
+  expect(chapterPlanLineage).toHaveLength(2)
+  expect(chapterPlanLineage).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      inputRevisionId: screenplayRevision?.id,
+      role: 'source_material',
+      position: 0,
+    }),
+    expect.objectContaining({
+      inputRevisionId: styleRevision?.id,
+      role: 'creative_direction',
+      position: 1,
+    }),
+  ]))
   expect(afterChapterPlan.domain.chapters).toHaveLength(0)
 
   await sendNaturalLanguage(page, GOLDEN_FREEFORM_ADOPT_CHAPTERS_REQUEST)

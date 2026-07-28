@@ -17,6 +17,11 @@ function stableStringify(value: unknown): string {
 }
 
 /** Stable approval-input identity; it is not an operation lifecycle signal. */
+export function stableArgsFingerprint(input: unknown): string {
+  return createHash('sha256').update(stableStringify(input)).digest('hex')
+}
+
+/** Compact identity for database and idempotency keys. */
 export function stableArgsHash(input: unknown): string {
-  return createHash('sha256').update(stableStringify(input)).digest('hex').slice(0, 16)
+  return stableArgsFingerprint(input).slice(0, 16)
 }
