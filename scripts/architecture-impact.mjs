@@ -72,8 +72,5 @@ for (const requestedPath of requestedPaths) {
     process.stdout.write('    Matched by:\n')
     for (const sourcePath of sourcePaths) process.stdout.write(`      - ${sourcePath}\n`)
     process.stdout.write(`    Read: ${architectureModule.document}\n`)
-    process.stdout.write('    Verify:\n')
-    for (const testPath of architectureModule.testPaths) process.stdout.write(`      - ${testPath}\n`)
-    for (const guardPath of architectureModule.guardPaths) process.stdout.write(`      - ${guardPath}\n`)
   }
 }

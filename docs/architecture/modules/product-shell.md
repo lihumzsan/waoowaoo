@@ -37,8 +37,7 @@
 - `tests/unit/auth/phone-number.test.ts` 验证中国大陆输入变体与国际号码只能投影为一个 E.164 canonical identity，歧义号码原地拒绝。
 - `GJ-I18N-CRITICAL-PROJECT` 验证英文 UI 创建的同一项目经产品语言切换后仍是同一持久实体。
 - `GJ-DEPLOY-SELF-HOSTED-CAPABILITIES` 比较公开 capability contract 与真实注册、Profile 和导航表面。
-- `scripts/guards/locale-navigation-guard.mjs` 阻止本地化导航恢复第二入口。
-- `scripts/guards/api-route-contract-guard.mjs` 只允许枚举的匿名 route；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
+- 匿名 route 必须显式枚举；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
 - 自由组合 Golden 从真实首页证明 Project、16:9 和首 Episode 同时存在且没有比例 Choice；缺少比例的非首页入口则证明模型通用 Choice 仍可恢复当前媒体请求。
 - `tests/unit/auth/rate-limit-client-ip.test.ts` 反证伪造 X-Forwarded-For 绕过；`docker compose config` 与 cloud env preflight 分别验证自托管、cloud 启动契约。
 
@@ -58,6 +57,7 @@
 - 首页增加比例选择后曾用三个独立 HTTP 事务依次创建 Project、PATCH 比例、创建 Episode；后两步失败会留下无比例或无 Episode 的孤儿 Project。当前首页 payload 只调用现有 `create_project`，构造事务复用比例与 Episode 的权威 writer；独立 Project/Episode API 仍服务非首页显式操作，不是首页 fallback。
 - 手机号认证接入前，密码注册通过 `/api/auth/register → auth_register_user` 创建 `User + UserBalance`，Google adapter 又独立复制同一初始化事务；页面同时保留 signin/signup 两套入口，deployment feature 只控制 Google 按钮和 provider，继续新增手机号会形成第三个 writer，并可能让 Cloud 隐藏密码 UI 后仍保留 credentials callback、注册 API 与密码设置 API。当前删除独立 signup、register route、注册 Operation 与旧结果协议，Google、手机号和 self-hosted 密码共同复用一个 onboarding writer；Cloud feature 同时裁决页面、NextAuth provider、短信发送 route 与密码设置 route。腾讯云明确拒绝时按 challenge identity 补偿，网络结果不明时保留短期 challenge，避免已送达验证码被本地误删。初始 SDK 接入曾假设模板同时接收验证码和有效分钟数，真实已审核模板只声明 `{1}` 验证码，导致参数数量不一致时发送必然被拒；当前发送契约只传一个验证码参数，5 分钟有效期仍由 Redis challenge TTL 唯一裁决，不从短信文案解释状态。真实运营商到达率与目标生产反向代理组合仍是外部盲区。
 - 手机号认证收敛 Cloud 密码入口时，`showAccountSecurity` 被整体关闭，导致本应继续存在的显示名称管理和已登录 Google 绑定也随密码表单一起消失；deployment 单测只证明总开关为 false，未证明 Cloud 真实个人中心仍覆盖非密码身份管理。当前个人资料可见性与 `enablePasswordAuth` 分离：Cloud 恢复资料与 Google 绑定，密码卡和密码写 route 继续失败关闭；Google 已绑定其他用户时仍由 NextAuth 拒绝，不自动合并持久 identity。真实 Google OAuth 回调仍依赖外部 provider，是本地验证盲区。
+- `update_project` 首次公开严格字段 Schema 时仍把 `name`、`description` 都声明为可选，并只在 executor 内拒绝空对象和校验裁剪后的长度；模型因此能生成 Schema 合法、运行时失败的空命令，HTTP 调用方也各自拼接同义字段组合。当前唯一 Operation 输入改为 `command.kind=name|description|details` 的穷尽结构，每个分支在 Schema 中冻结实际字符串边界，两个页面调用方直接提交同一 canonical command；executor 不再拥有隐藏的“至少一个字段”裁判。真实浏览器的重命名与完整编辑交互仍由既有产品 Journey 作为发布复验边界。
 
 ## 修改检查表
 

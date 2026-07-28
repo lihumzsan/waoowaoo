@@ -43,8 +43,6 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 
 ## 验证
 
-- `npm run check:architecture-docs` 验证模块文档结构、索引和声明路径完整。
-- `npm run check:asset-scope-ownership` 拒绝新的 raw-ID mutation、跨父级 variant 和非原子 copy 旁路。
 - `tests/integration/api/specific/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、character/location/prop、parent/variant、copy atomicity，以及共享 prepare 版本的第二次上传必须被 stale `updatedAt` CAS 拒绝且不能覆盖第一份正式 render。
 - `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 通过真实浏览器与生产 copy route，证明第二个已登录用户不能覆盖其他项目的资产。
 - 同一 Golden 的媒体加载与跨用户拒绝必须经过受保护 `/m`/文件 route；共享 policy 的路径规范化、symlink containment 与 private cache header 由 route/logic 验证补充。
@@ -76,4 +74,4 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 是否把“关系删除”误写成 storageKey 物理删除？除本次失败上传的唯一临时 key 外，领域操作不得承担媒体 GC。
 - 如果新增资产 kind 或 variant，是否同步更新 resolver、`docs/architecture/modules.json` 的实际路径、真实 MySQL conformance 和适用 Golden Journey？
 - manifest adoption 是否只调用共享 Project asset writer 并更新 Binding，没有创建图片 Task？图片是否仍只经 `create_image` 和终态 Binding？
-- 是否运行 `npm run check:architecture-docs`、`npm run check:asset-scope-ownership`，并根据行为影响选择已有 Product Golden，而不是机械新增测试？
+- 是否根据行为影响选择已有 Product Golden，而不是机械新增测试？

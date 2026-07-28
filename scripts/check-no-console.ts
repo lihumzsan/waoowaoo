@@ -6,12 +6,6 @@ const ALLOWLIST = new Set<string>([
   'src/lib/logging/context.ts',
   'src/lib/logging/redact.ts',
   'scripts/check-no-console.ts',
-  'scripts/guards/no-api-direct-llm-call.mjs',
-  'scripts/guards/no-internal-task-sync-fallback.mjs',
-  'scripts/guards/no-media-provider-bypass.mjs',
-  'scripts/guards/no-server-mirror-state.mjs',
-  'scripts/guards/task-loading-guard.mjs',
-  'scripts/guards/task-target-states-no-polling-guard.mjs',
 ])
 
 function run(cmd: string): string {

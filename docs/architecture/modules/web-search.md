@@ -53,7 +53,6 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 - `tests/unit/creative-worker/research.test.ts` 验证 outer budget、hosted query、source-only evidence 与未尝试/部分失败状态。
 - `tests/unit/creative-worker/web-search-tool.test.ts` 验证方向 Worker 的真实函数 Tool、冻结预算、报告传递、来源计数和非方向工具缺席。
 - `tests/unit/creative-resource/creative-work-materialization.test.ts` 验证 evidence 只进入 Direction generation metadata。
-- `scripts/guards/prompt-semantic-regression.mjs` 锁定条件搜索、来源层级、不可信边界、事实/社区/推导分离和零调用无 warning。
 - 真实 OpenAI 的中文论坛覆盖、登录墙、来源排序、延迟、成本，以及 `image_result` 与 annotation 的线上实际形状属于发布复验；本地 contract 不伪造这些质量结论。**`image_result` 字段名当前来自官方文档，装机 SDK 未定型该输出，首次真实调用必须核对后再收紧契约。**
 
 ## 历史回归

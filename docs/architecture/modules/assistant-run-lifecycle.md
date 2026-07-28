@@ -100,7 +100,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registry 穷尽验证 direct/on-demand 分区与能力目录 identity，并证明 loader 返回的 `parameters` 与同一 registry schema 完全一致；`tests/unit/project-agent/tool-discovery.test.ts` 验证固定工具前缀、segment 内加载集合累积、Approval 预载、provider-safe envelope 和非法 id fail closed；`tests/unit/project-agent/agents-ui-stream.test.ts` 验证基础设施加载调用不进入用户可见持久消息，并把 SDK tool-not-found 字符串投影成结构化失败；`tests/unit/project-agent/workspace-assistant-run-trace.test.ts` 验证 running 不合并、completed 才汇总。
 - `tests/contracts/{task-definition-conformance,project-agent-toolset-conformance}.test.ts` 从生产 Task/Operation registry 穷尽验证 Resource reference projection 与 Assistant presentation 声明；`tests/golden-journey/journeys/freeform-resources.spec.ts` 的直接视频路径验证终态消息显示权威文件名蓝链且不显示 `/m/` 原始地址。
 - `tests/unit/project-agent/model-input-{budget,tool-result,summary}.test.ts` 验证上下文预算与收敛的纯逻辑：平台上限压过模型宣称窗口、模型窗口更窄时反向生效、预留耗尽必须 typed fail；清理保留 call 记录、保护最近结果与 irreplaceable 结果、达标即停且不重复清理；摘要只前移水位线、不重压已折叠消息、失配水位线按未覆盖处理。`tests/contracts/project-agent-model-result-retention.test.ts` 从生产 registry 穷尽枚举 `modelResultRetention`，反证新增 suspending Operation 漏声明。
-- `scripts/guards/{single-project-agent-continuation,no-plan-run-runtime,assistant-choice-offer-authority-guard,project-agent-run-state-machine-guard,single-operation-invocation-guard,sse-durable-watermark-guard}.mjs` 只提供结构旁路检查，不替代真实用户旅程。`project-agent-run-state-machine-guard` 同时钉住执行段围栏必须先于模型输入裁决与模型调用。
+- 执行段围栏必须先于模型输入裁决与模型调用。
 ## Session 通知状态所有权
 
 | 事实 | 唯一所有者 / 写入者 | 消费者 |

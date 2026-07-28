@@ -73,7 +73,6 @@
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `stripe-recharge.integration.test.ts` 使用 Stripe SDK 生成真实签名 header，并验证部分退款、重复事件、退款失败恢复、争议创建/关闭不改余额、资金扣回/恢复事件和未知 payment intent 拒绝。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
-- `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
 - `npm run check:pricing-catalog` 只验证 standards pricing 的结构及其 capability tier 字段；它不证明运行时代码 catalog 与 standards 值相同。
 ## 状态所有权
 

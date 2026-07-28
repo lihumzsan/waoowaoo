@@ -16,7 +16,7 @@ npm run architecture:impact -- <准备修改的文件或目录>
 npm run architecture:impact -- --changed
 ```
 
-`--changed` 包含 tracked modified、staged、untracked、renamed 与 deleted 路径，但只提供只读路由；它不决定 Journey 适用性、当前任务所有权或提交范围。未映射路径正常报告且不失败，执行者必须根据真实语义明确“不适用”或补充模块映射。命令不能代替验证，不能根据 changed files 猜测测试；实现必须复用文档列出的权威入口，并选择相应的 Golden、Critical、Logic、Conformance 或结构检查。
+`--changed` 包含 tracked modified、staged、untracked、renamed 与 deleted 路径，但只提供只读路由；它不决定 Journey 适用性、当前任务所有权或提交范围。未映射路径正常报告且不失败，执行者必须根据真实语义明确“不适用”或补充模块映射。命令不能代替验证，不能根据 changed files 猜测测试；实现必须复用文档列出的权威入口，并选择相应的 Golden、Critical、Logic 或 Conformance 证据。
 
 | 改动范围 | 必读模块 | 主要权威入口 |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ npm run architecture:impact -- --changed
 
 1. 模块文档定义产品/架构决策的**为什么**和不可违背语义。
 2. 共享类型、registry、policy、状态机定义机器可执行的**是什么**。
-3. 满足准入的真实场景证明用户结果，适用的结构检查证明已知旁路不会静默恢复；两者不能互相冒充。
+3. 满足准入的真实场景证明用户结果。
 
 文档与代码冲突时，不允许在调用方加兼容分支。必须先确认产品决策，再同步收敛文档、权威入口和适用验证证据。
 
@@ -48,5 +48,4 @@ npm run architecture:impact -- --changed
 - 新增或变更一个模块的语义不变量时，必须同步更新该模块文档、`modules.json`、权威代码和验证。
 - 纯局部实现变更不要求机械修改文档；但不得改变文档所述语义。
 - 每条不变量应有稳定编号；只有满足测试准入时才要求 executable evidence，并尽可能保留真实历史反例。
-- C/D 前置治理分析属于当前任务过程，可存在于任务计划或 Git 忽略的临时文件；完成后只把长期有效的不变量、权威入口、历史根因与盲区压缩进所属模块，禁止建立永久 process/incident 文档库。
-- `npm run check:architecture-docs` 校验目录、模块文档、权威入口、已声明测试和结构检查的引用完整性；它不证明产品行为正确。
+- 架构变更前置治理分析属于当前任务过程，可存在于任务计划或 Git 忽略的临时文件；完成后只把长期有效的不变量、权威入口、历史根因与盲区压缩进所属模块，禁止建立永久 process/incident 文档库。
