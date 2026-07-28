@@ -45,6 +45,12 @@ export const AUTH_SMS_SEND_LIMIT: RateLimitConfig = {
     maxRequests: 10,
 }
 
+/** 图形验证码：单个可信客户端来源 60 秒内最多创建 20 个一次性挑战。 */
+export const AUTH_CAPTCHA_ISSUE_LIMIT: RateLimitConfig = {
+    windowSeconds: 60,
+    maxRequests: 20,
+}
+
 // ============================================================
 // 核心逻辑
 // ============================================================

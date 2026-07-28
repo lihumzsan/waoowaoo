@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import GoogleSignInButton from '@/components/auth/GoogleSignInButton'
@@ -28,9 +28,32 @@ interface AuthEntryCardProps {
 
 type PendingAction = 'send-code' | 'submit' | null
 
+interface ImageCaptchaPayload {
+  captchaId: string
+  imageDataUrl: string
+}
+
+function readImageCaptchaPayload(payload: unknown): ImageCaptchaPayload | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const captchaId = Reflect.get(payload, 'captchaId')
+  const imageDataUrl = Reflect.get(payload, 'imageDataUrl')
+  if (typeof captchaId !== 'string' || !captchaId) return null
+  if (
+    typeof imageDataUrl !== 'string'
+    || !imageDataUrl.startsWith('data:image/svg+xml;base64,')
+  ) {
+    return null
+  }
+  return { captchaId, imageDataUrl }
+}
+
 export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
+  const [captchaId, setCaptchaId] = useState('')
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
+  const [captchaImageDataUrl, setCaptchaImageDataUrl] = useState('')
+  const [captchaLoading, setCaptchaLoading] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
@@ -40,6 +63,33 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [notice, setNotice] = useState('')
   const router = useRouter()
   const t = useTranslations('auth')
+
+  const loadImageCaptcha = useCallback(async (showError: boolean) => {
+    setCaptchaLoading(true)
+    try {
+      const response = await apiFetch('/api/auth/phone/captcha', {
+        method: 'POST',
+      })
+      const payload: unknown = await response.json()
+      const captcha = response.ok ? readImageCaptchaPayload(payload) : null
+      if (!captcha) {
+        if (showError) setError(t('imageCaptchaUnavailable'))
+        return
+      }
+      setCaptchaId(captcha.captchaId)
+      setCaptchaImageDataUrl(captcha.imageDataUrl)
+      setCaptchaAnswer('')
+    } catch {
+      if (showError) setError(t('imageCaptchaUnavailable'))
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }, [t])
+
+  useEffect(() => {
+    if (!features.enablePhoneAuth) return
+    void loadImageCaptcha(false)
+  }, [features.enablePhoneAuth, loadImageCaptcha])
 
   useEffect(() => {
     if (resendSeconds <= 0) return
@@ -65,6 +115,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
         return t('smsProviderRejected')
       case PHONE_AUTH_RESULT_CODES.providerUnavailable:
         return t('smsProviderUnavailable')
+      case PHONE_AUTH_RESULT_CODES.humanVerificationInvalid:
+        return t('imageCaptchaInvalid')
+      case PHONE_AUTH_RESULT_CODES.humanVerificationUnavailable:
+        return t('imageCaptchaUnavailable')
       case PHONE_AUTH_RESULT_CODES.featureDisabled:
         return t('authUnavailable')
       case PHONE_AUTH_RESULT_CODES.bodyParseFailed:
@@ -77,6 +131,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
   const handleSendCode = async () => {
     if (pendingAction || resendSeconds > 0) return
+    if (!captchaId || captchaAnswer.length !== 4) {
+      setError(t('imageCaptchaRequired'))
+      return
+    }
     setPendingAction('send-code')
     setError('')
     setNotice('')
@@ -87,11 +145,16 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ phoneNumber }),
+        body: JSON.stringify({
+          phoneNumber,
+          captchaId,
+          captchaAnswer,
+        }),
       })
       const payload: unknown = await response.json()
       if (!response.ok) {
         setError(resolveSendCodeError(payload))
+        void loadImageCaptcha(false)
         return
       }
 
@@ -100,8 +163,10 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
         : 0
       setResendSeconds(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60)
       setNotice(t('codeSent'))
+      void loadImageCaptcha(false)
     } catch {
       setError(t('sendCodeFailed'))
+      void loadImageCaptcha(false)
     } finally {
       setPendingAction(null)
     }
@@ -199,6 +264,55 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                   className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
                   placeholder={t('phoneNumberPlaceholder')}
                 />
+              </div>
+
+              <div>
+                <label htmlFor="imageCaptcha" className="mb-2 block text-sm font-semibold text-slate-900">
+                  {t('imageCaptcha')}
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    id="imageCaptcha"
+                    name="imageCaptcha"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    maxLength={4}
+                    value={captchaAnswer}
+                    onChange={(event) => {
+                      setCaptchaAnswer(
+                        event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4),
+                      )
+                    }}
+                    required
+                    className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-base uppercase tracking-[0.18em] text-black outline-none transition placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                    placeholder={t('imageCaptchaPlaceholder')}
+                  />
+                  <button
+                    type="button"
+                    disabled={captchaLoading || pendingAction !== null}
+                    onClick={() => void loadImageCaptcha(true)}
+                    aria-label={t('refreshImageCaptcha')}
+                    title={t('refreshImageCaptcha')}
+                    className="h-12 w-[140px] shrink-0 overflow-hidden rounded-xl border border-slate-300 bg-slate-50 shadow-sm transition hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {captchaImageDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- the API returns a short-lived inline challenge.
+                      <img
+                        src={captchaImageDataUrl}
+                        alt={t('imageCaptchaAlt')}
+                        width={140}
+                        height={48}
+                        className="h-full w-full"
+                      />
+                    ) : (
+                      <span className="text-xs font-medium text-slate-500">
+                        {captchaLoading ? t('continuing') : t('refreshImageCaptcha')}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500">{t('imageCaptchaHint')}</p>
               </div>
 
               <div>

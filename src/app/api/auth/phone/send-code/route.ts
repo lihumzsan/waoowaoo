@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
+import {
+  consumeImageCaptcha,
+  ImageCaptchaError,
+} from '@/lib/auth/image-captcha'
 import { PHONE_AUTH_RESULT_CODES } from '@/lib/auth/phone-auth-contract'
 import {
   PhoneVerificationError,
@@ -75,6 +79,32 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const phoneNumber = body && typeof body === 'object' && !Array.isArray(body)
     ? Reflect.get(body, 'phoneNumber')
     : null
+  const captchaId = body && typeof body === 'object' && !Array.isArray(body)
+    ? Reflect.get(body, 'captchaId')
+    : null
+  const captchaAnswer = body && typeof body === 'object' && !Array.isArray(body)
+    ? Reflect.get(body, 'captchaAnswer')
+    : null
+
+  try {
+    await consumeImageCaptcha({
+      captchaId,
+      answer: captchaAnswer,
+      clientIdentity: ip,
+    })
+  } catch (error) {
+    if (error instanceof ImageCaptchaError) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: error.code,
+        },
+        { status: error.code === PHONE_AUTH_RESULT_CODES.humanVerificationInvalid ? 400 : 503 },
+      )
+    }
+    throw error
+  }
+
   try {
     const result = await sendPhoneVerificationCode(phoneNumber)
     return NextResponse.json({
