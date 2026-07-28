@@ -10,22 +10,9 @@ import {
   type ProjectVideoRatio,
 } from '@/lib/projects/video-ratio'
 
-const RATIO_HINT_KEYS: Record<
-  ProjectVideoRatio,
-  'widescreen' | 'landscape' | 'classicLandscape' | 'square' | 'classicPortrait' | 'portrait' | 'tallPortrait'
-> = {
-  '21:9': 'widescreen',
-  '16:9': 'landscape',
-  '4:3': 'classicLandscape',
-  '1:1': 'square',
-  '3:4': 'classicPortrait',
-  '9:16': 'portrait',
-  '9:21': 'tallPortrait',
-}
-
-const PANEL_WIDTH = 744
-const PANEL_MAX_HEIGHT = 172
-const MIN_COMFORTABLE_PANEL_HEIGHT = 160
+const PANEL_WIDTH = 620
+const PANEL_MAX_HEIGHT = 124
+const MIN_COMFORTABLE_PANEL_HEIGHT = 112
 const VIEWPORT_EDGE_GAP = 16
 
 interface HomeVideoRatioSelectProps {
@@ -172,33 +159,28 @@ export default function HomeVideoRatioSelect({
                         onChange(option)
                         setIsOpen(false)
                       }}
-                      className={`relative flex min-w-[96px] flex-1 flex-col items-center gap-1.5 rounded-xl px-2 py-2.5 text-center transition-colors duration-200 ${
+                      className={`relative flex min-w-[78px] flex-1 flex-col items-center gap-1 rounded-lg px-1.5 py-2 text-center transition-colors duration-200 ${
                         selected
                           ? 'bg-[color-mix(in_srgb,var(--glass-accent-from)_9%,transparent)]'
                           : 'hover:bg-[rgba(15,17,23,0.035)]'
                       }`}
                     >
-                      <span className="flex h-[42px] w-full flex-shrink-0 items-center justify-center">
+                      <span className="flex h-8 w-full flex-shrink-0 items-center justify-center">
                         <RatioPreviewIcon
                           ratio={option}
-                          size={40}
+                          size={32}
                           selected={selected}
                           variant="muted"
                           radiusClassName="rounded-[4px]"
                         />
                       </span>
 
-                      <span className="min-w-0">
-                        <span className={`block text-[14px] font-bold ${selected ? 'text-[var(--glass-tone-info-fg)]' : 'text-[var(--glass-text-primary)]'}`}>
-                          {option}
-                        </span>
-                        <span className="mt-0.5 block min-h-8 text-[11px] leading-4 text-[var(--glass-text-tertiary)]">
-                          {t(`aspectRatioHints.${RATIO_HINT_KEYS[option]}`)}
-                        </span>
+                      <span className={`text-[13px] font-bold ${selected ? 'text-[var(--glass-tone-info-fg)]' : 'text-[var(--glass-text-primary)]'}`}>
+                        {option}
                       </span>
 
                       {selected ? (
-                        <AppIcon name="check" className="absolute right-2 top-2 h-3.5 w-3.5 text-[var(--glass-tone-info-fg)]" />
+                        <AppIcon name="check" className="absolute right-1.5 top-1.5 h-3 w-3 text-[var(--glass-tone-info-fg)]" />
                       ) : null}
                     </button>
                   )

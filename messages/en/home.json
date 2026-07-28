@@ -4,15 +4,6 @@
   "inputPlaceholder": "Describe a story, or paste a script…",
   "aspectRatio": "Aspect ratio",
   "aspectRatioCurrent": "Aspect ratio: {ratio}",
-  "aspectRatioHints": {
-    "widescreen": "Widescreen · cinematic",
-    "landscape": "Landscape · standard video",
-    "classicLandscape": "Classic landscape · traditional",
-    "square": "Square · social media",
-    "classicPortrait": "Classic portrait · people",
-    "portrait": "Portrait · mobile short video",
-    "tallPortrait": "Ultra-tall · immersive"
-  },
   "defaultProjectName": "New Project {timestamp}",
   "createFailed": "Failed to create project. Please try again.",
   "startCreation": "Start Creating",
