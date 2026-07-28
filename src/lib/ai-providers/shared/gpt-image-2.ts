@@ -42,6 +42,8 @@ type GptImage2OptionPolicy = {
 const GPT_IMAGE_2_MIN_PIXELS = 655_360
 const GPT_IMAGE_2_MAX_PIXELS = 8_294_400
 const GPT_IMAGE_2_MAX_EDGE = 3840
+// 注意:这是对齐前的目标短边,不是最终输出。实际尺寸经 ceilToMultipleOf16 对齐
+// (如 1K 短边实际输出 1088),不变量由 gpt-image-2-size-invariant 测试穷尽锁定。
 const GPT_IMAGE_2_SHORT_EDGE_BY_RESOLUTION: Record<GptImage2Resolution, number> = {
   '1K': 1080,
   '2K': 1440,
