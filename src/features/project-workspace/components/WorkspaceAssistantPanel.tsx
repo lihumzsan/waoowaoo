@@ -12,7 +12,10 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
-import { PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES } from '@/lib/project-agent/media-attachments'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
 import { uploadProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
@@ -58,6 +61,7 @@ interface WorkspaceAssistantPanelProps {
   autoStartDraft?: {
     readonly message: string
     readonly attachments: readonly ProjectAssistantTextAttachment[]
+    readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
   } | null
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void

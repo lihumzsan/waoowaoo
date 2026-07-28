@@ -27,6 +27,12 @@ interface TextAttachmentUploadDialogProps {
   readonly onClose: () => void
   readonly onUploaded: (attachment: ProjectAssistantTextAttachment) => void
   readonly onUploadedMedia?: (attachment: ProjectAssistantMediaAttachment) => void
+  /**
+   * Pre-project mode (Home): a selected media file is handed back raw instead
+   * of being uploaded, because project-scoped materialization needs a project
+   * that does not exist yet. Mutually exclusive with projectId+onUploadedMedia.
+   */
+  readonly onMediaFileSelected?: (file: File) => void
 }
 
 interface TextAttachmentChipsProps {
@@ -127,7 +133,7 @@ export function MediaAttachmentChips({
   className,
 }: {
   readonly attachments: readonly ProjectAssistantMediaAttachment[]
-  readonly onRemove?: (revisionId: string) => void
+  readonly onRemove?: (resourceId: string) => void
   readonly className?: string
 }) {
   const t = useTranslations('assistantAgent')
@@ -137,7 +143,7 @@ export function MediaAttachmentChips({
       {attachments.map((attachment) => (
         attachment.mediaType === 'image' && attachment.href ? (
           <div
-            key={attachment.revisionId}
+            key={attachment.resourceId}
             className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-slate-100 shadow-sm"
             title={attachment.name}
           >
@@ -153,13 +159,13 @@ export function MediaAttachmentChips({
               <MediaAttachmentRemoveButton
                 name={attachment.name}
                 floating
-                onRemove={() => onRemove(attachment.revisionId)}
+                onRemove={() => onRemove(attachment.resourceId)}
               />
             ) : null}
           </div>
         ) : (
           <div
-            key={attachment.revisionId}
+            key={attachment.resourceId}
             className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm"
             title={attachment.name}
           >
@@ -178,7 +184,80 @@ export function MediaAttachmentChips({
               <MediaAttachmentRemoveButton
                 name={attachment.name}
                 floating={false}
-                onRemove={() => onRemove(attachment.revisionId)}
+                onRemove={() => onRemove(attachment.resourceId)}
+              />
+            ) : null}
+          </div>
+        )
+      ))}
+    </div>
+  )
+}
+
+export interface PendingMediaFileChip {
+  readonly id: string
+  readonly fileName: string
+  readonly isImage: boolean
+  readonly previewUrl: string | null
+}
+
+/**
+ * Pre-upload media chips for surfaces where the file is still local (Home,
+ * before the project exists). Visually identical to MediaAttachmentChips so
+ * the two states read as one attachment experience.
+ */
+export function PendingMediaFileChips({
+  files,
+  onRemove,
+  className,
+}: {
+  readonly files: readonly PendingMediaFileChip[]
+  readonly onRemove?: (id: string) => void
+  readonly className?: string
+}) {
+  const t = useTranslations('assistantAgent')
+  if (files.length === 0) return null
+  return (
+    <div className={['flex flex-wrap items-center gap-2', className].filter(Boolean).join(' ')}>
+      {files.map((file) => (
+        file.isImage && file.previewUrl ? (
+          <div
+            key={file.id}
+            className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-slate-100 shadow-sm"
+            title={file.fileName}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={file.previewUrl} alt={file.fileName} className="h-full w-full object-cover" />
+            {onRemove ? (
+              <MediaAttachmentRemoveButton
+                name={file.fileName}
+                floating
+                onRemove={() => onRemove(file.id)}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div
+            key={file.id}
+            className="inline-flex max-w-full items-center gap-2 rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm"
+            title={file.fileName}
+          >
+            <AppIcon
+              name={file.isImage ? 'image' : 'audioWave'}
+              className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-info-fg)]"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 max-w-[12rem] truncate font-medium text-[var(--glass-text-primary)]">
+              {file.fileName}
+            </span>
+            <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">
+              {t(file.isImage ? 'attachments.mediaKindImage' : 'attachments.mediaKindAudio')}
+            </span>
+            {onRemove ? (
+              <MediaAttachmentRemoveButton
+                name={file.fileName}
+                floating={false}
+                onRemove={() => onRemove(file.id)}
               />
             ) : null}
           </div>
@@ -195,6 +274,7 @@ export function TextAttachmentUploadDialog({
   onClose,
   onUploaded,
   onUploadedMedia,
+  onMediaFileSelected,
 }: TextAttachmentUploadDialogProps) {
   const t = useTranslations('assistantAgent')
   const locale = useLocale()
@@ -239,7 +319,7 @@ export function TextAttachmentUploadDialog({
     selectFile(fileFromList(event.dataTransfer.files))
   }, [disabled, selectFile, uploading])
 
-  const mediaUploadEnabled = Boolean(projectId && onUploadedMedia)
+  const mediaUploadEnabled = Boolean((projectId && onUploadedMedia) || onMediaFileSelected)
 
   const handleUpload = useCallback(async () => {
     if (!selectedFile || disabled || uploading) return
@@ -247,14 +327,17 @@ export function TextAttachmentUploadDialog({
     setError(null)
     try {
       if (isProjectAssistantMediaFile(selectedFile)) {
-        if (!projectId || !onUploadedMedia) {
+        if (onMediaFileSelected) {
+          onMediaFileSelected(selectedFile)
+        } else if (projectId && onUploadedMedia) {
+          const mediaAttachment = await uploadProjectAssistantMediaAttachment({
+            projectId,
+            file: selectedFile,
+          })
+          onUploadedMedia(mediaAttachment)
+        } else {
           throw new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNAVAILABLE')
         }
-        const mediaAttachment = await uploadProjectAssistantMediaAttachment({
-          projectId,
-          file: selectedFile,
-        })
-        onUploadedMedia(mediaAttachment)
       } else {
         const attachment = await uploadProjectAssistantTextAttachment({ file: selectedFile })
         onUploaded(attachment)
@@ -265,7 +348,7 @@ export function TextAttachmentUploadDialog({
     } finally {
       setUploading(false)
     }
-  }, [disabled, onClose, onUploaded, onUploadedMedia, projectId, selectedFile, uploading])
+  }, [disabled, onClose, onMediaFileSelected, onUploaded, onUploadedMedia, projectId, selectedFile, uploading])
 
   if (!mounted || !open) return null
 

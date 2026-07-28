@@ -49,13 +49,13 @@ export function useWorkspaceAssistantComposer(
   const addMediaAttachment = useCallback((attachment: ProjectAssistantMediaAttachment) => {
     setMediaAttachments((current) => {
       if (current.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES) return current
-      if (current.some((item) => item.revisionId === attachment.revisionId)) return current
+      if (current.some((item) => item.resourceId === attachment.resourceId)) return current
       return [...current, attachment]
     })
   }, [])
 
-  const removeMediaAttachment = useCallback((revisionId: string) => {
-    setMediaAttachments((current) => current.filter((attachment) => attachment.revisionId !== revisionId))
+  const removeMediaAttachment = useCallback((resourceId: string) => {
+    setMediaAttachments((current) => current.filter((attachment) => attachment.resourceId !== resourceId))
   }, [])
 
   return {

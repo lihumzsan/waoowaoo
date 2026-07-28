@@ -4,6 +4,11 @@ import {
   readProjectAssistantTextAttachmentsFromMetadata,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import {
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_METADATA_KEY,
+  readProjectAssistantMediaAttachmentsFromMetadata,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
 
 export const HOME_ASSISTANT_AUTOSTART_QUERY = 'assistantAutoStart' as const
@@ -44,6 +49,7 @@ export interface CreateHomeProjectLaunchResult {
 export interface HomeAssistantAutoStartDraft {
   readonly message: string
   readonly attachments: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
 }
 
 function readObject(value: unknown): Record<string, unknown> | null {
@@ -94,13 +100,15 @@ export function writeHomeAssistantAutoStartDraft(input: {
   readonly episodeId: string
   readonly message: string
   readonly attachments?: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
 }): void {
   if (typeof window === 'undefined') {
     throw new Error('HOME_ASSISTANT_AUTOSTART_STORAGE_UNAVAILABLE')
   }
   const message = input.message.trim()
   const attachments = input.attachments ?? []
-  if (!message && attachments.length === 0) {
+  const mediaAttachments = input.mediaAttachments ?? []
+  if (!message && attachments.length === 0 && mediaAttachments.length === 0) {
     throw new Error('HOME_ASSISTANT_AUTOSTART_DRAFT_EMPTY')
   }
   window.sessionStorage.setItem(
@@ -108,6 +116,7 @@ export function writeHomeAssistantAutoStartDraft(input: {
     JSON.stringify({
       message,
       attachments,
+      mediaAttachments,
     } satisfies HomeAssistantAutoStartDraft),
   )
 }
@@ -131,8 +140,16 @@ function parseHomeAssistantAutoStartDraft(rawValue: string | null): HomeAssistan
           [PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY]: rawAttachments,
         },
       })
-  return message || attachments.length > 0
-    ? { message, attachments }
+  const rawMediaAttachments = record.mediaAttachments
+  const mediaAttachments = rawMediaAttachments === undefined
+    ? []
+    : readProjectAssistantMediaAttachmentsFromMetadata({
+        custom: {
+          [PROJECT_ASSISTANT_MEDIA_ATTACHMENT_METADATA_KEY]: rawMediaAttachments,
+        },
+      })
+  return message || attachments.length > 0 || mediaAttachments.length > 0
+    ? { message, attachments, mediaAttachments }
     : null
 }
 

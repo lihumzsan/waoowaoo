@@ -1,5 +1,6 @@
 import type { Project } from '@/types/project'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
+import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 
 export interface Episode {
   id: string
@@ -22,6 +23,7 @@ export interface ProjectWorkspaceProps {
   assistantAutoStartDraft?: {
     readonly message: string
     readonly attachments: readonly ProjectAssistantTextAttachment[]
+    readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
   } | null
   assistantAutoStartKey?: string | null
   onAssistantAutoStartConsumed?: () => void

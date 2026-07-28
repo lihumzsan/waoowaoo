@@ -23,7 +23,7 @@ interface WorkspaceAssistantComposerProps {
   readonly onStopReply: () => Promise<void>
   readonly onAttachClick: () => void
   readonly onRemoveAttachment: (attachmentId: string) => void
-  readonly onRemoveMediaAttachment?: (revisionId: string) => void
+  readonly onRemoveMediaAttachment?: (resourceId: string) => void
   readonly onPasteMediaFiles?: (files: readonly File[]) => void
 }
 

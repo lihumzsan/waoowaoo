@@ -16,7 +16,6 @@ function isMediaUploadResponse(value: unknown): value is ProjectAssistantMediaAt
   return payload.success === true
     && !!payload.resource
     && typeof payload.resource.resourceId === 'string'
-    && typeof payload.resource.revisionId === 'string'
     && (payload.mediaType === 'image' || payload.mediaType === 'audio')
     && typeof payload.name === 'string'
     && typeof payload.href === 'string'
@@ -52,7 +51,6 @@ export async function uploadProjectAssistantMediaAttachment({
   }
   return {
     resourceId: payload.resource.resourceId,
-    revisionId: payload.resource.revisionId,
     mediaType: payload.mediaType,
     name: payload.name,
     href: payload.href,

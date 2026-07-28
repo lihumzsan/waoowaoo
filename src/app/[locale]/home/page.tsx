@@ -4,7 +4,7 @@
  * 首页 - 创作中心
  * 用户登录后的主入口页面：快速创作 + 最近项目
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, type ClipboardEvent } from 'react'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
@@ -14,8 +14,10 @@ import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
 import HomeVideoRatioSelect from '@/components/home/HomeVideoRatioSelect'
 import {
+  PendingMediaFileChips,
   TextAttachmentChips,
   TextAttachmentUploadDialog,
+  type PendingMediaFileChip,
 } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
@@ -26,7 +28,13 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
+import { PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES } from '@/lib/project-agent/media-attachments'
+import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+
+interface PendingHomeMediaFile extends PendingMediaFileChip {
+  readonly file: File
+}
 
 interface ProjectStats {
   episodes: number
@@ -58,9 +66,19 @@ export default function HomePage() {
   const [inputValue, setInputValue] = useState('')
   const [videoRatio, setVideoRatio] = useState<ProjectVideoRatio>('16:9')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<PendingHomeMediaFile[]>([])
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  // Object URLs power the local image previews; revoke them on unmount.
+  const pendingMediaFilesRef = useRef(pendingMediaFiles)
+  pendingMediaFilesRef.current = pendingMediaFiles
+  useEffect(() => () => {
+    for (const pending of pendingMediaFilesRef.current) {
+      if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl)
+    }
+  }, [])
 
   // 鉴权
   useEffect(() => {
@@ -102,6 +120,7 @@ export default function HomePage() {
       inputValue,
       videoRatio,
       attachments,
+      mediaFiles: pendingMediaFiles.map((pending) => pending.file),
       isSubmitting: createLoading,
       apiFetch,
       projectName: t('defaultProjectName', {
@@ -131,7 +150,47 @@ export default function HomePage() {
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
   }, [])
 
-  const createDisabled = (!inputValue.trim() && attachments.length === 0) || createLoading
+  const addPendingMediaFiles = useCallback((files: readonly File[]) => {
+    setPendingMediaFiles((current) => {
+      const room = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - current.length
+      if (room <= 0) return current
+      const added = files.slice(0, room).map((file) => {
+        const isImage = file.type.toLowerCase().startsWith('image/')
+          || /\.(png|jpe?g|webp)$/i.test(file.name)
+        return {
+          id: crypto.randomUUID(),
+          file,
+          fileName: file.name || 'upload',
+          isImage,
+          previewUrl: isImage ? URL.createObjectURL(file) : null,
+        } satisfies PendingHomeMediaFile
+      })
+      return [...current, ...added]
+    })
+    if (createError) {
+      setCreateError(null)
+    }
+  }, [createError])
+
+  const handleRemovePendingMediaFile = useCallback((id: string) => {
+    setPendingMediaFiles((current) => {
+      const removed = current.find((pending) => pending.id === id)
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+      return current.filter((pending) => pending.id !== id)
+    })
+  }, [])
+
+  const handleComposerPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (createLoading) return
+    const files = Array.from(event.clipboardData?.files ?? []).filter(isProjectAssistantMediaFile)
+    if (files.length === 0) return
+    event.preventDefault()
+    addPendingMediaFiles(files)
+  }, [addPendingMediaFiles, createLoading])
+
+  const createDisabled = (
+    !inputValue.trim() && attachments.length === 0 && pendingMediaFiles.length === 0
+  ) || createLoading
 
   // 时间格式化
   const formatTimeAgo = (dateString: string): string => {
@@ -333,6 +392,7 @@ export default function HomePage() {
                 }
               }}
               onSubmit={handleCreate}
+              onPaste={handleComposerPaste}
               placeholder={t('inputPlaceholder')}
               minRows={HOME_QUICK_START_MIN_ROWS}
               containerClassName="relative mx-auto w-full max-w-[792px] rounded-[28px] border border-[rgba(15,17,23,0.08)] bg-white/85 shadow-[0_2px_4px_rgba(15,17,23,0.03),0_8px_20px_-6px_rgba(15,17,23,0.07),0_32px_64px_-20px_rgba(15,17,23,0.16)] backdrop-blur-[20px] transition-all duration-300 focus-within:border-[rgba(47,123,255,0.38)] focus-within:shadow-[0_2px_4px_rgba(15,17,23,0.04),0_12px_28px_-8px_rgba(47,123,255,0.20),0_40px_80px_-24px_rgba(15,17,23,0.20)]"
@@ -366,7 +426,10 @@ export default function HomePage() {
                     type="button"
                     aria-label={ta('attachments.openUpload')}
                     title={ta('attachments.openUpload')}
-                    disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+                    disabled={createLoading || (
+                      attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+                      && pendingMediaFiles.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+                    )}
                     onClick={() => setAttachmentDialogOpen(true)}
                     className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[rgba(15,17,23,0.55)] transition hover:bg-black/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -382,9 +445,13 @@ export default function HomePage() {
                   />
                 </div>
               )}
-              footer={attachments.length > 0 || createError ? (
+              footer={attachments.length > 0 || pendingMediaFiles.length > 0 || createError ? (
                 <div className="space-y-3">
                   <TextAttachmentChips attachments={attachments} onRemove={createLoading ? undefined : handleRemoveAttachment} />
+                  <PendingMediaFileChips
+                    files={pendingMediaFiles}
+                    onRemove={createLoading ? undefined : handleRemovePendingMediaFile}
+                  />
                   {createError ? (
                     <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
                       {createError}
@@ -485,9 +552,13 @@ export default function HomePage() {
       </section>
       <TextAttachmentUploadDialog
         open={attachmentDialogOpen}
-        disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+        disabled={createLoading || (
+          attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+          && pendingMediaFiles.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+        )}
         onClose={() => setAttachmentDialogOpen(false)}
         onUploaded={handleAttachmentUploaded}
+        onMediaFileSelected={(file) => addPendingMediaFiles([file])}
       />
     </div>
   )

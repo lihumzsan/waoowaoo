@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
+import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 import {
   isWorkspaceAssistantSendMessageEvent,
   releaseWorkspaceAssistantMessageKey,
@@ -14,6 +15,7 @@ interface UseWorkspaceAssistantMessageDispatchParams {
   readonly autoStartDraft: {
     readonly message: string
     readonly attachments: readonly ProjectAssistantTextAttachment[]
+    readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
   } | null | undefined
   readonly autoStartKey: string | null | undefined
   readonly storageLoading: boolean
@@ -38,14 +40,15 @@ export function useWorkspaceAssistantMessageDispatch({
     message: string,
     hidden = false,
     attachments: readonly ProjectAssistantTextAttachment[] = [],
+    mediaAttachments: readonly ProjectAssistantMediaAttachment[] = [],
   ) => {
     const normalizedMessage = message.trim()
-    if (!normalizedMessage && attachments.length === 0) return
+    if (!normalizedMessage && attachments.length === 0 && mediaAttachments.length === 0) return
     const reservedKey = reserveWorkspaceAssistantMessageKey(key, consumedMessageKeysRef.current)
     if (!reservedKey) return
     try {
       if (hidden) await sendHiddenMessage(normalizedMessage)
-      else await sendMessage({ text: normalizedMessage, attachments })
+      else await sendMessage({ text: normalizedMessage, attachments, mediaAttachments })
     } catch (error) {
       releaseWorkspaceAssistantMessageKey(reservedKey, consumedMessageKeysRef.current)
       throw error
@@ -60,6 +63,7 @@ export function useWorkspaceAssistantMessageDispatch({
       autoStartDraft.message,
       false,
       autoStartDraft.attachments,
+      autoStartDraft.mediaAttachments,
     )
   }, [
     autoStartDraft,
