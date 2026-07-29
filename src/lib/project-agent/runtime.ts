@@ -68,6 +68,7 @@ import {
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import { createAgentsPublicReasoningNormalizer } from '@/lib/ai-exec/agents-public-reasoning'
+import { ensureAgentsLocalTracing } from '@/lib/ai-exec/agents-tracing'
 import { readProjectAgentPlan, type ProjectAgentPlanSnapshot } from './plan'
 import {
   type ProjectAgentWaitFollowUp,
@@ -162,6 +163,8 @@ import {
   createProjectAgentOperationBatchCoordinator,
   type ProjectAgentOperationBatchCoordinator,
 } from './operation-batch'
+
+ensureAgentsLocalTracing()
 
 type UnknownObject = { [key: string]: unknown }
 

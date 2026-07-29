@@ -10,6 +10,7 @@ import {
   type CreativeSkillId,
 } from '@/lib/creative-skills'
 import { createAgentsPublicReasoningNormalizer } from '@/lib/ai-exec/agents-public-reasoning'
+import { ensureAgentsLocalTracing } from '@/lib/ai-exec/agents-tracing'
 import { CREATIVE_WORKER_HARD_LIMITS } from './constants'
 import { CreativeWorkerError, isCreativeWorkerError } from './errors'
 import {
@@ -50,6 +51,8 @@ import {
   readCreativeWorkerGenerationBoundary,
   readCreativeWorkerOutputDelta,
 } from './model-stream'
+
+ensureAgentsLocalTracing()
 
 const COMMON_CREATIVE_SKILL_ID: CreativeSkillId = 'creative-core'
 const REASONING_SNAPSHOT_DELTA_CHARS = 4_096
