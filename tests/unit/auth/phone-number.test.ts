@@ -5,7 +5,10 @@ import {
   normalizePhoneNumberForDestination,
   resolveSmsDestinationFromPhoneNumber,
 } from '@/lib/auth/phone-number'
-import { SMS_DESTINATIONS } from '@/lib/auth/sms-destinations'
+import {
+  resolveAvailableSmsDestinationIds,
+  SMS_DESTINATIONS,
+} from '@/lib/auth/sms-destinations'
 
 describe('phone canonical identity', () => {
   it('normalizes mainland China input variants to one E.164 identity', () => {
@@ -32,6 +35,34 @@ describe('phone canonical identity', () => {
       expect(phoneNumber, destination.id).not.toBeNull()
       expect(resolveSmsDestinationFromPhoneNumber(phoneNumber)?.id).toBe(destination.id)
     }
+  })
+
+  it('projects only destinations that are currently sendable', () => {
+    expect(resolveAvailableSmsDestinationIds({})).toEqual([
+      'CN',
+      'HK',
+      'MO',
+      'TW',
+      'JP',
+      'KR',
+      'MY',
+      'GB',
+    ])
+    expect(resolveAvailableSmsDestinationIds({
+      TENCENTCLOUD_SMS_SENDER_ID_US: 'assigned-us',
+      TENCENTCLOUD_SMS_SENDER_ID_CA: 'assigned-ca',
+    })).toEqual([
+      'CN',
+      'HK',
+      'MO',
+      'TW',
+      'US',
+      'CA',
+      'JP',
+      'KR',
+      'MY',
+      'GB',
+    ])
   })
 
   it('masks phone identities before authentication logging', () => {

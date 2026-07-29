@@ -18,6 +18,7 @@ export const SMS_DESTINATION_IDS = [
 export type SmsDestinationId = (typeof SMS_DESTINATION_IDS)[number]
 export type SmsChannel = 'domestic' | 'international'
 export type SmsSenderIdPolicy = 'not-applicable' | 'public-default' | 'dedicated-required'
+export type SmsDestinationEnvironment = Readonly<Record<string, string | undefined>>
 
 export interface SmsDestination {
   id: SmsDestinationId
@@ -137,4 +138,35 @@ export function getSmsDestinationByCountryCode(
   return isSmsDestinationId(countryCode)
     ? SMS_DESTINATION_BY_ID[countryCode]
     : null
+}
+
+export function getSmsSenderIdEnvKey(destinationId: SmsDestinationId): string {
+  return `TENCENTCLOUD_SMS_SENDER_ID_${destinationId}`
+}
+
+export function readSmsDestinationSenderId(
+  destination: SmsDestination,
+  environment: SmsDestinationEnvironment,
+): string | undefined {
+  if (destination.channel === 'domestic') return undefined
+  const senderId = environment[getSmsSenderIdEnvKey(destination.id)]
+  return typeof senderId === 'string' && senderId.trim()
+    ? senderId.trim()
+    : undefined
+}
+
+export function isSmsDestinationAvailable(
+  destination: SmsDestination,
+  environment: SmsDestinationEnvironment,
+): boolean {
+  return destination.senderIdPolicy !== 'dedicated-required'
+    || readSmsDestinationSenderId(destination, environment) !== undefined
+}
+
+export function resolveAvailableSmsDestinationIds(
+  environment: SmsDestinationEnvironment,
+): SmsDestinationId[] {
+  return SMS_DESTINATIONS
+    .filter((destination) => isSmsDestinationAvailable(destination, environment))
+    .map((destination) => destination.id)
 }

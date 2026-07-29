@@ -1,6 +1,11 @@
 import { sms } from 'tencentcloud-sdk-nodejs-sms'
 import { resolveSmsDestinationFromPhoneNumber } from '@/lib/auth/phone-number'
-import type { SmsDestination, SmsDestinationId } from '@/lib/auth/sms-destinations'
+import {
+  isSmsDestinationAvailable,
+  readSmsDestinationSenderId,
+  type SmsDestination,
+  type SmsDestinationId,
+} from '@/lib/auth/sms-destinations'
 
 export interface TencentSmsConfig {
   secretId: string
@@ -58,13 +63,6 @@ function readRequiredEnv(name: string): string {
   return value.trim()
 }
 
-function readOptionalEnv(name: string): string | undefined {
-  const value = process.env[name]
-  return typeof value === 'string' && value.trim()
-    ? value.trim()
-    : undefined
-}
-
 export function readTencentSmsConfig(): TencentSmsConfig {
   return {
     secretId: readRequiredEnv('TENCENTCLOUD_SECRET_ID'),
@@ -78,15 +76,13 @@ export function readTencentSmsConfig(): TencentSmsConfig {
 }
 
 function resolveSenderId(destination: SmsDestination): string | undefined {
-  if (destination.channel === 'domestic') return undefined
-  const senderId = readOptionalEnv(`TENCENTCLOUD_SMS_SENDER_ID_${destination.id}`)
-  if (destination.senderIdPolicy === 'dedicated-required' && !senderId) {
+  if (!isSmsDestinationAvailable(destination, process.env)) {
     throw new TencentSmsDestinationUnavailableError(
       destination.id,
       'SENDER_ID_MISSING',
     )
   }
-  return senderId
+  return readSmsDestinationSenderId(destination, process.env)
 }
 
 export async function sendTencentVerificationSms(input: {

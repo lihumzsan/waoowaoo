@@ -17,7 +17,6 @@ import { normalizePhoneNumberForDestination } from '@/lib/auth/phone-number'
 import {
   getSmsDestination,
   isSmsDestinationId,
-  SMS_DESTINATIONS,
   type SmsDestinationId,
 } from '@/lib/auth/sms-destinations'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
@@ -27,6 +26,7 @@ interface AuthEntryCardProps {
   features: Pick<
     PublicDeploymentFeatures,
     | 'enablePhoneAuth'
+    | 'smsDestinationIds'
     | 'enablePasswordAuth'
     | 'showGoogleOAuth'
     | 'showInviteCode'
@@ -56,7 +56,9 @@ function readImageCaptchaPayload(payload: unknown): ImageCaptchaPayload | null {
 }
 
 export default function AuthEntryCard({ features }: AuthEntryCardProps) {
-  const [destinationId, setDestinationId] = useState<SmsDestinationId>('CN')
+  const [destinationId, setDestinationId] = useState<SmsDestinationId>(
+    features.smsDestinationIds[0] ?? 'CN',
+  )
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [captchaId, setCaptchaId] = useState('')
@@ -75,6 +77,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const router = useRouter()
   const t = useTranslations('auth')
   const selectedDestination = getSmsDestination(destinationId)
+  const availableSmsDestinations = features.smsDestinationIds.map(getSmsDestination)
 
   const resolvePhoneNumber = () => normalizePhoneNumberForDestination(
     phoneNumber,
@@ -333,7 +336,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                     }}
                     className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {SMS_DESTINATIONS.map((destination) => (
+                    {availableSmsDestinations.map((destination) => (
                       <option key={destination.id} value={destination.id}>
                         {`${destination.flag} ${t(`phoneDestinations.${destination.id}`)} (+${destination.callingCode})${destination.senderIdPolicy === 'dedicated-required' ? ` · ${t('senderIdRequired')}` : ''}`}
                       </option>
