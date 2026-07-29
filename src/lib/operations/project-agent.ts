@@ -17,6 +17,7 @@ import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createCreativeResourceGenerationOperations } from './domains/creative-resource/generation-ops'
 import { createCreativeResourceOperations } from './domains/creative-resource/resource-ops'
+import { createCreativeResourceUploadedMediaOperations } from './domains/creative-resource/uploaded-media-ops'
 import { createCreativeResourceVideoMergeOperations } from './domains/creative-resource/video-merge-ops'
 import { createAssistantPlanOperations } from './domains/assistant/plan-ops'
 import { createAssistantCreativeOperations } from './domains/assistant/creative-ops'
@@ -208,6 +209,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     ...withOperationPack(createCreativeResourceVideoMergeOperations(), {
       groupPath: ['resource'],
       channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createCreativeResourceUploadedMediaOperations(), {
+      groupPath: ['resource'],
+      channels: { tool: true, api: false },
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),

@@ -13,10 +13,13 @@ export function formatProjectAssistantMediaAttachmentsForModel(input: {
 }): string {
   if (input.attachments.length === 0) return ''
   const blocks = input.attachments.map((attachment, index) => {
-    const tag = `<uploaded_media name="${escapeTagAttribute(attachment.name)}" mediaType="${attachment.mediaType}" resourceId="${escapeTagAttribute(attachment.resourceId)}" />`
+    if (!attachment.attachmentToken) {
+      throw new Error(`PROJECT_ASSISTANT_MEDIA_ATTACHMENT_TOKEN_REQUIRED:${attachment.resourceId}`)
+    }
+    const tag = `<uploaded_media name="${escapeTagAttribute(attachment.name)}" mediaType="${attachment.mediaType}" attachmentToken="${escapeTagAttribute(attachment.attachmentToken)}" />`
     return `Uploaded media ${String(index + 1)}:\n${tag}`
   })
-  const hint = 'These are ready Resources owned by the user. To use one in generation, pass its resourceId into the matching typed reference parameter (for example create_video.imageReferences, create_video.audioReferences, create_audio.videoReference, or create_image.imageReferences).'
+  const hint = 'These are chat-scoped uploaded attachments, not project Resources yet. Attached images are already visible to you in this conversation for viewing and discussion. To use one as an input to generation, lineage, or transcription, first call register_uploaded_media with the exact attachmentToken to materialize it as a ready upload Resource, then pass the returned resourceId into the matching typed reference parameter (for example create_video.imageReferences, create_image.imageReferences, create_audio.videoReference, or create_text.content.sourceResourceId). Never invent or reuse tokens across attachments.'
   return [...blocks, hint].join('\n\n')
 }
 

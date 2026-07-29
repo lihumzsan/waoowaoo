@@ -25,7 +25,7 @@
 - **CR-13 — candidate 是独立 Resource。** 一次 `count=N` 预留 N 个短 Resource ID，可共享一个 `rs_…` candidateSetId。兄弟候选成功或失败互不覆盖；retry 显式列出失败 Resource ID。candidateSetId 只表达同批浏览关系，不是内容 identity。
 - **CR-14 — `mediaType` 是 fallback，`schemaId` 是专业语义。** 每个 Resource 必须声明 `text|image|audio|video` 和生产 registry 中的 schemaId。专业 renderer 优先，缺失时才使用媒体 renderer。新增专业结果优先增加 registry 声明，不得复制 Resource、Lineage、Binding 或生命周期。
 - **CR-15 — 专业投影不复制产物身份。** `ProjectEpisodeSourceDocument.sourceResourceId` 和 `ProjectStoryCanon.storyCanonResourceId` 只保存精确 Resource ID；结构化字段是其领域查询投影。screenplay、Story Canon、Creative Direction 和 Asset Manifest 的 Resource scope 由 Creative Work output registry 裁决。成功 screenplay Resource 可直接使用，不存在 confirmed screenplay 或“正式版本”副本。
-- **CR-16 — 外部素材也只创建 Resource。** 网页导入和用户上传经各自唯一入口完成安全抓取/嗅探、MediaObject 登记和同步或异步物化；同一外部来源通过领域 identity 收敛。出处、sha256、MIME、大小和原文件名属于 provenance/执行参数。下游仍只使用 Resource ID，生成入口不能铸造 import schema。
+- **CR-16 — 外部素材登记与物化两步分离，最终仍只创建 Resource。** 网页导入经唯一入口完成安全抓取、MediaObject 登记与异步物化。用户上传拆成两步：`api_project_upload_media` 是唯一登记入口，只做嗅探、重编码、内容寻址存储与 MediaObject 登记，并签发绑定 `userId + projectId + 媒体 identity + 预定域 Resource ID` 的对话附件 receipt（HMAC token）——不创建 CreativeResource、不广播画布；`register_uploaded_media` 是唯一物化入口，服务端验证 receipt 的 owner/scope 与登记媒体一致后按 `user_upload + projectId:sha256` 域 identity reserve + materialize 唯一 Resource 并广播。同一内容任何时刻物化都收敛到同一 Resource ID。出处、sha256、MIME、大小和原文件名属于 provenance/执行参数。物化后下游仍只使用 Resource ID；attachment receipt 只是对话附件的 owner/scope 证明，不是第二引用协议，生成入口不能铸造 import schema。从未物化也从未被消息引用的登记（MediaObject + 存储对象）没有 TTL 生命周期，是已知边界，不自造清理 timer。
 - **CR-17 — 当前角色音色由 Binding 裁决。** 每次 `generate_voice` 都创建新的音频 Resource；`bind_voice` 或生成终态 CAS 只更新 `character_voice` Binding。新生成不是原位写入。删除必须拒绝 active Task、任何 Binding 和下游 Lineage，并且不能删除共享 MediaObject。
 - **CR-18 — 开放创作文档与不可变内容隔离。** `creativeData` 是 Resource 上单独的 schema-open CAS 文档，仅由 `edit_resource` 按 `creativeDataVersion` 做最小路径 Patch。内嵌 `$resourceRef` 只含 Resource ID并经过 owner/scope 校验。它不能改写 Resource 内容、provenance、Lineage、Binding、Task 或生命周期。
 - **CR-19 — UI 只消费最终 View。** Resource View 是卡片的唯一读模型；pending 摘要只从预留 Resource 和唯一 active Task 的冻结 payload 派生，ready 摘要从同一 Resource 的物化内容派生（未物化 Resource 的内容摘要为 empty，生成 prompt 属于 provenance，只在详情视图展示，不充当卡片内容）。card View 附带服务端一次性解析的 `inputSummaries`（引用输入的 name、mediaType、受保护媒体预览 URL），消费方不得按 resourceId 零散请求或用名称二次定位；materialized Lineage 输入缺行必须显式失败，不得回退显示领域 ID。Assistant Link View 只接受精确 Resource ID，文件名来自 Resource name，href 来自受保护媒体投影。Canvas edge 只来自持久 Lineage。
@@ -49,7 +49,7 @@
 
 ## 权威入口
 
-- 同步创建：`create_text`、上传 Operation、领域导入 service。
+- 同步创建：`create_text`、`register_uploaded_media`（对话附件物化）、领域导入 service；`api_project_upload_media` 只登记附件，不创建 Resource。
 - 异步创建：`create_image`、`create_audio`、`create_video`、`merge_videos`、`creative_work` 以及外部图片导入；全部复用 Operation plan/commit、Task 和 terminal materializer。
 - 采用：Binding service 及其 `adopt_creative_direction`、`adopt_asset_manifest`、`bind_voice`、资产图片终态入口。
 - 读取：Resource View、Assistant Link View、`list_resources`、Project Context 和领域投影。
@@ -122,6 +122,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 - `confirmed_screenplay` 曾与成功 screenplay Resource 并存成为第二状态。确认入口和 Binding 已删除，调用方显式选择一个 screenplay Resource。
 - 角色音色曾把“重新生成”解释为原位追加版本，使当前绑定与生成完成的晚到顺序竞争。现在每次生成创建新 Resource，只有 Binding CAS 决定当前音色。
 - Prompt Set 之外的两条 Worker 产物执行链曾长期依赖 Primary 搬运内容：资产图要求 Primary 逐条把 manifest `generationPrompt` 抄进 `create_image.kind=asset`，配乐要求 Primary 把 `music_direction` cue 时间线压缩改写成一条 `create_audio` prompt——后者本身就是「另一个模型改写同一创作判断」，且「原样使用」只有提示词纪律而无契约保证。参考资产回归（见上）已证明这类 Primary 解释层是漂移面。`creative_work_v11` 为 `music_direction` strict 输出增加必填可空 `score`，`manifest_assets`（CR-21）与 `music_direction`（CR-22）由此补齐引用执行；当前 v13 只继续切换 Worker 提交/trace 协议，不改变这些 Resource schema 和执行 owner。无 `score` 键的旧 music_direction Resource 引用执行时仍显式失败，由 Primary 重新委派。
+- 上传曾经"粘贴即物化"：`api_project_upload_media` 在上传事务里直接 reserve + materialize `project.upload_image/upload_audio` Resource 并广播画布，用户往对话里粘贴一张仅供讨论的截图也会立刻在画布上出卡，画布被从未进入创作链路的素材污染；消息附件协议因此还把"上传 Resource ID"当作对话附件身份，模型输入与聊天层耦合了 Resource 生命周期。当前一次性切换为两步（CR-16）：上传只登记（MediaObject + 签发 owner/scope 绑定的 attachment receipt），Resource 只由 Agent 显式调用 `register_uploaded_media` 物化，画布只在物化时收到广播。历史消息里旧协议的 resource-marker 图片按协议不兼容处理：模型输入将其替换为显式占位文本并记录结构化日志，不静默跳过也不保留旧解析分支；消息接受层直接拒绝无 receipt 的附件引用。旧上传 Resource 行保持不变仍可正常引用。防线：附件的唯一解析权威是 `media-attachments/resolve.ts`（消息接受、模型输入、物化共用），receipt 由服务端 HMAC 签发验证；未物化登记的存储清理仍是已知边界。
 
 ## 修改检查表
 

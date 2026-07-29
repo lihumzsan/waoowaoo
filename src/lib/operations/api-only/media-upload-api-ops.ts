@@ -1,19 +1,11 @@
-import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import sharp from 'sharp'
 import { ApiError } from '@/lib/api-errors'
-import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
 import {
-  materializeCreativeResourceInTransaction,
-  reserveDomainCreativeResourceInTransaction,
-} from '@/lib/creative-resource/persistence'
-import {
-  buildUserUploadProvenance,
-  buildUserUploadSourceId,
+  buildUserUploadResourceId,
   buildUserUploadStorageKey,
   resolveUserUploadAcceptedMedia,
-  USER_UPLOAD_SOURCE_TYPE,
   userUploadSchemaIdForMediaType,
 } from '@/lib/creative-resource/upload-contract'
 import {
@@ -28,8 +20,8 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
+import { buildProjectAssistantAttachmentToken } from '@/lib/project-agent/media-attachments/attachment-token'
 import { deleteObject, uploadObject } from '@/lib/storage'
-import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
 type UploadFileLike = {
   name: string
@@ -53,7 +45,7 @@ const preparedUserUploadSchema = z.object({
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
-  fileName: z.string().min(1).max(500),
+  fileName: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
 }).strict()
 
@@ -61,14 +53,12 @@ type PreparedUserUpload = z.infer<typeof preparedUserUploadSchema>
 
 const uploadMediaOutputSchema = z.object({
   success: z.literal(true),
-  resource: z.object({
+  attachment: z.object({
     resourceId: z.string().min(1),
+    attachmentToken: z.string().min(1),
+    mediaType: z.enum(['image', 'audio']),
+    name: z.string().min(1),
   }).strict(),
-  mediaType: z.enum(['image', 'audio']),
-  schemaId: z.string().min(1),
-  name: z.string().min(1),
-  href: z.string().startsWith('/m/'),
-  reused: z.boolean(),
 }).strict()
 
 function normalizeUploadName(rawName: unknown, fileName: string, mediaType: 'image' | 'audio'): string {
@@ -143,7 +133,7 @@ async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpl
 
   const sha256 = createHash('sha256').update(normalized.stored).digest('hex')
   const storageKey = buildUserUploadStorageKey({ sha256, extension: accepted.extension })
-  const fileName = (file.name.trim() || 'upload').slice(0, 500)
+  const fileName = (file.name.trim() || 'upload').slice(0, 200)
   const prepared: PreparedUserUpload = {
     mediaType: accepted.mediaType,
     schemaId: userUploadSchemaIdForMediaType(accepted.mediaType),
@@ -166,11 +156,13 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
   return {
     api_project_upload_media: defineOperation({
       id: 'api_project_upload_media',
-      summary: 'API-only: Materialize one user-uploaded image or audio file as a ready project upload Resource, consumable through the standard resource reference protocol.',
+      summary: 'API-only: Register one user-uploaded image or audio file (sniffed, sanitized, content-addressed, MediaObject-registered) as a chat attachment and return its signed registration receipt. No CreativeResource is created here; the Agent materializes an attachment on demand through register_uploaded_media.',
       intent: 'act',
       effects: {
         writes: true,
-        workspaceResourceImpact: 'creative_resources',
+        // Only bytes and the shared MediaObject registration are written; no
+        // Resource exists until register_uploaded_media materializes one.
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -179,15 +171,8 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
         longRunning: false,
       },
       resourceContract: {
-        kind: 'resource',
-        assistantPresentation: 'none',
-        acceptsReferences: false,
-        outputMediaTypes: ['image', 'audio'],
-        outputSchemaIds: [
-          userUploadSchemaIdForMediaType('image'),
-          userUploadSchemaIdForMediaType('audio'),
-        ],
-        supportsCandidates: false,
+        kind: 'none',
+        reason: 'registers a chat attachment only; register_uploaded_media is the sole materialization entry for upload Resources',
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: z.object({}).passthrough(),
@@ -197,11 +182,6 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
       },
       executeInTransaction: async (ctx, _input, transaction, preparedValue) => {
         const prepared = preparedUserUploadSchema.parse(preparedValue)
-        const scope = resolveProjectCreativeResourceScope({
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          episodeId: null,
-        })
         const media = await ensureMediaObjectFromStorageKey(prepared.storageKey, {
           sha256: prepared.sha256,
           mimeType: prepared.mimeType,
@@ -209,71 +189,29 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
           width: prepared.width,
           height: prepared.height,
         }, transaction)
-        const reserved = await reserveDomainCreativeResourceInTransaction(transaction, {
-          scope,
+        const resourceId = buildUserUploadResourceId({
+          projectId: ctx.projectId,
+          sha256: prepared.sha256,
+        })
+        const attachmentToken = buildProjectAssistantAttachmentToken({
+          v: 1,
+          publicId: media.publicId,
+          resourceId,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
           mediaType: prepared.mediaType,
-          schemaId: prepared.schemaId,
-          sourceType: USER_UPLOAD_SOURCE_TYPE,
-          sourceId: buildUserUploadSourceId({ projectId: ctx.projectId, sha256: prepared.sha256 }),
+          fileName: prepared.fileName,
           name: prepared.name,
-        })
-        if (reserved.status === 'ready') {
-          const existing = await transaction.creativeResource.findUnique({
-            where: { id: reserved.resourceId },
-            select: { materializedAt: true, name: true },
-          })
-          if (!existing?.materializedAt) {
-            throw new Error(`USER_UPLOAD_READY_MATERIALIZATION_MISSING:${reserved.resourceId}`)
-          }
-          return uploadMediaOutputSchema.parse({
-            success: true,
-            resource: { resourceId: reserved.resourceId },
-            mediaType: prepared.mediaType,
-            schemaId: prepared.schemaId,
-            name: existing.name ?? prepared.name,
-            href: media.url,
-            reused: true,
-          })
-        }
-        const resource = await materializeCreativeResourceInTransaction(transaction, {
-          resourceId: reserved.resourceId,
-          userId: ctx.userId,
-          mediaType: prepared.mediaType,
-          schemaId: prepared.schemaId,
-          content: { kind: 'media', mediaId: media.id },
-          inputs: [],
-          provenance: {
-            operationId: 'api_project_upload_media',
-            inputHash: prepared.sha256,
-            taskId: null,
-            operationExecutionId: null,
-            executionSegmentId: null,
-            toolCallId: null,
-            prompt: null,
-            modelKey: null,
-            generationOptions: buildUserUploadProvenance({
-              fileName: prepared.fileName,
-              sha256: prepared.sha256,
-              mimeType: prepared.mimeType,
-              sizeBytes: prepared.sizeBytes,
-            }),
-          },
-        })
-        await createWorkspaceResourceBroadcastsInTransaction({
-          tx: transaction,
-          invocationId: `api_project_upload_media:${randomUUID()}`,
-          affectedResources: [{ kind: 'creativeResources', projectId: ctx.projectId, episodeId: null }],
-          userId: ctx.userId,
-          operationId: 'api_project_upload_media',
+          sha256: prepared.sha256,
         })
         return uploadMediaOutputSchema.parse({
           success: true,
-          resource: resource,
-          mediaType: prepared.mediaType,
-          schemaId: prepared.schemaId,
-          name: prepared.name,
-          href: media.url,
-          reused: false,
+          attachment: {
+            resourceId,
+            attachmentToken,
+            mediaType: prepared.mediaType,
+            name: prepared.name,
+          },
         })
       },
       compensateTransactionFailure: async (_ctx, _input, preparedValue) => {

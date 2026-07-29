@@ -21,9 +21,16 @@ function readAttachment(value: unknown): ProjectAssistantMediaAttachment | null 
   const resourceId = typeof value.resourceId === 'string' ? value.resourceId.trim() : ''
   const name = typeof value.name === 'string' ? value.name.trim() : ''
   const href = typeof value.href === 'string' && value.href.startsWith('/m/') ? value.href : null
+  // Legacy resource-backed attachments (retired protocol) persist in immutable
+  // message history without a token. They stay displayable, but every write or
+  // model consumer must reject a null token explicitly.
+  const attachmentToken = typeof value.attachmentToken === 'string' && value.attachmentToken.trim()
+    ? value.attachmentToken.trim()
+    : null
   if (!resourceId || !name || !isMediaType(value.mediaType)) return null
   return {
     resourceId,
+    attachmentToken,
     mediaType: value.mediaType,
     name,
     href,

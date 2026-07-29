@@ -141,7 +141,9 @@ export function MediaAttachmentChips({
               {attachment.name}
             </span>
             <span className="shrink-0 text-[11px] text-[var(--glass-text-tertiary)]">
-              {t(attachment.mediaType === 'image' ? 'attachments.mediaKindImage' : 'attachments.mediaKindAudio')}
+              {t(attachment.mediaType === 'image'
+                ? 'attachments.chatAttachmentImage'
+                : 'attachments.chatAttachmentAudio')}
             </span>
             {onRemove ? (
               <MediaAttachmentRemoveButton

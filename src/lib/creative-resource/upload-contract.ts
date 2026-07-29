@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { CreativeResourceMediaType } from './contracts'
 import { creativeResourceGenerationOptionsSchema } from './generation-contract'
+import { buildDomainCreativeResourceId } from './identity'
 import { CREATIVE_RESOURCE_SCHEMA, type CreativeResourceSchemaId } from './schema-registry'
 
 export const USER_UPLOAD_SOURCE_TYPE = 'user_upload'
@@ -70,6 +71,23 @@ export function buildUserUploadSourceId(input: {
   const projectId = input.projectId.trim()
   if (!projectId) throw new Error('USER_UPLOAD_PROJECT_ID_REQUIRED')
   return `${projectId}:${input.sha256.trim().toLowerCase()}`
+}
+
+/**
+ * Canonical Resource identity for one uploaded content in one project. It is a
+ * pure function of the domain origin, so the registration step (upload) can
+ * hand out the exact identity the materialization step will reserve, without
+ * creating the Resource row first (CR-01 domain identity, CR-02 identity
+ * stability across reservation and materialization).
+ */
+export function buildUserUploadResourceId(input: {
+  readonly projectId: string
+  readonly sha256: string
+}): string {
+  return buildDomainCreativeResourceId({
+    sourceType: USER_UPLOAD_SOURCE_TYPE,
+    sourceId: buildUserUploadSourceId(input),
+  })
 }
 
 /**

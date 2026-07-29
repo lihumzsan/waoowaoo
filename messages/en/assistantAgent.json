@@ -144,6 +144,8 @@
     "removeFile": "Remove {fileName}",
     "mediaKindImage": "Image",
     "mediaKindAudio": "Audio",
+    "chatAttachmentImage": "Image · chat attachment",
+    "chatAttachmentAudio": "Audio · chat attachment",
     "mediaUploading": "Uploading attachment...",
     "mediaUploadFailed": "Attachment upload failed."
   },

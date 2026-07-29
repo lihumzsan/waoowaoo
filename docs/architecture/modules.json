@@ -254,6 +254,7 @@
         "src/lib/adapters/tools/execute-project-agent-operation.ts",
         "src/app/api/projects/[projectId]/assistant",
         "src/app/api/assistant/text-attachments",
+        "src/components/project-assistant",
         "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantComposer.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantSettings.tsx",

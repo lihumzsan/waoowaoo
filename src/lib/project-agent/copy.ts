@@ -13,6 +13,7 @@ const PROJECT_AGENT_OPERATION_TITLE_COPY: Record<string, ProjectAgentOperationTi
   update_plan: { zh: '更新计划', en: 'Update plan' },
   get_project_snapshot: { zh: '项目快照', en: 'Project snapshot' },
   get_project_context: { zh: '项目上下文', en: 'Project context' },
+  register_uploaded_media: { zh: '保存上传素材', en: 'Save uploaded media' },
   create_text: { zh: '创建文字资源', en: 'Create text resource' },
   create_image: { zh: '生成图片资源', en: 'Generate image resource' },
   create_audio: { zh: '生成音频资源', en: 'Generate audio resource' },

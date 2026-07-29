@@ -13,12 +13,14 @@ interface UploadProjectAssistantMediaAttachmentParams {
 function isMediaUploadResponse(value: unknown): value is ProjectAssistantMediaAttachmentUploadResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const payload = value as Partial<ProjectAssistantMediaAttachmentUploadResponse>
+  const attachment = payload.attachment
   return payload.success === true
-    && !!payload.resource
-    && typeof payload.resource.resourceId === 'string'
-    && (payload.mediaType === 'image' || payload.mediaType === 'audio')
-    && typeof payload.name === 'string'
-    && typeof payload.href === 'string'
+    && !!attachment
+    && typeof attachment.resourceId === 'string'
+    && typeof attachment.attachmentToken === 'string'
+    && attachment.attachmentToken.length > 0
+    && (attachment.mediaType === 'image' || attachment.mediaType === 'audio')
+    && typeof attachment.name === 'string'
 }
 
 /**
@@ -50,9 +52,14 @@ export async function uploadProjectAssistantMediaAttachment({
     throw new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UPLOAD_RESPONSE_INVALID')
   }
   return {
-    resourceId: payload.resource.resourceId,
-    mediaType: payload.mediaType,
-    name: payload.name,
-    href: payload.href,
+    resourceId: payload.attachment.resourceId,
+    attachmentToken: payload.attachment.attachmentToken,
+    mediaType: payload.attachment.mediaType,
+    name: payload.attachment.name,
+    // Composer-only preview from the local file. Message acceptance strips
+    // non-`/m/` hrefs, so this never persists beyond the composer session.
+    href: payload.attachment.mediaType === 'image' && typeof URL !== 'undefined'
+      ? URL.createObjectURL(file)
+      : null,
   }
 }

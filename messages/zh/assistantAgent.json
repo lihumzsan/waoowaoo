@@ -144,6 +144,8 @@
     "removeFile": "移除 {fileName}",
     "mediaKindImage": "图片",
     "mediaKindAudio": "音频",
+    "chatAttachmentImage": "图片 · 对话附件",
+    "chatAttachmentAudio": "音频 · 对话附件",
     "mediaUploading": "附件上传中...",
     "mediaUploadFailed": "附件上传失败。"
   },

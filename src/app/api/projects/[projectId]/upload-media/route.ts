@@ -5,8 +5,11 @@ import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-
 
 /**
  * POST /api/projects/[projectId]/upload-media
- * Materialize one user-uploaded image or audio file (multipart `file`,
- * optional `name`) as a ready project upload Resource.
+ * Register one user-uploaded image or audio file (multipart `file`, optional
+ * `name`) as a chat attachment: bytes are sanitized and stored, the shared
+ * MediaObject is registered, and a signed attachment receipt is returned.
+ * No CreativeResource is created; the Agent materializes attachments on
+ * demand through the register_uploaded_media operation.
  */
 export const POST = apiHandler(async (
   request: NextRequest,
