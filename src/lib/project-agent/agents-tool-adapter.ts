@@ -151,6 +151,14 @@ export function readProjectAgentOperationGatewayOperationId(input: unknown): str
   return operationId
 }
 
+export function resolveProjectAgentOperationGatewayToolIdentity(input: unknown): string {
+  try {
+    return readProjectAgentOperationGatewayOperationId(input)
+  } catch {
+    return PROJECT_AGENT_OPERATION_GATEWAY_NAME
+  }
+}
+
 export function readProjectAgentOperationGatewayInput(
   input: unknown,
 ): ProjectAgentOperationGatewayInput {
@@ -286,13 +294,7 @@ export function createProjectAgentOperationTools(
       try {
         resolved = await resolveOperation(toolInput, rawToolCallId)
       } catch (error) {
-        const operationId = (() => {
-          try {
-            return readProjectAgentOperationGatewayInput(toolInput).operationId
-          } catch {
-            return PROJECT_AGENT_OPERATION_GATEWAY_NAME
-          }
-        })()
+        const operationId = resolveProjectAgentOperationGatewayToolIdentity(toolInput)
         const toolCallId = identifyToolCall(rawToolCallId, operationId)
         const outcome: ProjectAgentOperationOutcome = {
           kind: 'failed',
