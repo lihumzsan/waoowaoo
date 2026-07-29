@@ -1,11 +1,8 @@
 import type { DeploymentFeatures } from './features'
-import { isSmsDestinationId } from '@/lib/auth/sms-destinations'
 
 export type PublicDeploymentFeatures = DeploymentFeatures
 
-const BOOLEAN_DEPLOYMENT_FEATURE_KEYS: Array<
-  Exclude<keyof PublicDeploymentFeatures, 'smsDestinationIds'>
-> = [
+const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showOfficialPublicPages',
   'showPricingPage',
   'showLegalPages',
@@ -29,11 +26,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isPublicDeploymentFeatures(value: unknown): value is PublicDeploymentFeatures {
   if (!isRecord(value)) return false
-  if (!BOOLEAN_DEPLOYMENT_FEATURE_KEYS.every((key) => typeof value[key] === 'boolean')) {
-    return false
-  }
-  return Array.isArray(value.smsDestinationIds)
-    && value.smsDestinationIds.every(isSmsDestinationId)
+  return DEPLOYMENT_FEATURE_KEYS.every((key) => typeof value[key] === 'boolean')
 }
 
 export async function fetchPublicDeploymentFeatures(): Promise<PublicDeploymentFeatures | null> {

@@ -1,11 +1,6 @@
 import { sms } from 'tencentcloud-sdk-nodejs-sms'
 import { resolveSmsDestinationFromPhoneNumber } from '@/lib/auth/phone-number'
-import {
-  isSmsDestinationAvailable,
-  readSmsDestinationSenderId,
-  type SmsDestination,
-  type SmsDestinationId,
-} from '@/lib/auth/sms-destinations'
+import type { SmsDestinationId } from '@/lib/auth/sms-destinations'
 
 export interface TencentSmsConfig {
   secretId: string
@@ -42,16 +37,12 @@ export class TencentSmsConfigurationError extends Error {
 
 export class TencentSmsDestinationUnavailableError extends Error {
   readonly destinationId: SmsDestinationId | null
-  readonly reason: 'DESTINATION_NOT_ENABLED' | 'SENDER_ID_MISSING'
+  readonly reason = 'DESTINATION_NOT_ENABLED'
 
-  constructor(
-    destinationId: SmsDestinationId | null,
-    reason: 'DESTINATION_NOT_ENABLED' | 'SENDER_ID_MISSING',
-  ) {
+  constructor(destinationId: SmsDestinationId | null) {
     super('TENCENT_SMS_DESTINATION_UNAVAILABLE')
     this.name = 'TencentSmsDestinationUnavailableError'
     this.destinationId = destinationId
-    this.reason = reason
   }
 }
 
@@ -75,16 +66,6 @@ export function readTencentSmsConfig(): TencentSmsConfig {
   }
 }
 
-function resolveSenderId(destination: SmsDestination): string | undefined {
-  if (!isSmsDestinationAvailable(destination, process.env)) {
-    throw new TencentSmsDestinationUnavailableError(
-      destination.id,
-      'SENDER_ID_MISSING',
-    )
-  }
-  return readSmsDestinationSenderId(destination, process.env)
-}
-
 export async function sendTencentVerificationSms(input: {
   phoneNumber: string
   code: string
@@ -92,13 +73,9 @@ export async function sendTencentVerificationSms(input: {
 }): Promise<TencentSmsSendResult> {
   const destination = resolveSmsDestinationFromPhoneNumber(input.phoneNumber)
   if (!destination) {
-    throw new TencentSmsDestinationUnavailableError(
-      null,
-      'DESTINATION_NOT_ENABLED',
-    )
+    throw new TencentSmsDestinationUnavailableError(null)
   }
   const config = readTencentSmsConfig()
-  const senderId = resolveSenderId(destination)
   const SmsClient = sms.v20210111.Client
   const client = new SmsClient({
     credential: {
@@ -127,7 +104,6 @@ export async function sendTencentVerificationSms(input: {
     ...(destination.channel === 'domestic'
       ? { SignName: config.domesticSignName }
       : {}),
-    ...(senderId ? { SenderId: senderId } : {}),
   })
   const status = response.SendStatusSet?.[0]
   if (status?.Code !== 'Ok') {

@@ -5,10 +5,7 @@ import {
   normalizePhoneNumberForDestination,
   resolveSmsDestinationFromPhoneNumber,
 } from '@/lib/auth/phone-number'
-import {
-  resolveAvailableSmsDestinationIds,
-  SMS_DESTINATIONS,
-} from '@/lib/auth/sms-destinations'
+import { SMS_DESTINATIONS } from '@/lib/auth/sms-destinations'
 
 describe('phone canonical identity', () => {
   it('normalizes mainland China input variants to one E.164 identity', () => {
@@ -19,8 +16,9 @@ describe('phone canonical identity', () => {
   })
 
   it('preserves enabled international E.164 identities and rejects ambiguous or unsupported input', () => {
-    expect(normalizePhoneNumber('+14155552671')).toBe('+14155552671')
+    expect(normalizePhoneNumber('+447400123456')).toBe('+447400123456')
     expect(normalizePhoneNumber('4155552671')).toBeNull()
+    expect(normalizePhoneNumber('+14155552671')).toBeNull()
     expect(normalizePhoneNumber('+33123456789')).toBeNull()
     expect(normalizePhoneNumber('+0123456789')).toBeNull()
     expect(normalizePhoneNumber('not-a-phone')).toBeNull()
@@ -35,34 +33,6 @@ describe('phone canonical identity', () => {
       expect(phoneNumber, destination.id).not.toBeNull()
       expect(resolveSmsDestinationFromPhoneNumber(phoneNumber)?.id).toBe(destination.id)
     }
-  })
-
-  it('projects only destinations that are currently sendable', () => {
-    expect(resolveAvailableSmsDestinationIds({})).toEqual([
-      'CN',
-      'HK',
-      'MO',
-      'TW',
-      'JP',
-      'KR',
-      'MY',
-      'GB',
-    ])
-    expect(resolveAvailableSmsDestinationIds({
-      TENCENTCLOUD_SMS_SENDER_ID_US: 'assigned-us',
-      TENCENTCLOUD_SMS_SENDER_ID_CA: 'assigned-ca',
-    })).toEqual([
-      'CN',
-      'HK',
-      'MO',
-      'TW',
-      'US',
-      'CA',
-      'JP',
-      'KR',
-      'MY',
-      'GB',
-    ])
   })
 
   it('masks phone identities before authentication logging', () => {
