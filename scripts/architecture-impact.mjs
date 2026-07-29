@@ -14,6 +14,7 @@ import {
 const root = process.cwd()
 const manifestPath = path.join(root, 'docs', 'architecture', 'modules.json')
 const requestedArgs = process.argv.slice(2)
+const GIT_STATUS_MAX_BUFFER_BYTES = 64 * 1024 * 1024
 
 function usage() {
   process.stderr.write('Usage: npm run architecture:impact -- <file-or-directory> [...more paths]\n')
@@ -25,7 +26,11 @@ function readChangedPaths() {
   const raw = execFileSync(
     'git',
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    { cwd: root, encoding: 'utf8' },
+    {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: GIT_STATUS_MAX_BUFFER_BYTES,
+    },
   )
   return parseGitStatusPorcelainZ(raw, root)
 }
