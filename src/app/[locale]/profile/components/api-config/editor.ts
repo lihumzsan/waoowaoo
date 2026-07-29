@@ -9,6 +9,48 @@ import { useCallback, useRef, useState } from 'react'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { capabilitySelectionsToCommand } from '@/lib/ai-registry/capability-selection-command'
 
+export interface ApiConfigSaveError {
+  code: string
+  providerId?: string
+  requestId?: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+async function readSaveError(response: Response, providers: Provider[]): Promise<ApiConfigSaveError> {
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    return { code: 'REQUEST_FAILED' }
+  }
+
+  if (!isRecord(payload)) return { code: 'REQUEST_FAILED' }
+  const nestedError = isRecord(payload.error) ? payload.error : null
+  const details = nestedError && isRecord(nestedError.details) ? nestedError.details : null
+  const code = readString(details?.code)
+    || readString(payload.code)
+    || readString(nestedError?.code)
+    || 'REQUEST_FAILED'
+  const field = readString(details?.field) || readString(payload.field)
+  const providerIndexMatch = /^providers\[(\d+)]\.id$/.exec(field)
+  const providerIndex = providerIndexMatch ? Number.parseInt(providerIndexMatch[1], 10) : -1
+  const providerId = providerIndex >= 0 ? providers[providerIndex]?.id : undefined
+  const requestId = readString(payload.requestId) || readString(details?.requestId)
+
+  return {
+    code,
+    ...(providerId ? { providerId } : {}),
+    ...(requestId ? { requestId } : {}),
+  }
+}
+
 export function useApiConfigSaver(input: {
   latestModelsRef: MutableRefObject<CustomModel[]>
   latestProvidersRef: MutableRefObject<Provider[]>
@@ -17,6 +59,7 @@ export function useApiConfigSaver(input: {
   latestCapabilityDefaultsRef: MutableRefObject<CapabilitySelections>
 }): {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
+  saveError: ApiConfigSaveError | null
   performSave: (overrides?: {
     defaultModels?: DefaultModels
     workflowConcurrency?: WorkflowConcurrency
@@ -25,6 +68,7 @@ export function useApiConfigSaver(input: {
   flushConfig: () => Promise<void>
 } {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveError, setSaveError] = useState<ApiConfigSaveError | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const performSave = useCallback(async (
@@ -39,7 +83,10 @@ export function useApiConfigSaver(input: {
       clearTimeout(saveTimeoutRef.current)
       saveTimeoutRef.current = null
     }
-    if (!silent) setSaveStatus('saving')
+    if (!silent) {
+      setSaveStatus('saving')
+      setSaveError(null)
+    }
 
     try {
       const currentModels = input.latestModelsRef.current
@@ -72,18 +119,25 @@ export function useApiConfigSaver(input: {
         }),
       })
       if (!res.ok) {
-        if (!silent) setSaveStatus('error')
+        if (!silent) {
+          setSaveError(await readSaveError(res, currentProviders))
+          setSaveStatus('error')
+        }
         return false
       }
 
       if (!silent) {
+        setSaveError(null)
         setSaveStatus('saved')
         saveTimeoutRef.current = setTimeout(() => setSaveStatus('idle'), 3000)
       }
       return true
     } catch (error) {
       _ulogError('保存失败:', error)
-      if (!silent) setSaveStatus('error')
+      if (!silent) {
+        setSaveError({ code: 'NETWORK_ERROR' })
+        setSaveStatus('error')
+      }
       return false
     }
   }, [input.latestCapabilityDefaultsRef, input.latestDefaultModelsRef, input.latestModelsRef, input.latestProvidersRef, input.latestWorkflowConcurrencyRef])
@@ -95,5 +149,5 @@ export function useApiConfigSaver(input: {
     }
   }, [performSave])
 
-  return { saveStatus, performSave, flushConfig }
+  return { saveStatus, saveError, performSave, flushConfig }
 }

@@ -1,11 +1,10 @@
 import { ApiError } from '@/lib/api-errors'
+import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import type { StoredProvider } from './api-config-types'
 import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared'
 
-const SUPPORTED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google', 'mureka'])
-
 function assertSupportedProvider(providerId: string, field: string) {
-  if (SUPPORTED_PROVIDER_KEYS.has(getProviderKey(providerId))) return
+  if (isApiConfigCatalogProviderId(providerId)) return
   throw new ApiError('INVALID_PARAMS', {
     code: 'PROVIDER_NOT_SUPPORTED',
     field,

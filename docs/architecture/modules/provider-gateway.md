@@ -46,7 +46,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - 模型 option 的唯一校验与 canonical normalize：各 adapter descriptor 暴露的生产 `AiOptionSchema`、`src/lib/ai-exec/normalize.ts`；GPT Image 2 跨 provider 的共享 schema/pixel policy 为 `src/lib/ai-providers/shared/gpt-image-2.ts`。
 - LLM 推理强度的唯一运行时解析：`src/lib/ai-exec/reasoning-effort.ts`；平台 assistant/analysis 模型 identity 与角色环境配置入口：`src/lib/platform-models/` 和 `.env*.example`。
 - 结构化 LLM/vision 输出的唯一 envelope 解析、shape 校验与 schema 执行入口：`src/lib/ai-exec/structured-json.ts`、`src/lib/ai-exec/structured-step.ts`。
-- 用户 provider 配置的严格解析与写入：`src/lib/user-api/**`；运行时选择入口为 `src/lib/user-api/runtime-config.ts`。
+- 用户可配置 provider identity 的唯一目录为 `src/lib/ai-registry/api-config-catalog.ts` 的 `API_CONFIG_CATALOG_PROVIDERS`；保存校验和运行时读取必须复用其 `isApiConfigCatalogProviderId`，不得维护私有白名单。严格解析与写入仍由 `src/lib/user-api/**` 负责，运行时选择入口为 `src/lib/user-api/runtime-config.ts`。
 - Provider 可选出站代理：`src/lib/http/outbound-proxy.ts`；请求/响应体积入口：`src/lib/http/body-limits.ts`。部署模式与用户 Provider 配置可用性的唯一裁决分别是 `src/lib/deployment/config.ts` 与 `src/lib/user-api/availability.ts`。
 - Provider-bound 私有媒体读取的唯一共享入口：`src/lib/media/outbound-owned-media.ts`；图片与音频只在 `src/lib/media/outbound-image.ts`、`src/lib/media/outbound-audio.ts` 追加各自 MIME 与大小 policy，再输出 Base64 Data URL。
 - `standards/capabilities/**` 与 `standards/pricing/**` 当前分别由 catalog 检查脚本读取，不是生产 runtime registry 的 writer；运行时仍从 `src/lib/ai-providers/*/models.ts` 经 builtin catalog 注册。修改 standards 必须审计相应 runtime catalog，不能把校验通过解释为生产能力或价格已切换。
@@ -71,10 +71,13 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `tests/unit/ai-exec/structured-json.test.ts` 验证结构化输出只接受纯 JSON 或单一完整外层 fence，并拒绝说明文字、未知/不完整/多重 fence 与 JSON 内容修复。
 - `tests/unit/ai-exec/llm-result-projector.test.ts` 验证 AI SDK usage/cache/cost/reasoning/safety 到 versioned 项目结果的唯一投影及旧 ChatCompletion shape 拒绝；`tests/unit/provider/llm-stream-finalization.test.ts` 反证 delta/final 分叉、漏发 suffix 与二次 completion 猜测。
 - `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 穷尽验证 runtime LLM protocol，并观察 Ark Responses thinking/SSE、Ark/Google Vision 图片编码、OpenRouter reasoning/cache/session/cost 与 provider 连接请求的真实 wire contract。
+- `tests/contracts/provider-api-config-conformance.test.ts` 从生产 API 配置目录穷尽验证每个 provider 同时具有 builtin model、runtime adapter、platform env 声明且能通过严格保存 parser；目录外 identity 继续 fail closed。
 - provider guards 只阻止 API/媒体绕过、跨 provider 猜测和 fallback 等结构旁路，不替代协议或用户旅程证据。
 - `npm run check:capability-catalog` 与 `npm run check:pricing-catalog` 验证 standards 文件自身及 tier/capability 字段关系；它们不证明 standards 与运行时代码 catalog 值一致。
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 反证用户 API 配置重新进入主 Agent；`tests/unit/deployment/config.test.ts` 验证 `platform-key/user-key` 的唯一部署能力投影；`tests/unit/http/body-limits.test.ts` 继续反证超限 chunk 与 base64。
 ## 历史回归
+
+- `3f871a490` 删除 ElevenLabs ambient-sound provider 时移除了 adapter、model、执行和运行时白名单，却遗留 API 配置目录项与 Cloud env 样例。Profile GET 因而把不可执行的 ElevenLabs 合并进表单，而前端每次 PUT 都回传全部 provider；严格 writer 在任何字段保存时均以 `PROVIDER_NOT_SUPPORTED` 拒绝整笔事务，刷新后用户配置全部回退。旧 provider contract 只验证执行与连接协议，`check:model-config-contract` 只扫描已落盘 model shape，都没有从生产配置目录穷尽穿过 writer/runtime。当前删除幽灵目录与 env 入口，保存 parser 和 runtime reader 复用目录 identity，并由 registry conformance 同时对齐 builtin model、adapter、platform env 与严格 parser；真实浏览器保存/刷新仍需可用 MySQL 环境复验。
 
 - OpenRouter LLM 曾要求同一 model id 分别手工加入 pricing、capability、API config 与 platform preset 四张数组；GPT-5.6 Sol 已接齐四处，而环境切换到真实存在的 Claude Fable 5 时只有配置值、没有 catalog 声明，启动因此报 `PLATFORM_DEFAULT_MODEL_NOT_FOUND`。直接允许任意 OpenRouter 字符串虽然能通过统一 HTTP transport，却会丢失价格、reasoning 与类型裁决。当前 provider-owned LLM definition registry 是唯一声明源，四个 catalog 全部派生；未知模型仍 fail closed。
 

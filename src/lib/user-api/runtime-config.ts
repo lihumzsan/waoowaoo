@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
+import { isApiConfigCatalogProviderId } from '@/lib/ai-registry/api-config-catalog'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
@@ -48,8 +49,6 @@ type PlatformProviderEnv = {
   apiKey: string
   baseUrl?: string
 }
-
-const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google', 'mureka'])
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -125,7 +124,7 @@ function parseCustomProviders(rawProviders: string | null | undefined): CustomPr
     if (!id || !name) {
       throw new Error(`PROVIDER_PAYLOAD_INVALID: customProviders[${index}] id/name required`)
     }
-    if (!SUPPORTED_PROVIDER_IDS.has(id)) {
+    if (!isApiConfigCatalogProviderId(id)) {
       throw new Error(`PROVIDER_UNSUPPORTED: ${id}`)
     }
 
@@ -152,7 +151,7 @@ function normalizeStoredModel(raw: unknown, index: number): CustomModel {
 
   const modelId = parsed.modelId
   const provider = parsed.provider
-  if (!SUPPORTED_PROVIDER_IDS.has(provider)) {
+  if (!isApiConfigCatalogProviderId(provider)) {
     throw new Error(`MODEL_PROVIDER_UNSUPPORTED: customModels[${index}].provider`)
   }
 

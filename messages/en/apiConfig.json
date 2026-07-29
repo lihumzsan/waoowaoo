@@ -3,6 +3,7 @@
   "saving": "Saving...",
   "saved": "Saved",
   "saveFailed": "Save failed",
+  "saveFailedProviderUnsupported": "Save failed: provider {provider} is not supported",
   "connected": "Connected",
   "notConfigured": "Not configured",
   "configure": "Configure",

@@ -13,6 +13,7 @@ import {
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
+import type { ApiConfigSaveError } from './editor'
 import { useUserApiConfigQuery } from './query'
 import {
     clearMissingDefaultModels,
@@ -40,6 +41,7 @@ interface UseProvidersReturn {
     capabilityDefaults: CapabilitySelections
     loading: boolean
     saveStatus: 'idle' | 'saving' | 'saved' | 'error'
+    saveError: ApiConfigSaveError | null
     flushConfig: () => Promise<void>
     updateProviderHidden: (providerId: string, hidden: boolean) => void
     updateProviderApiKey: (providerId: string, apiKey: string) => void
@@ -82,7 +84,7 @@ export function useProviders(): UseProvidersReturn {
     useEffect(() => { latestWorkflowConcurrencyRef.current = workflowConcurrency }, [workflowConcurrency])
     useEffect(() => { latestCapabilityDefaultsRef.current = capabilityDefaults }, [capabilityDefaults])
 
-    const { saveStatus, performSave, flushConfig } = useApiConfigSaver({
+    const { saveStatus, saveError, performSave, flushConfig } = useApiConfigSaver({
         latestModelsRef,
         latestProvidersRef,
         latestDefaultModelsRef,
@@ -406,6 +408,7 @@ export function useProviders(): UseProvidersReturn {
         capabilityDefaults,
         loading: queryLoading,
         saveStatus,
+        saveError,
         flushConfig,
         updateProviderHidden,
         updateProviderApiKey,

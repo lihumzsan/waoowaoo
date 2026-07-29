@@ -358,6 +358,10 @@
         "src/lib/user-api",
         "src/app/api/user/api-config",
         "src/app/[locale]/profile/components/api-config",
+        "src/app/[locale]/profile/components/api-config-tab",
+        "messages/en/apiConfig.json",
+        "messages/zh/apiConfig.json",
+        ".env.cloud.example",
         "src/lib/http/outbound-proxy.ts",
         "src/lib/http/body-limits.ts",
         "src/lib/image-cache.ts",
@@ -370,7 +374,8 @@
         "src/lib/operations/api-only/user-api-config-connection-ops.ts",
         "src/lib/operations/domains/config/user-api-config-ops.ts",
         "tests/setup/env.ts",
-        "tests/golden-journey/runtime/start-environment.ts"
+        "tests/golden-journey/runtime/start-environment.ts",
+        "tests/contracts/provider-api-config-conformance.test.ts"
       ]
     },
     {

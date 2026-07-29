@@ -45,15 +45,17 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
   return registeredApiConfigCatalog
 }
 
-export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
+export const API_CONFIG_CATALOG_PROVIDERS: readonly ApiConfigCatalogProvider[] = [
   { id: 'ark', name: 'Volcengine Ark' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
-  { id: 'elevenlabs', name: 'ElevenLabs' },
   { id: 'mureka', name: 'Mureka' },
 ]
 
+const API_CONFIG_CATALOG_PROVIDER_IDS = new Set(
+  API_CONFIG_CATALOG_PROVIDERS.map((provider) => provider.id),
+)
 const CATALOG_PROVIDER_ORDER = new Map(API_CONFIG_CATALOG_PROVIDERS.map((provider, index) => [provider.id, index]))
 const CATALOG_TYPE_ORDER: Readonly<Record<UnifiedModelType, number>> = {
   llm: 0,
@@ -135,6 +137,11 @@ export function getApiConfigProviderKey(providerId?: string): string {
   if (!providerId) return ''
   const colonIndex = providerId.indexOf(':')
   return colonIndex === -1 ? providerId : providerId.slice(0, colonIndex)
+}
+
+export function isApiConfigCatalogProviderId(providerId: string): boolean {
+  const providerKey = getApiConfigProviderKey(providerId.trim().toLowerCase())
+  return API_CONFIG_CATALOG_PROVIDER_IDS.has(providerKey)
 }
 
 export function encodeApiConfigModelKey(provider: string, modelId: string): string {
