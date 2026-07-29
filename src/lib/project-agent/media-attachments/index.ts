@@ -17,8 +17,3 @@ export {
   appendProjectAssistantMediaAttachmentsToUserText,
   formatProjectAssistantMediaAttachmentsForModel,
 } from './format'
-export {
-  buildProjectAssistantImageInputParts,
-  canonicalizeProjectAssistantModelInputMedia,
-  resolveProjectAssistantModelInputMedia,
-} from './model-input'

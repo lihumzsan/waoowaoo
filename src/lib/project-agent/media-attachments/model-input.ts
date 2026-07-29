@@ -1,3 +1,4 @@
+import 'server-only'
 import type { AgentInputItem, UserMessageItem } from '@openai/agents'
 import { resolveOwnedImageHttpsForGeneration } from '@/lib/media/outbound-image'
 import { resolveProjectAssistantMediaAttachments } from './resolve'

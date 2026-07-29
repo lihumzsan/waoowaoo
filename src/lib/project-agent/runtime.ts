@@ -139,10 +139,12 @@ import {
 } from './text-attachments'
 import {
   appendProjectAssistantMediaAttachmentsToUserText,
-  buildProjectAssistantImageInputParts,
   readProjectAssistantMediaAttachmentsFromMessage,
-  resolveProjectAssistantModelInputMedia,
 } from './media-attachments'
+import {
+  buildProjectAssistantImageInputParts,
+  resolveProjectAssistantModelInputMedia,
+} from './media-attachments/model-input'
 import {
   appendProjectAssistantThreadMessages,
   type ProjectAssistantModelHistoryCommit,
