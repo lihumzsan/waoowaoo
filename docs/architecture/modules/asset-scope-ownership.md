@@ -48,7 +48,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - `tests/integration/security/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、parent/variant、copy atomicity 与 stale CAS 拒绝。
 - `SEC-ASSET-CROSS-PROJECT-DENIAL` 通过真实浏览器和生产 copy route 验证第二个已登录用户不能覆盖其他项目的资产。
 - `S3_*` 的 HTTPS、必填凭据与 endpoint shape 可由配置解析和类型检查验证；HeadBucket、对象权限、签名域名及外部 Provider 可达性必须在目标部署桶人工复验，不能由本地 fixture 证明。
-- `npx tsx scripts/test-sign-api.ts` 仅用于目标部署桶的人工验收：用唯一 key 上传对象、生成 HTTPS 签名 URL、下载比对后删除该测试对象；该命令会写入并删除一个测试对象，不属于只读启动检查。
+- `npx tsx --env-file=.env scripts/test-sign-api.ts` 仅用于目标部署桶的人工验收：用唯一 key 上传对象、生成 HTTPS 签名 URL、下载比对后删除该测试对象；该命令会写入并删除一个测试对象，不属于只读启动检查。
 - `tests/integration/security/outbound-image.security.test.ts` 只保留 SSRF、重定向、字节和格式安全边界。后台私有媒体 owner + S3 的真实组合依赖部署对象存储，当前作为发布复验盲区，不用本地存储 fixture 伪造。
 
 结构检查只证明已知旁路没有恢复；跨用户拒绝由最小安全 Journey 证明，普通 source/target 组合由真实 MySQL integration 证明，不再另建一条浏览器产品线。

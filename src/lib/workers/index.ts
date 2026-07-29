@@ -1,4 +1,3 @@
-import 'dotenv/config'
 import type { Job, Worker } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import { installYunwuFetchTraceIfEnabled } from '@/lib/http/fetch-trace'

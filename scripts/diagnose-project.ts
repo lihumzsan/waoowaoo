@@ -1,10 +1,7 @@
 /**
  * 诊断项目任务状态
- * 运行: npx tsx scripts/diagnose-project.ts <projectId>
+ * 运行: npx tsx --env-file=.env scripts/diagnose-project.ts <projectId>
  */
-import { config } from 'dotenv'
-config()
-
 import { prisma } from '../src/lib/prisma'
 import { resolveRedisRuntimeConfig } from '../src/lib/redis-config'
 
@@ -164,8 +161,8 @@ async function diagnoseProject(projectId: string) {
 
 const projectId = process.argv[2]
 if (!projectId) {
-  console.log('用法: npx tsx scripts/diagnose-project.ts <projectId>')
-  console.log('示例: npx tsx scripts/diagnose-project.ts fae709e9-9215-4b3f-9f53-dad871f09896')
+  console.log('用法: npx tsx --env-file=.env scripts/diagnose-project.ts <projectId>')
+  console.log('示例: npx tsx --env-file=.env scripts/diagnose-project.ts fae709e9-9215-4b3f-9f53-dad871f09896')
   process.exit(1)
 }
 

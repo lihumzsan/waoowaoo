@@ -1,10 +1,7 @@
 /**
  * 测试 /api/storage/sign 端点
- * 运行: npx tsx scripts/test-sign-api.ts
+ * 运行: npx tsx --env-file=.env scripts/test-sign-api.ts
  */
-import { config } from 'dotenv'
-config()
-
 import { uploadObject, getSignedObjectUrl } from '../src/lib/storage'
 import { randomUUID } from 'crypto'
 

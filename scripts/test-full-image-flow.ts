@@ -1,10 +1,7 @@
 /**
  * 模拟完整的图像生成和显示流程
- * 运行: npx tsx scripts/test-full-image-flow.ts
+ * 运行: npx tsx --env-file=.env scripts/test-full-image-flow.ts
  */
-import { config } from 'dotenv'
-config()
-
 import { uploadObject, getStorageProvider } from '../src/lib/storage'
 import { extractStorageKeyFromLegacyValue, resolveMediaRefFromLegacyValue, getMediaObjectByPublicId } from '../src/lib/media/service'
 import { attachMediaFieldsToProject } from '../src/lib/media/attach'
