@@ -36,7 +36,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     AUTH_CAPTCHA_ISSUE_LIMIT,
   )
   if (rateResult.limited) {
-    logAuthAction('LOGIN', 'phone', { error: 'Image captcha issue rate limited', ip })
+    logAuthAction('LOGIN', 'Image captcha issue rate limited', { success: false, provider: 'phone', ip })
     return NextResponse.json(
       {
         success: false,

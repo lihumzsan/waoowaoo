@@ -37,25 +37,25 @@ export async function authorizePasswordIdentity(input: {
 }): Promise<PasswordAuthUser | null> {
   const features = getDeploymentFeatures(getDeploymentConfig())
   if (!features.enablePasswordAuth) {
-    logAuthAction('LOGIN', 'password', { error: 'Password auth disabled' })
+    logAuthAction('LOGIN', 'Password auth disabled', { success: false, provider: 'password' })
     return null
   }
 
   const name = normalizeUsername(input.username)
   const password = normalizePassword(input.password)
   if (!name || !password) {
-    logAuthAction('LOGIN', name || 'unknown', { error: 'Missing credentials' })
+    logAuthAction('LOGIN', 'Missing credentials', { success: false, provider: 'password' }, undefined, name || undefined)
     return null
   }
 
   const existingUser = await readPasswordUser(name)
   if (existingUser) {
     if (!existingUser.password || !await bcrypt.compare(password, existingUser.password)) {
-      logAuthAction('LOGIN', name, { error: 'Invalid password' })
+      logAuthAction('LOGIN', 'Invalid password', { success: false, provider: 'password' }, existingUser.id, name)
       return null
     }
 
-    logAuthAction('LOGIN', name, { userId: existingUser.id, success: true })
+    logAuthAction('LOGIN', 'Password login succeeded', { success: true, provider: 'password' }, existingUser.id, name)
     return {
       id: existingUser.id,
       name: existingUser.name,
@@ -63,7 +63,7 @@ export async function authorizePasswordIdentity(input: {
   }
 
   if (password.length < AUTH_PASSWORD_MIN_LENGTH) {
-    logAuthAction('REGISTER', name, { error: 'Password too short' })
+    logAuthAction('REGISTER', 'Password too short', { success: false, provider: 'password' }, undefined, name)
     return null
   }
 
@@ -77,7 +77,7 @@ export async function authorizePasswordIdentity(input: {
         inviteCode,
       })
     ))
-    logAuthAction('REGISTER', name, { userId: user.id, success: true })
+    logAuthAction('REGISTER', 'Password registration succeeded', { success: true, provider: 'password' }, user.id, name)
     return {
       id: user.id,
       name: user.name,
@@ -87,11 +87,11 @@ export async function authorizePasswordIdentity(input: {
 
     const concurrentUser = await readPasswordUser(name)
     if (!concurrentUser?.password || !await bcrypt.compare(password, concurrentUser.password)) {
-      logAuthAction('LOGIN', name, { error: 'Concurrent registration conflict' })
+      logAuthAction('LOGIN', 'Concurrent registration conflict', { success: false, provider: 'password' }, undefined, name)
       return null
     }
 
-    logAuthAction('LOGIN', name, { userId: concurrentUser.id, success: true })
+    logAuthAction('LOGIN', 'Password login succeeded after concurrent registration', { success: true, provider: 'password' }, concurrentUser.id, name)
     return {
       id: concurrentUser.id,
       name: concurrentUser.name,

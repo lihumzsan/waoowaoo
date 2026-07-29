@@ -49,7 +49,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const ip = getClientIp(request)
   const rateResult = await checkRateLimit('auth:phone:send', ip, AUTH_SMS_SEND_LIMIT)
   if (rateResult.limited) {
-    logAuthAction('LOGIN', 'phone', { error: 'SMS send rate limited', ip })
+    logAuthAction('LOGIN', 'SMS send rate limited', { success: false, provider: 'phone', ip })
     return NextResponse.json(
       {
         success: false,

@@ -251,26 +251,38 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
     }
     if (error instanceof TencentSmsRejectedError) {
       await compensateRejectedChallenge(keys, challengeId)
-      logAuthAction('LOGIN', maskPhoneNumber(phoneNumber), {
-        error: 'SMS provider rejected',
-        provider: 'tencent-sms',
-        providerCode: error.providerCode,
-        requestId: error.requestId,
-      })
+      logAuthAction(
+        'LOGIN',
+        'SMS provider rejected',
+        {
+          success: false,
+          provider: 'tencent-sms',
+          providerCode: error.providerCode,
+          requestId: error.requestId,
+        },
+        undefined,
+        maskPhoneNumber(phoneNumber),
+      )
       throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerRejected)
     }
 
-    logAuthAction('LOGIN', maskPhoneNumber(phoneNumber), {
-      error: 'SMS provider unavailable',
-      provider: 'tencent-sms',
-    })
+    logAuthAction(
+      'LOGIN',
+      'SMS provider unavailable',
+      { success: false, provider: 'tencent-sms' },
+      undefined,
+      maskPhoneNumber(phoneNumber),
+    )
     throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.providerUnavailable)
   }
 
-  logAuthAction('LOGIN', maskPhoneNumber(phoneNumber), {
-    provider: 'tencent-sms',
-    success: true,
-  })
+  logAuthAction(
+    'LOGIN',
+    'SMS verification code sent',
+    { success: true, provider: 'tencent-sms' },
+    undefined,
+    maskPhoneNumber(phoneNumber),
+  )
   return {
     phoneNumber,
     retryAfterSeconds: PHONE_SEND_COOLDOWN_SECONDS,
@@ -309,17 +321,25 @@ export async function authorizePhoneIdentity(input: {
 
   const verified = await consumePhoneChallenge(phoneNumber, code)
   if (!verified) {
-    logAuthAction('LOGIN', maskPhoneNumber(phoneNumber), { error: 'Invalid verification code' })
+    logAuthAction(
+      'LOGIN',
+      'Invalid verification code',
+      { success: false, provider: 'phone' },
+      undefined,
+      maskPhoneNumber(phoneNumber),
+    )
     return null
   }
 
   const existingUser = await readPhoneUser(phoneNumber)
   if (existingUser) {
-    logAuthAction('LOGIN', maskPhoneNumber(phoneNumber), {
-      userId: existingUser.id,
-      provider: 'phone',
-      success: true,
-    })
+    logAuthAction(
+      'LOGIN',
+      'Phone login succeeded',
+      { success: true, provider: 'phone' },
+      existingUser.id,
+      maskPhoneNumber(phoneNumber),
+    )
     return existingUser
   }
 
@@ -336,11 +356,13 @@ export async function authorizePhoneIdentity(input: {
         },
       })
     ))
-    logAuthAction('REGISTER', maskPhoneNumber(phoneNumber), {
-      userId: user.id,
-      provider: 'phone',
-      success: true,
-    })
+    logAuthAction(
+      'REGISTER',
+      'Phone registration succeeded',
+      { success: true, provider: 'phone' },
+      user.id,
+      maskPhoneNumber(phoneNumber),
+    )
     return {
       id: user.id,
       name: user.name,

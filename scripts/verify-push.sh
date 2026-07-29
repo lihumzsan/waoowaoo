@@ -5,3 +5,4 @@ set -euo pipefail
 # remain limited to secret scanning; test execution policy is a separate phase.
 npm run lint:all
 npm run typecheck
+npm run check:log-semantic

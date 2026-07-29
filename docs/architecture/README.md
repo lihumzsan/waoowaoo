@@ -33,6 +33,7 @@ npm run architecture:impact -- --changed
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
 | 注册/登录、顶层导航、语言切换、deployment capability 投影 | [产品外壳、身份与本地化](modules/product-shell.md) | auth/session、i18n navigation、deployment features、Navbar |
 | 全局/项目资产的 owner、scope、kind、variant 与复制边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、unified asset operations |
+| 结构化日志、log context、审计通道与告警命名空间 | [日志与可观测性](modules/logging-observability.md) | logging core 唯一 write、semantic helpers、log context、check-log-semantic |
 | 自动化测试准入、保留集合、关键基础设施、registry conformance 与最小浏览器安全 | [测试治理](modules/test-governance.md) | admission contract、retained suites、critical scenarios、security browser harness |
 
 ## 权威层级

@@ -30,7 +30,7 @@ async function handlePost(req: NextRequest, ctx: NextAuthRouteContext) {
         const provider = segments[1]
         const rateResult = await checkRateLimit(`auth:${provider}:verify`, ip, AUTH_LOGIN_LIMIT)
         if (rateResult.limited) {
-            logAuthAction('LOGIN', provider, { error: 'Rate limited', ip })
+            logAuthAction('LOGIN', 'Login rate limited', { success: false, provider, ip })
             // 返回 NextAuth 兼容的错误格式，signIn() 会解析 URL 中的 error 参数
             const origin = req.nextUrl.origin
             return NextResponse.json(

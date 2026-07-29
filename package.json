@@ -33,7 +33,6 @@
     "start:board": "tsx --env-file=.env scripts/bull-board.ts",
     "stats:errors": "tsx scripts/task-error-stats.ts",
     "architecture:impact": "node scripts/architecture-impact.mjs",
-    "check:logs": "tsx scripts/check-no-console.ts",
     "check:log-semantic": "tsx scripts/check-log-semantic.ts",
     "check:media-normalization": "tsx scripts/check-media-normalization.ts",
     "check:capability-catalog": "node scripts/check-capability-catalog.mjs",

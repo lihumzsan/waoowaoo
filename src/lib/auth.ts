@@ -69,11 +69,11 @@ export const authOptions: NextAuthOptions = {
 
       const verifiedEmail = readVerifiedGoogleProfileEmail(profile)
       if (!verifiedEmail) {
-        logAuthAction('LOGIN', 'google', { error: 'Google email not verified' })
+        logAuthAction('LOGIN', 'Google email not verified', { success: false, provider: 'google' })
         return false
       }
 
-      logAuthAction('LOGIN', verifiedEmail, { provider: 'google', success: true })
+      logAuthAction('LOGIN', 'Google login succeeded', { success: true, provider: 'google' }, undefined, verifiedEmail)
       return true
     },
     async jwt({ token, user, trigger }) {

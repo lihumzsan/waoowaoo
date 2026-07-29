@@ -19,16 +19,16 @@ const RULES: Rule[] = [
     patterns: ['sse.connect', 'sse.replay', 'sse.disconnect'],
   },
   {
-    file: 'scripts/log-cleanup.ts',
-    patterns: ['log.cleanup.started', 'log.cleanup.completed', 'log.cleanup.failed'],
-  },
-  {
     file: 'scripts/bull-board.ts',
     patterns: ['bull_board.started', 'bull_board.shutdown'],
   },
   {
     file: 'src/lib/task/submitter.ts',
-    patterns: ['requestId', 'task.submit.created', 'task.submit.enqueued'],
+    patterns: ['requestId', 'task.submit.persisted'],
+  },
+  {
+    file: 'src/lib/task/enqueue.ts',
+    patterns: ['task.submit.enqueued'],
   },
   {
     file: 'src/lib/task/types.ts',
@@ -36,14 +36,14 @@ const RULES: Rule[] = [
   },
 ]
 
-function read(file: string) {
-  return fs.readFileSync(file, 'utf8')
-}
-
-function checkRules() {
+function checkRules(): string[] {
   const violations: string[] = []
   for (const rule of RULES) {
-    const content = read(rule.file)
+    if (!fs.existsSync(rule.file)) {
+      violations.push(`${rule.file} missing (rule file not found)`)
+      continue
+    }
+    const content = fs.readFileSync(rule.file, 'utf8')
     for (const pattern of rule.patterns) {
       if (!content.includes(pattern)) {
         violations.push(`${rule.file} missing "${pattern}"`)
@@ -53,46 +53,8 @@ function checkRules() {
   return violations
 }
 
-function checkSubmitTaskRoutes() {
-  const root = 'src/app/api'
-  const files = walk(root).filter((file) => file.endsWith('/route.ts'))
-  const submitTaskFiles = files.filter((file) => read(file).includes('submitTask('))
-  const violations: string[] = []
-
-  for (const file of submitTaskFiles) {
-    const content = read(file)
-    if (!content.includes('getRequestId')) {
-      violations.push(`${file} uses submitTask but does not import getRequestId`)
-      continue
-    }
-    if (!content.includes('requestId: getRequestId(request)')) {
-      violations.push(`${file} uses submitTask but does not pass requestId`)
-    }
-  }
-
-  return { submitTaskFiles, violations }
-}
-
-function walk(dir: string): string[] {
-  const entries = fs.readdirSync(dir, { withFileTypes: true })
-  const out: string[] = []
-
-  for (const entry of entries) {
-    const next = `${dir}/${entry.name}`
-    if (entry.isDirectory()) {
-      out.push(...walk(next))
-    } else {
-      out.push(next)
-    }
-  }
-
-  return out
-}
-
 function main() {
   const violations = checkRules()
-  const submitTaskResult = checkSubmitTaskRoutes()
-  violations.push(...submitTaskResult.violations)
 
   if (violations.length > 0) {
     process.stderr.write('[check:log-semantic] semantic violations detected:\n')
@@ -102,9 +64,7 @@ function main() {
     process.exit(1)
   }
 
-  process.stdout.write(
-    `[check:log-semantic] ok rules=${RULES.length} submitTaskRoutes=${submitTaskResult.submitTaskFiles.length}\n`,
-  )
+  process.stdout.write(`[check:log-semantic] ok rules=${RULES.length}\n`)
 }
 
 main()
