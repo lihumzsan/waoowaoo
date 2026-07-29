@@ -7,5 +7,6 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>
 
 export function NodeContent(props: WorkspaceCanvasNodeRendererProps) {
-  return <ResourceCardContent {...props} />
+  const Renderer = WORKSPACE_CANVAS_NODE_RENDERERS[props.data.kind]
+  return <Renderer {...props} />
 }

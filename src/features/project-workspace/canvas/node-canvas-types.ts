@@ -10,10 +10,19 @@ import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-life
  */
 export type WorkspaceCanvasNodeKind = 'resourceCard'
 
-export interface WorkspaceCanvasNodeDisclosureState {
-  readonly canToggle: boolean
-  readonly effectiveExpanded: boolean
-  readonly mode: 'collapsed' | 'expanded'
+/**
+ * The shape a Resource card's media area takes, declared per media family in
+ * the node presentation profile. `frame` keeps the project aspect ratio
+ * (image/video), `bar` is a low strip (audio: music, ambience, voice
+ * references), `card` is a fixed text panel. Projector and renderer only
+ * consume the resolved shell; neither may branch on media type for sizing.
+ */
+export type WorkspaceCanvasMediaShellForm = 'frame' | 'bar' | 'card'
+
+export interface WorkspaceCanvasMediaShell {
+  readonly form: WorkspaceCanvasMediaShellForm
+  readonly width: number
+  readonly height: number
 }
 
 export interface WorkspaceCanvasNodeData {
@@ -26,11 +35,8 @@ export interface WorkspaceCanvasNodeData {
   readonly targetId: string
   readonly title: string
   readonly eyebrow: string
-  readonly body: string
-  readonly meta: string
   readonly lifecycle: WorkspaceCanvasLifecycle
-  readonly focusHighlighted?: boolean
-  readonly disclosure?: WorkspaceCanvasNodeDisclosureState
+  readonly mediaShell: WorkspaceCanvasMediaShell
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
   readonly height: number
@@ -39,10 +45,6 @@ export interface WorkspaceCanvasNodeData {
     readonly y: number
   }
   readonly readOnly?: boolean
-  readonly expanded?: boolean
-  readonly expandedLayout?: 'stack' | 'wide'
-  readonly defaultExpanded?: boolean
-  readonly onToggleExpanded?: (nodeId: string) => void
   readonly resourceDetails: CreativeResourceCardView
 }
 

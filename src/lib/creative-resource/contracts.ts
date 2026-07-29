@@ -214,9 +214,29 @@ export interface CreativeResourceWorkingSetView {
   }
 }
 
+export interface CreativeResourceInputMediaPreview {
+  readonly url: string
+  readonly mimeType: string | null
+  readonly width: number | null
+  readonly height: number | null
+  readonly durationMs: number | null
+}
+
+/**
+ * A resolved preview of one generation input reference. The server projects
+ * these once per card so the UI never re-fetches or guesses referenced
+ * Resources from raw IDs (CR-19).
+ */
+export interface CreativeResourceInputSummaryView extends CreativeResourceInputRef {
+  readonly name: string
+  readonly mediaType: CreativeResourceMediaType
+  readonly media: CreativeResourceInputMediaPreview | null
+}
+
 export interface CreativeResourceCardView {
   readonly resource: CreativeResourceView
   readonly candidates: CreativeResourceCandidateView | null
+  readonly inputSummaries: readonly CreativeResourceInputSummaryView[]
   readonly presentation: {
     readonly rendererKey: string
     readonly fallbackMediaType: CreativeResourceMediaType

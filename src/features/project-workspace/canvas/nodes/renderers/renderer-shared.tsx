@@ -53,14 +53,6 @@ export function renderSection(title: string, children: ReactNode) {
   )
 }
 
-export function ClampedText({ text }: { readonly text: string }) {
-  return (
-    <p className={`${SELECTABLE_TEXT_CLASS} line-clamp-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700`}>
-      {text}
-    </p>
-  )
-}
-
 export function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
   return isWorkspaceCanvasLifecycleRunning(data.lifecycle)
 }

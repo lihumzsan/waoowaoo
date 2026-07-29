@@ -84,7 +84,6 @@
     },
     "taskStatus": {
         "progressLabel": "Generation progress",
-        "overtime": "Still generating, please wait",
         "intent": {
             "generate": {
                 "running": {

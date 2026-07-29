@@ -17,6 +17,7 @@ export interface EstimatedTaskProgressInput {
 export interface EstimatedTaskProgressSnapshot extends EstimatedTaskProgressTiming {
   readonly phase: EstimatedTaskProgressPhase
   readonly percent: number
+  readonly elapsedSeconds: number
   readonly isRunning: boolean
   readonly isFailed: boolean
   readonly isCompleted: boolean
@@ -94,12 +95,14 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
   const isRunning = phase === 'queued' || phase === 'processing'
   const isFailed = phase === 'failed'
   const isCompleted = phase === 'completed'
+  const elapsedSeconds = Math.max(0, Math.floor(input.elapsedMs / 1000))
 
   if (isCompleted) {
     return {
       ...timing,
       phase,
       percent: 100,
+      elapsedSeconds,
       isRunning: false,
       isFailed: false,
       isCompleted: true,
@@ -112,6 +115,7 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
       ...timing,
       phase,
       percent: 0,
+      elapsedSeconds,
       isRunning: false,
       isFailed: true,
       isCompleted: false,
@@ -124,6 +128,7 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
       ...timing,
       phase,
       percent: 0,
+      elapsedSeconds,
       isRunning: false,
       isFailed: false,
       isCompleted: false,
@@ -131,12 +136,12 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
     }
   }
 
-  const elapsedSeconds = Math.max(0, input.elapsedMs / 1000)
   if (elapsedSeconds <= timing.expectedSeconds) {
     return {
       ...timing,
       phase,
       percent: clampPercent((elapsedSeconds / timing.expectedSeconds) * MAIN_PROGRESS_CAP),
+      elapsedSeconds,
       isRunning: true,
       isFailed: false,
       isCompleted: false,
@@ -150,6 +155,7 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
       ...timing,
       phase,
       percent: clampPercent(MAIN_PROGRESS_CAP + tailEaseOut(tailElapsedSeconds / timing.tailSeconds) * (RUNNING_PROGRESS_CAP - MAIN_PROGRESS_CAP)),
+      elapsedSeconds,
       isRunning: true,
       isFailed: false,
       isCompleted: false,
@@ -161,6 +167,7 @@ export function calculateEstimatedTaskProgress(input: EstimatedTaskProgressInput
     ...timing,
     phase,
     percent: RUNNING_PROGRESS_CAP,
+    elapsedSeconds,
     isRunning: true,
     isFailed: false,
     isCompleted: false,

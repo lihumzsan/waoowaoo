@@ -47,21 +47,35 @@
         "canceled": "Canceled"
       },
       "nodeFields": {
-        "expandDetails": "Expand",
-        "collapseDetails": "Collapse",
         "generationPrompt": "Generation prompt",
         "generationModel": "Generation model",
         "generationReferences": "Input resources",
         "structuredSummary": "Structured content · {count} entries",
         "structuredSummaryUnknown": "Structured content",
-        "domainSnapshotSummary": "Domain snapshot",
-        "candidateIndex": "Candidate {index}",
         "moreItems": "{count} more"
+      },
+      "generation": {
+        "stage": {
+          "submitted": "Submitted",
+          "queued": "Queued",
+          "generating": "Generating",
+          "saving": "Saving"
+        },
+        "progressPercent": "Generating · {percent}%",
+        "waitedMinutes": "Waited {minutes} min"
+      },
+      "details": {
+        "empty": "No generation details"
       },
       "nodes": {
         "resourceCard": {
           "eyebrow": "Creative Resource · {type}",
-          "body": "Persistent creative output"
+          "mediaType": {
+            "text": "Text",
+            "image": "Image",
+            "audio": "Audio",
+            "video": "Video"
+          }
         }
       }
     }

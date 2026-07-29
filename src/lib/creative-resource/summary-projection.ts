@@ -28,10 +28,10 @@ function structuredEntryCount(value: CreativeResourceJsonValue): number | null {
 export function projectCreativeResourceSummary(
   resource: CreativeResourceView,
 ): CreativeResourceSummaryView {
+  // An unmaterialized Resource has no content summary. The generation prompt
+  // is provenance, surfaced only by the detail view — never as card content.
   const content = resource.materialization?.content
-  if (!content) {
-    return summaryText(resource.pendingGeneration?.prompt) ?? { kind: 'empty' }
-  }
+  if (!content) return { kind: 'empty' }
   if (content.kind === 'text') {
     return summaryText(content.text) ?? { kind: 'empty' }
   }

@@ -6,6 +6,10 @@ import {
   workspaceCanvasSucceededResourcePresentation,
 } from '../lifecycle/workspace-canvas-resource-lifecycle'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
+import {
+  resolveWorkspaceCanvasMediaShell,
+  resolveWorkspaceCanvasNodeSize,
+} from '../node-presentation-profiles'
 import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 import type { WorkspaceNodeProjectionContext } from './workspace-node-projection-shared'
 import {
@@ -18,8 +22,6 @@ const RESOURCE_COLUMNS = 3
 const RESOURCE_COLUMN_GAP = 460
 const RESOURCE_ROW_GAP = 620
 const RESOURCE_SECTION_GAP = 180
-const RESOURCE_WIDTH = 400
-const RESOURCE_HEIGHT = 500
 const RESOURCE_CARD_DEFINITION = getWorkspaceCanvasNodeDefinition('resourceCard')
 
 function resourcePresentation(resource: CreativeResourceView) {
@@ -34,7 +36,9 @@ function groupingKey(card: CreativeResourceCardView): string {
 }
 
 export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjectionContext): void {
-  const { projectId, episodeName, creativeResources, savedLayouts, translate, nodes, edges } = context
+  const {
+    projectId, episodeName, projectAspectRatio, creativeResources, savedLayouts, translate, nodes, edges,
+  } = context
   if (creativeResources.length === 0) return
   const cardsByGroup = new Map<string, CreativeResourceCardView>()
   for (const card of creativeResources) {
@@ -50,14 +54,24 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     groupResources.forEach((resource) => nodeIdByResourceId.set(resource.resourceId, nodeId))
     const column = index % RESOURCE_COLUMNS
     const row = Math.floor(index / RESOURCE_COLUMNS)
+    const mediaShell = resolveWorkspaceCanvasMediaShell({
+      kind: 'resourceCard',
+      mediaType: card.resource.mediaType,
+      projectAspectRatio,
+    })
+    const size = resolveWorkspaceCanvasNodeSize({
+      kind: 'resourceCard',
+      mediaType: card.resource.mediaType,
+      projectAspectRatio,
+    })
     nodes.push(createNode({
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
         x: 260 + column * RESOURCE_COLUMN_GAP,
         y: sectionY + row * RESOURCE_ROW_GAP,
       }),
-      width: RESOURCE_WIDTH,
-      height: RESOURCE_HEIGHT,
+      width: size.width,
+      height: size.height,
       data: {
         projectId,
         episodeName,
@@ -66,11 +80,10 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
         targetType: 'creativeResource',
         targetId: card.resource.resourceId,
         title: card.resource.name,
-        eyebrow: translate('nodes.resourceCard.eyebrow', { type: card.resource.mediaType }),
-        body: card.resource.materialization?.provenance.prompt
-          ?? card.resource.pendingGeneration?.prompt
-          ?? translate('nodes.resourceCard.body'),
-        meta: card.resource.schemaId,
+        eyebrow: translate('nodes.resourceCard.eyebrow', {
+          type: translate(`nodes.resourceCard.mediaType.${card.resource.mediaType}`),
+        }),
+        mediaShell,
         ...resourcePresentation(card.resource),
         runtimeTargets: groupResources.map((resource) => ({
           targetType: 'CreativeResource',

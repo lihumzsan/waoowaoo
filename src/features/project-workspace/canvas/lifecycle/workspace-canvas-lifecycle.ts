@@ -89,6 +89,23 @@ export function isWorkspaceCanvasLifecycleRunning(lifecycle: WorkspaceCanvasLife
   return lifecycle.phase === 'queued' || lifecycle.phase === 'processing'
 }
 
+/**
+ * User-facing generation stage for an in-flight card. Derived only from the
+ * resolved lifecycle; renderers must not reinterpret phases. `saving` is the
+ * declared slot for a finer terminal-persistence runtime fact and maps here
+ * once the Task runtime exposes it.
+ */
+export type WorkspaceCanvasGenerationStage = 'submitted' | 'queued' | 'generating' | 'saving'
+
+export function workspaceCanvasGenerationStage(
+  lifecycle: WorkspaceCanvasLifecycle,
+): WorkspaceCanvasGenerationStage | null {
+  if (lifecycle.phase === 'pending') return 'submitted'
+  if (lifecycle.phase === 'queued') return 'queued'
+  if (lifecycle.phase === 'processing') return 'generating'
+  return null
+}
+
 export function workspaceCanvasLifecycleStatusKey(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasLifecyclePhase {
   return lifecycle.phase
 }

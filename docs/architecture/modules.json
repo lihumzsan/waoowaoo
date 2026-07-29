@@ -76,6 +76,7 @@
         "src/lib/query/workspace-sse-event-sync.ts",
         "src/lib/query/task-target-overlay.ts",
         "src/lib/query/hooks/useEstimatedTaskProgress.ts",
+        "src/lib/task/estimated-progress.ts",
         "src/lib/query/hooks/useTaskTargetStateMap.ts",
         "src/lib/query/hooks/useSSE.ts",
         "src/lib/query/hooks/useAssets.ts",

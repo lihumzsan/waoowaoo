@@ -47,21 +47,35 @@
         "canceled": "已取消"
       },
       "nodeFields": {
-        "expandDetails": "展开",
-        "collapseDetails": "收起",
         "generationPrompt": "生成提示词",
         "generationModel": "生成模型",
         "generationReferences": "输入资源",
         "structuredSummary": "结构化内容 · {count} 项",
         "structuredSummaryUnknown": "结构化内容",
-        "domainSnapshotSummary": "领域快照",
-        "candidateIndex": "候选 {index}",
         "moreItems": "还有 {count} 项"
+      },
+      "generation": {
+        "stage": {
+          "submitted": "已提交",
+          "queued": "排队中",
+          "generating": "生成中",
+          "saving": "保存中"
+        },
+        "progressPercent": "生成中 · {percent}%",
+        "waitedMinutes": "已等待 {minutes} 分钟"
+      },
+      "details": {
+        "empty": "暂无生成信息"
       },
       "nodes": {
         "resourceCard": {
           "eyebrow": "创作资源 · {type}",
-          "body": "持久化创作结果"
+          "mediaType": {
+            "text": "文本",
+            "image": "图片",
+            "audio": "音频",
+            "video": "视频"
+          }
         }
       }
     }

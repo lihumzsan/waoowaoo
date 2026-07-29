@@ -23,12 +23,16 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 Binding role 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。
+- **CN-11 — 媒体 presentation 只来自 profile 契约。** 卡片形态与尺寸由 `node-presentation-profiles.ts` 按媒体族穷尽声明：image/video 为 `frame`（按项目 `videoRatio` 定宽高）、audio 为 `bar` 矮条、text 为固定 `card`；pending 生成外壳与就绪媒体共用同一 shell，完成时不跳变。projector 与 renderer 只消费解析后的 shell，禁止各自按媒体类型分支尺寸。折叠卡只显示标题、状态与媒体本体（或生成外壳），不显示提示词、引用列表、进度条或任何领域 ID；生成中呈现为阶段文案（submitted/queued/generating，`saving` 为预留映射位）加模拟百分比，超时后只显示已等待时长，永不钉在 99%。
+- **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容只消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；UI 不得按 resourceId 零散请求或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
 
 ## 权威入口
 
 - 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
+- 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
-- Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
+- Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
+- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx`，数据只来自 card View（prompt provenance + `inputSummaries`）。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
 - 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
 - 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
@@ -36,7 +40,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 
 ## 验证
 
-- `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture。
+- `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
 - Canvas 的布局、卡片、刷新、媒体展示和真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验；不再维护 projection snapshot 或脚本创作 Journey。
 
 ## 历史回归
@@ -57,7 +61,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 ## 修改检查表
 
 1. 新节点是否完整注册且 identity 来自正式领域资源或 CreativeResource？
-2. materialization、lifecycle、stream presentation 和 UI disclosure 是否仍为独立输入？
+2. materialization、lifecycle、stream presentation 和 UI 选中态是否仍为独立输入？卡片尺寸/形态是否只来自 presentation 契约？
 3. 是否重新引入 Panel/Image/VideoGroup、历史推断、timer/refetch 正确性或 ID fallback？
 4. 专业 origin 是否复用专业 renderer，通用 fallback 是否避免重复节点？
 5. 是否用 Workflow、布局或同批关系伪造了可见性或 Lineage edge？

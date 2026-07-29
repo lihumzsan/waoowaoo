@@ -18,7 +18,7 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useCreativeResources, useEpisodeData } from '@/lib/query/hooks'
+import { useCreativeResources, useEpisodeData, useProjectData } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
@@ -42,16 +42,12 @@ import {
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
 import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
+import { WorkspaceNodeDetailsCard } from './details/WorkspaceNodeDetailsCard'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
 } from './node-canvas-types'
-import {
-  getWorkspaceCanvasNodePresentationProfile,
-  resolveWorkspaceCanvasNodeDisclosure,
-  resolveWorkspaceCanvasNodeSize,
-} from './node-presentation-profiles'
 import {
   collectWorkspaceNodeRuntimeTargets,
   resolveWorkspaceCanvasNodeData,
@@ -83,10 +79,6 @@ interface CanvasViewportControlsProps {
   readonly onZoomIn: () => void
   readonly onZoomOut: () => void
   readonly onToggleAutoFollow: () => void
-}
-
-interface WorkspaceCanvasNodeDisclosureOverride {
-  readonly expanded: boolean
 }
 
 interface WorkspaceCanvasUserPosition {
@@ -190,15 +182,15 @@ function ProjectWorkspaceCanvasContent({
   const { projectId, episodeId } = useWorkspaceProvider()
   const { data: episodeData } = useEpisodeData(projectId, episodeId ?? null)
   const episodeName = typeof episodeData?.name === 'string' ? episodeData.name : undefined
+  const { data: projectData } = useProjectData(projectId)
+  const projectAspectRatio = projectData?.videoRatio ?? null
   const { data: creativeResourcesResponse } = useCreativeResources(projectId, episodeId ?? null)
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
-  const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
   const [reactFlowReady, setReactFlowReady] = useState(false)
-  const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const assistantSelectionSignatureRef = useRef<string | null>(null)
   const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
   const projectedFlowNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
@@ -221,32 +213,10 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
-  const updateNodeDisclosureOverrides = useCallback((
-    updater: (current: ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>) => ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>,
-  ) => {
-    setNodeDisclosureOverrides((current) => {
-      const next = updater(current)
-      nodeDisclosureOverridesRef.current = next
-      return next
-    })
-  }, [])
-  const toggleNodeExpanded = useCallback((nodeId: string) => {
-    const anchorNode = reactFlow.getNode(nodeId)
-    if (anchorNode?.data.disclosure && !anchorNode.data.disclosure.canToggle) return
-    setSelectedNodeId(nodeId)
-    const currentOverride = nodeDisclosureOverridesRef.current.get(nodeId)
-    const currentExpanded = currentOverride?.expanded ?? anchorNode?.data.disclosure?.effectiveExpanded ?? false
-    updateNodeDisclosureOverrides((current) => {
-      const next = new Map(current)
-      next.set(nodeId, {
-        expanded: !currentExpanded,
-      })
-      return next
-    })
-  }, [reactFlow, updateNodeDisclosureOverrides])
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
     episodeName,
+    projectAspectRatio,
     creativeResources: creativeResourcesResponse?.resources ?? [],
     savedLayouts: savedNodeLayouts,
     translate: t,
@@ -267,44 +237,15 @@ function ProjectWorkspaceCanvasContent({
         node,
         statesByQueryKey: workspaceTaskStateMap.byQueryKey,
       })
-      const profile = getWorkspaceCanvasNodePresentationProfile(resolvedData.kind)
-      const disclosureOverride = nodeDisclosureOverrides.get(node.id)
-      const disclosure = resolveWorkspaceCanvasNodeDisclosure({
-        kind: resolvedData.kind,
-        userExpandedOverride: disclosureOverride?.expanded,
-        defaultExpanded: resolvedData.defaultExpanded,
-      })
-      const expanded = disclosure.effectiveExpanded
-      const size = resolveWorkspaceCanvasNodeSize({
-        kind: resolvedData.kind,
-        expanded,
-        collapsedSize: {
-          width: resolvedData.width,
-          height: resolvedData.height,
-        },
-      })
-      const zIndex = node.id === selectedNodeId ? 30 : expanded ? 20 : undefined
+      const zIndex = node.id === selectedNodeId ? 30 : undefined
       return {
         ...node,
         zIndex,
-        style: {
-          ...node.style,
-          width: size.width,
-          height: size.height,
-        },
-        data: {
-          ...resolvedData,
-          disclosure,
-          expanded,
-          expandedLayout: expanded ? profile.expandedLayout : undefined,
-          onToggleExpanded: toggleNodeExpanded,
-        },
+        data: { ...resolvedData },
       }
     })
   }, [
-    nodeDisclosureOverrides,
     selectedNodeId,
-    toggleNodeExpanded,
     workspaceTaskStateMap.byQueryKey,
   ])
   const resolvedProjectedNodes = useMemo(
@@ -380,18 +321,6 @@ function ProjectWorkspaceCanvasContent({
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
-    updateNodeDisclosureOverrides((current) => {
-      let changed = false
-      const next = new Map<string, WorkspaceCanvasNodeDisclosureOverride>()
-      current.forEach((override, nodeId) => {
-        if (projectedNodeIds.has(nodeId)) {
-          next.set(nodeId, override)
-        } else {
-          changed = true
-        }
-      })
-      return changed ? next : current
-    })
     setUserNodePositions((current) => {
       let changed = false
       const next = new Map<string, WorkspaceCanvasUserPosition>()
@@ -404,7 +333,7 @@ function ProjectWorkspaceCanvasContent({
       })
       return changed ? next : current
     })
-  }, [projectedNodes, projectionNodeSignature, updateNodeDisclosureOverrides])
+  }, [projectedNodes, projectionNodeSignature])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return
@@ -565,6 +494,7 @@ function ProjectWorkspaceCanvasContent({
           proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
+          {selectedNode ? <WorkspaceNodeDetailsCard node={selectedNode} /> : null}
           <MiniMap
             pannable
             zoomable

@@ -6,6 +6,7 @@ import type {
   CreativeResourceContent,
   CreativeResourceDataView,
   CreativeResourceInputRef,
+  CreativeResourceInputSummaryView,
   CreativeResourceJsonObject,
   CreativeResourceJsonValue,
   CreativeResourceMaterializationView,
@@ -104,12 +105,16 @@ function scopeFromRow(
   }
 }
 
+function protectedMediaUrl(publicId: string): string {
+  return `/m/${encodeURIComponent(publicId)}`
+}
+
 function resourceContent(row: ResourceRow): CreativeResourceContent {
   if (row.media) {
     return {
       kind: 'media',
       mediaId: row.media.id,
-      url: `/m/${encodeURIComponent(row.media.publicId)}`,
+      url: protectedMediaUrl(row.media.publicId),
       mimeType: row.media.mimeType,
       width: row.media.width,
       height: row.media.height,
@@ -193,15 +198,15 @@ export function projectCreativeResourceView(
   }
 }
 
-export function projectCreativeResourceCardView(
-  row: ResourceRow,
-  pendingGeneration: CreativeResourcePendingGeneration | null = null,
+function cardViewFromResource(
+  resource: CreativeResourceView,
+  inputSummaries: readonly CreativeResourceInputSummaryView[],
 ): CreativeResourceCardView {
-  const resource = projectCreativeResourceView(row, pendingGeneration)
   const schema = getCreativeResourceSchema(resource.schemaId)
   return {
     resource,
     candidates: null,
+    inputSummaries,
     presentation: {
       rendererKey: schema?.schemaId ?? 'generic.resource',
       fallbackMediaType: resource.mediaType,
@@ -209,6 +214,76 @@ export function projectCreativeResourceCardView(
     },
   }
 }
+
+function cardInputRefs(view: CreativeResourceView): readonly CreativeResourceInputRef[] {
+  return view.materialization?.inputs ?? view.pendingGeneration?.inputs ?? []
+}
+
+/**
+ * Resolves generation input references into display summaries (name, media
+ * type, protected preview URL). Input Resources are owner-scoped rows loaded
+ * by exact Resource ID; a materialized Lineage input can never be missing
+ * (RESTRICT), so a missing row fails loudly instead of degrading to raw IDs.
+ */
+async function loadInputSummaries(
+  client: CreativeResourceReadClient,
+  views: readonly CreativeResourceView[],
+  userId: string,
+): Promise<ReadonlyMap<string, readonly CreativeResourceInputSummaryView[]>> {
+  const inputIds = new Set<string>()
+  for (const view of views) {
+    for (const input of cardInputRefs(view)) inputIds.add(input.resourceId)
+  }
+  if (inputIds.size === 0) return new Map()
+  const rows = await client.creativeResource.findMany({
+    where: { id: { in: [...inputIds] }, userId },
+    select: {
+      id: true,
+      name: true,
+      mediaType: true,
+      media: {
+        select: {
+          publicId: true,
+          mimeType: true,
+          width: true,
+          height: true,
+          durationMs: true,
+        },
+      },
+    },
+  })
+  const rowById = new Map(rows.map((row) => [row.id, row]))
+  const summariesByViewId = new Map<string, readonly CreativeResourceInputSummaryView[]>()
+  for (const view of views) {
+    const inputs = cardInputRefs(view)
+    if (inputs.length === 0) continue
+    summariesByViewId.set(view.resourceId, inputs.map((input) => {
+      const row = rowById.get(input.resourceId)
+      if (!row) {
+        throw new Error(`CREATIVE_RESOURCE_INPUT_SUMMARY_MISSING:${input.resourceId}`)
+      }
+      return {
+        resourceId: input.resourceId,
+        role: input.role,
+        position: input.position,
+        name: row.name,
+        mediaType: requireMediaType(row.mediaType),
+        media: row.media
+          ? {
+              url: protectedMediaUrl(row.media.publicId),
+              mimeType: row.media.mimeType,
+              width: row.media.width,
+              height: row.media.height,
+              durationMs: row.media.durationMs,
+            }
+          : null,
+      }
+    }))
+  }
+  return summariesByViewId
+}
+
+const EMPTY_INPUT_SUMMARIES: readonly CreativeResourceInputSummaryView[] = []
 
 async function loadPendingGenerations(
   client: CreativeResourceReadClient,
@@ -292,7 +367,12 @@ export async function listProjectCreativeResourceCards(input: {
     take: limit,
   })
   const pending = await loadPendingGenerations(client, rows.map((row) => row.id))
-  const views = rows.map((row) => projectCreativeResourceCardView(row, pending.get(row.id) ?? null))
+  const resources = rows.map((row) => projectCreativeResourceView(row, pending.get(row.id) ?? null))
+  const inputSummaries = await loadInputSummaries(client, resources, input.userId)
+  const views = resources.map((resource) => cardViewFromResource(
+    resource,
+    inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
+  ))
   const byCandidateSet = new Map<string, CreativeResourceCardView[]>()
   for (const view of views) {
     const candidateSetId = view.resource.candidateSetId
@@ -342,7 +422,12 @@ export async function getProjectCreativeResourceCard(input: {
   })
   if (!row) return null
   const pending = await loadPendingGenerations(client, [row.id])
-  return projectCreativeResourceCardView(row, pending.get(row.id) ?? null)
+  const resource = projectCreativeResourceView(row, pending.get(row.id) ?? null)
+  const inputSummaries = await loadInputSummaries(client, [resource], input.userId)
+  return cardViewFromResource(
+    resource,
+    inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
+  )
 }
 
 export async function getProjectCreativeResourceDataView(input: {

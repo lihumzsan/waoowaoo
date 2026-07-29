@@ -17,6 +17,8 @@ type Translate = (key: string, values?: TranslateValues) => string
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
   readonly episodeName?: string
+  /** Project `videoRatio` (`W:H`); media frame cards derive their size from it. */
+  readonly projectAspectRatio?: string | null
   readonly creativeResources?: readonly CreativeResourceCardView[]
   readonly savedLayouts: readonly CanvasNodeLayout[]
   readonly translate: Translate
@@ -26,6 +28,7 @@ export function createWorkspaceNodeProjectionContext(input: BuildWorkspaceNodeCa
   return {
     projectId: input.projectId,
     episodeName: input.episodeName,
+    projectAspectRatio: input.projectAspectRatio ?? null,
     creativeResources: input.creativeResources ?? [],
     savedLayouts: input.savedLayouts,
     translate: input.translate,
