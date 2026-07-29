@@ -210,6 +210,7 @@ describe('provider contract - fal video', () => {
   })
 
   it('submits Seedance 2.0 character voice references with independently numbered images and audios', async () => {
+    const referenceAudioDataUrl = 'data:audio/wav;base64,UklGRgQAAABXQVZF'
     server!.defineScenario({
       method: 'POST',
       path: '/fal/bytedance/seedance-2.0/reference-to-video',
@@ -231,7 +232,7 @@ describe('provider contract - fal video', () => {
       imageUrl: 'https://example.com/character.png',
       options: {
         prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
-        referenceAudios: ['https://example.com/locked-voice.wav'],
+        referenceAudios: [referenceAudioDataUrl],
         resolution: '720p',
         duration: 6,
         aspectRatio: '16:9',
@@ -244,7 +245,7 @@ describe('provider contract - fal video', () => {
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
       prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
       image_urls: ['https://example.com/character.png'],
-      audio_urls: ['https://example.com/locked-voice.wav'],
+      audio_urls: [referenceAudioDataUrl],
       resolution: '720p',
       duration: '6',
       aspect_ratio: '16:9',

@@ -3,7 +3,7 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
-import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { normalizeOwnedImageToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import type { TaskJobData } from '@/lib/task/types'
@@ -45,7 +45,7 @@ async function loadImageReferences(
     if (resource.mediaType !== 'image' || !resource.media?.storageKey) {
       throw new Error(`CREATIVE_RESOURCE_IMAGE_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return await normalizeOwnedMediaToBase64ForGeneration(resource.media.storageKey, job.data.userId)
+    return await normalizeOwnedImageToBase64ForGeneration(resource.media.storageKey, job.data.userId)
   }))
 }
 

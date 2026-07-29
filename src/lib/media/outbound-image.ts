@@ -1,10 +1,16 @@
 import net from 'node:net'
-import path from 'node:path'
 import { lookup } from 'node:dns/promises'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getInternalBaseUrl } from '@/lib/env'
+import { resolveMediaMimeType } from '@/lib/media/media-mime'
+import {
+  OwnedMediaOutboundError,
+  readOwnedMediaForGeneration,
+} from '@/lib/media/outbound-owned-media'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+
+export { detectMimeFromBuffer } from '@/lib/media/media-mime'
 
 type StorageHelpers = Pick<typeof import('@/lib/storage'), 'getSignedObjectUrl' | 'toFetchableUrl'>
 
@@ -70,23 +76,6 @@ const NEXT_IMAGE_PATH = '/_next/image'
 const MAX_NEXT_IMAGE_UNWRAP_DEPTH = 6
 const SIGNED_URL_TTL_SECONDS = 3600
 const STORAGE_KEY_PREFIXES = ['images/', 'video/'] as const
-const DEFAULT_CONTENT_TYPE = 'application/octet-stream'
-
-const MIME_BY_EXT: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.m4a': 'audio/mp4',
-}
 
 let storageHelpersPromise: Promise<StorageHelpers> | null = null
 
@@ -352,119 +341,8 @@ function toUrlMaybe(value: string): URL | null {
   return null
 }
 
-export function detectMimeFromBuffer(buffer: Uint8Array): string | null {
-  if (buffer.length >= 8) {
-    const isPng =
-      buffer[0] === 0x89
-      && buffer[1] === 0x50
-      && buffer[2] === 0x4e
-      && buffer[3] === 0x47
-      && buffer[4] === 0x0d
-      && buffer[5] === 0x0a
-      && buffer[6] === 0x1a
-      && buffer[7] === 0x0a
-    if (isPng) return 'image/png'
-  }
-
-  if (buffer.length >= 3) {
-    const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
-    if (isJpeg) return 'image/jpeg'
-  }
-
-  if (buffer.length >= 6) {
-    const isGif87a =
-      buffer[0] === 0x47
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x38
-      && buffer[4] === 0x37
-      && buffer[5] === 0x61
-    const isGif89a =
-      buffer[0] === 0x47
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x38
-      && buffer[4] === 0x39
-      && buffer[5] === 0x61
-    if (isGif87a || isGif89a) return 'image/gif'
-  }
-
-  if (buffer.length >= 12) {
-    const isWebp =
-      buffer[0] === 0x52
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x46
-      && buffer[8] === 0x57
-      && buffer[9] === 0x45
-      && buffer[10] === 0x42
-      && buffer[11] === 0x50
-    if (isWebp) return 'image/webp'
-  }
-
-  if (buffer.length >= 12) {
-    const isWav =
-      buffer[0] === 0x52
-      && buffer[1] === 0x49
-      && buffer[2] === 0x46
-      && buffer[3] === 0x46
-      && buffer[8] === 0x57
-      && buffer[9] === 0x41
-      && buffer[10] === 0x56
-      && buffer[11] === 0x45
-    if (isWav) return 'audio/wav'
-  }
-
-  if (buffer.length >= 4) {
-    const isOgg =
-      buffer[0] === 0x4f
-      && buffer[1] === 0x67
-      && buffer[2] === 0x67
-      && buffer[3] === 0x53
-    if (isOgg) return 'audio/ogg'
-  }
-
-  if (buffer.length >= 3) {
-    const isMp3WithId3 =
-      buffer[0] === 0x49
-      && buffer[1] === 0x44
-      && buffer[2] === 0x33
-    const isMp3FrameSync =
-      buffer[0] === 0xff
-      && (buffer[1] & 0xe0) === 0xe0
-    if (isMp3WithId3 || isMp3FrameSync) return 'audio/mpeg'
-  }
-
-  if (buffer.length >= 12) {
-    const isWebm =
-      buffer[0] === 0x1a
-      && buffer[1] === 0x45
-      && buffer[2] === 0xdf
-      && buffer[3] === 0xa3
-    if (isWebm) return 'video/webm'
-  }
-
-  if (buffer.length >= 8) {
-    const isMp4 =
-      buffer[4] === 0x66
-      && buffer[5] === 0x74
-      && buffer[6] === 0x79
-      && buffer[7] === 0x70
-    if (isMp4) return 'video/mp4'
-  }
-
-  return null
-}
-
 function guessContentType(input: string, contentTypeHeader: string | null, buffer: Uint8Array): string {
-  const headerType = contentTypeHeader?.split(';')[0]?.trim()
-  if (headerType && headerType !== DEFAULT_CONTENT_TYPE) return headerType
-  const sniffedType = detectMimeFromBuffer(buffer)
-  if (sniffedType) return sniffedType
-  const parsed = toUrlMaybe(input)
-  const pathname = parsed?.pathname ?? input
-  const ext = path.extname(pathname).toLowerCase()
-  return MIME_BY_EXT[ext] || DEFAULT_CONTENT_TYPE
+  return resolveMediaMimeType(input, contentTypeHeader, buffer)
 }
 
 async function signStorageKey(storageKey: string): Promise<string> {
@@ -664,42 +542,35 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
  * ownership decision used by the authenticated media routes. This avoids using
  * a browser session or a second internal-auth protocol for background work.
  */
-export async function normalizeOwnedMediaToBase64ForGeneration(
+export async function normalizeOwnedImageToBase64ForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {
   const normalizedInput = normalizeInput(input)
-  const storageKey = await resolveStorageKeyFromMediaValue(normalizedInput)
-  if (!storageKey) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
-      stage: 'normalize_base64',
-      input: normalizedInput,
-      message: `owned media input does not resolve to a storage key: ${normalizedInput}`,
+  try {
+    const media = await readOwnedMediaForGeneration(normalizedInput, userId, {
+      maxBytes: MAX_IMAGE_BYTES,
+      label: 'owned outbound image',
     })
+    const mimeType = guessContentType(
+      media.storageKey,
+      media.declaredContentType,
+      media.buffer,
+    )
+    return `data:${mimeType};base64,${media.buffer.toString('base64')}`
+  } catch (error) {
+    if (error instanceof OwnedMediaOutboundError) {
+      throw new OutboundImageNormalizeError({
+        code: error.code === 'OWNED_MEDIA_UNSUPPORTED_INPUT'
+          ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+          : 'OUTBOUND_IMAGE_FETCH_FAILED',
+        stage: 'normalize_base64',
+        input: normalizedInput,
+        message: error.message,
+      })
+    }
+    throw error
   }
-
-  const { authorizeStorageObjectReadForUser } = await import('@/lib/media/storage-access-policy')
-  const media = await authorizeStorageObjectReadForUser(storageKey, userId)
-  const { getObjectStream } = await import('@/lib/storage')
-  const object = await getObjectStream({ key: media.storageKey })
-  if (object.statusCode < 200 || object.statusCode >= 300) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_FETCH_FAILED',
-      stage: 'normalize_base64',
-      input: normalizedInput,
-      message: `owned media storage read failed (${object.statusCode}): ${media.storageKey}`,
-    })
-  }
-
-  const headers = new Headers()
-  const declaredContentType = media.mimeType || object.contentType
-  if (declaredContentType) headers.set('content-type', declaredContentType)
-  if (object.contentLength != null) headers.set('content-length', String(object.contentLength))
-  const response = new Response(object.body, { status: object.statusCode, headers })
-  const buffer = await readResponseBufferWithLimit(response, MAX_IMAGE_BYTES, 'owned outbound image')
-  const mimeType = guessContentType(media.storageKey, declaredContentType, buffer)
-  return `data:${mimeType};base64,${buffer.toString('base64')}`
 }
 
 function isOwnedStorageInputCandidate(input: string): boolean {
@@ -714,7 +585,7 @@ function isOwnedStorageInputCandidate(input: string): boolean {
 
 async function normalizeReferenceForGeneration(input: string, ownerUserId?: string): Promise<string> {
   if (ownerUserId && isOwnedStorageInputCandidate(input)) {
-    return await normalizeOwnedMediaToBase64ForGeneration(input, ownerUserId)
+    return await normalizeOwnedImageToBase64ForGeneration(input, ownerUserId)
   }
   return await normalizeToBase64ForGeneration(input)
 }

@@ -37,7 +37,7 @@
 | location-backed 资产操作 | `src/lib/assets/services/location-backed-assets.ts`，仅由 scoped asset actions 调用 | 已验证的 project/global asset identity |
 | upload/render 写入 | `src/lib/assets/services/project-upload-render.ts` | `prepareTransaction` 在事务外完成 target ownership 预检、图片上传与空间分析；短事务以 target identity + prepare `updatedAt` 单条 CAS 取得版本写权并一次提交业务关系、输出与资源 Outbox；失败只按 prepare identity 补偿本次新临时 key，事务结果不明时先以 owner + target identity + key 查询精确关系，关系已存在则拒绝删除 |
 | API 与 Operation 入口 | unified asset routes、`src/lib/operations/api-only/assets-api-ops.ts` | Route 鉴权 + service 返回的 scoped authority |
-| 媒体对象读取与签名 | `src/lib/media/storage-access-policy.ts`，由 `/m`、`/api/files`、`/api/storage/sign` 与 worker-owned media normalizer 共同调用 | MediaObject 的 owner relation registry；迁移期只接受逐字段精确解析的 legacy relation；Task userId 只作为裁决输入，不是读取旁路 |
+| 媒体对象读取与签名 | `src/lib/media/storage-access-policy.ts`，由 `/m`、`/api/files`、`/api/storage/sign` 与 `src/lib/media/outbound-owned-media.ts` 共同调用 | MediaObject 的 owner relation registry；迁移期只接受逐字段精确解析的 legacy relation；Task userId 只作为裁决输入，不是读取旁路 |
 
 Route body 中的 ID、UI card identity、Operation context、最近记录或裸 variant ID 都不是所有权事实。调用方不得自行补充部分查询，也不得在 resolver 失败后回退到无 scope 的 `findUnique({ id })`。
 
@@ -46,6 +46,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - `tests/integration/api/specific/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、character/location/prop、parent/variant、copy atomicity，以及共享 prepare 版本的第二次上传必须被 stale `updatedAt` CAS 拒绝且不能覆盖第一份正式 render。
 - `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 通过真实浏览器与生产 copy route，证明第二个已登录用户不能覆盖其他项目的资产。
 - 同一 Golden 的媒体加载与跨用户拒绝必须经过受保护 `/m`/文件 route；共享 policy 的路径规范化、symlink containment 与 private cache header 由 route/logic 验证补充。
+- `tests/integration/task/creative-resource-video-audio-reference.integration.test.ts` 使用真实 MediaObject relation 与对象存储，证明后台视频 Task 的 owner user 可直接读取参考声音并输出 provider-ready Data URL，而 foreign user 在 provider 调用前失败。
 
 结构检查只证明已知旁路没有恢复；跨用户拒绝由最小安全 Journey 证明，普通 source/target 组合由真实 MySQL integration 证明，不再另建一条浏览器产品线。
 
@@ -59,6 +60,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 项目删除从旧 route 迁入 Operation 时沿用了“先枚举项目内 URL 并批量删除 storage，再删除数据库”的顺序；它既不能在 DB 失败时恢复对象，也把“项目引用”误当成媒体独占所有权，copy/reuse 后可能删除其他存活关系仍在使用的对象。当前 `delete_project` 只在 Operation 事务内删除项目及级联领域关系，返回值不再伪报 storage cleanup；后续物理回收只能由独立 media lifecycle/GC owner 证明全 registry 零引用后执行。
 - 写入侧 owner resolver 已存在时，媒体读取 route 仍把 `publicId` 和 storage key 当作 bearer capability：任意登录用户可枚举 `/m`，本地文件 route 甚至无需会话，对象存储签名也未证明关系 owner。旧 Asset Journey 只验证 mutation/copy，没有攻击读取链。当前三个入口收敛到 relation-based read policy，本地文件额外用 realpath 拒绝 symlink 越界；legacy 字段只作为迁移期精确引用适配，尚未物化为 MediaObject relation 的全部历史组合是需由 Golden 继续复验的盲区。
 - 媒体 route 收紧为浏览器 session 后，真实 Golden 又发现 video/image worker 仍把本地 key 转成 `/api/files` 再通过 HTTP 回读；worker 没有也不应拥有浏览器 Cookie，因此合法参考图被 401 拒绝、视频阶段永久停留在 processing。当前后台读取复用同一 owner relation policy，再直接读取对象存储并执行输入大小上限；旧内部 token、公开文件 route 和 session 冒充均未恢复。项目资产改图查询同时以 `projectId + userId` 约束裸子实体，防止合法 Task payload 被替换成其他 scope 的 ID。
+- 参考声音作为视频输入的新实例曾绕过上述后台读取入口：图片直接按 owner relation 读对象存储，声音却获取浏览器签名 route；MinIO 返回的相对 URL 被外部 Provider 以 `Invalid URL format` 拒绝。旧 contract 只注入公网 HTTPS 音频，没有覆盖私有媒体 owner/storage 交界。当前私有图片与音频共用 `outbound-owned-media` 的 canonical key 解析、owner 裁决和有界对象读取，模态 wrapper 只追加格式 policy；音频签名 route 旁路已删除，真实 DB/storage critical test 反证 foreign owner 与相对内部 URL 再次进入 adapter。
 - 旧风格预览链曾写入 storage 却未登记 MediaObject，暴露受保护媒体关系、Next 图片优化器 session 与本地签名 origin 三类断点。固定预览链已删除；用户显式要求的任意预览现在只走通用图片 Resource 路径，因此必须像其他图片一样先登记 MediaObject、使用受保护同源读取并保持 owner relation，不能恢复专用存储旁路。
 - 顶层资产删除曾同时存在 Project character/location、Asset Hub character/location 和 generic location/prop 五个 Operation，部分路径直接调用 Prisma delete，Agent 又只有按图片组/单图分裂的旧重生成工具。用户无法从统一资产 identity 表达“删除后重做”或“原地重生成”，调用方也可能用 create 新增同义资产。当前五条顶层 delete 收敛为 `delete_asset` 并统一经过 scoped `removeAsset`；两个旧重生成 Operation 收敛为 `regenerate_asset`，复用既有 generation planner、共享资产 writer 和 asset identity。variant 删除不属于顶层资产入口，仍保留其精确 parent/variant 契约。
 - 资产管线曾让 Worker 直接给出实体 key，并在采用结果时同步创建图片任务；随后 canonical screenplay 又提前登记生产资产候选，使剧本身份、资产筛选、数据库 identity 和媒体生命周期彼此耦合，剧本漏登时下游无法补救。当前 asset manifest 是生产资产范围唯一 owner，服务端生成稳定 manifest identity，共享 Project asset writer 唯一建立领域 identity，manifest adoption 只采用，`create_image` 只生成并在终态绑定。当前验证盲区是真实 MySQL 下同名历史资产与新 `manifestAssetId` 并发采用的完整竞争组合。

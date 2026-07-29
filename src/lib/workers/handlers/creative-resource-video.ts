@@ -5,10 +5,10 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
-import { normalizeOwnedMediaToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { normalizeOwnedAudioToBase64ForGeneration } from '@/lib/media/outbound-audio'
+import { normalizeOwnedImageToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
-import { getSignedUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { resolveVideoDownloadHeaders } from '@/lib/workers/video-download'
@@ -52,7 +52,7 @@ async function loadVideoImageReferences(
       ? reference.role
       : 'reference'
     return {
-      url: await normalizeOwnedMediaToBase64ForGeneration(resource.media.storageKey, job.data.userId),
+      url: await normalizeOwnedImageToBase64ForGeneration(resource.media.storageKey, job.data.userId),
       role,
       order: index + 1,
       source: 'generated' as const,
@@ -60,8 +60,8 @@ async function loadVideoImageReferences(
   }))
 }
 
-async function loadVideoAudioReferences(
-  job: Job<TaskJobData>,
+export async function loadVideoAudioReferences(
+  userId: string,
   input: CreativeResourceGenerationTaskPayload,
 ): Promise<string[]> {
   const inputByPosition = new Map(input.resource.inputs.map((reference) => [reference.position, reference]))
@@ -85,13 +85,13 @@ async function loadVideoAudioReferences(
   return await Promise.all(audioInputs.map(async (reference) => {
     const resource = byId.get(reference.resourceId)
     if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
-    if (resource.userId !== job.data.userId || resource.status !== 'ready') {
+    if (resource.userId !== userId || resource.status !== 'ready') {
       throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
     }
     if (resource.mediaType !== 'audio' || !resource.media?.storageKey) {
       throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return getSignedUrl(resource.media.storageKey, 3600)
+    return await normalizeOwnedAudioToBase64ForGeneration(resource.media.storageKey, userId)
   }))
 }
 
@@ -109,7 +109,7 @@ export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
   }
   await reportTaskProgress(job, 20, { stage: 'creative_resource_prepare' })
   const referenceImages = await loadVideoImageReferences(job, payload)
-  const referenceAudios = await loadVideoAudioReferences(job, payload)
+  const referenceAudios = await loadVideoAudioReferences(job.data.userId, payload)
   if (referenceAudios.length > 0 && referenceImages.length === 0) {
     throw new Error(`VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE:${payload.resource.modelKey}`)
   }

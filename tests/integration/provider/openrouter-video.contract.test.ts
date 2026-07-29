@@ -158,6 +158,7 @@ describe('provider contract - OpenRouter video', () => {
   })
 
   it('serializes Seedance image and voice references through one multimodal input list', async () => {
+    const referenceAudioDataUrl = 'data:audio/wav;base64,UklGRgQAAABXQVZF'
     server!.defineScenario({
       method: 'POST',
       path: '/openrouter/videos',
@@ -183,7 +184,7 @@ describe('provider contract - OpenRouter video', () => {
       imageUrl: 'https://example.com/character.png',
       options: {
         prompt: 'Image 1 (@Image1) speaks with audio 1 (@Audio1): {Stay with me.}',
-        referenceAudios: ['https://example.com/locked-voice.wav'],
+        referenceAudios: [referenceAudioDataUrl],
         duration: 6,
         resolution: '720p',
         aspectRatio: '16:9',
@@ -198,7 +199,7 @@ describe('provider contract - OpenRouter video', () => {
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toMatchObject({
       input_references: [
         { type: 'image_url', image_url: { url: 'https://example.com/character.png' } },
-        { type: 'audio_url', audio_url: { url: 'https://example.com/locked-voice.wav' } },
+        { type: 'audio_url', audio_url: { url: referenceAudioDataUrl } },
       ],
     })
   })
