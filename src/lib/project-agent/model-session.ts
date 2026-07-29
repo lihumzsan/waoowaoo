@@ -6,6 +6,7 @@ import {
   type ProjectAssistantModelHistoryCommit,
   type ProjectAssistantThreadIdentity,
 } from './persistence'
+import { canonicalizeProjectAssistantModelInputMedia } from './media-attachments'
 
 function cloneItems(items: readonly AgentInputItem[]): AgentInputItem[] {
   return items.map((item) => structuredClone(item))
@@ -104,7 +105,9 @@ export class ProjectAgentModelSession implements Session {
 
   async addItems(items: AgentInputItem[]): Promise<void> {
     await this.ensureLoaded()
-    const persistedItems = items.filter((item) => !isTransientRuntimeInput(item))
+    const persistedItems = canonicalizeProjectAssistantModelInputMedia(
+      items.filter((item) => !isTransientRuntimeInput(item)),
+    )
     this.items.push(...cloneItems(persistedItems))
     await this.stage(persistedItems.some(isGeneratedModelItem))
   }
@@ -124,7 +127,9 @@ export class ProjectAgentModelSession implements Session {
 
   async replaceItems(items: readonly AgentInputItem[]): Promise<void> {
     await this.ensureLoaded()
-    this.items = cloneItems(items.filter((item) => !isTransientRuntimeInput(item)))
+    this.items = cloneItems(canonicalizeProjectAssistantModelInputMedia(
+      items.filter((item) => !isTransientRuntimeInput(item)),
+    ))
     await this.stage(false)
   }
 

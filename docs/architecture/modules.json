@@ -229,6 +229,7 @@
       "title": "Assistant Run 生命周期",
       "sourcePaths": [
         "src/lib/project-agent",
+        "src/lib/media/outbound-image.ts",
         "src/lib/projects/video-ratio.ts",
         "src/lib/ai-exec/agents-public-reasoning.ts",
         "src/lib/ai-exec/model-context-window.ts",

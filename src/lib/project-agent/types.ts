@@ -36,6 +36,8 @@ export interface ProjectAgentContext {
   executionSegmentId?: string | null
   /** Exact visible text from the user message that started this user-turn segment. */
   userTurnText?: string | null
+  /** Server-resolved Resource identities attached to this exact user turn. */
+  userTurnMediaResourceIds?: readonly string[]
   choiceDecision?: ProjectAgentChoiceDecision | null
   selectedScopeRef?: string | null
   selectedAssetId?: string | null

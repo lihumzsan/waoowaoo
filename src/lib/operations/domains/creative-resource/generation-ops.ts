@@ -48,6 +48,7 @@ import {
   CREATIVE_RESOURCE_SCHEMA,
   requireCreativeResourceSchema,
 } from '@/lib/creative-resource/schema-registry'
+import { readProjectCreativeResourceLinkViews } from '@/lib/creative-resource/assistant-link-view'
 import { creativeWorkOutputSchemas } from '@/lib/creative-worker'
 import { assetManifestSchema, validateAssetManifest } from '@/lib/screenplay'
 import { matchCurrentUserText } from '@/lib/creative-resource/current-user-text'
@@ -169,6 +170,24 @@ const createTextInputSchema = z.object({
       ]).describe('Classify a complete project screenplay as screenplay; use generic_text for every other exact excerpt.'),
       text: z.string().trim().min(1)
         .describe('An exact contiguous excerpt of the visible user message that started this turn. Do not rewrite, summarize, normalize, or copy text from an earlier turn.'),
+    }).strict(),
+    z.object({
+      kind: z.literal('current_user_media_transcription'),
+      scope: z.enum(['project', 'current_episode'])
+        .describe('Persist a faithful transcription of the current attached image at project scope or the currently selected Episode scope.'),
+      sourceResourceId: z.string().trim().min(1)
+        .describe('Exact image Resource attached to the current user message and transcribed into this text.'),
+      classification: z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('generic_text'),
+        }).strict(),
+        z.object({
+          kind: z.literal('screenplay'),
+          title: z.string().trim().min(1).max(300),
+        }).strict(),
+      ]).describe('Classify a complete project screenplay as screenplay; use generic_text for every other transcription.'),
+      text: z.string().trim().min(1)
+        .describe('Faithful transcription of the current attached image. Do not rewrite, summarize, or invent text that is not visible in that image.'),
     }).strict(),
   ]).describe('Choose one completed result or a selectable candidate set.'),
   contextReferences: contextReferenceSchema,
@@ -558,7 +577,10 @@ async function createTextResources(
   input: CreateTextInput,
   tx: Parameters<NonNullable<ReturnType<typeof defineOperation>['executeInTransaction']>>[2],
 ) {
-  const suppliedScreenplayTitle = input.content.kind === 'current_user_text'
+  const suppliedScreenplayTitle = (
+    input.content.kind === 'current_user_text'
+    || input.content.kind === 'current_user_media_transcription'
+  )
     && input.content.classification.kind === 'screenplay'
     ? input.content.classification.title
     : null
@@ -579,14 +601,36 @@ async function createTextResources(
       agentRetryableAfterCorrection: currentUserTextMatch.code === 'CURRENT_USER_TEXT_NOT_EXACT',
     })
   }
-  const episodeId = input.content.kind === 'current_user_text'
-    ? input.content.scope === 'project'
+  const suppliedTextScope = (
+    input.content.kind === 'current_user_text'
+    || input.content.kind === 'current_user_media_transcription'
+  )
+    ? input.content.scope
+    : null
+  const episodeId = suppliedTextScope !== null
+    ? suppliedTextScope === 'project'
       ? null
       : ctx.context.episodeId?.trim() || null
     : resolveEpisodeId(input, ctx)
-  if (input.content.kind === 'current_user_text' && input.content.scope === 'current_episode' && !episodeId) {
+  if (
+    input.content.kind === 'current_user_text'
+    && suppliedTextScope === 'current_episode'
+    && !episodeId
+  ) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CURRENT_USER_TEXT_EPISODE_SCOPE_UNAVAILABLE',
+      field: 'content.scope',
+      allowedValues: ['project'],
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  if (
+    input.content.kind === 'current_user_media_transcription'
+    && suppliedTextScope === 'current_episode'
+    && !episodeId
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CURRENT_USER_MEDIA_TRANSCRIPTION_EPISODE_SCOPE_UNAVAILABLE',
       field: 'content.scope',
       allowedValues: ['project'],
       agentRetryableAfterCorrection: true,
@@ -605,10 +649,57 @@ async function createTextResources(
     projectId: ctx.projectId,
     episodeId,
   })
-  const references = normalizeInputReferences(input.contextReferences, {
+  const mediaSourceResourceId = input.content.kind === 'current_user_media_transcription'
+    ? input.content.sourceResourceId
+    : null
+  if (
+    mediaSourceResourceId
+    && !ctx.context.userTurnMediaResourceIds?.includes(mediaSourceResourceId)
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CURRENT_USER_MEDIA_SOURCE_NOT_ATTACHED',
+      field: 'content.sourceResourceId',
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  if (mediaSourceResourceId) {
+    const [source] = await readProjectCreativeResourceLinkViews({
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      refs: [{ resourceId: mediaSourceResourceId }],
+      client: tx,
+    })
+    if (source?.mediaType !== 'image') {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CURRENT_USER_MEDIA_SOURCE_NOT_IMAGE',
+        field: 'content.sourceResourceId',
+        allowedValues: ['image'],
+        agentRetryableAfterCorrection: true,
+      })
+    }
+  }
+  if (
+    mediaSourceResourceId
+    && input.contextReferences?.some((reference) => reference.resourceId === mediaSourceResourceId)
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_INPUT_REFERENCE_DUPLICATE',
+      field: 'contextReferences',
+      resourceId: mediaSourceResourceId,
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const contextReferences = normalizeInputReferences(input.contextReferences, {
     defaultRole: 'context',
-    positionOffset: 0,
+    positionOffset: mediaSourceResourceId ? 1 : 0,
   })
+  const references: CreativeResourceInputRef[] = mediaSourceResourceId
+    ? [{
+        resourceId: mediaSourceResourceId,
+        role: 'source',
+        position: 0,
+      }, ...contextReferences]
+    : contextReferences
   const candidates = input.content.kind === 'candidates'
     ? input.content.candidates
     : [{
@@ -673,7 +764,12 @@ async function createTextResources(
         modelKey: null,
         generationOptions: input.content.kind === 'current_user_text'
           ? { source: 'current_user_turn' }
-          : null,
+          : input.content.kind === 'current_user_media_transcription'
+            ? {
+                source: 'current_user_media_transcription',
+                sourceResourceId: input.content.sourceResourceId,
+              }
+            : null,
       },
     })
     resources.push({ ...materialized, candidateIndex })
@@ -2582,7 +2678,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more generic text Resources authored in this Agent turn, or persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text for every other excerpt. Creative authoring and resource still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one or more generic text Resources authored in this Agent turn; persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text; or faithfully transcribe an image attached to this exact user turn with content.kind=current_user_media_transcription and its sourceResourceId. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text otherwise. Creative authoring and resource still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
       effects: {
         writes: true,

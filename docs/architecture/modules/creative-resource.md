@@ -32,6 +32,7 @@
 - **CR-20 — Resource 不裁决流程。** Resource 存在、缺失、旧生成结果或 Lineage 都只是事实。Operation 可调用性只由 registry channel、显式 input schema、scope、provider capability、审批和破坏性确认裁决；Workflow step、Canvas 位置或推荐顺序不能成为隐藏门槛。
 - **CR-21 — 清单资产图按引用执行。** `create_image.request.kind=manifest_assets` 只接受当前 adopted `project.asset_manifest` 的精确 Resource ID 与可选 `manifestAssetIds` 子集；服务端校验 adopted Binding、按 `manifestAssetId` 解析项目资产身份与 `project_asset_image` Binding 当前 version、原样读取每项 `generationPrompt`（叠加固定资产版式），一次调用为每个资产创建一个图片 Task，manifest Resource 写入每个 Task 的 Lineage。Primary 不复制 prompt、不重供绑定、不手动附加引用；`request.kind=asset` 只服务清单之外的单个资产图。该窄分支仍在 `create_image` planner 内展开，复用同一 Billing/Approval、Task submitter 与 terminal materializer，不是第二图片执行器；非 adopted 清单、未知/重复 manifestAssetId、缺失资产身份或空清单必须在计划阶段失败。
 - **CR-22 — 配乐按引用执行。** `music_direction` 输出的 `score` 是唯一最终配乐执行指令（null 表示刻意不配乐且不存在下游音乐生成）。`create_audio.request.kind=music_direction` 只接受该方向 Resource ID 与精确目标视频 Resource；服务端原样读取 `score.generationPrompt`、从视频 MediaObject 真实时长导出 duration 并按 music capability 校验，`maxReferenceVideos` 声明允许时把视频冻结为 `videoInputPositions`，否则只作为 Lineage 上下文。方向与视频 Resource 都进入 BGM Task 的 Lineage。null score、时长缺失或超出能力范围必须在计划阶段失败；Primary 不改写、不压缩、不补充配乐指令。
+- **CR-23 — 用户来源转录仍由 `create_text` 唯一写入。** 当前消息附带图片中的原文只能通过 `create_text.content.kind=current_user_media_transcription` 物化为文本 Resource；服务端必须证明 `sourceResourceId` 属于该 exact user turn、回库验证 owner/project/ready/image，并把原图以 `role=source, position=0` 写入输出 Lineage。完整剧本仍使用同一个 `project.screenplay` schema，不创建 OCR Resource、正式副本、确认态或第二 writer；模型转录文本不能反向充当图片 identity 或校验依据。
 
 ## 状态与写入者
 
@@ -109,6 +110,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 
 ## 历史回归
 
+- 完整用户剧本的第一次来源捕获只覆盖可由服务端 substring 证明的当前消息文字；图片上传虽然已经物化为 Resource，却只能作为媒体生成引用，Primary 与 Worker都读取不到像素。真实运行因此创建了一个没有正文的 `project.screenplay` 占位 Resource。当前不新增 OCR 持久实体：Primary 看图后的转录仍经唯一 `create_text` 事务写入，服务端把当前附图 Resource 固定为 source Lineage 并拒绝非当前 turn、非图片或重复引用。模型 OCR 内容正确性仍是人工样本复验边界。
 - 初始 Resource spine 同时保存 Resource、Revision、head 和 origin；跨层又逐步只认 Revision，形成多个可合法出现但语义重叠的 identity。修补调用方只能减少某一种不一致，不能消除组合错误。本次直接删除 Revision/head/origin 协议。
 - Resource retry 首次冻结输入收敛只把 `request.kind=new` 认作原始生成；随后 Video Prompt Set 新增 `request.kind=prompt_set`，初次多段视频与失败终态都能正常持久化，但单段 retry resolver 会忽略同一 Operation 的真实 Plan/Task，并错误返回 `CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_MISSING`。旧冻结输入测试只构造 `new`，Prompt Set Critical 又只验证全部成功，因此两条防线各自通过却没有反证“Prompt Set 中一个 provider 失败后只重试该 Resource”的真实组合。当前原始执行身份统一定义为同一 Operation 的唯一非 retry Plan/Task，所有重试仍只重放该 Task 的冻结 payload；真实 MySQL Critical 从生产 Prompt Set planner 创建两个 Task，令其中一个失败、另一个成功，再证明 retry 只为失败 Resource 创建一个同 identity Task、payload 除新 toolCallId 外完全一致且不触碰兄弟 Resource。该修复热更新后的预检/批准 route 曾分别保留新旧 resolver，暴露审批协议只比较内容 Hash、没有冻结 planner 语义；Billing Approval 现以 Snapshot 唯一 `executionContractRevision` 在任何二次读取前拒绝跨版本执行，Creative Resource 不另建版本裁判。
 - 参考资产回归的直接症状是视频生成未消费用户已选资产。上一版只保证 `request.kind=retry` 从旧 Task 恢复冻结引用，但初次 `video_prompt_set` 仍只输出自然语言 `referenceKeys`，Primary 必须根据名称、资源列表和历史上下文重新选择 ID；因此初次生成完全绕过 retry 防线，且曾把 Resource hash 当成执行需要的 ID。当前 Prompt Set 保存精确 `mediaResourceIds`，服务端只允许其持久 Lineage 中的真实 Resource，Primary 不再解释引用。

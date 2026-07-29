@@ -139,7 +139,9 @@ import {
 } from './text-attachments'
 import {
   appendProjectAssistantMediaAttachmentsToUserText,
+  buildProjectAssistantImageInputParts,
   readProjectAssistantMediaAttachmentsFromMessage,
+  resolveProjectAssistantModelInputMedia,
 } from './media-attachments'
 import {
   appendProjectAssistantThreadMessages,
@@ -302,17 +304,24 @@ function readTextFromParts(parts: readonly unknown[]): string {
 
 function buildProjectAgentUserTurnInputItem(message: UIMessage): AgentInputItem {
   if (message.role !== 'user') throw new Error('PROJECT_AGENT_USER_TURN_MESSAGE_ROLE_INVALID')
+  const attachments = readProjectAssistantMediaAttachmentsFromMessage(message)
   const content = appendProjectAssistantMediaAttachmentsToUserText({
     userText: appendProjectAssistantTextAttachmentsToUserText({
       userText: readTextFromParts(message.parts),
       attachments: readProjectAssistantTextAttachmentsFromMessage(message),
     }),
-    attachments: readProjectAssistantMediaAttachmentsFromMessage(message),
+    attachments,
   })
   if (!content.trim()) throw new Error('PROJECT_AGENT_USER_TURN_CONTENT_REQUIRED')
+  const imageParts = buildProjectAssistantImageInputParts(attachments)
   return {
     role: 'user',
-    content,
+    content: imageParts.length > 0
+      ? [
+          { type: 'input_text', text: content },
+          ...imageParts,
+        ]
+      : content,
   } satisfies AgentInputItem
 }
 
@@ -864,6 +873,10 @@ export async function createProjectAgentChatResponse(input: {
     userTurnText: control.kind === 'user_turn'
       ? readTextFromParts(control.message.parts) || null
       : null,
+    userTurnMediaResourceIds: control.kind === 'user_turn'
+      ? readProjectAssistantMediaAttachmentsFromMessage(control.message)
+          .map((attachment) => attachment.resourceId)
+      : [],
     choiceDecision: control.kind === 'choice' ? control.decision : null,
     ...(issuedApprovalGrants.length > 0
       ? {
@@ -1494,11 +1507,15 @@ export async function createProjectAgentChatResponse(input: {
       // state produces, so approval resume is governed by the same authority
       // as an initial turn. It rewrites only the outgoing payload; the
       // serialised state stays byte-identical.
-      callModelInputFilter: ({ modelData }) => {
+      callModelInputFilter: async ({ modelData }) => {
         const decision = decideProjectAgentModelInput(modelInputFilterConfig, modelData)
         latestModelInputDecision = decision
         return {
-          input: decision.input,
+          input: await resolveProjectAssistantModelInputMedia({
+            items: decision.input,
+            userId: input.userId,
+            projectId: input.projectId,
+          }),
           ...(decision.instructions === undefined ? {} : { instructions: decision.instructions }),
         }
       },
