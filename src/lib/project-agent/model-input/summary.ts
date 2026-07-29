@@ -1,153 +1,125 @@
+import type { AgentInputItem } from '@openai/agents'
 import { z } from 'zod'
-import type { UIMessage } from 'ai'
+import { estimateProjectAgentUnknownTokens } from './estimate'
 
-/**
- * Persisted, incremental summary of conversation that has scrolled out of the
- * model's working set.
- *
- * Conversation is the one part of context that cannot be recovered: unlike a
- * tool result, there is no call to re-issue. So it is summarised rather than
- * shed — but only after the recoverable material has already been cleared,
- * because summarising costs a model call and rewrites the prompt prefix, which
- * discards the provider cache for everything after it.
- *
- * The summary is stored and extended, never recomputed. The previous summary
- * is carried into the next pass verbatim as settled fact, so this is an append
- * rather than a summary-of-a-summary; repeatedly re-compressing the same text
- * is how detail quietly bleeds away.
- */
 export const PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION = 1
 
 export const projectAgentConversationSummarySchema = z.object({
   version: z.literal(PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION),
-  /** Last message included in `summaryText`; everything after it is still verbatim. */
-  summarizedThroughMessageId: z.string().trim().min(1),
-  summarizedMessageCount: z.number().int().nonnegative(),
+  summarizedItemCount: z.number().int().nonnegative(),
   summaryText: z.string().trim().min(1),
 }).strict()
 
 export type ProjectAgentConversationSummary = z.infer<typeof projectAgentConversationSummarySchema>
 
-export function parseProjectAgentConversationSummary(
-  value: unknown,
+const SUMMARY_HEADER = /^\[conversation_summary version=1 summarized_items=(\d+)\]\n([\s\S]+)\n\[\/conversation_summary\]$/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readStringMessageContent(item: AgentInputItem): string | null {
+  const record = item as unknown
+  if (!isRecord(record) || record.role !== 'user') return null
+  return typeof record.content === 'string' ? record.content : null
+}
+
+export function parseProjectAgentConversationSummaryItem(
+  item: AgentInputItem | undefined,
 ): ProjectAgentConversationSummary | null {
-  if (value === null || value === undefined) return null
-  const parsed = projectAgentConversationSummarySchema.safeParse(value)
-  // A summary written by an incompatible version is dropped rather than
-  // half-read: a partially understood summary would silently misstate what the
-  // model has already been told.
+  if (!item) return null
+  const content = readStringMessageContent(item)
+  const match = content?.match(SUMMARY_HEADER)
+  if (!match) return null
+  const summarizedItemCount = Number(match[1])
+  const summaryText = match[2]?.trim() ?? ''
+  const parsed = projectAgentConversationSummarySchema.safeParse({
+    version: PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION,
+    summarizedItemCount,
+    summaryText,
+  })
   return parsed.success ? parsed.data : null
 }
 
-type UnknownRecord = Record<string, unknown>
-
-function readMessageText(message: UIMessage): string {
-  return message.parts
-    .flatMap((part) => {
-      const record = part as UnknownRecord
-      if (record.type !== 'text') return []
-      const text = record.text
-      return typeof text === 'string' && text.trim() ? [text.trim()] : []
-    })
-    .join('\n')
-}
-
-export function buildProjectAgentSummaryTranscript(messages: readonly UIMessage[]): string {
-  return messages
-    .map((message) => {
-      const text = readMessageText(message)
-      return text ? `${message.role.toUpperCase()}: ${text}` : null
-    })
-    .filter((line): line is string => Boolean(line))
-    .join('\n')
-}
-
-/**
- * Splits the thread at the summary watermark.
- *
- * Messages already covered by a stored summary are candidates for replacement;
- * the rest stay verbatim. A watermark that no longer matches any message means
- * the thread was cleared or rewritten underneath us, so nothing is treated as
- * summarised rather than guessing an offset.
- */
-export function splitProjectAgentThreadAtSummary(input: {
-  messages: readonly UIMessage[]
-  summary: ProjectAgentConversationSummary | null
-}): { summarized: readonly UIMessage[]; verbatim: readonly UIMessage[] } {
-  if (!input.summary) {
-    return { summarized: [], verbatim: input.messages }
-  }
-  const watermarkIndex = input.messages
-    .findIndex((message) => message.id === input.summary?.summarizedThroughMessageId)
-  if (watermarkIndex < 0) {
-    return { summarized: [], verbatim: input.messages }
-  }
+export function buildProjectAgentSummaryInputItem(
+  summary: ProjectAgentConversationSummary,
+): AgentInputItem {
   return {
-    summarized: input.messages.slice(0, watermarkIndex + 1),
-    verbatim: input.messages.slice(watermarkIndex + 1),
-  }
+    role: 'user',
+    content: [
+      `[conversation_summary version=${String(summary.version)} summarized_items=${String(summary.summarizedItemCount)}]`,
+      summary.summaryText,
+      '[/conversation_summary]',
+    ].join('\n'),
+  } satisfies AgentInputItem
 }
 
 /**
- * Share of the context ceiling conversation history may hold before it starts
- * being summarised.
- *
- * Conversation is one of several context sources and the least urgent: the
- * agent's working set — project facts, the current plan, the results it just
- * fetched — is what it reasons over now. Letting an old thread crowd that out
- * would trade the material the answer depends on for material the summary can
- * carry instead.
+ * The summary is an ordinary SDK input item at the head of Session history.
+ * No parallel summary field or UI-message watermark is needed.
  */
-const CONVERSATION_TOKEN_LIMIT = 48_000
+export function splitProjectAgentSessionSummary(items: readonly AgentInputItem[]): {
+  summary: ProjectAgentConversationSummary | null
+  verbatim: readonly AgentInputItem[]
+} {
+  const summary = parseProjectAgentConversationSummaryItem(items[0])
+  return summary
+    ? { summary, verbatim: items.slice(1) }
+    : { summary: null, verbatim: items }
+}
 
-/**
- * Summarising aims well under the limit for the same reason shedding does:
- * rewriting the prefix discards the provider cache after that point, so a pass
- * that only just clears the threshold would pay a model call and a cache reset
- * again on the next turn.
- */
+export function buildProjectAgentSummaryTranscript(items: readonly AgentInputItem[]): string {
+  return items.map((item) => JSON.stringify(item)).join('\n')
+}
+
+const CONVERSATION_TOKEN_LIMIT = 48_000
 const CONVERSATION_TARGET_TOKENS = 24_000
 
 export type ProjectAgentConversationCompactionPlan = {
-  /** Messages to fold into the summary on this pass; empty means no work. */
-  readonly toSummarize: readonly UIMessage[]
-  /** Messages that stay verbatim in the model input. */
-  readonly verbatim: readonly UIMessage[]
+  readonly previousSummary: ProjectAgentConversationSummary | null
+  readonly toSummarize: readonly AgentInputItem[]
+  readonly verbatim: readonly AgentInputItem[]
 }
 
-export function planProjectAgentConversationCompaction(input: {
-  messages: readonly UIMessage[]
-  summary: ProjectAgentConversationSummary | null
-  estimateTokens: (messages: readonly UIMessage[]) => number
-}): ProjectAgentConversationCompactionPlan {
-  const { verbatim } = splitProjectAgentThreadAtSummary({
-    messages: input.messages,
-    summary: input.summary,
-  })
-  if (input.estimateTokens(verbatim) <= CONVERSATION_TOKEN_LIMIT) {
-    return { toSummarize: [], verbatim }
+function isUserMessage(item: AgentInputItem | undefined): boolean {
+  const value = item as unknown
+  return !!item && isRecord(value) && value.role === 'user'
+}
+
+/**
+ * Cuts only at a later user-message boundary. This keeps every assistant tool
+ * call and matching result inside one side of the cut instead of manufacturing
+ * orphan protocol items.
+ */
+export function planProjectAgentConversationCompaction(
+  items: readonly AgentInputItem[],
+): ProjectAgentConversationCompactionPlan {
+  const split = splitProjectAgentSessionSummary(items)
+  if (estimateProjectAgentUnknownTokens(split.verbatim) <= CONVERSATION_TOKEN_LIMIT) {
+    return {
+      previousSummary: split.summary,
+      toSummarize: [],
+      verbatim: split.verbatim,
+    }
   }
 
-  // Walk forward from the oldest unsummarised message until what remains fits
-  // the target, so the newest exchanges — the ones the user is still in the
-  // middle of — always survive verbatim.
-  let cut = 0
-  while (
-    cut < verbatim.length - 1
-    && input.estimateTokens(verbatim.slice(cut)) > CONVERSATION_TARGET_TOKENS
-  ) {
-    cut += 1
+  for (let cut = 1; cut < split.verbatim.length; cut += 1) {
+    if (!isUserMessage(split.verbatim[cut])) continue
+    const remaining = split.verbatim.slice(cut)
+    if (estimateProjectAgentUnknownTokens(remaining) > CONVERSATION_TARGET_TOKENS) continue
+    return {
+      previousSummary: split.summary,
+      toSummarize: split.verbatim.slice(0, cut),
+      verbatim: remaining,
+    }
   }
-  if (cut === 0) return { toSummarize: [], verbatim }
 
+  // A single oversized turn cannot be cut without risking call/result
+  // causality. Per-step recoverable tool-result shedding remains responsible
+  // for that case.
   return {
-    toSummarize: verbatim.slice(0, cut),
-    verbatim: verbatim.slice(cut),
+    previousSummary: split.summary,
+    toSummarize: [],
+    verbatim: split.verbatim,
   }
-}
-
-export function buildProjectAgentSummaryText(
-  summary: ProjectAgentConversationSummary,
-): string {
-  return `Summary of earlier conversation in this thread:\n${summary.summaryText}`
 }

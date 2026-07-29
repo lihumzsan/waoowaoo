@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildProjectAgentChoiceResultFromDecision,
+  buildProjectAgentChoiceResponseInputItem,
   parseProjectAgentChoiceDecision,
   resolveProjectAgentChoiceCommitment,
 } from '@/lib/project-agent/choice-result'
@@ -80,30 +80,19 @@ describe('generic Project Agent Choice decisions', () => {
     expect(resolveProjectAgentChoiceCommitment({ offer: selectionOffer, decision })).toBeNull()
   })
 
-  it('serializes only the canonical current decision into the resumed model segment', () => {
-    const result = buildProjectAgentChoiceResultFromDecision({
+  it('adds the canonical decision as user input without fabricating a tool call', () => {
+    const item = buildProjectAgentChoiceResponseInputItem({
       decision: { kind: 'text', text: 'Use a quieter palette.' },
       toolCallId: 'tool-1',
+      cardId: 'choice-1',
     })
 
-    expect(result.decision).toEqual({ kind: 'text', text: 'Use a quieter palette.' })
-    expect(result.inputItems).toHaveLength(2)
-    expect(result.inputItems[0]).toMatchObject({
-      type: 'function_call',
-      callId: 'tool-1',
-      name: 'request_choice',
-    })
-    expect(result.inputItems[1]).toMatchObject({
-      type: 'function_call_result',
-      callId: 'tool-1',
-      name: 'request_choice',
-      output: {
-        type: 'text',
-        text: JSON.stringify({
-          ok: true,
-          decision: { kind: 'text', text: 'Use a quieter palette.' },
-        }),
-      },
-    })
+    expect(item).toMatchObject({ role: 'user' })
+    expect('type' in item ? item.type : undefined).not.toBe('function_call')
+    expect('content' in item ? item.content : '').toContain('toolCallId=tool-1')
+    expect('content' in item ? item.content : '').toContain('cardId=choice-1')
+    expect('content' in item ? item.content : '').toContain(
+      'decision={"kind":"text","text":"Use a quieter palette."}',
+    )
   })
 })

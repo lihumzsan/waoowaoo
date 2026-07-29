@@ -5,7 +5,6 @@ import type {
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
 import type { ProjectAgentChoiceDecision } from './choice-result'
-import type { ProjectAgentConversationSummary } from './model-input/summary'
 import type {
   ProjectAgentChoiceCardPartData,
 } from './choice-offer'
@@ -245,7 +244,7 @@ export interface ProjectAssistantContextSnapshot {
  */
 export interface ProjectAgentContextCompactedPartData {
   runId: string
-  summarizedMessageCount: number
+  summarizedItemCount: number
   summaryText: string
 }
 
@@ -260,7 +259,6 @@ export interface ProjectAssistantThreadSnapshot {
   episodeId?: string | null
   scopeRef: string
   messages: UIMessage[]
-  summary: ProjectAgentConversationSummary | null
   createdAt: string
   updatedAt: string
 }

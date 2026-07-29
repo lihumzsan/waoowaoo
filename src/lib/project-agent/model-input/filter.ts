@@ -41,6 +41,12 @@ export type ProjectAgentModelInputFilterInput = {
   readonly toolSchemaTokens: number
   readonly locale: ProjectAgentLocale
   readonly irreplaceableToolNames: ReadonlySet<string>
+  /**
+   * Tool discovery contracts are bound to one execution segment. Session keeps
+   * their exact historical call/result pairs, but a later segment must not see
+   * those expired definitions as reusable invocation authority.
+   */
+  readonly staleToolDiscoveryCallIds: ReadonlySet<string>
 }
 
 /**
@@ -57,10 +63,51 @@ const KEEP_RECENT_TOOL_RESULTS = 5
  */
 const SHED_TARGET_RATIO = 0.7
 
+function readFunctionItemIdentity(item: AgentInputItem): {
+  readonly type: 'function_call' | 'function_call_result'
+  readonly callId: string
+  readonly name: string
+} | null {
+  const record = item as unknown as Record<string, unknown>
+  if (record.type !== 'function_call' && record.type !== 'function_call_result') return null
+  const callId = typeof record.callId === 'string' ? record.callId.trim() : ''
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  return callId && name ? { type: record.type, callId, name } : null
+}
+
+export function collectProjectAgentFunctionCallIds(
+  items: readonly AgentInputItem[],
+  toolName: string,
+): ReadonlySet<string> {
+  const normalizedToolName = toolName.trim()
+  if (!normalizedToolName) throw new Error('PROJECT_AGENT_MODEL_INPUT_TOOL_NAME_REQUIRED')
+  return new Set(items.flatMap((item) => {
+    const identity = readFunctionItemIdentity(item)
+    return identity?.type === 'function_call' && identity.name === normalizedToolName
+      ? [identity.callId]
+      : []
+  }))
+}
+
+function dropStaleToolDiscoveryPairs(
+  items: readonly AgentInputItem[],
+  staleCallIds: ReadonlySet<string>,
+): AgentInputItem[] {
+  if (staleCallIds.size === 0) return [...items]
+  return items.filter((item) => {
+    const identity = readFunctionItemIdentity(item)
+    return !identity || !staleCallIds.has(identity.callId)
+  })
+}
+
 export function decideProjectAgentModelInput(
   config: ProjectAgentModelInputFilterInput,
   modelData: { input: AgentInputItem[]; instructions?: string },
 ): ProjectAgentModelInputDecision {
+  const executionScopedInput = dropStaleToolDiscoveryPairs(
+    modelData.input,
+    config.staleToolDiscoveryCallIds,
+  )
   const instructionTokens = modelData.instructions
     ? estimateProjectAgentTextTokens(modelData.instructions)
     : 0
@@ -71,14 +118,14 @@ export function decideProjectAgentModelInput(
     maxOutputTokens: PROJECT_AGENT_RESERVED_OUTPUT_TOKENS,
   })
   const budget = resolution.kind === 'resolved' ? resolution.budget : null
-  const initialTokens = estimateProjectAgentUnknownTokens(modelData.input)
+  const initialTokens = estimateProjectAgentUnknownTokens(executionScopedInput)
 
   // A null budget means the reservations already exhaust the window, which no
   // amount of shedding can fix; it is reported as over budget so the caller
   // surfaces it rather than proceeding as if the request were fine.
   if (budget === null) {
     return {
-      input: modelData.input,
+      input: executionScopedInput,
       ...(modelData.instructions === undefined ? {} : { instructions: modelData.instructions }),
       budget,
       estimatedInputTokens: initialTokens,
@@ -90,7 +137,7 @@ export function decideProjectAgentModelInput(
 
   const shedding = initialTokens > budget.availableInputTokens
     ? shedProjectAgentToolResults({
-      items: modelData.input,
+      items: executionScopedInput,
       locale: config.locale,
       keepRecentResults: KEEP_RECENT_TOOL_RESULTS,
       targetFreedTokens: initialTokens - Math.floor(budget.availableInputTokens * SHED_TARGET_RATIO),
@@ -98,7 +145,7 @@ export function decideProjectAgentModelInput(
     })
     : null
 
-  const input = shedding ? shedding.items : modelData.input
+  const input = shedding ? shedding.items : executionScopedInput
   const estimatedInputTokens = shedding ? initialTokens - shedding.freedTokens : initialTokens
 
   return {

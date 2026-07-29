@@ -31,7 +31,7 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
  * in what the assistant remembers reads as carelessness, and the user has no
  * way to tell which stretch was condensed — so the notice is quiet but always
  * present, and opens to the exact text the model now sees in place of those
- * messages.
+ * structured history items.
  */
 export function AssistantContextCompactedDataCard({
   data,
@@ -42,7 +42,7 @@ export function AssistantContextCompactedDataCard({
       <summary className="flex cursor-pointer list-none items-center gap-1.5">
         <AppIcon name="alert" className="h-3 w-3 shrink-0 opacity-60" />
         <span className="min-w-0 truncate">
-          {t('cards.contextCompacted', { count: data.summarizedMessageCount })}
+          {t('cards.contextCompacted', { count: data.summarizedItemCount })}
         </span>
       </summary>
       <div className="mt-1 whitespace-pre-wrap text-[var(--glass-text-secondary)]">

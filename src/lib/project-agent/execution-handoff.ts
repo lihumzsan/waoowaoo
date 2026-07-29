@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
+  type ProjectAssistantModelHistoryCommit,
 } from './persistence'
 import {
   assertProjectAgentChoiceOfferCurrent,
@@ -37,6 +38,7 @@ import type {
 } from './waits'
 import { localizeProjectAgentOperationTitle } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
+import { ProjectAgentModelSession } from './model-session'
 
 export type ProjectAgentExecutionHandoffKind = 'choice' | 'approval' | 'task_batch'
 export type ProjectAgentExecutionHandoffStatus = 'prepared' | 'settled'
@@ -83,6 +85,7 @@ interface ChoiceHandoffPayload {
   card: ProjectAgentChoiceCardDefinition
   subject: ProjectAgentChoiceSubject
   commitments: ProjectAgentChoiceCommitment[]
+  modelArguments: Prisma.JsonValue
 }
 
 interface ApprovalHandoffPayload {
@@ -126,16 +129,26 @@ function parseChoicePayload(value: Prisma.JsonValue): ChoiceHandoffPayload {
   const card = record.card
   const subject = record.subject
   const commitments = record.commitments
+  const modelArguments = record.modelArguments
   if (!card || typeof card !== 'object' || Array.isArray(card)) {
     throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_CARD_INVALID')
   }
-  if (!subject || typeof subject !== 'object' || Array.isArray(subject) || !Array.isArray(commitments)) {
+  if (
+    !subject
+    || typeof subject !== 'object'
+    || Array.isArray(subject)
+    || !Array.isArray(commitments)
+    || !modelArguments
+    || typeof modelArguments !== 'object'
+    || Array.isArray(modelArguments)
+  ) {
     throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_SUBJECT_INVALID')
   }
   const payload = {
     card: card as ProjectAgentChoiceCardDefinition,
     subject: subject as ProjectAgentChoiceSubject,
     commitments: commitments as ProjectAgentChoiceCommitment[],
+    modelArguments: modelArguments as Prisma.JsonValue,
   }
   buildProjectAgentChoiceOffer({
     runId: 'prepared-payload',
@@ -246,6 +259,7 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
   card: ProjectAgentChoiceCardDefinition
   subject: ProjectAgentChoiceSubject
   commitments: ProjectAgentChoiceCommitment[]
+  modelArguments: Prisma.InputJsonValue
 }): Promise<ProjectAgentPreparedChoiceHandoff> {
   const executionSegmentId = requireIdentity(
     input.executionSegmentId,
@@ -263,6 +277,7 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
     card: input.card,
     subject: input.subject,
     commitments: input.commitments,
+    modelArguments: JSON.parse(JSON.stringify(input.modelArguments)) as Prisma.JsonValue,
   }
   let handoffId = ''
 
@@ -572,6 +587,7 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     message: UIMessage
     outcome: 'awaiting_choice' | 'awaiting_approval'
     sourceOperationId: string
+    modelHistoryCommit?: ProjectAssistantModelHistoryCommit
     continuation?: ProjectAgentExecutionSegmentContinuation | null
   },
 ): Promise<void> {
@@ -581,6 +597,7 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     episodeId: input.episodeId ?? null,
     assistantId: input.assistantId,
     messages: [input.message],
+    ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
   })
   if (!input.continuation) return
   const checkpoint = await tx.projectAgentContinuationCheckpoint.findUnique({
@@ -806,6 +823,7 @@ export async function settleProjectAgentContinuationTerminalHandoff(input: {
   userId: string
   outcome: ProjectAgentContinuationTerminalOutcome
   message: UIMessage
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
 }): Promise<ProjectAgentContinuationCheckpoint> {
   if (!input.message.id.trim()) throw new Error('PROJECT_AGENT_CONTINUATION_MESSAGE_ID_REQUIRED')
   const messageJson = serializeContinuationMessage(input.message)
@@ -830,6 +848,7 @@ export async function settleProjectAgentContinuationTerminalHandoff(input: {
         episodeId: wait.episodeId,
         assistantId: wait.assistantId as ProjectAssistantId,
         messages: [input.message],
+        ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
       })
       const updated = await tx.projectAgentContinuationCheckpoint.updateMany({
         where: {
@@ -953,6 +972,7 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
   episodeId?: string | null
   assistantId?: ProjectAssistantId
   message: UIMessage
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
   continuation?: ProjectAgentExecutionSegmentContinuation | null
 }): Promise<ProjectAgentChoiceSuspensionReceipt> {
   const assistantId = input.assistantId ?? 'workspace-command'
@@ -1046,6 +1066,7 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
       message: input.message,
       outcome: 'awaiting_choice',
       sourceOperationId: handoff.operationId,
+      ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
       continuation: input.continuation ?? null,
     })
     assertProjectAgentOperationExecutionFenceSignal(input.executionFence)
@@ -1081,6 +1102,7 @@ export async function settleProjectAgentPreparedApprovalHandoff(input: {
   episodeId?: string | null
   assistantId?: ProjectAssistantId
   message: UIMessage
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
   continuation?: ProjectAgentExecutionSegmentContinuation | null
 }): Promise<ProjectAgentApprovalSuspensionReceipt> {
   const assistantId = input.assistantId ?? 'workspace-command'
@@ -1153,6 +1175,7 @@ export async function settleProjectAgentPreparedApprovalHandoff(input: {
       message: input.message,
       outcome: 'awaiting_approval',
       sourceOperationId: handoff.operationId,
+      ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
       continuation: input.continuation ?? null,
     })
     assertProjectAgentOperationExecutionFenceSignal(input.executionFence)
@@ -1205,6 +1228,37 @@ export async function recoverProjectAgentPreparedExecutionHandoff(input: {
   }
   if (handoff.kind === 'choice') {
     const payload = parseChoicePayload(handoff.payload)
+    const modelSession = new ProjectAgentModelSession({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId: input.assistantId ?? 'workspace-command',
+    }, handoff.executionSegmentId)
+    const modelHistoryCommit = await modelSession.buildPreparedHandoffRecoveryCommit([
+      {
+        type: 'function_call',
+        callId: payload.card.toolCallId,
+        name: handoff.operationId,
+        status: 'completed',
+        arguments: JSON.stringify(payload.modelArguments),
+      },
+      {
+        type: 'function_call_result',
+        callId: payload.card.toolCallId,
+        name: handoff.operationId,
+        status: 'completed',
+        output: {
+          type: 'text',
+          text: JSON.stringify({
+            ok: true,
+            data: {
+              emitted: true,
+              cardId: payload.card.cardId,
+            },
+          }),
+        },
+      },
+    ])
     await settleProjectAgentPreparedChoiceHandoff({
       executionFence: input.executionFence,
       handoff: {
@@ -1224,12 +1278,20 @@ export async function recoverProjectAgentPreparedExecutionHandoff(input: {
         role: 'assistant',
         parts: [{ type: 'text', text: payload.card.description ?? payload.card.title }],
       },
+      modelHistoryCommit,
       continuation: input.continuation ?? null,
     })
     return 'choice'
   }
   if (handoff.kind === 'approval') {
     const payload = parseApprovalPayload(handoff.payload)
+    const modelSession = new ProjectAgentModelSession({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId: input.assistantId ?? 'workspace-command',
+    }, handoff.executionSegmentId)
+    const modelHistoryCommit = await modelSession.buildPreparedHandoffRecoveryCommit([])
     await settleProjectAgentPreparedApprovalHandoff({
       executionFence: input.executionFence,
       handoff: {
@@ -1256,6 +1318,7 @@ export async function recoverProjectAgentPreparedExecutionHandoff(input: {
           ),
         }],
       },
+      modelHistoryCommit,
       continuation: input.continuation ?? null,
     })
     return 'approval'

@@ -1,7 +1,6 @@
 import {
   createUIMessageStreamResponse,
   readUIMessageStream,
-  safeValidateUIMessages,
   type UIMessage,
 } from 'ai'
 import {
@@ -57,7 +56,10 @@ import {
   buildProjectAgentContextTelemetry,
   measureProjectAgentToolSchemas,
 } from './context-telemetry'
-import { decideProjectAgentModelInput } from './model-input/filter'
+import {
+  collectProjectAgentFunctionCallIds,
+  decideProjectAgentModelInput,
+} from './model-input/filter'
 import { compactProjectAgentConversation } from './model-input/compaction'
 import { estimateProjectAgentTokens } from './model-input/estimate'
 import {
@@ -79,7 +81,10 @@ import {
   isProjectAgentRunOwnershipLostError,
   startProjectAgentRunHeartbeat,
 } from './run-heartbeat'
-import type { ProjectAgentChoiceResult } from './choice-result'
+import {
+  buildProjectAgentChoiceResponseInputItem,
+  type ProjectAgentChoiceDecision,
+} from './choice-result'
 import {
   type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
@@ -135,7 +140,11 @@ import {
   appendProjectAssistantMediaAttachmentsToUserText,
   readProjectAssistantMediaAttachmentsFromMessage,
 } from './media-attachments'
-import { appendProjectAssistantThreadMessages } from './persistence'
+import {
+  appendProjectAssistantThreadMessages,
+  type ProjectAssistantModelHistoryCommit,
+} from './persistence'
+import { ProjectAgentModelSession } from './model-session'
 import {
   mergeOperationPlanViewsForApproval,
   type OperationPlanView,
@@ -220,6 +229,7 @@ function resolveProjectAgentRunFailureTerminal(params: {
 export type ProjectAgentResolvedControl =
   | {
     kind: 'user_turn'
+    message: UIMessage
     declinedInterruptions: DeclinedProjectAgentInterruption[]
   }
   | {
@@ -231,10 +241,10 @@ export type ProjectAgentResolvedControl =
   | {
     kind: 'choice'
     interruptionId: string
-    toolCallId: string | null
-    cardId: string | null
+    toolCallId: string
+    cardId: string
     appliedOperationId: string | null
-    choiceResult: ProjectAgentChoiceResult
+    decision: ProjectAgentChoiceDecision
   }
   | {
     kind: 'task_follow_up'
@@ -244,6 +254,7 @@ export type ProjectAgentResolvedControl =
 export interface ProjectAgentTaskFollowUpSettlement {
   outcome: ProjectAgentContinuationTerminalOutcome
   message: UIMessage
+  modelHistoryCommit: ProjectAssistantModelHistoryCommit
 }
 
 function isRecord(value: unknown): value is UnknownObject {
@@ -286,40 +297,20 @@ function readTextFromParts(parts: readonly unknown[]): string {
   }).join('\n')
 }
 
-function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
-  const items: AgentInputItem[] = []
-  for (const message of messages) {
-    const text = readTextFromParts(message.parts)
-    if (message.role === 'user') {
-      const attachments = readProjectAssistantTextAttachmentsFromMessage(message)
-      const mediaAttachments = readProjectAssistantMediaAttachmentsFromMessage(message)
-      const content = appendProjectAssistantMediaAttachmentsToUserText({
-        userText: appendProjectAssistantTextAttachmentsToUserText({
-          userText: text,
-          attachments,
-        }),
-        attachments: mediaAttachments,
-      })
-      if (!content.trim()) continue
-      items.push({
-        role: 'user',
-        content,
-      } satisfies AgentInputItem)
-      continue
-    }
-    if (!text.trim()) continue
-    if (message.role === 'assistant') {
-      items.push({
-        role: 'assistant',
-        status: 'completed',
-        content: [{
-          type: 'output_text',
-          text,
-        }],
-      } satisfies AgentInputItem)
-    }
-  }
-  return items
+function buildProjectAgentUserTurnInputItem(message: UIMessage): AgentInputItem {
+  if (message.role !== 'user') throw new Error('PROJECT_AGENT_USER_TURN_MESSAGE_ROLE_INVALID')
+  const content = appendProjectAssistantMediaAttachmentsToUserText({
+    userText: appendProjectAssistantTextAttachmentsToUserText({
+      userText: readTextFromParts(message.parts),
+      attachments: readProjectAssistantTextAttachmentsFromMessage(message),
+    }),
+    attachments: readProjectAssistantMediaAttachmentsFromMessage(message),
+  })
+  if (!content.trim()) throw new Error('PROJECT_AGENT_USER_TURN_CONTENT_REQUIRED')
+  return {
+    role: 'user',
+    content,
+  } satisfies AgentInputItem
 }
 
 function createAgentRunStatusChunk(params: {
@@ -797,7 +788,6 @@ export async function createProjectAgentChatResponse(input: {
   userId: string
   projectId: string
   context: unknown
-  messages: unknown
   run: ProjectAgentRunRecord
   control: ProjectAgentResolvedControl
   runLock?: ProjectAgentRunLock | null
@@ -809,14 +799,6 @@ export async function createProjectAgentChatResponse(input: {
 }): Promise<Response> {
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
   const runFence = createProjectAgentRunFence(input.run)
-  const validation = await safeValidateUIMessages({ messages: input.messages })
-  if (!validation.success) {
-    throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
-  }
-  const normalizedMessages = validation.data
-  if (normalizedMessages.length === 0) {
-    throw new Error('PROJECT_AGENT_EMPTY_MESSAGES')
-  }
 
   const assistantModelKey = await resolveProjectAgentAssistantModelKey(input.userId)
   const billingConfirmationRequired = await readAssistantBillingConfirmationRequired(input.userId)
@@ -877,10 +859,9 @@ export async function createProjectAgentChatResponse(input: {
     runFence,
     executionSegmentId: executionSegment.id,
     userTurnText: control.kind === 'user_turn'
-      && normalizedMessages[normalizedMessages.length - 1]?.role === 'user'
-      ? readTextFromParts(normalizedMessages[normalizedMessages.length - 1]?.parts ?? []) || null
+      ? readTextFromParts(control.message.parts) || null
       : null,
-    choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
+    choiceDecision: control.kind === 'choice' ? control.decision : null,
     ...(issuedApprovalGrants.length > 0
       ? {
           approvedInvocationByToolCallId,
@@ -966,6 +947,7 @@ export async function createProjectAgentChatResponse(input: {
     await heartbeatController.stop()
   }
   const requestId = stableRequestId
+  let modelSession: ProjectAgentModelSession | null = null
 
   try {
     heartbeatController = startProjectAgentRunHeartbeat({
@@ -995,7 +977,13 @@ export async function createProjectAgentChatResponse(input: {
         }],
       })
     }
-    const runtimeMessages = normalizedMessages
+    modelSession = new ProjectAgentModelSession({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: context.episodeId || null,
+      assistantId: 'workspace-command',
+    }, executionSegment.id)
+    const activeModelSession = modelSession
 
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
@@ -1059,13 +1047,13 @@ export async function createProjectAgentChatResponse(input: {
   // inside the per-step filter: summarising mid-run would rewrite a prefix the
   // provider is still caching for the steps that follow.
   const compaction = control.kind === 'approval'
-    ? null
+    ? {
+        historyItems: await activeModelSession.getItems(),
+        compacted: null,
+      }
     : await compactProjectAgentConversation({
-        projectId: input.projectId,
+        session: activeModelSession,
         userId: input.userId,
-        episodeId: context.episodeId || null,
-        assistantId: 'workspace-command',
-        messages: runtimeMessages,
         signal: runAbortController.signal,
         onFailure: (error) => {
           projectAgentLogger.warn({
@@ -1078,25 +1066,26 @@ export async function createProjectAgentChatResponse(input: {
           })
         },
       })
-  const compactedMessages = compaction?.messages ?? runtimeMessages
-  const conversationInputItems: AgentInputItem[] = control.kind === 'approval'
-    ? []
-    : [
-        ...(compaction?.summaryInputItem ? [compaction.summaryInputItem] : []),
-        ...(control.kind === 'user_turn'
-          ? withDeclinedApprovalsNote(
-              toAgentInputItems(compactedMessages),
-              buildDeclinedApprovalsInputItem(control.declinedInterruptions),
-            )
-          : toAgentInputItems(compactedMessages)),
-      ]
+  const sessionHistoryItems = compaction.historyItems
+  const conversationInputItems: AgentInputItem[] = control.kind === 'user_turn'
+    ? withDeclinedApprovalsNote(
+        [buildProjectAgentUserTurnInputItem(control.message)],
+        buildDeclinedApprovalsInputItem(control.declinedInterruptions),
+      )
+    : control.kind === 'choice'
+      ? [buildProjectAgentChoiceResponseInputItem({
+          decision: control.decision,
+          toolCallId: control.toolCallId,
+          cardId: control.cardId,
+        })]
+      : control.kind === 'task_follow_up'
+        ? [buildTaskFollowUpInputItem(control.followUp)]
+        : []
   const agentPlanInputItem = currentPlan ? buildProjectAgentPlanInputItem(currentPlan) : null
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
     : [
         ...conversationInputItems,
-        ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
-        ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
         projectStateInputItem,
         ...(agentPlanInputItem ? [agentPlanInputItem] : []),
       ]
@@ -1118,11 +1107,11 @@ export async function createProjectAgentChatResponse(input: {
       projectId: input.projectId,
       episodeId: context.episodeId || null,
       messageCounts: {
-        normalized: normalizedMessages.length,
-        runtime: runtimeMessages.length,
-        model: agentInput.length,
+        normalized: conversationInputItems.length,
+        runtime: sessionHistoryItems.length,
+        model: sessionHistoryItems.length + agentInput.length,
       },
-      contextTokenEstimate: estimateContextTokens(agentInput),
+      contextTokenEstimate: estimateContextTokens([...sessionHistoryItems, ...agentInput]),
       toolset: {
         source: toolset.source,
         operationIds: [...toolset.operationIds],
@@ -1155,10 +1144,10 @@ export async function createProjectAgentChatResponse(input: {
       } satisfies ProjectAgentInterruptionResolvedPartData))
     }
   }
-  if (compaction?.compacted) {
+  if (compaction.compacted) {
     initialChunks.push(createDataChunk('data-assistant-context-compacted', {
       runId: input.run.id,
-      summarizedMessageCount: compaction.compacted.summarizedMessageCount,
+      summarizedItemCount: compaction.compacted.summarizedItemCount,
       summaryText: compaction.compacted.summaryText,
     } satisfies ProjectAgentContextCompactedPartData))
   }
@@ -1391,7 +1380,7 @@ export async function createProjectAgentChatResponse(input: {
   const contextComposition = buildProjectAgentContextComposition({
     instructions: systemPrompt,
     toolSchemas: toolSchemaMeasurement,
-    conversation: conversationInputItems,
+    conversation: [...sessionHistoryItems, ...conversationInputItems],
     projectState: projectStateInputItem,
     agentPlan: agentPlanInputItem,
   })
@@ -1399,6 +1388,10 @@ export async function createProjectAgentChatResponse(input: {
     modelKey: assistantModelKey,
     toolSchemaTokens: estimateProjectAgentTokens(toolSchemaMeasurement),
     locale,
+    staleToolDiscoveryCallIds: collectProjectAgentFunctionCallIds(
+      sessionHistoryItems,
+      PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+    ),
     // Enumerated from the production registry so a new Operation whose result
     // cannot be re-fetched is protected by declaring it, not by editing a
     // second list here.
@@ -1483,6 +1476,7 @@ export async function createProjectAgentChatResponse(input: {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
+      session: activeModelSession,
       toolNotFoundBehavior: 'return_error_to_model',
       toolErrorFormatter: ({ kind, toolName }) => (
         kind === 'tool_not_found'
@@ -1641,6 +1635,7 @@ export async function createProjectAgentChatResponse(input: {
         episodeId: context.episodeId || null,
         assistantId: 'workspace-command',
         messages: [message],
+        modelHistoryCommit: await activeModelSession.buildCommit(),
       })
       assistantMessagePersisted = true
     }
@@ -1658,6 +1653,7 @@ export async function createProjectAgentChatResponse(input: {
         expectedStatuses: ['running'],
         ...pendingRunSettlement,
         message,
+        modelHistoryCommit: await activeModelSession.buildCommit(),
       })
       assistantMessagePersisted = true
       pendingRunSettlement = null
@@ -1888,6 +1884,7 @@ export async function createProjectAgentChatResponse(input: {
             episodeId: context.episodeId || null,
             assistantId: 'workspace-command',
             message: await buildAssistantMessageOnce(),
+            modelHistoryCommit: await activeModelSession.buildCommit(),
             continuation: control.kind === 'task_follow_up'
               ? (() => {
                   const claimOwner = input.continuationClaim?.claimOwner
@@ -1943,6 +1940,7 @@ export async function createProjectAgentChatResponse(input: {
               episodeId: context.episodeId || null,
               assistantId: 'workspace-command',
               message: await buildAssistantMessageOnce(),
+              modelHistoryCommit: await activeModelSession.buildCommit(),
               continuation: control.kind === 'task_follow_up'
                 ? (() => {
                     const claimOwner = input.continuationClaim?.claimOwner
@@ -2058,6 +2056,7 @@ export async function createProjectAgentChatResponse(input: {
               await input.settleTaskFollowUp({
                 outcome: taskFollowUpSettlement,
                 message: await buildAssistantMessageOnce(),
+                modelHistoryCommit: await activeModelSession.buildCommit(),
               })
             }
           } else {
@@ -2102,11 +2101,17 @@ export async function createProjectAgentChatResponse(input: {
           errorCode: 'PROJECT_AGENT_RUN_FAILED',
           errorMessage: error instanceof Error ? error.message : String(error),
         })
+        // Once Session exists, its snapshot is part of the terminal
+        // transaction. Do not advance the Run while silently abandoning a
+        // staged model history; leaving the Run recoverable is safer than
+        // creating a UI/model-history split.
+        const modelHistoryCommit = await modelSession?.buildCommit()
         await settleProjectAgentRunFailureWithMessage({
           runFence,
           controlKind: executionControlKind,
           requestId,
           ...terminal,
+          ...(modelHistoryCommit ? { modelHistoryCommit } : {}),
         })
       }
     } finally {

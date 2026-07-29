@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type {
@@ -110,9 +111,9 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
       summary: 'Ask the user exactly one current question using a model-authored Choice card. Author the complete card copy and options in the conversation language. Titles, descriptions, and button labels must describe only this decision and must never promise a downstream step such as "confirm and generate". Use commitments only when this answer may atomically invoke one explicitly Choice-eligible operation; otherwise pass an empty array. This operation neither prescribes nor starts a later workflow.',
       intent: 'query',
       toolExposure: 'direct',
-      // The answer arrives as a synthetic tool result and exists nowhere else.
-      // Re-issuing the call would ask the user the same question again, so this
-      // result must survive context shedding.
+      // The SDK Session keeps the original authored call and its receipt so a
+      // later canonical choice_response can still resolve option ids to their
+      // model-authored labels. Re-issuing would ask the same question again.
       modelResultRetention: 'irreplaceable',
       effects: EFFECTS_NONE,
       agentFlow: { suspendsFor: 'choice' },
@@ -162,6 +163,7 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
           card,
           subject,
           commitments,
+          modelArguments: input as unknown as Prisma.InputJsonValue,
         })
         return requestChoiceOutputSchema.parse({
           emitted: true,

@@ -133,6 +133,34 @@ function calledToolsAfter(request: GoldenChatCompletionRequest, messageIndex: nu
   return called
 }
 
+/**
+ * A resumed Choice must carry the original model-authored call, not a
+ * synthetic call with `{}` arguments. This assertion lives at the external
+ * model boundary so the Golden Journey rejects the exact production failure:
+ * the UI card still looks correct while the next model request has forgotten
+ * what every option means.
+ */
+function assertCompleteChoiceHistoryAfter(
+  request: GoldenChatCompletionRequest,
+  messageIndex: number,
+): void {
+  const choiceArguments = request.messages.slice(messageIndex + 1).flatMap((message) => {
+    if (!Array.isArray(message.tool_calls)) return []
+    return message.tool_calls.flatMap((toolCall) => {
+      const fn = asRecord(asRecord(toolCall)?.function)
+      if (fn?.name !== 'request_choice' || typeof fn.arguments !== 'string') return []
+      try {
+        return [asRecord(JSON.parse(fn.arguments))]
+      } catch {
+        return [null]
+      }
+    })
+  })
+  if (choiceArguments.length === 0) return
+  if (choiceArguments.some((value) => asRecord(value?.subject) && asRecord(value?.card))) return
+  throw new Error('GOLDEN_CHOICE_MODEL_HISTORY_ARGUMENTS_MISSING')
+}
+
 function allCalledTools(request: GoldenChatCompletionRequest): ReadonlySet<string> {
   return calledToolsAfter(request, -1)
 }
@@ -801,6 +829,7 @@ export function decideGoldenModelResponse(input: {
   }
 
   const instruction = latestFreeformInstruction(input.request)
+  if (instruction) assertCompleteChoiceHistoryAfter(input.request, instruction.index)
   if (instruction?.text.includes(GOLDEN_STOP_REPLY_REQUEST)) {
     return { kind: 'text', text: `STOP_REPLY_STREAM_BEGIN ${'deterministic-stream-chunk '.repeat(200)}` }
   }

@@ -238,7 +238,7 @@
     "choiceCustomOptionLabel": "Other {label}",
     "choiceCustomOptionPlaceholder": "Other {label}",
     "choiceCustomOptionSubmit": "Select other {label}",
-    "contextCompacted": "Condensed {count} earlier messages"
+    "contextCompacted": "Condensed {count} earlier conversation records"
   },
   "choiceCard": {
     "groupProgress": "Question {current} of {total}"

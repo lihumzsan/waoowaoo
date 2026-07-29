@@ -1,4 +1,4 @@
-import type { UIMessage } from 'ai'
+import type { AgentInputItem } from '@openai/agents'
 import { generateText } from 'ai'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
@@ -14,26 +14,13 @@ import {
   type ProjectAgentConversationSummary,
 } from './summary'
 
-/**
- * Extends a stored conversation summary with newly aged-out messages.
- *
- * Runs on the utility model rather than the Primary Agent's: this is short
- * mechanical work, and doing it on the conversation model would mean paying
- * top-tier rates to compress text nobody reads.
- *
- * One model call, no retry. If it fails the caller falls back to shedding more
- * recoverable context; a failed summary is a missed optimisation, never a
- * reason to fail the user's turn.
- */
 export async function extendProjectAgentConversationSummary(input: {
   userId: string
   previous: ProjectAgentConversationSummary | null
-  newlySummarized: readonly UIMessage[]
+  newlySummarized: readonly AgentInputItem[]
   signal?: AbortSignal
 }): Promise<ProjectAgentConversationSummary | null> {
-  const watermark = input.newlySummarized[input.newlySummarized.length - 1]
-  if (!watermark) return input.previous
-
+  if (input.newlySummarized.length === 0) return input.previous
   const transcript = buildProjectAgentSummaryTranscript(input.newlySummarized)
   if (!transcript.trim()) return input.previous
 
@@ -69,11 +56,9 @@ export async function extendProjectAgentConversationSummary(input: {
 
   const summaryText = generated.text.trim()
   if (!summaryText) return input.previous
-
   return projectAgentConversationSummarySchema.parse({
     version: PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION,
-    summarizedThroughMessageId: watermark.id,
-    summarizedMessageCount: (input.previous?.summarizedMessageCount ?? 0) + input.newlySummarized.length,
+    summarizedItemCount: (input.previous?.summarizedItemCount ?? 0) + input.newlySummarized.length,
     summaryText,
   } satisfies ProjectAgentConversationSummary)
 }

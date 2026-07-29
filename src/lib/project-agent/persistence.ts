@@ -1,10 +1,10 @@
 import { Prisma, type ProjectAssistantThread } from '@prisma/client'
+import { protocol, type AgentInputItem } from '@openai/agents'
 import { isDeepStrictEqual } from 'node:util'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { ensureUniqueUIMessages } from './ui-message-validation'
 import type { ProjectAssistantId, ProjectAssistantThreadSnapshot } from './types'
-import { parseProjectAgentConversationSummary } from './model-input/summary'
 
 interface ProjectAssistantThreadScopeInput {
   projectId: string
@@ -16,16 +16,30 @@ export interface ProjectAssistantThreadIdentity extends ProjectAssistantThreadSc
   assistantId: ProjectAssistantId
 }
 
+export interface ProjectAssistantModelHistoryCommit {
+  executionSegmentId: string
+  expectedVersion: number
+  items: readonly AgentInputItem[]
+}
+
+export interface ProjectAssistantModelHistorySnapshot {
+  version: number
+  items: AgentInputItem[]
+  pending: {
+    executionSegmentId: string
+    baseVersion: number
+    ready: boolean
+    items: AgentInputItem[]
+  } | null
+}
+
 interface AppendProjectAssistantThreadMessagesInput extends ProjectAssistantThreadIdentity {
   messages: unknown
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
 }
 
 interface ReplaceProjectAssistantThreadPlanInput extends ProjectAssistantThreadIdentity {
   planJson: Prisma.InputJsonValue | typeof Prisma.DbNull
-}
-
-interface ReplaceProjectAssistantThreadSummaryInput extends ProjectAssistantThreadIdentity {
-  summaryJson: Prisma.InputJsonValue | typeof Prisma.DbNull
 }
 
 type ProjectAssistantThreadTransactionClient = Prisma.TransactionClient
@@ -36,6 +50,24 @@ function buildProjectAssistantScopeRef(input: ProjectAssistantThreadScopeInput):
 
 function serializeMessages(messages: UIMessage[]): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(ensureUniqueUIMessages(messages))) as Prisma.InputJsonValue
+}
+
+function validateModelHistoryItem(value: unknown): AgentInputItem {
+  const parsed = protocol.ModelItem.safeParse(value)
+  if (!parsed.success) {
+    throw new Error('PROJECT_ASSISTANT_MODEL_HISTORY_ITEM_INVALID')
+  }
+  return structuredClone(value) as AgentInputItem
+}
+
+function parseModelHistory(value: unknown): AgentInputItem[] {
+  if (!Array.isArray(value)) throw new Error('PROJECT_ASSISTANT_MODEL_HISTORY_INVALID')
+  return value.map(validateModelHistoryItem)
+}
+
+function serializeModelHistory(items: readonly AgentInputItem[]): Prisma.InputJsonValue {
+  const serialized = JSON.parse(JSON.stringify(items)) as unknown
+  return parseModelHistory(serialized) as unknown as Prisma.InputJsonValue
 }
 
 async function validateMessages(messages: unknown): Promise<UIMessage[]> {
@@ -54,7 +86,6 @@ function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[])
     episodeId: record.episodeId,
     scopeRef: record.scopeRef,
     messages,
-    summary: parseProjectAgentConversationSummary(record.summaryJson),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   }
@@ -126,6 +157,142 @@ export async function loadProjectAssistantThread(
   return toThreadSnapshot(record, messages)
 }
 
+export async function loadProjectAssistantModelHistory(
+  input: ProjectAssistantThreadIdentity,
+): Promise<ProjectAssistantModelHistorySnapshot> {
+  const record = await prisma.projectAssistantThread.findUnique({
+    where: {
+      projectId_userId_assistantId_scopeRef: {
+        projectId: input.projectId,
+        userId: input.userId,
+        assistantId: input.assistantId,
+        scopeRef: buildProjectAssistantScopeRef(input),
+      },
+    },
+    select: {
+      modelHistoryJson: true,
+      modelHistoryVersion: true,
+      pendingModelHistoryJson: true,
+      pendingModelHistorySegmentId: true,
+      pendingModelHistoryBaseVersion: true,
+      pendingModelHistoryReady: true,
+    },
+  })
+  if (!record) return { version: 0, items: [], pending: null }
+  const hasPendingIdentity = record.pendingModelHistorySegmentId !== null
+  const hasPendingPayload = record.pendingModelHistoryJson !== null
+    && record.pendingModelHistoryBaseVersion !== null
+  if (hasPendingIdentity !== hasPendingPayload) {
+    throw new Error('PROJECT_ASSISTANT_PENDING_MODEL_HISTORY_INCOMPLETE')
+  }
+  return {
+    version: record.modelHistoryVersion,
+    items: parseModelHistory(record.modelHistoryJson),
+    pending: hasPendingIdentity && hasPendingPayload
+      ? {
+          executionSegmentId: record.pendingModelHistorySegmentId as string,
+          baseVersion: record.pendingModelHistoryBaseVersion as number,
+          ready: record.pendingModelHistoryReady,
+          items: parseModelHistory(record.pendingModelHistoryJson),
+        }
+      : null,
+  }
+}
+
+export async function stageProjectAssistantModelHistory(
+  input: ProjectAssistantThreadIdentity & ProjectAssistantModelHistoryCommit & { ready: boolean },
+): Promise<void> {
+  const scopeRef = buildProjectAssistantScopeRef(input)
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM project_assistant_threads
+      WHERE projectId = ${input.projectId}
+        AND userId = ${input.userId}
+        AND assistantId = ${input.assistantId}
+        AND scopeRef = ${scopeRef}
+      FOR UPDATE
+    `)
+    if (locked.length !== 1) {
+      throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)
+    }
+    const record = await tx.projectAssistantThread.findUnique({
+      where: {
+        projectId_userId_assistantId_scopeRef: {
+          projectId: input.projectId,
+          userId: input.userId,
+          assistantId: input.assistantId,
+          scopeRef,
+        },
+      },
+      select: {
+        id: true,
+        modelHistoryVersion: true,
+        pendingModelHistorySegmentId: true,
+        pendingModelHistoryBaseVersion: true,
+        pendingModelHistoryReady: true,
+      },
+    })
+    if (!record) throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)
+    if (record.modelHistoryVersion !== input.expectedVersion) {
+      throw new Error(
+        `PROJECT_ASSISTANT_MODEL_HISTORY_VERSION_CONFLICT:${record.modelHistoryVersion}:${input.expectedVersion}`,
+      )
+    }
+    if (
+      record.pendingModelHistorySegmentId !== null
+      && (
+        record.pendingModelHistorySegmentId !== input.executionSegmentId
+        || record.pendingModelHistoryBaseVersion !== input.expectedVersion
+      )
+    ) {
+      throw new Error(
+        `PROJECT_ASSISTANT_PENDING_MODEL_HISTORY_CONFLICT:${record.pendingModelHistorySegmentId}:${input.executionSegmentId}`,
+      )
+    }
+    await tx.projectAssistantThread.update({
+      where: { id: record.id },
+      data: {
+        pendingModelHistoryJson: serializeModelHistory(input.items),
+        pendingModelHistorySegmentId: input.executionSegmentId,
+        pendingModelHistoryBaseVersion: input.expectedVersion,
+        pendingModelHistoryReady: record.pendingModelHistoryReady || input.ready,
+      },
+    })
+  })
+}
+
+/**
+ * Cancellation may discard only a pending segment proven to belong to the
+ * cancelled Run. Committed history is immutable here, and a concurrent/newer
+ * segment cannot match the explicit execution identity set.
+ */
+export async function discardProjectAssistantPendingModelHistoryInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: ProjectAssistantThreadIdentity & { executionSegmentIds: readonly string[] },
+): Promise<boolean> {
+  const executionSegmentIds = Array.from(new Set(
+    input.executionSegmentIds.map((value) => value.trim()).filter(Boolean),
+  ))
+  if (executionSegmentIds.length === 0) return false
+  const discarded = await tx.projectAssistantThread.updateMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      assistantId: input.assistantId,
+      scopeRef: buildProjectAssistantScopeRef(input),
+      pendingModelHistorySegmentId: { in: executionSegmentIds },
+    },
+    data: {
+      pendingModelHistoryJson: Prisma.DbNull,
+      pendingModelHistorySegmentId: null,
+      pendingModelHistoryBaseVersion: null,
+      pendingModelHistoryReady: false,
+    },
+  })
+  return discarded.count === 1
+}
+
 export async function appendProjectAssistantThreadMessages(
   input: AppendProjectAssistantThreadMessagesInput,
 ): Promise<ProjectAssistantThreadSnapshot> {
@@ -167,6 +334,7 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
       assistantId: input.assistantId,
       scopeRef,
       messagesJson: serializeMessages([]),
+      modelHistoryJson: serializeModelHistory([]),
     },
   })
   const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -193,7 +361,30 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
   })
   const existingMessages = await readThreadMessages(existingRecord)
   const nextMessages = mergeAppendMessages(existingMessages, appendedMessages)
-  if (existingRecord && nextMessages.length === existingMessages.length) {
+  const modelHistoryCommit = input.modelHistoryCommit
+  if (
+    modelHistoryCommit
+    && existingRecord
+    && existingRecord.modelHistoryVersion !== modelHistoryCommit.expectedVersion
+  ) {
+    throw new Error(
+      `PROJECT_ASSISTANT_MODEL_HISTORY_VERSION_CONFLICT:${existingRecord.modelHistoryVersion}:${modelHistoryCommit.expectedVersion}`,
+    )
+  }
+  if (modelHistoryCommit && existingRecord) {
+    const serializedModelHistory = serializeModelHistory(modelHistoryCommit.items)
+    if (
+      existingRecord.pendingModelHistorySegmentId !== modelHistoryCommit.executionSegmentId
+      || existingRecord.pendingModelHistoryBaseVersion !== modelHistoryCommit.expectedVersion
+      || existingRecord.pendingModelHistoryReady !== true
+      || !isDeepStrictEqual(existingRecord.pendingModelHistoryJson, serializedModelHistory)
+    ) {
+      throw new Error(
+        `PROJECT_ASSISTANT_PENDING_MODEL_HISTORY_NOT_READY:${modelHistoryCommit.executionSegmentId}`,
+      )
+    }
+  }
+  if (existingRecord && nextMessages.length === existingMessages.length && !modelHistoryCommit) {
     return toThreadSnapshot(existingRecord, existingMessages)
   }
 
@@ -205,6 +396,16 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
     data: {
       episodeId: input.episodeId || null,
       messagesJson: serializeMessages(nextMessages),
+      ...(modelHistoryCommit
+        ? {
+            modelHistoryJson: serializeModelHistory(modelHistoryCommit.items),
+            modelHistoryVersion: { increment: 1 },
+            pendingModelHistoryJson: Prisma.DbNull,
+            pendingModelHistorySegmentId: null,
+            pendingModelHistoryBaseVersion: null,
+            pendingModelHistoryReady: false,
+          }
+        : {}),
     },
   })
   return toThreadSnapshot(record, nextMessages)
@@ -223,30 +424,6 @@ export async function replaceProjectAssistantThreadPlanInTransaction(
       scopeRef,
     },
     data: { planJson: input.planJson },
-  })
-  if (updated.count !== 1) {
-    throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)
-  }
-}
-
-/**
- * Single writer for the conversation summary. It shares the thread row, and so
- * the thread's scope and lifecycle, rather than introducing a second record
- * that could outlive or contradict the messages it summarises.
- */
-export async function replaceProjectAssistantThreadSummaryInTransaction(
-  tx: ProjectAssistantThreadTransactionClient,
-  input: ReplaceProjectAssistantThreadSummaryInput,
-): Promise<void> {
-  const scopeRef = buildProjectAssistantScopeRef(input)
-  const updated = await tx.projectAssistantThread.updateMany({
-    where: {
-      projectId: input.projectId,
-      userId: input.userId,
-      assistantId: input.assistantId,
-      scopeRef,
-    },
-    data: { summaryJson: input.summaryJson },
   })
   if (updated.count !== 1) {
     throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND:${input.projectId}:${scopeRef}`)

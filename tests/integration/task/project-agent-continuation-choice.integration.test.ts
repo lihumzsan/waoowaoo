@@ -189,6 +189,20 @@ describe('Project Agent continuation Choice DB integration', () => {
         fingerprint: fingerprintProjectAgentChoiceSubject('none', { card, commitments }),
       },
       commitments,
+      modelArguments: {
+        subject: { kind: 'none' },
+        card: {
+          kind: 'confirm_or_text',
+          title: card.title,
+          description: card.description,
+          confirmation: { label: card.submitLabel },
+          reply: {
+            label: card.replyLabel,
+            placeholder: card.replyPlaceholder,
+            submitLabel: card.replySubmitLabel,
+          },
+        },
+      },
     })
     const suspension = await settleProjectAgentPreparedChoiceHandoff({
       executionFence,

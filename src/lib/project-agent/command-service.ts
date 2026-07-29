@@ -4,8 +4,6 @@ import type { NextRequest } from 'next/server'
 import { getRequestId } from '@/lib/api-errors'
 import { createProjectAgentChatResponse } from './runtime'
 import type { ProjectAgentResolvedControl } from './runtime'
-import { loadProjectAssistantThread } from './persistence'
-import { ensureUniqueUIMessages } from './ui-message-validation'
 import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
@@ -22,7 +20,6 @@ import {
   readRetryableConsumedProjectAgentChoiceInterruption,
   type DeclinedProjectAgentInterruption,
 } from './interruptions'
-import { buildProjectAgentChoiceResultFromDecision } from './choice-result'
 import {
   createProjectAgentConsumedControlRetryRun,
   createProjectAgentUserTurnRun,
@@ -92,33 +89,6 @@ function readVisibleUserText(command: ProjectAgentCommand): string | null {
   }
 }
 
-function isWorkspaceAssistantHiddenMessage(message: UIMessage): boolean {
-  const metadata = message.metadata
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
-  const custom = (metadata as Record<string, unknown>).custom
-  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return false
-  return (custom as Record<string, unknown>).workspaceAssistantHidden === true
-}
-
-function readLatestVisibleUserText(messages: readonly UIMessage[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (!message || message.role !== 'user') continue
-    if (isWorkspaceAssistantHiddenMessage(message)) continue
-    const text = message.parts
-      .flatMap((part) => {
-        const record = part as { type?: unknown; text?: unknown }
-        return record.type === 'text' && typeof record.text === 'string' && record.text.trim()
-          ? [record.text]
-          : []
-      })
-      .join('\n')
-      .trim()
-    if (text) return text
-  }
-  return ''
-}
-
 function buildControlVisibleUserMessage(params: {
   controlAction: ProjectAgentControlAction
   text: string
@@ -131,19 +101,6 @@ function buildControlVisibleUserMessage(params: {
       text: params.text,
     }],
   }
-}
-
-async function loadAuthoritativeThreadMessages(scope: ProjectAgentCommandScope): Promise<UIMessage[]> {
-  const thread = await loadProjectAssistantThread(scope)
-  return thread?.messages ?? []
-}
-
-function appendUniqueMessages(existing: readonly UIMessage[], appended: readonly UIMessage[]): UIMessage[] {
-  const existingIds = new Set(existing.map((message) => message.id))
-  return ensureUniqueUIMessages([
-    ...existing,
-    ...appended.filter((message) => !existingIds.has(message.id)),
-  ])
 }
 
 async function resolveProjectAgentRunForControl(params: {
@@ -162,7 +119,7 @@ async function resolveProjectAgentControl(params: {
   request: NextRequest
   controlAction: ProjectAgentControlAction | null
   scope: ProjectAgentCommandScope
-  messages: UIMessage[]
+  userMessage: UIMessage | null
   declinedInterruptions: readonly DeclinedProjectAgentInterruption[]
   visibleUserMessages: UIMessage[]
   operationSignal: AbortSignal | null
@@ -171,9 +128,11 @@ async function resolveProjectAgentControl(params: {
   const { controlAction, scope } = params
 
   if (!controlAction) {
+    if (!params.userMessage) throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
     return {
       control: {
         kind: 'user_turn',
+        message: params.userMessage,
         declinedInterruptions: [...params.declinedInterruptions],
       },
       retryInterruptionId: null,
@@ -234,11 +193,7 @@ async function resolveProjectAgentControl(params: {
       toolCallId: consumedChoice.offer.card.toolCallId,
       cardId: consumedChoice.offer.card.cardId,
       appliedOperationId: consumedChoice.appliedOperationId,
-      choiceResult: buildProjectAgentChoiceResultFromDecision({
-        decision: consumedChoice.parsedResponse,
-        toolCallId: consumedChoice.offer.card.toolCallId,
-        operationId: consumedChoice.operationId,
-      }),
+      decision: consumedChoice.parsedResponse,
     },
     retryInterruptionId: consumed ? null : consumedChoice.id,
   }
@@ -274,14 +229,11 @@ export async function executeProjectAgentCommand(
   let declinedInterruptions: DeclinedProjectAgentInterruption[] = []
   let controlTransitioned = false
   try {
-    const existingMessages = await loadAuthoritativeThreadMessages(scope)
     const visibleUserText = readVisibleUserText(command)
     const visibleUserMessages = controlAction && visibleUserText
       ? [buildControlVisibleUserMessage({ controlAction, text: visibleUserText })]
       : []
     const userMessage = command.kind === 'user_turn' ? command.message : null
-    const newMessages = userMessage ? [userMessage] : visibleUserMessages
-    const messages = appendUniqueMessages(existingMessages, newMessages)
 
     if (controlAction) {
       run = existingControlRun
@@ -316,7 +268,7 @@ export async function executeProjectAgentCommand(
           request,
           controlAction,
           scope,
-          messages,
+          userMessage,
           declinedInterruptions,
           visibleUserMessages,
           operationSignal: choiceOwnershipController?.signal ?? null,
@@ -352,7 +304,6 @@ export async function executeProjectAgentCommand(
       userId: scope.userId,
       projectId: scope.projectId,
       context: input.context,
-      messages,
       run,
       control,
       runLock,

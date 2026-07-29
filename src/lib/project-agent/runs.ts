@@ -7,6 +7,8 @@ import type { ProjectAssistantId } from './types'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
+  discardProjectAssistantPendingModelHistoryInTransaction,
+  type ProjectAssistantModelHistoryCommit,
 } from './persistence'
 import { releaseProjectAgentRunLockForRun } from './run-lock'
 import {
@@ -626,6 +628,7 @@ export async function settleProjectAgentRunWithMessage(params: {
   errorCode?: string | null
   errorMessage?: string | null
   message: UIMessage
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const run = await tx.projectAgentRun.findUnique({
@@ -644,6 +647,7 @@ export async function settleProjectAgentRunWithMessage(params: {
       episodeId: run.episodeId,
       assistantId: run.assistantId as ProjectAssistantId,
       messages: [params.message],
+      ...(params.modelHistoryCommit ? { modelHistoryCommit: params.modelHistoryCommit } : {}),
     })
     await appendProjectAgentEventsInTransaction(tx, {
       scope: {
@@ -681,6 +685,7 @@ export async function settleProjectAgentRunFailureWithMessage(params: {
   stopReason: string
   errorCode?: string | null
   errorMessage?: string | null
+  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
 }): Promise<void> {
   const message: UIMessage = {
     id: `workspace-assistant-run:${params.controlKind}:${params.runFence.runId}:${params.requestId}`,
@@ -709,6 +714,7 @@ export async function settleProjectAgentRunFailureWithMessage(params: {
     errorCode: params.errorCode,
     errorMessage: params.errorMessage,
     message,
+    ...(params.modelHistoryCommit ? { modelHistoryCommit: params.modelHistoryCommit } : {}),
   })
 }
 
@@ -827,11 +833,47 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
       assistantId,
     })
     if (!recovered || recovered === 'task_batch') {
-      await updateProjectAgentRunStatus({
-        runFence: createProjectAgentRunFence(run),
-        status: 'cancelled',
-        expectedStatuses: ['running'],
-        stopReason: 'stale_running_run',
+      await prisma.$transaction(async (tx) => {
+        const executionEvents = await tx.projectAgentEvent.findMany({
+          where: {
+            runId: run.id,
+            kind: 'run.execution_started',
+          },
+          select: { payload: true },
+        })
+        const executionSegmentIds = executionEvents.flatMap(({ payload }) => {
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+          const executionSegmentId = (payload as Record<string, unknown>).executionSegmentId
+          return typeof executionSegmentId === 'string' && executionSegmentId.trim()
+            ? [executionSegmentId]
+            : []
+        })
+        await discardProjectAssistantPendingModelHistoryInTransaction(tx, {
+          projectId: scope.projectId,
+          userId: scope.userId,
+          episodeId: scope.episodeId ?? null,
+          assistantId,
+          executionSegmentIds,
+        })
+        await appendProjectAgentEventsInTransaction(tx, {
+          scope: {
+            projectId: scope.projectId,
+            userId: scope.userId,
+            episodeId: scope.episodeId ?? null,
+            assistantId,
+            scopeRef,
+          },
+          events: [{
+            runFence: createProjectAgentRunFence(run),
+            event: {
+              kind: 'run.status_changed',
+              runId: run.id,
+              status: 'cancelled',
+              expectedStatuses: ['running'],
+              stopReason: 'stale_running_run',
+            },
+          }],
+        })
       })
     }
     await releaseProjectAgentRunLockForRun({

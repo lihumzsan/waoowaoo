@@ -294,7 +294,8 @@
         "prisma/migrations/20260720123000_make_project_video_ratio_nullable/migration.sql",
         "prisma/migrations/20260722120000_add_project_video_ratio_confirmation/migration.sql",
         "prisma/migrations/20260722180000_remove_fixed_creative_workflow/migration.sql",
-        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
+        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql",
+        "prisma/migrations/20260729130000_add_project_assistant_model_history/migration.sql"
       ]
     },
     {

@@ -32,7 +32,6 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
-import { loadProjectAssistantThread } from './persistence'
 
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
 
@@ -43,30 +42,6 @@ export class ProjectAgentContinuationDeferredError extends Error {
     super(message)
     this.name = 'ProjectAgentContinuationDeferredError'
     this.retryDelayMs = retryDelayMs
-  }
-}
-
-function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessage {
-  return {
-    id: `workspace-server-task-follow-up:${followUp.waitId}:${followUp.commandId}`,
-    role: 'user',
-    metadata: {
-      custom: {
-        workspaceAssistantHidden: true,
-      },
-    },
-    parts: [{
-      type: 'text',
-      text: [
-        '[task_update]',
-        `waitId=${followUp.waitId}`,
-        `operationId=${followUp.operationId}`,
-        `terminalStatus=${followUp.terminalStatus}`,
-        `successCount=${String(followUp.successCount)}`,
-        `failedCount=${String(followUp.failedCount)}`,
-        '[/task_update]',
-      ].join(' '),
-    }],
   }
 }
 
@@ -320,16 +295,6 @@ async function runClaimedFollowUp(params: {
     if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
     run = refreshedRun
 
-    const thread = await loadProjectAssistantThread({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      assistantId: 'workspace-command',
-    })
-    const messages = [
-      ...(thread?.messages ?? []),
-      buildServerFollowUpMessage(consumed),
-    ]
     const request = new NextRequest(`http://localhost/api/projects/${params.projectId}/assistant/server-follow-up`, {
       method: 'POST',
       headers: {
@@ -344,7 +309,6 @@ async function runClaimedFollowUp(params: {
       context: {
         episodeId: params.episodeId,
       },
-      messages,
       run,
       control: {
         kind: 'task_follow_up',
@@ -368,6 +332,7 @@ async function runClaimedFollowUp(params: {
             userId: params.userId,
             outcome: settlement.outcome,
             message: settlement.message,
+            modelHistoryCommit: settlement.modelHistoryCommit,
           })
           settleCompletion()
         } catch (error) {

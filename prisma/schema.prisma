@@ -254,11 +254,17 @@ model ProjectAssistantThread {
   assistantId  String
   scopeRef     String
   messagesJson Json
+  /// Complete OpenAI Agents SDK transcript. This is the sole model-history
+  /// authority; messagesJson remains the independent UI projection.
+  modelHistoryJson    Json
+  modelHistoryVersion Int    @default(0)
+  /// The SDK writes the current execution segment here while it runs. Only the
+  /// existing settlement transaction may promote a ready snapshot.
+  pendingModelHistoryJson        Json?
+  pendingModelHistorySegmentId   String? @db.VarChar(191)
+  pendingModelHistoryBaseVersion Int?
+  pendingModelHistoryReady       Boolean @default(false)
   planJson     Json?
-  /// Incremental conversation summary: { version, summarizedThroughMessageId, summaryText }.
-  /// Summarising is lossy and costs a model call, so the result is persisted and
-  /// extended rather than recomputed from full history on every turn.
-  summaryJson  Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

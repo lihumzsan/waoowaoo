@@ -238,7 +238,7 @@
     "choiceCustomOptionLabel": "其他{label}",
     "choiceCustomOptionPlaceholder": "其他{label}",
     "choiceCustomOptionSubmit": "选择其他{label}",
-    "contextCompacted": "已压缩较早的 {count} 条对话"
+    "contextCompacted": "已压缩较早的 {count} 条对话记录"
   },
   "choiceCard": {
     "groupProgress": "第 {current} / {total} 组"

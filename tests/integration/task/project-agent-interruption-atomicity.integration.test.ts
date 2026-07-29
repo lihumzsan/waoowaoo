@@ -212,6 +212,17 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
     card,
     subject,
     commitments,
+    modelArguments: {
+      subject: {
+        kind: 'resources',
+        resources: [{ resourceId: resource.id }],
+      },
+      card: {
+        kind: 'select_with_actions',
+        title: card.title,
+        description: card.description,
+      },
+    },
   })
   const suspension = await settleProjectAgentPreparedChoiceHandoff({
     executionFence,
