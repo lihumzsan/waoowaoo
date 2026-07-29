@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { addBalanceWithTransaction, applyBalanceAdjustmentWithTransaction } from '@/lib/billing/ledger'
+import { BillingOperationError } from '@/lib/billing/errors'
 import { roundMoney, toMoneyNumber } from '@/lib/billing/money'
 
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300
@@ -440,4 +441,45 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
     eventType: event.type,
     reason: 'unhandled_event_type',
   }
+}
+
+const PERMANENT_WEBHOOK_REJECTION_CODES: ReadonlySet<string> = new Set([
+  'STRIPE_EVENT_MISSING_REQUIRED_FIELDS',
+  'STRIPE_CHECKOUT_SESSION_ID_REQUIRED',
+  'STRIPE_CHECKOUT_PAYMENT_INTENT_REQUIRED',
+  'STRIPE_REFUND_ID_REQUIRED',
+  'STRIPE_REFUND_PAYMENT_INTENT_REQUIRED',
+  'STRIPE_REFUND_CURRENCY_REQUIRED',
+  'STRIPE_DISPUTE_ID_REQUIRED',
+  'STRIPE_DISPUTE_PAYMENT_INTENT_REQUIRED',
+  'STRIPE_DISPUTE_CURRENCY_REQUIRED',
+  'STRIPE_DISPUTE_STATUS_REQUIRED',
+  'STRIPE_RECHARGE_BILLING_META_INVALID',
+  'STRIPE_ADJUSTMENT_CURRENCY_MISMATCH',
+  'STRIPE_ADJUSTMENT_AMOUNT_EXCEEDS_RECHARGE',
+  'STRIPE_ADJUSTMENT_CREDITS_INVALID',
+  'BILLING_ADJUSTMENT_IDEMPOTENCY_CONFLICT',
+])
+
+export function readStripeWebhookErrorCode(error: unknown): string {
+  if (error instanceof BillingOperationError) return error.code
+  const message = error instanceof Error ? error.message : ''
+  return message.split(':')[0] ?? ''
+}
+
+/**
+ * Stripe's redelivery contract reads only the HTTP status: 4xx marks the event
+ * permanently unprocessable (redelivery stops), everything else keeps
+ * redelivery alive. Signature failures and immutable payload/ledger fact
+ * violations can never succeed on retry; missing local facts and
+ * infrastructure failures must stay retryable so the event remains visible
+ * until reconciled.
+ */
+export function isPermanentStripeWebhookRejection(error: unknown): boolean {
+  const code = readStripeWebhookErrorCode(error)
+  return (
+    code.startsWith('STRIPE_SIGNATURE_')
+    || code.startsWith('STRIPE_CHECKOUT_METADATA_')
+    || PERMANENT_WEBHOOK_REJECTION_CODES.has(code)
+  )
 }
