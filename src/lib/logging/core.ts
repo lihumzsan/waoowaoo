@@ -14,21 +14,14 @@ function shouldSuppressLogEvent(event: Pick<LogEvent, 'action'>): boolean {
   return SUPPRESSED_LOG_ACTIONS.has(event.action)
 }
 
-function writeProjectLogLine(line: string, projectId: string | undefined, moduleName: string | undefined): void {
+function writeLogLineToFile(line: string): void {
   if (typeof window !== 'undefined') return
   if (!fileWriterModulePromise) {
     fileWriterModulePromise = import('./file-writer')
   }
-  // 全局日志（所有日志都写入 app.log）
   void fileWriterModulePromise
     .then((mod) => mod.writeGlobalLogLine(line))
     .catch(() => undefined)
-  // 项目日志
-  if (projectId) {
-    void fileWriterModulePromise
-      .then((mod) => mod.writeLogToProjectFile(line, projectId, moduleName))
-      .catch(() => undefined)
-  }
 }
 
 function serializeError(error: unknown): ErrorFields | undefined {
@@ -110,10 +103,14 @@ function write(level: LogLevel, event: Omit<LogEvent, 'ts' | 'level' | 'service'
     message: event.message,
     requestId: event.requestId || context.requestId,
     taskId: event.taskId || context.taskId,
+    taskAttempt: event.taskAttempt ?? context.taskAttempt,
+    runId: event.runId || context.runId,
+    operationId: event.operationId || context.operationId,
     projectId: event.projectId || context.projectId,
     userId: event.userId || context.userId,
     errorCode: event.errorCode,
     retryable: event.retryable,
+    failureClass: event.failureClass,
     durationMs: event.durationMs,
     provider: event.provider || context.provider,
     details: event.details ?? null,
@@ -128,27 +125,7 @@ function write(level: LogLevel, event: Omit<LogEvent, 'ts' | 'level' | 'service'
   } else {
     console.log(line)
   }
-  writeProjectLogLine(line, safeEvent.projectId || undefined, safeEvent.module || undefined)
-}
-
-export function logEvent(event: Partial<LogEvent> & { level: LogLevel; message: string }): void {
-  const { level, ...rest } = event
-  write(level, {
-    audit: rest.audit ?? false,
-    message: rest.message,
-    module: rest.module,
-    action: rest.action,
-    requestId: rest.requestId,
-    taskId: rest.taskId,
-    projectId: rest.projectId,
-    userId: rest.userId,
-    errorCode: rest.errorCode,
-    retryable: rest.retryable,
-    durationMs: rest.durationMs,
-    provider: rest.provider,
-    details: rest.details ?? null,
-    error: rest.error,
-  })
+  writeLogLineToFile(line)
 }
 
 function logWithLevel(level: LogLevel, context: Partial<LogContext> | undefined, args: unknown[]): void {
@@ -160,6 +137,9 @@ function logWithLevel(level: LogLevel, context: Partial<LogContext> | undefined,
     action: context?.action,
     requestId: context?.requestId,
     taskId: context?.taskId,
+    taskAttempt: context?.taskAttempt,
+    runId: context?.runId,
+    operationId: context?.operationId,
     projectId: context?.projectId,
     userId: context?.userId,
     provider: context?.provider,
@@ -175,11 +155,15 @@ type ScopedLogInput = {
   module?: string
   requestId?: string
   taskId?: string
+  taskAttempt?: number
+  runId?: string
+  operationId?: string
   projectId?: string
   userId?: string
   provider?: string
   errorCode?: string
   retryable?: boolean
+  failureClass?: string
   durationMs?: number
   details?: Record<string, unknown> | unknown[] | null
   error?: ErrorFields
@@ -191,25 +175,35 @@ function isScopedLogInput(value: unknown): value is ScopedLogInput {
   return Boolean(value) && typeof value === 'object' && typeof (value as { message?: unknown }).message === 'string'
 }
 
+function mergeScopedEvent(
+  input: ScopedLogInput,
+  baseContext: Partial<SemanticContext>,
+): Omit<LogEvent, 'ts' | 'level' | 'service'> {
+  return {
+    audit: input.audit ?? false,
+    message: input.message,
+    module: input.module || baseContext.module,
+    action: input.action || baseContext.action,
+    requestId: input.requestId || baseContext.requestId,
+    taskId: input.taskId || baseContext.taskId,
+    taskAttempt: input.taskAttempt ?? baseContext.taskAttempt,
+    runId: input.runId || baseContext.runId,
+    operationId: input.operationId || baseContext.operationId,
+    projectId: input.projectId || baseContext.projectId,
+    userId: input.userId || baseContext.userId,
+    provider: input.provider || baseContext.provider,
+    errorCode: input.errorCode || baseContext.errorCode,
+    retryable: input.retryable ?? baseContext.retryable,
+    failureClass: input.failureClass || baseContext.failureClass,
+    durationMs: input.durationMs ?? baseContext.durationMs,
+    details: input.details ?? null,
+    error: input.error,
+  }
+}
+
 function logScoped(level: LogLevel, baseContext: Partial<SemanticContext>, args: unknown[]): void {
   if (args.length === 1 && isScopedLogInput(args[0])) {
-    const input = args[0]
-    write(level, {
-      audit: input.audit ?? false,
-      message: input.message,
-      module: input.module || baseContext.module,
-      action: input.action || baseContext.action,
-      requestId: input.requestId || baseContext.requestId,
-      taskId: input.taskId || baseContext.taskId,
-      projectId: input.projectId || baseContext.projectId,
-      userId: input.userId || baseContext.userId,
-      provider: input.provider || baseContext.provider,
-      errorCode: input.errorCode || baseContext.errorCode,
-      retryable: input.retryable ?? baseContext.retryable,
-      durationMs: input.durationMs ?? baseContext.durationMs,
-      details: input.details ?? null,
-      error: input.error,
-    })
+    write(level, mergeScopedEvent(args[0], baseContext))
     return
   }
 
@@ -221,11 +215,15 @@ function logScoped(level: LogLevel, baseContext: Partial<SemanticContext>, args:
     action: baseContext.action,
     requestId: baseContext.requestId,
     taskId: baseContext.taskId,
+    taskAttempt: baseContext.taskAttempt,
+    runId: baseContext.runId,
+    operationId: baseContext.operationId,
     projectId: baseContext.projectId,
     userId: baseContext.userId,
     provider: baseContext.provider,
     errorCode: baseContext.errorCode,
     retryable: baseContext.retryable,
+    failureClass: baseContext.failureClass,
     durationMs: baseContext.durationMs,
     details,
     error,
@@ -248,22 +246,6 @@ export function logError(...args: unknown[]): void {
   logWithLevel('ERROR', undefined, args)
 }
 
-export function logDebugCtx(context: Partial<LogContext>, ...args: unknown[]): void {
-  logWithLevel('DEBUG', context, args)
-}
-
-export function logInfoCtx(context: Partial<LogContext>, ...args: unknown[]): void {
-  logWithLevel('INFO', context, args)
-}
-
-export function logWarnCtx(context: Partial<LogContext>, ...args: unknown[]): void {
-  logWithLevel('WARN', context, args)
-}
-
-export function logErrorCtx(context: Partial<LogContext>, ...args: unknown[]): void {
-  logWithLevel('ERROR', context, args)
-}
-
 export type ScopedLogger = {
   debug: ScopedLogFn
   info: ScopedLogFn
@@ -280,22 +262,8 @@ export function createScopedLogger(baseContext: Partial<SemanticContext>): Scope
     warn: (...args: unknown[]) => logScoped('WARN', baseContext, args),
     error: (...args: unknown[]) => logScoped('ERROR', baseContext, args),
     event: (event) => {
-      write(event.level, {
-        audit: event.audit ?? false,
-        message: event.message,
-        module: event.module || baseContext.module,
-        action: event.action || baseContext.action,
-        requestId: event.requestId || baseContext.requestId,
-        taskId: event.taskId || baseContext.taskId,
-        projectId: event.projectId || baseContext.projectId,
-        userId: event.userId || baseContext.userId,
-        provider: event.provider || baseContext.provider,
-        errorCode: event.errorCode || baseContext.errorCode,
-        retryable: event.retryable ?? baseContext.retryable,
-        durationMs: event.durationMs ?? baseContext.durationMs,
-        details: event.details ?? null,
-        error: event.error,
-      })
+      const { level, ...rest } = event
+      write(level, mergeScopedEvent(rest, baseContext))
     },
     child: (context: Partial<SemanticContext>) => createScopedLogger({ ...baseContext, ...context }),
   }

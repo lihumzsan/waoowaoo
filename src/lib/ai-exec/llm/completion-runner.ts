@@ -163,7 +163,7 @@ async function executeText(input: {
     })
     return result
   } catch (error) {
-    llmLogger.warn({
+    llmLogger.error({
       action: input.stream ? 'llm.stream.failed' : 'llm.call.failed',
       message: input.stream ? 'llm stream failed' : 'llm call failed',
       userId: input.userId,

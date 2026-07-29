@@ -97,11 +97,9 @@ services:
       # 日志
       LOG_UNIFIED_ENABLED: "true"
       LOG_LEVEL: "INFO"
-      LOG_FORMAT: "json"
       LOG_DEBUG_ENABLED: "false"
       LOG_AUDIT_ENABLED: "true"
       LOG_SERVICE: "waoowaoo"
-      LOG_REDACT_KEYS: "password,token,apiKey,apikey,authorization,cookie,secret,access_token,refresh_token"
       # 计费
       DEPLOYMENT_EDITION: "self-hosted"
       PROVIDER_CREDENTIAL_MODE: "user-key"

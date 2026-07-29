@@ -20,6 +20,8 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/analyze(?:-|\/|$)/,
   /\/bible-conversion(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
+  // 统一 Operation 链路：所有经由 operations registry 的用户执行都属于用户操作审计。
+  /\/operations\/[^/]+\/(?:execute|commit)(?:\/|$)/,
 ]
 
 function isGenerationOperationPath(pathname: string): boolean {
@@ -186,7 +188,8 @@ export function apiHandler<TParams extends RouteParams>(handler: ApiHandler<TPar
           const response = await handler(req, ctx)
           response.headers.set('x-request-id', requestId)
 
-          logger.debug({
+          // 正常返回的 4xx/5xx（未抛异常）必须在生产可见；成功响应保持 DEBUG。
+          const finishEvent = {
             action: 'api.request.finish',
             message: 'api request finished',
             durationMs: Date.now() - startedAt,
@@ -195,7 +198,12 @@ export function apiHandler<TParams extends RouteParams>(handler: ApiHandler<TPar
               path: req.nextUrl.pathname,
               status: response.status,
             },
-          })
+          }
+          if (response.status >= 400) {
+            logger.warn(finishEvent)
+          } else {
+            logger.debug(finishEvent)
+          }
           if (shouldAuditUserOperation(req.method, response.status, req.nextUrl.pathname)) {
             logger.event({
               level: 'INFO',

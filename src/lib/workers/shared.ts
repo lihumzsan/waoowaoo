@@ -1,5 +1,4 @@
 import { UnrecoverableError, type Job } from 'bullmq'
-import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { LLMStreamChunk } from '@/lib/llm-observe/types'
 import { TaskTerminatedError } from '@/lib/task/errors'
@@ -20,7 +19,6 @@ import {
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
-import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import { getLogContext, withLogContext } from '@/lib/logging/context'
 import { commitTaskTerminal } from '@/lib/task/terminal'
 import {
@@ -179,20 +177,6 @@ function buildErrorCauseChain(input: unknown): Array<{ name: string; message: st
   return chain
 }
 
-async function resolveProjectNameForLogging(projectId: string): Promise<void> {
-  try {
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { name: true },
-    })
-    if (project?.name) {
-      onProjectNameAvailable(projectId, project.name)
-    }
-  } catch {
-    // Swallow – log file routing failure should never crash the worker.
-  }
-}
-
 export async function withTaskLifecycle(
   job: Job<TaskJobData>,
   handler: (
@@ -206,11 +190,19 @@ export async function withTaskLifecycle(
   const startedAt = Date.now()
   let taskAttempt: number | null = null
 
-  // Register project name for per-project log file routing
-  void resolveProjectNameForLogging(data.projectId)
-
   const heartbeatTimer = setInterval(() => {
-    if (taskAttempt !== null) void touchTaskHeartbeat(taskId, taskAttempt)
+    if (taskAttempt !== null) {
+      // 心跳失败只降级为日志，不得经 unhandledRejection 打挂 worker 进程。
+      touchTaskHeartbeat(taskId, taskAttempt).catch((error: unknown) => {
+        logger.warn({
+          action: 'worker.heartbeat.failed',
+          message: 'task heartbeat write failed',
+          error: error instanceof Error
+            ? { name: error.name, message: error.message }
+            : { message: String(error) },
+        })
+      })
+    }
   }, 10_000)
 
   try {
@@ -278,6 +270,8 @@ export async function withTaskLifecycle(
     const checkpoint = existingCheckpoint ?? await withLogContext({
       taskId,
       taskAttempt,
+      requestId: data.trace?.requestId ?? undefined,
+      module: 'worker',
       projectId: data.projectId,
       userId: data.userId,
     }, async () => {
@@ -321,7 +315,12 @@ export async function withTaskLifecycle(
       action: terminal.applied ? 'worker.completed' : 'worker.completed.idempotent',
       message: 'worker terminal completion committed',
       durationMs: Date.now() - startedAt,
-      details: { result: result || null, terminalEventId: terminal.terminalEventId },
+      // Task.result 是权威事实；日志只保留摘要，不复制完整结果内容。
+      details: {
+        resultKeys: result ? Object.keys(result) : [],
+        resultBytes: result ? JSON.stringify(result).length : 0,
+        terminalEventId: terminal.terminalEventId,
+      },
     })
   } catch (error: unknown) {
     if (taskAttempt === null) throw error
