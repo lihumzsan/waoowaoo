@@ -44,8 +44,7 @@ Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段
 ## 验证
 
 - Operation/Task conformance 应证明 Chapter、Story Canon 与 continuity analysis 是独立能力，没有自动下游提交或 WorkerGroup identity。
-- Choice/Prompt guards 应拒绝固定阶段、`confirmed_screenplay`、时长配方和专用 Chapter 卡片。
-- 适用自由组合 Golden 应覆盖：不使用 Chapter 的单上下文作品；多个 Chapter 并行且只恢复一次；Story Canon/Chapter 独立采用；刷新后精确 Resource 与 Lineage 保持不变。
+- 不使用 Chapter、多个 Chapter 并行、Story Canon/Chapter 独立采用和刷新后的内容一致性依赖真实模型规划，作为人工产品复验；不再以 Prompt token guard 或脚本 Journey 伪装模型行为证据。
 
 ## 历史回归
 

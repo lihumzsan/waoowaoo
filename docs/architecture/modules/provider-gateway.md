@@ -57,24 +57,12 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 ## 验证
 
-- `tests/integration/provider/fal-*.contract.test.ts` 使用本地协议服务器验证真实 FAL adapter 的提交、轮询、FAILED/unknown/malformed/无媒体结果、422/500 和零隐式 retry。
-- `tests/integration/provider/openrouter-{image,video}.contract.test.ts` 观察真实 SDK wire contract，并反证同步图片和异步视频提交在 5xx/不确定结果下自动重发 POST；`tests/golden-journey/self-tests/media-provider.test.ts` 通过生产 OpenRouter Video adapter 验证 submit 与 status 仍为两个独立调用。
-- `tests/integration/provider/openrouter-image.contract.test.ts` 还从生产 schema 取得 canonical GPT Image 2 option，反证默认值、alias conflict、压缩格式和禁用字段重新落入 adapter 私有解释；`tests/integration/provider/provider-gateway-capabilities.contract.test.ts` 验证 FAL 与 OpenRouter 共享模型族 normalizer、但继续遵守各自 capability。
-- 上述两组 contract 还从生产 route registry 验证 OpenRouter/FAL GPT Image 2 的等价 route set；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 DB 反证 pre-accept 之外的跨路由重提、并发 route advance、重放回到首路由和实际 provenance 丢失。数据库不可用时该项只能报告未验证。
-- `tests/integration/provider/fal-music-capability.contract.test.ts` 从生产 registry 验证 Lyria 连续 `120–180` 秒能力、范围外请求在 HTTP 前失败，以及 `duration_seconds` 与 `negative_prompt` 的真实 FAL wire contract。
-- `tests/integration/provider/fal-voice-capability.contract.test.ts` 从生产 registry 验证 Voice Design 多语言枚举、未知/采样 option 在 HTTP 前失败，以及 FAL 只收到 `text/prompt/language`。
-- 私有媒体 owner + S3 签名 HTTPS 与真实 Provider 可达性必须在目标部署对象存储上复验；本地 fixture 与人工注入公网 URL 均不能证明这一边界。
-- `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 与 `message-content.contract.test.ts` 验证生产 registry capability、connection 和消息协议。
-- `tests/integration/provider/openai-hosted-web-search.contract.test.ts` 通过 provider-owned runner seam 反证业务层直连 SDK、无真实 hosted call、缺少结构化 citation、网页正文泄漏和凭据错误被伪装成功。
-- `tests/golden-journey/self-tests/model-provider.test.ts` 验证隔离模型替身与生产协议边界一致并 fail closed；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、成功兄弟重放、失败 invocation/external job 仅由更高 attempt 重取，以及 `outcome_unknown` 与永久拒绝零重提。
-- `tests/unit/task/async-poll-external-id.test.ts` 只验证纯 external identity 解析。
-- `tests/unit/ai-exec/structured-json.test.ts` 验证结构化输出只接受纯 JSON 或单一完整外层 fence，并拒绝说明文字、未知/不完整/多重 fence 与 JSON 内容修复。
-- `tests/unit/ai-exec/llm-result-projector.test.ts` 验证 AI SDK usage/cache/cost/reasoning/safety 到 versioned 项目结果的唯一投影及旧 ChatCompletion shape 拒绝；`tests/unit/provider/llm-stream-finalization.test.ts` 反证 delta/final 分叉、漏发 suffix 与二次 completion 猜测。
-- `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 穷尽验证 runtime LLM protocol，并观察 Ark Responses thinking/SSE、Ark/Google Vision 图片编码、OpenRouter reasoning/cache/session/cost 与 provider 连接请求的真实 wire contract。
-- `tests/contracts/provider-api-config-conformance.test.ts` 从生产 API 配置目录穷尽验证每个 provider 同时具有 builtin model、runtime adapter、platform env 声明且能通过严格保存 parser；目录外 identity 继续 fail closed。
-- provider guards 只阻止 API/媒体绕过、跨 provider 猜测和 fallback 等结构旁路，不替代协议或用户旅程证据。
-- `npm run check:capability-catalog` 与 `npm run check:pricing-catalog` 验证 standards 文件自身及 tier/capability 字段关系；它们不证明 standards 与运行时代码 catalog 值一致。
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 反证用户 API 配置重新进入主 Agent；`tests/unit/deployment/config.test.ts` 验证 `platform-key/user-key` 的唯一部署能力投影；`tests/unit/http/body-limits.test.ts` 继续反证超限 chunk 与 base64。
+- `npm run test:critical:provider` 保留真实 adapter/wire 边界：FAL 与 OpenRouter 的提交/轮询/终态、零隐式 POST retry、模型能力、连接和 hosted web search 的结构化证据协议。
+- `tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一、route advance、重放和 `outcome_unknown` 零重提。私有声音 owner + S3 读取属于部署对象存储复验盲区。
+- `tests/contracts/provider-api-config-conformance.test.ts` 从生产目录穷尽检查 provider identity、runtime adapter 与严格 parser；`tests/unit/http/body-limits.test.ts`、`tests/unit/task/async-poll-external-id.test.ts` 和 `tests/unit/provider/llm-stream-finalization.test.ts` 只保留独立协议/算法 oracle。
+- `npm run check:capability-catalog` 与 `npm run check:pricing-catalog` 只验证 standards 文件自身结构，不证明运行时值或真实外部 Provider 已验证。
+
+脚本模型、脚本媒体 Provider 和创作 Journey 已删除；真实模型质量、付费 Provider 接受度与长上传时延只能通过发布前真实调用和生产观测验证。
 ## 历史回归
 
 - `3f871a490` 删除 ElevenLabs ambient-sound provider 时移除了 adapter、model、执行和运行时白名单，却遗留 API 配置目录项与 Cloud env 样例。Profile GET 因而把不可执行的 ElevenLabs 合并进表单，而前端每次 PUT 都回传全部 provider；严格 writer 在任何字段保存时均以 `PROVIDER_NOT_SUPPORTED` 拒绝整笔事务，刷新后用户配置全部回退。旧 provider contract 只验证执行与连接协议，`check:model-config-contract` 只扫描已落盘 model shape，都没有从生产配置目录穷尽穿过 writer/runtime。当前删除幽灵目录与 env 入口，保存 parser 和 runtime reader 复用目录 identity，并由 registry conformance 同时对齐 builtin model、adapter、platform env 与严格 parser；真实浏览器保存/刷新仍需可用 MySQL 环境复验。
@@ -100,7 +88,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `98e1c725e` 为用户可配置 Provider 增加统一 SSRF/DNS 防线，却把平台环境变量、Self-hosted 配置和 Provider 动态地址都解释成同一种不可信 URL；Cloud 同时只隐藏 API 配置页面，仍把配置 Operation 暴露给主 Agent并保留连接诊断 API。Clash Fake-IP 将合法 `openrouter.ai` 解析到 `198.18.0.0/15` 后，真实 Assistant 模型请求在交给显式代理前被误拒绝，既有安全测试因为依赖测试 allowlist 而没有覆盖该组合。当前以部署模式重新划定所有权：Cloud 用户配置和诊断在统一 availability 入口原地拒绝，配置 Operation 改为 API-only；Self-hosted 部署者继续拥有自定义连接。旧 URL policy、DNS/IP/metadata/redirect 裁决、私网 allowlist 和对应测试环境分支整体删除，代理只负责路由。Self-hosted 多个互不信任用户共享同一网络时的出站风险由部署者承担，不再由运行时阻断。
 - OpenRouter GPT Image 2 在真实调用中返回账户 billing hard limit；这不是平台 credits 不足，也不能由 Agent 看错误文案后重建一次 FAL 调用。旧 PG-05 绝对禁止跨 provider，因此系统即使拥有同 capability 的 FAL provider 也只能终止。当前把例外收窄为 registry 声明的等价 route set：OpenRouter adapter 将“请求明确未被受理且无外部身份”的响应规范化为 typed pre-accept rejection，Gateway 在同一 durable invocation 内前进到 FAL；任何受理不确定性都保持失败，不以可用性为理由切换。真实外部双 Provider 调用仍未执行，当前证据只覆盖协议与 DB fence（DB 可用时）。
 - GPT Image 2 的共享 pixel policy 曾只在缩放触及像素/边长上下限时对齐 16，常用 1K 尺寸因未触发缩放而直接产生 `1080` 短边；真实 4:3 资产图以 `1440x1080` 被 Provider 拒绝，既有 contract 反而把未对齐尺寸写成期望值。当前 canonical normalizer 在任何约束前统一向上对齐宽高，OpenRouter wire contract 直接反证非 16 倍数重新出现。
-- Qwen Voice Design 首次接入只登记了 capability、pricing、adapter 和固定模型选择，却遗漏 platform/API runtime catalog，并让 user-key runtime 保留第二份不含 `voice` 的媒体类型判定；provider contract mock 了 runtime-config，因此真实 `generate_voice` 在 HTTP 前以 `MODEL_NOT_FOUND ... not enabled for voice` 全部失败。当前 FAL provider identity 同时进入 platform 与 API catalog，runtime-config 删除私有类型裁判并复用共享穷尽 parser，voice contract 从生产 catalog 完成运行时选择。该修复首版仍只覆盖 platform-key:user-key 部署的 runtime 模型表来自用户 customModels,而配置面不存在 voice 类型,`generate_voice` 依旧 MODEL_NOT_FOUND;现按 PG-16 把 voice 模态的运行时模型解析固定为平台目录(任何凭证模式),provider 凭证仍按部署模式解析,`tests/unit/user-api/voice-runtime-selection.test.ts` 在 user-key 模式下反证不再读取用户配置。
+- Qwen Voice Design 首次接入只登记了 capability、pricing、adapter 和固定模型选择，却遗漏 platform/API runtime catalog，并让 user-key runtime 保留第二份不含 `voice` 的媒体类型判定；provider contract mock 了 runtime-config，因此真实 `generate_voice` 在 HTTP 前以 `MODEL_NOT_FOUND ... not enabled for voice` 全部失败。当前 FAL provider identity 同时进入 platform 与 API catalog，runtime-config 删除私有类型裁判并复用共享穷尽 parser；voice 模态的运行时模型固定由平台目录解析（任何凭证模式），provider 凭证仍按部署模式解析。真实 user-key 组合是发布复验边界，不再以复制 runtime 选择实现的 Unit 测试冒充独立证据。
 - OpenRouter LLM adapter 曾为每次成功响应克隆并读完整 response body，再把全部 SSE token、推理正文与 usage 写入 INFO 日志；一次普通问候即可产生数 MB 控制台和项目日志，同时让日志成为模型输出的第二份非必要副本。当前 Provider 日志只记录 URL、HTTP 状态、已脱敏响应头、session identity 与收到响应头的耗时；正文只由唯一 AI SDK runner 消费和投影，日志层不再读取、保存或输出 stream body。
 - 外部异步任务受理后，共享 poll 入口曾在每次查询都写一条 Provider 解析 INFO；Worker 又对同一次 pending 写进度 INFO，四个并行视频因而每数秒产生交错日志。这些日志不是提交、计费或终态事实。当前 poll 仍由 durable external id 唯一恢复，但例行 pending 查询不再输出 INFO；受理、完成、明确失败、查询异常与终态仍保留可观测性。
 

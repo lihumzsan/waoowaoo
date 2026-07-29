@@ -32,9 +32,8 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 
 ## 验证
 
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registry 验证 Primary 完整 capability toolset、简短目录与 canonical load definitions；`tests/unit/project-agent/tool-discovery.test.ts` 反证加载前后顶层 tools 数组变化，并验证精确加载结果携带 registry Schema。
-- `tests/unit/creative-worker/output-submission.test.ts` 通过真实 Agents loop 反证动态/宽松 output transport、一次性晚校验和错误后另起 Run；`tests/contracts/creative-result-resource-conformance.test.ts`、`tests/unit/creative-resource/creative-work-materialization.test.ts` 验证 strict outputKind 到 Resource 的唯一映射。
-- `tests/golden-journey/self-tests/model-provider.test.ts` 验证模型替身协议 fail closed；`freeform-resources.spec.ts` 通过自然语言目标验证真实 Tool/Task/Resource 组合。
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 只从生产 registry 穷尽验证 Tool 暴露分区、目录同源和公开 Schema 不含匿名宽松节点。
+- Task/Operation registry conformance 负责接线完整性；Prompt、Skill、真实模型 Tool 服从度和创作质量没有可靠自动 oracle，必须通过真实模型抽样与人工产品复验验证。
 
 ## 历史回归
 
@@ -58,4 +57,4 @@ Prompt 只告诉 Primary 如何判断、如何使用 Skill/Subagent 与注册式
 3. Prompt 是否恢复固定阶段、next action、确认门或固定分段配方；`>15s` 纪律是否仍只约束 Primary 规划而未变成 Operation/服务端门禁？
 4. Choice 是否只描述当前决定，Creative Direction 预览是否仍需用户明确请求？
 5. Resource 输入是否只使用精确 resourceId 并回库校验，结果是否保留真实 lineage？
-6. 双语 Primary Prompt、单份 Skill 与适用 Conformance/Golden 是否同步？
+6. 单份 Primary Prompt 与 Skill 是否仍服从真实产品目标；若无法自动反证，是否明确记录真实模型复验盲区而不是新增自证测试？

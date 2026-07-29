@@ -101,10 +101,9 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 
 ## 适用验证
 
-- Logic：短 identity 的分帧确定性、Resource 物化一次性、retry 冻结 payload、引用位置互斥、Prompt Set strict output 和媒体 ID 校验。
-- Conformance：Operation registry 的 `prompt_set`、`manifest_assets`、`music_direction` 窄分支、公开 Tool schema、Creative Work output registry、Binding 保留角色和 Assistant Link View。
-- Integration：Task terminal 原子物化、Binding CAS、领域投影、失败恢复和同 Resource replay。
-- Golden：Resource 创建、Task、Lineage、Binding、Assistant/Canvas 读取和刷新组合。
+- Logic 只保留 canonical Resource identity；Task/Operation conformance 只证明生产 registry 接线，不声称验证创作语义。
+- 通用 Task Critical 只验证提交、终态、重放和并发基础设施；不再为每个 Resource 请求分支复制 planner/fixture 测试。
+- 人工产品复验：Resource 创建、Task、Lineage、Binding、Assistant/Canvas 读取、刷新和真实模型组合；不使用脚本模型 Journey。
 
 真实 provider 对 Prompt Set 多段视频的外部受理、计费和最终媒体仍是环境型盲区；未运行对应真实组合时不得宣称架构完成。
 
@@ -117,7 +116,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 - 通用媒体 Task 曾在提交后没有 pending Resource，Canvas 只能等终态或刷新；随后 SSE 失效又只命中一个 episode key。当前提交事务预留 Resource，Project 级失效覆盖所有 episode 参数变体，UI 仍只重读正式 View。
 - Task terminal 曾把 storageKey/URL 等原始结果交给模型，Assistant 再从 Markdown 猜文件链接。当前 terminal 只交付 Resource refs，唯一 Link View 投影安全名称和地址。
 - 同用户跨 Project Binding 曾因只校验 user 而被接受。Binding service 现在验证目标 owner/scope 和 Resource scope，跨 Project/Episode失败关闭。
-- Project 删除曾只依赖数据库从 Project 向全部领域关系级联；当同一项目的输入 Resource 被输出 Resource 的 Lineage 引用时，输出端 `CASCADE` 尚未清除边，输入端 `RESTRICT` 已先拒绝删除。旧项目删除 Golden 只覆盖空项目或普通资产，Resource Golden 又从不删除项目，因此两条各自通过却没有反证组合。当前唯一 `delete_project` 事务先拒绝任何以项目 Resource 为输入、但输出不属于本项目的异常跨 scope Lineage，再由 Creative Resource owner 删除项目输出拥有的全部 Lineage；`inputResourceId RESTRICT` 继续保护单 Resource 删除语义。Chapter Planning owner 同事务清理自己的投影关系后才删除 Project。`GJ-FREEFORM-RESOURCE-CREATION` 在真实 Resource、Lineage、Binding、Story Canon、Chapter 与多 Episode 均存在后通过生产 UI 删除，并以数据库 Oracle 验证无残留项目关系。
+- Project 删除曾只依赖数据库从 Project 向全部领域关系级联；当同一项目的输入 Resource 被输出 Resource 的 Lineage 引用时，输出端 `CASCADE` 尚未清除边，输入端 `RESTRICT` 已先拒绝删除。旧项目删除 Golden 只覆盖空项目或普通资产，Resource Golden 又从不删除项目，因此两条各自通过却没有反证组合。当前唯一 `delete_project` 事务先拒绝任何以项目 Resource 为输入、但输出不属于本项目的异常跨 scope Lineage，再由 Creative Resource owner 删除项目输出拥有的全部 Lineage；`inputResourceId RESTRICT` 继续保护单 Resource 删除语义。Chapter Planning owner 同事务清理自己的投影关系后才删除 Project。真实复杂项目删除曾人工复验通过，但当前不保留脚本 Journey；跨 scope Lineage 的完整组合仍需发布前复验。
 - `confirmed_screenplay` 曾与成功 screenplay Resource 并存成为第二状态。确认入口和 Binding 已删除，调用方显式选择一个 screenplay Resource。
 - 角色音色曾把“重新生成”解释为原位追加版本，使当前绑定与生成完成的晚到顺序竞争。现在每次生成创建新 Resource，只有 Binding CAS 决定当前音色。
 - Prompt Set 之外的两条 Worker 产物执行链曾长期依赖 Primary 搬运内容：资产图要求 Primary 逐条把 manifest `generationPrompt` 抄进 `create_image.kind=asset`，配乐要求 Primary 把 `music_direction` cue 时间线压缩改写成一条 `create_audio` prompt——后者本身就是「另一个模型改写同一创作判断」，且「原样使用」只有提示词纪律而无契约保证。参考资产回归（见上）已证明这类 Primary 解释层是漂移面。`creative_work_v11` 为 `music_direction` strict 输出增加必填可空 `score`，`manifest_assets`（CR-21）与 `music_direction`（CR-22）由此补齐引用执行；当前 v13 只继续切换 Worker 提交/trace 协议，不改变这些 Resource schema 和执行 owner。无 `score` 键的旧 music_direction Resource 引用执行时仍显式失败，由 Primary 重新委派。

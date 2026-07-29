@@ -4,66 +4,66 @@
 
 ## 设计理念
 
-测试用最少的独立证据反证会伤害用户结果或架构不变量的错误实现。证据分为 Logic、Registry Conformance、Critical Infrastructure 与 Golden Journey；Harness 只是隔离运行环境。固定创作阶段已经删除，因此测试不能再通过复刻 screenplay → Story Canon → Chapter → asset → video 的顺序制造第二条 Workflow。
+自动化测试不是交付税，也不是代码变化的影子副本。仓库只保留少量能以独立 oracle 反证高损失错误的测试；其余验证优先使用类型、静态检查、代码审查、真实运行观察和人工产品复验。
+
+测试文件、覆盖率、通过数量和目录齐全度都不是质量目标。测试若不能指出它会拒绝哪一种真实错误实现，或者其期望只是当前实现、mock、fixture、UI 文案与数据映射的复制，就不应存在。
 
 ## 不变量
 
-- **TG-01 — 独立 oracle。** 期望来自用户目标、模块不变量、生产 registry 或已确认历史事实，不从当前实现、mock 返回、源码字符串、文件名或测试数量反推。
-- **TG-02 — 测试准入。** 新测试只能属于真实 Golden、安全 Journey、Critical Infrastructure、非平凡 Logic、Registry Conformance 或 Harness fail-closed 自测。
-- **TG-03 — Golden 走生产链。** 不 mock 自己的 UI、route、service、数据库、queue、worker、Outbox、SSE、projector 或状态机；只在付费/不可控外部模型和媒体协议边界使用替身。
-- **TG-04 — 自由组合是最高产品证据。** Golden 只给 Primary 自然语言目标，允许 Skill、Subagent、Operation 和 Resource 自由组合。它不能指定工具顺序、注入阶段、写业务事实或使用旧 mainline driver。
-- **TG-05 — 权威事实断言。** Oracle 读取 Project/Run/Task/Operation、CreativeResource/Lineage/Binding，以及可选的 screenplay source projection、Story Canon adoption 和 Chapter projection。不得查询已删除的 style preview/edit script/shot/video segment/BGM/final output 表，也不得用卡片文案代替领域事实。
-- **TG-06 — 关键目标必须有组合反证。** 适用 Golden 应覆盖通用模型作者 Choice、Choice 只提交当前决定、剧本 Resource 无确认门、Creative Direction 默认无预览、多 Chapter 由 Primary 自主选择、`>180s` 不触发服务端分支、Story Canon/continuity/Chapter 独立。
-- **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、late/replay、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam。
-- **TG-08 — Logic 与 Conformance 有边界。** Logic 只验证非平凡纯函数、parser、resolver、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，禁止维护第二份 Task/Operation/Canvas/Resource 清单。
-- **TG-09 — Harness fail closed。** runtime identity、MySQL/Redis scope、端口、Next dist、Next tsconfig、上传和报告目录必须隔离；Golden 为每个 runtime 生成忽略且可清理的独立 tsconfig，Next 不得回写仓库根 `tsconfig.json`。required case 缺失、skip/todo、浏览器异常、依赖不可用、付费调用或 Oracle 写入都显式失败。
-- **TG-10 — 纠正性证据必须 fail-before。** 同一断言必须能在 pre-fix 或受控真实故障下失败；mock X 再断言 X、检查文件存在或调用次数不算行为证明。
-- **TG-11 — Journey 同步。** Golden 覆盖的入口、生命周期、终态或禁止副作用变化时，同一变更必须更新 scenario、driver、Oracle 并执行 canonical command；不能执行只能报告未验证。
-- **TG-12 — 过程材料不持久化。** 临时历史矩阵和执行记录不进入仓库；长期有效结论压缩进模块历史回归。
+- **TG-01 — 默认不写测试。** 功能、修复、重构、架构或文档变化均不自动要求新增、修改或补齐测试；不得因为同目录已有测试、历史流程或 CI 形式而同步一份实现副本。
+- **TG-02 — 独立 oracle。** 合法期望只能来自数学/算法规格、公开协议、持久事务事实、安全隔离或生产 registry。当前实现输出、mock 返回、调用次数、源码字符串、文件存在、测试名称和旧 fixture 都不是 oracle。
+- **TG-03 — 仅四类准入。**
+  1. 非平凡纯逻辑：parser、resolver、reducer、policy、状态机、算法、canonical identity；
+  2. 关键基础设施：真实数据库/Redis/外部 wire 边界上的资金、事务、并发、幂等、权限、retry、late/replay、补偿或恢复；
+  3. Registry Conformance：直接从生产 registry 穷尽枚举 identity、capability 与 policy；
+  4. 最小浏览器安全：未登录拒绝、会话恢复、跨用户项目隔离、跨项目资产拒绝。
+- **TG-04 — 禁止自证。** 不得 mock 被测系统自己的 route、service、状态机、数据库、queue、worker、SSE 或 projector 后断言该 mock；不得以 `toHaveBeenCalled()`、当前映射/默认值/展示快照、getter、透传或组件内部实现充当行为证据。
+- **TG-05 — Critical 使用真实 owner。** 关键基础设施测试必须走生产事务、持久 owner 和正式协议入口，只允许在一个明确外部边界注入故障；数据库或 Redis 不可用时显式失败，不得降级为内存替身。
+- **TG-06 — Conformance 不维护第二清单。** Conformance 必须从生产 registry 枚举全集并检查每个成员的必需声明。手写实例名单、当前字段快照和特定产品示例属于重复实现，应删除。
+- **TG-07 — 浏览器只保留安全边界。** 不再用脚本模型、脚本媒体 Provider、场景 registry 或复杂产品 Journey 模拟创作行为。LLM 创作质量、自由组合流程和 UI 细节由人工真实产品复验，自动化不得声称覆盖未知模型行为。
+- **TG-08 — 失败先审计测试。** 现有测试失败时先证明它到达了有效 oracle。若 fixture 腐烂、语义已删除、断言只复述实现或维护成本高于风险，删除测试及文档/CI 引用；禁止修改生产代码迎合无效测试。
+- **TG-09 — 同一作者不等于独立证据。** 实现者可以编写符合准入的测试，但必须明确 oracle 的外部来源和会被拒绝的错误实现。无法说明时不写。
+- **TG-10 — Harness fail closed。** retained suite 的 required case 缺失、skip/todo、依赖不可用、浏览器异常或报告不完整必须显式失败；未运行只能报告未验证。
+- **TG-11 — 无隐式挂载。** Git hooks 不运行测试。CI 只运行本模块列出的保留集合；任何新增测试都必须先更新本模块的准入说明，而不是靠目录匹配自动扩张。
+- **TG-12 — 如实交付。** 交付只列实际执行的命令、结果和盲区。不得用未执行、已删除或只自证的测试暗示产品行为已验证。
 
-## 权威入口
+## 保留集合与权威入口
 
-- Logic：`npm run test:logic`。
-- Conformance：`npm run test:conformance`。
-- Critical：`npm run test:critical` 及其 provider/task/billing 子集。
-- Golden：`npm run test:journey`。
-- 自由组合与取消：`tests/golden-journey/journeys/freeform-resources.spec.ts`。
-- 安全边界：`auth-project-permission.spec.ts`、`asset-hub-ownership.spec.ts`。
-- Scenario registry：`tests/golden-journey/contracts/scenarios.ts`。
-- 只读 Oracle：`tests/golden-journey/oracle/**`。
-- Harness：`tests/golden-journey/runtime/**`、`providers/**`、`browser/**`。
+| 类别 | 入口 | 保留理由 |
+| --- | --- | --- |
+| Logic | `npm run test:logic` | 独立规格的纯逻辑、状态机、算法、identity，以及 retained harness 的 fail-closed 校验 |
+| Conformance | `npm run test:conformance` | 从生产 Task、Operation、Canvas、Provider 等 registry 穷尽检查接线 |
+| Provider Critical | `npm run test:critical:provider` | 真实 adapter/wire 协议、零隐式重提与明确失败 |
+| Task Critical | `npm run test:critical:task` | 真实 MySQL/Redis 的提交原子性、attempt、Outbox、Wait、并发与 at-most-once |
+| Billing Critical | `npm run test:critical:billing`、`npm run test:critical:billing-concurrency` | 余额、冻结、结算、Stripe 逆向资金事件与并发账本 |
+| Security Critical | `npm run test:critical:security` | 真实 owner/scope、媒体读取与跨项目写入拒绝 |
+| Browser Security | `npm run test:security` | 四个最小 authenticated/unauthenticated 权限边界 |
 
-## 验证
+`npm run test:critical` 只聚合上述 Critical 子集。仓库没有 `test:journey`、Golden scenario registry、脚本模型 Provider 或创作行为自动化入口。
 
-### Golden 观察面
+## 新测试准入记录
 
-自由组合 Journey 从空项目通过真实 Composer 发出目标，由外部模型替身按可见 Resource/Task 事实返回普通生产 Tool calls。Oracle 必须证明：
+新增测试前只需在变更说明中回答四个问题，不创建长期表格或 ledger：
 
-1. 每个创作结论是 `creative_work` 终态物化的不可变 Resource；
-2. 媒体只消费精确输入 Resources，并产生 Lineage；
-3. 部分失败只重试失败 Resource，成功 Resource 不重复提交；
-4. 通用 Choice 的 subject/option/commit 只属于当前决定；
-5. 不采用 Chapter 的长内容不会被服务端自动拆分；采用 Chapter 时来自 `chapter_plan` Resource 且每单元局部约束有效；
-6. Creative Direction 未显式要求预览时不会创建 image Task；
-7. 刷新和 SSE replay 后 Resource、Task、Binding 与 Lineage identity 不变；
-8. 旧固定表、TaskType、Workflow 卡片和自动下游副作用为零。
+1. 属于 TG-03 的哪一类？
+2. 独立 oracle 来自哪里？
+3. 会拒绝哪一种具体且高损失的错误实现？
+4. 为什么现有类型、静态检查、人工复验或保留测试不足？
 
-外部基础设施不可用、场景未挂载或浏览器崩溃都属于未通过，不能用“未发现产品错误”替代。
+任一问题答不清即不新增。修复提交不要求“先红后绿”，但也不得把人工构造错误常量直接传入断言冒充回归证据。
 
 ## 历史回归
 
-- 旧 Golden 以 `mainline-complete.spec.ts` 编排固定多章节阶段，既成为第二 Workflow，又要求已删除表继续存在。当前删除主线 driver，唯一专业产品证据改为自然语言驱动的自由 Resource 组合。
-- 旧 Oracle 查询 style preview、edit script、shot execution、video segment、BGM、music score 和 final output 表；生产删表后 Golden 会在进入行为前直接 SQL 失败。当前 Oracle 只读取 Resource spine 与仍存在的可选投影。
-- 旧测试用 stream 延迟和固定 sleep 观察 processing 卡片，机器速度变化会制造假失败。当前成功由持久 Task/Resource 终态和只读 Oracle 裁决，时间只限定等待上界。
-- 旧阶段测试数量很多，但真实组合经常在更早阶段失败，文件存在被误当作覆盖。当前 required suite 必须真实执行且无 failed/skipped/todo；未运行范围明确列为盲区。
-- Golden 生成目录曾被 lint 当成源码，导致 `test:journey → verify:push` 顺序不稳定。当前 runtime identity 隔离 `.next-golden` 与 artifacts，并由 Git/lint 排除；过期本地缓存不能作为源码类型错误。
-- Next dev 会把每个动态 `.next-golden/<runtime>/types` 追加进它使用的 tsconfig；仅隔离 distDir 仍持续污染被追踪的根配置。当前每个 Golden runtime 生成唯一且忽略的根相对 tsconfig，预先包含精确 dist types 并在停止时清理，根 `tsconfig.json` 不再承担 Harness 运行状态。
+- 旧测试系统长期把测试数量、mutation 分数和目录覆盖当质量目标；大量 route 测试在鉴权 mock 后即返回，业务路径从未执行。测试与生产代码同步变化，却没有独立发现真实缺陷。
+- 旧 Golden Journey 用脚本模型和脚本媒体 Provider 重放预先写好的创作顺序。它能证明 harness 与自身 fixture 一致，却不能发现真实模型的未知组合行为，并持续要求业务变更同步 scenario、driver、oracle 和 provider policy。
+- CI 长期常红后仍继续开发，说明红灯已失去阻塞语义。保留集合必须始终可解释：失败要么修复真实缺陷，要么删除失效测试，不允许把常红当正常状态。
+- 过去纠正性提交中的测试多数是修复后的同步工作，而不是缺陷发现来源。当前取消“任何修复都补测试”的默认要求，把维护预算集中在资金、并发、幂等、权限和生产 registry 漏接。
 
 ## 修改检查表
 
-1. 已有 Golden、Critical、Logic 或 Conformance 是否已反证本次风险？
-2. 新证据属于哪一类，独立 Oracle 是什么？
-3. 是否 mock 了被测系统自己的关键层？
-4. 是否能在 pre-fix 或受控真实故障下失败？
-5. 是否同步了受影响 Golden scenario、driver 与 Oracle？
-6. 实际命令是否无 failed/skipped/todo，未验证盲区是否明确？
+1. 是否默认选择了不新增测试？
+2. 保留或新增的测试是否有实现之外的独立 oracle？
+3. 是否仍存在脚本创作 Journey、映射快照、mock 自证或重复清单？
+4. 失败测试是否先完成有效性审计，而不是让生产代码迁就它？
+5. CI 与 package scripts 是否只指向本页保留集合？
+6. 实际验证与未验证范围是否如实说明？

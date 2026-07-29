@@ -38,7 +38,7 @@
 - Provider contract 继续验证模型选择由服务端拥有、单次 120–180 秒能力及 wire contract；这不作为创作流程证据。
 - Billing/Task/Resource 场景验证精确计划、冻结输入、失败重试和 Resource lineage。
 - FFmpeg Critical 场景验证显式视频/音频 Resources 的确定性混音，不依赖旧 BgmDesign 当前状态。
-- 自由组合 Golden 应覆盖“无音乐完成视频”“先生成音乐但不渲染”“显式混音”三种合法组合。
+- “无音乐完成视频”“先生成音乐但不渲染”“显式混音”三种合法组合依赖真实模型规划与媒体质量，作为人工产品复验而非脚本 Journey。
 
 ## 历史回归
 

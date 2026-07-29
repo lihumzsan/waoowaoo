@@ -16,7 +16,8 @@
 # next.js
 /.next/
 /.next-golden/
-/.tsconfig-golden-*.json
+/.next-security/
+/.tsconfig-security-*.json
 /.next-verify/
 /out/
 
@@ -98,6 +99,7 @@ AGENTS.md
 docs/**
 !docs/architecture/
 !docs/architecture/**
+/artifacts/browser-security/
 /artifacts/golden-journey/
 # GitHub CI workflows (internal)
 # .github/ — 只保留 workflows，忽略其他

@@ -37,9 +37,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 ## 验证
 
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture。
-- `tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts` 与 `canvas-layout-input.test.ts` 验证纯 Resource projection 和 lifecycle。
-- 自由组合 Golden 应按真实 Resource/Task/Lineage 对齐视频、音频、普通最终 VideoCard 和刷新后 identity，并断言流程阶段、专用完成卡与伪造连线为零。
-- `tests/golden-journey/journeys/freeform-resources.spec.ts` 从空项目验证通用媒体卡片、多候选、专业/通用 renderer 选择、Prompt/引用展示、Lineage edge、Binding 与刷新恢复。
+- Canvas 的布局、卡片、刷新、媒体展示和真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验；不再维护 projection snapshot 或脚本创作 Journey。
 
 ## 历史回归
 
@@ -63,4 +61,4 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 3. 是否重新引入 Panel/Image/VideoGroup、历史推断、timer/refetch 正确性或 ID fallback？
 4. 专业 origin 是否复用专业 renderer，通用 fallback 是否避免重复节点？
 5. 是否用 Workflow、布局或同批关系伪造了可见性或 Lineage edge？
-6. 受影响的 Golden observable 是否已同步？
+6. 是否明确了需要人工复验的 Canvas observable，而不是机械新增快照测试？

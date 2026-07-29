@@ -48,12 +48,8 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 ## 验证
 
 - `tests/integration/provider/openai-hosted-web-search.contract.test.ts` 在付费外部 runner seam 注入 Responses output item shape，验证 hosted query、结构化 URL citation、image 证据、去重、非 HTTP 丢弃、无图正常完成、进度投影、模型角色拒绝路由键、报告边界、缺 key、拒绝凭据和无证据 fail-closed。
-- `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registries 穷尽证明 Primary Operation 可发现，且只有 `creative_direction` Worker 得到 `web_search`。
-- `tests/unit/operations/web-search-ops.test.ts` 验证 Primary 成功结果与缺失/拒绝配置的 typed Operation failure。
-- `tests/unit/creative-worker/research.test.ts` 验证 outer budget、hosted query、source-only evidence 与未尝试/部分失败状态。
-- `tests/unit/creative-worker/web-search-tool.test.ts` 验证方向 Worker 的真实函数 Tool、strict transport 与运行时 parser 共用的显式域名数组契约、冻结预算、报告传递、来源计数和非方向工具缺席。
-- `tests/unit/creative-resource/creative-work-materialization.test.ts` 验证 evidence 只进入 Direction generation metadata。
-- 真实 OpenAI 的中文论坛覆盖、登录墙、来源排序、延迟、成本，以及 `image_result` 与 annotation 的线上实际形状属于发布复验；本地 contract 不伪造这些质量结论。**`image_result` 字段名当前来自官方文档，装机 SDK 未定型该输出，首次真实调用必须核对后再收紧契约。**
+- `tests/contracts/project-agent-toolset-conformance.test.ts` 只证明 Primary Operation 从生产 registry 可发现；Worker 工具暴露、研究预算、报告传递与 generation metadata 不再用同一实现的 Unit fixture 自证。
+- 真实 OpenAI 的中文论坛覆盖、登录墙、来源排序、延迟、成本，以及 `image_result` 与 annotation 的线上实际形状属于发布复验；本地 wire contract 不伪造这些质量结论。**`image_result` 字段名当前来自官方文档，装机 SDK 未定型该输出，首次真实调用必须核对后再收紧契约。**
 
 ## 历史回归
 

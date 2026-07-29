@@ -45,10 +45,9 @@
     "check:outbound-image-runtime-sample": "tsx scripts/check-outbound-image-runtime-sample.ts",
     "check:outbound-image-success-rate": "tsx scripts/check-outbound-image-success-rate.ts",
     "check:image-urls-contract": "tsx scripts/check-image-urls-contract.ts",
-    "verify:outbound-image": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run src/lib/media/outbound-image.test.ts src/lib/media/image-url.test.ts",
     "billing:cleanup-pending-freezes": "tsx scripts/billing-cleanup-pending-freezes.ts",
     "billing:reconcile-ledger": "tsx scripts/billing-reconcile-ledger.ts",
-    "test:journey": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/golden-journey/self-tests && tsx tests/golden-journey/runtime/verify-mounts.ts && tsx tests/golden-journey/runtime/verify-service-isolation.ts && cross-env GOLDEN_MODEL_SCENARIO=free-composition playwright test --config tests/golden-journey/playwright.config.ts freeform-resources.spec.ts auth-project-permission.spec.ts asset-hub-ownership.spec.ts",
+    "test:security": "cross-env BILLING_TEST_BOOTSTRAP=0 playwright test --config tests/browser-security/playwright.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime-scripts.json",
     "lint:all": "npm run lint -- .",
     "security:secrets:staged": "node scripts/security/secret-scan.mjs --staged",
@@ -68,13 +67,13 @@
     "lint": "eslint",
     "clean": "rimraf .next .next-verify",
     "test:logic": "cross-env BILLING_TEST_BOOTSTRAP=0 node scripts/test-verification/run-required-suite.mjs --suite logic --root tests/unit",
-    "test:conformance": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/contracts",
-    "test:fast": "npm run test:logic && npm run test:conformance",
+    "test:conformance": "cross-env BILLING_TEST_BOOTSTRAP=0 node scripts/test-verification/run-required-suite.mjs --suite conformance --root tests/contracts",
     "test:critical:provider": "cross-env BILLING_TEST_BOOTSTRAP=0 node scripts/test-verification/run-required-suite.mjs --suite critical-provider --root tests/integration/provider",
     "test:critical:task": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite critical-task --root tests/integration/task",
     "test:critical:billing": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite critical-billing --root tests/integration/billing",
     "test:critical:billing-concurrency": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite critical-billing-concurrency --root tests/concurrency/billing",
-    "test:critical": "npm run test:critical:provider && npm run test:critical:task && npm run test:critical:billing && npm run test:critical:billing-concurrency"
+    "test:critical:security": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite critical-security --root tests/integration/security",
+    "test:critical": "npm run test:critical:provider && npm run test:critical:task && npm run test:critical:billing && npm run test:critical:billing-concurrency && npm run test:critical:security"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.22",

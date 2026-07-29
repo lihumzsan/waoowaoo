@@ -16,7 +16,7 @@ npm run architecture:impact -- <准备修改的文件或目录>
 npm run architecture:impact -- --changed
 ```
 
-`--changed` 包含 tracked modified、staged、untracked、renamed 与 deleted 路径，但只提供只读路由；它不决定 Journey 适用性、当前任务所有权或提交范围。未映射路径正常报告且不失败，执行者必须根据真实语义明确“不适用”或补充模块映射。命令不能代替验证，不能根据 changed files 猜测测试；实现必须复用文档列出的权威入口，并选择相应的 Golden、Critical、Logic 或 Conformance 证据。
+`--changed` 包含 tracked modified、staged、untracked、renamed 与 deleted 路径，但只提供只读路由；它不决定验证方式、当前任务所有权或提交范围。未映射路径正常报告且不失败，执行者必须根据真实语义明确“不适用”或补充模块映射。命令不能代替验证，不能根据 changed files 猜测测试；实现必须复用文档列出的权威入口，并按风险选择最低成本的有效验证。
 
 | 改动范围 | 必读模块 | 主要权威入口 |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ npm run architecture:impact -- --changed
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
 | 注册/登录、顶层导航、语言切换、deployment capability 投影 | [产品外壳、身份与本地化](modules/product-shell.md) | auth/session、i18n navigation、deployment features、Navbar |
 | 全局/项目资产的 owner、scope、kind、variant 与复制边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、unified asset operations |
-| Golden Journey、关键基础设施场景、纯逻辑规格、registry conformance 与 harness | [测试治理](modules/test-governance.md) | Golden scenario registry、read-only oracle、critical scenarios、admission contract |
+| 自动化测试准入、保留集合、关键基础设施、registry conformance 与最小浏览器安全 | [测试治理](modules/test-governance.md) | admission contract、retained suites、critical scenarios、security browser harness |
 
 ## 权威层级
 

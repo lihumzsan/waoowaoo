@@ -39,6 +39,7 @@
     "node_modules",
     ".next",
     ".next-golden",
+    ".next-security",
     "scripts",
     "tmp"
   ]

@@ -49,13 +49,12 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 ## 验证
 
 - `tests/contracts/task-definition-conformance.test.ts` 从生产 registry 穷尽所有 Task 定义。
-- `tests/contracts/creative-result-resource-conformance.test.ts` 与 `tests/unit/creative-resource/creative-work-materialization.test.ts` 验证专业结果统一落到 Resource spine。
 - `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts`、`outbox-delivery-lifecycle.integration.test.ts` 验证真实 MySQL/Redis 的原子提交、去重与恢复。
 - `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`provider-invocation-at-most-once.integration.test.ts` 验证 attempt、late/replay 和 provider fence。
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证多 Task Wait seal 与单 continuation。
 - `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 验证提交后精确即时入队、stale 恢复、毒消息与预期 contention 不消耗 delivery failure budget。
-- `tests/integration/task/creative-resource-video-merge-ffmpeg.integration.test.ts` 用真实 FFmpeg 验证通用视频合并的音视频时长与失败边界。
-- `tests/golden-journey/journeys/freeform-resources.spec.ts` 通过真实 UI/API/DB/queue/worker/SSE/刷新验证自由 Resource 创建、失败重试、采用与 lineage；不再使用固定 mainline stage 作为 oracle。
+
+LLM 创作组合、媒体呈现和 FFmpeg 产物质量没有保留脚本 Journey 或 fixture 测试；它们属于真实输入下的人工/发布复验边界。
 
 ## 发布边界
 
@@ -82,4 +81,4 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 2. Task 与 Resource 的 writer 是否各自唯一，失败、取消、重试、晚到和 replay 是否明确？
 3. 输入是否只冻结精确 Resource ID，并由服务端回库校验 scope？
 4. 是否删除被替代的 TaskType、target、文案、测试、guard 与查询，而非增加兼容分支？
-5. 是否运行适用 Conformance、Logic、Critical、Golden，并明确 DB/Redis/provider 盲区？
+5. 是否按风险运行了适用的保留验证，并明确 DB/Redis/provider 与真实产品盲区？

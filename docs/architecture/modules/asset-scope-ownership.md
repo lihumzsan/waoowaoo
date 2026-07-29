@@ -45,18 +45,18 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 
 ## 验证
 
-- `tests/integration/api/specific/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、character/location/prop、parent/variant、copy atomicity，以及共享 prepare 版本的第二次上传必须被 stale `updatedAt` CAS 拒绝且不能覆盖第一份正式 render。
-- `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 通过真实浏览器与生产 copy route，证明第二个已登录用户不能覆盖其他项目的资产。
+- `tests/integration/security/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、parent/variant、copy atomicity 与 stale CAS 拒绝。
+- `SEC-ASSET-CROSS-PROJECT-DENIAL` 通过真实浏览器和生产 copy route 验证第二个已登录用户不能覆盖其他项目的资产。
 - `S3_*` 的 HTTPS、必填凭据与 endpoint shape 可由配置解析和类型检查验证；HeadBucket、对象权限、签名域名及外部 Provider 可达性必须在目标部署桶人工复验，不能由本地 fixture 证明。
 - `npx tsx scripts/test-sign-api.ts` 仅用于目标部署桶的人工验收：用唯一 key 上传对象、生成 HTTPS 签名 URL、下载比对后删除该测试对象；该命令会写入并删除一个测试对象，不属于只读启动检查。
-- 后台私有媒体 owner + S3 的真实组合依赖部署对象存储，当前作为发布复验盲区，不用本地存储 fixture 伪造。
+- `tests/integration/security/outbound-image.security.test.ts` 只保留 SSRF、重定向、字节和格式安全边界。后台私有媒体 owner + S3 的真实组合依赖部署对象存储，当前作为发布复验盲区，不用本地存储 fixture 伪造。
 
 结构检查只证明已知旁路没有恢复；跨用户拒绝由最小安全 Journey 证明，普通 source/target 组合由真实 MySQL integration 证明，不再另建一条浏览器产品线。
 
 ## 历史回归
 
 - `f364bbc9e4` 引入 unified asset service 与 copy route 时，全局 source 查询包含 owner scope，但项目 target 仍使用裸 `findUnique({ id })`。结果是用户 B 可以用自己的项目完成 Route 鉴权，却把项目 A 的 character ID 作为 target，并成功覆盖项目 A 的资产。
-- System Journey 的 `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 首次通过真实浏览器、生产 Route、Service 和 MySQL 复现了这个跨用户写入。
+- 旧 System Journey 首次通过真实浏览器、生产 Route、Service 和 MySQL 复现了这个跨用户写入；该案例现收缩为最小浏览器安全场景 `SEC-ASSET-CROSS-PROJECT-DENIAL`。
 - `af300a4ff` 将 owner、project、kind、parent/variant 与 copy transaction 收敛到共享 resolver，并删除 operation-specific raw-ID 所有权解释。
 - 当前防线由跨项目拒绝 Journey 与 integration 中的合法复用/原子 copy 组合共同构成，避免用第二条产品 Journey 重复覆盖同一 service 契约。
 - 资源通知与业务写收敛到同一事务时，项目和 Asset Hub 上传曾把 `sharp`、对象存储和空间档案 AI 一起塞入 interactive transaction，并且只在 executor 已返回 output 后才能补偿；慢外部调用可能令事务超时，执行中失败还会留下本次未共享对象。同步 Asset Hub 写迁入事务后，media normalizer/projector 还曾使用全局 Prisma client，无法读取本事务未提交的 MediaObject 并可能形成跨 client 竞争。当前 Operation 明确分为事务外 prepare、短事务 commit 和按 prepare identity 的失败补偿；同步媒体规范化/投影复用同一 transaction client，registry 穷尽拒绝缺少 prepare/commit/compensate 的外部资源写。已有关系仍只由领域更新，物理回收没有被转移给 Operation。
@@ -76,6 +76,6 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - missing、foreign、wrong-kind、cross-parent 是否都在副作用前以不泄露存在性的错误失败？
 - destructive helper 是否仍只能从 `asset-actions.ts` 的 scoped 入口调用？
 - 是否把“关系删除”误写成 storageKey 物理删除？除本次失败上传的唯一临时 key 外，领域操作不得承担媒体 GC。
-- 如果新增资产 kind 或 variant，是否同步更新 resolver、`docs/architecture/modules.json` 的实际路径、真实 MySQL conformance 和适用 Golden Journey？
+- 如果新增资产 kind 或 variant，是否同步更新 resolver、`docs/architecture/modules.json` 的实际路径，并按风险判断现有 MySQL/security 证据是否仍适用？
 - manifest adoption 是否只调用共享 Project asset writer 并更新 Binding，没有创建图片 Task？图片是否仍只经 `create_image` 和终态 Binding？
-- 是否根据行为影响选择已有 Product Golden，而不是机械新增测试？
+- 是否默认不新增测试，并明确人工或自动验证边界？

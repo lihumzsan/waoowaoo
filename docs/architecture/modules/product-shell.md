@@ -12,7 +12,7 @@
 - **PS-02 — 部署能力单一来源。** cloud/self-hosted 的可见能力只从 `src/lib/deployment/features.ts` 派生并经公开 deployment contract 消费，页面不得根据 edition 名称或环境变量另行猜测。隐藏页面不等于关闭能力：用户 Provider 配置是否可用必须由 `providerCredentialMode` 同时裁决 UI、API、Operation channel 和 runtime；`platform-key` 下用户读取、写入和连接诊断全部拒绝。
 - **PS-03 — 会话与业务身份分离。** 浏览器重载、退出和重新登录不得改变用户的持久 identity；受保护页面和 route 必须分别通过真实会话与资源 owner 校验。
 - **PS-04 — locale 导航唯一入口。** 本地化页面导航必须使用 `@/i18n/navigation`，切换语言必须保留当前产品 pathname 和持久实体 identity。
-- **PS-05 — 外部辅助能力不是真相来源。** GitHub 更新等外部辅助响应不能改变鉴权、项目或部署能力事实；Golden 只以协议兼容替身验证边界，真实公网可用性保留为外部盲区。
+- **PS-05 — 外部辅助能力不是真相来源。** GitHub 更新等外部辅助响应不能改变鉴权、项目或部署能力事实；真实公网可用性保留为外部盲区。
 - **PS-06 — 一个用户动作只有一个页面后继。** 创建或保存成功后若必须导航到另一产品表面，不得同时启动只服务于当前页面的 refetch；留在当前页时才由当前页刷新自己的 View。
 - **PS-07 — 权威父资源成功后才可初始化子资源。** 空数组、缺失 View 或 loading 结束不能证明用户拥有父资源。自动创建默认剧集等 setup 写入必须先取得成功且已鉴权的 Project；父资源 401/403/404 或读取错误后必须停止全部派生写入。
 - **PS-08 — 浏览器会话是用户 API 的唯一身份来源。** 受保护 HTTP route 只接受 NextAuth session 中的持久 user id；固定内部 token、调用方提供的 user id、用户名或邮箱不得成为并行身份入口。日志下载和其他运维数据还必须经过显式管理员授权，不能由 deployment feature visibility 代替鉴权。
@@ -33,15 +33,13 @@
 
 ## 验证
 
-- `GJ-AUTH-SESSION-RECOVERY` 验证注册、刷新、退出、错误密码和恢复登录不改变持久用户 identity。
-- `GJ-PROJECT-CROSS-USER-ISOLATION` 验证会话 identity 不能越过项目 owner。
+- `SEC-AUTH-SESSION-RECOVERY` 验证注册、刷新、退出、错误密码和恢复登录不改变持久用户 identity。
+- `SEC-PROJECT-CROSS-USER-ISOLATION` 验证会话 identity 不能越过项目 owner。
 - `tests/unit/auth/phone-number.test.ts` 验证中国大陆输入变体与国际号码只能投影为一个 E.164 canonical identity，歧义号码原地拒绝。
-- `GJ-I18N-CRITICAL-PROJECT` 验证英文 UI 创建的同一项目经产品语言切换后仍是同一持久实体。
-- `GJ-DEPLOY-SELF-HOSTED-CAPABILITIES` 比较公开 capability contract 与真实注册、Profile 和导航表面。
 - 匿名 route 必须显式枚举；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
-- 自由组合 Golden 从真实首页证明 Project、16:9 和首 Episode 同时存在且没有比例 Choice；缺少比例的非首页入口则证明模型通用 Choice 仍可恢复当前媒体请求。
 - `tests/unit/auth/rate-limit-client-ip.test.ts` 反证伪造 X-Forwarded-For 绕过；`docker compose config` 与 cloud env preflight 分别验证自托管、cloud 启动契约。
 - 对象存储启动契约以 `docker compose config --quiet` 和实际目标环境的 `npm run storage:init` 复验；没有真实目标桶时只能验证配置解析，不能宣称 Provider 已可下载签名对象。
+- i18n、deployment capability、首页默认 Project/Episode 和 Assistant ratio Choice 通过人工产品复验，不再复制成脚本 Journey。
 
 ## 历史回归
 
@@ -51,7 +49,7 @@
 - Asset ownership Journey 在删除攻击者项目后立即退出，发现删除 handler 启动当前页 refetch 却不等待它完成；下一次导航把成功删除后的刷新记录成网络错误。留在当前页的删除动作现在等待自己的唯一刷新后继完成。
 - 权限 Journey 发现外部用户读取 Project 已返回 403 后，页面仍把空 episodes 当作合法零状态并自动创建第一集；自动初始化现在必须先证明权威 Project 已成功读取。
 - 大量旧测试没有经过真实英文页面、Navbar 和产品切换确认，因而从未观察到这个组合错误。
-- 早期内部 LLM HTTP 代理删除后，固定 `INTERNAL_TASK_TOKEN + x-user-id` 身份旁路仍残留在通用 auth helper，且普通用户可下载全局日志；路由级项目鉴权与 UI 隐藏没有覆盖这两个非项目入口。当前删除内部 token 协议、代理 handler 与 callback，用户 API 只接受 session id，日志 route 复用管理员裁决，5xx 响应不再回传内部错误详情。Golden auth/permission 继续验证真实会话；运维身份的独立部署验证仍是未覆盖盲区。
+- 早期内部 LLM HTTP 代理删除后，固定 `INTERNAL_TASK_TOKEN + x-user-id` 身份旁路仍残留在通用 auth helper，且普通用户可下载全局日志；路由级项目鉴权与 UI 隐藏没有覆盖这两个非项目入口。当前删除内部 token 协议、代理 handler 与 callback，用户 API 只接受 session id，日志 route 复用管理员裁决，5xx 响应不再回传内部错误详情。最小 browser security 只验证普通会话边界；运维身份的独立部署验证仍是未覆盖盲区。
 - 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。第一轮只把 MinIO 密钥改为显式配置，仍让本地文件、内网 MinIO 与公网对象存储成为三种部署/Provider 组合。当前 Compose 只编排 MySQL、Redis 和应用，所有环境必须显式配置同一外部 HTTPS S3-compatible bucket；storage startup 只验证预建桶，不创建基础设施或回退。既有 local/MinIO 数据必须由部署者在升级前迁移，本次没有执行数据复制；真实目标云的权限、域名和 Provider 可达性仍需在目标环境复验。
 - 代理信任改为显式配置后，真实权限 Journey 在无可信代理的本地部署连续创建多个测试用户时触发了共享注册桶：原先每分钟 3 次的阈值会把同一 NAT/未知来源下的正常注册误判成攻击。注册桶调整为每分钟 10 次，仍由 Redis 原子滑窗限制批量滥用；登录继续保持更严格阈值，无法确认客户端来源时仍不信任来路 header，也不回退为无限制。
 - 安全部署加固曾把正式公网 cloud 的管理员、Bull Board 认证、HTTPS 和正数代理跳数要求无条件加入 `.env.cloud.local` preflight；结构检查和生产构建只证明规则足够严格，没有运行仍由同一入口驱动的本地 `dev:cloud`，导致没有管理员、反向代理或公网 Bull Board 的正常开发环境无法启动。当前保留一个 fail-closed 校验器，由 package script 显式选择 development 或 production profile；development 只放宽不存在的运维能力，公网 HTTP、半套 Bull Board 凭据、非 loopback 无认证暴露和非法代理值仍原地失败。
@@ -67,6 +65,6 @@
 2. 目标 locale 是否只在用户选择后用于确认内容和后续导航？
 3. deployment UI 是否只消费公开 features contract，而没有读取 edition 或环境自行判断？
 4. 登出、重载、切换语言后是否保留或明确结束正确的会话与业务 identity？
-5. 是否复用了 `@/i18n/navigation`，且相关 Golden Journey 经过真实浏览器验证？
+5. 是否复用了 `@/i18n/navigation`，并明确需要人工复验的导航与 locale 边界？
 6. 自动创建默认子资源前，是否已经成功读取并鉴权父资源，而不是只看到空列表？
 7. 新认证方式是否复用了唯一 onboarding writer、canonical Account identity 与 deployment capability，而没有恢复独立注册入口？

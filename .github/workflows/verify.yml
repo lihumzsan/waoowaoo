@@ -2,7 +2,10 @@ name: Verify
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
@@ -56,14 +59,19 @@ jobs:
       - name: Static verification
         run: npm run verify:push
 
-      - name: Fast tests
-        run: npm run test:fast
+      - name: Logic tests
+        run: npm run test:logic
+
+      - name: Registry conformance
+        run: npm run test:conformance
 
       - name: Critical infrastructure tests
         run: npm run test:critical
 
       - name: Install Playwright browser
+        if: github.event_name != 'pull_request'
         run: npx playwright install --with-deps chromium
 
-      - name: Product Journey
-        run: npm run test:journey
+      - name: Browser security
+        if: github.event_name != 'pull_request'
+        run: npm run test:security
