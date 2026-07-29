@@ -104,6 +104,7 @@
     "geist": "^1.7.0",
     "ioredis": "^5.9.2",
     "jszip": "^3.10.1",
+    "libphonenumber-js": "^1.13.9",
     "lru-cache": "^11.2.6",
     "lucide-react": "^0.575.0",
     "mammoth": "^1.11.0",

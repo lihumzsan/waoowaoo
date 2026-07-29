@@ -13,7 +13,13 @@ import {
   PHONE_AUTH_RESULT_CODES,
   readPhoneAuthResultCode,
 } from '@/lib/auth/phone-auth-contract'
-import { normalizePhoneNumber } from '@/lib/auth/phone-number'
+import { normalizePhoneNumberForDestination } from '@/lib/auth/phone-number'
+import {
+  getSmsDestination,
+  isSmsDestinationId,
+  SMS_DESTINATIONS,
+  type SmsDestinationId,
+} from '@/lib/auth/sms-destinations'
 import type { PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 
@@ -50,6 +56,7 @@ function readImageCaptchaPayload(payload: unknown): ImageCaptchaPayload | null {
 }
 
 export default function AuthEntryCard({ features }: AuthEntryCardProps) {
+  const [destinationId, setDestinationId] = useState<SmsDestinationId>('CN')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [captchaId, setCaptchaId] = useState('')
@@ -67,6 +74,12 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [notice, setNotice] = useState('')
   const router = useRouter()
   const t = useTranslations('auth')
+  const selectedDestination = getSmsDestination(destinationId)
+
+  const resolvePhoneNumber = () => normalizePhoneNumberForDestination(
+    phoneNumber,
+    destinationId,
+  )
 
   const loadImageCaptcha = useCallback(async (clearError: boolean) => {
     if (clearError) setCaptchaError('')
@@ -116,6 +129,8 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
         return t('sendRateLimited')
       case PHONE_AUTH_RESULT_CODES.providerRejected:
         return t('smsProviderRejected')
+      case PHONE_AUTH_RESULT_CODES.destinationUnavailable:
+        return t('smsDestinationUnavailable')
       case PHONE_AUTH_RESULT_CODES.providerUnavailable:
         return t('smsProviderUnavailable')
       case PHONE_AUTH_RESULT_CODES.humanVerificationInvalid:
@@ -134,6 +149,12 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
   const handleSendCode = async () => {
     if (pendingAction || resendSeconds > 0) return
+    const normalizedPhoneNumber = resolvePhoneNumber()
+    if (!normalizedPhoneNumber) {
+      setCaptchaDialogOpen(false)
+      setError(t('phoneInvalid'))
+      return
+    }
     if (!captchaId || captchaAnswer.length !== 4) {
       setCaptchaError(t('imageCaptchaRequired'))
       return
@@ -149,7 +170,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phoneNumber,
+          phoneNumber: normalizedPhoneNumber,
           captchaId,
           captchaAnswer,
         }),
@@ -192,7 +213,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
   const handleOpenCaptchaDialog = () => {
     if (pendingAction || resendSeconds > 0) return
-    if (!normalizePhoneNumber(phoneNumber)) {
+    if (!resolvePhoneNumber()) {
       setError(t('phoneInvalid'))
       return
     }
@@ -213,6 +234,11 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
   const handlePhoneSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    const normalizedPhoneNumber = resolvePhoneNumber()
+    if (!normalizedPhoneNumber) {
+      setError(t('phoneInvalid'))
+      return
+    }
     if (features.requireInviteCodeOnSignup && !inviteCode.trim()) {
       setError(t('inviteCodeRequired'))
       return
@@ -223,7 +249,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
     setNotice('')
     try {
       const result = await signIn('phone', {
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         code: verificationCode,
         inviteCode: inviteCode.trim(),
         redirect: false,
@@ -287,22 +313,52 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
 
           {features.enablePhoneAuth ? (
             <form onSubmit={handlePhoneSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="phoneNumber" className="mb-2 block text-sm font-semibold text-slate-900">
-                  {t('phoneNumber')}
-                </label>
-                <input
-                  id="phoneNumber"
-                  name="phoneNumber"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.target.value)}
-                  required
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                  placeholder={t('phoneNumberPlaceholder')}
-                />
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                <div>
+                  <label htmlFor="phoneDestination" className="mb-2 block text-sm font-semibold text-slate-900">
+                    {t('phoneDestination')}
+                  </label>
+                  <select
+                    id="phoneDestination"
+                    name="phoneDestination"
+                    value={destinationId}
+                    disabled={pendingAction !== null}
+                    onChange={(event) => {
+                      if (!isSmsDestinationId(event.target.value)) return
+                      setDestinationId(event.target.value)
+                      setPhoneNumber('')
+                      setVerificationCode('')
+                      setError('')
+                      setNotice('')
+                    }}
+                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {SMS_DESTINATIONS.map((destination) => (
+                      <option key={destination.id} value={destination.id}>
+                        {`${destination.flag} ${t(`phoneDestinations.${destination.id}`)} (+${destination.callingCode})${destination.senderIdPolicy === 'dedicated-required' ? ` · ${t('senderIdRequired')}` : ''}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="phoneNumber" className="mb-2 block text-sm font-semibold text-slate-900">
+                    {t('phoneNumber')}
+                  </label>
+                  <input
+                    id="phoneNumber"
+                    name="phoneNumber"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    value={phoneNumber}
+                    onChange={(event) => setPhoneNumber(event.target.value)}
+                    required
+                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                    placeholder={t('phoneNumberPlaceholder', {
+                      example: selectedDestination.exampleNationalNumber,
+                    })}
+                  />
+                </div>
               </div>
 
               <div>

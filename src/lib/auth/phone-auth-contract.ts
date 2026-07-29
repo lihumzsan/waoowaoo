@@ -5,6 +5,7 @@ export const PHONE_AUTH_RESULT_CODES = {
   verificationInvalid: 'PHONE_AUTH_VERIFICATION_INVALID',
   providerUnavailable: 'PHONE_AUTH_PROVIDER_UNAVAILABLE',
   providerRejected: 'PHONE_AUTH_PROVIDER_REJECTED',
+  destinationUnavailable: 'PHONE_AUTH_DESTINATION_UNAVAILABLE',
   featureDisabled: 'PHONE_AUTH_FEATURE_DISABLED',
   bodyParseFailed: 'PHONE_AUTH_BODY_PARSE_FAILED',
   humanVerificationInvalid: 'PHONE_AUTH_HUMAN_VERIFICATION_INVALID',

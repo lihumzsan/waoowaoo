@@ -6,6 +6,7 @@ import { maskPhoneNumber, normalizePhoneNumber } from '@/lib/auth/phone-number'
 import {
   sendTencentVerificationSms,
   TencentSmsConfigurationError,
+  TencentSmsDestinationUnavailableError,
   TencentSmsRejectedError,
 } from '@/lib/auth/tencent-sms'
 import { getDeploymentConfig } from '@/lib/deployment/config'
@@ -229,6 +230,22 @@ export async function sendPhoneVerificationCode(rawPhoneNumber: unknown): Promis
       challengeId,
     })
   } catch (error) {
+    if (error instanceof TencentSmsDestinationUnavailableError) {
+      await compensateRejectedChallenge(keys, challengeId)
+      logAuthAction(
+        'LOGIN',
+        'SMS destination unavailable',
+        {
+          success: false,
+          provider: 'tencent-sms',
+          destinationId: error.destinationId,
+          reason: error.reason,
+        },
+        undefined,
+        maskPhoneNumber(phoneNumber),
+      )
+      throw new PhoneVerificationError(PHONE_AUTH_RESULT_CODES.destinationUnavailable)
+    }
     if (error instanceof TencentSmsConfigurationError) {
       await compensateRejectedChallenge(keys, challengeId)
     }

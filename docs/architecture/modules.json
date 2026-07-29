@@ -478,7 +478,8 @@
         "messages/en/nav.json",
         "messages/zh/nav.json",
         "messages/en/profile.json",
-        "messages/zh/profile.json"
+        "messages/zh/profile.json",
+        "tests/unit/auth/phone-number.test.ts"
       ]
     },
     {
