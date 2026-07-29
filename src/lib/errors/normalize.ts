@@ -30,6 +30,16 @@ function toMessage(value: unknown): string {
   }
 }
 
+/**
+ * Human-readable description of an unknown thrown value. Plain objects are
+ * serialized whole (bounded) so provider error payloads thrown as raw JSON
+ * survive into logs and persisted error messages instead of "[object Object]".
+ */
+export function describeUnknownError(value: unknown): string {
+  const message = toMessage(value)
+  return (message || String(value)).slice(0, 4000)
+}
+
 function toLowerMessage(value: unknown): string {
   return toMessage(value).toLowerCase()
 }

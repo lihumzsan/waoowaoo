@@ -52,6 +52,7 @@ import { normalizeProjectAgentLocale } from './locale'
 import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
 import { stableArgsHash } from './stable-args-hash'
 import { recordUsageFact } from '@/lib/billing/reporting'
+import { describeUnknownError } from '@/lib/errors/normalize'
 import {
   buildProjectAgentContextComposition,
   buildProjectAgentContextTelemetry,
@@ -2115,7 +2116,7 @@ export async function createProjectAgentChatResponse(input: {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
         const clientDisconnect = readProjectAgentClientDisconnect(runAbortController.signal)
         const effectiveError = ownershipLoss ?? clientDisconnect ?? error
-        const errorMessage = effectiveError instanceof Error ? effectiveError.message : String(effectiveError)
+        const errorMessage = describeUnknownError(effectiveError)
         projectAgentLogger.error({
           action: 'assistant.agents.stream.failed',
           message: 'Project agent UI message stream failed',
