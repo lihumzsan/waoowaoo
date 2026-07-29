@@ -1,4 +1,5 @@
 import { asSchema } from 'ai'
+import { ApiError } from '@/lib/api-errors'
 import type {
   JsonObject,
   JsonValue,
@@ -115,20 +116,69 @@ function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean 
   for (const [key, propertySchema] of Object.entries(properties)) {
     if (!isRecord(propertySchema) || !Object.prototype.hasOwnProperty.call(propertySchema, 'const')) continue
     if (!Object.prototype.hasOwnProperty.call(value, key)) continue
+    // A null in strict-dialect input may encode absence, so it can never veto
+    // a branch through a const discriminator; the normalizer resolves it later.
+    if (value[key] === null) continue
     if (!schemaMatchesDiscriminator(value[key], propertySchema)) return false
   }
   return true
 }
 
-function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null {
+function readUnionBranches(schema: JsonValue): JsonValue[] {
+  if (!isRecord(schema)) return []
   const branches = Array.isArray(schema.oneOf)
     ? schema.oneOf
     : Array.isArray(schema.anyOf)
       ? schema.anyOf
       : []
+  return branches.map(toJsonValue)
+}
+
+function selectUnionBranchIndex(value: unknown, branches: readonly JsonValue[]): number {
+  const matches = branches.flatMap((branch, index) => (
+    schemaMatchesDiscriminator(value, branch) ? [index] : []
+  ))
+  return matches.length === 1 ? matches[0] ?? -1 : -1
+}
+
+function selectUnionBranch(value: unknown, schema: JsonObject): JsonValue | null {
+  const branches = readUnionBranches(schema)
   if (branches.length === 0) return null
-  const matches = branches.filter((branch) => schemaMatchesDiscriminator(value, toJsonValue(branch)))
-  return matches.length === 1 ? toJsonValue(matches[0]) : null
+  const index = selectUnionBranchIndex(value, branches)
+  return index >= 0 ? branches[index] ?? null : null
+}
+
+/**
+ * Picks the union branch a strict-dialect value belongs to. The canonical
+ * runtime schema is the only required-key authority: strict projection marks
+ * every key required, so tool-side required lists carry no discrimination
+ * evidence. The tool projection preserves union order, so once the canonical
+ * branch is known the matching tool branch is the same index.
+ */
+function selectUnionBranchPair(params: {
+  value: unknown
+  toolSchema: JsonObject
+  runtimeSchema: JsonValue | undefined
+}): { tool: JsonValue | null; runtime: JsonValue | null } {
+  const toolBranches = readUnionBranches(params.toolSchema)
+  const runtimeBranches = readUnionBranches(
+    params.runtimeSchema === undefined ? null : params.runtimeSchema,
+  )
+  if (runtimeBranches.length > 0) {
+    const runtimeIndex = selectUnionBranchIndex(params.value, runtimeBranches)
+    if (runtimeIndex >= 0) {
+      return {
+        tool: toolBranches.length === runtimeBranches.length
+          ? toolBranches[runtimeIndex] ?? null
+          : selectUnionBranch(params.value, params.toolSchema),
+        runtime: runtimeBranches[runtimeIndex] ?? null,
+      }
+    }
+  }
+  return {
+    tool: selectUnionBranch(params.value, params.toolSchema),
+    runtime: null,
+  }
 }
 
 function normalizeNullableModelValue(
@@ -158,15 +208,16 @@ function normalizeNullableModelValue(
     })
   }
   if (!isRecord(value) || !isRecord(toolSchema)) return value
-  const selectedToolBranch = selectUnionBranch(value, toolSchema)
-  const selectedRuntimeBranch = isRecord(runtimeSchema)
-    ? selectUnionBranch(value, runtimeSchema)
-    : null
-  if (selectedToolBranch || selectedRuntimeBranch) {
+  const selectedBranches = selectUnionBranchPair({
+    value,
+    toolSchema,
+    runtimeSchema,
+  })
+  if (selectedBranches.tool || selectedBranches.runtime) {
     return normalizeNullableModelValue(
       value,
-      selectedToolBranch ?? toolSchema,
-      selectedRuntimeBranch ?? runtimeSchema,
+      selectedBranches.tool ?? toolSchema,
+      selectedBranches.runtime ?? runtimeSchema,
     )
   }
   const properties = readProperties(toolSchema)
@@ -185,30 +236,56 @@ function normalizeNullableModelValue(
 }
 
 /**
- * Strict tool schemas must list every property. Optional runtime fields are
- * therefore exposed to the model as nullable, but the canonical Zod runtime
- * schema still models absence as undefined. Preserve real null values when
- * Zod accepts them; otherwise, and only for a tool-schema property that
- * explicitly permits null, normalize null to absence before the same Zod
- * parser validates the request.
+ * Strict tool schemas must list every property. Optional runtime fields of
+ * legacy tools are therefore exposed to the model as nullable, but the
+ * canonical Zod runtime schema still models absence as undefined. Preserve
+ * real null values when Zod accepts them; otherwise, and only for a
+ * tool-schema property that explicitly permits null, normalize null to
+ * absence before the same Zod parser validates the request.
+ *
+ * When neither the raw input nor its normalization satisfies the canonical
+ * schema this fails loudly with the same typed OPERATION_INPUT_INVALID error
+ * the invocation authority raises: silently forwarding the raw input would
+ * let half-translated payloads reach planning and surface as unrelated
+ * downstream failures.
  */
 export function normalizeProjectAgentToolInput(params: {
+  operationId: string
   input: unknown
   inputSchema: RuntimeSchema<unknown>
   toolInputSchema: ProjectAgentToolInputSchema
 }): unknown {
-  if (params.inputSchema.safeParse(params.input).success) return params.input
+  const rawParse = params.inputSchema.safeParse(params.input)
+  if (rawParse.success) return params.input
   const rawRuntimeSchema = asSchema(params.inputSchema).jsonSchema
-  if (isPromiseLike(rawRuntimeSchema)) return params.input
-  const runtimeSchema = toJsonObject(rawRuntimeSchema, 'runtime-normalization')
+  if (isPromiseLike(rawRuntimeSchema)) {
+    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_ASYNC_UNSUPPORTED:${params.operationId}`)
+  }
+  const runtimeSchema = toJsonObject(rawRuntimeSchema, params.operationId)
   const normalized = normalizeNullableModelValue(params.input, {
     type: params.toolInputSchema.type,
     properties: params.toolInputSchema.properties,
     required: params.toolInputSchema.required,
     additionalProperties: params.toolInputSchema.additionalProperties,
   }, runtimeSchema)
-  if (normalized === OMIT_NULLISH_MODEL_VALUE) return params.input
-  return params.inputSchema.safeParse(normalized).success ? normalized : params.input
+  if (
+    normalized !== OMIT_NULLISH_MODEL_VALUE
+    && params.inputSchema.safeParse(normalized).success
+  ) {
+    return normalized
+  }
+  const issues = Array.isArray(rawParse.error.issues) ? rawParse.error.issues : []
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'OPERATION_INPUT_INVALID',
+    operationId: params.operationId,
+    message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
+    issues,
+    corrections: buildProjectAgentToolInputCorrections({
+      input: params.input,
+      toolInputSchema: params.toolInputSchema,
+      issues,
+    }),
+  })
 }
 
 export type ProjectAgentToolInputCorrectionAction =

@@ -284,6 +284,37 @@ function assertGrantMatchesSnapshot(params: {
   }
 }
 
+/**
+ * Returns the exact normalized input that was priced and approved for a
+ * granted plan. Approval resume executes this snapshot: normalization happens
+ * exactly once, at preflight, and the persisted snapshot the user approved is
+ * the only input authority afterwards. Re-normalizing the model's original
+ * tool arguments on resume is forbidden — a dialect difference between the
+ * bound contract used at preflight and the schemas available at resume would
+ * silently change what executes versus what was approved.
+ */
+export async function loadApprovedOperationExecutionInput(params: {
+  userId: string
+  operationId: string
+  invocation: PlannedOperationInvocation
+}): Promise<unknown> {
+  const grant = await prisma.approvalGrant.findUnique({
+    where: { id: params.invocation.approvalGrantId },
+  })
+  if (!grant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  if (grant.userId !== params.userId || grant.operationId !== params.operationId) {
+    throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
+  }
+  const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId)
+  if (!snapshot) throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+  assertGrantMatchesSnapshot({
+    grant,
+    requestId: params.invocation.requestId,
+    snapshot,
+  })
+  return snapshot.normalizedInput
+}
+
 export async function invokeApprovedOperationPlan<Input, Output>(params: {
   operation: ProjectAgentOperationDefinition<Input, Output>
   ctx: ProjectAgentOperationContext

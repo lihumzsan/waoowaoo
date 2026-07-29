@@ -46,10 +46,14 @@ const voiceTargetSchema = z.discriminatedUnion('kind', [
   }).strict(),
 ])
 
+// generate_voice has no capability binder, so this canonical schema is also the
+// model-facing tool schema. Every field stays required: an optional field would
+// be published as nullable in strict mode, and null is not part of the tool
+// input dialect.
 const voiceResourceCommandSchema = z.object({
   kind: z.literal('new'),
-  name: z.string().trim().min(1).max(191).optional()
-    .describe('Optional display name for the new immutable voice Resource.'),
+  name: z.string().trim().min(1).max(191)
+    .describe('Display name for the new immutable voice Resource.'),
 }).strict()
 
 const generateVoiceInputSchema = z.object({
@@ -175,7 +179,6 @@ async function planGenerateVoice(
     candidateIndex: 0,
   })
   const resourceName = input.resource.name
-    ?? input.description.slice(0, 80)
   const generationOptions = { language: input.language }
   const resourcePayload = {
     resourceId,

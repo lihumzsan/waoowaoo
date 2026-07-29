@@ -6,10 +6,12 @@ import {
   type Tool,
 } from '@openai/agents'
 import type { NextRequest } from 'next/server'
+import { ApiError } from '@/lib/api-errors'
 import { buildToolError, normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
+import { loadApprovedOperationExecutionInput } from '@/lib/operations/planned-operation-invocation'
 import type {
   OperationAgentFlow,
   ProjectAgentOperationRegistry,
@@ -259,15 +261,32 @@ export function createProjectAgentOperationTools(
     })
     const identifiedToolCallId = identifyToolCall(toolCallId, operation.id)
     if (!requiresApproval) return false
+    if (
+      identifiedToolCallId
+      && params.context.approvedInvocationByToolCallId?.[identifiedToolCallId]
+    ) {
+      // The persisted grant already settles this Tool call; execution reads
+      // the approved input snapshot instead of running another preflight.
+      return false
+    }
     if (!identifiedToolCallId) {
       throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)
     }
     if (!params.approvalPreflightStore) return true
-    const normalizedInput = normalizeProjectAgentToolInput({
-      input: invocation.arguments,
-      inputSchema: contract?.inputSchema ?? operation.inputSchema,
-      toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
-    })
+    let normalizedInput: unknown
+    try {
+      normalizedInput = normalizeProjectAgentToolInput({
+        operationId: operation.id,
+        input: invocation.arguments,
+        inputSchema: contract?.inputSchema ?? operation.inputSchema,
+        toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
+      })
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error
+      // Invalid input never earns an approval card; execution re-raises the
+      // same typed normalization error as the tool result.
+      return false
+    }
     return await preflightProjectAgentToolApproval({
       request: params.request,
       operation,
@@ -322,11 +341,46 @@ export function createProjectAgentOperationTools(
       const toolCallId = identifyToolCall(rawToolCallId, operation.id)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
-      const normalizedInput = normalizeProjectAgentToolInput({
-        input: invocation.arguments,
-        inputSchema: contract?.inputSchema ?? operation.inputSchema,
-        toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
-      })
+      const persistedApprovedInvocation = toolCallId
+        ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
+        : null
+      let normalizedInput: unknown
+      if (persistedApprovedInvocation) {
+        // An approved invocation executes the exact input snapshot that was
+        // normalized, priced, and granted at preflight; re-normalizing the
+        // model's original arguments on resume is forbidden.
+        try {
+          normalizedInput = await loadApprovedOperationExecutionInput({
+            userId: params.userId,
+            operationId: operation.id,
+            invocation: persistedApprovedInvocation,
+          })
+        } catch (error) {
+          const toolError = normalizeOperationExecutionToolError({
+            error,
+            operation,
+            operationId: operation.id,
+          })
+          reportExecutionSettled({ kind: 'failed', error: toolError })
+          return { ok: false, error: toolError }
+        }
+      } else {
+        try {
+          normalizedInput = normalizeProjectAgentToolInput({
+            operationId: operation.id,
+            input: invocation.arguments,
+            inputSchema: contract?.inputSchema ?? operation.inputSchema,
+            toolInputSchema: contract?.toolInputSchema ?? operation.toolInputSchema,
+          })
+        } catch (error) {
+          if (!(error instanceof ApiError)) throw error
+          // Un-normalizable input still flows to the single invocation
+          // authority, which re-raises the same typed OPERATION_INPUT_INVALID
+          // through its established error mapping; only the raw arguments the
+          // model actually sent are used for the keys and budget below.
+          normalizedInput = invocation.arguments
+        }
+      }
       const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
         operationId: operation.id,
         toolCallId,
@@ -362,9 +416,6 @@ export function createProjectAgentOperationTools(
         }
       }
       let automaticApprovedInvocation = null
-      const persistedApprovedInvocation = toolCallId
-        ? params.context.approvedInvocationByToolCallId?.[toolCallId] ?? null
-        : null
       if (automaticallyAuthorizeBilling && !persistedApprovedInvocation) {
         if (!toolCallId) {
           throw new Error(`PROJECT_AGENT_TOOL_CALL_ID_MISSING:${operation.id}`)

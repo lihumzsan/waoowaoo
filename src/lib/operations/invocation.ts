@@ -158,6 +158,7 @@ export function prepareProjectAgentOperationInput(params: {
   const normalized = normalizeInvocationInput(params)
   const normalizedBusinessInput = params.channel === 'tool'
     ? normalizeProjectAgentToolInput({
+        operationId: params.operation.id,
         input: normalized.businessInput,
         inputSchema: params.operation.inputSchema,
         toolInputSchema: params.operation.toolInputSchema,
