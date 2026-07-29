@@ -15,7 +15,6 @@ import {
 } from '@/lib/auth/phone-auth-contract'
 import { normalizePhoneNumberForDestination } from '@/lib/auth/phone-number'
 import {
-  getSmsDestination,
   isSmsDestinationId,
   SMS_DESTINATIONS,
   type SmsDestinationId,
@@ -74,7 +73,6 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
   const [notice, setNotice] = useState('')
   const router = useRouter()
   const t = useTranslations('auth')
-  const selectedDestination = getSmsDestination(destinationId)
 
   const resolvePhoneNumber = () => normalizePhoneNumberForDestination(
     phoneNumber,
@@ -353,10 +351,7 @@ export default function AuthEntryCard({ features }: AuthEntryCardProps) {
                     value={phoneNumber}
                     onChange={(event) => setPhoneNumber(event.target.value)}
                     required
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition placeholder:text-slate-400 focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                    placeholder={t('phoneNumberPlaceholder', {
-                      example: selectedDestination.exampleNationalNumber,
-                    })}
+                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base text-black outline-none transition focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
                   />
                 </div>
               </div>
