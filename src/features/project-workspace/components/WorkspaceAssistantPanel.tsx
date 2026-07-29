@@ -36,7 +36,6 @@ import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/Workspace
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
-import { WorkspaceAssistantTextPlaybackProvider } from './workspace-assistant/WorkspaceAssistantTextPlayback'
 import {
   WorkspaceAssistantRunningSurfaceProvider,
 } from './workspace-assistant/WorkspaceAssistantReasoning'
@@ -245,8 +244,7 @@ export default function WorkspaceAssistantPanel({
         />
         <div className="h-full opacity-100 transition-opacity duration-200">
           <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
-            <WorkspaceAssistantTextPlaybackProvider key={`${projectId}:${episodeId ?? ''}`}>
-              <ThreadPrimitive.Root className="relative flex h-full min-h-0 flex-col">
+              <ThreadPrimitive.Root key={`${projectId}:${episodeId ?? ''}`} className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantSettings />
               <WorkspaceAssistantSubagentTabs
                 subagents={visibleSubagents}
@@ -373,7 +371,6 @@ export default function WorkspaceAssistantPanel({
                 </div>
               ) : null}
               </ThreadPrimitive.Root>
-            </WorkspaceAssistantTextPlaybackProvider>
           </AssistantRuntimeProvider>
         </div>
       </div>

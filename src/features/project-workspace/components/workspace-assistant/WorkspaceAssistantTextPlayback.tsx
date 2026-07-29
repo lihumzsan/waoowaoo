@@ -1,16 +1,7 @@
 'use client'
 
 import { useLocale } from 'next-intl'
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const LOW_WATER_GRAPHEMES = 7
 const PLAYBACK_INTERVAL_MS = 28
@@ -23,54 +14,9 @@ type WorkspaceAssistantTextPlayback = {
   readonly animating: boolean
 }
 
-export type WorkspaceAssistantTextPlaybackCheckpoint = {
-  readonly sourceText: string
-  readonly displayedCount: number
-  readonly started: boolean
-  readonly streamed: boolean
-}
-
-type WorkspaceAssistantTextPlaybackInitialState = Omit<
-  WorkspaceAssistantTextPlaybackCheckpoint,
-  'sourceText'
->
-
-type WorkspaceAssistantTextPlaybackRegistry = Map<
-  string,
-  WorkspaceAssistantTextPlaybackCheckpoint
->
-
-const WorkspaceAssistantTextPlaybackRegistryContext = createContext<
-  WorkspaceAssistantTextPlaybackRegistry | null
->(null)
-
-export function WorkspaceAssistantTextPlaybackProvider(props: {
-  readonly children: ReactNode
-}) {
-  const registryRef = useRef<WorkspaceAssistantTextPlaybackRegistry>(new Map())
-  return (
-    <WorkspaceAssistantTextPlaybackRegistryContext.Provider value={registryRef.current}>
-      {props.children}
-    </WorkspaceAssistantTextPlaybackRegistryContext.Provider>
-  )
-}
-
 function segmentGraphemes(text: string, locale: string): readonly string[] {
   const segmenter = new Intl.Segmenter(locale, { granularity: 'grapheme' })
   return Array.from(segmenter.segment(text), (segment) => segment.segment)
-}
-
-export function resolveWorkspaceAssistantTextPlaybackInitialState(params: {
-  readonly sourceText: string
-  readonly targetLength: number
-  readonly running: boolean
-  readonly checkpoint: WorkspaceAssistantTextPlaybackCheckpoint | null
-}): WorkspaceAssistantTextPlaybackInitialState {
-  return {
-    displayedCount: params.targetLength,
-    started: true,
-    streamed: params.checkpoint?.streamed === true || params.running,
-  }
 }
 
 function resolvePlaybackStep(backlog: number, running: boolean): number {
@@ -113,30 +59,15 @@ export function resolveWorkspaceAssistantTextPlaybackTick(params: {
 export function useWorkspaceAssistantTextPlayback(params: {
   readonly text: string
   readonly running: boolean
-  readonly playbackKey?: string | null
 }): WorkspaceAssistantTextPlayback {
   const locale = useLocale()
-  const registry = useContext(WorkspaceAssistantTextPlaybackRegistryContext)
   const targetGraphemes = useMemo(
     () => segmentGraphemes(params.text, locale),
     [locale, params.text],
   )
-  const initialStateRef = useRef<WorkspaceAssistantTextPlaybackInitialState | null>(null)
-  if (!initialStateRef.current) {
-    initialStateRef.current = resolveWorkspaceAssistantTextPlaybackInitialState({
-      sourceText: params.text,
-      targetLength: targetGraphemes.length,
-      running: params.running,
-      checkpoint: params.playbackKey
-        ? registry?.get(params.playbackKey) ?? null
-        : null,
-    })
-  }
-  const streamedRef = useRef(initialStateRef.current.streamed)
+  // 挂载即显示 canonical 全文,不重播历史动画。
+  const [displayedCount, setDisplayedCount] = useState(() => targetGraphemes.length)
   const previousSourceRef = useRef(params.text)
-  const [displayedCount, setDisplayedCount] = useState(
-    initialStateRef.current.displayedCount,
-  )
   const displayedCountRef = useRef(displayedCount)
   const targetLengthRef = useRef(targetGraphemes.length)
   const runningRef = useRef(params.running)
@@ -152,21 +83,17 @@ export function useWorkspaceAssistantTextPlayback(params: {
   targetLengthRef.current = targetGraphemes.length
   runningRef.current = params.running
 
-  useEffect(() => {
-    if (params.running) streamedRef.current = true
-  }, [params.running])
-
+  // 挂载后的文本变化只有两种:前缀增长与非前缀替换。前缀增长一律视为流式
+  // 输入(消息状态是否 running 不参与裁决 —— 控制流 merge 的正文以非
+  // running 状态逐 chunk 增长),游标交给下方唯一的自维持 tick 时钟排空,
+  // 此处绝不逐 chunk 派发 React state;非前缀替换意味着换成另一份 canonical
+  // 文本,游标一次性跳到全文。
   useEffect(() => {
     const previousSource = previousSourceRef.current
     previousSourceRef.current = params.text
     if (params.text.startsWith(previousSource)) return
     commitDisplayedCount(targetGraphemes.length)
   }, [commitDisplayedCount, params.text, targetGraphemes.length])
-
-  useEffect(() => {
-    if (params.running || streamedRef.current) return
-    commitDisplayedCount(targetGraphemes.length)
-  }, [commitDisplayedCount, params.running, targetGraphemes.length])
 
   tickRef.current = () => {
     timerRef.current = null
@@ -199,27 +126,6 @@ export function useWorkspaceAssistantTextPlayback(params: {
   }, [])
 
   const boundedDisplayedCount = Math.min(displayedCount, targetGraphemes.length)
-  useEffect(() => {
-    if (!registry || !params.playbackKey) return
-    if (!params.running && boundedDisplayedCount >= targetGraphemes.length) {
-      registry.delete(params.playbackKey)
-      return
-    }
-    registry.set(params.playbackKey, {
-      sourceText: params.text,
-      displayedCount: boundedDisplayedCount,
-      started: true,
-      streamed: streamedRef.current,
-    })
-  }, [
-    boundedDisplayedCount,
-    params.playbackKey,
-    params.running,
-    params.text,
-    registry,
-    targetGraphemes.length,
-  ])
-
   return {
     text: targetGraphemes.slice(0, boundedDisplayedCount).join(''),
     animating: (
@@ -231,7 +137,6 @@ export function useWorkspaceAssistantTextPlayback(params: {
 export function WorkspaceAssistantAnimatedPlainText(props: {
   readonly text: string
   readonly running: boolean
-  readonly playbackKey: string
 }) {
   const locale = useLocale()
   const playback = useWorkspaceAssistantTextPlayback(props)

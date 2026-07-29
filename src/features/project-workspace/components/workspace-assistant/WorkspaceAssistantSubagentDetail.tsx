@@ -59,7 +59,6 @@ function SubagentEventBody(props: {
       <SubagentReasoningEventBody
         event={event}
         label={label}
-        playbackKey={`subagent:${props.part.subagentId}:reasoning:${event.reasoningId}`}
         t={props.t}
       />
     )
@@ -124,7 +123,6 @@ function SubagentEventBody(props: {
 function SubagentReasoningEventBody(props: {
   event: SubagentReasoningEvent
   label: string
-  playbackKey: string
   t: AssistantAgentTranslator
 }) {
   return (
@@ -135,7 +133,6 @@ function SubagentReasoningEventBody(props: {
           <WorkspaceAssistantAnimatedPlainText
             text={props.event.text}
             running={props.event.status === 'running'}
-            playbackKey={props.playbackKey}
           />
         </div>
       ) : null}

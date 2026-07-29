@@ -3,10 +3,7 @@
 import React, { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import {
-  useMessagePartRuntime,
-  type TextMessagePartProps,
-} from '@assistant-ui/react'
+import type { TextMessagePartProps } from '@assistant-ui/react'
 import type { Components } from 'react-markdown'
 import { useWorkspaceAssistantTextPlayback } from './WorkspaceAssistantTextPlayback'
 
@@ -136,18 +133,9 @@ function MarkdownTextPartImpl({
   text,
   status,
 }: Pick<TextMessagePartProps, 'text' | 'status'>) {
-  const partRuntime = useMessagePartRuntime({ optional: true })
-  const playbackKey = partRuntime
-    ? `message-part:${JSON.stringify({
-        thread: partRuntime.path.threadSelector,
-        message: partRuntime.path.messageSelector,
-        part: partRuntime.path.messagePartSelector,
-      })}`
-    : null
   const playback = useWorkspaceAssistantTextPlayback({
     text,
     running: status.type === 'running',
-    playbackKey,
   })
   if (!playback.text) return null
 
