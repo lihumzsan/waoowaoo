@@ -7,6 +7,7 @@ import {
   OwnedMediaOutboundError,
   readOwnedMediaForGeneration,
 } from '@/lib/media/outbound-owned-media'
+import { isOutboundImageStorageKey } from '@/lib/media/storage-key'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { MAX_IMAGE_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
@@ -75,7 +76,6 @@ const logger = createScopedLogger({
 const NEXT_IMAGE_PATH = '/_next/image'
 const MAX_NEXT_IMAGE_UNWRAP_DEPTH = 6
 const SIGNED_URL_TTL_SECONDS = 3600
-const STORAGE_KEY_PREFIXES = ['images/', 'video/'] as const
 
 let storageHelpersPromise: Promise<StorageHelpers> | null = null
 
@@ -299,7 +299,7 @@ function isAbsoluteOrRootPath(value: string): boolean {
 }
 
 function isStorageKey(value: string): boolean {
-  return STORAGE_KEY_PREFIXES.some((prefix) => value.startsWith(prefix))
+  return isOutboundImageStorageKey(value)
 }
 
 function isNextImagePath(pathname: string): boolean {

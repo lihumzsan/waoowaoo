@@ -44,24 +44,9 @@ const mustIncludeRules: Rule[] = [
     message: 'outbound-image.ts must fail explicitly when all references fail to normalize',
   },
   {
-    file: 'src/lib/workers/handlers/image-task-handlers-core.ts',
-    pattern: /normalizeToBase64ForGeneration\(currentUrl\)/,
-    message: 'image-task-handlers-core.ts must convert currentUrl to base64 before outbound',
-  },
-  {
-    file: 'src/lib/workers/handlers/image-task-handlers-core.ts',
-    pattern: /normalizeReferenceImagesForGeneration\(extraReferenceInputs,/,
-    message: 'image-task-handlers-core.ts must normalize extra references before outbound',
-  },
-  {
-    file: 'src/lib/workers/video.worker.ts',
-    pattern: /payload\.referenceImages\.map\(async \(reference\) => \(\{[\s\S]*?normalizeToBase64ForGeneration\(reference\.source\)/,
-    message: 'video.worker.ts must normalize every frozen segment reference before outbound generation',
-  },
-  {
-    file: 'src/lib/assets/services/asset-actions.ts',
-    pattern: /sanitizeImageInputsForTaskPayload/,
-    message: 'asset modify service must sanitize image inputs before task payload creation',
+    file: 'src/lib/workers/handlers/creative-resource-video.ts',
+    pattern: /normalizeOwnedImageToBase64ForGeneration\(resource\.media\.storageKey/,
+    message: 'creative-resource-video.ts must normalize owned image references before outbound generation',
   },
   {
     file: 'src/components/ui/ImagePreviewModal.tsx',
@@ -72,14 +57,9 @@ const mustIncludeRules: Rule[] = [
 
 const mustNotIncludeRules: Rule[] = [
   {
-    file: 'src/lib/workers/handlers/image-task-handlers-core.ts',
-    pattern: /referenceImages:\s*\[currentUrl\]/,
-    message: 'image-task-handlers-core.ts must not pass raw currentUrl directly as outbound reference',
-  },
-  {
-    file: 'src/lib/workers/video.worker.ts',
-    pattern: /url:\s*reference\.source/,
-    message: 'video.worker.ts must not pass raw frozen reference storage keys to the provider',
+    file: 'src/lib/workers/handlers/creative-resource-video.ts',
+    pattern: /url:\s*resource\.media\.storageKey/,
+    message: 'creative-resource-video.ts must not pass raw owned storage keys to the provider',
   },
   {
     file: 'src/lib/media/outbound-image.ts',

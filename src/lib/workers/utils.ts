@@ -5,6 +5,7 @@ import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
 import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { getSignedUrl } from '@/lib/storage'
+import { isMediaStorageKey } from '@/lib/media/storage-key'
 import { processMediaResult } from '@/lib/media-process'
 import {
   getProjectModelConfig,
@@ -724,7 +725,7 @@ export async function uploadAudioSourceToCos(
 
 export function toSignedUrlIfCos(keyOrUrl: string | null | undefined, ttlSeconds = 3600) {
   if (!keyOrUrl) return null
-  return keyOrUrl.startsWith('images/') || keyOrUrl.startsWith('audio/') || keyOrUrl.startsWith('music/') || keyOrUrl.startsWith('video/')
+  return isMediaStorageKey(keyOrUrl)
     ? getSignedUrl(keyOrUrl, ttlSeconds)
     : keyOrUrl
 }
