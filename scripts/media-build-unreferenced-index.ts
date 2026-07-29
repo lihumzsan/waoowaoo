@@ -1,7 +1,7 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import COS from 'cos-nodejs-sdk-v5'
+import { S3Client, paginateListObjectsV2 } from '@aws-sdk/client-s3'
 import { prisma } from '@/lib/prisma'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { MEDIA_MODEL_MAPPINGS } from './media-mapping'
@@ -10,11 +10,6 @@ type StorageEntry = {
   key: string
   sizeBytes: number
   lastModified: string | null
-}
-type CosBucketPage = {
-  Contents?: Array<{ Key: string; Size?: string | number; LastModified?: string }>
-  IsTruncated?: string | boolean
-  NextMarker?: string
 }
 type DynamicModel = {
   findMany: (args: unknown) => Promise<Array<Record<string, unknown>>>
@@ -69,37 +64,22 @@ async function listCosObjects(): Promise<StorageEntry[]> {
     throw new Error('Missing COS env: COS_SECRET_ID/COS_SECRET_KEY/COS_BUCKET/COS_REGION')
   }
 
-  const cos = new COS({ SecretId: secretId, SecretKey: secretKey, Timeout: 60_000 })
+  // COS speaks the S3 wire protocol; the shared S3 SDK replaces the COS-only one.
+  const client = new S3Client({
+    endpoint: `https://cos.${region}.myqcloud.com`,
+    region,
+    credentials: { accessKeyId: secretId, secretAccessKey: secretKey },
+  })
   const rows: StorageEntry[] = []
-  let marker = ''
-
-  while (true) {
-    const page = await new Promise<CosBucketPage>((resolve, reject) => {
-      cos.getBucket(
-        {
-          Bucket: bucket,
-          Region: region,
-          Marker: marker,
-          MaxKeys: 1000,
-        },
-        (err, data) => (err ? reject(err) : resolve(data as unknown as CosBucketPage)),
-      )
-    })
-
-    const contents = page.Contents || []
-    for (const item of contents) {
+  for await (const page of paginateListObjectsV2({ client }, { Bucket: bucket, MaxKeys: 1000 })) {
+    for (const item of page.Contents || []) {
+      if (!item.Key) continue
       rows.push({
         key: item.Key,
         sizeBytes: Number(item.Size || 0),
-        lastModified: item.LastModified || null,
+        lastModified: item.LastModified ? item.LastModified.toISOString() : null,
       })
     }
-
-    const truncated = String(page.IsTruncated || 'false') === 'true'
-    if (!truncated) break
-    const nextMarker = typeof page.NextMarker === 'string' ? page.NextMarker : ''
-    marker = nextMarker || (contents.length ? contents[contents.length - 1].Key : '')
-    if (!marker) break
   }
 
   return rows
