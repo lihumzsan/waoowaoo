@@ -77,6 +77,58 @@ describe('durable Outbox delivery lifecycle', () => {
     })
   })
 
+  it('fast-dispatches the exact commands created by a transactional operation commit without a dispatcher cycle', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const operation = makeTestOperation({
+      id: 'test_commit_fast_dispatch',
+      channels: { tool: false, api: true },
+      intent: 'act',
+      effects: {
+        writes: true,
+        workspaceResourceImpact: 'project_data',
+        billable: false,
+        destructive: false,
+        overwrite: false,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      inputSchema: z.object({}).strict(),
+      outputSchema: z.object({ success: z.literal(true) }).strict(),
+      executeInTransaction: async () => ({ success: true as const }),
+    })
+    const context = {
+      request: new NextRequest('http://localhost/api/test-operation', { method: 'POST' }),
+      userId: user.id,
+      projectId: project.id,
+      context: {},
+      source: 'test',
+      writer: null,
+      toolCallId: null,
+    } as unknown as ProjectAgentOperationContext
+
+    await invokeProjectAgentOperation({
+      registry: { [operation.id]: operation },
+      channel: 'api',
+      operationId: operation.id,
+      context,
+      input: {},
+    })
+
+    // No dispatcher cycle ran: the invocation owner itself must have handed
+    // the exact committed command to the transport.
+    const commands = await prisma.outboxCommand.findMany({
+      where: { kind: 'workspace_resource.broadcast' },
+    })
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({ enqueuedAt: expect.any(Date), acceptedAt: null })
+    await expect(getOutboxQueue().getJob(commands[0].id)).resolves.toMatchObject({
+      id: commands[0].id,
+      data: { outboxId: commands[0].id },
+    })
+  })
+
   it('resets stale enqueued state only when the Redis job is truly absent', async () => {
     const command = await createValidCommand('outbox-job-lost')
     await prisma.outboxCommand.update({

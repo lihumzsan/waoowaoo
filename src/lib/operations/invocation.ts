@@ -8,6 +8,8 @@ import {
   requireProjectAgentChoiceHandoffReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
+import { createOutboxCommitCollector } from '@/lib/outbox/repository'
 import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
@@ -352,10 +354,16 @@ export async function invokeProjectAgentOperation(params: {
         return parsed
       }
       if (params.transaction) {
+        // Atomic choice commit: the outer transaction owner commits and owns
+        // any post-commit dispatch; nothing has committed at this point.
         parsedOutputData = await executeTransaction(params.transaction)
       } else {
+        const outboxCollector = createOutboxCommitCollector()
         try {
-          parsedOutputData = await prisma.$transaction(executeTransaction)
+          parsedOutputData = await prisma.$transaction(async (tx) => {
+            outboxCollector.bindTransaction(tx)
+            return await executeTransaction(tx)
+          })
         } catch (error) {
           if (operation.compensateTransactionFailure) {
             try {
@@ -375,6 +383,10 @@ export async function invokeProjectAgentOperation(params: {
           }
           throw error
         }
+        // Commit succeeded: hand the exact command ids created inside this
+        // transaction to the existing fast dispatch. A transport failure only
+        // logs; the periodic dispatcher recovers from the same durable rows.
+        await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
       }
     } else {
       const execute = operation.execute

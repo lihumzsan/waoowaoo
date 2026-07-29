@@ -14,6 +14,8 @@ import {
   buildCurrentOperationPlanArtifactHashes,
   changedOperationPlanArtifacts,
 } from './operation-plan-revalidation'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
+import { createOutboxCommitCollector } from '@/lib/outbox/repository'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
@@ -368,8 +370,10 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         ctx: params.ctx,
         normalizedInput: params.normalizedInput,
       })
+  const outboxCollector = createOutboxCommitCollector()
   const transactionResult = await prisma.$transaction(
     async (tx) => {
+      outboxCollector.bindTransaction(tx)
       if (params.ctx.executionFence) {
         await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
       }
@@ -541,6 +545,12 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
     })
   }
   params.ctx.taskBatchBinding?.markCommitted()
+  // Commit succeeded: immediately hand the exact Task enqueue/lifecycle and
+  // workspace broadcast commands created inside this transaction to the
+  // existing fast dispatch (symmetric with the task terminal path). An
+  // idempotent replay of a completed execution collects nothing. Transport
+  // failure only logs; the periodic dispatcher recovers the same durable rows.
+  await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
   for (const part of bufferedParts) {
     params.ctx.writer?.write(part)
   }

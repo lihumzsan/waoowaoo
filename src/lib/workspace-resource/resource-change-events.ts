@@ -60,10 +60,11 @@ export async function createWorkspaceResourceBroadcastsInTransaction(params: {
   affectedResources: readonly WorkspaceResourceRef[]
   userId: string
   operationId: string
-}): Promise<void> {
+}): Promise<readonly string[]> {
+  const commandIds: string[] = []
   const specs = extractWorkspaceResourceChangeEventSpecs(params)
   for (const spec of specs) {
-    await createOutboxCommandInTransaction(params.tx, {
+    const command = await createOutboxCommandInTransaction(params.tx, {
       idempotencyKey: buildWorkspaceResourceBroadcastIdempotencyKey({
         invocationId: params.invocationId,
         projectId: spec.projectId,
@@ -78,7 +79,9 @@ export async function createWorkspaceResourceBroadcastsInTransaction(params: {
         affectedResources: spec.affectedResources,
       },
     })
+    commandIds.push(command.id)
   }
+  return commandIds
 }
 
 export function buildWorkspaceResourceChangedEvent(params: {

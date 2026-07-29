@@ -16,6 +16,7 @@ import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
 import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
 const mergeVideosInputSchema = z.object({
@@ -127,6 +128,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
             toolCallId: ctx.toolCallId?.trim() || null,
           },
         }
+        let broadcastCommandIds: readonly string[] = []
         const result = await submitOperationTask({
           request: ctx.request,
           userId: ctx.userId,
@@ -172,7 +174,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
               requestId,
               candidates: [{ resourceId, name: resourceName, candidateIndex: 0 }],
             })
-            await createWorkspaceResourceBroadcastsInTransaction({
+            broadcastCommandIds = await createWorkspaceResourceBroadcastsInTransaction({
               tx,
               invocationId: requestId,
               affectedResources: [{ kind: 'creativeResources', projectId: ctx.projectId, episodeId }],
@@ -181,6 +183,10 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
             })
           },
         })
+        // submitOperationTask returns only after its transaction committed;
+        // fast-dispatch the broadcast created in that transaction. Failure only
+        // logs — the periodic dispatcher recovers the same durable row.
+        await dispatchCommittedOutboxCommands(broadcastCommandIds)
         return mergeVideosOutputSchema.parse({ ...result, resourceId })
       },
     }),

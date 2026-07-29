@@ -40,6 +40,17 @@ async function assertTaskSubmissionScope(
   }
 }
 
+type PersistedSubmittedTask = {
+  readonly task: Task
+  /**
+   * The exact durable outbox commands (lifecycle broadcast + enqueue) created
+   * with this Task in the same transaction. The transaction owner hands them
+   * to `dispatchCommittedOutboxCommands` after a successful commit; the
+   * periodic dispatcher recovers the same rows on crash.
+   */
+  readonly outboxCommandIds: readonly string[]
+}
+
 async function persistValidatedSubmittedTaskInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly input: CreateTaskInput & { readonly id?: string }
@@ -48,7 +59,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
     tx: Prisma.TransactionClient,
     task: { id: string },
   ) => Promise<void>
-}): Promise<Task> {
+}): Promise<PersistedSubmittedTask> {
   const input = params.input
   const task = await params.tx.task.create({
     data: {
@@ -123,7 +134,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       })),
     },
   })
-  await createOutboxCommandInTransaction(params.tx, {
+  const broadcastCommand = await createOutboxCommandInTransaction(params.tx, {
     idempotencyKey: `task-lifecycle-broadcast:${event.id}`,
     aggregateType: 'task',
     aggregateId: stored.id,
@@ -133,7 +144,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       taskId: stored.id,
     },
   })
-  await createOutboxCommandInTransaction(params.tx, {
+  const enqueueCommand = await createOutboxCommandInTransaction(params.tx, {
     idempotencyKey: `task-enqueue:${stored.id}`,
     aggregateType: 'task',
     aggregateId: stored.id,
@@ -143,7 +154,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       operationExecutionId: stored.operationExecutionId,
     },
   })
-  return stored
+  return { task: stored, outboxCommandIds: [broadcastCommand.id, enqueueCommand.id] }
 }
 
 export async function persistSubmittedTaskInTransaction(params: {
@@ -154,7 +165,7 @@ export async function persistSubmittedTaskInTransaction(params: {
     tx: Prisma.TransactionClient,
     task: { id: string },
   ) => Promise<void>
-}): Promise<Task> {
+}): Promise<PersistedSubmittedTask> {
   await assertTaskSubmissionScope(params.tx, params.input)
   return await persistValidatedSubmittedTaskInTransaction(params)
 }
@@ -162,6 +173,7 @@ export async function persistSubmittedTaskInTransaction(params: {
 type PersistedBatchTask = {
   readonly task: Task
   readonly deduped: boolean
+  readonly outboxCommandIds: readonly string[]
 }
 
 async function assertExistingSubmissionBundle(
@@ -270,16 +282,16 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
     if (existingCandidate) {
       const existing = await lockExistingBatchTaskById(params.tx, existingCandidate.id)
       await assertExistingSubmissionBundle(params.tx, existing, input)
-      ordered.push({ task: existing, deduped: true })
+      ordered.push({ task: existing, deduped: true, outboxCommandIds: [] })
       continue
     }
     try {
-      const task = await persistValidatedSubmittedTaskInTransaction({
+      const persisted = await persistValidatedSubmittedTaskInTransaction({
         tx: params.tx,
         input,
         billingMode: params.billingMode,
       })
-      ordered.push({ task, deduped: false })
+      ordered.push({ ...persisted, deduped: false })
     } catch (error) {
       const identityCollision = (input.id || input.dedupeKey)
         && error instanceof Prisma.PrismaClientKnownRequestError
@@ -288,7 +300,7 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
       const collided = await loadCollidedBatchTaskForUpdate(params.tx, input)
       if (!collided) throw error
       await assertExistingSubmissionBundle(params.tx, collided, input)
-      ordered.push({ task: collided, deduped: true })
+      ordered.push({ task: collided, deduped: true, outboxCommandIds: [] })
     }
   }
   await params.onBatchCreatedInTransaction?.(params.tx, ordered)

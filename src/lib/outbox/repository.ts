@@ -4,6 +4,37 @@ import type { CreateOutboxCommandInput } from './types'
 
 export type OutboxTransactionClient = Prisma.TransactionClient
 
+/**
+ * Explicit post-commit fast-dispatch collection.
+ *
+ * The owner of a transaction that may persist outbox commands creates a
+ * collector and binds it to its own transaction client; every command written
+ * through `createOutboxCommandInTransaction` inside that transaction is then
+ * recorded. After a successful commit the same owner hands `commandIds` to
+ * `dispatchCommittedOutboxCommands` — symmetric with the task terminal
+ * reference path. Collection is keyed per transaction client, so concurrent
+ * transactions never observe each other's commands and a transaction without
+ * a bound collector records nothing. The periodic dispatcher stays the sole
+ * crash-recovery authority for the same persisted rows.
+ */
+export type OutboxCommitCollector = {
+  readonly bindTransaction: (tx: OutboxTransactionClient) => void
+  readonly commandIds: readonly string[]
+}
+
+const commitCollectorsByTransaction = new WeakMap<object, string[]>()
+
+export function createOutboxCommitCollector(): OutboxCommitCollector {
+  const commandIds: string[] = []
+  return {
+    bindTransaction(tx: OutboxTransactionClient) {
+      commandIds.length = 0
+      commitCollectorsByTransaction.set(tx, commandIds)
+    },
+    commandIds,
+  }
+}
+
 function toInputJson(value: CreateOutboxCommandInput['payload']): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
@@ -52,6 +83,7 @@ export async function createOutboxCommandInTransaction(
     update: {},
   })
   assertSameOutboxCommand(command, input)
+  commitCollectorsByTransaction.get(tx)?.push(command.id)
   return command
 }
 

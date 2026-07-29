@@ -11,7 +11,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - **TL-01 — 单一提交入口。** Task、billing freeze、Created Event 与 `task.enqueue` Outbox 只能由共享 submitter/事务 primitive 创建。route、Operation 和 worker 不得直接写队列或复制提交协议。
 - **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、execution deadline、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task，以及把外部网页图片导入自有存储的 `creative_resource_web_reference` Task。终态是否要求 handler 回传 modelKey 也是 registry 声明（`terminalModelKeyRequirement`），不运行模型的 Task 声明 `none`；materializer 和 worker handler 不得按 Task 类型内联另一份 deadline 或终态规则。
 - **TL-03 — attempt 唯一执行者。** worker 以 DB CAS 领取 `queued → processing`，携带 `taskId + taskAttempt` 写 heartbeat、progress、provider checkpoint 与终态。只有这个 attempt owner 可以按 TaskDefinition 创建 execution deadline AbortSignal 并传给 handler；重复、晚到或旧 attempt 无写权。
-- **TL-04 — 提交失败原子回滚。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；Terminal transaction 提交后可以立即 enqueue 本次返回的精确 Outbox IDs，运输失败不回滚已提交业务事实，并由持久 Outbox dispatcher 恢复，不能把业务 Task 改写为失败或让周期扫描承担正常路径延迟。
+- **TL-04 — 提交失败原子回滚，提交与终态对称即时运输。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；创建 Outbox 命令的事务 owner（Terminal transaction、`invokeProjectAgentOperation` 自有事务、`invokeApprovedOperationPlan`）在 commit 成功后必须立即把本次事务创建的精确 Outbox IDs 交给 `dispatchCommittedOutboxCommands`。事务内命令 id 由唯一写入入口 `createOutboxCommandInTransaction` 记录进 owner 显式绑定的 per-transaction collector（`createOutboxCommitCollector`），不得用全局可变状态或事后启发式查询重建。运输失败不回滚已提交业务事实，并由持久 Outbox dispatcher 恢复；周期扫描只承担崩溃恢复，不承担正常路径延迟，也不得以调小扫描间隔冒充快投递。
 - **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。
 - **TL-06 — 终态 writer 唯一。** worker 不能自行把 Task 或 Resource 写成最终失败。Terminal Service 负责最终 completed/failed/canceled、billing settlement、Task Event、Resource materialization、workspace impact 与 Assistant continuation。
 - **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
@@ -40,7 +40,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - attempt 与恢复：`src/lib/task/claim.ts`、`retry-policy.ts`、`reconcile.ts`、`src/lib/workers/shared.ts`。
 - provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。
 - 终态：`src/lib/task/terminal/**`。
-- 持久 Outbox 与提交后即时运输：`src/lib/outbox/repository.ts`、`dispatcher.ts`、`src/lib/workers/outbox.worker.ts`；dispatcher 只从同一持久命令恢复，不创建第二业务事实。
+- 持久 Outbox 与提交后即时运输：`src/lib/outbox/repository.ts`（唯一写入入口 + per-transaction commit collector）、`dispatcher.ts`（`dispatchCommittedOutboxCommands` 快路径 + 周期崩溃恢复）、`src/lib/workers/outbox.worker.ts`；dispatcher 只从同一持久命令恢复，不创建第二业务事实。快投递只依赖 prisma 与惰性 `queueRedis`，web 与 worker 进程均可调用；周期 dispatcher 仍只在 worker 进程启动。
 - 结果物化：`src/lib/creative-resource/task-materializer.ts`、`creative-work-materialization.ts`。
 - Agent 聚合：`src/lib/project-agent/operation-batch.ts`、`waits.ts`。
 - 资源变化：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`、`src/lib/query/workspace-sse-event-sync.ts`。
@@ -52,7 +52,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts`、`outbox-delivery-lifecycle.integration.test.ts` 验证真实 MySQL/Redis 的原子提交、去重与恢复。
 - `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`provider-invocation-at-most-once.integration.test.ts` 验证 attempt、late/replay 和 provider fence。
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证多 Task Wait seal 与单 continuation。
-- `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 验证提交后精确即时入队、stale 恢复、毒消息与预期 contention 不消耗 delivery failure budget。
+- `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 验证提交后精确即时入队（含事务 operation commit 后无需任何 dispatcher 周期即完成投递）、stale 恢复、毒消息与预期 contention 不消耗 delivery failure budget。
 
 LLM 创作组合、媒体呈现和 FFmpeg 产物质量没有保留脚本 Journey 或 fixture 测试；它们属于真实输入下的人工/发布复验边界。
 
@@ -73,6 +73,7 @@ LLM 创作组合、媒体呈现和 FFmpeg 产物质量没有保留脚本 Journey
 - MutationBatch 最初为旧 panel、voice line 和专用媒体 writer 提供整批撤销；这些 writer 删除后，生产代码已经没有创建调用，但两个撤销 Operation、独立 route、SSE event/replay/checkpoint、结果 `canUndo` 投影和 v3 游标水位仍继续声明这项能力。当前这些零 writer 运行时入口和第二状态协议已一起删除，SSE 一次切换为只包含 Task/Assistant/Resource 水位的 v4；数据库模型只为未获迁移授权的历史行暂留，不再有应用 writer、reader 或恢复入口，后续 schema/data 删除需单独迁移和排空授权。
 - 长模型 Task 曾在具体 handler 内各自读取全局 timeout，attempt owner 只无条件写 heartbeat；这使 registry 不知道执行是否有界，也把“worker 进程还活着”误当成“供应商仍有进展”。第一版 registry deadline 为 `creative_work` 固定 5 分钟，真实长方向结果在首次校验拒绝后的纠正轮被 299.96 秒安全阀截断，证明该值会裁掉合法 attempt。当前 execution deadline 仍是 TaskDefinition 的唯一穷尽事实，但校准为 20 分钟 safety bound；通用 attempt owner 创建 AbortSignal 并以 canonical `GENERATION_TIMEOUT` 进入既有 registry retry policy，heartbeat 与 UI 阶段事件都只证明活动，不承担 stall 或完成裁决。
 - Task terminal 曾只写 durable continuation Outbox，正常路径也等待周期 dispatcher；Outbox 与 continuation claim 又使用十分钟级 lease，worker 被重启后虽有完整持久事实却长期无人可领取。预期的前台 Run/Choice contention 还会增加 deliveryCount，最终把可恢复占用误判成 dead delivery。当前 terminal commit 后立即 enqueue 精确 Outbox IDs，失败仍由同一持久 dispatcher 恢复；运输与 continuation claim 使用 30 秒 lease/heartbeat，typed defer 原子撤销本次 deliveryCount。没有新增轮询、第二队列协议或客户端续跑入口。
+- Task terminal 获得 commit 后即时投递后，提交路径（Operation 事务、批准计划 commit）仍把 Outbox 命令 id 丢弃在事务内：`createWorkspaceResourceBroadcastsInTransaction` 返回 void，`transactional-create` 的 lifecycle/enqueue 命令无人接收，两个事务 owner commit 后不做任何投递；而周期 dispatcher 只在 worker 进程启动，web 进程 instrumentation 只启动 reconciler。后果是 worker 在跑时新画布节点与任务入队固定晚约 5 秒，worker 不在时提交路径的 SSE 永远不发、用户必须刷新——终态防线（上一条）没有覆盖对称的提交路径。当前 `createOutboxCommandInTransaction` 作为唯一写入入口把 id 记录进 owner 显式绑定的 per-transaction collector，`invokeProjectAgentOperation` 与 `invokeApprovedOperationPlan` 两个事务 owner commit 后立即调用同一个 `dispatchCommittedOutboxCommands`，workspace broadcast writer 与 `transactional-create` 同时返回精确 id；快投递失败只记结构化日志，周期 dispatcher 角色收敛为纯崩溃恢复。`submitOperationTask`/`submitter` 自有事务与 choice-commit 外层事务的 owner 尚未接入快投递（其中 web reference/video merge 的 broadcast 已由调用方 commit 后补投），仍依赖周期扫描，属已声明慢路径而非第二状态解释源。
 - `get_task` 首次公开严格字段 Schema 时仍用 `includeEvents` 与独立可选 `eventsLimit` 表达事件读取；关闭或省略 events 时携带 limit 在 Schema 中合法，却被 executor 静默忽略。当前输入改为 `events.kind=none|include`，只有 include 分支拥有可选 limit，Task route 也拒绝 limit 与关闭事件的矛盾查询后再构造同一 canonical 分支。Task 生命周期和事件 writer 均未改变；本次只收敛读取命令语义。
 
 ## 修改检查表
