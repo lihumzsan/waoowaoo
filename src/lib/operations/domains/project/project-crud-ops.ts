@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
+import { deleteProjectOwnedCreativeResourceLineage } from '@/lib/creative-resource/project-deletion'
+import { deleteProjectNarrativeProjections } from '@/lib/story-canon/project-deletion'
 import { addSignedUrlsToProject } from '@/lib/storage'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
@@ -175,6 +177,15 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           { projectId: ctx.projectId, userId: ctx.userId },
           transaction,
         )
+
+        await deleteProjectOwnedCreativeResourceLineage({
+          projectId: ctx.projectId,
+          transaction,
+        })
+        await deleteProjectNarrativeProjections({
+          projectId: ctx.projectId,
+          transaction,
+        })
 
         await transaction.project.delete({
           where: { id: ctx.projectId },

@@ -54,6 +54,7 @@ Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段
 - 旧 splitter 在采用 Story Canon 的同一事务创建全部 Chapter，导致 Story Canon writer 同时拥有执行分组；随后 `delegation.source=chapters` 容易被误解为持久 WorkerGroup。当前 Story Canon 与 Chapter writer 分离，一个 Chapter 一个 Task，批量只属于既有 Wait 聚合协议。
 - Chapter 委派曾把 `chapter.targetDurationSec` 直接写成下游 `targetDurationSeconds`，使规划估时未经区分成为视频交付硬预算：Worker 必须让分段之和精确等于它，估算虚高部分只能由拖慢的表演填满。当前删除该自动映射，交付时长只由调用方显式 `durationIntent` 决定，Chapter 估时退回规划与上限校验职责，仍作为参考事实进入编译上下文。
 - Chapter 投影最初按 `(episodeId, chapterIndex)` upsert；采用新计划时数据库 ID 不变但标题、范围和事件已全部替换，使 provenance 中的 chapterId 同时表示“位置”和“叙事单元”。当前同 Plan 重试保留 IDs，不同 Plan 原子 delete+create，位置只在单个计划内部有意义。
+- Project 删除曾同时级联 Episode、Source Document 与 Story Canon；Story Canon 对 Source Document 的 `RESTRICT` 会在两条级联路径完成前拒绝删除。单独的权限 Golden 只删空项目，自由 Resource Golden 又不删除，因而没有反证这个真实组合。当前 `delete_project` 仍是唯一入口，但先调用 Chapter Planning owner，按 Story Canon → Chapter → Source Document 的依赖顺序删除项目叙事投影，再删除 Project；外键语义和单实体 writer 均未放宽。
 
 ## 修改检查表
 

@@ -4,9 +4,9 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-FREEFORM-RESOURCE-CREATION',
     kind: 'freeform',
-    title: 'natural language composes independent Resources with schema-projected card summaries, refresh-safe current Choice commitments, and explicitly adopted Chapters that become parallel Worker inputs',
+    title: 'natural language composes independent Resources with lineage and bindings, then deletes the populated project atomically through the production UI',
     startState: 'empty_project',
-    expectedTerminal: 'independent_resources_and_explicit_optional_projections_ready',
+    expectedTerminal: 'resource_rich_project_deleted_without_partial_relations',
     requiresWorkers: true,
     zeroPaidProviderCalls: true,
   },

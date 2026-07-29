@@ -5,6 +5,7 @@ import {
   launchGoldenStoryFromHome,
   type GoldenWorkspaceScope,
 } from '../browser/pages/home'
+import { deleteGoldenProjectThroughUi } from '../browser/pages/projects'
 import {
   readGoldenAssistantRunStatus,
   readGoldenPendingInteractionOperationId,
@@ -607,12 +608,26 @@ test('[GJ-FREEFORM-RESOURCE-CREATION] natural language creates, retries, reuses,
   expect(secondEpisodeSnapshot.resources.filter((resource) => (
     resource.id === screenplayResource.id || resource.id === storyCanonResource.id
   ))).toHaveLength(2)
-  browserObservations.assertClean()
-
   await testInfo.attach('freeform-resource-oracle', {
     body: Buffer.from(JSON.stringify({ firstEpisode: finalSnapshot, secondEpisode: secondEpisodeSnapshot }, null, 2)),
     contentType: 'application/json',
   })
+
+  const projectName = asRecord(secondEpisodeSnapshot.project)?.name
+  if (typeof projectName !== 'string') throw new Error('GOLDEN_PROJECT_NAME_MISSING')
+  await deleteGoldenProjectThroughUi(page, {
+    projectId: scope.projectId,
+    name: projectName,
+  })
+  const deletedProjectSnapshot = await readGoldenOracleSnapshot(scope)
+  expect(deletedProjectSnapshot).toMatchObject({
+    project: null,
+    episode: null,
+    resources: [],
+    resourceLineage: [],
+    resourceBindings: [],
+  })
+  browserObservations.assertClean()
 })
 
 test('[GJ-FREEFORM-ZERO-VIDEO] an empty project submits text-to-video directly without workflow artifacts', async ({

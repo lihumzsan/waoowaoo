@@ -19,7 +19,7 @@ describe('Golden Journey scenario contracts', () => {
     ])
     expect(GOLDEN_SCENARIO_CONTRACTS[0]).toMatchObject({
       startState: 'empty_project',
-      expectedTerminal: 'independent_resources_and_explicit_optional_projections_ready',
+      expectedTerminal: 'resource_rich_project_deleted_without_partial_relations',
       requiresWorkers: true,
     })
   })
