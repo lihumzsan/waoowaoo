@@ -353,6 +353,12 @@ type BillablePlannedOperationBehavior<Input, Output> = {
     kind: 'billable_media'
     required: true
   }
+  /**
+   * Revision of the server-owned plan/commit contract consumed across the
+   * approval boundary. Change it whenever the same normalized input may be
+   * interpreted into a different immutable plan or commit meaning.
+   */
+  planContractRevision: string
   plan: BivariantOperationPlan<Input>
   commit: BivariantOperationCommit<Input, Output>
   execute?: never
@@ -386,9 +392,22 @@ type NormalizedBillableOperationBehavior<Input, Output> = BillablePlannedOperati
   }
 }
 
-export type ProjectAgentOperationDefinition<Input = unknown, Output = unknown> = ProjectAgentOperationDefinitionFields<Input, Output> &
+export type BillableProjectAgentOperationDefinition<Input = unknown, Output = unknown> =
+  ProjectAgentOperationDefinitionFields<Input, Output> &
   NormalizedOperationFields &
-  (NormalizedDirectOperationBehavior<Input, Output> | NormalizedBillableOperationBehavior<Input, Output>)
+  NormalizedBillableOperationBehavior<Input, Output>
+
+export type ProjectAgentOperationDefinition<Input = unknown, Output = unknown> =
+  | (ProjectAgentOperationDefinitionFields<Input, Output> &
+    NormalizedOperationFields &
+    NormalizedDirectOperationBehavior<Input, Output>)
+  | BillableProjectAgentOperationDefinition<Input, Output>
+
+export function isBillablePlannedOperation<Input, Output>(
+  operation: ProjectAgentOperationDefinition<Input, Output>,
+): operation is BillableProjectAgentOperationDefinition<Input, Output> {
+  return operation.confirmation.kind === 'billable_media'
+}
 
 export type ProjectAgentOperationRegistryDraft = Record<ProjectAgentOperationId, ProjectAgentOperationDefinitionBase>
 

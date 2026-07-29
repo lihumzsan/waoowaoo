@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
-import type { ProjectAgentOperationContext, ProjectAgentOperationDefinition } from './types'
+import {
+  isBillablePlannedOperation,
+  type ProjectAgentOperationContext,
+  type ProjectAgentOperationDefinition,
+} from './types'
 import { loadOperationPlanSnapshot } from './operation-plan-snapshot'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
@@ -286,17 +290,12 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   normalizedInput: Input
   invocation: PlannedOperationInvocation
 }): Promise<Output> {
-  if (params.operation.confirmation.kind !== 'billable_media') {
+  if (!isBillablePlannedOperation(params.operation)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'APPROVAL_GRANT_NOT_APPLICABLE',
     })
   }
-  if (!params.operation.plan || !params.operation.commit) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED',
-      operationId: params.operation.id,
-    })
-  }
+  const planContractRevision = params.operation.planContractRevision
   const commit = params.operation.commit
   type OperationWriter = NonNullable<ProjectAgentOperationContext['writer']>
   type BufferedOperationPart = Parameters<OperationWriter['write']>[0]
@@ -329,7 +328,9 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
     where: { approvalGrantId: previewGrant.id },
     select: { id: true },
   })
-  const currentArtifacts = existingExecution
+  const executionContractChanged = !existingExecution
+    && previewSnapshot.executionContractRevision !== planContractRevision
+  const currentArtifacts = existingExecution || executionContractChanged
     ? null
     : await buildCurrentOperationPlanArtifactHashes({
         operation: params.operation,
@@ -379,6 +380,16 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       }
       if (grant.consumedAt || grant.consumedExecutionId) {
         throw new Error(`APPROVAL_GRANT_CONSUMED_WITHOUT_EXECUTION:${grant.id}`)
+      }
+      if (snapshot.executionContractRevision !== planContractRevision) {
+        await settleApprovalGrant(tx, {
+          kind: 'revoke',
+          grantId: grant.id,
+        })
+        return {
+          kind: 'plan_changed' as const,
+          changedArtifacts: ['executionContractRevision'] as const,
+        }
       }
       if (!currentArtifacts) {
         throw new Error(`OPERATION_PLAN_REVALIDATION_MISSING:${grant.id}`)

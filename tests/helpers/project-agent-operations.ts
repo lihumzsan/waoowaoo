@@ -46,6 +46,7 @@ export function makeTestOperation<Input, Output>(params: {
   prerequisites?: OperationPrerequisites
   effects?: OperationEffects
   confirmation?: OperationConfirmation
+  planContractRevision?: string
   agentFlow?: OperationAgentFlow
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
@@ -96,10 +97,16 @@ export function makeTestOperation<Input, Output>(params: {
       : {}),
     ...(params.plan ? { plan: params.plan } : {}),
     ...(params.commit ? { commit: params.commit } : {}),
+    ...(params.planContractRevision
+      ? { planContractRevision: params.planContractRevision }
+      : {}),
   }
   if (confirmation.kind === 'billable_media') {
     if (!params.plan || !params.commit || params.execute || params.executeInTransaction) {
       throw new Error(`TEST_BILLABLE_OPERATION_MUST_BE_PLAN_COMMIT_ONLY:${params.id}`)
+    }
+    if (!params.planContractRevision?.trim()) {
+      throw new Error(`TEST_BILLABLE_OPERATION_PLAN_CONTRACT_REVISION_REQUIRED:${params.id}`)
     }
     return common as ProjectAgentOperationDefinition<Input, Output>
   }

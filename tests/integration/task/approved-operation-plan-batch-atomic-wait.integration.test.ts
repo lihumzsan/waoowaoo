@@ -72,6 +72,7 @@ async function seedExecution(balance: number) {
   const quote = await quoteOperationPlan(plan)
   const snapshot = await persistOperationPlanSnapshot({
     plan,
+    executionContractRevision: 'approved-operation-plan-batch/v1',
     normalizedInput: { episodeId: episode.id },
     quote,
     episodeId: episode.id,
@@ -104,6 +105,7 @@ function createApprovedBatchOperation(plan: OperationPlan, afterSubmit?: () => P
     intent: 'act',
     effects: EFFECTS_BILLABLE,
     confirmation: { kind: 'billable_media', required: true },
+    planContractRevision: 'approved-operation-plan-batch/v1',
     inputSchema: z.object({ episodeId: z.string().min(1) }),
     outputSchema: z.object({ taskIds: z.array(z.string()) }),
     plan: async () => plan,
@@ -289,6 +291,7 @@ describe('approved operation plan Task batch integration', () => {
     }
     const snapshot = await persistOperationPlanSnapshot({
       plan,
+      executionContractRevision: 'approved-operation-plan-batch/v1',
       normalizedInput: { episodeId: seeded.episode.id },
       quote: await quoteOperationPlan(plan),
       episodeId: seeded.episode.id,

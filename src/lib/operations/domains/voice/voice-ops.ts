@@ -310,6 +310,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         supportsCandidates: false,
       },
       confirmation: { kind: 'billable_media', required: true },
+      planContractRevision: 'voice-generation/v1',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: planGenerateVoice,

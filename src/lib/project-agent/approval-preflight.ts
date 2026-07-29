@@ -130,6 +130,7 @@ async function createPersistedProjectAgentOperationPlan<Input>(params: {
   })
   return await persistOperationPlanView({
     plan,
+    executionContractRevision: params.operation.planContractRevision,
     normalizedInput: prepared.input,
     episodeId: params.context.episodeId ?? null,
   })

@@ -875,6 +875,7 @@ model OperationPlanSnapshot {
   projectId       String?
   episodeId       String?
   operationId     String               @db.VarChar(128)
+  executionContractRevision String               @db.VarChar(128)
   normalizedInput Json
   inputHash       String               @db.VarChar(64)
   planSnapshot    Json

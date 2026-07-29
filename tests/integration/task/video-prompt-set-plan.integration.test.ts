@@ -9,6 +9,7 @@ import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { persistOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
 import { issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
 import { planOperation, quoteOperationPlan } from '@/lib/operations/planning'
+import { isBillablePlannedOperation } from '@/lib/operations/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { resetSystemState } from '../../helpers/db-reset'
 import {
@@ -321,6 +322,9 @@ describe('Video Prompt Set direct Resource planning', () => {
       ],
     })
     const operation = createProjectAgentOperationRegistry().create_video
+    if (!isBillablePlannedOperation(operation)) {
+      throw new Error('CREATE_VIDEO_BILLABLE_OPERATION_REQUIRED')
+    }
     const initialInputResult = operation.inputSchema.safeParse({
       request: {
         kind: 'prompt_set',
@@ -349,6 +353,7 @@ describe('Video Prompt Set direct Resource planning', () => {
     expect(initialPlan.tasks).toHaveLength(2)
     const snapshot = await persistOperationPlanSnapshot({
       plan: initialPlan,
+      executionContractRevision: operation.planContractRevision,
       normalizedInput: initialInput,
       quote: await quoteOperationPlan(initialPlan),
       episodeId: episode.id,

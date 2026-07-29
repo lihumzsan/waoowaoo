@@ -182,6 +182,7 @@ export interface PersistedOperationPlanSnapshot {
   projectId: string | null
   episodeId: string | null
   operationId: string
+  executionContractRevision: string
   normalizedInput: unknown
   inputHash: string
   plan: OperationPlan
@@ -210,10 +211,15 @@ export function hashOperationPlanArtifacts(params: {
 
 export async function persistOperationPlanSnapshot(params: {
   plan: OperationPlan
+  executionContractRevision: string
   normalizedInput: unknown
   quote: BillingQuoteView
   episodeId?: string | null
 }): Promise<PersistedOperationPlanSnapshot> {
+  const executionContractRevision = params.executionContractRevision.trim()
+  if (!executionContractRevision) {
+    throw new Error(`OPERATION_PLAN_EXECUTION_CONTRACT_REVISION_MISSING:${params.plan.operationId}`)
+  }
   assertOperationPlanTaskResourceScopes(params.plan)
   await assertOperationPlanTaskDependencies(params.plan)
   const scopeKind = params.plan.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
@@ -235,6 +241,7 @@ export async function persistOperationPlanSnapshot(params: {
       projectId: scopeKind === 'project' ? params.plan.projectId : null,
       episodeId: params.episodeId ?? null,
       operationId: params.plan.operationId,
+      executionContractRevision,
       normalizedInput,
       inputHash,
       planSnapshot,
@@ -251,6 +258,7 @@ export async function persistOperationPlanSnapshot(params: {
     projectId: created.projectId,
     episodeId: created.episodeId,
     operationId: created.operationId,
+    executionContractRevision: created.executionContractRevision,
     normalizedInput,
     inputHash,
     plan: params.plan,
@@ -289,6 +297,7 @@ export async function loadOperationPlanSnapshot(
     projectId: record.projectId,
     episodeId: record.episodeId,
     operationId: record.operationId,
+    executionContractRevision: readString(record, 'executionContractRevision'),
     normalizedInput: record.normalizedInput,
     inputHash: record.inputHash,
     plan,

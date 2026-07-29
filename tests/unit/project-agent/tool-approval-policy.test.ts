@@ -21,6 +21,7 @@ function buildBillableOperation() {
     intent: 'act',
     effects: EFFECTS_BILLABLE,
     confirmation: { kind: 'billable_media', required: true },
+    planContractRevision: 'tool-approval-policy/v1',
     inputSchema: z.object({}),
     outputSchema: z.object({ ok: z.boolean() }),
     plan: async () => ({

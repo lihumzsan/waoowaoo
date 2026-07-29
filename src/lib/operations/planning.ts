@@ -15,6 +15,7 @@ import type {
   ProjectAgentOperationDefinition,
   ProjectAgentOperationId,
 } from './types'
+import { isBillablePlannedOperation } from './types'
 import { createProjectAgentOperationRegistryForApi } from './registry'
 import { assertOperationChannelAllowed } from './channel-policy'
 import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
@@ -291,6 +292,7 @@ export async function toOperationPlanView(plan: OperationPlan): Promise<Operatio
 
 export async function persistOperationPlanView(params: {
   plan: OperationPlan
+  executionContractRevision: string
   normalizedInput: unknown
   episodeId?: string | null
 }): Promise<OperationPlanView> {
@@ -310,6 +312,7 @@ export async function persistOperationPlanView(params: {
   }
   const snapshot = await persistOperationPlanSnapshot({
     plan: params.plan,
+    executionContractRevision: params.executionContractRevision,
     normalizedInput: params.normalizedInput,
     quote,
     episodeId: plannedEpisodeId ?? requestedEpisodeId,
@@ -391,6 +394,12 @@ export async function planProjectAgentOperationFromApi(params: {
     })
   }
   assertOperationChannelAllowed(operation, 'api')
+  if (!isBillablePlannedOperation(operation)) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_PLAN_UNAVAILABLE',
+      message: `operation plan unavailable: ${params.operationId}`,
+    })
+  }
   const parsed = operation.inputSchema.safeParse(params.input)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {
@@ -418,6 +427,7 @@ export async function planProjectAgentOperationFromApi(params: {
   })
   return await persistOperationPlanView({
     plan,
+    executionContractRevision: operation.planContractRevision,
     normalizedInput: parsed.data,
     episodeId: params.context?.episodeId ?? null,
   })

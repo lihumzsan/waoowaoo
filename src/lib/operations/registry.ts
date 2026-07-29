@@ -160,6 +160,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       }
     }
     if (confirmation.kind === 'billable_media') {
+      mustTrimmedString(op.planContractRevision, 'PLAN_CONTRACT_REVISION')
       if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)
       }
@@ -170,6 +171,9 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_EXECUTOR_FORBIDDEN:${operationId}`)
       }
     } else {
+      if (op.planContractRevision !== undefined) {
+        throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_PLAN_CONTRACT_REVISION_FORBIDDEN:${operationId}`)
+      }
       const hasDirectExecutor = typeof op.execute === 'function'
       const hasTransactionalExecutor = typeof op.executeInTransaction === 'function'
       if (Number(hasDirectExecutor) + Number(hasTransactionalExecutor) !== 1) {

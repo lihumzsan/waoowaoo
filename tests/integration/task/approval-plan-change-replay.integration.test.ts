@@ -10,6 +10,7 @@ import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operation
 import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/planning'
 
 const OPERATION_ID = 'approval_plan_change_fixture'
+const PLAN_CONTRACT_REVISION = 'approval-plan-change-fixture/v1'
 
 async function seedGrant() {
   const user = await createTestUser()
@@ -24,6 +25,7 @@ async function seedGrant() {
   const quote = await quoteOperationPlan(plan)
   const snapshot = await persistOperationPlanSnapshot({
     plan,
+    executionContractRevision: PLAN_CONTRACT_REVISION,
     normalizedInput: { episodeId: null },
     quote,
   })
@@ -38,12 +40,14 @@ async function seedGrant() {
 function buildOperation(params: {
   plan: ReturnType<typeof vi.fn<() => Promise<OperationPlan>>>
   commit: ReturnType<typeof vi.fn<() => Promise<{ durable: string }>>>
+  planContractRevision?: string
 }) {
   return makeTestOperation({
     id: OPERATION_ID,
     intent: 'act',
     effects: EFFECTS_BILLABLE,
     confirmation: { kind: 'billable_media', required: true },
+    planContractRevision: params.planContractRevision ?? PLAN_CONTRACT_REVISION,
     inputSchema: z.object({ episodeId: z.null() }),
     outputSchema: z.object({ durable: z.string() }),
     plan: async () => await params.plan(),
@@ -152,6 +156,34 @@ describe('Approval plan change and durable replay integration', () => {
     expect(await prisma.task.count()).toBe(0)
     expect((await prisma.approvalGrant.findUniqueOrThrow({ where: { id: seeded.issued.approvalGrantId } })).revokedAt)
       .not.toBeNull()
+  })
+
+  it('revokes without replanning when the execution contract revision changed', async () => {
+    const seeded = await seedGrant()
+    const plan = vi.fn(async (): Promise<OperationPlan> => seeded.plan)
+    const commit = vi.fn(async () => ({ durable: 'must-not-run' }))
+
+    await expect(invokeApprovedOperationPlan(invocationParams({
+      seeded,
+      operation: buildOperation({
+        plan,
+        commit,
+        planContractRevision: 'approval-plan-change-fixture/v2',
+      }),
+    }))).rejects.toMatchObject({
+      code: 'OPERATION_PLAN_CHANGED',
+      details: {
+        changedArtifacts: ['executionContractRevision'],
+      },
+    })
+
+    expect(plan).not.toHaveBeenCalled()
+    expect(commit).not.toHaveBeenCalled()
+    expect(await prisma.operationExecution.count()).toBe(0)
+    expect(await prisma.task.count()).toBe(0)
+    expect((await prisma.approvalGrant.findUniqueOrThrow({
+      where: { id: seeded.issued.approvalGrantId },
+    })).revokedAt).not.toBeNull()
   })
 
   it('returns persisted output without replanning an already consumed execution', async () => {

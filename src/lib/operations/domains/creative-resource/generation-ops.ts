@@ -2574,6 +2574,10 @@ const MEDIA_EFFECTS = {
   longRunning: true,
 } as const
 
+// v2 broadens the canonical initial-generation root from request.kind=new to
+// every non-retry request branch, including prompt_set and manifest_assets.
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'creative-resource-generation/v2'
+
 export function createCreativeResourceGenerationOperations(): ProjectAgentOperationRegistryDraft {
   return {
     create_text: defineOperation({
@@ -2620,6 +2624,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         supportsCandidates: true,
       },
       confirmation: { kind: 'billable_media', required: true },
+      planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
       bindToolInputSchema: bindImageGenerationToolInputSchema,
       inputSchema: createImageInputSchema,
       outputSchema: mediaTaskOutputSchema,
@@ -2640,6 +2645,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         supportsCandidates: false,
       },
       confirmation: { kind: 'billable_media', required: true },
+      planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
       bindToolInputSchema: bindAudioGenerationToolInputSchema,
       inputSchema: createAudioInputSchema,
       outputSchema: mediaTaskOutputSchema,
@@ -2660,6 +2666,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         supportsCandidates: true,
       },
       confirmation: { kind: 'billable_media', required: true },
+      planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
       bindToolInputSchema: bindVideoGenerationToolInputSchema,
       inputSchema: createVideoInputSchema,
       outputSchema: mediaTaskOutputSchema,

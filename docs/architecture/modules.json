@@ -16,6 +16,8 @@
         "src/lib/payments",
         "src/app/api/user/transactions/route.ts",
         "src/lib/operations/planning.ts",
+        "src/lib/operations/types.ts",
+        "src/lib/operations/registry.ts",
         "src/lib/operations/operation-plan-snapshot.ts",
         "src/lib/operations/operation-plan-revalidation.ts",
         "src/lib/operations/planned-operation-invocation.ts",
@@ -42,9 +44,11 @@
         "src/lib/task/approved-plan-submitter.ts",
         "src/lib/task/enqueue.ts",
         "src/lib/operations/domains",
+        "prisma/schema.prisma",
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
         "prisma/migrations/20260713110000_remove_operation_plan_expiry/migration.sql",
-        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql"
+        "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql",
+        "prisma/migrations/20260729170000_add_operation_plan_execution_contract_revision/migration.sql"
       ]
     },
     {
