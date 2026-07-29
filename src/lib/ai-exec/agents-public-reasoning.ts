@@ -3,6 +3,7 @@ import type { RunStreamEvent } from '@openai/agents'
 export type AgentsPublicReasoningEvent =
   | { kind: 'start'; reasoningId: string }
   | { kind: 'delta'; reasoningId: string; delta: string }
+  | { kind: 'output_boundary' }
   | { kind: 'end'; reasoningId: string; text: string }
 
 type ReasoningBlock = {
@@ -84,6 +85,9 @@ export function createAgentsPublicReasoningNormalizer(): AgentsPublicReasoningNo
 
       const part = readRawModelPart(event)
       const partType = readString(part?.type)
+      if (partType === 'text-start' || partType === 'tool-input-start') {
+        return [...ensureResponse(), { kind: 'output_boundary' }]
+      }
       if (
         partType !== 'reasoning-start'
         && partType !== 'reasoning-delta'

@@ -36,6 +36,11 @@ interface UseWorkspaceAssistantSessionSyncInput {
   locale: string
 }
 
+interface WorkspaceAssistantSessionRefreshOptions {
+  minimumEventWatermark?: string
+  forceNewRequest?: boolean
+}
+
 const MAX_PENDING_SUBAGENT_OWNERSHIP_EVENTS = 256
 
 interface PendingSubagentOwnershipEvents {
@@ -55,6 +60,15 @@ export function isWorkspaceAssistantSessionResponseFresh(params: {
     candidate: params.responseEventWatermark,
     required: params.requiredEventWatermark,
   })
+}
+
+function hasTerminalWorkspaceAssistantSubagent(
+  sessionState: ProjectAgentSessionState,
+  taskId: string,
+): boolean {
+  return sessionState.subagents.some((subagent) => (
+    subagent.taskId === taskId && subagent.status !== 'running'
+  ))
 }
 
 async function fetchWorkspaceAssistantSessionState(params: {
@@ -111,15 +125,16 @@ export function useWorkspaceAssistantSessionSync({
   >(() => new Map())
 
   const refreshSessionState = useCallback(async (
-    minimumEventWatermark = latestEventWatermarkRef.current,
+    options: WorkspaceAssistantSessionRefreshOptions = {},
   ): Promise<ProjectAgentSessionState | null> => {
     const requestKey = `${projectId}:${episodeId ?? ''}:${locale}`
     const requiredEventWatermark = maxProjectAgentSessionEventWatermark(
-      minimumEventWatermark,
+      options.minimumEventWatermark ?? latestEventWatermarkRef.current,
       latestEventWatermarkRef.current,
     )
     if (
-      requestRef.current?.key === requestKey
+      !options.forceNewRequest
+      && requestRef.current?.key === requestKey
       && isWorkspaceAssistantSessionResponseFresh({
         responseEventWatermark: requestRef.current.minimumEventWatermark,
         requiredEventWatermark,
@@ -253,19 +268,32 @@ export function useWorkspaceAssistantSessionSync({
       || lifecycleType === TASK_EVENT_TYPE.CANCELED
   }, [])
 
+  const reconcileTerminalSubagent = useCallback((taskId: string): void => {
+    void refreshSessionState({ forceNewRequest: true }).then((refreshed) => {
+      if (
+        refreshed
+        && hasTerminalWorkspaceAssistantSubagent(refreshed, taskId)
+      ) {
+        clearSubagentLiveTask(taskId)
+      }
+    })
+  }, [clearSubagentLiveTask, refreshSessionState])
+
   const applyOwnedSubagentTaskEvent = useCallback((event: TaskSSEEvent): void => {
     if (event.type === TASK_SSE_EVENT_TYPE.STREAM) {
       applyOwnedSubagentStreamEvent(event)
       return
     }
     const terminal = isTerminalCreativeTaskEvent(event)
-    void refreshSessionState().then((refreshed) => {
-      if (terminal && refreshed) clearSubagentLiveTask(event.taskId)
-    })
+    if (terminal) {
+      reconcileTerminalSubagent(event.taskId)
+      return
+    }
+    void refreshSessionState()
   }, [
     applyOwnedSubagentStreamEvent,
-    clearSubagentLiveTask,
     isTerminalCreativeTaskEvent,
+    reconcileTerminalSubagent,
     refreshSessionState,
   ])
 
@@ -307,13 +335,13 @@ export function useWorkspaceAssistantSessionSync({
         }
       }
       if (buffered.events.some(isTerminalCreativeTaskEvent)) {
-        clearSubagentLiveTask(event.taskId)
+        reconcileTerminalSubagent(event.taskId)
       }
     })
   }, [
     applyOwnedSubagentStreamEvent,
-    clearSubagentLiveTask,
     isTerminalCreativeTaskEvent,
+    reconcileTerminalSubagent,
     refreshSessionState,
   ])
 
@@ -347,7 +375,7 @@ export function useWorkspaceAssistantSessionSync({
       assistantEvent.agentEventId,
     )
     setSessionEventWatermark(latestEventWatermarkRef.current)
-    void refreshSessionState(assistantEvent.agentEventId)
+    void refreshSessionState({ minimumEventWatermark: assistantEvent.agentEventId })
   }), [
     applyOwnedSubagentTaskEvent,
     confirmUnknownSubagentTaskEvent,

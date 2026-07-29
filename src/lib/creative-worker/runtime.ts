@@ -417,6 +417,25 @@ export async function runCreativeWorker(
     const applyReasoningEvent = async (
       reasoningEvent: ReturnType<typeof publicReasoning.accept>[number],
     ): Promise<void> => {
+      if (reasoningEvent.kind === 'output_boundary') {
+        for (const state of reasoningStates.values()) {
+          if (
+            state.status !== 'running'
+            || state.text.length === 0
+            || state.persistedLength === state.text.length
+          ) continue
+          state.persistedLength = state.text.length
+          await emitEvent({
+            kind: 'reasoning',
+            reasoningId: state.reasoningId,
+            text: state.text,
+            status: 'running',
+            truncated: state.truncated,
+          })
+        }
+        await emitEvent({ kind: 'output_boundary' })
+        return
+      }
       if (reasoningEvent.kind === 'start') {
         if (reasoningStates.has(reasoningEvent.reasoningId)) {
           throw new CreativeWorkerError('CREATIVE_WORK_RUN_FAILED', {

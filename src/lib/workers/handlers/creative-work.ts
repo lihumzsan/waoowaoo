@@ -73,6 +73,10 @@ export async function handleCreativeWorkTask(
       signal: execution.signal,
       request: payload.request,
       onEvent: async (event) => {
+        if (event.kind === 'output_boundary') {
+          await streamCallbacks.flush()
+          return
+        }
         if (event.kind === 'reasoning_delta') {
           const reasoningId = `${String(attempt)}:${event.reasoningId}`
           streamCallbacks.onChunk?.({

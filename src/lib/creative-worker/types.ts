@@ -179,6 +179,9 @@ export type CreativeWorkerEvent = CreativeWorkTraceEvent
     delta: string
   }
   | {
+    kind: 'output_boundary'
+  }
+  | {
     kind: 'completed'
     outputKind: CreativeWorkOutputKind
   }

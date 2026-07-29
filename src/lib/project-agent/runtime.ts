@@ -1632,6 +1632,7 @@ export async function createProjectAgentChatResponse(input: {
     const writePublicReasoning = (
       event: ReturnType<typeof publicReasoning.accept>[number],
     ): void => {
+      if (event.kind === 'output_boundary') return
       if (event.kind === 'start') {
         sideChannel.write({
           kind: 'public_reasoning',
