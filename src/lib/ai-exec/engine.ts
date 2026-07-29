@@ -22,7 +22,12 @@ import {
 import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
 import { AppError, toAppError } from '@/lib/errors/app-error'
 import { getLogContext } from '@/lib/logging/context'
-import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
+import {
+  cancelAsyncProviderTaskBestEffort,
+  ProviderQueueTimeoutError,
+  waitForAsyncProviderResult,
+  type AsyncProviderWaitCallbacks,
+} from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
@@ -144,6 +149,7 @@ export type AiMediaExecutionInput =
 export async function executeMediaGeneration(
   input: AiMediaExecutionInput,
   invocation?: TaskProviderInvocation,
+  wait?: AsyncProviderWaitCallbacks,
 ): Promise<GenerateResult> {
   if (input.modality === 'image') {
     assertImageMediaReferencesUseHttps(input.options)
@@ -294,6 +300,8 @@ export async function executeMediaGeneration(
     const completed = await waitForAsyncProviderResult({
       externalId,
       userId: input.userId,
+      beforePoll: wait?.beforePoll,
+      onPending: wait?.onPending,
     })
     return {
       ...result,
@@ -301,6 +309,22 @@ export async function executeMediaGeneration(
       audioUrl: completed.url,
     }
   } catch (error) {
+    if (error instanceof ProviderQueueTimeoutError) {
+      const queueError = new AppError('GENERATION_QUEUE_TIMEOUT', error.message, {
+        provider: selection.provider,
+        details: { externalId, queuedMs: error.queuedMs, queueTimeoutMs: error.queueTimeoutMs },
+        cause: error,
+      })
+      // 顺序契约（PG-06A 排队超时补偿）：先持久化“旧 external id 作废”
+      // （checkpoint submitted → retryable_rejected），再尽力取消 provider 侧任务；
+      // 新提交只能由下一 attempt 经 durable fence 重新授权。此处崩溃最坏留下
+      // 一个已被作废、无人消费的孤儿 provider job，不会出现双活身份。
+      if (taskId && invocation) {
+        await markTaskProviderInvocationRetryable({ taskId, invocation, error: queueError })
+      }
+      await cancelAsyncProviderTaskBestEffort({ externalId, userId: input.userId })
+      throw queueError
+    }
     if (error instanceof ProviderTerminalFailureError) {
       if (taskId && invocation) {
         await markTaskProviderInvocationRetryable({ taskId, invocation, error })
@@ -389,6 +413,7 @@ export async function generateMusic(
   prompt: string,
   options?: AiMusicExecutionOptions,
   invocation?: TaskProviderInvocation,
+  wait?: AsyncProviderWaitCallbacks,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'music',
@@ -396,7 +421,7 @@ export async function generateMusic(
     modelKey,
     prompt,
     options,
-  }, invocation)
+  }, invocation, wait)
 }
 
 export async function generateVoice(
@@ -406,6 +431,7 @@ export async function generateVoice(
   text: string,
   options?: AiVoiceExecutionOptions,
   invocation?: TaskProviderInvocation,
+  wait?: AsyncProviderWaitCallbacks,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'voice',
@@ -414,7 +440,7 @@ export async function generateVoice(
     description,
     text,
     options,
-  }, invocation)
+  }, invocation, wait)
 }
 
 export function taskAiInvocationKey(input: {

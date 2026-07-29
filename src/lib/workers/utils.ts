@@ -2,7 +2,11 @@ import { type Job } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
 import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
-import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
+import {
+  cancelAsyncProviderTaskBestEffort,
+  ProviderQueueTimeoutError,
+  waitForAsyncProviderResult,
+} from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { processMediaResult } from '@/lib/media-process'
 import {
@@ -142,9 +146,9 @@ export async function waitExternalResult(
       timeoutMs: opts?.timeoutMs,
       intervalMs: opts?.intervalMs,
       beforePoll: async () => await assertTaskActive(job, 'polling_external'),
-      onPending: async (elapsedRatio) => {
+      onPending: async ({ elapsedRatio, phase }) => {
         const progress = progressStart + Math.floor((progressEnd - progressStart) * elapsedRatio)
-        await reportTaskProgress(job, progress, { stage: 'polling_external', externalId })
+        await reportTaskProgress(job, progress, { stage: 'polling_external', externalId, externalPhase: phase })
         await assertTaskActive(job, 'polling_external_wait')
       },
     })
@@ -155,6 +159,34 @@ export async function waitExternalResult(
     })
     return result
   } catch (error) {
+    if (error instanceof ProviderQueueTimeoutError) {
+      const queueError = new AppError('GENERATION_QUEUE_TIMEOUT', error.message, {
+        details: { externalId, externalStatus: 'queue_timeout', queuedMs: error.queuedMs, queueTimeoutMs: error.queueTimeoutMs },
+        cause: error,
+      })
+      logger.error({
+        message: queueError.message,
+        errorCode: 'GENERATION_QUEUE_TIMEOUT',
+        retryable: true,
+        durationMs: Date.now() - startAt,
+        details: {
+          externalId,
+        },
+      })
+      // 顺序契约（PG-06A 排队超时补偿）：先持久化“旧 external id 作废”，再尽力取消
+      // provider 侧任务；新提交只能由下一 attempt 经 durable fence 重新授权。
+      // Task.externalId 只是 resume 提示、不是提交闸门，先清除它可消除
+      // “checkpoint 已作废但提示仍指向旧 id”的崩溃角：任一步之间崩溃，下一
+      // attempt 要么经 fence 重放旧 id 继续排队计时，要么全新提交，绝不双活。
+      await clearTaskExternalId(job.data.taskId)
+      await markTaskProviderInvocationRetryableByExternalId({
+        taskId: job.data.taskId,
+        externalId,
+        error: queueError,
+      })
+      await cancelAsyncProviderTaskBestEffort({ externalId, userId })
+      throw queueError
+    }
     if (error instanceof ProviderTerminalFailureError) {
       const terminalError = new AppError('EXTERNAL_ERROR', error.message, {
         details: { externalId, externalStatus: 'failed' },

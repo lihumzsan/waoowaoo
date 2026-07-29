@@ -11,6 +11,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from './audio-artifact'
 import { getWorkerConcurrency } from './runtime-config'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
+import { assertTaskActive } from './utils'
 
 function readRequiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) {
@@ -34,6 +35,16 @@ export async function handleVoiceGenerateTask(job: Job<TaskJobData>) {
     previewText,
     { language },
     { key: 'media:voice:primary' },
+    {
+      // 与 image/video 参照物（workers/utils.ts waitExternalResult）对齐：
+      // beforePoll 做任务取消检查，onPending 上报真实排队/生成阶段与进度。
+      beforePoll: async () => await assertTaskActive(job, 'polling_external'),
+      onPending: async ({ elapsedRatio, phase }) => {
+        const progress = 30 + Math.floor((80 - 30) * elapsedRatio)
+        await reportTaskProgress(job, progress, { stage: 'polling_external', externalPhase: phase })
+        await assertTaskActive(job, 'polling_external_wait')
+      },
+    },
   )
   if (!generated.success) {
     throw new Error(generated.error || 'VOICE_GENERATE_PROVIDER_FAILED')

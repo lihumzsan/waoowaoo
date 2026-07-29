@@ -214,6 +214,15 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.GENERATION_TIMEOUT',
     defaultMessage: 'Generation timed out',
   },
+  // 外部任务在 provider 队列中排队超预算：与 GENERATION_TIMEOUT（生成阶段超时）分开，
+  // 补偿协议为“作废旧 external id + 尽力取消 + 新 attempt 全新提交”（PG-06 扩展）。
+  GENERATION_QUEUE_TIMEOUT: {
+    httpStatus: 504,
+    retryable: true,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.GENERATION_QUEUE_TIMEOUT',
+    defaultMessage: 'Generation queue wait timed out',
+  },
   VIDEO_API_FORMAT_UNSUPPORTED: {
     httpStatus: 400,
     retryable: false,

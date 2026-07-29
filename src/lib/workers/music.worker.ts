@@ -17,6 +17,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { getWorkerConcurrency } from './runtime-config'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from './audio-artifact'
+import { assertTaskActive } from './utils'
 
 type MusicVideoReference = {
   readonly url: string
@@ -97,7 +98,16 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
       referenceVideoUrl: videoReference.url,
       referenceVideoDurationMs: videoReference.durationMs ?? Math.round(durationSeconds * 1000),
     } : {}),
-  }, { key: 'media:music:primary' })
+  }, { key: 'media:music:primary' }, {
+    // 与 image/video 参照物（workers/utils.ts waitExternalResult）对齐：
+    // beforePoll 做任务取消检查，onPending 上报真实排队/生成阶段与进度。
+    beforePoll: async () => await assertTaskActive(job, 'polling_external'),
+    onPending: async ({ elapsedRatio, phase }) => {
+      const progress = 30 + Math.floor((80 - 30) * elapsedRatio)
+      await reportTaskProgress(job, progress, { stage: 'polling_external', externalPhase: phase })
+      await assertTaskActive(job, 'polling_external_wait')
+    },
+  })
   if (!generated.success) {
     throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
   }

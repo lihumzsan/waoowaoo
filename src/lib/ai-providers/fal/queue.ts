@@ -1,4 +1,4 @@
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { logDebug as _ulogDebug, logInfo as _ulogInfo, logWarn as _ulogWarn, logError as _ulogError } from '@/lib/logging/core'
 import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
@@ -151,8 +151,10 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
     throw new Error(`FAL_STATUS_UNKNOWN:${String(status)}`)
   }
 
+  // 例行 pending 查询不是提交/计费/终态事实，按 provider-gateway 契约只记 DEBUG；
+  // 受理、完成、明确失败与查询异常仍保留 INFO/ERROR 可观测性。
   // Stryker disable next-line StringLiteral,MethodExpression: observability text does not change status handling.
-  _ulogInfo(`[FAL Status] requestId=${requestId.slice(0, 16)}... 状态=${status}`)
+  _ulogDebug(`[FAL Status] requestId=${requestId.slice(0, 16)}... 状态=${status}`)
 
   if (status === 'COMPLETED') {
     const resultUrl = typeof data.response_url === 'string'
@@ -220,4 +222,41 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
     completed: false,
     failed: false,
   }
+}
+
+/**
+ * Best-effort cancellation of an accepted FAL queue request.
+ * Cancel URL is the request base URL + `/cancel` (the status URL without `/status`).
+ * Idempotent by contract: 2xx means the cancellation was accepted; any 4xx means
+ * the request is already terminal, already canceled, or unknown — all tolerated
+ * as a no-op because the caller has already durably disowned the external id.
+ * Only transport failures / 5xx throw so the caller can log the failed attempt.
+ */
+export async function cancelFalTask(endpoint: string, requestId: string, apiKey: string): Promise<void> {
+  if (!apiKey) {
+    throw new Error('请配置 FAL API Key')
+  }
+
+  const baseEndpoint = readFalBaseEndpoint(endpoint)
+  const cancelUrl = buildFalQueueUrl(`${baseEndpoint}/requests/${requestId}/cancel`)
+  const response = await fetchWithProviderProxy(cancelUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Key ${apiKey}`,
+    },
+  })
+
+  if (response.ok) {
+    // Stryker disable next-line StringLiteral: observability text does not change the cancel protocol.
+    _ulogInfo(`[FAL Cancel] 取消已受理: requestId=${requestId.slice(0, 16)}...`)
+    return
+  }
+
+  const errorText = await response.text()
+  if (response.status >= 400 && response.status < 500) {
+    // Stryker disable next-line StringLiteral,MethodExpression: observability text does not change the tolerated outcome.
+    _ulogWarn(`[FAL Cancel] 请求已终态或无法取消 (${response.status}): ${errorText.slice(0, 300)}`)
+    return
+  }
+  throw new FetchStatusError(response.status, errorText)
 }

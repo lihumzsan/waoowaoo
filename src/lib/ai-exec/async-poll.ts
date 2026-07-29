@@ -39,6 +39,34 @@ export async function pollAsyncTask(
   })
 }
 
+/**
+ * Provider-side cancel dispatch for one external job. Capability is declared by
+ * the provider's async-task registration (`cancel`), never guessed by callers;
+ * providers without cancel report `unsupported` so best-effort compensation can
+ * proceed without inventing a second provider protocol.
+ */
+export async function cancelAsyncTask(
+  externalId: string,
+  userId: string,
+): Promise<'canceled' | 'unsupported'> {
+  if (!userId) {
+    throw new Error('缺少用户ID，无法获取 API Key')
+  }
+
+  const registration = resolveAsyncTaskProviderByExternalId(externalId)
+  if (!registration.cancel) return 'unsupported'
+  const parsed = registration.parseExternalId(externalId)
+  await registration.cancel({
+    parsed,
+    context: {
+      userId,
+      getProviderConfig,
+      getUserModels,
+    },
+  })
+  return 'canceled'
+}
+
 export function formatExternalId(
   provider: FormatExternalIdProvider,
   type: FormatExternalIdType,

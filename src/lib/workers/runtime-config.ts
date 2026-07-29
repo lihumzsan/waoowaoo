@@ -38,6 +38,20 @@ export function getWorkerExternalTimeoutMs(env: RuntimeEnvironment = process.env
   })
 }
 
+/**
+ * Queue wait budget for accepted external jobs (provider-reported `queued`
+ * phase). Independent from `WORKER_EXTERNAL_TIMEOUT_MS`, which only meters the
+ * `running` phase; exceeding this budget cancels the stuck job (best effort)
+ * and retries with a fresh submission.
+ */
+export function getWorkerExternalQueueTimeoutMs(env: RuntimeEnvironment = process.env): number {
+  return resolvePositiveIntegerConfig({
+    name: 'WORKER_EXTERNAL_QUEUE_TIMEOUT_MS',
+    value: env.WORKER_EXTERNAL_QUEUE_TIMEOUT_MS,
+    defaultValue: 30 * 60 * 1_000,
+  })
+}
+
 export function getWorkerExternalPollMs(env: RuntimeEnvironment = process.env): number {
   return resolvePositiveIntegerConfig({
     name: 'WORKER_EXTERNAL_POLL_MS',

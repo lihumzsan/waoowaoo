@@ -215,7 +215,9 @@ describe('task reconciler DB and Redis integration', () => {
         billingInfo: { billable: false, source: 'task', status: 'skipped' },
         queuedAt: staleAt,
         startedAt: staleAt,
-        heartbeatAt: staleAt,
+        // 心跳必须新鲜：本场景断言“活 owner 的 attempt 不可被重投递抢占”。
+        // 心跳过期的接管路径由 task-attempt-claim 集成场景单独验证。
+        heartbeatAt: new Date(),
       },
     })
     queuedJobIds.push(task.id)

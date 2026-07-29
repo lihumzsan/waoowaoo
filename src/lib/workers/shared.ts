@@ -30,6 +30,13 @@ import {
   runWithTaskExecutionDeadline,
   type TaskAttemptExecutionContext,
 } from './task-execution-deadline'
+import {
+  TASK_ATTEMPT_HEARTBEAT_STALE_MS,
+  isTaskHeartbeatReleaseActive,
+  registerInFlightTaskAttempt,
+  tryTakeOverStaleProcessingAttempt,
+  unregisterInFlightTaskAttempt,
+} from './attempt-recovery'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -191,7 +198,8 @@ export async function withTaskLifecycle(
   let taskAttempt: number | null = null
 
   const heartbeatTimer = setInterval(() => {
-    if (taskAttempt !== null) {
+    // 停机释放后不再刷新心跳：释放的 attempt 必须保持 stale，供 stalled 重投递立即接管。
+    if (taskAttempt !== null && !isTaskHeartbeatReleaseActive()) {
       // 心跳失败只降级为日志，不得经 unhandledRejection 打挂 worker 进程。
       touchTaskHeartbeat(taskId, taskAttempt).catch((error: unknown) => {
         logger.warn({
@@ -218,14 +226,6 @@ export async function withTaskLifecycle(
       },
     })
     const claim = await tryClaimTaskAttempt({ taskId })
-    if (claim.kind === 'already_processing') {
-      logger.warn({
-        action: 'worker.delivery.already_processing',
-        message: 'stalled or duplicate delivery cannot claim the active DB attempt',
-        details: { activeAttempt: claim.attempt },
-      })
-      throw new UnrecoverableError(`TASK_ATTEMPT_ALREADY_PROCESSING:${taskId}:${claim.attempt}`)
-    }
     if (claim.kind === 'missing' || claim.kind === 'terminal') {
       logger.info({
         action: 'worker.skip.terminated',
@@ -236,7 +236,35 @@ export async function withTaskLifecycle(
       })
       return
     }
-    taskAttempt = claim.attempt
+    if (claim.kind === 'already_processing') {
+      // 处于 processing 的 attempt 只有心跳过期（owner 已死：crash / dev 重启）才可被
+      // 本次 stalled 重投递接管；接管固定递增 attempt，旧 owner 即使复活也失去写权。
+      const takeover = await tryTakeOverStaleProcessingAttempt({
+        taskId,
+        observedAttempt: claim.attempt,
+      })
+      if (takeover.kind !== 'taken_over') {
+        logger.warn({
+          action: 'worker.delivery.already_processing',
+          message: 'stalled or duplicate delivery cannot claim the active DB attempt (heartbeat is fresh)',
+          details: { activeAttempt: claim.attempt, heartbeatStaleMs: TASK_ATTEMPT_HEARTBEAT_STALE_MS },
+        })
+        throw new UnrecoverableError(`TASK_ATTEMPT_ALREADY_PROCESSING:${taskId}:${claim.attempt}`)
+      }
+      logger.warn({
+        action: 'worker.delivery.stale_attempt_taken_over',
+        message: 'took over a processing attempt whose heartbeat expired; resuming from durable checkpoints',
+        details: {
+          previousAttempt: claim.attempt,
+          attempt: takeover.attempt,
+          heartbeatStaleMs: TASK_ATTEMPT_HEARTBEAT_STALE_MS,
+        },
+      })
+      taskAttempt = takeover.attempt
+    } else {
+      taskAttempt = claim.attempt
+    }
+    registerInFlightTaskAttempt(taskId, taskAttempt)
     const processingPayload = withFlowFields(data, {
       queue: job.queueName,
       stage: 'received',
@@ -323,7 +351,22 @@ export async function withTaskLifecycle(
       },
     })
   } catch (error: unknown) {
-    if (taskAttempt === null) throw error
+    if (taskAttempt === null) {
+      // Claim/接管阶段失败：本进程从未拥有任何 attempt，DB Task 状态未被本次交付改变，
+      // 因此没有 attempt 身份可以发布 FAILED 生命周期事件。这不是终态：Task 仍是
+      // queued/processing，由 BullMQ 重投递或 reconciler 按 DB 事实恢复。必须留下
+      // 结构化日志，避免 “job failed 但无生命周期事件” 成为不可观测的静默状态。
+      logger.error({
+        action: 'worker.claim_phase_failed',
+        message: 'worker failed before owning a task attempt; no lifecycle event is published and recovery is owned by redelivery/reconciler',
+        durationMs: Date.now() - startedAt,
+        details: { queue: job.queueName, taskType: data.type },
+        error: error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { message: String(error) },
+      })
+      throw error
+    }
     if (error instanceof TaskTerminatedError) {
       logger.info({
         action: 'worker.terminated',
@@ -468,6 +511,7 @@ export async function withTaskLifecycle(
     throw new UnrecoverableError(normalizedError.message || 'Task failed')
   } finally {
     clearInterval(heartbeatTimer)
+    unregisterInFlightTaskAttempt(taskId)
   }
 }
 
