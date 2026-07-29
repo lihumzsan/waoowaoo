@@ -20,6 +20,7 @@ import {
   createProjectAgentExecutionSegment,
   projectAgentExecutionStartedIdempotencyKey,
 } from '@/lib/project-agent/execution-segment'
+import { buildReadyProjectAgentModelHistoryCommit } from './project-agent-model-history.fixture'
 
 const PREFIX = 'execution-segment-integration:'
 
@@ -33,6 +34,12 @@ async function settleApprovalHandoff(
     ...prepareInput,
     executionSegmentId: `test-approval:${input.approvalId}`,
   })
+  const modelHistoryCommit = await buildReadyProjectAgentModelHistoryCommit({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId: input.assistantId ?? 'workspace-command',
+  }, handoff.executionSegmentId)
   return await settleProjectAgentPreparedApprovalHandoff({
     executionFence: input.executionFence,
     handoff,
@@ -41,6 +48,7 @@ async function settleApprovalHandoff(
     episodeId: input.episodeId ?? null,
     assistantId: input.assistantId,
     message,
+    modelHistoryCommit,
   })
 }
 

@@ -11,6 +11,7 @@ import {
 } from '@/lib/project-agent/execution-handoff'
 import { fingerprintProjectAgentChoiceSubject } from '@/lib/project-agent/choice-offer'
 import type { ProjectAgentChoiceCommitment } from '@/lib/project-agent/choice-offer'
+import { buildReadyProjectAgentModelHistoryCommit } from './project-agent-model-history.fixture'
 
 const RUN_ID = 'continuation-choice-run-1'
 const WAIT_ID = 'continuation-choice-wait-1'
@@ -26,6 +27,17 @@ async function seedClaimedContinuation() {
       projectId: project.id,
       episodeNumber: 1,
       name: 'Continuation episode',
+    },
+  })
+  await prisma.projectAssistantThread.create({
+    data: {
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command',
+      scopeRef: `episode:${episode.id}`,
+      messagesJson: [],
+      modelHistoryJson: [],
     },
   })
   await prisma.projectAgentRun.create({
@@ -216,6 +228,12 @@ describe('Project Agent continuation Choice DB integration', () => {
         role: 'assistant',
         parts: [{ type: 'text', text: '请确认当前创作方向。' }],
       },
+      modelHistoryCommit: await buildReadyProjectAgentModelHistoryCommit({
+        projectId: project.id,
+        userId: user.id,
+        episodeId: episode.id,
+        assistantId: 'workspace-command',
+      }, prepared.executionSegmentId),
       continuation: {
         waitId: WAIT_ID,
         commandId: COMMAND_ID,

@@ -74,6 +74,15 @@ export interface ProjectAgentRunRecord {
   heartbeatAt: Date | null
 }
 
+export type ProjectAgentRunModelHistorySettlement =
+  | {
+      kind: 'commit'
+      commit: ProjectAssistantModelHistoryCommit
+    }
+  | {
+      kind: 'discard'
+    }
+
 export const PROJECT_AGENT_RUN_HEARTBEAT_INTERVAL_MS = 30 * 1000
 export const PROJECT_AGENT_RUN_STALE_MS = 90 * 1000
 
@@ -93,6 +102,26 @@ function buildRunScope(scope: ProjectAgentRunScope): {
       episodeId: scope.episodeId ?? null,
     }),
   }
+}
+
+async function listProjectAgentRunExecutionSegmentIdsInTransaction(
+  tx: Prisma.TransactionClient,
+  runId: string,
+): Promise<string[]> {
+  const executionEvents = await tx.projectAgentEvent.findMany({
+    where: {
+      runId,
+      kind: 'run.execution_started',
+    },
+    select: { payload: true },
+  })
+  return executionEvents.flatMap(({ payload }) => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+    const executionSegmentId = (payload as Record<string, unknown>).executionSegmentId
+    return typeof executionSegmentId === 'string' && executionSegmentId.trim()
+      ? [executionSegmentId]
+      : []
+  })
 }
 
 function normalizeControlKind(value: string): ProjectAgentRunControlKind {
@@ -628,7 +657,7 @@ export async function settleProjectAgentRunWithMessage(params: {
   errorCode?: string | null
   errorMessage?: string | null
   message: UIMessage
-  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
+  modelHistorySettlement: ProjectAgentRunModelHistorySettlement
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const run = await tx.projectAgentRun.findUnique({
@@ -641,13 +670,28 @@ export async function settleProjectAgentRunWithMessage(params: {
       },
     })
     if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runFence.runId}`)
+    if (params.modelHistorySettlement.kind === 'discard') {
+      const executionSegmentIds = await listProjectAgentRunExecutionSegmentIdsInTransaction(
+        tx,
+        params.runFence.runId,
+      )
+      await discardProjectAssistantPendingModelHistoryInTransaction(tx, {
+        projectId: run.projectId,
+        userId: run.userId,
+        episodeId: run.episodeId,
+        assistantId: run.assistantId as ProjectAssistantId,
+        executionSegmentIds,
+      })
+    }
     await appendProjectAssistantThreadMessagesInTransaction(tx, {
       projectId: run.projectId,
       userId: run.userId,
       episodeId: run.episodeId,
       assistantId: run.assistantId as ProjectAssistantId,
       messages: [params.message],
-      ...(params.modelHistoryCommit ? { modelHistoryCommit: params.modelHistoryCommit } : {}),
+      ...(params.modelHistorySettlement.kind === 'commit'
+        ? { modelHistoryCommit: params.modelHistorySettlement.commit }
+        : {}),
     })
     await appendProjectAgentEventsInTransaction(tx, {
       scope: {
@@ -685,7 +729,6 @@ export async function settleProjectAgentRunFailureWithMessage(params: {
   stopReason: string
   errorCode?: string | null
   errorMessage?: string | null
-  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
 }): Promise<void> {
   const message: UIMessage = {
     id: `workspace-assistant-run:${params.controlKind}:${params.runFence.runId}:${params.requestId}`,
@@ -714,7 +757,7 @@ export async function settleProjectAgentRunFailureWithMessage(params: {
     errorCode: params.errorCode,
     errorMessage: params.errorMessage,
     message,
-    ...(params.modelHistoryCommit ? { modelHistoryCommit: params.modelHistoryCommit } : {}),
+    modelHistorySettlement: { kind: 'discard' },
   })
 }
 
@@ -834,20 +877,7 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
     })
     if (!recovered || recovered === 'task_batch') {
       await prisma.$transaction(async (tx) => {
-        const executionEvents = await tx.projectAgentEvent.findMany({
-          where: {
-            runId: run.id,
-            kind: 'run.execution_started',
-          },
-          select: { payload: true },
-        })
-        const executionSegmentIds = executionEvents.flatMap(({ payload }) => {
-          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
-          const executionSegmentId = (payload as Record<string, unknown>).executionSegmentId
-          return typeof executionSegmentId === 'string' && executionSegmentId.trim()
-            ? [executionSegmentId]
-            : []
-        })
+        const executionSegmentIds = await listProjectAgentRunExecutionSegmentIdsInTransaction(tx, run.id)
         await discardProjectAssistantPendingModelHistoryInTransaction(tx, {
           projectId: scope.projectId,
           userId: scope.userId,

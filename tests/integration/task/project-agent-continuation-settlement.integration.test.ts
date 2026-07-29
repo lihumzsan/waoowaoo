@@ -4,12 +4,21 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { beginProjectAgentWaitContinuationExecution } from '@/lib/project-agent/waits'
-import { appendProjectAssistantThreadMessages, loadProjectAssistantThread } from '@/lib/project-agent/persistence'
+import {
+  appendProjectAssistantThreadMessages,
+  loadProjectAssistantModelHistory,
+  loadProjectAssistantThread,
+} from '@/lib/project-agent/persistence'
 import {
   finalizeProjectAgentContinuationHandoff,
   loadProjectAgentContinuationCheckpoint,
   settleProjectAgentContinuationTerminalHandoff,
 } from '@/lib/project-agent/execution-handoff'
+import { createProjectAgentExecutionSegment } from '@/lib/project-agent/execution-segment'
+import {
+  buildReadyProjectAgentModelHistoryCommit,
+  stageUnreadyProjectAgentModelHistory,
+} from './project-agent-model-history.fixture'
 const RUN_ID = 'continuation-run-1'
 const WAIT_ID = 'continuation-wait-1'
 const WAIT_ACTIVITY_ID = 'continuation-wait-activity-1'
@@ -24,6 +33,17 @@ async function seedClaimedContinuation() {
       projectId: project.id,
       episodeNumber: 1,
       name: 'Continuation episode',
+    },
+  })
+  await prisma.projectAssistantThread.create({
+    data: {
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command',
+      scopeRef: `episode:${episode.id}`,
+      messagesJson: [],
+      modelHistoryJson: [],
     },
   })
   await prisma.projectAgentRun.create({
@@ -114,6 +134,16 @@ describe('Project Agent continuation settlement DB integration', () => {
         userId: user.id,
       }),
     ).resolves.toBe('started')
+    const executionSegmentId = createProjectAgentExecutionSegment({
+      kind: 'task_follow_up',
+      commandId: COMMAND_ID,
+    }).id
+    const modelHistoryCommit = await buildReadyProjectAgentModelHistoryCommit({
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command',
+    }, executionSegmentId)
 
     const settled = await settleProjectAgentContinuationTerminalHandoff({
       waitId: WAIT_ID,
@@ -124,6 +154,7 @@ describe('Project Agent continuation settlement DB integration', () => {
       claimOwner: FIRST_CLAIM,
       outcome: 'completed',
       message,
+      modelHistoryCommit,
     })
     expect(
       await loadProjectAgentContinuationCheckpoint({
@@ -223,6 +254,23 @@ describe('Project Agent continuation settlement DB integration', () => {
         userId: user.id,
       }),
     ).resolves.toBe('started')
+    const executionSegmentId = createProjectAgentExecutionSegment({
+      kind: 'task_follow_up',
+      commandId: COMMAND_ID,
+    }).id
+    const threadIdentity = {
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command' as const,
+    }
+    await stageUnreadyProjectAgentModelHistory(threadIdentity, executionSegmentId)
+    const beforeSettlement = await loadProjectAssistantModelHistory(threadIdentity)
+    expect(beforeSettlement.pending).toMatchObject({
+      executionSegmentId,
+      baseVersion: beforeSettlement.version,
+      ready: false,
+    })
     await settleProjectAgentContinuationTerminalHandoff({
       runId: RUN_ID,
       waitId: WAIT_ID,
@@ -234,7 +282,7 @@ describe('Project Agent continuation settlement DB integration', () => {
       message,
     })
 
-    const [wait, activity, run, thread] = await Promise.all([
+    const [wait, activity, run, thread, modelHistory] = await Promise.all([
       prisma.projectAgentWait.findUnique({ where: { id: WAIT_ID } }),
       prisma.projectAgentActivity.findUnique({
         where: { id: WAIT_ACTIVITY_ID },
@@ -246,6 +294,7 @@ describe('Project Agent continuation settlement DB integration', () => {
         episodeId: episode.id,
         assistantId: 'workspace-command',
       }),
+      loadProjectAssistantModelHistory(threadIdentity),
     ])
     expect(wait).toMatchObject({ status: 'followed', claimId: FIRST_CLAIM })
     expect(activity).toMatchObject({ status: 'completed' })
@@ -255,6 +304,68 @@ describe('Project Agent continuation settlement DB integration', () => {
       errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
     })
     expect(thread?.messages).toEqual([message])
+    expect(modelHistory).toMatchObject({
+      version: beforeSettlement.version,
+      items: beforeSettlement.items,
+      pending: null,
+    })
+
+    const nextExecutionSegmentId = 'user-turn:after-outcome-unknown'
+    await expect(
+      stageUnreadyProjectAgentModelHistory(threadIdentity, nextExecutionSegmentId),
+    ).resolves.toBeUndefined()
+    await expect(loadProjectAssistantModelHistory(threadIdentity)).resolves.toMatchObject({
+      version: beforeSettlement.version,
+      pending: {
+        executionSegmentId: nextExecutionSegmentId,
+        baseVersion: beforeSettlement.version,
+        ready: false,
+      },
+    })
+  })
+
+  it('never discards a pending snapshot owned by another execution segment', async () => {
+    const { user, project, episode } = await seedClaimedContinuation()
+    await expect(
+      beginProjectAgentWaitContinuationExecution({
+        runId: RUN_ID,
+        waitId: WAIT_ID,
+        commandId: COMMAND_ID,
+        claimOwner: FIRST_CLAIM,
+        projectId: project.id,
+        userId: user.id,
+      }),
+    ).resolves.toBe('started')
+    const threadIdentity = {
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command' as const,
+    }
+    const foreignExecutionSegmentId = 'user-turn:foreign-run'
+    await stageUnreadyProjectAgentModelHistory(threadIdentity, foreignExecutionSegmentId)
+
+    await settleProjectAgentContinuationTerminalHandoff({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+      outcome: 'outcome_unknown',
+      message: {
+        id: `workspace-continuation-outcome-unknown:${COMMAND_ID}`,
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'continuation outcome unknown' }],
+      },
+    })
+
+    await expect(loadProjectAssistantModelHistory(threadIdentity)).resolves.toMatchObject({
+      pending: {
+        executionSegmentId: foreignExecutionSegmentId,
+        ready: false,
+      },
+    })
   })
 
   it('serializes concurrent thread appends without dropping either message', async () => {

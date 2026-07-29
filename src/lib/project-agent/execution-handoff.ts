@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
+  discardProjectAssistantPendingModelHistoryInTransaction,
   type ProjectAssistantModelHistoryCommit,
 } from './persistence'
 import {
@@ -39,6 +40,7 @@ import type {
 import { localizeProjectAgentOperationTitle } from './copy'
 import { normalizeProjectAgentLocale } from './locale'
 import { ProjectAgentModelSession } from './model-session'
+import { createProjectAgentExecutionSegment } from './execution-segment'
 
 export type ProjectAgentExecutionHandoffKind = 'choice' | 'approval' | 'task_batch'
 export type ProjectAgentExecutionHandoffStatus = 'prepared' | 'settled'
@@ -46,6 +48,16 @@ export type ProjectAgentExecutionHandoffStatus = 'prepared' | 'settled'
 export type ProjectAgentContinuationTerminalOutcome = Exclude<
   ProjectAgentTaskFollowUpSettlementOutcome,
   'awaiting_choice' | 'awaiting_approval'
+>
+
+type ProjectAgentContinuationCommittedOutcome = Extract<
+  ProjectAgentContinuationTerminalOutcome,
+  'completed' | 'failed'
+>
+
+type ProjectAgentContinuationDiscardedOutcome = Exclude<
+  ProjectAgentContinuationTerminalOutcome,
+  ProjectAgentContinuationCommittedOutcome
 >
 
 export interface ProjectAgentContinuationCheckpoint {
@@ -587,7 +599,7 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     message: UIMessage
     outcome: 'awaiting_choice' | 'awaiting_approval'
     sourceOperationId: string
-    modelHistoryCommit?: ProjectAssistantModelHistoryCommit
+    modelHistoryCommit: ProjectAssistantModelHistoryCommit
     continuation?: ProjectAgentExecutionSegmentContinuation | null
   },
 ): Promise<void> {
@@ -597,7 +609,7 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     episodeId: input.episodeId ?? null,
     assistantId: input.assistantId,
     messages: [input.message],
-    ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
+    modelHistoryCommit: input.modelHistoryCommit,
   })
   if (!input.continuation) return
   const checkpoint = await tx.projectAgentContinuationCheckpoint.findUnique({
@@ -814,17 +826,28 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
  * the assistant message, closes the checkpoint, follows the Wait, completes
  * or fails the continuation Activity, and advances the Run terminal state.
  */
-export async function settleProjectAgentContinuationTerminalHandoff(input: {
+type ProjectAgentContinuationTerminalHandoffInput = {
   runId: string
   waitId: string
   commandId: string
   claimOwner: string
   projectId: string
   userId: string
-  outcome: ProjectAgentContinuationTerminalOutcome
   message: UIMessage
-  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
-}): Promise<ProjectAgentContinuationCheckpoint> {
+} & (
+  | {
+      outcome: ProjectAgentContinuationCommittedOutcome
+      modelHistoryCommit: ProjectAssistantModelHistoryCommit
+    }
+  | {
+      outcome: ProjectAgentContinuationDiscardedOutcome
+      modelHistoryCommit?: never
+    }
+)
+
+export async function settleProjectAgentContinuationTerminalHandoff(
+  input: ProjectAgentContinuationTerminalHandoffInput,
+): Promise<ProjectAgentContinuationCheckpoint> {
   if (!input.message.id.trim()) throw new Error('PROJECT_AGENT_CONTINUATION_MESSAGE_ID_REQUIRED')
   const messageJson = serializeContinuationMessage(input.message)
   return await prisma.$transaction(async (tx) => {
@@ -842,6 +865,20 @@ export async function settleProjectAgentContinuationTerminalHandoff(input: {
         || !isDeepStrictEqual(checkpoint.messageJson, messageJson)
       ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_CONFLICT:${input.commandId}`)
     } else if (checkpoint.status === 'running') {
+      if (!input.modelHistoryCommit) {
+        await discardProjectAssistantPendingModelHistoryInTransaction(tx, {
+          projectId: wait.projectId,
+          userId: wait.userId,
+          episodeId: wait.episodeId,
+          assistantId: wait.assistantId as ProjectAssistantId,
+          executionSegmentIds: [
+            createProjectAgentExecutionSegment({
+              kind: 'task_follow_up',
+              commandId: input.commandId,
+            }).id,
+          ],
+        })
+      }
       await appendProjectAssistantThreadMessagesInTransaction(tx, {
         projectId: wait.projectId,
         userId: wait.userId,
@@ -972,7 +1009,7 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
   episodeId?: string | null
   assistantId?: ProjectAssistantId
   message: UIMessage
-  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
+  modelHistoryCommit: ProjectAssistantModelHistoryCommit
   continuation?: ProjectAgentExecutionSegmentContinuation | null
 }): Promise<ProjectAgentChoiceSuspensionReceipt> {
   const assistantId = input.assistantId ?? 'workspace-command'
@@ -1066,7 +1103,7 @@ export async function settleProjectAgentPreparedChoiceHandoff(input: {
       message: input.message,
       outcome: 'awaiting_choice',
       sourceOperationId: handoff.operationId,
-      ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
+      modelHistoryCommit: input.modelHistoryCommit,
       continuation: input.continuation ?? null,
     })
     assertProjectAgentOperationExecutionFenceSignal(input.executionFence)
@@ -1102,7 +1139,7 @@ export async function settleProjectAgentPreparedApprovalHandoff(input: {
   episodeId?: string | null
   assistantId?: ProjectAssistantId
   message: UIMessage
-  modelHistoryCommit?: ProjectAssistantModelHistoryCommit
+  modelHistoryCommit: ProjectAssistantModelHistoryCommit
   continuation?: ProjectAgentExecutionSegmentContinuation | null
 }): Promise<ProjectAgentApprovalSuspensionReceipt> {
   const assistantId = input.assistantId ?? 'workspace-command'
@@ -1175,7 +1212,7 @@ export async function settleProjectAgentPreparedApprovalHandoff(input: {
       message: input.message,
       outcome: 'awaiting_approval',
       sourceOperationId: handoff.operationId,
-      ...(input.modelHistoryCommit ? { modelHistoryCommit: input.modelHistoryCommit } : {}),
+      modelHistoryCommit: input.modelHistoryCommit,
       continuation: input.continuation ?? null,
     })
     assertProjectAgentOperationExecutionFenceSignal(input.executionFence)

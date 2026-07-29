@@ -23,6 +23,7 @@ import {
 } from '@/lib/creative-resource'
 import { CREATIVE_WORK_TASK_PROTOCOL } from '@/lib/creative-worker'
 import { TASK_TYPE } from '@/lib/task/types'
+import { buildReadyProjectAgentModelHistoryCommit } from './project-agent-model-history.fixture'
 
 const TEST_PREFIX = 'interruption-atomicity:'
 
@@ -36,6 +37,12 @@ async function settleApprovalHandoff(
     ...prepareInput,
     executionSegmentId: `test-approval:${input.approvalId}`,
   })
+  const modelHistoryCommit = await buildReadyProjectAgentModelHistoryCommit({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId: input.assistantId ?? 'workspace-command',
+  }, handoff.executionSegmentId)
   return await settleProjectAgentPreparedApprovalHandoff({
     executionFence: input.executionFence,
     handoff,
@@ -44,6 +51,7 @@ async function settleApprovalHandoff(
     episodeId: input.episodeId ?? null,
     assistantId: input.assistantId,
     message,
+    modelHistoryCommit,
   })
 }
 
@@ -236,6 +244,12 @@ async function seedGenericStyleChoice(params: { validCommitment: boolean }) {
       role: 'assistant',
       parts: [{ type: 'text', text: '请选择当前视觉方向。' }],
     },
+    modelHistoryCommit: await buildReadyProjectAgentModelHistoryCommit({
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command',
+    }, prepared.executionSegmentId),
   })
   if (suspension.kind !== 'choice') throw new Error('EXPECTED_CHOICE_SUSPENSION')
   return { user, project, episode, resource, run, card: suspension.card, interruptionId: suspension.interruptionId }

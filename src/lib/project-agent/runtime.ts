@@ -252,7 +252,7 @@ export type ProjectAgentResolvedControl =
   }
 
 export interface ProjectAgentTaskFollowUpSettlement {
-  outcome: ProjectAgentContinuationTerminalOutcome
+  outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'completed' | 'failed'>
   message: UIMessage
   modelHistoryCommit: ProjectAssistantModelHistoryCommit
 }
@@ -1576,7 +1576,7 @@ export async function createProjectAgentChatResponse(input: {
       }
     })()
     let runStatusFinalized = false
-    let taskFollowUpSettlement: ProjectAgentContinuationTerminalOutcome | null = null
+    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlement['outcome'] | null = null
     let taskFollowUpSettlementCommittedInline = false
     let pendingRunSettlement: {
       status: ProjectAgentRunStatus
@@ -1639,8 +1639,13 @@ export async function createProjectAgentChatResponse(input: {
       })
       assistantMessagePersisted = true
     }
-    const persistAssistantMessageOrSettleRun = async (): Promise<void> => {
+    const persistAssistantMessageOrSettleRun = async (
+      modelHistoryDisposition: 'commit' | 'discard' = 'commit',
+    ): Promise<void> => {
       if (!pendingRunSettlement) {
+        if (modelHistoryDisposition === 'discard') {
+          throw new Error(`PROJECT_AGENT_MODEL_HISTORY_DISCARD_WITHOUT_RUN_SETTLEMENT:${input.run.id}`)
+        }
         await persistAssistantMessageOnce()
         return
       }
@@ -1653,7 +1658,12 @@ export async function createProjectAgentChatResponse(input: {
         expectedStatuses: ['running'],
         ...pendingRunSettlement,
         message,
-        modelHistoryCommit: await activeModelSession.buildCommit(),
+        modelHistorySettlement: modelHistoryDisposition === 'commit'
+          ? {
+              kind: 'commit',
+              commit: await activeModelSession.buildCommit(),
+            }
+          : { kind: 'discard' },
       })
       assistantMessagePersisted = true
       pendingRunSettlement = null
@@ -2028,7 +2038,7 @@ export async function createProjectAgentChatResponse(input: {
           failureTerminal.status,
           failureTerminal.stopReason,
         ))
-        await persistAssistantMessageOrSettleRun()
+        await persistAssistantMessageOrSettleRun('discard')
         runStatusFinalized = true
       },
       onCancel: async () => {
@@ -2040,7 +2050,7 @@ export async function createProjectAgentChatResponse(input: {
           stopReason: 'stream_cancelled',
         }
         recordAssistantChunk(createRuntimeStatusChunk('cancelled', 'stream_cancelled'))
-        await persistAssistantMessageOrSettleRun()
+        await persistAssistantMessageOrSettleRun('discard')
         runStatusFinalized = true
       },
       onSettled: async () => {
@@ -2101,17 +2111,11 @@ export async function createProjectAgentChatResponse(input: {
           errorCode: 'PROJECT_AGENT_RUN_FAILED',
           errorMessage: error instanceof Error ? error.message : String(error),
         })
-        // Once Session exists, its snapshot is part of the terminal
-        // transaction. Do not advance the Run while silently abandoning a
-        // staged model history; leaving the Run recoverable is safer than
-        // creating a UI/model-history split.
-        const modelHistoryCommit = await modelSession?.buildCommit()
         await settleProjectAgentRunFailureWithMessage({
           runFence,
           controlKind: executionControlKind,
           requestId,
           ...terminal,
-          ...(modelHistoryCommit ? { modelHistoryCommit } : {}),
         })
       }
     } finally {

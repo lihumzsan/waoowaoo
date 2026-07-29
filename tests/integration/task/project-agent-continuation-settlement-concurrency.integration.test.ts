@@ -8,15 +8,24 @@ import {
 } from '@/lib/project-agent/waits'
 import {
   appendProjectAssistantThreadMessages,
+  loadProjectAssistantModelHistory,
   loadProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
 import {
   createProjectAgentUserTurnRun,
+  getProjectAgentRun,
   settleProjectAgentRunWithMessage,
 } from '@/lib/project-agent/runs'
 import { resolveProjectAgentWaitsForTaskTerminalInTransaction } from '@/lib/project-agent/waits'
 import { createQueuedTask } from '../../helpers/billing-fixtures'
 import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import { appendProjectAgentEvents } from '@/lib/project-agent/event'
+import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
+import {
+  createProjectAgentExecutionSegment,
+  projectAgentExecutionStartedIdempotencyKey,
+} from '@/lib/project-agent/execution-segment'
+import { stageUnreadyProjectAgentModelHistory } from './project-agent-model-history.fixture'
 const RUN_ID = 'continuation-run-1'
 const WAIT_ID = 'continuation-wait-1'
 const COMMAND_ID = 'continuation-command-1'
@@ -96,13 +105,6 @@ async function seedClaimedContinuation() {
     },
   })
   return { user, project }
-}
-function buildAssistantMessage(): UIMessage {
-  return {
-    id: `workspace-assistant-task-follow-up:${WAIT_ID}:${COMMAND_ID}`,
-    role: 'assistant',
-    parts: [{ type: 'text', text: '任务已经完成。' }],
-  }
 }
 describe('Project Agent continuation settlement DB integration', () => {
   beforeEach(async () => {
@@ -201,9 +203,10 @@ describe('Project Agent continuation settlement DB integration', () => {
     }
     await expect(settleProjectAgentRunWithMessage({
       runFence: { runId: 'run-message-settlement-1', runVersion: 0, eventSeq: '0' },
-      status: 'completed',
-      stopReason: 'completed',
+      status: 'failed',
+      stopReason: 'stream_error',
       message,
+      modelHistorySettlement: { kind: 'discard' },
     })).rejects.toThrow()
     const [run, thread] = await Promise.all([
       prisma.projectAgentRun.findUnique({ where: { id: 'run-message-settlement-1' } }),
@@ -215,6 +218,77 @@ describe('Project Agent continuation settlement DB integration', () => {
     ])
     expect(run?.status).toBe('running')
     expect(thread).toBeNull()
+  })
+  it('atomically discards only the failed Run segment pending history before the next turn', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const runId = 'failed-user-turn-run'
+    const { run } = await createProjectAgentUserTurnRun({
+      runId,
+      requestId: 'failed-user-turn-request',
+      projectId: project.id,
+      userId: user.id,
+      assistantId: 'workspace-command',
+      message: {
+        id: 'failed-user-turn-message',
+        role: 'user',
+        parts: [{ type: 'text', text: 'start generation' }],
+      },
+    })
+    const segment = createProjectAgentExecutionSegment({ kind: 'user_turn', runId })
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: project.id,
+        userId: user.id,
+        assistantId: 'workspace-command',
+      },
+      events: [{
+        runFence: createProjectAgentRunFence(run),
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(segment.id),
+        event: {
+          kind: 'run.execution_started',
+          runId,
+          executionSegmentId: segment.id,
+          controlKind: segment.controlKind,
+        },
+      }],
+    })
+    const activeRun = await getProjectAgentRun({
+      projectId: project.id,
+      userId: user.id,
+      runId,
+    })
+    if (!activeRun) throw new Error('EXPECTED_ACTIVE_RUN')
+    const identity = {
+      projectId: project.id,
+      userId: user.id,
+      assistantId: 'workspace-command' as const,
+    }
+    await stageUnreadyProjectAgentModelHistory(identity, segment.id)
+    const beforeSettlement = await loadProjectAssistantModelHistory(identity)
+    expect(beforeSettlement.pending?.executionSegmentId).toBe(segment.id)
+
+    await settleProjectAgentRunWithMessage({
+      runFence: createProjectAgentRunFence(activeRun),
+      status: 'failed',
+      stopReason: 'stream_error',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      message: {
+        id: 'failed-user-turn-assistant-message',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'generation failed' }],
+      },
+      modelHistorySettlement: { kind: 'discard' },
+    })
+
+    await expect(loadProjectAssistantModelHistory(identity)).resolves.toMatchObject({
+      version: beforeSettlement.version,
+      items: beforeSettlement.items,
+      pending: null,
+    })
+    await expect(
+      stageUnreadyProjectAgentModelHistory(identity, 'user-turn:next-run'),
+    ).resolves.toBeUndefined()
   })
   /**
    * Authority: a user turn owns only the foreground Run slot; background Task
