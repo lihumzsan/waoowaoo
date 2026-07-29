@@ -1,4 +1,5 @@
-import { parsePhoneNumberFromString } from 'libphonenumber-js/min'
+import { parsePhoneNumberFromString } from 'libphonenumber-js/core'
+import phoneMetadata from 'libphonenumber-js/metadata.min'
 import {
   getSmsDestination,
   getSmsDestinationByCountryCode,
@@ -33,7 +34,7 @@ export function normalizePhoneNumberForDestination(
   const parsed = parsePhoneNumberFromString(candidate, {
     defaultCountry: destination.countryCode,
     extract: false,
-  })
+  }, phoneMetadata)
   if (!parsed?.isValid() || parsed.country !== destination.countryCode) return null
   return String(parsed.number)
 }
@@ -53,7 +54,7 @@ export function normalizePhoneNumber(value: unknown): string | null {
     return normalizePhoneNumberForDestination(candidate, 'CN')
   }
 
-  const parsed = parsePhoneNumberFromString(candidate, { extract: false })
+  const parsed = parsePhoneNumberFromString(candidate, { extract: false }, phoneMetadata)
   if (!parsed?.isValid() || !getSmsDestinationByCountryCode(parsed.country)) return null
   return String(parsed.number)
 }
@@ -63,7 +64,7 @@ export function resolveSmsDestinationFromPhoneNumber(
 ): SmsDestination | null {
   const phoneNumber = normalizePhoneNumber(value)
   if (!phoneNumber) return null
-  const parsed = parsePhoneNumberFromString(phoneNumber, { extract: false })
+  const parsed = parsePhoneNumberFromString(phoneNumber, { extract: false }, phoneMetadata)
   return getSmsDestinationByCountryCode(parsed?.country)
 }
 

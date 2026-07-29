@@ -1,4 +1,5 @@
-import { getCountryCallingCode, type CountryCode } from 'libphonenumber-js/min'
+import { getCountryCallingCode, type CountryCode } from 'libphonenumber-js/core'
+import phoneMetadata from 'libphonenumber-js/metadata.min'
 
 export const SMS_DESTINATION_IDS = [
   'CN',
@@ -86,7 +87,7 @@ const SMS_DESTINATION_DEFINITIONS: Record<SmsDestinationId, SmsDestinationDefini
 export const SMS_DESTINATIONS: readonly SmsDestination[] = SMS_DESTINATION_IDS.map((id) => ({
   id,
   countryCode: id,
-  callingCode: getCountryCallingCode(id),
+  callingCode: getCountryCallingCode(id, phoneMetadata),
   ...SMS_DESTINATION_DEFINITIONS[id],
 }))
 
