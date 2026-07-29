@@ -10,6 +10,7 @@
     "QUOTA_EXCEEDED": "Quota exceeded. Please try again later",
     "GENERATION_FAILED": "Generation failed. Please retry",
     "GENERATION_TIMEOUT": "Generation timed out. Please retry",
+    "GENERATION_QUEUE_TIMEOUT": "Generation waited in the provider queue for too long. The stuck request was cancelled and will be retried",
     "SENSITIVE_CONTENT": "Content may contain sensitive material",
     "INVALID_PARAMS": "Invalid parameters",
     "MISSING_CONFIG": "Please complete model configuration first",
@@ -62,5 +63,13 @@
     "CREATIVE_WORK_TIMEOUT": "The Subagent exceeded its maximum runtime and this attempt was stopped",
     "CREATIVE_WORK_EVENT_DELIVERY_FAILED": "Subagent progress could not be stored reliably",
     "CREATIVE_WORK_ABORTED": "The Subagent task was cancelled",
-    "CREATIVE_WORK_RUN_FAILED": "The Subagent run failed; inspect the task detail before retrying"
+    "CREATIVE_WORK_RUN_FAILED": "The Subagent run failed; inspect the task detail before retrying",
+    "errorPage": {
+        "title": "Something went wrong",
+        "description": "An unexpected error occurred. You can try again, or contact support with the ID below if it keeps happening.",
+        "retry": "Try again",
+        "requestIdLabel": "Error ID",
+        "copy": "Copy",
+        "copied": "Copied"
+    }
 }

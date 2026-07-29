@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { useToast } from '@/contexts/ToastContext'
+import { reportClientError } from '@/lib/errors/client-reporter'
 
 interface WorkspaceTopActionsProps {
   onOpenAssetLibrary: () => void
@@ -36,8 +37,14 @@ export default function WorkspaceTopActions({
       await Promise.resolve(onRefresh())
       showToast(refreshTitle, 'success', 2400)
     } catch (error) {
-      // 显式记录错误，保持“显式失败”原则，但不打断用户操作
-      console.error('[WorkspaceTopActions] 刷新失败', error)
+      // 显式上报错误，保持“显式失败”原则，但不打断用户操作
+      reportClientError({
+        kind: 'error',
+        message: error instanceof Error
+          ? `[WorkspaceTopActions] refresh failed: ${error.message}`
+          : '[WorkspaceTopActions] refresh failed',
+        stack: error instanceof Error ? error.stack : undefined,
+      })
     } finally {
       setIsRefreshing(false)
     }

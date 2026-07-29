@@ -10,6 +10,7 @@
     "QUOTA_EXCEEDED": "配额已用尽，请稍后重试",
     "GENERATION_FAILED": "生成失败，请重试",
     "GENERATION_TIMEOUT": "生成超时，请重试",
+    "GENERATION_QUEUE_TIMEOUT": "生成请求在供应商队列中排队超时，已取消卡住的请求并自动重试",
     "SENSITIVE_CONTENT": "内容可能包含敏感信息",
     "INVALID_PARAMS": "参数错误",
     "MISSING_CONFIG": "请先完成模型配置",
@@ -62,5 +63,13 @@
     "CREATIVE_WORK_TIMEOUT": "Subagent 超过最长运行时间，已终止本次尝试",
     "CREATIVE_WORK_EVENT_DELIVERY_FAILED": "Subagent 进度无法可靠写入任务状态",
     "CREATIVE_WORK_ABORTED": "Subagent 任务已取消",
-    "CREATIVE_WORK_RUN_FAILED": "Subagent 运行失败，请检查任务详情后重试"
+    "CREATIVE_WORK_RUN_FAILED": "Subagent 运行失败，请检查任务详情后重试",
+    "errorPage": {
+        "title": "页面出错了",
+        "description": "发生了意外错误。你可以重试；如果问题持续出现，请携带下方编号联系支持。",
+        "retry": "重试",
+        "requestIdLabel": "错误编号",
+        "copy": "复制",
+        "copied": "已复制"
+    }
 }
