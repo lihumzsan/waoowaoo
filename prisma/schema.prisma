@@ -276,6 +276,28 @@ model ProjectAssistantThread {
   @@map("project_assistant_threads")
 }
 
+/// 用户清空会话时的系统内归档：对用户不可见，仅供依权限的滥用调查/争议追溯。
+/// 不挂 Project 外键——项目删除后归档仍需保留；挂 User 级联——账号注销时一并清除。
+model ProjectAssistantThreadArchive {
+  id               String   @id @default(uuid())
+  threadId         String
+  projectId        String
+  userId           String
+  episodeId        String?
+  assistantId      String
+  scopeRef         String
+  messagesJson     Json
+  modelHistoryJson Json
+  threadCreatedAt  DateTime
+  threadUpdatedAt  DateTime
+  archivedAt       DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, archivedAt])
+  @@index([userId, archivedAt])
+  @@map("project_assistant_thread_archives")
+}
+
 model ProjectAgentWait {
   id                     String                              @id @default(uuid())
   runId                  String?
@@ -647,6 +669,7 @@ model User {
   tasks                          Task[]
   taskEvents                     TaskEvent[]
   projectAssistantThreads        ProjectAssistantThread[]
+  projectAssistantThreadArchives ProjectAssistantThreadArchive[]
   projectAgentRuns               ProjectAgentRun[]
   projectAgentActivities         ProjectAgentActivity[]
   projectAgentEvents             ProjectAgentEvent[]

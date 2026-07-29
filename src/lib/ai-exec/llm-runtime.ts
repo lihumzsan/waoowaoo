@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { recordTextUsage as recordBillingTextUsage } from '@/lib/billing/runtime-usage'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -20,6 +21,37 @@ export type LlmRawMessage = {
   content: ProviderChatMessageContent
 }
 
+/**
+ * `llm.raw.input` / `llm.raw.output` are privacy-preserving summaries: they
+ * keep model identity, usage, finish reason, message counts, char counts and
+ * a sha256 prefix for content identity, and deliberately never log message,
+ * output or reasoning content. The action ids are kept stable so existing
+ * log tooling keeps matching the same call points.
+ */
+function sha256Prefix16(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 16)
+}
+
+function summarizeText(value: string): { chars: number; sha256: string } {
+  return {
+    chars: value.length,
+    sha256: sha256Prefix16(value),
+  }
+}
+
+function summarizeLlmMessages(messages: LlmRawMessage[]): {
+  count: number
+  chars: number
+  sha256: string
+} {
+  const serialized = JSON.stringify(messages)
+  return {
+    count: messages.length,
+    chars: serialized.length,
+    sha256: sha256Prefix16(serialized),
+  }
+}
+
 export function logLlmRawInput(params: {
   userId: string
   projectId?: string
@@ -36,7 +68,7 @@ export function logLlmRawInput(params: {
   llmLogger.info({
     audit: true,
     action: 'llm.raw.input',
-    message: 'llm raw input',
+    message: 'llm input summary',
     userId: params.userId,
     projectId: params.projectId,
     provider: params.provider,
@@ -52,7 +84,7 @@ export function logLlmRawInput(params: {
         reasoningEffort: params.reasoningEffort,
         openRouterSessionId: params.openRouterSessionId ?? null,
       },
-      messages: params.messages,
+      messages: summarizeLlmMessages(params.messages),
     },
   })
 }
@@ -73,10 +105,12 @@ export function logLlmRawOutput(params: {
 }) {
   const logContext = getLogContext()
   const isEmpty = !params.text
+  const text = summarizeText(params.text)
+  const reasoning = summarizeText(params.reasoning)
   const logPayload = {
     audit: true,
     action: 'llm.raw.output',
-    message: isEmpty ? 'llm raw output [EMPTY]' : 'llm raw output',
+    message: isEmpty ? 'llm output summary [EMPTY]' : 'llm output summary',
     userId: params.userId,
     projectId: params.projectId,
     provider: params.provider,
@@ -88,16 +122,15 @@ export function logLlmRawOutput(params: {
         key: params.modelKey,
       },
       output: {
-        reasoning: params.reasoning,
-        text: params.text,
-        textChars: params.text.length,
-        reasoningChars: params.reasoning.length,
+        textChars: text.chars,
+        textSha256: text.sha256,
+        reasoningChars: reasoning.chars,
+        reasoningSha256: reasoning.sha256,
         empty: isEmpty || undefined,
       },
       taskAttempt: logContext.taskAttempt ?? null,
       termination: params.termination ?? null,
       usage: params.usage || null,
-      providerResponse: params.providerResponse ?? null,
     },
   }
   if (isEmpty) {

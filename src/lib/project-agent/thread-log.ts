@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 import type { UIMessage } from 'ai'
 import type { ProjectAssistantThreadSnapshot } from './types'
 
@@ -130,13 +128,4 @@ export function serializeWorkspaceAssistantThreadLog(
   ]
   const sections = thread.messages.map((message, index) => renderMessage(message, index))
   return [...header, ...sections].join('\n')
-}
-
-export async function writeWorkspaceAssistantThreadLog(thread: ProjectAssistantThreadSnapshot): Promise<string> {
-  const logsDir = path.join(process.cwd(), 'logs')
-  const fileName = buildWorkspaceAssistantThreadLogFileName(thread)
-  const filePath = path.join(logsDir, fileName)
-  await mkdir(logsDir, { recursive: true })
-  await writeFile(filePath, serializeWorkspaceAssistantThreadLog({ thread }), 'utf8')
-  return filePath
 }

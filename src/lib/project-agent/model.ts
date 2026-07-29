@@ -75,6 +75,12 @@ export async function resolveProjectAgentLanguageModel(input: {
     ...(input.projectId ? { projectId: input.projectId } : {}),
   })
   return {
+    // Retry posture: this LanguageModel is consumed by the @openai/agents
+    // aisdk adapter, which invokes doGenerate/doStream directly — the AI SDK
+    // `maxRetries` wrapper (generateText/streamText) never runs here, so no
+    // silent transport retry exists on this path. Callers that do use bare
+    // generateText (e.g. model-input/summarizer) must pass `maxRetries: 0`
+    // to match the ai-exec sdk-runner.
     languageModel: createAiLanguageModel({
       providerKey,
       selection,

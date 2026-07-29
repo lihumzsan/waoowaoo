@@ -455,14 +455,45 @@ export async function clearProjectAssistantThreadInTransaction(
     select: { id: true },
   })
   if (blockingRun) throw new Error(`PROJECT_AGENT_THREAD_ACTIVE:${blockingRun.id}`)
-  await tx.projectAssistantThread.deleteMany({
-    where: {
-      projectId: input.projectId,
-      userId: input.userId,
-      assistantId: input.assistantId,
-      scopeRef,
+  const threadFilter = {
+    projectId: input.projectId,
+    userId: input.userId,
+    assistantId: input.assistantId,
+    scopeRef,
+  }
+  // 清空对用户是删除，对系统是归档：同一事务内先归档再删除，原文的唯一权威留在归档表。
+  const threads = await tx.projectAssistantThread.findMany({
+    where: threadFilter,
+    select: {
+      id: true,
+      projectId: true,
+      userId: true,
+      episodeId: true,
+      assistantId: true,
+      scopeRef: true,
+      messagesJson: true,
+      modelHistoryJson: true,
+      createdAt: true,
+      updatedAt: true,
     },
   })
+  if (threads.length > 0) {
+    await tx.projectAssistantThreadArchive.createMany({
+      data: threads.map((thread) => ({
+        threadId: thread.id,
+        projectId: thread.projectId,
+        userId: thread.userId,
+        episodeId: thread.episodeId,
+        assistantId: thread.assistantId,
+        scopeRef: thread.scopeRef,
+        messagesJson: thread.messagesJson as Prisma.InputJsonValue,
+        modelHistoryJson: thread.modelHistoryJson as Prisma.InputJsonValue,
+        threadCreatedAt: thread.createdAt,
+        threadUpdatedAt: thread.updatedAt,
+      })),
+    })
+  }
+  await tx.projectAssistantThread.deleteMany({ where: threadFilter })
 }
 
 export { buildProjectAssistantScopeRef }
