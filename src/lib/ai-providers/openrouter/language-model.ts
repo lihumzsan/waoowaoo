@@ -13,12 +13,20 @@ const openRouterLanguageModelLogger = createScopedLogger({
   module: 'ai-provider.openrouter.language-model',
 })
 
-function headersToRecord(headers: Headers): Record<string, string> {
-  const output: Record<string, string> = {}
-  headers.forEach((value, key) => {
-    output[key] = value
-  })
-  return output
+function readOptionalHeader(headers: Headers, name: string): string | undefined {
+  const value = headers.get(name)?.trim()
+  return value || undefined
+}
+
+function readOpenRouterResponseTrace(headers: Headers): Record<string, string> {
+  const generationId = readOptionalHeader(headers, 'x-generation-id')
+  const upstreamProviderName = readOptionalHeader(headers, 'x-provider-name')
+  const edgeRequestId = readOptionalHeader(headers, 'cf-ray')
+  return {
+    ...(generationId ? { generationId } : {}),
+    ...(upstreamProviderName ? { upstreamProviderName } : {}),
+    ...(edgeRequestId ? { edgeRequestId } : {}),
+  }
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -72,7 +80,7 @@ function createOpenRouterLoggingFetch(input: AiProviderLanguageModelContext): ty
         url: requestUrl(requestInput),
         status: response.status,
         statusText: response.statusText,
-        headers: headersToRecord(response.headers),
+        ...readOpenRouterResponseTrace(response.headers),
         openRouterSessionId: input.openRouterSessionId ?? null,
       },
     })
