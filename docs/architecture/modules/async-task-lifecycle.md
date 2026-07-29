@@ -20,12 +20,14 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - **TL-10 — UI 不解释生命周期。** SSE 只传递持久事件；断线后按 watermark replay。Canvas 收到终态影响后重新读取正式 Resource/Task View，不能依赖轮询、TTL、历史卡片或本地 overlay 完成业务交接。
 - **TL-11 — 本地媒体进程有界。** 视频合并只经 `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts` 与 `video-merge-audio.ts`。FFmpeg 禁止交互 stdin，deadline 从明确媒体时长派生，音轨按 canonical duration pad/trim/reset PTS，不能用多路 EOF 或 `-shortest` 裁决正确性。
 - **TL-12 — 进度文案不是协议。** Task progress 只能使用当前 registry 的通用 Task/阶段 label；删除 TaskType 时必须同时删除旧文案，禁止让 UI 暗示已不存在的流程。
+- **TL-13 — 进度持久化只有一个投影。** `reportTaskProgress` 可向 SSE 发送 provider/stream 细节，但 `Task.payload` 只能由 Task-owned runtime envelope 投影后写入；Creative Work 与 Creative Resource 的严格 payload parser 必须复用同一 envelope，禁止 worker 或领域 parser 各自维护字段白名单。
 
 ## 状态所有权
 
 | 事实 | 唯一 owner / writer | 消费者 |
 | --- | --- | --- |
 | Task identity、status、attempt | Task service / Terminal Service | worker、Agent、UI |
+| Task 持久进度 envelope | Task service + `progress-payload.ts` | 严格 payload parser、Task View |
 | provider invocation/checkpoint | provider invocation fence | 当前 attempt worker |
 | Task result | 当前 attempt worker，终态后不可变 | Terminal Service/materializer |
 | Resource/Lineage | Creative Resource materializer 或同步 Resource Operation | Primary、Canvas、后续 Operation |
@@ -36,6 +38,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 ## 权威入口
 
 - Task 定义：`src/lib/task/definition.ts`。
+- Task 持久进度投影：`src/lib/task/progress-payload.ts`、`src/lib/task/service.ts`。
 - 提交与原子创建：`src/lib/task/submitter.ts`、`transactional-create.ts`、`approved-plan-submitter.ts`、`src/lib/operations/submit-operation-task.ts`。
 - attempt 与恢复：`src/lib/task/claim.ts`、`retry-policy.ts`、`reconcile.ts`、`src/lib/workers/shared.ts`。
 - provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。

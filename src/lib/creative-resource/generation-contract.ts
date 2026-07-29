@@ -1,8 +1,8 @@
 import { z } from 'zod'
+import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { CREATIVE_RESOURCE_MEDIA_TYPES, type CreativeResourceJsonValue } from './contracts'
 import {
   creativeResourceLifecycleProjectionSchema,
-  creativeResourceTaskRuntimeEnvelopeShape,
 } from './task-runtime-envelope'
 
 export const CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS = 15
@@ -161,7 +161,7 @@ export type CreativeResourceGenerationTaskPayload = z.infer<
 >
 
 const creativeResourceGenerationTaskEnvelopeSchema = creativeResourceGenerationTaskPayloadSchema.extend({
-  ...creativeResourceTaskRuntimeEnvelopeShape,
+  ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
 /**

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills'
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
+import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
 import {
   creativeWorkOutputSchemas,
@@ -207,17 +208,7 @@ export const creativeWorkTaskPayloadSchema = z.object({
     toolCallId: z.string().trim().min(1),
   }).strict(),
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
-  stage: z.string().trim().min(1).optional(),
-  stageLabel: z.string().trim().min(1).optional(),
-  displayMode: z.string().trim().min(1).optional(),
-  message: z.string().trim().min(1).optional(),
-  flowId: z.string().trim().min(1).optional(),
-  flowStageTitle: z.string().trim().min(1).optional(),
-  flowStageIndex: z.number().int().positive().optional(),
-  flowStageTotal: z.number().int().positive().optional(),
-  runId: z.string().trim().min(1).optional(),
-  ui: z.record(z.string(), z.unknown()).optional(),
-  meta: z.record(z.string(), z.unknown()).optional(),
+  ...taskRuntimePayloadEnvelopeShape,
 }).strict().superRefine((payload, context) => {
   const injectCreativeDirection = readCreativeWorkOutputDefinition(
     payload.request.outputKind,

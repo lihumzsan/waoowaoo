@@ -1,8 +1,8 @@
 import { z } from 'zod'
+import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { creativeResourceGenerationOptionsSchema } from './generation-contract'
 import {
   creativeResourceLifecycleProjectionSchema,
-  creativeResourceTaskRuntimeEnvelopeShape,
 } from './task-runtime-envelope'
 
 const videoMergeInputRefSchema = z.object({
@@ -41,7 +41,7 @@ export const creativeResourceVideoMergeTaskPayloadSchema = z.object({
 }).strict()
 
 const creativeResourceVideoMergeTaskEnvelopeSchema = creativeResourceVideoMergeTaskPayloadSchema.extend({
-  ...creativeResourceTaskRuntimeEnvelopeShape,
+  ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
 export type CreativeResourceVideoMergeTaskPayload = z.infer<

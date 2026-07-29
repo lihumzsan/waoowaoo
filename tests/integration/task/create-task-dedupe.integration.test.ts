@@ -256,6 +256,10 @@ describe('transactional Task batch dedupe', () => {
 
     expect(await tryUpdateTaskProgress(task.id, 1, 18, {
       stage: 'generate_creative_resource_image',
+      externalPhase: 'running',
+      streamRunId: 'event-only-stream',
+      output: 'event-only-output',
+      done: false,
       meta: { locale: 'zh' },
     })).toBe(true)
     const stored = await prisma.task.findUnique({
@@ -266,11 +270,15 @@ describe('transactional Task batch dedupe', () => {
     expect(stored?.progress).toBe(18)
     expect(payload).toMatchObject({
       stage: 'generate_creative_resource_image',
+      externalPhase: 'running',
       imageModel: 'fal::image-model',
       referenceMode: 'asset',
       meta: { locale: 'zh', flowId: 'creative_resource:image' },
       ui: { intent: 'generate', hasOutputAtStart: true },
     })
+    expect(payload).not.toHaveProperty('streamRunId')
+    expect(payload).not.toHaveProperty('output')
+    expect(payload).not.toHaveProperty('done')
   })
 
   it('rejects progress from a stale worker attempt without overwriting the current attempt', async () => {

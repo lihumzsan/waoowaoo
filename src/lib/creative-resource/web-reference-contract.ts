@@ -1,9 +1,9 @@
 import { z } from 'zod'
+import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import { creativeResourceGenerationOptionsSchema } from './generation-contract'
 import { CREATIVE_RESOURCE_SCHEMA } from './schema-registry'
 import {
   creativeResourceLifecycleProjectionSchema,
-  creativeResourceTaskRuntimeEnvelopeShape,
 } from './task-runtime-envelope'
 
 export const WEB_REFERENCE_IMAGE_SOURCE_TYPE = 'web_search_image'
@@ -70,7 +70,7 @@ export const creativeResourceWebReferenceTaskPayloadSchema = z.object({
 }).strict()
 
 const creativeResourceWebReferenceTaskEnvelopeSchema = creativeResourceWebReferenceTaskPayloadSchema.extend({
-  ...creativeResourceTaskRuntimeEnvelopeShape,
+  ...taskRuntimePayloadEnvelopeShape,
 }).strict()
 
 export type CreativeResourceWebReferenceTaskPayload = z.infer<

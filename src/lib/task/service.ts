@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { TASK_STATUS, type TaskBillingInfo, type TaskStatus } from './types'
 import { commitTaskTerminal } from './terminal'
+import { projectPersistedTaskProgressPayload } from './progress-payload'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const logger = createScopedLogger({ module: 'task.service' })
@@ -53,13 +54,14 @@ function mergeNestedRecordField(
 
 function mergeTaskProgressPayload(currentPayload: unknown, progressPayload: Record<string, unknown>) {
   const current = toObject(currentPayload)
+  const persistedProgressPayload = projectPersistedTaskProgressPayload(progressPayload)
   const next: Record<string, unknown> = {
     ...current,
-    ...progressPayload,
+    ...persistedProgressPayload,
   }
-  const meta = mergeNestedRecordField(current, progressPayload, 'meta')
+  const meta = mergeNestedRecordField(current, persistedProgressPayload, 'meta')
   if (meta) next.meta = meta
-  const ui = mergeNestedRecordField(current, progressPayload, 'ui')
+  const ui = mergeNestedRecordField(current, persistedProgressPayload, 'ui')
   if (ui) next.ui = ui
   return next
 }
