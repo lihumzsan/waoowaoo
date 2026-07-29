@@ -4,7 +4,6 @@ import {
   getProjectChannel,
   listEventsAfter,
   listRecentTerminalLifecycleEvents,
-  listTaskStructuredStreamCheckpointEvents,
 } from '@/lib/task/publisher'
 import {
   TASK_EVENT_TYPE,
@@ -26,11 +25,6 @@ import {
   resolveWorkspaceResourceRefs,
   WORKSPACE_RESOURCE_IMPACT,
 } from '@/lib/workspace-resource/resource-impact'
-import {
-  buildRecoverableStructuredStreamCheckpointEvents,
-  buildStructuredStreamTerminalSnapshotEvents,
-} from '@/lib/task/structured-stream-checkpoint'
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -139,7 +133,6 @@ async function listRecoverableTaskSnapshot(params: {
   userId: string
   activeLimit?: number
   terminalLimit?: number
-  streamCheckpointLimit?: number
 }): Promise<TaskSSEEvent[]> {
   const [terminalEvents, activeEvents] = await Promise.all([
     listRecentTerminalLifecycleEvents({
@@ -156,24 +149,9 @@ async function listRecoverableTaskSnapshot(params: {
     }),
   ])
 
-  const recentTerminalTaskIds = terminalEvents.slice(-32).map((event) => event.taskId)
-  const checkpointRows = await listTaskStructuredStreamCheckpointEvents({
-    projectId: params.projectId,
-    userId: params.userId,
-    taskIds: [...activeEvents.map((event) => event.taskId), ...recentTerminalTaskIds],
-    limit: params.streamCheckpointLimit ?? 1000,
-  })
-  const checkpoints = buildRecoverableStructuredStreamCheckpointEvents(checkpointRows)
-  const terminalSnapshots = buildStructuredStreamTerminalSnapshotEvents({
-    checkpoints,
-    terminalEvents,
-  })
-
   return uniqueTaskEvents([
-    ...checkpoints,
     ...terminalEvents,
     ...activeEvents,
-    ...terminalSnapshots,
   ]).sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
 }
 
@@ -199,7 +177,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
         snapshotLimit: z.number().int().positive().max(2000).optional(),
-        streamCheckpointLimit: z.number().int().positive().max(5000).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -246,7 +223,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
                 userId: ctx.userId,
                 activeLimit: input.snapshotLimit ?? 500,
                 terminalLimit: Math.min(input.snapshotLimit ?? 500, 200),
-                streamCheckpointLimit: input.streamCheckpointLimit,
               })
             : []
           const resourceRecoveryCheckpoint = (
@@ -293,7 +269,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
             userId: ctx.userId,
             activeLimit: snapshotLimit,
             terminalLimit: Math.min(snapshotLimit, 200),
-            streamCheckpointLimit: input.streamCheckpointLimit,
           }),
           listLatestProjectAgentSessionChangedEvent({
             projectId: ctx.projectId,

@@ -10,7 +10,6 @@ import {
   tryUpdateTaskProgress,
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
-import type { TaskStructuredStreamCheckpointWrite } from '@/lib/task/structured-stream-checkpoint'
 import { TASK_EVENT_TYPE, type TaskJobData } from '@/lib/task/types'
 import { getTaskDefinition } from '@/lib/task/definition'
 import {
@@ -142,7 +141,6 @@ async function publishStreamEvent(params: {
   targetId: string
   episodeId?: string | null
   payload?: Record<string, unknown> | null
-  checkpoint: TaskStructuredStreamCheckpointWrite
 }) {
   await publishTaskStreamEvent({
     taskId: params.taskId,
@@ -153,7 +151,6 @@ async function publishStreamEvent(params: {
     targetId: params.targetId,
     episodeId: params.episodeId || null,
     payload: params.payload,
-    checkpoint: params.checkpoint,
   })
 
 }
@@ -525,7 +522,6 @@ export async function reportTaskProgress(job: Job<TaskJobData>, progress: number
 export async function reportTaskStreamChunk(
   job: Job<TaskJobData>,
   chunk: LLMStreamChunk,
-  checkpoint: TaskStructuredStreamCheckpointWrite,
   payload?: Record<string, unknown>,
 ) {
   const mergedPayload: Record<string, unknown> = withFlowFields(job.data, {
@@ -549,6 +545,5 @@ export async function reportTaskStreamChunk(
         requestId: job.data.trace?.requestId || null,
       },
     },
-    checkpoint,
   })
 }

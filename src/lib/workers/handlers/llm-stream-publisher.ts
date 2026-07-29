@@ -53,19 +53,10 @@ export function createWorkerLLMStreamPublisher(input: {
     throw new Error('WORKER_LLM_STREAM_CHUNK_SIZE_INVALID')
   }
   const buffered = new Map<string, BufferedStreamChunk>()
-  const checkpointDeltaByStepLane = new Map<string, string>()
 
   const publish = (chunk: BufferedStreamChunk) => {
     if (!chunk.delta) return
     const seq = nextStreamSeq(input.context, chunk.stepId, chunk.lane)
-    const checkpointKey = [
-      chunk.stepId ?? '__default',
-      String(chunk.stepAttempt ?? 0),
-      chunk.lane,
-      chunk.kind,
-    ].join('|')
-    const fullDelta = `${checkpointDeltaByStepLane.get(checkpointKey) ?? ''}${chunk.delta}`
-    checkpointDeltaByStepLane.set(checkpointKey, fullDelta)
     input.enqueue('worker_llm_stream', async () => {
       await reportTaskStreamChunk(
         input.job,
@@ -74,10 +65,6 @@ export function createWorkerLLMStreamPublisher(input: {
           delta: chunk.delta,
           seq,
           lane: chunk.lane,
-        },
-        {
-          fullDelta,
-          throughSeq: seq,
         },
         {
           stage: 'worker_llm_stream',

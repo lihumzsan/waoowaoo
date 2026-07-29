@@ -12,11 +12,10 @@ import {
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
-import {
-  TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
-  buildTaskStructuredStreamCheckpoint,
-  type TaskStructuredStreamCheckpointWrite,
-} from './structured-stream-checkpoint'
+
+// No writer since the structured canvas stream removal; the type only keeps
+// historical TaskEvent rows replayable as plain stream events.
+const LEGACY_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE = 'task.stream_checkpoint'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -77,7 +76,7 @@ function isStreamEventType(type: string) {
 }
 
 function isStreamCheckpointEventType(type: string) {
-  return type === TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE
+  return type === LEGACY_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE
 }
 
 function shouldReplayLifecycleRow(type: string) {
@@ -439,39 +438,13 @@ export async function publishTaskStreamEvent(params: {
   targetId?: string | null
   episodeId?: string | null
   payload?: Record<string, unknown> | null
-  checkpoint: TaskStructuredStreamCheckpointWrite
 }) {
   if (!STREAM_EPHEMERAL_ENABLED) return null
 
   const normalizedPayload = normalizeStreamPayload(params.taskType, params.payload || null)
-  const checkpointedAt = new Date().toISOString()
-  const checkpoint = buildTaskStructuredStreamCheckpoint({
-    taskId: params.taskId,
-    taskType: params.taskType,
-    payload: normalizedPayload,
-    checkpoint: params.checkpoint,
-    checkpointedAt,
-  })
-  if (checkpoint) {
-    await taskEventModel.upsert({
-      where: { idempotencyKey: checkpoint.idempotencyKey },
-      create: {
-        taskId: params.taskId,
-        projectId: params.projectId,
-        userId: params.userId,
-        eventType: TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
-        idempotencyKey: checkpoint.idempotencyKey,
-        payload: checkpoint.payload,
-      },
-      update: {
-        payload: checkpoint.payload,
-      },
-    })
-  }
-
   const message = buildStreamEvent({
     id: createEphemeralId(),
-    ts: checkpointedAt,
+    ts: new Date().toISOString(),
     taskId: params.taskId,
     projectId: params.projectId,
     userId: params.userId,
@@ -484,33 +457,6 @@ export async function publishTaskStreamEvent(params: {
 
   await redis.publish(getProjectChannel(params.projectId), JSON.stringify(message))
   return message
-}
-
-export async function listTaskStructuredStreamCheckpointEvents(params: {
-  projectId: string
-  userId: string
-  taskIds: readonly string[]
-  limit?: number
-}): Promise<TaskSSEEvent[]> {
-  const taskIds = Array.from(new Set(params.taskIds.filter((taskId) => taskId.trim().length > 0)))
-  if (taskIds.length === 0) return []
-  const safeLimit = Number.isFinite(params.limit)
-    ? Math.min(Math.max(Math.floor(params.limit ?? 1000), 1), 5000)
-    : 1000
-  const rows = await taskEventModel.findMany({
-    where: {
-      projectId: params.projectId,
-      userId: params.userId,
-      taskId: { in: taskIds },
-      eventType: TASK_STRUCTURED_STREAM_CHECKPOINT_EVENT_TYPE,
-    },
-    orderBy: { id: 'asc' },
-    take: safeLimit + 1,
-  })
-  if (rows.length > safeLimit) {
-    throw new Error(`TASK_STRUCTURED_STREAM_CHECKPOINT_LIMIT_EXCEEDED:${String(safeLimit)}`)
-  }
-  return await mapRowsToReplayEvents(rows)
 }
 
 export async function listEventsAfter(projectId: string, afterId: number, limit = 200) {
