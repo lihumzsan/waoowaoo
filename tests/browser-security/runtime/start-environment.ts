@@ -39,7 +39,6 @@ function applicationEnvironment(testServices: TestServiceEndpoints): NodeJS.Proc
     DATABASE_URL: testServices.databaseUrl,
     REDIS_HOST: testServices.redisHost,
     REDIS_PORT: String(testServices.redisPort),
-    STORAGE_TYPE: 'local',
     UPLOAD_DIR: RUNTIME_IDENTITY.uploadDir,
     NEXT_DIST_DIR: RUNTIME_IDENTITY.distDir,
     NEXT_TSCONFIG_PATH: RUNTIME_IDENTITY.tsconfigPath,
