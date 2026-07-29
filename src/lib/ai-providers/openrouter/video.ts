@@ -1,9 +1,7 @@
-import { HTTPClient, OpenRouter } from '@openrouter/sdk'
 import type { VideoGenerationRequest } from '@openrouter/sdk/models'
 import { ResponseValidationError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { AppError } from '@/lib/errors/app-error'
 import { FetchStatusError } from '@/lib/retry'
 import type {
@@ -16,6 +14,10 @@ import {
   OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID,
   OPENROUTER_VIDEO_MODEL_IDS,
 } from './models'
+import {
+  createOpenRouterVideoClient,
+  serializeErrorForLog,
+} from './video-transport'
 
 type OpenRouterVideoOptions = NonNullable<AiProviderVideoExecutionContext['options']>
 
@@ -30,7 +32,8 @@ export type OpenRouterVideoPollResult = {
   error?: string
 }
 
-const OPENROUTER_VIDEO_REQUEST_TIMEOUT_MS = 60_000
+const OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS = 5 * 60_000
+const OPENROUTER_VIDEO_STATUS_TIMEOUT_MS = 60_000
 const OPENROUTER_VIDEO_ERROR_FIELD_LIMIT = 1_000
 const OPENROUTER_SEEDANCE_2_DURATIONS = new Set([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 const OPENROUTER_SEEDANCE_2_RESOLUTIONS = new Set(['480p', '720p', '1080p'])
@@ -220,35 +223,6 @@ function buildOpenRouterSeedance2Payload(input: {
   return shared
 }
 
-async function fetchOpenRouterSdkRequest(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  if (!(input instanceof Request)) {
-    return await fetchWithProviderProxy(input, init)
-  }
-  const methodHasBody = input.method !== 'GET' && input.method !== 'HEAD'
-  const body = methodHasBody ? await input.arrayBuffer() : undefined
-  return await fetchWithProviderProxy(input.url, {
-    method: input.method,
-    headers: input.headers,
-    ...(body && body.byteLength > 0 ? { body } : {}),
-    signal: input.signal,
-    cache: input.cache,
-    ...init,
-  })
-}
-
-function createOpenRouterVideoClient(input: { baseUrl: string; apiKey: string }): OpenRouter {
-  return new OpenRouter({
-    apiKey: input.apiKey,
-    serverURL: input.baseUrl,
-    httpClient: new HTTPClient({ fetcher: fetchOpenRouterSdkRequest }),
-    retryConfig: { strategy: 'none' },
-    timeoutMs: OPENROUTER_VIDEO_REQUEST_TIMEOUT_MS,
-  })
-}
-
 type OpenRouterVideoSubmitRejection = {
   readonly code: number | null
   readonly errorType: string | null
@@ -357,7 +331,10 @@ export async function submitOpenRouterVideoTask(input: {
 
   let requestId: string
   try {
-    const response = await createOpenRouterVideoClient(input).videoGeneration.generate(
+    const response = await createOpenRouterVideoClient({
+      ...input,
+      timeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+    }).videoGeneration.generate(
       { videoGenerationRequest: input.payload },
       { retries: { strategy: 'none' }, cache: 'no-store' },
     )
@@ -379,7 +356,10 @@ export async function queryOpenRouterVideoStatus(input: {
     throw new Error('请配置 OpenRouter API Key')
   }
 
-  const response = await createOpenRouterVideoClient(input).videoGeneration.getGeneration(
+  const response = await createOpenRouterVideoClient({
+    ...input,
+    timeoutMs: OPENROUTER_VIDEO_STATUS_TIMEOUT_MS,
+  }).videoGeneration.getGeneration(
     { jobId: input.requestId },
     { retries: { strategy: 'none' }, cache: 'no-store' },
   )
@@ -441,14 +421,46 @@ export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExe
   })
 
   const logger = createScopedLogger({ module: 'worker.openrouter-video', action: 'openrouter_video_generate' })
-  logger.info({ message: 'OpenRouter video generation request', details: { modelId } })
-
-  const requestId = await submitOpenRouterVideoTask({
-    baseUrl: normalizedBaseUrl,
-    apiKey,
-    payload,
+  const submitStartedAt = Date.now()
+  const referenceSummary = summarizeReferenceCounts(payload)
+  logger.info({
+    message: 'OpenRouter video generation request',
+    details: {
+      modelId,
+      submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+      ...referenceSummary,
+    },
   })
-  logger.info({ message: 'OpenRouter video task submitted', details: { requestId } })
+
+  let requestId: string
+  try {
+    requestId = await submitOpenRouterVideoTask({
+      baseUrl: normalizedBaseUrl,
+      apiKey,
+      payload,
+    })
+  } catch (error) {
+    logger.error({
+      action: 'openrouter_video_submit_failed',
+      message: 'OpenRouter video task submission failed',
+      durationMs: Date.now() - submitStartedAt,
+      details: {
+        modelId,
+        submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+        ...referenceSummary,
+      },
+      error: serializeErrorForLog(error),
+    })
+    throw error
+  }
+  logger.info({
+    message: 'OpenRouter video task submitted',
+    durationMs: Date.now() - submitStartedAt,
+    details: {
+      requestId,
+      submitTimeoutMs: OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS,
+    },
+  })
 
   return {
     success: true,
@@ -456,5 +468,18 @@ export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExe
     requestId,
     endpoint: 'videos',
     externalId: `OPENROUTER:VIDEO:${requestId}`,
+  }
+}
+
+function summarizeReferenceCounts(payload: OpenRouterVideoRequest): {
+  frameImageCount: number
+  inputImageReferenceCount: number
+  inputAudioReferenceCount: number
+} {
+  const inputReferences = payload.inputReferences ?? []
+  return {
+    frameImageCount: payload.frameImages?.length ?? 0,
+    inputImageReferenceCount: inputReferences.filter((reference) => reference.type === 'image_url').length,
+    inputAudioReferenceCount: inputReferences.filter((reference) => reference.type === 'audio_url').length,
   }
 }
