@@ -7,7 +7,7 @@ import {
   Agent,
   RunContext,
   RunState,
-  run,
+  Runner,
   type AgentInputItem,
   type FunctionToolResult,
   type RunToolApprovalItem,
@@ -51,6 +51,7 @@ import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
 import { stableArgsHash } from './stable-args-hash'
+import { recordUsageFact } from '@/lib/billing/reporting'
 import {
   buildProjectAgentContextComposition,
   buildProjectAgentContextTelemetry,
@@ -128,6 +129,7 @@ import {
   createProjectAgentStopController,
 } from './stop-conditions'
 import {
+  buildProjectAgentTerminalClosureChunks,
   createDataChunk,
   createProjectAgentSideChannel,
   createProjectAgentUiMessageStream,
@@ -809,6 +811,7 @@ export async function createProjectAgentChatResponse(input: {
   confirmTaskFollowUpSettlement?: () => Promise<void>
   onTaskFollowUpSettlementFailure?: (error: unknown) => void
 }): Promise<Response> {
+  const runStartedAtMs = Date.now()
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
   const runFence = createProjectAgentRunFence(input.run)
 
@@ -964,6 +967,9 @@ export async function createProjectAgentChatResponse(input: {
   }
   const requestId = stableRequestId
   let modelSession: ProjectAgentModelSession | null = null
+  let settleRunObservabilityOnce:
+    | ((terminal: { status: string; stopReason: string | null }) => Promise<void>)
+    | null = null
 
   try {
     heartbeatController = startProjectAgentRunHeartbeat({
@@ -1219,6 +1225,9 @@ export async function createProjectAgentChatResponse(input: {
   const completedResourceRefs: CreativeResourceMaterializedRef[] = []
   const submittedTaskReceiptsByToolCall = new Map<string, ProjectAgentOperationOutcome & { kind: 'submitted_tasks' }>()
   const operationIdByToolCallId = new Map<string, string>()
+  // Counts every SDK function tool call observed this execution segment
+  // (including discovery); observability only, no lifecycle interpretation.
+  let observedToolCallCount = 0
   let activeOperationBatch = createProjectAgentOperationBatchCoordinator({ originRunId: input.run.id })
   const operationBatch: ProjectAgentOperationBatchCoordinator = {
     claim: (operationId) => activeOperationBatch.claim(operationId),
@@ -1458,6 +1467,91 @@ export async function createProjectAgentChatResponse(input: {
     locale,
   })
 
+  // Single observability settlement per execution segment: one summary log
+  // for every terminal path (success, failure, cancel, pre-stream error) and
+  // one usage-fact row. Never a second Run-state interpreter: `status` here is
+  // whatever the authoritative settlement already decided.
+  let runObservabilitySettled = false
+  settleRunObservabilityOnce = async (terminal) => {
+    if (runObservabilitySettled) return
+    runObservabilitySettled = true
+    const telemetry = buildProjectAgentContextTelemetry({
+      composition: contextComposition,
+      usage: runContext.usage,
+    })
+    projectAgentLogger.info({
+      action: 'assistant.run.summary',
+      message: 'Project agent run summary',
+      requestId,
+      runId: input.run.id,
+      projectId: input.projectId,
+      userId: input.userId,
+      durationMs: Date.now() - runStartedAtMs,
+      details: {
+        executionSegmentId: executionSegment.id,
+        control: control.kind,
+        modelKey: assistantModelKey,
+        status: terminal.status,
+        stopReason: terminal.stopReason,
+        toolCallCount: observedToolCallCount,
+        budget: latestModelInputDecision
+          ? {
+              availableInputTokens: latestModelInputDecision.budget?.availableInputTokens ?? null,
+              estimatedInputTokens: latestModelInputDecision.estimatedInputTokens,
+              overBudget: latestModelInputDecision.overBudget,
+              clearedResultCount: latestModelInputDecision.clearedResultCount,
+              freedTokens: latestModelInputDecision.freedTokens,
+            }
+          : null,
+        ...telemetry,
+      },
+    })
+    const usage = telemetry.usage
+    if (usage.requests <= 0 || usage.totalTokens <= 0) return
+    // Usage-fact accounting only, via the existing sole UsageCost writer.
+    // The assistant is currently free: cost stays 0 and no freeze/charge
+    // lifecycle is created (billing-approval BA-13). A recording failure is
+    // logged and never touches the authoritative Run settlement.
+    try {
+      const cachedInputTokens = usage.inputTokenDetails.cached_tokens ?? 0
+      await recordUsageFact(prisma, {
+        projectId: input.projectId,
+        userId: input.userId,
+        action: 'assistant.run',
+        apiType: 'text',
+        model: assistantModelKey,
+        quantity: usage.totalTokens,
+        unit: 'token',
+        cost: 0,
+        metadata: {
+          runId: input.run.id,
+          executionSegmentId: executionSegment.id,
+          control: control.kind,
+          status: terminal.status,
+          requests: usage.requests,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
+          inputTokenDetails: usage.inputTokenDetails,
+        },
+      })
+    } catch (error) {
+      projectAgentLogger.error({
+        action: 'assistant.run.usage_record_failed',
+        message: 'Project agent run token usage could not be recorded',
+        requestId,
+        runId: input.run.id,
+        projectId: input.projectId,
+        userId: input.userId,
+        details: {
+          executionSegmentId: executionSegment.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+    }
+  }
+  const settleRunObservability = settleRunObservabilityOnce
+
   const runInput = approvalInterruption
     ? await (async () => {
         const state = await RunState.fromStringWithContext<ProjectAgentAgentsRunContext, Agent<ProjectAgentAgentsRunContext>>(
@@ -1488,7 +1582,19 @@ export async function createProjectAgentChatResponse(input: {
       })()
     : agentInput
 
-    const result = await run(agent, runInput, {
+    // Runner config only carries trace correlation for the local debug trace
+    // sink (see ai-exec/agents-tracing); it changes no run semantics.
+    const runner = new Runner({
+      workflowName: 'project-agent',
+      groupId: input.run.id,
+      traceMetadata: {
+        projectId: input.projectId,
+        userId: input.userId,
+        runId: input.run.id,
+        executionSegmentId: executionSegment.id,
+      },
+    })
+    const result = await runner.run(agent, runInput, {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
@@ -1570,6 +1676,7 @@ export async function createProjectAgentChatResponse(input: {
             && event.item.type === 'tool_call_item'
             && event.item.rawItem.type === 'function_call'
           ) {
+            observedToolCallCount += 1
             const operationId = event.item.rawItem.name === PROJECT_AGENT_OPERATION_GATEWAY_NAME
               ? readProjectAgentOperationGatewayOperationId(
                   JSON.parse(event.item.rawItem.arguments) as unknown,
@@ -1636,13 +1743,27 @@ export async function createProjectAgentChatResponse(input: {
     const buildAssistantMessageOnce = async (): Promise<UIMessage> => {
       if (preparedAssistantMessage) return preparedAssistantMessage
       recordLatestRunStatusForPersistence()
+      // AR-02E/AR-04G: failed/cancelled settlements must not persist
+      // non-terminal parts; close unresolved tool calls and unfinished
+      // reasoning/text blocks before the terminal message is built.
+      const terminalStatus = latestRunStatusForPersistence?.status
+      const messageChunks = terminalStatus === 'failed' || terminalStatus === 'cancelled'
+        ? [
+            ...persistedAssistantChunks,
+            ...buildProjectAgentTerminalClosureChunks(persistedAssistantChunks, {
+              errorText: terminalStatus === 'failed'
+                ? 'PROJECT_AGENT_RUN_FAILED'
+                : 'PROJECT_AGENT_RUN_CANCELLED',
+            }),
+          ]
+        : persistedAssistantChunks
       preparedAssistantMessage = await buildAssistantMessageFromChunks({
         messageId: createPersistedAssistantMessageId({
           runId: input.run.id,
           controlKind: executionControlKind,
           requestId,
         }),
-        chunks: persistedAssistantChunks,
+        chunks: messageChunks,
       })
       return preparedAssistantMessage
     }
@@ -1731,33 +1852,6 @@ export async function createProjectAgentChatResponse(input: {
         } catch (error) {
           completionError = error
         }
-
-        projectAgentLogger.info({
-          action: 'assistant.context.usage',
-          message: 'Project agent model context usage',
-          requestId,
-          projectId: input.projectId,
-          userId: input.userId,
-          details: {
-            runId: input.run.id,
-            executionSegmentId: executionSegment.id,
-            control: control.kind,
-            modelKey: assistantModelKey,
-            budget: latestModelInputDecision
-              ? {
-                availableInputTokens: latestModelInputDecision.budget?.availableInputTokens ?? null,
-                estimatedInputTokens: latestModelInputDecision.estimatedInputTokens,
-                overBudget: latestModelInputDecision.overBudget,
-                clearedResultCount: latestModelInputDecision.clearedResultCount,
-                freedTokens: latestModelInputDecision.freedTokens,
-              }
-              : null,
-            ...buildProjectAgentContextTelemetry({
-              composition: contextComposition,
-              usage: runContext.usage,
-            }),
-          },
-        })
 
         const approvalItems = result.interruptions.length > 0
           ? result.interruptions
@@ -2108,6 +2202,10 @@ export async function createProjectAgentChatResponse(input: {
           })
           throw error
         } finally {
+          await settleRunObservability({
+            status: latestRunStatusForPersistence?.status ?? 'unknown',
+            stopReason: latestRunStatusForPersistence?.stopReason ?? null,
+          })
           detachAbortSignals()
           await stopHeartbeatOnce()
           await releaseRunLockOnce()
@@ -2131,11 +2229,20 @@ export async function createProjectAgentChatResponse(input: {
           errorCode: 'PROJECT_AGENT_RUN_FAILED',
           errorMessage: error instanceof Error ? error.message : String(error),
         })
+        await settleRunObservabilityOnce?.({
+          status: terminal.status,
+          stopReason: terminal.stopReason,
+        })
         await settleProjectAgentRunFailureWithMessage({
           runFence,
           controlKind: executionControlKind,
           requestId,
           ...terminal,
+        })
+      } else {
+        await settleRunObservabilityOnce?.({
+          status: 'failed',
+          stopReason: 'run_failed',
         })
       }
     } finally {

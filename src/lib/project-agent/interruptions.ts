@@ -399,6 +399,44 @@ export async function readRetryableConsumedProjectAgentApprovalInterruption(
   })
 }
 
+/**
+ * Reads the exact interruption a control command targets, regardless of its
+ * status. This is the admission probe for the HTTP command service: it must
+ * resolve the target BEFORE any Run slot or lock decision, so a card that was
+ * already consumed or superseded can be answered calmly instead of colliding
+ * with whatever run currently owns the scope.
+ */
+export async function getProjectAgentInterruptionForControl(params: ProjectAgentInterruptionScope & {
+  runId: string
+  interruptionId: string
+  type: 'approval' | 'choice'
+}): Promise<ProjectAgentInterruptionSnapshot | null> {
+  const { assistantId, scopeRef } = buildScope(params)
+  const record = await prisma.projectAgentInterruption.findFirst({
+    where: {
+      id: params.interruptionId,
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+      type: params.type,
+    },
+    select: {
+      id: true,
+      runId: true,
+      activityId: true,
+      type: true,
+      status: true,
+      operationId: true,
+      approvalId: true,
+      toolCallId: true,
+      payload: true,
+    },
+  })
+  return record ? toInterruptionSnapshot(record) : null
+}
+
 export async function getPendingProjectAgentApprovalInterruption(params: ProjectAgentInterruptionScope & {
   runId: string
 }): Promise<Omit<ProjectAgentApprovalInterruptionRecord, 'runState'> | null> {

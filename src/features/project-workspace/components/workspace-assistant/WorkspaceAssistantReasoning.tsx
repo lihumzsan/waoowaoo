@@ -28,9 +28,18 @@ type SetWorkspaceAssistantRunningSurface = (key: string, active: boolean) => voi
 const WorkspaceAssistantRunningSurfaceSetterContext = createContext<SetWorkspaceAssistantRunningSurface | null>(null)
 const WorkspaceAssistantRunningSurfaceCountContext = createContext(0)
 
+/**
+ * AR-04G: exactly one active-turn indicator. The registry only represents the
+ * turn currently in flight — surfaces register per message identity and only
+ * from the last thread message, and the registry is deterministically cleared
+ * whenever a new turn begins (`activeTurn` rising edge). Historical messages
+ * with non-terminal parts can therefore never suppress the wait dots.
+ */
 export function WorkspaceAssistantRunningSurfaceProvider({
+  activeTurn,
   children,
 }: {
+  readonly activeTurn: boolean
   readonly children: ReactNode
 }) {
   const [activeSurfaceKeys, setActiveSurfaceKeys] = useState<ReadonlySet<string>>(() => new Set())
@@ -44,7 +53,11 @@ export function WorkspaceAssistantRunningSurfaceProvider({
       return next
     })
   }, [])
-  const activeSurfaceCount = activeSurfaceKeys.size
+  useLayoutEffect(() => {
+    if (!activeTurn) return
+    setActiveSurfaceKeys((current) => current.size === 0 ? current : new Set())
+  }, [activeTurn])
+  const activeSurfaceCount = activeTurn ? activeSurfaceKeys.size : 0
 
   return (
     <WorkspaceAssistantRunningSurfaceSetterContext.Provider value={setRunningSurface}>
@@ -55,13 +68,22 @@ export function WorkspaceAssistantRunningSurfaceProvider({
   )
 }
 
+/**
+ * Registers a running surface for the current turn. The registration key is
+ * namespaced by the owning message identity, and registration is gated to the
+ * last thread message so replayed history never counts as a live surface.
+ */
 export function useWorkspaceAssistantRunningSurface(key: string, active: boolean): void {
   const setRunningSurface = useContext(WorkspaceAssistantRunningSurfaceSetterContext)
+  const messageId = useMessage((state) => state.id)
+  const isLastMessage = useMessage((state) => state.isLast)
+  const scopedKey = `${messageId}:${key}`
+  const effectiveActive = active && isLastMessage
   useLayoutEffect(() => {
     if (!setRunningSurface) return
-    setRunningSurface(key, active)
-    return () => setRunningSurface(key, false)
-  }, [active, key, setRunningSurface])
+    setRunningSurface(scopedKey, effectiveActive)
+    return () => setRunningSurface(scopedKey, false)
+  }, [effectiveActive, scopedKey, setRunningSurface])
 }
 
 export function useWorkspaceAssistantHasRunningSurface(): boolean {
@@ -172,7 +194,7 @@ export function HiddenWorkspaceAssistantReasoning() {
 }
 
 // 流式期间 run 尚未完成,不会进入 RunTraceGroup,所以「思考中」状态必须由本组件自己表达:
-// 运行时标题扫光并展开正文,结束后自动折叠成一行,正文用左竖线与助手正文区分。
+// 运行时标题扫光并展开正文,结束后自动折叠成一行,正文用缩进和次级文字颜色与助手正文区分。
 export function WorkspaceAssistantReasoningPart({
   text,
   status,
@@ -195,7 +217,7 @@ export function WorkspaceAssistantReasoningPart({
   if (!text.trim()) return null
 
   const content = (
-    <div className="border-l border-[var(--glass-stroke-base)] pl-3 leading-6 text-[var(--glass-text-secondary)]">
+    <div className="pl-3 leading-6 text-[var(--glass-text-secondary)]">
       <MarkdownTextPart text={text} status={status} />
     </div>
   )

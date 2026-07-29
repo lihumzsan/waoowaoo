@@ -216,9 +216,12 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
   })
+  // The raw error string is passed through: Composer owns the localized
+  // classification (busy / balance / already-resolved / generic) and must see
+  // the original code to branch on it.
   const composerError = showRunFailureNotice
     ? null
-    : assistantRuntime.error ? t('panel.sendErrorGeneric') : null
+    : assistantRuntime.error?.message ?? null
 
   return (
     <aside
@@ -265,7 +268,7 @@ export default function WorkspaceAssistantPanel({
                     structuredOutputText={assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null}
                   />
                 ) : (
-                  <WorkspaceAssistantRunningSurfaceProvider>
+                  <WorkspaceAssistantRunningSurfaceProvider activeTurn={assistantRuntime.replyInFlight}>
                     <div className="min-w-0">
                       <div className="space-y-3">
                         <ThreadPrimitive.Messages>
@@ -359,7 +362,10 @@ export default function WorkspaceAssistantPanel({
                       onChange={composer.setText}
                       onSubmit={async () => {
                         setMediaUploadError(null)
-                        await composer.submit()
+                        // Send failures surface through chat.error/controlError
+                        // (rendered under the composer); never as an unhandled
+                        // rejection reaching the React overlay.
+                        await composer.submit().catch(() => undefined)
                       }}
                       onStopReply={assistantRuntime.stopReply}
                       onAttachClick={attachmentPicker.open}

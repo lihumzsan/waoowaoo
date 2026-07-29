@@ -85,7 +85,7 @@ const markdownComponents: Components = {
     </pre>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="mb-2 border-l-2 border-[var(--glass-accent-from)] pl-3 text-[var(--glass-text-secondary)] last:mb-0">
+    <blockquote className="mb-2 pl-3 text-[var(--glass-text-secondary)] last:mb-0">
       {children}
     </blockquote>
   ),

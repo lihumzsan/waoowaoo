@@ -16,7 +16,7 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
   const t = useTranslations('assistantAgent')
   if (data.reason === 'awaiting_user_confirmation') return null
   return (
-    <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-sm leading-5 text-[var(--glass-text-secondary)]">
+    <div className="flex items-center gap-2 pl-2 text-sm leading-5 text-[var(--glass-text-secondary)]">
       <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
       <span className="min-w-0 truncate">{t('cards.toolErrorBoundary')}</span>
     </div>
@@ -38,7 +38,7 @@ export function AssistantContextCompactedDataCard({
 }: DataMessagePartProps<ProjectAgentContextCompactedPartData>) {
   const t = useTranslations('assistantAgent')
   return (
-    <details className="border-l-2 border-[var(--glass-text-tertiary)]/30 pl-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
+    <details className="pl-2 text-xs leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-1.5">
         <AppIcon name="alert" className="h-3 w-3 shrink-0 opacity-60" />
         <span className="min-w-0 truncate">

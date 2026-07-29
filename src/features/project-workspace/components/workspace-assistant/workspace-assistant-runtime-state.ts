@@ -15,6 +15,31 @@ export type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 export type WorkspaceAssistantControlIntent = 'approve' | 'deny' | 'choice'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice'
 
+/**
+ * Server code for a control command whose target interruption was already
+ * consumed or superseded. Delivered as a calm HTTP 200 JSON body, not an
+ * error stream; the client refreshes session state and shows a localized
+ * notice instead of surfacing a raw failure.
+ */
+export const WORKSPACE_ASSISTANT_CONTROL_ALREADY_RESOLVED_CODE = 'PROJECT_AGENT_CONTROL_ALREADY_RESOLVED'
+
+const WORKSPACE_ASSISTANT_STALE_CONTROL_ERROR_CODES = [
+  WORKSPACE_ASSISTANT_CONTROL_ALREADY_RESOLVED_CODE,
+  'PROJECT_AGENT_INTERRUPTION_NOT_PENDING',
+  'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
+  'PROJECT_AGENT_CHOICE_OFFER_STALE',
+] as const
+
+/**
+ * True when a control failure only means the card is outdated (the decision
+ * was already handled elsewhere). Such failures keep the card locally marked
+ * as responded — session refresh removes it — and render as the calm
+ * "already handled" notice rather than a retryable error.
+ */
+export function isWorkspaceAssistantStaleControlErrorText(errorText: string): boolean {
+  return WORKSPACE_ASSISTANT_STALE_CONTROL_ERROR_CODES.some((code) => errorText.includes(code))
+}
+
 export function buildWorkspaceAssistantChatId(params: {
   projectId: string
   episodeId?: string

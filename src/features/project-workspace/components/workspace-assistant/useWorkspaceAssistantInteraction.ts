@@ -25,7 +25,9 @@ import {
   createWorkspaceAssistantControlMessageId,
   createWorkspaceAssistantControlVisibleUserMessage,
   isWorkspaceAssistantRunBusyStatus,
+  isWorkspaceAssistantStaleControlErrorText,
   resolveWorkspaceAssistantReplyInFlight,
+  WORKSPACE_ASSISTANT_CONTROL_ALREADY_RESOLVED_CODE,
   type WorkspaceAssistantControlEndpoint,
   type WorkspaceAssistantControlIntent,
   type WorkspaceAssistantRunStatus,
@@ -137,6 +139,11 @@ export function useWorkspaceAssistantInteraction({
   const sendMessage = useCallback(async (input: WorkspaceAssistantSendMessageInput) => {
     chat.clearError()
     setControlError(null)
+    // Server semantics (AR): a new user message consumes the pending approval
+    // as a rejection and supersedes pending choices. Mirror that locally right
+    // away so the outdated card cannot be clicked while the send is in flight.
+    const supersededInterruptionId = pendingInterruptionId
+    if (supersededInterruptionId) markInterruptionResponded(supersededInterruptionId)
     const activitySequence = beginReplyActivity()
     const metadata = mergeProjectAssistantMessageMetadata(
       buildProjectAssistantTextAttachmentMetadata(input.attachments ?? []),
@@ -150,6 +157,7 @@ export function useWorkspaceAssistantInteraction({
       await refreshSessionState()
       markReplyActivityRequestSettled(activitySequence)
     } catch (error) {
+      if (supersededInterruptionId) unmarkInterruptionResponded(supersededInterruptionId)
       await refreshSessionState().catch(() => null)
       clearReplyActivity(activitySequence)
       throw error
@@ -158,13 +166,18 @@ export function useWorkspaceAssistantInteraction({
     beginReplyActivity,
     chat,
     clearReplyActivity,
+    markInterruptionResponded,
     markReplyActivityRequestSettled,
+    pendingInterruptionId,
     refreshSessionState,
+    unmarkInterruptionResponded,
   ])
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
     setControlError(null)
+    const supersededInterruptionId = pendingInterruptionId
+    if (supersededInterruptionId) markInterruptionResponded(supersededInterruptionId)
     const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({
@@ -178,6 +191,7 @@ export function useWorkspaceAssistantInteraction({
       await refreshSessionState()
       markReplyActivityRequestSettled(activitySequence)
     } catch (error) {
+      if (supersededInterruptionId) unmarkInterruptionResponded(supersededInterruptionId)
       await refreshSessionState().catch(() => null)
       clearReplyActivity(activitySequence)
       throw error
@@ -186,8 +200,11 @@ export function useWorkspaceAssistantInteraction({
     beginReplyActivity,
     chat,
     clearReplyActivity,
+    markInterruptionResponded,
     markReplyActivityRequestSettled,
+    pendingInterruptionId,
     refreshSessionState,
+    unmarkInterruptionResponded,
   ])
 
   const sendControlRequest = useCallback(async (params: {
@@ -258,6 +275,22 @@ export function useWorkspaceAssistantInteraction({
         const errorText = await response.text().catch(() => '')
         throw new Error(errorText || `PROJECT_AGENT_CONTROL_REQUEST_FAILED:${String(response.status)}`)
       }
+      if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+        // Calm typed response: the target decision was already handled by a
+        // newer action. Keep the local responded marking, surface a localized
+        // notice, and let the session refresh in `finally` converge the UI.
+        const payload: unknown = await response.json().catch(() => null)
+        const code = payload && typeof payload === 'object' && !Array.isArray(payload)
+          && typeof (payload as Record<string, unknown>).code === 'string'
+          ? (payload as Record<string, unknown>).code as string
+          : null
+        if (code !== WORKSPACE_ASSISTANT_CONTROL_ALREADY_RESOLVED_CODE) {
+          throw new Error(`PROJECT_AGENT_CONTROL_RESPONSE_UNEXPECTED:${code ?? 'unknown'}`)
+        }
+        setControlError(new Error(code))
+        requestSucceeded = true
+        return
+      }
       const chunkStream = controlTransport.toUIMessageChunkStream(response.body)
       for await (const message of readUIMessageStream({
         stream: chunkStream,
@@ -272,13 +305,20 @@ export function useWorkspaceAssistantInteraction({
       }
       requestSucceeded = true
     } catch (error) {
-      if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
+      const errorText = error instanceof Error ? error.message : String(error)
+      // A stale-control conflict means the decision is already settled on the
+      // server; re-showing the dead card would only invite another failing
+      // click. Keep it marked responded and let the session refresh remove it.
+      const staleControl = isWorkspaceAssistantStaleControlErrorText(errorText)
+      if (respondedInterruptionId && !staleControl) unmarkInterruptionResponded(respondedInterruptionId)
       setActiveControlRun((current) => current?.runId === params.runId ? null : current)
       if (abortController.signal.aborted) {
         clearReplyActivity(activitySequence)
         return
       }
-      setControlError(buildWorkspaceAssistantControlError(params.endpoint, error))
+      setControlError(staleControl
+        ? new Error(WORKSPACE_ASSISTANT_CONTROL_ALREADY_RESOLVED_CODE)
+        : buildWorkspaceAssistantControlError(params.endpoint, error))
       clearReplyActivity(activitySequence)
       throw error
     } finally {

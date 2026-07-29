@@ -7,6 +7,7 @@ import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
+import { isWorkspaceAssistantStaleControlErrorText } from './workspace-assistant-runtime-state'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
@@ -40,7 +41,8 @@ function isInsufficientBalanceErrorText(error: string): boolean {
 
 function resolveComposerErrorMessageKey(
   error: string,
-): 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.cardResponseErrorGeneric' | 'panel.backgroundFollowUpErrorGeneric' | 'panel.sendErrorGeneric' {
+): 'panel.cardAlreadyResolved' | 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.cardResponseErrorGeneric' | 'panel.backgroundFollowUpErrorGeneric' | 'panel.sendErrorGeneric' {
+  if (isWorkspaceAssistantStaleControlErrorText(error)) return 'panel.cardAlreadyResolved'
   if (error.includes('PROJECT_AGENT_RUN_ACTIVE')) return 'panel.sendErrorBusy'
   if (isInsufficientBalanceErrorText(error)) return 'panel.sendErrorInsufficientBalance'
   if (error.includes('PROJECT_ASSISTANT_CARD_RESPONSE_FAILED')) return 'panel.cardResponseErrorGeneric'
@@ -147,15 +149,25 @@ export function WorkspaceAssistantComposer({
           )}
         </div>
       </div>
-      {error ? (
-        <div
-          role="alert"
-          className="mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
-        >
-          <p className="font-medium">{t(resolveComposerErrorMessageKey(error))}</p>
-          <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error}</p>
-        </div>
-      ) : null}
+      {error ? (() => {
+        const errorKey = resolveComposerErrorMessageKey(error)
+        // "Already handled" is an informative outcome, not a failure: show the
+        // localized notice without the raw protocol detail.
+        const isCalmNotice = errorKey === 'panel.cardAlreadyResolved'
+        return (
+          <div
+            role={isCalmNotice ? 'status' : 'alert'}
+            className={isCalmNotice
+              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
+              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'}
+          >
+            <p className="font-medium">{t(errorKey)}</p>
+            {isCalmNotice ? null : (
+              <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error}</p>
+            )}
+          </div>
+        )
+      })() : null}
     </div>
   )
 }

@@ -247,6 +247,77 @@ export function createDataChunk(type: string, data: unknown): ProjectAgentUiChun
   } as unknown as ProjectAgentUiChunk
 }
 
+const TERMINAL_TOOL_OUTPUT_CHUNK_TYPES = new Set([
+  'tool-output-available',
+  'tool-output-error',
+  'tool-output-denied',
+  'tool-input-error',
+])
+
+const OPEN_TOOL_CHUNK_TYPES = new Set([
+  'tool-input-start',
+  'tool-input-delta',
+  'tool-input-available',
+  'tool-approval-request',
+])
+
+/**
+ * AR-02E/AR-04G: a run settled as failed or cancelled must not persist
+ * non-terminal parts. When the model stream stops mid-part, tool calls are
+ * left in an input or approval state and reasoning/text blocks miss their end
+ * events; replaying such a message keeps registering permanent "running"
+ * surfaces in the UI. This derives the exact closing chunks (tool-output-error
+ * for unresolved tool calls, reasoning-end/text-end for unclosed blocks) so
+ * the persisted terminal message is fully settled.
+ */
+export function buildProjectAgentTerminalClosureChunks(
+  chunks: readonly ProjectAgentUiChunk[],
+  params: { errorText: string },
+): ProjectAgentUiChunk[] {
+  const openToolCallIds = new Set<string>()
+  const openReasoningIds = new Set<string>()
+  const openTextIds = new Set<string>()
+  for (const chunk of chunks) {
+    const type = readChunkString(chunk, 'type')
+    if (!type) continue
+    if (OPEN_TOOL_CHUNK_TYPES.has(type) || TERMINAL_TOOL_OUTPUT_CHUNK_TYPES.has(type)) {
+      const toolCallId = readChunkString(chunk, 'toolCallId')
+      if (!toolCallId) continue
+      if (TERMINAL_TOOL_OUTPUT_CHUNK_TYPES.has(type)) openToolCallIds.delete(toolCallId)
+      else openToolCallIds.add(toolCallId)
+      continue
+    }
+    if (type === 'reasoning-start' || type === 'reasoning-end') {
+      const id = readChunkString(chunk, 'id')
+      if (!id) continue
+      if (type === 'reasoning-start') openReasoningIds.add(id)
+      else openReasoningIds.delete(id)
+      continue
+    }
+    if (type === 'text-start' || type === 'text-end') {
+      const id = readChunkString(chunk, 'id')
+      if (!id) continue
+      if (type === 'text-start') openTextIds.add(id)
+      else openTextIds.delete(id)
+    }
+  }
+  return [
+    ...[...openToolCallIds].map((toolCallId): ProjectAgentUiChunk => ({
+      type: 'tool-output-error',
+      toolCallId,
+      errorText: params.errorText,
+    })),
+    ...[...openReasoningIds].map((id): ProjectAgentUiChunk => ({
+      type: 'reasoning-end',
+      id,
+    })),
+    ...[...openTextIds].map((id): ProjectAgentUiChunk => ({
+      type: 'text-end',
+      id,
+    })),
+  ]
+}
+
 export function createProjectAgentUiMessageStream(params: {
   source: AsyncIterable<RunStreamEvent>
   initialChunks: ProjectAgentUiChunk[]

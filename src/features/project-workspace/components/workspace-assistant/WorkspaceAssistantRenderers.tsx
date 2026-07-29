@@ -148,6 +148,8 @@ function BillingQuoteBlock(props: {
   )
 }
 
+type ConfirmationActionDecision = 'idle' | 'confirming' | 'cancelling' | 'settled'
+
 export function ConfirmationActionCard(props: {
   operationId: string
   title: string
@@ -157,11 +159,31 @@ export function ConfirmationActionCard(props: {
   onCancel: () => Promise<void>
 }) {
   const t = useTranslations('assistantAgent')
+  // A pending approval accepts exactly one decision: the first click disables
+  // both actions, and any submission failure is consumed here (the panel-level
+  // control error shows the localized notice) instead of escaping to React.
+  const [decision, setDecision] = React.useState<ConfirmationActionDecision>('idle')
   const quote = props.operationPlan?.quote ?? null
   const quoteActionLabel = quote ? buildBillingActionSummaryLabel(quote, t) : null
   const quotePreview = quote
     ? buildAssistantBillingQuotePreview({ quote, actionLabel: quoteActionLabel, t })
     : null
+  const submitDecision = (kind: 'confirm' | 'cancel'): void => {
+    setDecision((current) => {
+      if (current !== 'idle') return current
+      void (async () => {
+        try {
+          await (kind === 'confirm' ? props.onConfirm() : props.onCancel())
+          setDecision('settled')
+        } catch {
+          // The control layer already surfaced the failure; allow a retry.
+          setDecision('idle')
+        }
+      })()
+      return kind === 'confirm' ? 'confirming' : 'cancelling'
+    })
+  }
+  const locked = decision !== 'idle'
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
@@ -171,17 +193,19 @@ export function ConfirmationActionCard(props: {
         <BillingActionButton
           type="button"
           icon="arrowRight"
-          label={t('cards.confirmContinue')}
+          label={decision === 'confirming' ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
           quote={quotePreview}
           className="flex-1 rounded-xl py-2 text-sm"
-          onClick={() => { void props.onConfirm() }}
+          disabled={locked}
+          onClick={() => { submitDecision('confirm') }}
         />
         <button
           type="button"
-          className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"
-          onClick={() => { void props.onCancel() }}
+          disabled={locked}
+          className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => { submitDecision('cancel') }}
         >
-          {t('cards.cancelAction')}
+          {decision === 'cancelling' ? t('cards.choiceSubmitting') : t('cards.cancelAction')}
         </button>
       </div>
     </div>

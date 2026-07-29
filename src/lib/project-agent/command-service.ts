@@ -2,9 +2,11 @@ import type { UIMessage } from 'ai'
 import type { Prisma } from '@prisma/client'
 import type { NextRequest } from 'next/server'
 import { getRequestId } from '@/lib/api-errors'
+import { createScopedLogger } from '@/lib/logging/core'
 import { createProjectAgentChatResponse } from './runtime'
 import type { ProjectAgentResolvedControl } from './runtime'
 import {
+  acquireOrAdoptProjectAgentRunLockForControl,
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
 } from './run-lock'
@@ -16,9 +18,11 @@ import {
 import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
+  getProjectAgentInterruptionForControl,
   readRetryableConsumedProjectAgentApprovalInterruption,
   readRetryableConsumedProjectAgentChoiceInterruption,
   type DeclinedProjectAgentInterruption,
+  type ProjectAgentInterruptionStatus,
 } from './interruptions'
 import {
   createProjectAgentConsumedControlRetryRun,
@@ -29,6 +33,10 @@ import {
   type ProjectAgentRunRecord,
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
+
+const commandLogger = createScopedLogger({
+  module: 'project-agent.command',
+})
 
 type ApprovalControlAction = Extract<ProjectAgentControlAction, { type: 'approval_response' }>
 type ChoiceControlAction = Extract<ProjectAgentControlAction, { type: 'choice_response' }>
@@ -89,6 +97,22 @@ function readVisibleUserText(command: ProjectAgentCommand): string | null {
   }
 }
 
+/**
+ * Observability-only size of the user-supplied input for this command.
+ * Content itself is never logged.
+ */
+function countCommandInputChars(command: ProjectAgentCommand): number {
+  switch (command.kind) {
+    case 'user_turn':
+      return command.message.parts.reduce((total, part) => (
+        part.type === 'text' ? total + part.text.length : total
+      ), 0)
+    case 'approval_response':
+    case 'choice_response':
+      return command.visibleUserText?.length ?? 0
+  }
+}
+
 function buildControlVisibleUserMessage(params: {
   controlAction: ProjectAgentControlAction
   text: string
@@ -113,6 +137,92 @@ async function resolveProjectAgentRunForControl(params: {
   })
   if (!run) throw new Error('PROJECT_AGENT_RUN_NOT_FOUND')
   return run
+}
+
+function buildApprovalControlResponse(action: ApprovalControlAction): Prisma.InputJsonObject {
+  return {
+    approved: action.approved,
+    reason: action.reason,
+  } satisfies Prisma.InputJsonObject
+}
+
+export const PROJECT_AGENT_CONTROL_ALREADY_RESOLVED_CODE = 'PROJECT_AGENT_CONTROL_ALREADY_RESOLVED'
+
+type ProjectAgentControlAdmission =
+  | { kind: 'proceed' }
+  | { kind: 'already_resolved'; interruptionStatus: Exclude<ProjectAgentInterruptionStatus, 'pending'> }
+
+/**
+ * Admission for a control command, decided from the durable target facts
+ * BEFORE any Run slot or Redis lock decision. A card whose interruption was
+ * already consumed by another path (e.g. a newer user message rejecting the
+ * approval, or the same decision in another tab) or superseded is answered
+ * with a calm typed response instead of colliding with the currently active
+ * run. Only a consumed decision whose identical response is still retryable
+ * proceeds into the existing retry path, which keeps its typed fail-closed
+ * conflicts (AR-02G).
+ */
+async function resolveProjectAgentControlAdmission(params: {
+  controlAction: ProjectAgentControlAction
+  scope: ProjectAgentCommandScope
+}): Promise<ProjectAgentControlAdmission> {
+  const { controlAction, scope } = params
+  const type = controlAction.type === 'approval_response' ? 'approval' : 'choice'
+  const interruption = await getProjectAgentInterruptionForControl({
+    ...scope,
+    runId: controlAction.runId,
+    interruptionId: controlAction.interruptionId,
+    type,
+  })
+  if (!interruption) {
+    throw new Error(type === 'approval'
+      ? 'PROJECT_AGENT_INTERRUPTION_NOT_PENDING'
+      : 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING')
+  }
+  if (interruption.status === 'pending') return { kind: 'proceed' }
+  if (interruption.status === 'superseded') {
+    return { kind: 'already_resolved', interruptionStatus: 'superseded' }
+  }
+  const retryable = await (async () => {
+    if (controlAction.type === 'approval_response') {
+      return await readRetryableConsumedProjectAgentApprovalInterruption({
+        ...scope,
+        runId: controlAction.runId,
+        interruptionId: controlAction.interruptionId,
+        response: buildApprovalControlResponse(controlAction),
+      })
+    }
+    try {
+      return await readRetryableConsumedProjectAgentChoiceInterruption({
+        ...scope,
+        runId: controlAction.runId,
+        interruptionId: controlAction.interruptionId,
+        cardId: controlAction.cardId,
+        toolCallId: controlAction.toolCallId,
+        response: controlAction.output as Prisma.InputJsonObject,
+      })
+    } catch (error) {
+      // A stale offer cannot be retried; the decision stands as resolved.
+      if (error instanceof Error && error.message === 'PROJECT_AGENT_CHOICE_OFFER_STALE') return null
+      throw error
+    }
+  })()
+  if (retryable) return { kind: 'proceed' }
+  return { kind: 'already_resolved', interruptionStatus: 'consumed' }
+}
+
+function createProjectAgentControlAlreadyResolvedResponse(params: {
+  controlAction: ProjectAgentControlAction
+  run: ProjectAgentRunRecord
+  interruptionStatus: Exclude<ProjectAgentInterruptionStatus, 'pending'>
+}): Response {
+  return Response.json({
+    code: PROJECT_AGENT_CONTROL_ALREADY_RESOLVED_CODE,
+    runId: params.controlAction.runId,
+    runStatus: params.run.status,
+    interruptionId: params.controlAction.interruptionId,
+    interruptionStatus: params.interruptionStatus,
+  }, { status: 200 })
 }
 
 async function resolveProjectAgentControl(params: {
@@ -140,10 +250,7 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'approval_response') {
-    const response = {
-      approved: controlAction.approved,
-      reason: controlAction.reason,
-    } satisfies Prisma.InputJsonObject
+    const response = buildApprovalControlResponse(controlAction)
     const consumed = await consumeProjectAgentApprovalInterruption({
       ...scope,
       runId: controlAction.runId,
@@ -211,18 +318,50 @@ export async function executeProjectAgentCommand(
   const controlAction = readControlAction(command)
   const requestId = getRequestId(request) ?? crypto.randomUUID()
 
-  await ensureProjectAgentRunSlotAvailable(scope)
+  // Control commands resolve their durable target FIRST: an already-resolved
+  // interruption must never depend on — or collide with — whichever run
+  // currently owns the scope slot. Only a still-actionable target competes for
+  // the Run slot, and it may exclude (and, for the lock, adopt) its own run.
   const existingControlRun = controlAction
     ? await resolveProjectAgentRunForControl({ controlAction, scope })
     : null
+  if (controlAction && existingControlRun) {
+    const admission = await resolveProjectAgentControlAdmission({
+      controlAction,
+      scope,
+    })
+    if (admission.kind === 'already_resolved') {
+      commandLogger.info({
+        action: 'assistant.control.already-resolved',
+        message: 'Project agent control target was already resolved; returning calm response',
+        requestId,
+        runId: controlAction.runId,
+        projectId: scope.projectId,
+        userId: scope.userId,
+        details: {
+          command: command.kind,
+          interruptionId: controlAction.interruptionId,
+          interruptionStatus: admission.interruptionStatus,
+          runStatus: existingControlRun.status,
+        },
+      })
+      return createProjectAgentControlAlreadyResolvedResponse({
+        controlAction,
+        run: existingControlRun,
+        interruptionStatus: admission.interruptionStatus,
+      })
+    }
+  }
+  await ensureProjectAgentRunSlotAvailable(controlAction
+    ? { ...scope, excludeRunId: controlAction.runId }
+    : scope)
   const runId = existingControlRun
     && (existingControlRun.status === 'failed' || existingControlRun.status === 'cancelled')
     ? crypto.randomUUID()
     : controlAction?.runId ?? crypto.randomUUID()
-  const runLock = await acquireProjectAgentRunLock({
-    ...scope,
-    runId,
-  })
+  const runLock = controlAction
+    ? await acquireOrAdoptProjectAgentRunLockForControl({ ...scope, runId })
+    : await acquireProjectAgentRunLock({ ...scope, runId })
   if (!runLock) throw new Error('PROJECT_AGENT_RUN_ACTIVE')
 
   let run: ProjectAgentRunRecord | null = null
@@ -299,6 +438,21 @@ export async function executeProjectAgentCommand(
       }
     }
     controlTransitioned = true
+    commandLogger.info({
+      action: 'assistant.turn.started',
+      message: 'Project agent command accepted; runtime invocation starting',
+      requestId,
+      runId: run.id,
+      projectId: scope.projectId,
+      userId: scope.userId,
+      details: {
+        command: command.kind,
+        episodeId: scope.episodeId,
+        scopeRef: run.scopeRef,
+        inputChars: countCommandInputChars(command),
+        retriedInterruptionId: resolvedControl.retryInterruptionId,
+      },
+    })
     return await createProjectAgentChatResponse({
       request,
       userId: scope.userId,
@@ -309,6 +463,20 @@ export async function executeProjectAgentCommand(
       runLock,
     })
   } catch (error) {
+    commandLogger.error({
+      action: 'assistant.turn.failed',
+      message: 'Project agent command failed before streaming started',
+      requestId,
+      ...(run ? { runId: run.id } : {}),
+      projectId: scope.projectId,
+      userId: scope.userId,
+      details: {
+        command: command.kind,
+        episodeId: scope.episodeId,
+        controlTransitioned,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    })
     if (run && controlTransitioned) {
       const currentRun = await getProjectAgentRun({ ...scope, runId: run.id })
       if (currentRun?.status === 'running') {
