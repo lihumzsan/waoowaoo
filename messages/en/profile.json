@@ -31,7 +31,9 @@
   "allTypes": "All Types",
   "transactionKinds": {
     "recharge": "Credits Added",
-    "consume": "Service Consumption"
+    "consume": "Service Consumption",
+    "freeze": "Credits Frozen",
+    "refund": "Freeze Refunded"
   },
   "transactionType": "Type",
   "transactionOperation": "Operation",

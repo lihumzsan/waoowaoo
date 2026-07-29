@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { logError as _ulogError } from '@/lib/logging/core'
+import { logError as _ulogError, createScopedLogger } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import {
@@ -83,6 +83,27 @@ type UsageByModel = Record<string, {
 
 const MONEY_SCALE = 6
 const MONEY_EPSILON = 1e-9
+
+const billingServiceLogger = createScopedLogger({ module: 'billing.service' })
+
+function reportRollbackFreezeFailure(params: {
+  userId: string
+  freezeId: string
+  amount: number
+  taskId?: string
+}): void {
+  billingServiceLogger.error({
+    audit: true,
+    action: 'alert.billing.rollback_failed',
+    message: 'billing freeze rollback failed; frozen amount may be stuck',
+    userId: params.userId,
+    taskId: params.taskId,
+    details: {
+      freezeId: params.freezeId,
+      amount: params.amount,
+    },
+  })
+}
 
 function normalizeMoney(value: number): number {
   const numeric = Number(value)
@@ -301,7 +322,14 @@ async function ensureFreezeCoverage(params: {
     return chargedCost
   }
 
-  await rollbackFreeze(params.freezeId)
+  const rolledBack = await rollbackFreeze(params.freezeId)
+  if (!rolledBack) {
+    reportRollbackFreezeFailure({
+      userId: params.userId,
+      freezeId: params.freezeId,
+      amount: normalizedQuoted,
+    })
+  }
   const balance = await getBalance(params.userId)
   throw new InsufficientBalanceError(chargedCost, balance.balance)
 }
@@ -652,7 +680,14 @@ async function withSyncBillingCore<T>(
     )
     return result
   } catch (error) {
-    await rollbackFreeze(freezeId)
+    const rolledBack = await rollbackFreeze(freezeId)
+    if (!rolledBack) {
+      reportRollbackFreezeFailure({
+        userId: params.userId,
+        freezeId,
+        amount: quotedCost,
+      })
+    }
     if (error instanceof BillingOperationError) {
       throw new BillingOperationError(error.code, error.message, {
         ...(error.details || {}),

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { createScopedLogger } from '@/lib/logging/core'
 import { rollbackTaskBillingInTransaction, settleTaskBillingInTransaction } from '@/lib/billing'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
@@ -22,6 +23,8 @@ import {
 } from '@/lib/workspace-resource/resource-impact'
 import type { TaskTerminalCommitIntent, TaskTerminalCommitResult } from './types'
 import { materializeCreativeResourceTaskTerminalInTransaction } from '@/lib/creative-resource/task-materializer'
+
+const terminalLogger = createScopedLogger({ module: 'task.terminal' })
 
 const ACTIVE_STATUSES = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] as const
 type TerminalTaskRow = {
@@ -317,6 +320,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),
           ...(materializedOutput ?? {}),
+          billing: nextBillingInfo,
           ...(errorCode ? { errorCode } : {}),
           ...(errorMessage ? { message: errorMessage } : {}),
           terminalSource: intent.kind === 'completed' ? 'worker' : intent.source,
@@ -357,6 +361,18 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
     },
     { maxWait: 10_000, timeout: 15_000 },
   )
+  terminalLogger.info({
+    action: 'task.terminal.committed',
+    message: 'task terminal commit resolved',
+    taskId: intent.taskId,
+    details: {
+      kind: intent.kind,
+      applied: result.applied,
+      reason: result.applied ? 'applied' : result.reason,
+      fence: intent.fence.kind,
+      fenceAttempt: intent.fence.kind === 'attempt' ? intent.fence.attempt : null,
+    },
+  })
   await dispatchCommittedOutboxCommands(result.outboxCommandIds)
   return result
 }

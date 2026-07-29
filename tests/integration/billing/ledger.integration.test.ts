@@ -145,7 +145,9 @@ describe('billing/ledger integration', () => {
 
     expect(first).toBe(true)
     expect(second).toBe(true)
-    expect(await prisma.balanceTransaction.count({ where: { freezeId } })).toBe(1)
+    // 结算只产生一条 consume；freeze/refund 审计行各一条，重复 confirm 不追加任何行。
+    expect(await prisma.balanceTransaction.count({ where: { freezeId, type: 'consume' } })).toBe(1)
+    expect(await prisma.balanceTransaction.count({ where: { freezeId } })).toBe(3)
   })
 
   it('returns an explicit conflict instead of reusing a terminal freeze', async () => {

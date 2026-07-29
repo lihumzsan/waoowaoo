@@ -1,10 +1,25 @@
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { logInfo as _ulogInfo, logError as _ulogError, createScopedLogger } from '@/lib/logging/core'
+import type { ErrorFields } from '@/lib/logging/types'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { recordUsageCostOnly, buildBillingMeta } from './reporting'
+import { recordUsageCostOnly, buildBillingMeta, buildBillingMetaRecord, isProjectScoped } from './reporting'
 import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
 import { roundMoney, toMoneyNumber, type MoneyValue } from './money'
+
+const ledgerLogger = createScopedLogger({ module: 'billing.ledger' })
+
+function toErrorFields(error: unknown): ErrorFields {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error instanceof BillingOperationError ? error.code : undefined,
+    }
+  }
+  return { message: String(error) }
+}
 
 type LedgerRecordParams = {
   projectId: string
@@ -166,6 +181,78 @@ function assertFreezeExpectation(
   }
 }
 
+function readMetadataString(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = metadata?.[key]
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function readScopedProjectId(metadata: Record<string, unknown> | null | undefined): string | null {
+  const projectId = readMetadataString(metadata, 'projectId')
+  return projectId && isProjectScoped(projectId) ? projectId : null
+}
+
+function parseStoredFreezeMetadata(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function buildFreezeAuditMeta(
+  amounts: Record<string, number>,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  const quantity = Number(metadata?.quantity)
+  const unit = readMetadataString(metadata, 'unit')
+  const model = readMetadataString(metadata, 'model')
+  const apiType = readMetadataString(metadata, 'apiType')
+  const base = unit && model && apiType && Number.isFinite(quantity)
+    ? buildBillingMetaRecord({ quantity, unit, model, apiType, metadata: metadata ?? undefined })
+    : {}
+  return JSON.stringify({ ...base, ...amounts })
+}
+
+type FreezeAuditRow = {
+  type: 'freeze' | 'refund'
+  userId: string
+  freezeId: string
+  balanceAfter: number
+  description: string
+  billingMeta: string
+  projectId?: string | null
+  episodeId?: string | null
+  taskType?: string | null
+}
+
+/**
+ * Freeze / rollback / settlement partial refunds are internal balance <-> frozen
+ * transfers: the reconcile invariant `balance + frozenAmount == SUM(amount)`
+ * only holds if these rows carry amount = 0. The transferred amounts live in
+ * billingMeta ({ freezeAmount } / { refundedAmount }) for display and audit.
+ */
+async function appendFreezeAuditTransaction(tx: Prisma.TransactionClient, row: FreezeAuditRow): Promise<void> {
+  await tx.balanceTransaction.create({
+    data: {
+      userId: row.userId,
+      type: row.type,
+      amount: 0,
+      balanceAfter: row.balanceAfter,
+      description: row.description,
+      relatedId: row.freezeId,
+      freezeId: row.freezeId,
+      projectId: row.projectId || null,
+      episodeId: row.episodeId || null,
+      taskType: row.taskType || null,
+      billingMeta: row.billingMeta,
+    },
+  })
+}
+
 export async function freezeBalanceInTransaction(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -232,6 +319,34 @@ export async function freezeBalanceInTransaction(
       requestId: options?.requestId || null,
       idempotencyKey: options?.idempotencyKey || null,
       metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
+    },
+  })
+  const balanceRow = await tx.userBalance.findUnique({ where: { userId }, select: { balance: true } })
+  const balanceAfter = toMoneyNumber(balanceRow?.balance ?? 0)
+  const metadata = options?.metadata ?? null
+  const action = readMetadataString(metadata, 'action') || readMetadataString(metadata, 'taskType')
+  await appendFreezeAuditTransaction(tx, {
+    type: 'freeze',
+    userId,
+    freezeId,
+    balanceAfter,
+    description: `[FREEZE] ${action || options?.source || 'sync'}`,
+    billingMeta: buildFreezeAuditMeta({ freezeAmount: normalizedAmount }, metadata),
+    projectId: readScopedProjectId(metadata),
+    episodeId: readMetadataString(metadata, 'episodeId'),
+    taskType: readMetadataString(metadata, 'taskType') || action,
+  })
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.freeze.created',
+    message: 'billing freeze created',
+    userId,
+    taskId: options?.taskId || undefined,
+    details: {
+      freezeId,
+      amount: normalizedAmount,
+      balanceAfter,
+      idempotencyKey: options?.idempotencyKey ?? null,
     },
   })
   return { status: 'frozen', freezeId }
@@ -354,15 +469,51 @@ export async function confirmChargeWithRecordInTransaction(
       ...(refundAmount > 0 ? { balance: { increment: refundAmount } } : {}),
     },
   })
-  if (chargedAmount > 0) {
-    await recordUsageCostOnly(tx, {
-      ...recordParams,
+  const balanceAfter = toMoneyNumber(updatedBalance.balance)
+  // A zero charge still appends an amount = 0 consume row so every settlement
+  // is visible in the ledger trail.
+  await recordUsageCostOnly(tx, {
+    ...recordParams,
+    userId: freeze.userId,
+    cost: chargedAmount,
+    balanceAfter,
+    freezeId: freeze.id,
+  })
+  if (refundAmount > 0) {
+    await appendFreezeAuditTransaction(tx, {
+      type: 'refund',
       userId: freeze.userId,
-      cost: chargedAmount,
-      balanceAfter: toMoneyNumber(updatedBalance.balance),
       freezeId: freeze.id,
+      balanceAfter,
+      description: `[REFUND] settlement release - ${recordParams.action}`,
+      billingMeta: JSON.stringify({
+        ...buildBillingMetaRecord({
+          quantity: recordParams.quantity,
+          unit: recordParams.unit,
+          model: recordParams.model,
+          apiType: recordParams.apiType,
+          metadata: recordParams.metadata,
+        }),
+        refundedAmount: refundAmount,
+      }),
+      projectId: isProjectScoped(recordParams.projectId) ? recordParams.projectId : null,
+      episodeId: recordParams.episodeId ?? null,
+      taskType: recordParams.taskType || recordParams.action || null,
     })
   }
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.freeze.settled',
+    message: 'billing freeze settled',
+    userId: freeze.userId,
+    taskId: freeze.taskId || undefined,
+    details: {
+      freezeId: freeze.id,
+      amount: chargedAmount,
+      balanceAfter,
+      idempotencyKey: freeze.idempotencyKey ?? null,
+    },
+  })
   return 'settled'
 }
 
@@ -427,11 +578,38 @@ export async function rollbackFreezeInTransaction(
       status: latest?.status || null,
     })
   }
-  await tx.userBalance.update({
+  const updatedBalance = await tx.userBalance.update({
     where: { userId: freeze.userId },
     data: {
       balance: { increment: freezeAmount },
       frozenAmount: { decrement: freezeAmount },
+    },
+  })
+  const balanceAfter = toMoneyNumber(updatedBalance.balance)
+  const storedMetadata = parseStoredFreezeMetadata(freeze.metadata)
+  const action = readMetadataString(storedMetadata, 'action') || readMetadataString(storedMetadata, 'taskType')
+  await appendFreezeAuditTransaction(tx, {
+    type: 'refund',
+    userId: freeze.userId,
+    freezeId: freeze.id,
+    balanceAfter,
+    description: `[REFUND] freeze rollback${action ? ` - ${action}` : ''}`,
+    billingMeta: buildFreezeAuditMeta({ refundedAmount: freezeAmount }, storedMetadata),
+    projectId: readScopedProjectId(storedMetadata),
+    episodeId: readMetadataString(storedMetadata, 'episodeId'),
+    taskType: readMetadataString(storedMetadata, 'taskType') || action,
+  })
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.freeze.rolled_back',
+    message: 'billing freeze rolled back',
+    userId: freeze.userId,
+    taskId: freeze.taskId || undefined,
+    details: {
+      freezeId: freeze.id,
+      amount: freezeAmount,
+      balanceAfter,
+      idempotencyKey: freeze.idempotencyKey ?? null,
     },
   })
   return 'rolled_back'
@@ -451,7 +629,18 @@ export async function rollbackFreeze(freezeId: string): Promise<boolean> {
 
     return true
   } catch (error) {
-    _ulogError('[Billing] rollback freeze failed:', error)
+    const errorCode = error instanceof BillingOperationError ? error.code : 'BILLING_ROLLBACK_FAILED'
+    const owner = await prisma.balanceFreeze
+      .findUnique({ where: { id: freezeId }, select: { userId: true } })
+      .catch(() => null)
+    ledgerLogger.error({
+      action: 'billing.freeze.rollback_failed',
+      message: 'rollback freeze failed',
+      errorCode,
+      userId: owner?.userId,
+      details: { freezeId },
+      error: toErrorFields(error),
+    })
     return false
   }
 }
@@ -622,7 +811,15 @@ export async function addBalanceWithTransaction(
       },
       select: { id: true },
     })
-    if (existing) return
+    if (existing) {
+      ledgerLogger.info({
+        action: 'billing.idempotent_replay.skipped',
+        message: 'billing idempotent replay skipped',
+        userId,
+        details: { idempotencyKey: options.idempotencyKey, type: transactionType },
+      })
+      return
+    }
   }
 
   const updatedBalance = await tx.userBalance.upsert({
@@ -651,6 +848,18 @@ export async function addBalanceWithTransaction(
       externalOrderId: options.externalOrderId || null,
       idempotencyKey: options.idempotencyKey || null,
       billingMeta: options.billingMeta ? JSON.stringify(options.billingMeta) : null,
+    },
+  })
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.transaction.appended',
+    message: 'balance transaction appended',
+    userId,
+    details: {
+      type: transactionType,
+      amount,
+      balanceAfter: toMoneyNumber(updatedBalance.balance),
+      idempotencyKey: options.idempotencyKey ?? null,
     },
   })
 }
@@ -719,6 +928,18 @@ export async function applyBalanceAdjustmentWithTransaction(
       externalOrderId: options.externalOrderId,
       idempotencyKey: options.idempotencyKey,
       billingMeta: options.billingMeta ? JSON.stringify(options.billingMeta) : null,
+    },
+  })
+  ledgerLogger.info({
+    audit: true,
+    action: 'billing.transaction.appended',
+    message: 'balance transaction appended',
+    userId,
+    details: {
+      type: 'adjust',
+      amount: normalizedAmount,
+      balanceAfter: toMoneyNumber(updatedBalance.balance),
+      idempotencyKey: options.idempotencyKey ?? null,
     },
   })
   return 'applied'

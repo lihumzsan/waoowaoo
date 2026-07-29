@@ -31,7 +31,9 @@
   "allTypes": "全部类型",
   "transactionKinds": {
     "recharge": "额度入账",
-    "consume": "服务消费"
+    "consume": "服务消费",
+    "freeze": "额度冻结",
+    "refund": "冻结退回"
   },
   "transactionType": "类型",
   "transactionOperation": "操作",

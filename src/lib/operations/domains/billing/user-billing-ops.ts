@@ -26,10 +26,35 @@ const listUserTransactionsInputSchema = z.object({
 
 function extractActionFromDescription(description: string | null): string | null {
   if (!description) return null
-  const cleaned = description.replace(/^\[SHADOW\]\s*/i, '').trim()
+  const cleaned = description.replace(/^\[(?:SHADOW|FREEZE|REFUND)\]\s*/i, '').trim()
   const firstPart = cleaned.split(' - ')[0]?.trim() || ''
   if (ACTION_KEY_PATTERN.test(firstPart)) return firstPart
   return null
+}
+
+function readBillingMetaNumber(meta: Record<string, unknown> | null, key: string): number | null {
+  const value = meta?.[key]
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+/**
+ * `freeze` / `refund` rows are amount = 0 ledger audit rows (like
+ * `shadow_consume`): the ledger keeps SUM(amount) aligned with
+ * balance + frozenAmount, while the moved amount lives in billingMeta.
+ * For display, project the available-balance delta from billingMeta so the
+ * row matches its balanceAfter movement.
+ */
+function resolveDisplayAmount(type: string, amount: number, billingMeta: Record<string, unknown> | null): number {
+  if (type === 'freeze') {
+    const freezeAmount = readBillingMetaNumber(billingMeta, 'freezeAmount')
+    if (freezeAmount !== null) return -freezeAmount
+  }
+  if (type === 'refund') {
+    const refundedAmount = readBillingMetaNumber(billingMeta, 'refundedAmount')
+    if (refundedAmount !== null) return refundedAmount
+  }
+  return amount
 }
 
 export function createUserBillingOperations(): ProjectAgentOperationRegistryDraft {
@@ -165,7 +190,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
 
           return {
             ...item,
-            amount: toMoneyNumber(item.amount),
+            amount: resolveDisplayAmount(item.type, toMoneyNumber(item.amount), billingMeta),
             balanceAfter: toMoneyNumber(item.balanceAfter),
             action,
             projectId,

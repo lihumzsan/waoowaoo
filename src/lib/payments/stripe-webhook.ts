@@ -184,7 +184,7 @@ function readPositiveMetadataNumber(metadata: Record<string, string>, key: strin
   return value
 }
 
-async function creditCheckoutSession(session: StripeCheckoutSessionLike): Promise<StripeWebhookHandleResult> {
+async function creditCheckoutSession(eventId: string, session: StripeCheckoutSessionLike): Promise<StripeWebhookHandleResult> {
   if (session.metadata.waoowaoo_kind !== 'credit_recharge') {
     return {
       received: true,
@@ -225,6 +225,7 @@ async function creditCheckoutSession(session: StripeCheckoutSessionLike): Promis
       relatedId: paymentIntentId,
       billingMeta: {
         provider: 'stripe',
+        eventId,
         checkoutSessionId: session.id,
         paymentIntentId,
         credits,
@@ -382,7 +383,7 @@ export async function handleStripeWebhook(rawBody: string, signatureHeader: stri
 
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const session = readCheckoutSession(event.data.object)
-    const result = await creditCheckoutSession(session)
+    const result = await creditCheckoutSession(eventId, session)
     return {
       ...result,
       eventType: event.type,

@@ -27,7 +27,7 @@ interface PureRecordParams extends RecordParams {
 
 const VIRTUAL_PROJECT_IDS = new Set(['asset-hub', GLOBAL_ASSET_PROJECT_ID, 'system'])
 
-function isProjectScoped(projectId: string): boolean {
+export function isProjectScoped(projectId: string): boolean {
   return Boolean(projectId && !VIRTUAL_PROJECT_IDS.has(projectId))
 }
 
@@ -40,13 +40,13 @@ function isProjectScoped(projectId: string): boolean {
  *   second → "30秒"
  *   call   → "1次"
  */
-export function buildBillingMeta(params: {
+export function buildBillingMetaRecord(params: {
   quantity: number
   unit: string
   model: string
   apiType: string
   metadata?: Record<string, unknown>
-}): string {
+}): Record<string, unknown> {
   // 尝试从 model composite ID 提取短名 "provider:xxx::model" → "model"
   const modelShort = params.model.includes('::')
     ? params.model.split('::').pop() ?? params.model
@@ -94,42 +94,59 @@ export function buildBillingMeta(params: {
     meta.actualModels = params.metadata.actualModels
   }
 
-  return JSON.stringify(meta)
+  return meta
+}
+
+export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecord>[0]): string {
+  return JSON.stringify(buildBillingMetaRecord(params))
+}
+
+/**
+ * 用量事实 writer（唯一的 UsageCost 写入点）。
+ * 只记录用量，不产生任何 BalanceTransaction：没有资金事件的消耗
+ * （如当前免费的 assistant run）走这里，资金流水只属于账本生命周期。
+ */
+export async function recordUsageFact(
+  txOrPrisma: Prisma.TransactionClient | typeof prisma,
+  params: Pick<PureRecordParams, 'projectId' | 'userId' | 'action' | 'apiType' | 'model' | 'quantity' | 'unit' | 'cost' | 'metadata'>,
+): Promise<boolean> {
+  if (!isProjectScoped(params.projectId)) {
+    return false
+  }
+  const project = await txOrPrisma.project.findUnique({
+    where: { id: params.projectId },
+    select: { id: true },
+  })
+  if (!project) {
+    throw new BillingOperationError('BILLING_INVALID_PROJECT', `project not found for billing: ${params.projectId}`, {
+      projectId: params.projectId,
+      action: params.action,
+      apiType: params.apiType,
+    })
+  }
+
+  await txOrPrisma.usageCost.create({
+    data: {
+      projectId: params.projectId,
+      userId: params.userId,
+      apiType: params.apiType,
+      model: params.model,
+      action: params.action,
+      quantity: params.quantity,
+      unit: params.unit,
+      cost: params.cost,
+      metadata: params.metadata ? JSON.stringify(params.metadata) : null,
+    },
+  })
+  return true
 }
 
 export async function recordUsageCostOnly(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
   params: PureRecordParams,
 ): Promise<void> {
-  const hasProject = isProjectScoped(params.projectId)
-
-  if (hasProject) {
-    const project = await txOrPrisma.project.findUnique({
-      where: { id: params.projectId },
-      select: { id: true },
-    })
-    if (!project) {
-      throw new BillingOperationError('BILLING_INVALID_PROJECT', `project not found for billing: ${params.projectId}`, {
-        projectId: params.projectId,
-        action: params.action,
-        apiType: params.apiType,
-      })
-    }
-
-    await txOrPrisma.usageCost.create({
-      data: {
-        projectId: params.projectId,
-        userId: params.userId,
-        apiType: params.apiType,
-        model: params.model,
-        action: params.action,
-        quantity: params.quantity,
-        unit: params.unit,
-        cost: params.cost,
-        metadata: params.metadata ? JSON.stringify(params.metadata) : null,
-      },
-    })
-  } else {
+  const hasProject = await recordUsageFact(txOrPrisma, params)
+  if (!hasProject) {
     _ulogInfo(`[计费] 跳过 UsageCost 记录 (projectId=${params.projectId})，仅记录流水`)
   }
 
@@ -160,8 +177,8 @@ export async function getProjectTotalCost(projectId: string): Promise<number> {
     })
     return toMoneyNumber(result._sum.cost)
   } catch (error) {
-    _ulogError('[计费] 查询项目总费用失败:', error)
-    return 0
+    _ulogError('[Billing] project total cost query failed', { projectId }, error)
+    throw error
   }
 }
 
@@ -238,11 +255,8 @@ export async function getUserCostSummary(userId: string) {
       })),
     }
   } catch (error) {
-    _ulogError('[计费] 查询用户费用汇总失败:', error)
-    return {
-      total: 0,
-      byProject: [],
-    }
+    _ulogError('[Billing] user cost summary query failed', { userId }, error)
+    throw error
   }
 }
 
