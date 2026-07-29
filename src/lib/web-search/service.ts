@@ -7,7 +7,7 @@
  * credential read and one failure vocabulary for the whole product.
  */
 import {
-  normalizedWebSearchRequestSchema,
+  webSearchRequestSchema,
   type WebSearchProgressListener,
   type WebSearchRequest,
   type WebSearchResponse,
@@ -83,7 +83,7 @@ export async function searchWeb(input: {
   readonly provider?: WebSearchProvider
   readonly onProgress?: WebSearchProgressListener
 }): Promise<WebSearchResponse> {
-  const parsed = normalizedWebSearchRequestSchema.safeParse(input.request)
+  const parsed = webSearchRequestSchema.safeParse(input.request)
   if (!parsed.success) {
     throw new WebSearchError('WEB_SEARCH_REQUEST_FAILED', {
       provider: input.provider?.id ?? 'openai',

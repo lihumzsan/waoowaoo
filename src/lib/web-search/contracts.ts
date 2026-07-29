@@ -20,14 +20,9 @@ export const WEB_SEARCH_PROVIDER_ID = 'openai' as const
 export const webSearchRequestSchema = z.object({
   query: z.string().trim().min(1).max(1_000)
     .describe('The exact question or compact research brief. Include the subject, medium, language, region, community, and recency only when they matter.'),
-  allowedDomains: z.array(z.string().trim().min(1).max(253)).max(20).optional()
-    .describe('Optional domain-only allowlist when the research must focus on specific primary sources, forums, or communities. Omit for open-web research.'),
+  allowedDomains: z.array(z.string().trim().min(1).max(253)).max(20)
+    .describe('Domain-only allowlist when research must focus on specific primary sources, forums, or communities. Pass an empty array for open-web research.'),
 }).strict()
-
-export const normalizedWebSearchRequestSchema = webSearchRequestSchema.transform((request) => ({
-  ...request,
-  allowedDomains: request.allowedDomains ?? [],
-}))
 
 export const webSearchSourceSchema = z.object({
   title: z.string().trim().min(1).max(500),
@@ -62,7 +57,7 @@ export const webSearchResponseSchema = z.object({
 }).strict()
 
 export type WebSearchRequest = z.input<typeof webSearchRequestSchema>
-export type NormalizedWebSearchRequest = z.output<typeof normalizedWebSearchRequestSchema>
+export type NormalizedWebSearchRequest = z.output<typeof webSearchRequestSchema>
 export type WebSearchResponse = z.infer<typeof webSearchResponseSchema>
 export type WebSearchSource = z.infer<typeof webSearchSourceSchema>
 export type WebSearchImage = z.infer<typeof webSearchImageSchema>

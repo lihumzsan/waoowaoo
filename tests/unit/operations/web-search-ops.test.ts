@@ -37,6 +37,7 @@ describe('Main Agent Web Search Operation', () => {
 
     await expect(operation.execute(context(), {
       query: 'current documentary advertising grammar',
+      allowedDomains: [],
     })).resolves.toMatchObject({
       provider: 'openai',
       query: 'current documentary advertising grammar',
@@ -58,6 +59,7 @@ describe('Main Agent Web Search Operation', () => {
 
     await expect(operation.execute(context(), {
       query: '规则怪谈 最新 社区',
+      allowedDomains: [],
     })).rejects.toMatchObject({
       code: 'MISSING_CONFIG',
       details: {

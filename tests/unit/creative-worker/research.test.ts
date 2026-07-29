@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  normalizeResearchRequest,
   projectCreativeWorkerResearchEvidence,
   recordCompletedResearchAttempt,
   recordResearchFailure,
   type CreativeWorkerResearchState,
 } from '@/lib/creative-worker/research'
+import { webSearchRequestSchema } from '@/lib/web-search'
 
 function state(): CreativeWorkerResearchState {
   return {
@@ -22,7 +22,7 @@ describe('Creative Worker external research evidence', () => {
     research.usedCalls = 1
     recordCompletedResearchAttempt({
       state: research,
-      request: normalizeResearchRequest({
+      request: webSearchRequestSchema.parse({
         query: '规则怪谈 叙事 影像 论坛',
         allowedDomains: ['zhihu.com'],
       }),
@@ -74,7 +74,10 @@ describe('Creative Worker external research evidence', () => {
     unavailable.usedCalls = 1
     recordResearchFailure({
       state: unavailable,
-      request: normalizeResearchRequest({ query: 'analog horror latest' }),
+      request: webSearchRequestSchema.parse({
+        query: 'analog horror latest',
+        allowedDomains: [],
+      }),
       status: 'unavailable',
     })
     expect(projectCreativeWorkerResearchEvidence({
@@ -88,7 +91,10 @@ describe('Creative Worker external research evidence', () => {
     partial.usedCalls = 2
     recordCompletedResearchAttempt({
       state: partial,
-      request: normalizeResearchRequest({ query: 'analog horror grammar' }),
+      request: webSearchRequestSchema.parse({
+        query: 'analog horror grammar',
+        allowedDomains: [],
+      }),
       response: {
         provider: 'openai',
         query: 'analog horror grammar',
@@ -103,7 +109,10 @@ describe('Creative Worker external research evidence', () => {
     })
     recordResearchFailure({
       state: partial,
-      request: normalizeResearchRequest({ query: 'analog horror community' }),
+      request: webSearchRequestSchema.parse({
+        query: 'analog horror community',
+        allowedDomains: [],
+      }),
       status: 'failed',
     })
     expect(projectCreativeWorkerResearchEvidence({

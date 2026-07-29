@@ -8,13 +8,19 @@ import {
   type CreativeWorkerRunContext,
 } from '@/lib/creative-worker/types'
 import type { CreativeWorkTraceEvent } from '@/lib/creative-worker/trace-contract'
-import { WebSearchError } from '@/lib/web-search'
+import { webSearchRequestSchema, WebSearchError } from '@/lib/web-search'
 
 const acceptTestSubmission = () => ({
   accepted: true as const,
   outputKind: 'creative_direction' as const,
   outputChars: 1,
 })
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
 
 function createDirectionTools(workerTools: readonly 'web_search'[]) {
   const definition = creativeWorkOutputRegistry.creative_direction
@@ -66,6 +72,34 @@ function runContext(input: {
 }
 
 describe('Creative Direction Worker web_search tool', () => {
+  it('keeps strict transport and runtime parsing on one explicit domain-array contract', () => {
+    const tool = createDirectionTools(['web_search'])
+      .find((candidate) => candidate.name === 'web_search')
+    if (tool?.type !== 'function') throw new Error('WEB_SEARCH_TOOL_REQUIRED')
+
+    const parameters = readRecord(tool.parameters)
+    const properties = readRecord(parameters.properties)
+    const allowedDomains = readRecord(properties.allowedDomains)
+
+    expect(parameters.required).toEqual(['query', 'allowedDomains'])
+    expect(allowedDomains).toMatchObject({
+      type: 'array',
+      description: expect.stringContaining('empty array'),
+    })
+    expect(allowedDomains.anyOf).toBeUndefined()
+    expect(webSearchRequestSchema.safeParse({
+      query: 'open-web research',
+      allowedDomains: [],
+    }).success).toBe(true)
+    expect(webSearchRequestSchema.safeParse({
+      query: 'missing domain policy',
+    }).success).toBe(false)
+    expect(webSearchRequestSchema.safeParse({
+      query: 'nullable domain policy',
+      allowedDomains: null,
+    }).success).toBe(false)
+  })
+
   it('records real source identity and refuses a provider call after the frozen budget', async () => {
     let providerCalls = 0
     const context = runContext({
@@ -92,12 +126,15 @@ describe('Creative Direction Worker web_search tool', () => {
 
     const completed = await tool.invoke(agentContext, JSON.stringify({
       query: '模拟恐怖 镜头 声音 叙事',
+      allowedDomains: [],
     }))
     const exhausted = await tool.invoke(agentContext, JSON.stringify({
       query: 'analog horror forum conventions',
+      allowedDomains: [],
     }))
     await tool.invoke(agentContext, JSON.stringify({
       query: 'a third query must not grow evidence after exhaustion',
+      allowedDomains: [],
     }))
 
     expect(completed).toMatchObject({
@@ -176,8 +213,14 @@ describe('Creative Direction Worker web_search tool', () => {
     if (!tool || tool.type !== 'function') throw new Error('WEB_SEARCH_TOOL_MISSING')
     const runner = new RunContext(context)
 
-    await tool.invoke(runner, JSON.stringify({ query: 'succeeding brief' }))
-    await tool.invoke(runner, JSON.stringify({ query: 'failing brief' }))
+    await tool.invoke(runner, JSON.stringify({
+      query: 'succeeding brief',
+      allowedDomains: [],
+    }))
+    await tool.invoke(runner, JSON.stringify({
+      query: 'failing brief',
+      allowedDomains: [],
+    }))
 
     expect(events).toEqual([
       { kind: 'research_started', researchId: 'research-1', query: 'succeeding brief' },

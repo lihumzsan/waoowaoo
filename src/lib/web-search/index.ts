@@ -1,6 +1,5 @@
 export {
   WEB_SEARCH_PROVIDER_ID,
-  normalizedWebSearchRequestSchema,
   webSearchImageSchema,
   webSearchRequestSchema,
   webSearchResponseSchema,

@@ -10,7 +10,6 @@ import {
   webSearchRequestSchema,
 } from '@/lib/web-search'
 import {
-  normalizeResearchRequest,
   projectCreativeWorkerResearchEvidence,
   recordCompletedResearchAttempt,
   recordResearchFailure,
@@ -103,7 +102,7 @@ function createWebSearchTool(): Tool<CreativeWorkerRunContext> {
           reason: 'web_search is not enabled for this output kind',
         })
       }
-      const request = normalizeResearchRequest(input)
+      const request = webSearchRequestSchema.parse(input)
       if (research.usedCalls >= research.maxCalls) {
         const attempt = research.attempts.find((candidate) => (
           candidate.status === 'budget_exhausted'

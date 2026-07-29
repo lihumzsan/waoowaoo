@@ -142,7 +142,7 @@ describe('OpenAI hosted Web Search provider contract', () => {
     const response = await searchWeb({
       provider,
       signal: new AbortController().signal,
-      request: { query: 'text only research' },
+      request: { query: 'text only research', allowedDomains: [] },
     })
     expect(response.images).toEqual([])
     expect(response.sources).toHaveLength(1)
@@ -187,7 +187,7 @@ describe('OpenAI hosted Web Search provider contract', () => {
     await expect(searchWeb({
       provider,
       signal: new AbortController().signal,
-      request: { query: 'rules horror current examples' },
+      request: { query: 'rules horror current examples', allowedDomains: [] },
     })).rejects.toMatchObject({
       code: 'WEB_SEARCH_UNAVAILABLE',
       details: {
@@ -209,7 +209,7 @@ describe('OpenAI hosted Web Search provider contract', () => {
     await expect(searchWeb({
       provider,
       signal: new AbortController().signal,
-      request: { query: 'unverified current claim' },
+      request: { query: 'unverified current claim', allowedDomains: [] },
     })).rejects.toMatchObject({
       code: 'WEB_SEARCH_RESPONSE_INVALID',
       details: {

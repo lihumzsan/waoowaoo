@@ -84,8 +84,9 @@ describe('project agent operation registry', () => {
     })
     expect(operation.toolInputSchema.properties).toMatchObject({
       query: expect.objectContaining({ type: 'string' }),
-      allowedDomains: expect.objectContaining({ type: ['array', 'null'] }),
+      allowedDomains: expect.objectContaining({ type: 'array' }),
     })
+    expect(operation.toolInputSchema.required).toEqual(['query', 'allowedDomains'])
   })
 
   it('keeps adoption and Chapter planning as explicit current operations', () => {

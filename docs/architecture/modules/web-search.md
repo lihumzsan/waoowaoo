@@ -11,7 +11,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 ## 不变量
 
 - **WS-01 — 一个业务执行入口。** `searchWeb` 是所有业务调用方的唯一搜索入口。Primary Operation 和 Creative Worker Tool 不得各自创建 OpenAI Client、Agent 或 `webSearchTool()`。
-- **WS-02 — 单 provider、托管检索、直连 Responses。** 当前唯一 provider 是 `openai`。Provider 直接调用 OpenAI Responses 接口挂载托管 `web_search`，不经 Agents SDK 的 Agent/Runner 包装，固定启用 live web、high search context、`text+image` 内容类型与 `web_search_call.action.sources`。公共请求只包含 research brief 和可选 allowed domains；公共结果只包含 provider、原 brief、研究报告、真实 hosted queries、URL citations 与结构化 image 证据，不暴露任意 OpenAI payload、网页正文或模型推理。
+- **WS-02 — 单 provider、托管检索、直连 Responses。** 当前唯一 provider 是 `openai`。Provider 直接调用 OpenAI Responses 接口挂载托管 `web_search`，不经 Agents SDK 的 Agent/Runner 包装，固定启用 live web、high search context、`text+image` 内容类型与 `web_search_call.action.sources`。公共请求只包含 research brief 和显式 `allowedDomains` 数组，`[]` 是开放网络研究的唯一表达；公共结果只包含 provider、原 brief、研究报告、真实 hosted queries、URL citations 与结构化 image 证据，不暴露任意 OpenAI payload、网页正文或模型推理。
 - **WS-03 — 独立凭据、独立模型角色、明确失败。** cloud 与 self-hosted 都只从服务端 `OPENAI_API_KEY` 读取搜索凭据。搜索模型是平台级角色 `OPENAI_WEB_SEARCH_MODEL`（裸 OpenAI 模型 id，有默认值），**不进用户可选模型注册表**——注册表内的 LLM 全部经 OpenRouter/Ark/Fal/Google 路由，无法运行托管工具；填入路由模型键必须明确失败。缺失凭据、401 或 403 返回 `WEB_SEARCH_UNAVAILABLE`；超时、网络、429、5xx 与非法响应返回 typed failure；不得从聊天、Resource、客户端参数或 Primary/analysis provider 凭据猜 key，也不得 fallback 到另一个 provider。
 - **WS-04 — Primary 仍经 Operation gateway。** `web_search` 是生产 Operation registry 中的 `query`、`on_demand`、零业务写入能力。Primary 当前可能通过 OpenRouter 或其他模型运行，因此 hosted search 不能直接挂到 Primary 模型；Operation 仍通过固定 `load_tools + execute_operation` gateway 调用 `searchWeb`。缺少 OpenAI 搜索配置必须明确失败。
 - **WS-05 — Worker 工具与提示暴露面由 output registry 穷尽。** `creative_direction.workerTools=['web_search']` 是 Creative Worker 搜索能力的唯一声明；运行时从该声明同时决定研究状态、函数 Tool 与搜索 system Prompt 片段。其他 output kind 只看到 `read_skill`，也不接收搜索说明。Worker 的预算函数 Tool 内部调用同一 `searchWeb`；不得把 OpenAI hosted tool 直接挂到可配置的 analysis 模型，也不得开放 URL fetch、Extract、Crawl 或 Deep Research。
@@ -51,12 +51,13 @@ Primary 搜索失败是 Operation 失败。Creative Direction 搜索失败是显
 - `tests/contracts/project-agent-toolset-conformance.test.ts` 从生产 registries 穷尽证明 Primary Operation 可发现，且只有 `creative_direction` Worker 得到 `web_search`。
 - `tests/unit/operations/web-search-ops.test.ts` 验证 Primary 成功结果与缺失/拒绝配置的 typed Operation failure。
 - `tests/unit/creative-worker/research.test.ts` 验证 outer budget、hosted query、source-only evidence 与未尝试/部分失败状态。
-- `tests/unit/creative-worker/web-search-tool.test.ts` 验证方向 Worker 的真实函数 Tool、冻结预算、报告传递、来源计数和非方向工具缺席。
+- `tests/unit/creative-worker/web-search-tool.test.ts` 验证方向 Worker 的真实函数 Tool、strict transport 与运行时 parser 共用的显式域名数组契约、冻结预算、报告传递、来源计数和非方向工具缺席。
 - `tests/unit/creative-resource/creative-work-materialization.test.ts` 验证 evidence 只进入 Direction generation metadata。
 - 真实 OpenAI 的中文论坛覆盖、登录墙、来源排序、延迟、成本，以及 `image_result` 与 annotation 的线上实际形状属于发布复验；本地 contract 不伪造这些质量结论。**`image_result` 字段名当前来自官方文档，装机 SDK 未定型该输出，首次真实调用必须核对后再收紧契约。**
 
 ## 历史回归
 
+- Web Search 公共请求最初把 `allowedDomains` 声明为 optional，并在 service/Worker 内把省略规范化为 `[]`；Agents SDK 的 strict function schema 为满足“所有属性均 required”，把它投影成“必填但可为 null”。真实 Creative Direction 模型据此合法提交 `null`，Worker 随后又用原始 Zod schema 重读参数并在进入 `searchWeb` 前拒绝，搜索 provider 根本没有被调用。旧 Tool/provider 测试直接省略字段，Operation registry 测试甚至把 nullable schema 当作正确结果，因此共同验证了错误协议。当前共享请求契约要求 Primary 与 Worker 都显式提交数组，`[]` 唯一表示开放网络；SDK Tool 与 Operation schema 均不再接受 null，运行时继续 fail closed，不保留 null-to-empty 或 omitted-to-empty 兼容分支。
 - Worker research runtime 首次已发出 `research_started/research_completed`，但 Task handler 的持久事件白名单遗漏这两个 kind；结果是外部 Trace 能看到搜索，刷新后的 Subagent 详情却只能看到 Skill。当前同一 trace schema 的研究事件进入既有 lifecycle projection，并按 attempt-scoped `researchId` 用 terminal 事件替换 started；listener、Task.status 与最终 evidence owner 均未改变。
 - Style Bible 只有静态视觉政策，遇到“规则怪谈”“模拟恐怖”等新近或社群定义类别时只能依赖模型记忆；为每种风格新增 Skill 又会制造无限 identity。当前把研究限定为 Creative Direction 的证据输入，再由同一方向契约影响下游。
 - 初始 Web Search 使用 Tavily function Tool：项目自行拥有 query 参数、HTTP wire、结果裁剪和二次模型往返，返回的 ranked snippets 仍需当前 Worker 重新判断检索充分性。真实“规则怪谈”配对测试显示 OpenAI hosted search 可以在一次托管 run 中自主规划多条 query、综合报告并提供结构化 citation，同时延迟更低；当前删除 Tavily adapter 和私有参数，不保留 fallback 双轨。

@@ -11,8 +11,10 @@
  * prompt attached to the project.
  */
 import { z } from 'zod'
-import type { Locale } from '@/i18n/routing'
-import type { WebSearchRequest, WebSearchResponse } from '@/lib/web-search'
+import {
+  type NormalizedWebSearchRequest,
+  type WebSearchResponse,
+} from '@/lib/web-search'
 import { CREATIVE_WORKER_HARD_LIMITS } from './constants'
 
 export const creativeWorkerResearchAttemptSchema = z.object({
@@ -75,19 +77,9 @@ function researchNotice(
   return 'External research was not performed: web search failed, and assumptions were not presented as findings.'
 }
 
-export function normalizeResearchRequest(
-  request: WebSearchRequest,
-): Required<Pick<WebSearchRequest, 'query' | 'allowedDomains'>> & WebSearchRequest {
-  return {
-    ...request,
-    query: request.query.trim(),
-    allowedDomains: request.allowedDomains ?? [],
-  }
-}
-
 export function recordCompletedResearchAttempt(input: {
   readonly state: CreativeWorkerResearchState
-  readonly request: ReturnType<typeof normalizeResearchRequest>
+  readonly request: NormalizedWebSearchRequest
   readonly response: WebSearchResponse
 }): CreativeWorkerResearchAttempt {
   const attempt: CreativeWorkerResearchAttempt = {
@@ -106,7 +98,7 @@ export function recordCompletedResearchAttempt(input: {
 
 export function recordResearchFailure(input: {
   readonly state: CreativeWorkerResearchState
-  readonly request: ReturnType<typeof normalizeResearchRequest>
+  readonly request: NormalizedWebSearchRequest
   readonly status: Exclude<CreativeWorkerResearchAttempt['status'], 'completed'>
 }): CreativeWorkerResearchAttempt {
   const attempt: CreativeWorkerResearchAttempt = {
