@@ -89,6 +89,7 @@
 ## 历史回归
 
 - BGM 与环境音首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 Grant issuer；这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。当前 Approval payload 穷尽保存每个 `approvalId + toolCallId + planSnapshotId`，聚合 plan 只服务 UI 报价；即使旧固定声音链已经删除，同一步自由组合多个收费 Operation 仍逐成员获得精确授权。
+- 聚合 Approval 改为按 `toolCallId` 精确映射 Grant 后，runtime 虽只在 `approved=true` 时签发 Grant，却对批准与拒绝无条件构建同一 approved invocation map；即使绕过该错误，SDK 为被拒绝调用生成的明确 rejection output 也会被误判为“执行 outcome 丢失”。真实计费卡取消因此先原子消费 `approved=false` 决定，再抛出 `PROJECT_AGENT_APPROVAL_GRANT_MEMBER_MISMATCH` 或 `PROJECT_AGENT_TOOL_OUTCOME_MISSING`，被 control route 泛化为 `EXTERNAL_ERROR` 并错误结算 Run。旧 Golden 只穿过批准分支，Interruption 单测只证明拒绝决定可消费，没有组合 route、RunState 恢复、Grant 映射与 tool outcome 投影。当前只有批准分支构建并穷尽校验 Grant map；拒绝分支直接对原 SDK Tool call 执行 `state.reject`，outcome collector 只依据 SDK 的权威 `isToolApproved(...) === false` 识别非执行结果，其他 outcome 缺失仍 fail-closed，且不创建 Grant、Execution 或 Task。`GJ-PARALLEL-OPERATION-BATCH` 先通过真实卡片拒绝聚合报价并断言零副作用与 Run 正常完成，再以新的 Tool call 重新报价和批准，防止旧授权或旧计划被复用。
 
 - 旧 Soundscape/BGM 各自维护文本 plan 与收费生成；统一 BgmDesign 后仍保留“先规划再生成”的固定创意链。当前旧 planner/generator pair 删除，独立 `create_audio` 像其他媒体 Operation 一样为本次完整输入形成精确计划与授权；音乐方向 Creative Task 免费但绝不自动派生收费任务。
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。

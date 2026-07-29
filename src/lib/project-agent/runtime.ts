@@ -604,6 +604,7 @@ function collectFunctionToolOutputs(
   toolResults: FunctionToolResult[],
   outcomesByToolCall: Map<string, ProjectAgentOperationOutcome>,
   operationIdByToolCallId: ReadonlyMap<string, string>,
+  isToolCallRejected: (identity: { toolName: string; toolCallId: string }) => boolean,
 ): Array<{ toolCallId: string; toolName: string; outcome: ProjectAgentOperationOutcome }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
@@ -615,6 +616,12 @@ function collectFunctionToolOutputs(
     }
     const outcome = outcomesByToolCall.get(toolCallId)
     if (!outcome) {
+      if (isToolCallRejected({
+        toolName: result.tool.name,
+        toolCallId,
+      })) {
+        return []
+      }
       throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_MISSING:${result.tool.name}:${toolCallId}`)
     }
     const operationId = operationIdByToolCallId.get(toolCallId)
@@ -849,18 +856,20 @@ export async function createProjectAgentChatResponse(input: {
       })
     : []
   const issuedGrantByPlanSnapshotId = new Map(issuedApprovalGrants.map((grant) => [grant.planSnapshotId, grant]))
-  const approvedInvocationByToolCallId = Object.fromEntries(persistedApprovalItems.flatMap((item) => {
-    const planSnapshotId = item.operationPlan?.planSnapshotId ?? null
-    if (!item.toolCallId || !planSnapshotId) return []
-    const grant = issuedGrantByPlanSnapshotId.get(planSnapshotId)
-    if (!grant || grant.operationId !== item.operationId) {
-      throw new Error(`PROJECT_AGENT_APPROVAL_GRANT_MEMBER_MISMATCH:${item.toolCallId}`)
-    }
-    return [[item.toolCallId, {
-      approvalGrantId: grant.approvalGrantId,
-      requestId: grant.requestId,
-    }] as const]
-  }))
+  const approvedInvocationByToolCallId = control.kind === 'approval' && control.approved
+    ? Object.fromEntries(persistedApprovalItems.flatMap((item) => {
+        const planSnapshotId = item.operationPlan?.planSnapshotId ?? null
+        if (!item.toolCallId || !planSnapshotId) return []
+        const grant = issuedGrantByPlanSnapshotId.get(planSnapshotId)
+        if (!grant || grant.operationId !== item.operationId) {
+          throw new Error(`PROJECT_AGENT_APPROVAL_GRANT_MEMBER_MISMATCH:${item.toolCallId}`)
+        }
+        return [[item.toolCallId, {
+          approvalGrantId: grant.approvalGrantId,
+          requestId: grant.requestId,
+        }] as const]
+      }))
+    : {}
   const context: ProjectAgentContext = {
     ...contextBase,
     locale,
@@ -1408,11 +1417,15 @@ export async function createProjectAgentChatResponse(input: {
       parallelToolCalls: true,
     },
     tools,
-    toolUseBehavior: async (_runContext, toolResults) => {
+    toolUseBehavior: async (runContext, toolResults) => {
       const outcomes = collectFunctionToolOutputs(
         toolResults,
         outcomesByToolCall,
         operationIdByToolCallId,
+        ({ toolName, toolCallId }) => runContext.isToolApproved({
+          toolName,
+          callId: toolCallId,
+        }) === false,
       )
       await sealActiveOperationBatch()
       const stopPart = stopController.evaluateStep(outcomes)

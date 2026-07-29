@@ -13,9 +13,9 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-PARALLEL-OPERATION-BATCH',
     kind: 'freeform',
-    title: 'the model resolves a missing ratio with one current Choice, then one step requests three independent images under one exact quote and background batch',
+    title: 'the model resolves a missing ratio, rejects one aggregate quote with zero side effects, then a new request approves three independent images under one exact quote and background batch',
     startState: 'empty_project',
-    expectedTerminal: 'parallel_resources_ready',
+    expectedTerminal: 'rejected_quote_without_side_effect_then_parallel_resources_ready',
     requiresWorkers: true,
     zeroPaidProviderCalls: true,
   },

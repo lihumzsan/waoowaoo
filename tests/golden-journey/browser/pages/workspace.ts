@@ -58,3 +58,16 @@ export function getGoldenApprovalButton(page: Page): Locator {
 export async function submitGoldenApproval(page: Page): Promise<void> {
   await getGoldenApprovalButton(page).click()
 }
+
+export function getGoldenApprovalCancellationButton(page: Page): Locator {
+  const currentApprovalCard = page
+    .getByText('需要确认', { exact: true })
+    .filter({ visible: true })
+    .last()
+    .locator('..')
+  return currentApprovalCard.getByRole('button', { name: '取消操作', exact: true }).last()
+}
+
+export async function submitGoldenApprovalCancellation(page: Page): Promise<void> {
+  await getGoldenApprovalCancellationButton(page).click()
+}

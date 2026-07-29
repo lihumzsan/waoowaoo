@@ -9,6 +9,7 @@ import {
   readGoldenAssistantRunStatus,
   readGoldenPendingInteractionOperationId,
   submitGoldenApproval,
+  submitGoldenApprovalCancellation,
 } from '../browser/pages/workspace'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import {
@@ -54,6 +55,15 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null
+}
+
+function readApprovalToolCallIds(payload: unknown): string[] {
+  const record = asRecord(payload)
+  if (!Array.isArray(record?.approvalItems)) return []
+  return record.approvalItems.flatMap((item) => {
+    const toolCallId = asRecord(item)?.toolCallId
+    return typeof toolCallId === 'string' && toolCallId.trim() ? [toolCallId.trim()] : []
+  })
 }
 
 async function approveOperation(
@@ -740,7 +750,7 @@ test('[GJ-ASSISTANT-STOP-REPLY] stopping a streamed reply cancels its Run and pe
   })
 })
 
-test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote and one background continuation', async ({
+test('[GJ-PARALLEL-OPERATION-BATCH] a rejected aggregate quote has no side effect before a new approved batch', async ({
   page,
   browserObservations,
 }) => {
@@ -762,11 +772,43 @@ test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote a
   ))
   expect(pendingApprovals).toHaveLength(1)
   const approvalPayload = asRecord(pendingApprovals[0]?.payload)
-  expect(Array.isArray(approvalPayload?.approvalItems) ? approvalPayload.approvalItems : []).toHaveLength(3)
+  const rejectedToolCallIds = readApprovalToolCallIds(approvalPayload)
+  expect(rejectedToolCallIds).toHaveLength(3)
+  expect(new Set(rejectedToolCallIds).size).toBe(3)
   expect(asRecord(approvalPayload?.operationPlan)?.taskCount).toBe(3)
   expect(beforeApproval.tasks).toHaveLength(0)
   expect(beforeApproval.approvalGrants).toHaveLength(0)
 
+  await submitGoldenApprovalCancellation(page)
+  await expect.poll(async () => (await readGoldenOracleSnapshot(scope)).runs.at(-1)?.status ?? null, {
+    timeout: 60_000,
+    message: 'rejecting the aggregate quote must resume and complete the existing Assistant Run',
+  }).toBe('completed')
+  const afterRejection = await readGoldenOracleSnapshot(scope)
+  const rejectedApprovals = afterRejection.interruptions.filter((item) => (
+    item.type === 'approval'
+    && item.status === 'consumed'
+    && asRecord(item.response)?.approved === false
+  ))
+  expect(rejectedApprovals).toHaveLength(1)
+  expect(afterRejection.tasks).toHaveLength(0)
+  expect(afterRejection.resources).toHaveLength(0)
+  expect(afterRejection.approvalGrants).toHaveLength(0)
+  expect(afterRejection.operationExecutions).toHaveLength(0)
+
+  await sendNaturalLanguage(page, GOLDEN_PARALLEL_IMAGE_REQUEST)
+  await expect.poll(async () => await readGoldenPendingInteractionOperationId(page, scope), {
+    timeout: 60_000,
+    message: 'a new model Tool call must create a new aggregate quote after the previous rejection',
+  }).toBe('create_image')
+  const beforeNewApproval = await readGoldenOracleSnapshot(scope)
+  const newApproval = beforeNewApproval.interruptions.find((item) => (
+    item.type === 'approval' && item.status === 'pending'
+  ))
+  const approvedToolCallIds = readApprovalToolCallIds(newApproval?.payload)
+  expect(approvedToolCallIds).toHaveLength(3)
+  expect(new Set(approvedToolCallIds).size).toBe(3)
+  expect(approvedToolCallIds.some((toolCallId) => rejectedToolCallIds.includes(toolCallId))).toBe(false)
   await submitGoldenApproval(page)
   const resources = await waitForResources(scope, 'image', 3)
   await expect.poll(async () => {
@@ -797,7 +839,9 @@ test('[GJ-PARALLEL-OPERATION-BATCH] three same-Operation calls share one quote a
   expect(operationBatchHandoffs).toHaveLength(1)
   expect(operationBatchHandoffs[0]?.status).toBe('settled')
   expect(snapshot.identities.duplicateToolCallIds).toHaveLength(0)
-  expect(snapshot.identities.toolCallIds.filter((id) => id.includes('create_image'))).toHaveLength(3)
+  expect(snapshot.identities.toolCallIds.filter((id) => id.includes('create_image')).sort()).toEqual(
+    [...rejectedToolCallIds, ...approvedToolCallIds].sort(),
+  )
   for (const resource of resources) {
     if (typeof resource.id !== 'string') throw new Error('GOLDEN_RESOURCE_ID_MISSING')
     await expect(page.locator(`article[data-node-id="${workspaceNodeId.resourceCard(String(resource.candidateSetId ?? resource.id))}"]`))
