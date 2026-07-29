@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, type WriteStream } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import mysql from 'mysql2/promise'
@@ -12,12 +13,49 @@ import {
   type TestServiceScope,
 } from '../../setup/test-services'
 import { resolveSecurityArtifactRoot, resolveSecurityRuntimeIdentity } from './identity'
+import {
+  createSecurityProcessIdentity,
+  terminateSecurityProcessTree,
+  type SecurityProcessIdentity,
+} from './process-lifecycle'
 
 const RUNTIME_IDENTITY = resolveSecurityRuntimeIdentity()
 const APP_PORT = RUNTIME_IDENTITY.appPort
+const COORDINATOR_PORT = RUNTIME_IDENTITY.coordinatorPort
 const ARTIFACT_ROOT = resolveSecurityArtifactRoot()
 const ORACLE_DATABASE_USER = 'security_oracle'
-let startupScope: Required<TestServiceScope> | null = null
+
+interface SecurityEnvironmentDescriptor {
+  readonly runtimeId: string
+  readonly ownerPid: number
+  readonly status: 'starting' | 'ready'
+  readonly appBaseUrl: string
+  readonly coordinatorBaseUrl: string
+  readonly shutdownToken: string
+  readonly testServiceScope: string
+  readonly tsconfigPath: string
+  readonly appProcess?: SecurityProcessIdentity
+  readonly oracleDatabaseUrl?: string
+}
+
+interface OwnedNextProcess {
+  readonly child: ChildProcess
+  readonly identity: SecurityProcessIdentity
+  readonly log: WriteStream
+}
+
+interface OwnedEnvironment {
+  scope: Required<TestServiceScope> | null
+  coordinator: Server | null
+  next: OwnedNextProcess | null
+}
+
+const ownedEnvironment: OwnedEnvironment = {
+  scope: null,
+  coordinator: null,
+  next: null,
+}
+let shutdownPromise: Promise<void> | null = null
 
 function executable(name: string): string {
   return path.resolve(process.cwd(), 'node_modules/.bin', name)
@@ -95,7 +133,7 @@ async function createReadOnlyOracle(databaseUrl: string, password: string): Prom
   return oracleUrl.toString()
 }
 
-function spawnNext(env: NodeJS.ProcessEnv): ChildProcess {
+function spawnNext(env: NodeJS.ProcessEnv): OwnedNextProcess {
   const log = createWriteStream(path.join(ARTIFACT_ROOT, 'next.log'), { flags: 'a' })
   const child = spawn(
     executable('next'),
@@ -109,20 +147,28 @@ function spawnNext(env: NodeJS.ProcessEnv): ChildProcess {
   )
   child.stdout?.pipe(log)
   child.stderr?.pipe(log)
-  return child
+  if (!child.pid) {
+    log.end()
+    throw new Error('SECURITY_APPLICATION_PID_MISSING')
+  }
+  child.once('exit', (code, signal) => {
+    log.write(
+      `\n[security-environment] next exited code=${String(code)} signal=${String(signal)}\n`,
+    )
+  })
+  return {
+    child,
+    identity: createSecurityProcessIdentity(child.pid),
+    log,
+  }
 }
 
-function signalChild(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (!child.pid || child.exitCode !== null) return
-  try {
-    if (process.platform === 'win32') child.kill(signal)
-    else process.kill(-child.pid, signal)
-  } catch (error) {
-    const code = error && typeof error === 'object' && 'code' in error
-      ? String((error as { code: unknown }).code)
-      : ''
-    if (code !== 'ESRCH') throw error
-  }
+async function closeLog(log: WriteStream): Promise<void> {
+  if (log.closed) return
+  await new Promise<void>((resolve) => {
+    log.once('close', resolve)
+    log.end()
+  })
 }
 
 async function waitForApplication(child: ChildProcess): Promise<void> {
@@ -144,11 +190,131 @@ async function waitForApplication(child: ChildProcess): Promise<void> {
   throw new Error('SECURITY_APPLICATION_START_TIMEOUT')
 }
 
-async function main(): Promise<void> {
+async function writeEnvironmentDescriptor(
+  descriptor: SecurityEnvironmentDescriptor,
+): Promise<void> {
+  await writeFile(
+    path.join(ARTIFACT_ROOT, 'environment.json'),
+    `${JSON.stringify(descriptor, null, 2)}\n`,
+  )
+}
+
+async function startCoordinator(input: {
+  readonly shutdownToken: string
+  readonly onShutdown: () => void
+}): Promise<Server> {
+  const server = createServer((request, response) => {
+    if (request.method === 'POST' && request.url === '/shutdown') {
+      if (request.headers.authorization !== `Bearer ${input.shutdownToken}`) {
+        response.writeHead(403, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ ok: false }))
+        return
+      }
+      response.writeHead(202, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ ok: true, runtimeId: RUNTIME_IDENTITY.runtimeId }))
+      setImmediate(input.onShutdown)
+      return
+    }
+    const next = ownedEnvironment.next
+    const healthy = shutdownPromise === null
+      && (next === null || next.child.exitCode === null)
+    response.writeHead(healthy ? 200 : 503, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({ ok: healthy }))
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(COORDINATOR_PORT, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolve()
+    })
+  })
+  return server
+}
+
+async function closeCoordinator(server: Server): Promise<void> {
+  if (!server.listening) return
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
+}
+
+async function stopOwnedEnvironment(): Promise<void> {
+  const cleanupErrors: unknown[] = []
+  const next = ownedEnvironment.next
+  if (ownedEnvironment.scope) {
+    try {
+      stopTestServices(ownedEnvironment.scope)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  try {
+    await rm(path.resolve(process.cwd(), RUNTIME_IDENTITY.tsconfigPath), { force: true })
+  } catch (error) {
+    cleanupErrors.push(error)
+  }
+  if (ownedEnvironment.coordinator) {
+    try {
+      await closeCoordinator(ownedEnvironment.coordinator)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  if (next) {
+    try {
+      await terminateSecurityProcessTree(next.identity)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+    try {
+      await closeLog(next.log)
+    } catch (error) {
+      cleanupErrors.push(error)
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'SECURITY_ENVIRONMENT_SHUTDOWN_FAILED')
+  }
+}
+
+async function shutdownAndExit(requestedExitCode: number): Promise<never> {
+  shutdownPromise ??= stopOwnedEnvironment()
+  let exitCode = requestedExitCode
+  try {
+    await shutdownPromise
+  } catch (error) {
+    console.error(error)
+    exitCode = 1
+  }
+  process.exit(exitCode)
+}
+
+async function startEnvironment(): Promise<void> {
   await mkdir(ARTIFACT_ROOT, { recursive: true })
   await writeTypeScriptConfig()
   const scope = createScope()
-  startupScope = scope
+  ownedEnvironment.scope = scope
+  const shutdownToken = randomUUID()
+  const baseDescriptor: SecurityEnvironmentDescriptor = {
+    runtimeId: RUNTIME_IDENTITY.runtimeId,
+    ownerPid: process.pid,
+    status: 'starting',
+    appBaseUrl: `http://127.0.0.1:${String(APP_PORT)}`,
+    coordinatorBaseUrl: `http://127.0.0.1:${String(COORDINATOR_PORT)}`,
+    shutdownToken,
+    testServiceScope: scope.composeProjectName,
+    tsconfigPath: RUNTIME_IDENTITY.tsconfigPath,
+  }
+  await writeEnvironmentDescriptor(baseDescriptor)
+  ownedEnvironment.coordinator = await startCoordinator({
+    shutdownToken,
+    onShutdown: () => {
+      void shutdownAndExit(0)
+    },
+  })
   const services = await prepareFreshTestServices(scope, {
     mysqlMaxAttempts: 30,
     mysqlConnectTimeoutMs: 1_000,
@@ -156,32 +322,34 @@ async function main(): Promise<void> {
   })
   const env = applicationEnvironment(services)
   const oracleDatabaseUrl = await createReadOnlyOracle(services.databaseUrl, randomUUID())
-  await writeFile(path.join(ARTIFACT_ROOT, 'environment.json'), JSON.stringify({
-    runtimeId: RUNTIME_IDENTITY.runtimeId,
-    appBaseUrl: `http://127.0.0.1:${String(APP_PORT)}`,
+  const next = spawnNext(env)
+  ownedEnvironment.next = next
+  await writeEnvironmentDescriptor({
+    ...baseDescriptor,
+    appProcess: next.identity,
     oracleDatabaseUrl,
-    testServiceScope: scope.composeProjectName,
-  }, null, 2))
+  })
+  await waitForApplication(next.child)
+  await writeEnvironmentDescriptor({
+    ...baseDescriptor,
+    status: 'ready',
+    appProcess: next.identity,
+    oracleDatabaseUrl,
+  })
+}
 
-  const child = spawnNext(env)
-  let stopping = false
-  const stop = async (): Promise<void> => {
-    if (stopping) return
-    stopping = true
-    signalChild(child, 'SIGTERM')
-    stopTestServices(scope)
-    await rm(path.resolve(process.cwd(), RUNTIME_IDENTITY.tsconfigPath), { force: true })
-    process.exit(0)
-  }
-  process.on('SIGINT', () => void stop())
-  process.on('SIGTERM', () => void stop())
-  await waitForApplication(child)
+async function main(): Promise<void> {
+  process.once('SIGINT', () => {
+    void shutdownAndExit(0)
+  })
+  process.once('SIGTERM', () => {
+    void shutdownAndExit(0)
+  })
+  await startEnvironment()
   await new Promise<void>(() => undefined)
 }
 
 main().catch(async (error: unknown) => {
   console.error(error)
-  if (startupScope) stopTestServices(startupScope)
-  await rm(path.resolve(process.cwd(), RUNTIME_IDENTITY.tsconfigPath), { force: true })
-  process.exit(1)
+  await shutdownAndExit(1)
 })
