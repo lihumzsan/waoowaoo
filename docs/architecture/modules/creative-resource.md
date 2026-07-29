@@ -12,7 +12,7 @@
 
 - **CR-01 — 一个短 Resource ID 只表示一个不可变产物。** `CreativeResource.id` 是唯一跨层身份，格式为 `r_` 加 128-bit SHA-256 base64url 摘要，总长 24 字符。通用生成由 `operationId + requestId + candidateIndex` 确定，领域导入由 `sourceType + sourceId` 确定；两者都经带长度分帧的共享 identity builder 生成。名称只用于显示，不能参与解析。禁止恢复 Revision、head、originKey、内容 hash identity 或调用方自造长 UUID。
 - **CR-02 — Resource 预留与物化分离，但身份不变。** 异步提交事务先创建 pending Resource 和 Task；唯一 terminal materializer 在成功时把内容、媒体、provenance 与 `materializedAt` 一次写入同一 Resource。已物化 Resource 不得再次写内容。失败或取消只可结算未物化 Resource 的状态。
-- **CR-03 — retry 与 regenerate 是两种动作。** retry 只接受 failed Resource ID，重放该 Resource 首次提交时冻结的 prompt、模型路由、参数和输入，并只允许同一 Resource 从未物化状态完成；它不接收任何可改写生成事实的字段。重新生成、修改、角色状态变化或用户需要另一方案时必须创建一个新 Resource，并用 Lineage 表达来源。角色的晴天、雨夜、战损等状态是多个 Resource，不是同一 identity 的版本。
+- **CR-03 — retry 与 regenerate 是两种动作。** retry 只接受 failed Resource ID，并从同一 Operation 的唯一非 retry 初始 Plan/Task 重放该 Resource 首次提交时冻结的 prompt、模型路由、参数和输入；`new`、`prompt_set`、`manifest_assets` 等初始请求分支必须遵守同一规则，不能把某个请求 kind 当成“原始生成”的同义词。retry 只允许同一 Resource 从未物化状态完成，不接收任何可改写生成事实的字段。重新生成、修改、角色状态变化或用户需要另一方案时必须创建一个新 Resource，并用 Lineage 表达来源。角色的晴天、雨夜、战损等状态是多个 Resource，不是同一 identity 的版本。
 - **CR-04 — Lineage 只连接精确 Resource。** `CreativeResourceLineage` 的唯一事实是 `inputResourceId + role + position → outputResourceId`。服务端按 Resource ID 回库验证 owner、scope、schema、status 和真实内容。禁止从名称、当前 Binding、最近记录、数组位置、历史消息、Prompt、Canvas edge 或模型输出重新猜关联。
 - **CR-05 — Binding 只保存一个 Resource ID。** 当前采用关系的唯一 key 是 `scope + role + slotKey`，值只有 `resourceId`，由 Binding service 以 version CAS 写入。Binding 不复制内容，不保存第二 identity，不改变或删除被换下的 Resource。Creative Direction、Asset Manifest、角色音色和资产图片继续由各自保留入口写其命名空间。
 - **CR-06 — 引用协议只传 Resource ID。** Creative Work request、媒体 Operation、消息附件、Assistant Link View、Choice subject、Canvas 与领域投影都只传 `resourceId`。可选 `role` 只表达该输入在新输出中的语义，不参与定位。调用方不得同时传名称、短 key、origin、hash 或内容副本充当第二关联协议。
@@ -111,6 +111,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 ## 历史回归
 
 - 初始 Resource spine 同时保存 Resource、Revision、head 和 origin；跨层又逐步只认 Revision，形成多个可合法出现但语义重叠的 identity。修补调用方只能减少某一种不一致，不能消除组合错误。本次直接删除 Revision/head/origin 协议。
+- Resource retry 首次冻结输入收敛只把 `request.kind=new` 认作原始生成；随后 Video Prompt Set 新增 `request.kind=prompt_set`，初次多段视频与失败终态都能正常持久化，但单段 retry resolver 会忽略同一 Operation 的真实 Plan/Task，并错误返回 `CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_MISSING`。旧冻结输入测试只构造 `new`，Prompt Set Critical 又只验证全部成功，因此两条防线各自通过却没有反证“Prompt Set 中一个 provider 失败后只重试该 Resource”的真实组合。当前原始执行身份统一定义为同一 Operation 的唯一非 retry Plan/Task，所有重试仍只重放该 Task 的冻结 payload；真实 MySQL Critical 从生产 Prompt Set planner 创建两个 Task，令其中一个失败、另一个成功，再证明 retry 只为失败 Resource 创建一个同 identity Task、payload 除新 toolCallId 外完全一致且不触碰兄弟 Resource。
 - 参考资产回归的直接症状是视频生成未消费用户已选资产。上一版只保证 `request.kind=retry` 从旧 Task 恢复冻结引用，但初次 `video_prompt_set` 仍只输出自然语言 `referenceKeys`，Primary 必须根据名称、资源列表和历史上下文重新选择 ID；因此初次生成完全绕过 retry 防线，且曾把 Resource hash 当成执行需要的 ID。当前 Prompt Set 保存精确 `mediaResourceIds`，服务端只允许其持久 Lineage 中的真实 Resource，Primary 不再解释引用。
 - 语义上下文与 provider 图片曾共用 `references`，导致 Creative Direction 文字被送入图片 provider。当前三种 provider 引用由冻结位置明确区分，旧 payload 不兼容。
 - 通用媒体 Task 曾在提交后没有 pending Resource，Canvas 只能等终态或刷新；随后 SSE 失效又只命中一个 episode key。当前提交事务预留 Resource，Project 级失效覆盖所有 episode 参数变体，UI 仍只重读正式 View。

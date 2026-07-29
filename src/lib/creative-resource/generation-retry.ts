@@ -8,9 +8,13 @@ import {
   type CreativeResourceGenerationTaskPayload,
 } from './generation-contract'
 
-const originalGenerationInputIdentitySchema = z.object({
+const initialGenerationInputIdentitySchema = z.object({
   request: z.object({
-    kind: z.literal('new'),
+    // Every non-retry request kind is an initial generation entry owned by
+    // the same Operation. This includes server-expanded batch inputs such as
+    // video prompt sets and manifest assets. Retry is the only request kind
+    // that reuses an existing Resource identity.
+    kind: z.string().trim().min(1).refine((kind) => kind !== 'retry'),
   }).passthrough(),
 }).passthrough()
 
@@ -51,7 +55,7 @@ function retryError(code: string, resourceId: string): ApiError {
  * Resolves the immutable execution input for an explicit Resource retry.
  *
  * The original Task is selected by semantic identity (same target and a
- * persisted OperationPlan input with `request.kind=new`), never by row order.
+ * persisted non-retry OperationPlan input), never by row order.
  * A retry cannot provide or reinterpret any creative/provider fields.
  */
 export async function loadCreativeResourceRetryCandidates(params: {
@@ -131,7 +135,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
   for (const task of candidateTasks) {
     if (
       task.status !== 'failed'
-      || !originalGenerationInputIdentitySchema.safeParse(
+      || !initialGenerationInputIdentitySchema.safeParse(
         task.operationExecution?.planSnapshot.normalizedInput,
       ).success
     ) {

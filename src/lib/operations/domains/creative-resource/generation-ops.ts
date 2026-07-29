@@ -272,22 +272,12 @@ const createVideoNewRequestBaseShape = {
     .describe('Whether the configured video generation capability should generate synchronized native audio.'),
 } as const
 
-const createVideoWithoutAudioReferencesRequestSchema = z.object({
+const createVideoNewRequestSchema = z.object({
   ...createVideoNewRequestBaseShape,
   imageReferences: videoImageReferenceSchema,
+  audioReferences: z.array(creativeResourceInputRefSchema).min(1).max(3).optional()
+    .describe('Optional ready audio Resources sent to the configured video model. When present, imageReferences must also be present and cannot use first_frame or last_frame roles.'),
 }).strict()
-
-const createVideoWithAudioReferencesRequestSchema = z.object({
-  ...createVideoNewRequestBaseShape,
-  imageReferences: z.array(videoAudioCompatibleImageReferenceSchema).min(1).max(8)
-    .describe('At least one image reference is required when audioReferences are present.'),
-  audioReferences: z.array(creativeResourceInputRefSchema).min(1).max(3),
-}).strict()
-
-const createVideoNewRequestSchema = z.union([
-  createVideoWithoutAudioReferencesRequestSchema,
-  createVideoWithAudioReferencesRequestSchema,
-])
 
 const createVideoPromptSetRequestSchema = z.object({
   kind: z.literal('prompt_set'),

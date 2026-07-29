@@ -228,6 +228,28 @@ describe('project agent toolset conformance', () => {
         },
       },
       {
+        operationId: 'create_video',
+        input: {
+          request: {
+            kind: 'new',
+            name: 'Opening retry replacement',
+            prompt: 'A presenter raises a handwritten card in a paper-cut studio.',
+            contextReferences: null,
+            count: 1,
+            imageReferences: [{
+              resourceId: 'r_AAAAAAAAAAAAAAAAAAAAAA',
+              role: 'character',
+            }],
+            audioReferences: null,
+            schemaId: 'generic.video',
+            durationSeconds: 10,
+            aspectRatio: '16:9',
+            resolution: null,
+            generateAudio: true,
+          },
+        },
+      },
+      {
         operationId: 'delegate_creative_work',
         input: {
           delegation: {
@@ -565,10 +587,8 @@ describe('project agent toolset conformance', () => {
       registry.create_video.toolInputSchema.properties.request,
       'kind',
     ).filter((branch) => readRecord(readRecord(branch.properties).kind).const === 'new')
-    expect(videoNewBranches).toHaveLength(2)
-    expect(videoNewBranches.some((branch) => (
-      Object.keys(readRecord(branch.properties)).includes('audioReferences')
-    ))).toBe(true)
+    expect(videoNewBranches).toHaveLength(1)
+    expect(Object.keys(readRecord(videoNewBranches[0]?.properties))).toContain('audioReferences')
     for (const branch of videoNewBranches) {
       const videoNewProperties = readRecord(branch.properties)
       expect(Object.keys(videoNewProperties)).toContain('imageReferences')

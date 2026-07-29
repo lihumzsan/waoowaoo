@@ -102,6 +102,16 @@ function schemaMatchesDiscriminator(value: unknown, schema: JsonValue): boolean 
   if (Object.prototype.hasOwnProperty.call(schema, 'const')) return value === schema.const
   if (!isRecord(value)) return true
   const properties = readProperties(schema)
+  const required = readStringArray(schema.required)
+  if (required.some((key) => !Object.prototype.hasOwnProperty.call(value, key))) {
+    return false
+  }
+  if (
+    schema.additionalProperties === false
+    && Object.keys(value).some((key) => !Object.prototype.hasOwnProperty.call(properties, key))
+  ) {
+    return false
+  }
   for (const [key, propertySchema] of Object.entries(properties)) {
     if (!isRecord(propertySchema) || !Object.prototype.hasOwnProperty.call(propertySchema, 'const')) continue
     if (!Object.prototype.hasOwnProperty.call(value, key)) continue

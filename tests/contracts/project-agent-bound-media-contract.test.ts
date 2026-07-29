@@ -36,6 +36,7 @@ import {
   resolveBuiltinCapabilitiesByModelKey,
 } from '@/lib/ai-registry/capabilities-catalog'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
+import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
 import {
   createProjectAgentToolCatalog,
   createProjectAgentToolDiscoveryState,
@@ -142,6 +143,13 @@ describe('project agent bound media contract conformance', () => {
       },
     }
     expect(validate(legal), JSON.stringify(validate.errors)).toBe(true)
+    const operation = createProjectAgentOperationRegistry().create_video
+    const normalized = normalizeProjectAgentToolInput({
+      input: legal,
+      inputSchema: operation.inputSchema,
+      toolInputSchema: contract.parameters,
+    })
+    expect(operation.inputSchema.safeParse(normalized).success).toBe(true)
     expect(validate({
       request: {
         kind: 'prompt_set',
