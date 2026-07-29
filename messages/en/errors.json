@@ -71,5 +71,12 @@
         "requestIdLabel": "Error ID",
         "copy": "Copy",
         "copied": "Copied"
-    }
+    },
+    "PROJECT_AGENT_RUN_ACTIVE": "The assistant is still processing the previous action, so this message was not sent. Wait for it to finish and try again.",
+    "PROJECT_AGENT_CONTROL_ALREADY_RESOLVED": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
+    "PROJECT_AGENT_INTERRUPTION_NOT_PENDING": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
+    "PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
+    "PROJECT_AGENT_CHOICE_OFFER_STALE": "This confirmation was already handled by a newer action. The latest status has been refreshed.",
+    "PROJECT_ASSISTANT_CARD_RESPONSE_FAILED": "Card response failed. Retry the card action.",
+    "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "Background follow-up was interrupted. Refresh status or retry the current step."
 }

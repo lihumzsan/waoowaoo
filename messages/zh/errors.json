@@ -71,5 +71,12 @@
         "requestIdLabel": "错误编号",
         "copy": "复制",
         "copied": "已复制"
-    }
+    },
+    "PROJECT_AGENT_RUN_ACTIVE": "助手正在处理上一个操作，这条消息没有发出去。请等当前处理完成后重试。",
+    "PROJECT_AGENT_CONTROL_ALREADY_RESOLVED": "该确认已由更新的操作处理，已为你同步最新状态。",
+    "PROJECT_AGENT_INTERRUPTION_NOT_PENDING": "该确认已由更新的操作处理，已为你同步最新状态。",
+    "PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING": "该确认已由更新的操作处理，已为你同步最新状态。",
+    "PROJECT_AGENT_CHOICE_OFFER_STALE": "该确认已由更新的操作处理，已为你同步最新状态。",
+    "PROJECT_ASSISTANT_CARD_RESPONSE_FAILED": "卡片响应提交失败，请重试该卡片操作。",
+    "PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED": "后台任务跟进中断，请刷新状态或重试当前步骤。"
 }

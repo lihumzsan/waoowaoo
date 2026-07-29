@@ -52,7 +52,7 @@ import { normalizeProjectAgentLocale } from './locale'
 import { readAssistantBillingConfirmationRequired } from './billing-confirmation'
 import { stableArgsHash } from './stable-args-hash'
 import { recordUsageFact } from '@/lib/billing/reporting'
-import { describeUnknownError } from '@/lib/errors/normalize'
+import { describeUnknownError, normalizeAnyError } from '@/lib/errors/normalize'
 import {
   buildProjectAgentContextComposition,
   buildProjectAgentContextTelemetry,
@@ -2117,16 +2117,25 @@ export async function createProjectAgentChatResponse(input: {
         const clientDisconnect = readProjectAgentClientDisconnect(runAbortController.signal)
         const effectiveError = ownershipLoss ?? clientDisconnect ?? error
         const errorMessage = describeUnknownError(effectiveError)
+        // The failure reason is classified by the shared normalizer, so the run
+        // record carries the same canonical code the rest of the app uses and
+        // the panel can render its existing localized text (rate limit, network,
+        // balance, …) instead of a generic sentence.
+        const normalized = normalizeAnyError(effectiveError, { context: 'api' })
         projectAgentLogger.error({
           action: 'assistant.agents.stream.failed',
           message: 'Project agent UI message stream failed',
           requestId,
           projectId: input.projectId,
           userId: input.userId,
+          errorCode: normalized.code,
+          retryable: normalized.retryable,
+          failureClass: normalized.failureClass,
           details: {
             runId: input.run.id,
             episodeId: context.episodeId || null,
             error: errorMessage,
+            provider: normalized.provider ?? null,
             runtimeFacts,
             stopReason: latestStopPart?.reason ?? null,
             runStatusFinalized,
@@ -2145,7 +2154,7 @@ export async function createProjectAgentChatResponse(input: {
           ownershipLoss,
           clientDisconnect,
           stopReason: 'stream_error',
-          errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+          errorCode: normalized.code,
           errorMessage,
         })
         pendingRunSettlement = failureTerminal
@@ -2227,8 +2236,8 @@ export async function createProjectAgentChatResponse(input: {
           ownershipLoss,
           clientDisconnect,
           stopReason: 'run_failed',
-          errorCode: 'PROJECT_AGENT_RUN_FAILED',
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorCode: normalizeAnyError(error, { context: 'api' }).code,
+          errorMessage: describeUnknownError(error),
         })
         await settleRunObservabilityOnce?.({
           status: terminal.status,

@@ -7,11 +7,16 @@ import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
 import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
-import { isWorkspaceAssistantStaleControlErrorText } from './workspace-assistant-runtime-state'
+import type { WorkspaceAssistantFailureView } from './workspace-assistant-panel-state'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
-  readonly error: string | null
+  /**
+   * Already-resolved failure view. A failed send must be unmissable: the user's
+   * message bubble stays in the thread without a reply, so the panel resolves
+   * the real reason once and the composer only renders it.
+   */
+  readonly error: WorkspaceAssistantFailureView | null
   readonly pending: boolean
   readonly canStopReply: boolean
   readonly attachments: readonly ProjectAssistantTextAttachment[]
@@ -26,28 +31,6 @@ interface WorkspaceAssistantComposerProps {
   readonly onRemoveAttachment: (attachmentId: string) => void
   readonly onRemoveMediaAttachment?: (resourceId: string) => void
   readonly onPasteMediaFiles?: (files: readonly File[]) => void
-}
-
-/**
- * Maps raw send-failure payloads (API error JSON, transport errors) to a
- * user-readable explanation. A failed send must be unmissable: the user's
- * message bubble stays in the thread without a reply, so a silent or truncated
- * error reads as "the assistant died".
- */
-function isInsufficientBalanceErrorText(error: string): boolean {
-  const normalized = error.toUpperCase()
-  return normalized.includes('INSUFFICIENT_BALANCE') || normalized.includes('INSUFFICIENT_CREDITS')
-}
-
-function resolveComposerErrorMessageKey(
-  error: string,
-): 'panel.cardAlreadyResolved' | 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.cardResponseErrorGeneric' | 'panel.backgroundFollowUpErrorGeneric' | 'panel.sendErrorGeneric' {
-  if (isWorkspaceAssistantStaleControlErrorText(error)) return 'panel.cardAlreadyResolved'
-  if (error.includes('PROJECT_AGENT_RUN_ACTIVE')) return 'panel.sendErrorBusy'
-  if (isInsufficientBalanceErrorText(error)) return 'panel.sendErrorInsufficientBalance'
-  if (error.includes('PROJECT_ASSISTANT_CARD_RESPONSE_FAILED')) return 'panel.cardResponseErrorGeneric'
-  if (error.includes('PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED')) return 'panel.backgroundFollowUpErrorGeneric'
-  return 'panel.sendErrorGeneric'
 }
 
 export function WorkspaceAssistantComposer({
@@ -149,25 +132,21 @@ export function WorkspaceAssistantComposer({
           )}
         </div>
       </div>
-      {error ? (() => {
-        const errorKey = resolveComposerErrorMessageKey(error)
-        // "Already handled" is an informative outcome, not a failure: show the
-        // localized notice without the raw protocol detail.
-        const isCalmNotice = errorKey === 'panel.cardAlreadyResolved'
-        return (
-          <div
-            role={isCalmNotice ? 'status' : 'alert'}
-            className={isCalmNotice
-              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
-              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'}
-          >
-            <p className="font-medium">{t(errorKey)}</p>
-            {isCalmNotice ? null : (
-              <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error}</p>
-            )}
-          </div>
-        )
-      })() : null}
+      {error ? (
+        <div
+          role={error.tone === 'info' ? 'status' : 'alert'}
+          className={error.tone === 'info'
+            ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
+            : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'}
+        >
+          <p className="font-medium">{error.headline}</p>
+          {/* "Already handled" is an informative outcome: the protocol detail
+              would only add noise to a state the user cannot act on. */}
+          {error.tone === 'info' || !error.technical ? null : (
+            <p className="mt-0.5 break-all text-xs leading-4 opacity-75">{error.technical}</p>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

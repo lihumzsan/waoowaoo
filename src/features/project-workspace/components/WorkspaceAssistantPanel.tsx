@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
@@ -54,10 +54,12 @@ import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useW
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import {
-  resolveWorkspaceAssistantRunFailureDetail,
+  parseWorkspaceAssistantFailureText,
+  resolveWorkspaceAssistantFailureView,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldShowWorkspaceAssistantReplyLoading,
   shouldShowWorkspaceAssistantRunFailureNotice,
+  type WorkspaceAssistantFailureView,
 } from './workspace-assistant/workspace-assistant-panel-state'
 
 interface WorkspaceAssistantPanelProps {
@@ -80,17 +82,11 @@ export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
 } satisfies CSSProperties
 
 function WorkspaceAssistantRunFailureNotice({
-  run,
+  failure,
 }: {
-  run: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'errorCode' | 'errorMessage'> | null
+  failure: WorkspaceAssistantFailureView
 }) {
   const t = useTranslations('assistantAgent')
-  const tErrors = useTranslations('errors')
-  const errorCode = run?.errorCode?.trim() ?? ''
-  const detail = resolveWorkspaceAssistantRunFailureDetail({
-    localizedError: errorCode && tErrors.has(errorCode) ? tErrors(errorCode) : null,
-    fallback: t('panel.runFailedDetail'),
-  })
   return (
     <div
       role="alert"
@@ -99,7 +95,10 @@ function WorkspaceAssistantRunFailureNotice({
       <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0">
         <div className="font-semibold">{t('panel.runFailedTitle')}</div>
-        <div className="break-words text-xs leading-4 opacity-80">{detail}</div>
+        <div className="break-words text-xs leading-4 opacity-80">{failure.headline}</div>
+        {failure.technical ? (
+          <div className="mt-0.5 break-all text-[11px] leading-4 opacity-60">{failure.technical}</div>
+        ) : null}
       </div>
     </div>
   )
@@ -115,6 +114,7 @@ export default function WorkspaceAssistantPanel({
   onActiveOperationChange,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
   const locale = normalizeProjectAgentLocale(useLocale())
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
@@ -216,12 +216,31 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
   })
-  // The raw error string is passed through: Composer owns the localized
-  // classification (busy / balance / already-resolved / generic) and must see
-  // the original code to branch on it.
-  const composerError = showRunFailureNotice
+  // Both failure surfaces resolve through the same view resolver, so a run
+  // failure and a send failure explain themselves with the same canonical
+  // error catalogue instead of panel-local sentences.
+  const localizeErrorCode = useCallback(
+    (code: string) => (tErrors.has(code) ? tErrors(code) : null),
+    [tErrors],
+  )
+  const unknownFailureFallback = tErrors('INTERNAL_ERROR')
+  const currentRun = assistantRuntime.sessionState?.currentRun ?? null
+  const runFailureView = resolveWorkspaceAssistantFailureView({
+    facts: {
+      code: currentRun?.errorCode?.trim() || null,
+      message: currentRun?.errorMessage?.trim() || null,
+      requestId: null,
+    },
+    localizeCode: localizeErrorCode,
+    unknownFallback: unknownFailureFallback,
+  })
+  const composerFailureView = showRunFailureNotice || !assistantRuntime.error
     ? null
-    : assistantRuntime.error?.message ?? null
+    : resolveWorkspaceAssistantFailureView({
+      facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
+      localizeCode: localizeErrorCode,
+      unknownFallback: unknownFailureFallback,
+    })
 
   return (
     <aside
@@ -293,7 +312,7 @@ export default function WorkspaceAssistantPanel({
                           </div>
                         ) : null}
                         {showRunFailureNotice ? (
-                          <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />
+                          <WorkspaceAssistantRunFailureNotice failure={runFailureView} />
                         ) : null}
                         {showExternalTaskRunCard && activeExternalTaskOperationId && activeExternalTasks.length > 0 ? (
                           <WorkspaceAssistantActiveRunCard
@@ -348,7 +367,7 @@ export default function WorkspaceAssistantPanel({
                     ) : null}
                     <WorkspaceAssistantComposer
                       value={composer.text}
-                      error={composerError}
+                      error={composerFailureView}
                       pending={assistantRuntime.pending || assistantRuntime.storageLoading}
                       canStopReply={assistantRuntime.canStopReply}
                       attachments={composer.attachments}
