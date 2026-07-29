@@ -30,7 +30,9 @@ type AsyncPollResultFields = {
  * Providers that cannot distinguish the two omit the field; consumers must
  * treat an absent phase as `running` so the generation timeout budget applies.
  */
-export type AsyncPendingPhase = 'queued' | 'running'
+export const ASYNC_PENDING_PHASES = ['queued', 'running'] as const
+
+export type AsyncPendingPhase = (typeof ASYNC_PENDING_PHASES)[number]
 
 export type AsyncPollResult = AsyncPollResultFields & (
   | {
