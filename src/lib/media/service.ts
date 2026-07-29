@@ -157,7 +157,7 @@ export async function getMediaObjectById(id: string, client?: MediaClient) {
 }
 
 /**
- * 将任意媒体值（COS key / 签名URL / /m/publicId / 对象形态）归一化为 storageKey。
+ * 将任意媒体值（storage key / 签名 URL / /m/publicId / 对象形态）归一化为 storageKey。
  * 这是服务端写路径（保存、比较、删除）应使用的唯一入口。
  */
 export async function resolveStorageKeyFromMediaValue(value: unknown, client?: MediaClient): Promise<string | null> {
@@ -186,8 +186,8 @@ export function extractStorageKeyFromLegacyValue(value: unknown): string | null 
   if (typeof value !== 'string' || !value.trim()) return null
   if (value.startsWith('/m/')) return null
 
-  // Keep external URLs that are actually COS object URLs (path -> key).
-  if (isLikelyExternalUrl(value) || value.startsWith('/api/files/') || !value.startsWith('/')) {
+  // Keep external URLs that are actually configured storage object URLs (path -> key).
+  if (isLikelyExternalUrl(value) || !value.startsWith('/')) {
     return extractStorageKey(value)
   }
 

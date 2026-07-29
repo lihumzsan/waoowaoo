@@ -5,8 +5,8 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
-import { normalizeOwnedAudioToBase64ForGeneration } from '@/lib/media/outbound-audio'
-import { normalizeOwnedImageToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { resolveOwnedAudioHttpsForGeneration } from '@/lib/media/outbound-audio'
+import { resolveOwnedImageHttpsForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import type { TaskJobData } from '@/lib/task/types'
@@ -14,7 +14,7 @@ import { reportTaskProgress } from '@/lib/workers/shared'
 import { resolveVideoDownloadHeaders } from '@/lib/workers/video-download'
 import {
   resolveVideoSourceFromGeneration,
-  uploadVideoSourceToCos,
+  uploadVideoSourceToStorage,
 } from '@/lib/workers/utils'
 
 async function loadVideoImageReferences(
@@ -52,7 +52,7 @@ async function loadVideoImageReferences(
       ? reference.role
       : 'reference'
     return {
-      url: await normalizeOwnedImageToBase64ForGeneration(resource.media.storageKey, job.data.userId),
+      url: await resolveOwnedImageHttpsForGeneration(resource.media.storageKey, job.data.userId),
       role,
       order: index + 1,
       source: 'generated' as const,
@@ -91,7 +91,7 @@ export async function loadVideoAudioReferences(
     if (resource.mediaType !== 'audio' || !resource.media?.storageKey) {
       throw new Error(`CREATIVE_RESOURCE_VIDEO_AUDIO_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return await normalizeOwnedAudioToBase64ForGeneration(resource.media.storageKey, userId)
+    return await resolveOwnedAudioHttpsForGeneration(resource.media.storageKey, userId)
   }))
 }
 
@@ -160,7 +160,7 @@ export async function handleCreativeResourceVideoTask(job: Job<TaskJobData>) {
     generated.downloadHeaders,
   )
   await reportTaskProgress(job, 90, { stage: 'creative_resource_persist' })
-  const storageKey = await uploadVideoSourceToCos(
+  const storageKey = await uploadVideoSourceToStorage(
     generated.url,
     'creative-resource',
     payload.resource.resourceId,

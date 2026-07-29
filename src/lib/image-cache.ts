@@ -159,7 +159,7 @@ export async function preloadImagesParallel(
 ): Promise<string[]> {
     const { logPrefix = '[批量预加载]' } = options
 
-    // 去重（支持 http URL 和本地相对路径 /api/files/...）
+    // 去重（支持 HTTP(S) URL 和应用内相对 API 路径）
     const uniqueUrls = [...new Set(imageUrls.filter(url => url && (url.startsWith('http') || url.startsWith('/'))))]
 
     if (uniqueUrls.length === 0) {

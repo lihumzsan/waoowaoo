@@ -7,8 +7,9 @@ import {
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
+import { resolveOwnedVideoHttpsForGeneration } from '@/lib/media/outbound-video'
 import { prisma } from '@/lib/prisma'
-import { getSignedUrl, uploadObject } from '@/lib/storage'
+import { uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
@@ -59,7 +60,7 @@ async function loadMusicVideoReference(
     throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.resourceId}`)
   }
   return {
-    url: await getSignedUrl(resource.media.storageKey, 3600),
+    url: await resolveOwnedVideoHttpsForGeneration(resource.media.storageKey, job.data.userId),
     durationMs: resource.media.durationMs ?? null,
   }
 }

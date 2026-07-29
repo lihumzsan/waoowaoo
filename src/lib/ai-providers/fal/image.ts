@@ -1,6 +1,5 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
@@ -90,7 +89,6 @@ export async function executeFalImageGeneration(input: AiProviderImageExecutionC
       hasReferenceImages,
       resolution: resolution ?? null,
       aspectRatio: aspectRatio ?? null,
-      referenceImageUrls: referenceImages.map((u) => u.substring(0, 100)),
     },
   })
 
@@ -102,15 +100,11 @@ export async function executeFalImageGeneration(input: AiProviderImageExecutionC
   })
 
   if (hasReferenceImages) {
-    const dataUrls = await Promise.all(
-      referenceImages.map(async (url) => (url.startsWith('data:') ? url : await normalizeToBase64ForGeneration(url))),
-    )
-    body.image_urls = dataUrls
+    body.image_urls = referenceImages
     logger.info({
-      message: 'FAL image reference images converted',
+      message: 'FAL image HTTPS references attached',
       details: {
         count: referenceImages.length,
-        sizes: dataUrls.map((d) => `${Math.round(d.length / 1024)}KB`),
       },
     })
   }

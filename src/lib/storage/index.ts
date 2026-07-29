@@ -1,7 +1,13 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
-import { createStorageProvider } from '@/lib/storage/factory'
-import type { DeleteObjectsResult, GetObjectStreamParams, ObjectStreamResult, StorageProvider } from '@/lib/storage/types'
+import { S3StorageProvider } from '@/lib/storage/providers/s3'
+import type {
+  DeleteObjectsResult,
+  GetObjectStreamParams,
+  ObjectMetadata,
+  ObjectStreamResult,
+  StorageProvider,
+} from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
 
@@ -14,14 +20,10 @@ let providerSingleton: StorageProvider | null = null
 
 export function getStorageProvider(): StorageProvider {
   if (!providerSingleton) {
-    providerSingleton = createStorageProvider()
+    providerSingleton = new S3StorageProvider()
     storageLogger.info(`[Storage] provider initialized: ${providerSingleton.kind}`)
   }
   return providerSingleton
-}
-
-export function getStorageType(): string {
-  return getStorageProvider().kind
 }
 
 export function toFetchableUrl(inputUrl: string): string {
@@ -70,6 +72,10 @@ export async function getObjectBuffer(key: string): Promise<Buffer> {
   return await getStorageProvider().getObjectBuffer(key)
 }
 
+export async function getObjectMetadata(key: string): Promise<ObjectMetadata> {
+  return await getStorageProvider().getObjectMetadata(key)
+}
+
 export async function getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult> {
   return await getStorageProvider().getObjectStream(params)
 }
@@ -82,11 +88,6 @@ export async function getSignedObjectUrl(key: string, expiresInSeconds: number =
 }
 
 export function getSignedUrl(key: string, expiresInSeconds: number = DEFAULT_SIGNED_URL_EXPIRES_SECONDS): string {
-  const provider = getStorageProvider()
-  if (provider.kind === 'local') {
-    return `/api/files/${encodeURIComponent(key)}`
-  }
-
   return `/api/storage/sign?key=${encodeURIComponent(key)}&expires=${encodeURIComponent(String(expiresInSeconds))}`
 }
 
@@ -154,7 +155,8 @@ export async function downloadAndUploadVideo(
       }
 
       const buffer = await readResponseBufferWithLimit(response, MAX_VIDEO_BYTES, 'storage video download')
-      return await uploadObject(buffer, key, 1)
+      const contentType = response.headers.get('content-type')?.split(';')[0]?.trim() || 'video/mp4'
+      return await uploadObject(buffer, key, 1, contentType)
     },
   })
 }

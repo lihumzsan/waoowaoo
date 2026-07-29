@@ -1,7 +1,6 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderImageExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
@@ -156,14 +155,6 @@ export async function executeArkImageGeneration(input: AiProviderImageExecutionC
     })()
 
   const referenceImages = options.referenceImages ?? []
-  const base64Images: string[] = []
-  for (const imageUrl of referenceImages) {
-    try {
-      base64Images.push(await normalizeToBase64ForGeneration(imageUrl))
-    } catch {
-      _ulogInfo(`[ARK Image] 参考图片转换失败: ${imageUrl}`)
-    }
-  }
 
   const arkData = await arkImageGeneration({
     model: modelId,
@@ -173,7 +164,7 @@ export async function executeArkImageGeneration(input: AiProviderImageExecutionC
     stream: false,
     watermark: false,
     ...(size ? { size } : {}),
-    ...(base64Images.length > 0 ? { image: base64Images } : {}),
+    ...(referenceImages.length > 0 ? { image: referenceImages } : {}),
   }, { apiKey, logPrefix: '[ARK Image]' })
 
   const imageUrls = Array.isArray(arkData.data)

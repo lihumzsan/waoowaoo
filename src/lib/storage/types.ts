@@ -1,5 +1,3 @@
-export type StorageType = 'minio' | 'local'
-
 export interface UploadObjectParams {
   key: string
   body: Buffer
@@ -25,6 +23,11 @@ export interface GetObjectStreamParams {
   range?: string | null
 }
 
+export interface ObjectMetadata {
+  contentType: string | null
+  contentLength: number | null
+}
+
 export interface ObjectStreamResult {
   body: ReadableStream<Uint8Array>
   contentType: string | null
@@ -35,18 +38,16 @@ export interface ObjectStreamResult {
 }
 
 export interface StorageProvider {
-  readonly kind: StorageType
+  readonly kind: 's3'
+  verifyReady(): Promise<void>
   uploadObject(params: UploadObjectParams): Promise<UploadObjectResult>
   deleteObject(key: string): Promise<void>
   deleteObjects(keys: string[]): Promise<DeleteObjectsResult>
   getSignedObjectUrl(params: SignedUrlParams): Promise<string>
   getObjectBuffer(key: string): Promise<Buffer>
+  getObjectMetadata(key: string): Promise<ObjectMetadata>
   getObjectStream(params: GetObjectStreamParams): Promise<ObjectStreamResult>
   extractStorageKey(input: string | null | undefined): string | null
   toFetchableUrl(inputUrl: string): string
   generateUniqueKey(params: { prefix: string; ext: string }): string
-}
-
-export interface StorageFactoryOptions {
-  storageType?: string
 }

@@ -19,6 +19,7 @@
 - **PS-09 — 认证防线与部署配置失败关闭。** 注册、初次设置和修改密码必须共同复用唯一密码策略，当前最小长度为 8 位；不得由页面、route 或运维写入绕过。登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后从右侧可信代理链解析客户端 IP；无法验证来源使用共享桶，Redis 不可用时拒绝认证尝试。cloud preflight 必须显式区分本地开发与正式部署：本地只允许 loopback HTTP、无代理或明确的非负代理跳数，以及仅 loopback 暴露的无认证 Bull Board；正式部署必须拒绝缺失、弱密钥、非 HTTPS 公网地址和未知代理拓扑。Compose 不得提供可用的默认密码或把基础设施默认绑定到公网。
 - **PS-10 — 首页初始化是一个原子构造。** 首页已展示并保存的画面比例不再触发模型 Choice；“开始创作”只能通过 `create_project` 的一个事务创建 Project、写入该显式比例并创建首 Episode。任一步失败必须全部回滚，浏览器不得用 create → config PATCH → episode POST 拼出半初始化项目。其他没有比例的合法入口仍保留 `videoRatio=null`，真正需要媒体执行时由 Primary 发起通用 Choice，并且只提交当前比例决定。
 - **PS-11 — 认证入口与账号初始化唯一。** 产品只有一个登录/注册页面；受信身份已存在时登录，不存在时在同一次认证动作中创建 `User` 与 `UserBalance`。所有认证方式必须复用 `src/lib/auth/account-onboarding.ts` 这一账号初始化 writer。Cloud 只注册手机号与 Google provider，密码 provider、独立注册 route、密码设置 API 必须同时关闭；self-hosted 只注册用户名密码 provider。个人资料可见性不能等同于密码能力：Cloud 仍须允许已登录用户修改非身份显示名称并主动绑定 Google，密码写入则必须继续由 `enablePasswordAuth` 独立失败关闭。手机号 canonical identity 是归一化 E.164，并由 `Account(provider="phone", providerAccountId)` 唯一键持久化；修改 `User.name` 不得改写这一登录 identity。短信验证码只在 Redis 中保存带 TTL 的 HMAC，发送、失败补偿、尝试计数与一次性消费由 `phone-verification.ts` 唯一裁决；发送短信前的图形挑战由 `image-captcha.ts` 生成、绑定可信客户端来源并一次性消费，Redis 或挑战状态不可判定时失败关闭。页面倒计时不承担安全或终态正确性。
+- **PS-12 — 对象存储是必需外部基础设施。** Cloud、self-hosted 与本地开发共用一个预建 S3-compatible bucket；`S3_ENDPOINT` 必须是公网 HTTPS，启动必须在应用/worker 前严格解析配置并完成 HeadBucket。Compose 只编排 MySQL、Redis 与应用，不捆绑 MinIO；启动不得创建桶、回退本地目录、启用 tunnel 或按 deployment edition 选择第二存储协议。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
 
 ## 权威入口
 
@@ -27,7 +28,7 @@
 - 部署能力：`src/lib/deployment/config.ts`、`src/lib/deployment/features.ts`、`/api/deployment`；用户 Provider 配置后端能力统一由 `src/lib/user-api/availability.ts` 裁决。
 - 注册/登录和资源 owner：`src/lib/auth/account-onboarding.ts`、`src/lib/auth/password-auth.ts`、`src/lib/auth/phone-verification.ts`、`src/lib/auth/image-captcha.ts`、生产 auth routes、NextAuth session 与项目鉴权 service。
 - API session、管理员权限和错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/api-errors.ts`。
-- 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/bull-board.ts` 与 `next.config.ts`。
+- 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/bull-board.ts`、`src/lib/storage/{s3-config,bootstrap,init}.ts` 与 `next.config.ts`。
 - 首页 Project 构造：`create_project` Operation；Episode 行锁与编号由 `src/lib/projects/episode-service.ts` 统一写入，比例初始值和后续 `update_project_config` 共同复用 `video-ratio-write.ts` 的唯一事实 writer。
 
 ## 验证
@@ -40,6 +41,7 @@
 - 匿名 route 必须显式枚举；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
 - 自由组合 Golden 从真实首页证明 Project、16:9 和首 Episode 同时存在且没有比例 Choice；缺少比例的非首页入口则证明模型通用 Choice 仍可恢复当前媒体请求。
 - `tests/unit/auth/rate-limit-client-ip.test.ts` 反证伪造 X-Forwarded-For 绕过；`docker compose config` 与 cloud env preflight 分别验证自托管、cloud 启动契约。
+- 对象存储启动契约以 `docker compose config --quiet` 和实际目标环境的 `npm run storage:init` 复验；没有真实目标桶时只能验证配置解析，不能宣称 Provider 已可下载签名对象。
 
 ## 历史回归
 
@@ -50,7 +52,7 @@
 - 权限 Journey 发现外部用户读取 Project 已返回 403 后，页面仍把空 episodes 当作合法零状态并自动创建第一集；自动初始化现在必须先证明权威 Project 已成功读取。
 - 大量旧测试没有经过真实英文页面、Navbar 和产品切换确认，因而从未观察到这个组合错误。
 - 早期内部 LLM HTTP 代理删除后，固定 `INTERNAL_TASK_TOKEN + x-user-id` 身份旁路仍残留在通用 auth helper，且普通用户可下载全局日志；路由级项目鉴权与 UI 隐藏没有覆盖这两个非项目入口。当前删除内部 token 协议、代理 handler 与 callback，用户 API 只接受 session id，日志 route 复用管理员裁决，5xx 响应不再回传内部错误详情。Golden auth/permission 继续验证真实会话；运维身份的独立部署验证仍是未覆盖盲区。
-- 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。当前所有密钥必须显式注入，基础设施与应用端口默认只绑定 loopback，Redis 启用认证，Bull Board 在生产或非 loopback 时强制完整凭据，容器以 Node 22 构建并在入口完成数据目录权限后降权到 `node`。既有部署升级前需同步 `.env`，真实反向代理/TLS 组合仍需在目标环境复验。
+- 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。第一轮只把 MinIO 密钥改为显式配置，仍让本地文件、内网 MinIO 与公网对象存储成为三种部署/Provider 组合。当前 Compose 只编排 MySQL、Redis 和应用，所有环境必须显式配置同一外部 HTTPS S3-compatible bucket；storage startup 只验证预建桶，不创建基础设施或回退。既有 local/MinIO 数据必须由部署者在升级前迁移，本次没有执行数据复制；真实目标云的权限、域名和 Provider 可达性仍需在目标环境复验。
 - 代理信任改为显式配置后，真实权限 Journey 在无可信代理的本地部署连续创建多个测试用户时触发了共享注册桶：原先每分钟 3 次的阈值会把同一 NAT/未知来源下的正常注册误判成攻击。注册桶调整为每分钟 10 次，仍由 Redis 原子滑窗限制批量滥用；登录继续保持更严格阈值，无法确认客户端来源时仍不信任来路 header，也不回退为无限制。
 - 安全部署加固曾把正式公网 cloud 的管理员、Bull Board 认证、HTTPS 和正数代理跳数要求无条件加入 `.env.cloud.local` preflight；结构检查和生产构建只证明规则足够严格，没有运行仍由同一入口驱动的本地 `dev:cloud`，导致没有管理员、反向代理或公网 Bull Board 的正常开发环境无法启动。当前保留一个 fail-closed 校验器，由 package script 显式选择 development 或 production profile；development 只放宽不存在的运维能力，公网 HTTP、半套 Bull Board 凭据、非 loopback 无认证暴露和非法代理值仍原地失败。
 - Cloud API 配置页面虽由 deployment feature 隐藏，共享的读取、写入和连接诊断 route 仍只校验登录，主 Agent registry 也继续暴露读写配置 Tool；正常生成因为 `platform-key` 忽略用户持久配置而未被改写，但隐藏 UI 并未关闭后端能力。当前 `providerCredentialMode` 同时派生 API 配置可见性和后端 availability，Cloud 在数据库或外部连接前统一拒绝，Agent 配置 Operation 改为 API-only；Self-hosted 的个人设置 writer 保持不变。

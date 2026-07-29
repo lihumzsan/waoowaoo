@@ -5,7 +5,7 @@ import { getInternalBaseUrl } from '@/lib/env'
 import { resolveMediaMimeType } from '@/lib/media/media-mime'
 import {
   OwnedMediaOutboundError,
-  readOwnedMediaForGeneration,
+  resolveOwnedMediaForGeneration,
 } from '@/lib/media/outbound-owned-media'
 import { isOutboundImageStorageKey } from '@/lib/media/storage-key'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
@@ -76,6 +76,11 @@ const logger = createScopedLogger({
 const NEXT_IMAGE_PATH = '/_next/image'
 const MAX_NEXT_IMAGE_UNWRAP_DEPTH = 6
 const SIGNED_URL_TTL_SECONDS = 3600
+const SUPPORTED_PROVIDER_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
 
 let storageHelpersPromise: Promise<StorageHelpers> | null = null
 
@@ -542,29 +547,25 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
  * ownership decision used by the authenticated media routes. This avoids using
  * a browser session or a second internal-auth protocol for background work.
  */
-export async function normalizeOwnedImageToBase64ForGeneration(
+export async function resolveOwnedImageHttpsForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {
   const normalizedInput = normalizeInput(input)
   try {
-    const media = await readOwnedMediaForGeneration(normalizedInput, userId, {
+    const media = await resolveOwnedMediaForGeneration(normalizedInput, userId, {
       maxBytes: MAX_IMAGE_BYTES,
       label: 'owned outbound image',
+      supportedMimeTypes: SUPPORTED_PROVIDER_IMAGE_MIME_TYPES,
     })
-    const mimeType = guessContentType(
-      media.storageKey,
-      media.declaredContentType,
-      media.buffer,
-    )
-    return `data:${mimeType};base64,${media.buffer.toString('base64')}`
+    return media.url
   } catch (error) {
     if (error instanceof OwnedMediaOutboundError) {
       throw new OutboundImageNormalizeError({
         code: error.code === 'OWNED_MEDIA_UNSUPPORTED_INPUT'
           ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
           : 'OUTBOUND_IMAGE_FETCH_FAILED',
-        stage: 'normalize_base64',
+        stage: 'normalize_original',
         input: normalizedInput,
         message: error.message,
       })
@@ -579,13 +580,12 @@ function isOwnedStorageInputCandidate(input: string): boolean {
   const parsed = toUrlMaybe(unwrapped)
   if (!parsed) return false
   return parsed.pathname.startsWith('/m/')
-    || parsed.pathname.startsWith('/api/files/')
     || parsed.pathname === '/api/storage/sign'
 }
 
 async function normalizeReferenceForGeneration(input: string, ownerUserId?: string): Promise<string> {
   if (ownerUserId && isOwnedStorageInputCandidate(input)) {
-    return await normalizeOwnedImageToBase64ForGeneration(input, ownerUserId)
+    return await resolveOwnedImageHttpsForGeneration(input, ownerUserId)
   }
   return await normalizeToBase64ForGeneration(input)
 }

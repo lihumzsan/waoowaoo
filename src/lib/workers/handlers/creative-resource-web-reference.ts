@@ -7,7 +7,7 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
-import { uploadImageSourceToCos } from '@/lib/workers/utils'
+import { uploadImageSourceToStorage } from '@/lib/workers/utils'
 
 /**
  * Import one third-party web image into owned storage.
@@ -33,7 +33,7 @@ export async function handleCreativeResourceWebReferenceTask(job: Job<TaskJobDat
   )
 
   await reportTaskProgress(job, 70, { stage: 'creative_resource_persist' })
-  const storageKey = await uploadImageSourceToCos(
+  const storageKey = await uploadImageSourceToStorage(
     dataUrl,
     'web-reference',
     payload.resource.resourceId,

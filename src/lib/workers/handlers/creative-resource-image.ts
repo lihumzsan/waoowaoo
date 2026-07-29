@@ -3,7 +3,7 @@ import {
   parseCreativeResourceGenerationTaskPayload,
   type CreativeResourceGenerationTaskPayload,
 } from '@/lib/creative-resource/generation-contract'
-import { normalizeOwnedImageToBase64ForGeneration } from '@/lib/media/outbound-image'
+import { resolveOwnedImageHttpsForGeneration } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import type { TaskJobData } from '@/lib/task/types'
@@ -11,7 +11,7 @@ import { readTaskProviderInvocationRouteSelection } from '@/lib/task/provider-in
 import { reportTaskProgress } from '@/lib/workers/shared'
 import {
   resolveImageSourceFromGeneration,
-  uploadImageSourceToCos,
+  uploadImageSourceToStorage,
 } from '@/lib/workers/utils'
 
 async function loadImageReferences(
@@ -45,7 +45,7 @@ async function loadImageReferences(
     if (resource.mediaType !== 'image' || !resource.media?.storageKey) {
       throw new Error(`CREATIVE_RESOURCE_IMAGE_REFERENCE_REQUIRED:${reference.resourceId}`)
     }
-    return await normalizeOwnedImageToBase64ForGeneration(resource.media.storageKey, job.data.userId)
+    return await resolveOwnedImageHttpsForGeneration(resource.media.storageKey, job.data.userId)
   }))
 }
 
@@ -92,7 +92,7 @@ export async function handleCreativeResourceImageTask(job: Job<TaskJobData>) {
     throw new Error(`CREATIVE_RESOURCE_IMAGE_PROVIDER_ROUTE_MISSING:${job.data.taskId}`)
   }
   await reportTaskProgress(job, 90, { stage: 'creative_resource_persist' })
-  const storageKey = await uploadImageSourceToCos(source, 'creative-resource', payload.resource.resourceId, {
+  const storageKey = await uploadImageSourceToStorage(source, 'creative-resource', payload.resource.resourceId, {
     taskId: job.data.taskId,
     artifact: `creative-resource:${payload.resource.resourceId}`,
   })

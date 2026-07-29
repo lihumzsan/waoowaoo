@@ -3,7 +3,6 @@ import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime
 import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
 
@@ -424,7 +423,6 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   }
 
   const inputImageUrl = typeof input.imageUrl === 'string' ? input.imageUrl.trim() : ''
-  const imageBase64 = inputImageUrl ? await normalizeToBase64ForGeneration(inputImageUrl) : ''
   const referenceImageUrls = Array.isArray(input.options?.referenceImages)
     ? input.options.referenceImages.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
@@ -440,7 +438,7 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
     if (realModel !== 'doubao-seedance-2-0-260128' && realModel !== 'doubao-seedance-2-0-fast-260128') {
       throw new Error(`ARK_VIDEO_OPTION_UNSUPPORTED: referenceAudios for ${realModel}`)
     }
-    if (!imageBase64 && referenceImageUrls.length === 0) {
+    if (!inputImageUrl && referenceImageUrls.length === 0) {
       throw new Error('ARK_VIDEO_REFERENCE_AUDIO_REQUIRES_IMAGE')
     }
     if (lastFrameImageUrl) {
@@ -454,11 +452,10 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
   }
 
   if (lastFrameImageUrl) {
-    if (!imageBase64) throw new Error('ARK_VIDEO_LAST_FRAME_REQUIRES_FIRST_FRAME')
-    const lastImageBase64 = await normalizeToBase64ForGeneration(lastFrameImageUrl)
+    if (!inputImageUrl) throw new Error('ARK_VIDEO_LAST_FRAME_REQUIRES_FIRST_FRAME')
     for (const image of normalizeVideoReferenceImages([
-      { url: imageBase64, role: 'first_frame', order: 1 },
-      { url: lastImageBase64, role: 'last_frame', order: 2 },
+      { url: inputImageUrl, role: 'first_frame', order: 1 },
+      { url: lastFrameImageUrl, role: 'last_frame', order: 2 },
     ])) {
       const frameRole = image.role === 'last_frame' ? 'last_frame' : 'first_frame'
       content.push({
@@ -468,14 +465,9 @@ export async function executeArkVideoGeneration(input: AiProviderVideoExecutionC
       })
     }
   } else {
-    const normalizedReferenceImages: string[] = []
-    for (const referenceImageUrl of referenceImageUrls) {
-      const normalizedReferenceImage = await normalizeToBase64ForGeneration(referenceImageUrl)
-      normalizedReferenceImages.push(normalizedReferenceImage)
-    }
     appendArkReferenceImageContents(content, normalizeVideoReferenceImages([
-      ...(imageBase64 ? [{ url: imageBase64, role: 'reference' as const, order: 1 }] : []),
-      ...normalizedReferenceImages.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
+      ...(inputImageUrl ? [{ url: inputImageUrl, role: 'reference' as const, order: 1 }] : []),
+      ...referenceImageUrls.map((url, index) => ({ url, role: 'reference' as const, order: index + 2 })),
     ]).map((image) => image.url))
     for (const referenceAudioUrl of referenceAudioUrls) {
       content.push({

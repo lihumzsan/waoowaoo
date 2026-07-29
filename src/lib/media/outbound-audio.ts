@@ -1,5 +1,4 @@
-import { detectMimeFromBuffer, resolveMediaMimeType } from '@/lib/media/media-mime'
-import { readOwnedMediaForGeneration } from '@/lib/media/outbound-owned-media'
+import { resolveOwnedMediaForGeneration } from '@/lib/media/outbound-owned-media'
 
 const MAX_VIDEO_REFERENCE_AUDIO_BYTES = 15 * 1024 * 1024
 const SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES = new Set([
@@ -7,9 +6,7 @@ const SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES = new Set([
   'audio/wav',
 ])
 
-export type OutboundAudioNormalizeErrorCode =
-  | 'OUTBOUND_AUDIO_EMPTY_INPUT'
-  | 'OUTBOUND_AUDIO_FORMAT_UNSUPPORTED'
+export type OutboundAudioNormalizeErrorCode = 'OUTBOUND_AUDIO_EMPTY_INPUT'
 
 export class OutboundAudioNormalizeError extends Error {
   readonly code: OutboundAudioNormalizeErrorCode
@@ -33,7 +30,7 @@ function normalizeAudioMimeType(mimeType: string): string {
   return mimeType
 }
 
-export async function normalizeOwnedAudioToBase64ForGeneration(
+export async function resolveOwnedAudioHttpsForGeneration(
   input: string,
   userId: string,
 ): Promise<string> {
@@ -46,22 +43,11 @@ export async function normalizeOwnedAudioToBase64ForGeneration(
     })
   }
 
-  const media = await readOwnedMediaForGeneration(normalizedInput, userId, {
+  const media = await resolveOwnedMediaForGeneration(normalizedInput, userId, {
     maxBytes: MAX_VIDEO_REFERENCE_AUDIO_BYTES,
     label: 'owned outbound video reference audio',
+    supportedMimeTypes: SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES,
+    normalizeMimeType: normalizeAudioMimeType,
   })
-  const detectedMimeType = detectMimeFromBuffer(media.buffer)
-  const mimeType = normalizeAudioMimeType(
-    detectedMimeType
-      ?? resolveMediaMimeType(media.storageKey, media.declaredContentType, media.buffer),
-  )
-  if (!SUPPORTED_VIDEO_REFERENCE_AUDIO_MIME_TYPES.has(mimeType)) {
-    throw new OutboundAudioNormalizeError({
-      code: 'OUTBOUND_AUDIO_FORMAT_UNSUPPORTED',
-      mediaInput: normalizedInput,
-      message: `video reference audio must be MP3 or WAV, received ${mimeType}`,
-    })
-  }
-
-  return `data:${mimeType};base64,${media.buffer.toString('base64')}`
+  return media.url
 }

@@ -26,6 +26,11 @@ import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
+  assertImageMediaReferencesUseHttps,
+  assertMusicMediaReferencesUseHttps,
+  assertVideoMediaReferencesUseHttps,
+} from '@/lib/ai-exec/media-references'
+import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
   markTaskProviderInvocationRetryable,
@@ -140,6 +145,17 @@ export async function executeMediaGeneration(
   input: AiMediaExecutionInput,
   invocation?: TaskProviderInvocation,
 ): Promise<GenerateResult> {
+  if (input.modality === 'image') {
+    assertImageMediaReferencesUseHttps(input.options)
+  } else if (input.modality === 'video') {
+    assertVideoMediaReferencesUseHttps({
+      imageUrl: input.imageUrl,
+      options: input.options,
+    })
+  } else if (input.modality === 'music') {
+    assertMusicMediaReferencesUseHttps(input.options)
+  }
+
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
   _ulogInfo(`[ai-exec:${input.modality}] resolved model selection: ${selection.modelKey}`)
   const buildRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {

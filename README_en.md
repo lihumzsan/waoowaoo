@@ -43,6 +43,7 @@ cp .env.example .env
 
 # Edit .env: generate a distinct random value for every blank secret. Keep
 # MYSQL_PASSWORD in sync with DATABASE_URL and COMPOSE_DATABASE_URL (URL-encode special characters).
+# Also configure a pre-created S3-compatible bucket reachable over public HTTPS.
 
 # Start all services
 docker compose up -d
@@ -83,13 +84,13 @@ cd waoowaoo
 
 # Copy environment config (must be done before npm install)
 cp .env.example .env
-# ⚠️ Fill independent random values for database, Redis, MinIO, authentication,
-# encryption, and Bull Board secrets. MYSQL_PASSWORD must match both database URLs.
+# ⚠️ Configure database, Redis, external S3-compatible storage, authentication,
+# encryption, and Bull Board. MYSQL_PASSWORD must match both database URLs.
 
 npm install
 
-# Start infrastructure only
-docker compose up mysql redis minio -d
+# Start only the local database and queue. Media always uses the development S3 bucket in .env.
+docker compose up mysql redis -d
 
 # Push the Prisma schema
 npm run db:push
@@ -102,10 +103,17 @@ npm run dev
 
 Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!
 
-> The database is initialized automatically on first launch — no extra configuration needed.
+> Methods 1 and 2 initialize the database on first container launch; the external storage configuration and pre-created bucket are still required.
 
 > [!WARNING]
 > When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
+>
+> Pre-create the object-storage bucket and grant the configured credentials permission to check
+> the bucket and read, write, and delete objects. `S3_ENDPOINT` must be an HTTPS endpoint reachable
+> by external AI providers. Local development uses a development bucket too, so no ngrok,
+> cloudflared, local-file storage, or Docker MinIO is required. AWS S3, Cloudflare R2, Tencent COS,
+> and Alibaba OSS share the same `S3_*` configuration. GCS requires its XML API and HMAC credentials.
+> Azure Blob does not implement S3 and is not directly supported.
 >
 > Before applying async Task/Assistant lifecycle migrations, stop new submissions and workers, then run `npm run db:async-migration-preflight`. Proceed only when active Tasks, the retired parent Task type, pending Outbox commands, and non-terminal Runs/Waits are all zero. The check is read-only and never backfills legacy Tasks.
 

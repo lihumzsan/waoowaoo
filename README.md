@@ -49,7 +49,8 @@ curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/.env.example
 cp .env.example .env
 
 # 编辑 .env：为所有空白密钥生成独立随机值，并让 MYSQL_PASSWORD、
-# DATABASE_URL 与 COMPOSE_DATABASE_URL 中的密码保持一致（URL 中需编码特殊字符）
+# DATABASE_URL 与 COMPOSE_DATABASE_URL 中的密码保持一致（URL 中需编码特殊字符）。
+# 另外填写一个预先创建、可通过公网 HTTPS 访问的 S3-compatible 存储桶。
 
 # 启动所有服务
 docker compose up -d
@@ -90,15 +91,14 @@ cd waoowaoo
 
 # 复制环境变量配置文件（必须在 npm install 之前完成）
 cp .env.example .env
-# ⚠️ 编辑 .env，填写数据库、Redis、MinIO、认证、加密与 Bull Board 的独立随机密钥
+# ⚠️ 编辑 .env，填写数据库、Redis、外部 S3-compatible 存储、认证、加密与 Bull Board 配置
 # MYSQL_PASSWORD 必须与两个数据库 URL 中的密码一致
 
 npm install
 
-# 只启动基础设施
+# 只启动本地数据库和队列；媒体始终写入 .env 配置的开发对象存储桶
 # 注意：docker-compose.yml 将服务映射到非标准端口，.env.example 已按此预设
-mysql:13306  redis:16379  minio:19000
-docker compose up mysql redis minio -d
+docker compose up mysql redis -d
 
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
 npm run db:push
@@ -110,13 +110,19 @@ npm run dev
 > [!WARNING]
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
 >
+> 对象存储桶必须预先创建，并允许当前凭据执行 bucket 检查以及对象读、写、删操作。
+> `S3_ENDPOINT` 必须是外部 AI Provider 可访问的 HTTPS endpoint；本地开发同样使用开发桶，
+> 不需要 ngrok、cloudflared、本地文件存储或 Docker MinIO。AWS S3、Cloudflare R2、
+> 腾讯云 COS 与阿里云 OSS 只需切换同一组 `S3_*` 配置；GCS 需使用 XML API + HMAC 凭据。
+> Azure Blob 不是 S3 协议，本版本不直接支持。
+>
 > 升级异步任务/Assistant lifecycle migration 前，先停止新提交与 worker，并运行 `npm run db:async-migration-preflight`。只有 active Task、旧父任务、待交付 Outbox、非终态 Run/Wait 全部为 0 才能继续；该命令只读且不会回填旧任务。
 
 ---
 
 访问 [http://localhost:13000](http://localhost:13000)（方式一、二）或 [http://localhost:3000](http://localhost:3000)（方式三）开始使用！
 
-> 首次启动会自动完成数据库初始化，无需任何额外配置。
+> 方式一、二会在容器首次启动时初始化数据库；外部对象存储配置和预建桶仍必须提前准备。
 
 > [!TIP]
 > **如果遇到网页卡顿**：HTTP 模式下浏览器可能限制并发连接。可安装 [Caddy](https://caddyserver.com/docs/install) 启用 HTTPS：

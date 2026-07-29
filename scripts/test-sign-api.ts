@@ -14,7 +14,7 @@ async function testSignApi() {
   // 1. 上传测试文件
   console.log('1️⃣ 上传测试文件:')
   const testKey = `images/test-${randomUUID()}.txt`
-  const testContent = 'Hello from MinIO test!'
+  const testContent = 'Hello from S3-compatible storage verification!'
   
   await uploadObject(Buffer.from(testContent), testKey)
   console.log(`  ✅ 上传成功: ${testKey}`)

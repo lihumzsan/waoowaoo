@@ -30,7 +30,7 @@ function resolveContentType(ext: string): string {
 }
 
 /**
- * 处理媒体结果：下载 -> 上传 COS，返回 COS key。
+ * 处理媒体结果：下载并写入统一对象存储，返回 canonical storage key。
  */
 export async function processMediaResult(options: ProcessMediaOptions): Promise<string> {
   const { source, type, keyPrefix, targetId, downloadHeaders } = options

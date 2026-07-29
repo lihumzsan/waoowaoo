@@ -4,8 +4,6 @@ import { withLogContext } from '@/lib/logging/context'
 import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
 import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
-import { getSignedUrl } from '@/lib/storage'
-import { isMediaStorageKey } from '@/lib/media/storage-key'
 import { processMediaResult } from '@/lib/media-process'
 import {
   getProjectModelConfig,
@@ -676,7 +674,7 @@ export async function resolveVideoSourceFromGeneration(
   }
 }
 
-export async function uploadImageSourceToCos(
+export async function uploadImageSourceToStorage(
   source: string | Buffer,
   keyPrefix: string,
   targetId: string,
@@ -691,7 +689,7 @@ export async function uploadImageSourceToCos(
   })
 }
 
-export async function uploadVideoSourceToCos(
+export async function uploadVideoSourceToStorage(
   source: string | Buffer,
   keyPrefix: string,
   targetId: string,
@@ -706,28 +704,6 @@ export async function uploadVideoSourceToCos(
     downloadHeaders,
     taskArtifact,
   })
-}
-
-export async function uploadAudioSourceToCos(
-  source: string | Buffer,
-  keyPrefix: string,
-  targetId: string,
-  taskArtifact?: { taskId: string; artifact: string },
-) {
-  return await processMediaResult({
-    source,
-    type: 'audio',
-    keyPrefix,
-    targetId,
-    taskArtifact,
-  })
-}
-
-export function toSignedUrlIfCos(keyOrUrl: string | null | undefined, ttlSeconds = 3600) {
-  if (!keyOrUrl) return null
-  return isMediaStorageKey(keyOrUrl)
-    ? getSignedUrl(keyOrUrl, ttlSeconds)
-    : keyOrUrl
 }
 
 export async function getProjectModels(projectId: string, userId: string) {
