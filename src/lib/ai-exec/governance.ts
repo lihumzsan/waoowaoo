@@ -1,3 +1,5 @@
+import { createScopedLogger } from '@/lib/logging/core'
+
 type ConcurrencyScope = 'image' | 'video'
 
 interface GateState {
@@ -6,6 +8,15 @@ interface GateState {
 }
 
 const gateStateMap = new Map<string, GateState>()
+
+const logger = createScopedLogger({ module: 'ai-exec.governance' })
+
+const GATE_WAIT_HEARTBEAT_MS = 60_000
+
+type GateWaitLogContext = {
+  scope: ConcurrencyScope
+  userId: string
+}
 
 type ConcurrencyGateMode = 'memory' | 'redis'
 
@@ -42,7 +53,7 @@ function cleanupGateStateIfIdle(key: string) {
   }
 }
 
-async function acquireConcurrencySlot(key: string, limit: number): Promise<void> {
+async function acquireConcurrencySlot(key: string, limit: number, waitContext: GateWaitLogContext): Promise<void> {
   if (!Number.isInteger(limit) || limit <= 0) {
     throw new Error(`WORKFLOW_CONCURRENCY_INVALID: ${limit}`)
   }
@@ -53,8 +64,37 @@ async function acquireConcurrencySlot(key: string, limit: number): Promise<void>
     return
   }
 
-  await new Promise<void>((resolve) => {
-    state.waitingResolvers.push(resolve)
+  const waitStartedAt = Date.now()
+  logger.info({
+    action: 'concurrency.gate.wait.started',
+    message: 'concurrency gate saturated; waiting for a slot',
+    userId: waitContext.userId,
+    details: { mode: 'memory', scope: waitContext.scope, limit, queued: state.waitingResolvers.length },
+  })
+  // Observability only: a leaked slot would otherwise block this waiter forever
+  // with zero log output. The interval never times the wait out.
+  const heartbeat = setInterval(() => {
+    logger.warn({
+      action: 'concurrency.gate.wait.heartbeat',
+      message: 'concurrency gate wait still blocked',
+      userId: waitContext.userId,
+      durationMs: Date.now() - waitStartedAt,
+      details: { mode: 'memory', scope: waitContext.scope, limit },
+    })
+  }, GATE_WAIT_HEARTBEAT_MS)
+  try {
+    await new Promise<void>((resolve) => {
+      state.waitingResolvers.push(resolve)
+    })
+  } finally {
+    clearInterval(heartbeat)
+  }
+  logger.info({
+    action: 'concurrency.gate.wait.acquired',
+    message: 'concurrency gate slot acquired after waiting',
+    userId: waitContext.userId,
+    durationMs: Date.now() - waitStartedAt,
+    details: { mode: 'memory', scope: waitContext.scope, limit },
   })
 }
 
@@ -76,6 +116,7 @@ async function acquireConcurrencySlotRedis(input: {
   key: string
   limit: number
   ttlMs: number
+  waitContext: GateWaitLogContext
 }): Promise<{ stopHeartbeat: () => void; release: () => Promise<void> }> {
   if (!Number.isInteger(input.limit) || input.limit <= 0) {
     throw new Error(`WORKFLOW_CONCURRENCY_INVALID: ${input.limit}`)
@@ -109,12 +150,46 @@ async function acquireConcurrencySlotRedis(input: {
   ].join('\n')
 
   let attempt = 0
+  const waitStartedAt = Date.now()
+  let waited = false
+  let lastHeartbeatAt = waitStartedAt
   while (true) {
     attempt += 1
     const acquired = await queueRedis.eval(acquireScript, 1, input.key, String(input.limit), String(input.ttlMs)) as unknown
     if (acquired === 1 || acquired === '1') break
+    if (!waited) {
+      waited = true
+      logger.info({
+        action: 'concurrency.gate.wait.started',
+        message: 'concurrency gate saturated; polling for a slot',
+        userId: input.waitContext.userId,
+        details: { mode: 'redis', scope: input.waitContext.scope, limit: input.limit, ttlMs: input.ttlMs },
+      })
+    }
+    // Observability only: a leaked Redis counter can block waiters for up to the
+    // gate TTL, so emit a WARN heartbeat at least every 60s while still blocked.
+    const now = Date.now()
+    if (now - lastHeartbeatAt >= GATE_WAIT_HEARTBEAT_MS) {
+      lastHeartbeatAt = now
+      logger.warn({
+        action: 'concurrency.gate.wait.heartbeat',
+        message: 'concurrency gate wait still blocked',
+        userId: input.waitContext.userId,
+        durationMs: now - waitStartedAt,
+        details: { mode: 'redis', scope: input.waitContext.scope, limit: input.limit, ttlMs: input.ttlMs, attempt },
+      })
+    }
     const delayMs = Math.min(200 * attempt, 1000)
     await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  if (waited) {
+    logger.info({
+      action: 'concurrency.gate.wait.acquired',
+      message: 'concurrency gate slot acquired after waiting',
+      userId: input.waitContext.userId,
+      durationMs: Date.now() - waitStartedAt,
+      details: { mode: 'redis', scope: input.waitContext.scope, limit: input.limit, attempts: attempt },
+    })
   }
 
   const heartbeat = setInterval(() => {
@@ -137,6 +212,7 @@ export async function withAiConcurrencyGate<T>(input: {
 }): Promise<T> {
   const mode = resolveConcurrencyGateMode()
   const key = `${input.scope}:${input.userId}`
+  const waitContext: GateWaitLogContext = { scope: input.scope, userId: input.userId }
 
   if (mode === 'redis') {
     const redisKey = `ai_concurrency_gate:${key}`
@@ -144,6 +220,7 @@ export async function withAiConcurrencyGate<T>(input: {
       key: redisKey,
       limit: input.limit,
       ttlMs: resolveRedisGateTtlMs(),
+      waitContext,
     })
     try {
       return await input.run()
@@ -153,7 +230,7 @@ export async function withAiConcurrencyGate<T>(input: {
     }
   }
 
-  await acquireConcurrencySlot(key, input.limit)
+  await acquireConcurrencySlot(key, input.limit, waitContext)
   try {
     return await input.run()
   } finally {

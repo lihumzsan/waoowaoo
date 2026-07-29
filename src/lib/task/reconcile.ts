@@ -79,7 +79,7 @@ type ReconcileTask = TaskJobEnvelopeSource & {
 }
 
 async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<TaskTerminalCommitResult> {
-  return await commitTaskTerminal({
+  const terminal = await commitTaskTerminal({
     kind: 'failed',
     taskId: task.id,
     fence: { kind: 'snapshot', updatedAt: task.updatedAt },
@@ -92,6 +92,16 @@ async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<Ta
       message: reason,
     },
   })
+  logger.warn({
+    action: 'task.reconcile.orphan_failed',
+    message: reason,
+    taskId: task.id,
+    projectId: task.projectId,
+    userId: task.userId,
+    errorCode: 'RECONCILE_ORPHAN',
+    details: { applied: terminal.applied, previousStatus: task.status },
+  })
+  return terminal
 }
 
 type QueuedTaskRecovery = 'recovered' | 'failed' | 'retry_later'
@@ -147,6 +157,13 @@ async function recoverInterruptedProcessingTask(task: ReconcileTask): Promise<Qu
     },
   })
   if (reset.count !== 1) return 'retry_later'
+  logger.warn({
+    action: 'task.reconcile.processing_requeued',
+    message: 'interrupted processing task was reset to queued for re-enqueue',
+    taskId: task.id,
+    projectId: task.projectId,
+    userId: task.userId,
+  })
   return await recoverQueuedTask({ ...task, status: TASK_STATUS.QUEUED })
 }
 

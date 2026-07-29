@@ -30,6 +30,17 @@ import { getOutboxRuntimeConfig, getWorkerConcurrency } from './runtime-config'
 const logger = createScopedLogger({ module: 'worker.outbox' })
 const outboxConfig = getOutboxRuntimeConfig()
 
+function outboxPayloadTaskId(payload: ReturnType<typeof parseOutboxCommandPayload> | null): string | undefined {
+  if (!payload) return undefined
+  if (
+    payload.kind === OUTBOX_COMMAND_KIND.TASK_ENQUEUE
+    || payload.kind === OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST
+  ) {
+    return payload.taskId
+  }
+  return undefined
+}
+
 async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
   const outboxId = job.data.outboxId
   if (!outboxId || outboxId !== job.id) {
@@ -53,6 +64,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         logger.error({
           action: 'outbox.lease.extend_failed',
           message: 'outbox delivery lease heartbeat failed',
+          taskId: outboxPayloadTaskId(payload),
           details: { outboxId },
           error: error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
@@ -104,9 +116,11 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         reason: error.message,
       })
       if (!deferred) throw new Error(`OUTBOX_DEFER_CAS_FAILED:${outboxId}`)
-      logger.info({
+      // DEBUG: typed defers are routine contention traffic and dominated app.log at INFO.
+      logger.debug({
         action: 'outbox.delivery.assistant_deferred',
         message: error.message,
+        taskId: outboxPayloadTaskId(payload),
         details: { outboxId, kind: row.kind, retryDelayMs },
       })
       return
@@ -131,6 +145,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         logger.error({
           action: 'outbox.delivery.assistant_settlement_retry',
           message: settlementMessage,
+          taskId: outboxPayloadTaskId(payload),
           details: { outboxId, kind: row.kind, currentAttempt, attempts },
           error: settlementError instanceof Error
             ? { name: settlementError.name, message: settlementError.message, stack: settlementError.stack }
@@ -149,6 +164,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
     logger.error({
       action: dead ? 'outbox.delivery.dead' : 'outbox.delivery.retry',
       message,
+      taskId: outboxPayloadTaskId(payload),
       details: { outboxId, kind: row.kind, currentAttempt, attempts },
       error: error instanceof Error
         ? { name: error.name, message: error.message, stack: error.stack }

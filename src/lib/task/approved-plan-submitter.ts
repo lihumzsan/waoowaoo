@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
+import { createScopedLogger } from '@/lib/logging/core'
 import { getBillingMode } from '@/lib/billing'
 import { buildBillingReceiptView } from '@/lib/billing/task-billing-view'
 import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
@@ -8,6 +9,8 @@ import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progre
 import { normalizeTaskPayload, toObject, type SubmitTaskResult } from './submitter'
 import { isTaskType, type CreateTaskInput, type TaskBillingInfo } from './types'
 import { persistSubmittedTaskBatchInTransaction } from './transactional-create'
+
+const logger = createScopedLogger({ module: 'task.submitter' })
 
 function taskIdForPlanItem(operationExecutionId: string, operationPlanTaskId: string): string {
   return `opt_${createHash('sha256').update(`${operationExecutionId}\u0000${operationPlanTaskId}`).digest('hex').slice(0, 40)}`
@@ -123,6 +126,22 @@ export async function submitApprovedOperationPlanTasks(params: {
     tx,
     inputs: planned,
     billingMode,
+  })
+  logger.info({
+    action: 'task.submit.persisted',
+    message: 'approved operation plan tasks persisted with enqueue outbox commands',
+    operationId: execution.operationId,
+    projectId: snapshot.plan.projectId,
+    userId: execution.userId,
+    requestId: execution.requestId,
+    details: {
+      operationExecutionId: params.operationExecutionId,
+      approvalGrantId: params.approvalGrantId,
+      count: persisted.length,
+      dedupedCount: persisted.filter(({ deduped }) => deduped).length,
+      taskIds: persisted.map(({ task }) => task.id),
+      taskTypes: persisted.map(({ task }) => task.type),
+    },
   })
   return await buildSubmitTaskResults(persisted.map(({ task, deduped }) => ({
       id: task.id,

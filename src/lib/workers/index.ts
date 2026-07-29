@@ -1,7 +1,9 @@
 import type { Job, Worker } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
+import type { LogLevel } from '@/lib/logging/types'
 import { installYunwuFetchTraceIfEnabled } from '@/lib/http/fetch-trace'
 import type { TaskJobData } from '@/lib/task/types'
+import type { OutboxJobData } from '@/lib/outbox/queue'
 import { createImageWorker } from './image.worker'
 import { createMusicWorker } from './music.worker'
 import { createVoiceWorker } from './voice.worker'
@@ -9,6 +11,7 @@ import { createVideoWorker } from './video.worker'
 import { createTextWorker } from './text.worker'
 import { createOutboxWorker } from './outbox.worker'
 import { startOutboxDispatcher } from '@/lib/outbox/dispatcher'
+import { releaseInFlightTaskAttempts } from './attempt-recovery'
 
 installYunwuFetchTraceIfEnabled()
 
@@ -85,7 +88,20 @@ runtimeLogger.info({
   }),
 })
 
-for (const worker of workers) {
+type WorkerJobLogIdentity = {
+  taskId?: string
+  projectId?: string
+  userId?: string
+  jobFields: Record<string, unknown>
+}
+
+type WorkerEventLoggingSpec<TData> = {
+  describeJob: (job: Job<TData> | undefined | null) => WorkerJobLogIdentity
+  describeJobId: (jobId: string) => WorkerJobLogIdentity
+  completedLevel: LogLevel
+}
+
+function attachWorkerEventLogging<TData>(worker: Worker<TData>, spec: WorkerEventLoggingSpec<TData>): void {
   worker.on('ready', () => {
     runtimeLogger.info({
       action: 'worker.ready',
@@ -108,48 +124,95 @@ for (const worker of workers) {
   })
 
   worker.on('failed', (job, err, previousState) => {
+    const identity = spec.describeJob(job)
     runtimeLogger.error({
       action: 'worker.job.failed_event',
       message: 'BullMQ job failed event emitted',
-      taskId: job?.data?.taskId,
-      projectId: job?.data?.projectId,
-      userId: job?.data?.userId,
-      details: runtimeDetails(jobDetails(job, {
+      taskId: identity.taskId,
+      projectId: identity.projectId,
+      userId: identity.userId,
+      details: runtimeDetails({
+        ...identity.jobFields,
         queue: worker.name,
         previousState: previousState || null,
-      })),
+      }),
       error: errorDetails(err),
     })
   })
 
   worker.on('stalled', (jobId, previousState) => {
+    const identity = spec.describeJobId(jobId)
     runtimeLogger.error({
       action: 'worker.job.stalled',
       message: 'BullMQ job stalled; lock was not renewed before stalled detection',
-      taskId: jobId,
+      taskId: identity.taskId,
       details: runtimeDetails({
+        ...identity.jobFields,
         queue: worker.name,
-        jobId,
         previousState: previousState || null,
       }),
     })
   })
 
   worker.on('completed', (job) => {
-    runtimeLogger.info({
+    const identity = spec.describeJob(job)
+    runtimeLogger.event({
+      level: spec.completedLevel,
       action: 'worker.job.completed_event',
       message: 'BullMQ job completed event emitted',
-      taskId: job.data.taskId,
-      projectId: job.data.projectId,
-      userId: job.data.userId,
-      details: runtimeDetails(jobDetails(job, {
+      taskId: identity.taskId,
+      projectId: identity.projectId,
+      userId: identity.userId,
+      details: runtimeDetails({
+        ...identity.jobFields,
         queue: worker.name,
-      })),
+      }),
     })
   })
 }
 
+for (const worker of workers) {
+  attachWorkerEventLogging<TaskJobData>(worker, {
+    describeJob: (job) => ({
+      taskId: job?.data?.taskId,
+      projectId: job?.data?.projectId,
+      userId: job?.data?.userId,
+      jobFields: jobDetails(job),
+    }),
+    describeJobId: (jobId) => ({
+      taskId: jobId,
+      jobFields: { jobId },
+    }),
+    completedLevel: 'INFO',
+  })
+}
+
+// Outbox jobs carry no taskId: the BullMQ jobId is the outboxId, so job fields
+// are reported as-is instead of being coerced into task identity fields.
+// completed stays at DEBUG because every delivered (including deferred) outbox
+// command completes its job; INFO here would flood the log with routine traffic.
+attachWorkerEventLogging<OutboxJobData>(outboxWorker, {
+  describeJob: (job) => ({
+    jobFields: {
+      jobId: job?.id || null,
+      outboxId: job?.data?.outboxId || null,
+      failedReason: job?.failedReason || null,
+      processedOn: job?.processedOn || null,
+      finishedOn: job?.finishedOn || null,
+    },
+  }),
+  describeJobId: (jobId) => ({
+    jobFields: { jobId, outboxId: jobId },
+  }),
+  completedLevel: 'DEBUG',
+})
+
 let shuttingDown = false
+
+// 优雅停机窗口：先给 in-flight job 一个短暂完成机会（graceful close 会等待活跃 job，
+// 媒体轮询可长达数十分钟，不能无界等待）；超窗后放弃 attempt 归属而不标失败——
+// 将 heartbeatAt 置空，让 BullMQ stalled 重投递到达时立即通过心跳接管恢复执行。
+const WORKER_SHUTDOWN_JOB_GRACE_MS = 5_000
 
 async function shutdown(signal: string) {
   if (shuttingDown) return
@@ -160,7 +223,7 @@ async function shutdown(signal: string) {
     details: runtimeDetails({ signal }),
   })
   try {
-    await Promise.all([...workers, outboxWorker].map(async (worker) => {
+    const gracefulClose = Promise.all([...workers, outboxWorker].map(async (worker) => {
       runtimeLogger.info({
         action: 'worker.close.start',
         message: 'closing BullMQ worker',
@@ -173,6 +236,22 @@ async function shutdown(signal: string) {
         details: runtimeDetails({ queue: worker.name, signal }),
       })
     }))
+    const closedInGrace = await Promise.race([
+      gracefulClose.then(() => true),
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), WORKER_SHUTDOWN_JOB_GRACE_MS)
+      }),
+    ])
+    if (!closedInGrace) {
+      // 进程即将退出，被放弃的 close promise 不再消费；避免其晚到 rejection 触发 fatal 路径。
+      gracefulClose.catch(() => {})
+      const released = await releaseInFlightTaskAttempts()
+      runtimeLogger.warn({
+        action: 'workers.process.shutdown_released_attempts',
+        message: 'graceful close exceeded the shutdown grace; released in-flight attempt ownership for immediate takeover on redelivery',
+        details: runtimeDetails({ signal, released, graceMs: WORKER_SHUTDOWN_JOB_GRACE_MS }),
+      })
+    }
     process.exit(0)
   } catch (error) {
     runtimeLogger.error({

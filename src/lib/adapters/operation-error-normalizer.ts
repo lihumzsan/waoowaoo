@@ -1,5 +1,8 @@
 import { ApiError } from '@/lib/api-errors'
+import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/operations/types'
+
+const logger = createScopedLogger({ module: 'assistant.tool' })
 
 type SuspensionKind = 'choice'
 
@@ -115,6 +118,26 @@ export function withOperationErrorDetails(
 }
 
 export function normalizeOperationExecutionToolError(params: {
+  error: unknown
+  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } }
+  operationId: string
+}): ProjectAgentToolError {
+  const toolError = buildOperationExecutionToolError(params)
+  // Single normalization entry for tool execution exceptions: log here once so
+  // failures returned to the model as tool-error payloads stay server-visible.
+  logger.error({
+    action: 'assistant.tool.execution_failed',
+    message: 'assistant tool execution failed; error normalized into tool payload',
+    operationId: params.operationId,
+    errorCode: params.error instanceof ApiError ? params.error.code : toolError.code,
+    error: params.error instanceof Error
+      ? { name: params.error.name, message: params.error.message, stack: params.error.stack }
+      : { message: toolError.message },
+  })
+  return toolError
+}
+
+function buildOperationExecutionToolError(params: {
   error: unknown
   operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } }
   operationId: string

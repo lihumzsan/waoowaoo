@@ -2,12 +2,15 @@ import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors/app-error'
 import { getLogContext } from '@/lib/logging/context'
+import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { FetchStatusError } from '@/lib/retry'
 import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import { loadTaskExecutionFingerprint } from './execution-checkpoint'
 
 const STEP_PREFIX = 'provider:'
+
+const logger = createScopedLogger({ module: 'task.provider' })
 
 export type TaskProviderInvocation = {
   readonly key: string
@@ -225,6 +228,25 @@ function parseMediaProviderResult<TResult extends MediaProviderInvocationResult>
 }
 
 function outcomeUnknown(descriptor: ProviderInvocationDescriptor, cause?: unknown): AppError {
+  // Mirror at the single constructor of this terminal ambiguity: every code path
+  // that gives up with an unknown provider outcome flows through here.
+  logger.error({
+    action: 'provider.invocation.outcome_unknown',
+    message: 'provider submission outcome is unknown; invocation will not be submitted again',
+    taskId: descriptor.taskId,
+    provider: descriptor.provider,
+    errorCode: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+    details: {
+      invocationKey: descriptor.invocationKey,
+      modality: descriptor.modality,
+      modelKey: descriptor.modelKey,
+    },
+    error: cause === undefined
+      ? undefined
+      : cause instanceof Error
+        ? { name: cause.name, message: cause.message, stack: cause.stack }
+        : { message: String(cause) },
+  })
   return new AppError(
     'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
     'Provider submission outcome is unknown; this invocation will not be submitted again',
@@ -1019,6 +1041,18 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
     if (!claimedOutput) throw outcomeUnknown(descriptor)
     output = claimedOutput
     checkpoint = { ...checkpoint, state: 'submitting', output }
+    logger.info({
+      action: 'provider.route.attempted',
+      message: 'provider route submission attempt started',
+      taskId: params.taskId,
+      taskAttempt,
+      provider: routeDescriptor.provider,
+      details: {
+        logicalCapabilityId: params.logicalCapabilityId,
+        modelKey: routeDescriptor.modelKey,
+        routeIndex,
+      },
+    })
 
     let result: TResult
     try {
@@ -1048,6 +1082,22 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
           output: nextOutput,
         })
         if (!transitioned) throw outcomeUnknown(descriptor)
+        logger.warn({
+          action: 'provider.route.switched',
+          message: 'provider pre-accept rejection recorded; advancing provider route',
+          taskId: params.taskId,
+          taskAttempt,
+          provider: routeDescriptor.provider,
+          errorCode: 'PROVIDER_PRE_ACCEPT_REJECTED',
+          details: {
+            logicalCapabilityId: params.logicalCapabilityId,
+            modelKey: routeDescriptor.modelKey,
+            routeIndex,
+            nextRouteIndex,
+            exhausted: nextState === 'rejected',
+          },
+          error: { name: error.name, message: error.message },
+        })
         if (nextState === 'rejected') throw rejected(descriptor, error.message, error)
         checkpoint = { ...checkpoint, state: 'route_ready', output: nextOutput }
         output = nextOutput

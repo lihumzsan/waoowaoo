@@ -6,10 +6,27 @@ import {
   resetOutboxCommandEnqueue,
 } from './repository'
 import { prisma } from '@/lib/prisma'
+import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { getOutboxRuntimeConfig } from '@/lib/workers/runtime-config'
 
 const logger = createScopedLogger({ module: 'outbox.dispatcher' })
 const outboxConfig = getOutboxRuntimeConfig()
+
+/**
+ * Log-only extraction: reads taskId from raw persisted payload JSON without
+ * enforcing the payload contract (the worker owns strict parsing).
+ */
+function readOutboxTaskIdForLog(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined
+  const record = payload as { kind?: unknown; taskId?: unknown }
+  if (
+    record.kind !== OUTBOX_COMMAND_KIND.TASK_ENQUEUE
+    && record.kind !== OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST
+  ) {
+    return undefined
+  }
+  return typeof record.taskId === 'string' && record.taskId ? record.taskId : undefined
+}
 
 async function dispatchOutboxCommand(commandId: string): Promise<void> {
   await addOutboxJob(commandId)
@@ -36,6 +53,7 @@ export async function dispatchCommittedOutboxCommands(commandIds: readonly strin
   if (uniqueIds.length === 0) return 0
   let dispatched = 0
   for (const commandId of uniqueIds) {
+    let taskIdForLog: string | undefined
     try {
       const command = await prisma.outboxCommand.findFirst({
         where: {
@@ -44,15 +62,17 @@ export async function dispatchCommittedOutboxCommands(commandIds: readonly strin
           deadAt: null,
           availableAt: { lte: new Date() },
         },
-        select: { id: true },
+        select: { id: true, payload: true },
       })
       if (!command) continue
+      taskIdForLog = readOutboxTaskIdForLog(command.payload)
       await dispatchOutboxCommand(command.id)
       dispatched += 1
     } catch (error) {
       logger.error({
         action: 'outbox.commit_dispatch.failed',
         message: 'committed outbox command will be recovered by the durable dispatcher',
+        taskId: taskIdForLog,
         details: { outboxId: commandId },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
@@ -73,7 +93,7 @@ export async function reconcileStaleEnqueuedOutboxCommands(limit = 100): Promise
     },
     orderBy: { enqueuedAt: 'asc' },
     take: Math.min(Math.max(Math.floor(limit), 1), 500),
-    select: { id: true },
+    select: { id: true, payload: true },
   })
   let reset = 0
   for (const command of commands) {
@@ -84,6 +104,7 @@ export async function reconcileStaleEnqueuedOutboxCommands(limit = 100): Promise
     logger.warn({
       action: 'outbox.enqueue.reset',
       message: 'stale outbox transport was reset for deterministic re-enqueue',
+      taskId: readOutboxTaskIdForLog(command.payload),
       details: { outboxId: command.id, observation },
     })
   }

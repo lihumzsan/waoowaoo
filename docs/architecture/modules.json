@@ -530,6 +530,16 @@
       ]
     },
     {
+      "id": "logging-observability",
+      "document": "docs/architecture/modules/logging-observability.md",
+      "title": "日志与可观测性",
+      "sourcePaths": [
+        "src/lib/logging",
+        "src/instrumentation.ts",
+        "scripts/check-log-semantic.ts"
+      ]
+    },
+    {
       "id": "test-governance",
       "document": "docs/architecture/modules/test-governance.md",
       "title": "测试治理",

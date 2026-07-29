@@ -1,10 +1,12 @@
 import { Prisma } from '@prisma/client'
+import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { TASK_STATUS, type TaskBillingInfo, type TaskStatus } from './types'
 import { commitTaskTerminal } from './terminal'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
+const logger = createScopedLogger({ module: 'task.service' })
 const taskModel = prisma.task
 
 function isActiveStatus(status: string) {
@@ -303,6 +305,14 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
       })
     : null
   const cancelled = terminal?.applied === true
+  if (cancelled) {
+    logger.info({
+      action: 'task.canceled',
+      message: 'task canceled',
+      taskId,
+      details: { previousStatus: snapshot.status, reason },
+    })
+  }
   const task = await taskModel.findUnique({ where: { id: taskId } })
   return {
     task,

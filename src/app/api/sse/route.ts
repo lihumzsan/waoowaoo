@@ -107,6 +107,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
       const fail = async (error: unknown) => {
         if (closed) return
         closed = true
+        logger.error({
+          action: 'sse.stream.failed',
+          message: 'sse stream failed and will be terminated',
+          error: error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { message: String(error) },
+        })
         await cleanup()
         controller.error(error)
       }
