@@ -141,10 +141,8 @@ import {
   appendProjectAssistantMediaAttachmentsToUserText,
   readProjectAssistantMediaAttachmentsFromMessage,
 } from './media-attachments'
-import {
-  buildProjectAssistantImageInputParts,
-  resolveProjectAssistantModelInputMedia,
-} from './media-attachments/model-input'
+import { buildProjectAssistantImageInputParts } from './media-attachments/model-input-protocol'
+import { resolveProjectAssistantModelInputMedia } from './media-attachments/model-input-runtime'
 import {
   appendProjectAssistantThreadMessages,
   type ProjectAssistantModelHistoryCommit,

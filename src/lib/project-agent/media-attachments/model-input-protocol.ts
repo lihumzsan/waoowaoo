@@ -1,7 +1,4 @@
-import 'server-only'
 import type { AgentInputItem, UserMessageItem } from '@openai/agents'
-import { resolveOwnedImageHttpsForGeneration } from '@/lib/media/outbound-image'
-import { resolveProjectAssistantMediaAttachments } from './resolve'
 import type { ProjectAssistantMediaAttachment } from './types'
 
 type UnknownObject = { [key: string]: unknown }
@@ -31,7 +28,7 @@ function readMarkedImageResourceId(value: unknown): string | null {
   return resourceId || null
 }
 
-function mapMarkedImageContent(
+export function mapProjectAssistantModelInputMedia(
   items: readonly AgentInputItem[],
   mapImage: (input: {
     readonly content: UnknownObject
@@ -82,53 +79,8 @@ export function buildProjectAssistantImageInputParts(
 export function canonicalizeProjectAssistantModelInputMedia(
   items: readonly AgentInputItem[],
 ): AgentInputItem[] {
-  return mapMarkedImageContent(items, ({ content, resourceId }) => ({
+  return mapProjectAssistantModelInputMedia(items, ({ content, resourceId }) => ({
     ...content,
     image: buildImageMarker(resourceId),
   }))
-}
-
-/**
- * The only bridge from an attached Resource identity to model-visible image
- * bytes. Every model request revalidates owner/project/ready facts and then
- * uses the shared outbound-image authority to produce a provider-safe URL.
- */
-export async function resolveProjectAssistantModelInputMedia(input: {
-  readonly items: readonly AgentInputItem[]
-  readonly userId: string
-  readonly projectId: string
-}): Promise<AgentInputItem[]> {
-  const canonicalItems = canonicalizeProjectAssistantModelInputMedia(input.items)
-  const resourceIds: string[] = []
-  mapMarkedImageContent(canonicalItems, ({ content, resourceId }) => {
-    if (!resourceIds.includes(resourceId)) resourceIds.push(resourceId)
-    return content
-  })
-  if (resourceIds.length === 0) return canonicalItems
-
-  const attachments = await resolveProjectAssistantMediaAttachments({
-    userId: input.userId,
-    projectId: input.projectId,
-    refs: resourceIds.map((resourceId) => ({ resourceId })),
-  })
-  const imageUrlByResourceId = new Map<string, string>()
-  await Promise.all(attachments.map(async (attachment) => {
-    if (attachment.mediaType !== 'image' || !attachment.href) {
-      throw new Error(
-        `PROJECT_ASSISTANT_MODEL_INPUT_IMAGE_RESOURCE_INVALID:${attachment.resourceId}`,
-      )
-    }
-    imageUrlByResourceId.set(
-      attachment.resourceId,
-      await resolveOwnedImageHttpsForGeneration(attachment.href, input.userId),
-    )
-  }))
-
-  return mapMarkedImageContent(canonicalItems, ({ content, resourceId }) => {
-    const image = imageUrlByResourceId.get(resourceId)
-    if (!image) {
-      throw new Error(`PROJECT_ASSISTANT_MODEL_INPUT_IMAGE_URL_MISSING:${resourceId}`)
-    }
-    return { ...content, image }
-  })
 }

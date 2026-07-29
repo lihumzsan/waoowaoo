@@ -6,7 +6,7 @@ import {
   type ProjectAssistantModelHistoryCommit,
   type ProjectAssistantThreadIdentity,
 } from './persistence'
-import { canonicalizeProjectAssistantModelInputMedia } from './media-attachments/model-input'
+import { canonicalizeProjectAssistantModelInputMedia } from './media-attachments/model-input-protocol'
 
 function cloneItems(items: readonly AgentInputItem[]): AgentInputItem[] {
   return items.map((item) => structuredClone(item))
