@@ -202,10 +202,31 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
       locale: 'en',
     })
     expect(sessionWhileBackgroundRuns.currentRun?.runId).toBe(nextForegroundRun.id)
-    expect(sessionWhileBackgroundRuns.activeWaits).toEqual([
-      expect.objectContaining({ waitId, runId: backgroundRunId, status: 'pending', total: 4 }),
-    ])
-    expect(sessionWhileBackgroundRuns.activeTasks).toHaveLength(3)
+    expect(sessionWhileBackgroundRuns.taskBatches).toEqual([{
+      waitId,
+      status: 'pending',
+      terminalStatus: null,
+      tasks: [
+        expect.objectContaining({
+          taskId: taskIds[0],
+          status: TASK_STATUS.FAILED,
+          terminal: true,
+          failure: {
+            errorCode: 'EARLY_TERMINAL_TEST',
+            message: 'terminal before batch seal',
+          },
+        }),
+        expect.objectContaining({ taskId: taskIds[1], status: TASK_STATUS.QUEUED, terminal: false }),
+        expect.objectContaining({ taskId: taskIds[2], status: TASK_STATUS.QUEUED, terminal: false }),
+        expect.objectContaining({ taskId: taskIds[3], status: TASK_STATUS.QUEUED, terminal: false }),
+      ],
+      progress: {
+        total: 4,
+        terminal: 1,
+        failed: 1,
+        canceled: 0,
+      },
+    }])
 
     const terminalResults = await Promise.all(taskIds.slice(1).map(async (taskId) => await commitTaskTerminal({
       kind: 'failed',
@@ -221,12 +242,31 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
       expect.objectContaining({ applied: true, status: 'failed' }),
     ])
 
-    const [wait, backgroundRun, storedNextRun, continuationCommands] = await Promise.all([
+    const [
+      wait,
+      backgroundRun,
+      storedNextRun,
+      continuationCommands,
+      resolvedSession,
+      terminalAgentEvent,
+    ] = await Promise.all([
       prisma.projectAgentWait.findUniqueOrThrow({ where: { id: waitId } }),
       prisma.projectAgentRun.findUniqueOrThrow({ where: { id: backgroundRunId } }),
       prisma.projectAgentRun.findUniqueOrThrow({ where: { id: nextForegroundRun.id } }),
       prisma.outboxCommand.findMany({
-        where: { kind: 'project_agent.continue_wait', aggregateId: waitId },
+          where: { kind: 'project_agent.continue_wait', aggregateId: waitId },
+        }),
+      getProjectAgentSessionState({
+        projectId: project.id,
+        userId: user.id,
+        episodeId: episode.id,
+        assistantId: 'workspace-command',
+        locale: 'en',
+      }),
+      prisma.projectAgentEvent.findFirstOrThrow({
+        where: { runId: backgroundRunId, kind: 'task.terminal' },
+        orderBy: { id: 'desc' },
+        select: { id: true },
       }),
     ])
     expect(wait).toMatchObject({ status: 'resolved', terminalStatus: 'failed' })
@@ -234,6 +274,31 @@ describe('Project Agent OperationBatch Wait concurrency', () => {
     expect((wait.failedTaskIds as string[]).sort()).toEqual([...taskIds].sort())
     expect(backgroundRun.status).toBe('awaiting_task')
     expect(storedNextRun.status).toBe('running')
+    expect(resolvedSession.taskBatches).toEqual([expect.objectContaining({
+      waitId,
+      status: 'resolved',
+      terminalStatus: 'failed',
+      tasks: taskIds.map((taskId) => expect.objectContaining({
+        taskId,
+        status: TASK_STATUS.FAILED,
+        terminal: true,
+        failure: expect.objectContaining({
+          errorCode: expect.any(String),
+          message: expect.any(String),
+        }),
+      })),
+      progress: {
+        total: 4,
+        terminal: 4,
+        failed: 4,
+        canceled: 0,
+      },
+    })])
+    await expect(prisma.outboxCommand.findUniqueOrThrow({
+      where: {
+        idempotencyKey: `project-agent-session-broadcast:${terminalAgentEvent.id.toString()}`,
+      },
+    })).resolves.toMatchObject({ enqueuedAt: expect.any(Date) })
     expect(continuationCommands).toHaveLength(1)
     const continuationCommand = continuationCommands[0]
     if (!continuationCommand) throw new Error('EXPECTED_OPERATION_BATCH_CONTINUATION_COMMAND')

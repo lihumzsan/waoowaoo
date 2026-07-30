@@ -2,7 +2,10 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import { rollbackTaskBillingInTransaction, settleTaskBillingInTransaction } from '@/lib/billing'
-import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
+import {
+  createOutboxCommandInTransaction,
+  createOutboxCommitCollector,
+} from '@/lib/outbox/repository'
 import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { resolveProjectAgentWaitsForTaskTerminalInTransaction } from '@/lib/project-agent/waits'
@@ -134,8 +137,10 @@ async function loadExistingTerminalBundle(
 }
 
 export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Promise<TaskTerminalCommitResult> {
+  const outboxCollector = createOutboxCommitCollector()
   const result = await prisma.$transaction(
     async (tx): Promise<TaskTerminalCommitResult> => {
+      outboxCollector.bindTransaction(tx)
       const task = await loadLockedTask(tx, intent.taskId)
       if (!task) throw new Error(`TASK_NOT_FOUND:${intent.taskId}`)
       if (!isActiveStatus(task.status)) return await loadExistingTerminalBundle(tx, task)
@@ -373,6 +378,13 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       fenceAttempt: intent.fence.kind === 'attempt' ? intent.fence.attempt : null,
     },
   })
-  await dispatchCommittedOutboxCommands(result.outboxCommandIds)
+  // The collector includes commands created by nested owners such as the
+  // Project Agent session-broadcast append. The explicit result IDs remain the
+  // durable replay contract for already-terminal calls; the dispatcher
+  // deduplicates the union.
+  await dispatchCommittedOutboxCommands([
+    ...result.outboxCommandIds,
+    ...outboxCollector.commandIds,
+  ])
   return result
 }
