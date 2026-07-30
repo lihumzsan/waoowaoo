@@ -1278,7 +1278,7 @@ export async function createProjectAgentChatResponse(input: {
       merge: () => {
         throw new Error('PROJECT_AGENT_TOOL_WRITER_MERGE_UNSUPPORTED')
       },
-      onError: (error) => (error instanceof Error ? error.message : String(error)),
+      onError: (error) => (describeUnknownError(error)),
     },
     onExecutionSettled: ({ toolCallId, operationId, outcome }) => {
       if (!toolCallId) {
@@ -1305,7 +1305,7 @@ export async function createProjectAgentChatResponse(input: {
             details: {
               operationId,
               toolCallId,
-              error: error instanceof Error ? error.message : String(error),
+              error: describeUnknownError(error),
             },
           })
         }
@@ -1543,7 +1543,7 @@ export async function createProjectAgentChatResponse(input: {
         userId: input.userId,
         details: {
           executionSegmentId: executionSegment.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: describeUnknownError(error),
         },
       })
     }
@@ -1954,7 +1954,7 @@ export async function createProjectAgentChatResponse(input: {
               message: 'resource link views could not be read; links omitted for this turn',
               details: {
                 refCount: resourceRefs.length,
-                error: error instanceof Error ? error.message : String(error),
+                error: describeUnknownError(error),
               },
             })
           }
@@ -1966,7 +1966,7 @@ export async function createProjectAgentChatResponse(input: {
             status: 'failed',
             stopReason: 'completion_error',
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
-            errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
+            errorMessage: describeUnknownError(completionError),
           }
           chunks.push(createRuntimeStatusChunk('failed', 'completion_error'))
           runStatusFinalized = true
@@ -2270,7 +2270,7 @@ export async function createProjectAgentChatResponse(input: {
             details: {
               runId: input.run.id,
               episodeId: context.episodeId || null,
-              error: error instanceof Error ? error.message : String(error),
+              error: describeUnknownError(error),
             },
           })
           throw error
@@ -2321,7 +2321,7 @@ export async function createProjectAgentChatResponse(input: {
     } finally {
       await releaseRunLockOnce()
     }
-    const message = error instanceof Error ? error.message : String(error)
+    const message = describeUnknownError(error)
     projectAgentLogger.error({
       action: 'assistant.agents.run.failed',
       message: 'Project agent Agents SDK run failed',

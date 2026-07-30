@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import { randomUUID } from 'node:crypto'
 import {
@@ -282,7 +283,7 @@ export function createProjectAgentOperationTools(
           kind: 'failed',
           error: buildToolError({
             code: 'OPERATION_INPUT_INVALID',
-            message: error instanceof Error ? error.message : String(error),
+            message: describeUnknownError(error),
             operationId,
           }),
         }
@@ -494,7 +495,7 @@ export function createProjectAgentOperationTools(
             kind: 'failed',
             error: buildToolError({
               code: 'OPERATION_EXECUTION_FAILED',
-              message: error instanceof Error ? error.message : String(error),
+              message: describeUnknownError(error),
               operationId: operation.id,
             }),
           })
@@ -589,7 +590,7 @@ export function createProjectAgentOperationTools(
         reportExecutionSettled(execution.outcome)
         return result
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorMessage = describeUnknownError(error)
         const failedActivity = operationActivityId ? await appendProjectAgentEvents({
           scope: {
             projectId: params.projectId,
