@@ -37,6 +37,17 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   })
 }
 
+const assetHubUpdateCharacterAppearanceInputSchema = z.object({
+  characterId: z.string().trim().min(1),
+  appearanceIndex: z.union([
+    z.number().int().min(0),
+    z.string().trim().regex(/^\d+$/),
+  ]),
+  description: z.string().optional(),
+  descriptionIndex: z.number().int().min(0).optional(),
+  changeReason: z.string().optional(),
+}).strict()
+
 export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     asset_hub_update_character_appearance: defineOperation({
@@ -53,16 +64,11 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         externalSideEffects: false,
         longRunning: false,
       },
-      inputSchema: z.object({
-        characterId: z.string().min(1),
-        appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
-      }).passthrough(),
+      inputSchema: assetHubUpdateCharacterAppearanceInputSchema,
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
-        const body = input as unknown as Record<string, unknown>
-        assertNoLegacyArtStyle(body)
-        const characterId = normalizeString(body.characterId)
-        const appearanceIndex = parseAppearanceIndex(body.appearanceIndex)
+        const characterId = input.characterId
+        const appearanceIndex = parseAppearanceIndex(input.appearanceIndex)
 
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
@@ -76,30 +82,29 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         if (!appearance) throw new ApiError('NOT_FOUND')
 
         const updateData: Record<string, unknown> = {}
-        if (body.description !== undefined) {
-          if (typeof body.description !== 'string') throw new ApiError('INVALID_PARAMS')
-          const trimmedDescription = body.description.trim()
+        if (input.description !== undefined) {
+          const trimmedDescription = input.description.trim()
           const descriptions = (() => {
             const existing = parseDescriptions(appearance.descriptions)
             if (existing.length > 0) return existing
             return [typeof appearance.description === 'string' ? appearance.description : '']
           })()
 
-          const indexRaw = body.descriptionIndex
-          const index = typeof indexRaw === 'number' && Number.isInteger(indexRaw) && indexRaw >= 0 ? indexRaw : null
-          if (index !== null) {
-            while (descriptions.length <= index) {
-              descriptions.push('')
-            }
-            descriptions[index] = trimmedDescription
-          } else {
-            descriptions[0] = trimmedDescription
+          const index = input.descriptionIndex ?? 0
+          if (index >= descriptions.length) {
+            throw new ApiError('INVALID_PARAMS', {
+              code: 'ASSET_DESCRIPTION_INDEX_OUT_OF_RANGE',
+              field: 'descriptionIndex',
+              requestedValue: index,
+              allowedValues: descriptions.map((_, currentIndex) => currentIndex),
+            })
           }
+          descriptions[index] = trimmedDescription
           updateData.descriptions = JSON.stringify(descriptions)
           updateData.description = descriptions[0]
         }
 
-        if (body.changeReason !== undefined) updateData.changeReason = body.changeReason
+        if (input.changeReason !== undefined) updateData.changeReason = input.changeReason
 
         await transaction.globalCharacterAppearance.update({
           where: { id: appearance.id },
