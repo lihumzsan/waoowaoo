@@ -35,6 +35,7 @@ export type WorkspaceAssistantRunTraceView = {
   readonly hasPublicReasoning: boolean
   readonly hasVisibleContent: boolean
   readonly visibleToolCallCount: number
+  readonly runStatus: 'running' | 'awaiting_approval' | 'awaiting_choice' | 'awaiting_task' | 'completed' | 'failed' | 'cancelled' | null
   readonly traceAnchorIndex: number | null
   readonly traceIndices: readonly number[]
 }
@@ -60,12 +61,20 @@ function isRunAnchorPart(value: unknown): boolean {
   return part?.type === 'data' && part.name === 'agent-run'
 }
 
-function isRunCompleted(value: unknown): boolean {
+function readRunStatus(value: unknown): WorkspaceAssistantRunTraceView['runStatus'] {
   const part = readPart(value)
   const data = readPart(part?.data)
-  return part?.type === 'data'
-    && part.name === 'agent-run'
-    && data?.status === 'completed'
+  if (part?.type !== 'data' || part.name !== 'agent-run') return null
+  const status = data?.status
+  return status === 'running'
+    || status === 'awaiting_approval'
+    || status === 'awaiting_choice'
+    || status === 'awaiting_task'
+    || status === 'completed'
+    || status === 'failed'
+    || status === 'cancelled'
+    ? status
+    : null
 }
 
 function isReasoningPart(value: unknown): boolean {
@@ -113,7 +122,7 @@ export function resolveWorkspaceAssistantRunTraceView(
   ))
   const traceAnchorIndex = parts.findIndex(isRunAnchorPart)
   const latestRunPart = parts.findLast(isRunAnchorPart)
-  const runCompleted = isRunCompleted(latestRunPart)
+  const runStatus = readRunStatus(latestRunPart)
   const lastVisibleToolIndex = parts.findLastIndex(isVisibleToolPart)
   const visibleToolCallIds = new Set<string>()
 
@@ -126,7 +135,8 @@ export function resolveWorkspaceAssistantRunTraceView(
     visibleToolCallIds.add(toolCallId)
   }
 
-  const traceIndices = runCompleted && hasPublicReasoning && traceAnchorIndex >= 0
+  const terminal = runStatus === 'completed' || runStatus === 'failed' || runStatus === 'cancelled'
+  const traceIndices = terminal && hasPublicReasoning && traceAnchorIndex >= 0
     ? parts.flatMap((part, index) => {
         if (index === traceAnchorIndex) return [index]
         if (isReasoningPart(part) || isToolPart(part)) return [index]
@@ -146,6 +156,7 @@ export function resolveWorkspaceAssistantRunTraceView(
     hasPublicReasoning,
     hasVisibleContent: parts.some(isVisibleNonTracePart),
     visibleToolCallCount: visibleToolCallIds.size,
+    runStatus,
     traceAnchorIndex: traceAnchorIndex >= 0 ? traceAnchorIndex : null,
     traceIndices,
   }

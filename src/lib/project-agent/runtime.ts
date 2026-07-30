@@ -59,10 +59,13 @@ import {
   measureProjectAgentToolSchemas,
 } from './context-telemetry'
 import {
-  collectProjectAgentFunctionCallIds,
+  assertProjectAgentModelInputWithinBudget,
+  collectProjectAgentBoundToolDiscoveryCallIds,
   decideProjectAgentModelInput,
+  prepareProjectAgentContextCompressionInput,
 } from './model-input/filter'
-import { compactProjectAgentConversation } from './model-input/compaction'
+import { compressProjectAgentContext } from './model-input/compaction'
+import { projectProjectAgentActiveContext } from './model-input/checkpoint'
 import { estimateProjectAgentTokens } from './model-input/estimate'
 import {
   resolveProjectAgentAssistantModelKey,
@@ -1032,14 +1035,6 @@ export async function createProjectAgentChatResponse(input: {
     registry: operations,
     toolset,
   })
-  const initiallyLoadedOperationIds = control.kind === 'approval'
-    ? Array.from(new Set(
-        (persistedApprovalItems.length > 0
-          ? persistedApprovalItems.map((item) => item.operationId)
-          : [control.interruption.operationId])
-          .filter((operationId) => operations[operationId]?.toolExposure === 'on_demand'),
-      ))
-    : []
   const toolDiscoveryState = createProjectAgentToolDiscoveryState({
     catalog: toolCatalog,
     registry: operations,
@@ -1048,7 +1043,6 @@ export async function createProjectAgentChatResponse(input: {
       projectId: input.projectId,
       context,
     },
-    initiallyLoadedOperationIds,
   })
   const projectStateInputItem = buildProjectStateInputItem({
     projectId: input.projectId,
@@ -1066,30 +1060,8 @@ export async function createProjectAgentChatResponse(input: {
         assistantId: 'workspace-command',
       })
 
-  // Conversation only grows between turns, so it is compacted here rather than
-  // inside the per-step filter: summarising mid-run would rewrite a prefix the
-  // provider is still caching for the steps that follow.
-  const compaction = control.kind === 'approval'
-    ? {
-        historyItems: await activeModelSession.getItems(),
-        compacted: null,
-      }
-    : await compactProjectAgentConversation({
-        session: activeModelSession,
-        userId: input.userId,
-        signal: runAbortController.signal,
-        onFailure: (error) => {
-          projectAgentLogger.warn({
-            action: 'assistant.context.summary_failed',
-            message: 'Conversation summary failed; continuing without compaction',
-            requestId,
-            projectId: input.projectId,
-            userId: input.userId,
-            error,
-          })
-        },
-      })
-  const sessionHistoryItems = compaction.historyItems
+  let sessionHistoryItems = await activeModelSession.getItems()
+  let contextCompaction: { readonly replacedItemCount: number } | null = null
   const conversationInputItems: AgentInputItem[] = control.kind === 'user_turn'
     ? withDeclinedApprovalsNote(
         [buildProjectAgentUserTurnInputItem(control.message)],
@@ -1121,32 +1093,6 @@ export async function createProjectAgentChatResponse(input: {
       controlKind: executionControlKind,
       stopReason: null,
     }),
-    createDataChunk('data-agent-runtime-context', {
-      runtime: 'openai-agents-sdk',
-      requestId,
-      modelKey: assistantModelKey,
-      locale,
-      billingConfirmationRequired,
-      projectId: input.projectId,
-      episodeId: context.episodeId || null,
-      messageCounts: {
-        normalized: conversationInputItems.length,
-        runtime: sessionHistoryItems.length,
-        model: sessionHistoryItems.length + agentInput.length,
-      },
-      contextTokenEstimate: estimateContextTokens([...sessionHistoryItems, ...agentInput]),
-      toolset: {
-        source: toolset.source,
-        operationIds: [...toolset.operationIds],
-        directOperationIds: [...toolset.directOperationIds],
-        onDemandOperationIds: [...toolset.onDemandOperationIds],
-        disabledOperationIds: [...toolset.disabledOperationIds],
-      },
-      selectedTools: selectedTools.map((item) => ({
-        operationId: item.operation.id,
-        description: item.description,
-      })),
-    } satisfies AgentRuntimeContextPartData),
   ]
 
   if (control.kind === 'approval') {
@@ -1166,13 +1112,6 @@ export async function createProjectAgentChatResponse(input: {
         outcome: declined.type === 'approval' ? 'rejected' : 'superseded',
       } satisfies ProjectAgentInterruptionResolvedPartData))
     }
-  }
-  if (compaction.compacted) {
-    initialChunks.push(createDataChunk('data-assistant-context-compacted', {
-      runId: input.run.id,
-      summarizedItemCount: compaction.compacted.summarizedItemCount,
-      summaryText: compaction.compacted.summaryText,
-    } satisfies ProjectAgentContextCompactedPartData))
   }
   if (control.kind === 'choice') {
     initialChunks.push(createDataChunk('data-assistant-choice-resolved', {
@@ -1215,7 +1154,6 @@ export async function createProjectAgentChatResponse(input: {
       toolDiscovery: {
         toolName: PROJECT_AGENT_TOOL_DISCOVERY_NAME,
         catalogSize: toolCatalog.length,
-        initiallyLoadedOperationIds: toolDiscoveryState.loadedOperationIds(),
       },
     },
   })
@@ -1403,20 +1341,18 @@ export async function createProjectAgentChatResponse(input: {
     episodeId: context.episodeId || 'unknown',
   })
   const toolSchemaMeasurement = measureProjectAgentToolSchemas(tools)
-  const contextComposition = buildProjectAgentContextComposition({
-    instructions: systemPrompt,
-    toolSchemas: toolSchemaMeasurement,
-    conversation: [...sessionHistoryItems, ...conversationInputItems],
-    projectState: projectStateInputItem,
-    agentPlan: agentPlanInputItem,
-  })
   const modelInputFilterConfig = {
     modelKey: assistantModelKey,
     toolSchemaTokens: estimateProjectAgentTokens(toolSchemaMeasurement),
     locale,
-    staleToolDiscoveryCallIds: collectProjectAgentFunctionCallIds(
+    staleBoundToolDiscoveryCallIds: collectProjectAgentBoundToolDiscoveryCallIds(
       sessionHistoryItems,
       PROJECT_AGENT_TOOL_DISCOVERY_NAME,
+      new Set(
+        Object.values(operations)
+          .filter((operation) => Boolean(operation.bindToolInputSchema))
+          .map((operation) => operation.id),
+      ),
     ),
     // Enumerated from the production registry so a new Operation whose result
     // cannot be re-fetched is protected by declaring it, not by editing a
@@ -1427,6 +1363,74 @@ export async function createProjectAgentChatResponse(input: {
         .map((operation) => operation.id),
     ),
   }
+  if (control.kind !== 'approval') {
+    const decision = decideProjectAgentModelInput(modelInputFilterConfig, {
+      input: [...sessionHistoryItems, ...agentInput],
+      instructions: systemPrompt,
+    })
+    if (decision.overBudget) {
+      const compaction = await compressProjectAgentContext({
+        session: activeModelSession,
+        inputItems: prepareProjectAgentContextCompressionInput(
+          modelInputFilterConfig,
+          sessionHistoryItems,
+          decision.freedTokens,
+        ),
+        userId: input.userId,
+        signal: runAbortController.signal,
+      })
+      if (!compaction.compacted) {
+        assertProjectAgentModelInputWithinBudget(decision)
+      }
+      sessionHistoryItems = [...compaction.historyItems]
+      contextCompaction = compaction.compacted
+      const compactedDecision = decideProjectAgentModelInput(modelInputFilterConfig, {
+        input: [...sessionHistoryItems, ...agentInput],
+        instructions: systemPrompt,
+      })
+      assertProjectAgentModelInputWithinBudget(compactedDecision)
+    }
+  }
+  const activeSessionHistoryItems = projectProjectAgentActiveContext(sessionHistoryItems)
+  initialChunks.splice(1, 0, createDataChunk('data-agent-runtime-context', {
+    runtime: 'openai-agents-sdk',
+    requestId,
+    modelKey: assistantModelKey,
+    locale,
+    billingConfirmationRequired,
+    projectId: input.projectId,
+    episodeId: context.episodeId || null,
+    messageCounts: {
+      normalized: conversationInputItems.length,
+      runtime: activeSessionHistoryItems.length,
+      model: activeSessionHistoryItems.length + agentInput.length,
+    },
+    contextTokenEstimate: estimateContextTokens([...activeSessionHistoryItems, ...agentInput]),
+    toolset: {
+      source: toolset.source,
+      operationIds: [...toolset.operationIds],
+      directOperationIds: [...toolset.directOperationIds],
+      onDemandOperationIds: [...toolset.onDemandOperationIds],
+      disabledOperationIds: [...toolset.disabledOperationIds],
+    },
+    selectedTools: selectedTools.map((item) => ({
+      operationId: item.operation.id,
+      description: item.description,
+    })),
+  } satisfies AgentRuntimeContextPartData))
+  if (contextCompaction) {
+    initialChunks.push(createDataChunk('data-assistant-context-compacted', {
+      runId: input.run.id,
+      replacedItemCount: contextCompaction.replacedItemCount,
+    } satisfies ProjectAgentContextCompactedPartData))
+  }
+  const contextComposition = buildProjectAgentContextComposition({
+    instructions: systemPrompt,
+    toolSchemas: toolSchemaMeasurement,
+    conversation: [...activeSessionHistoryItems, ...conversationInputItems],
+    projectState: projectStateInputItem,
+    agentPlan: agentPlanInputItem,
+  })
   let latestModelInputDecision: ReturnType<typeof decideProjectAgentModelInput> | null = null
   const agent = new Agent<ProjectAgentAgentsRunContext>({
     name: 'Project Workspace Agent',
@@ -1617,6 +1621,7 @@ export async function createProjectAgentChatResponse(input: {
       callModelInputFilter: async ({ modelData }) => {
         const decision = decideProjectAgentModelInput(modelInputFilterConfig, modelData)
         latestModelInputDecision = decision
+        assertProjectAgentModelInputWithinBudget(decision)
         return {
           input: await resolveProjectAssistantModelInputMedia({
             items: decision.input,

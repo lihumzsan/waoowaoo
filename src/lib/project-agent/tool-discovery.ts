@@ -24,23 +24,30 @@ export interface ProjectAgentToolCatalogEntry {
   readonly parameters: ProjectAgentToolInputSchema
 }
 
-export interface ProjectAgentLoadedOperationDefinition {
-  readonly operationId: string
-  readonly contractId: string
-  readonly revision: string
-  readonly description: string
-  readonly parameters: ProjectAgentToolInputSchema
-}
+export type ProjectAgentLoadedOperationDefinition =
+  | {
+    readonly kind: 'static'
+    readonly operationId: string
+    readonly description: string
+    readonly parameters: ProjectAgentToolInputSchema
+  }
+  | {
+    readonly kind: 'bound'
+    readonly operationId: string
+    readonly contractId: string
+    readonly revision: string
+    readonly description: string
+    readonly parameters: ProjectAgentToolInputSchema
+  }
 
 export interface ProjectAgentToolLoadResult {
-  readonly newlyLoadedOperationIds: readonly string[]
-  readonly loadedOperationIds: readonly string[]
   readonly operations: readonly ProjectAgentLoadedOperationDefinition[]
   readonly executeWith: {
     readonly toolName: typeof PROJECT_AGENT_OPERATION_GATEWAY_NAME
     readonly arguments: {
+      readonly kind: 'Copy operations[].kind exactly'
       readonly operationId: 'Copy operations[].operationId exactly'
-      readonly contractId: 'Copy operations[].contractId exactly'
+      readonly contractId: 'Copy operations[].contractId only when kind is bound'
       readonly argumentsJson: 'JSON object matching operations[].parameters'
     }
   }
@@ -57,13 +64,11 @@ export interface ProjectAgentResolvedToolContract {
 
 export interface ProjectAgentToolDiscoveryState {
   readonly catalog: readonly ProjectAgentToolCatalogEntry[]
-  isLoaded: (operationId: string) => boolean
   load: (operationIds: readonly string[]) => Promise<ProjectAgentToolLoadResult>
   resolveContract: (
     operationId: string,
     contractId: string,
   ) => Promise<ProjectAgentResolvedToolContract>
-  loadedOperationIds: () => readonly string[]
 }
 
 export function formatProjectAgentToolNotFound(params: {
@@ -145,26 +150,15 @@ export function createProjectAgentToolDiscoveryState(params: {
   readonly catalog: readonly ProjectAgentToolCatalogEntry[]
   readonly registry: ProjectAgentOperationRegistry
   readonly bindingContext: ProjectAgentToolInputBindingContext
-  readonly initiallyLoadedOperationIds?: readonly string[]
 }): ProjectAgentToolDiscoveryState {
   const catalog = [...params.catalog]
   const knownOperationIds = new Set(catalog.map((entry) => entry.operationId))
   if (knownOperationIds.size !== catalog.length) {
     throw new Error('PROJECT_AGENT_TOOL_CATALOG_ID_DUPLICATE')
   }
-  const initialIds = params.initiallyLoadedOperationIds ?? []
-  for (const operationId of initialIds) {
-    if (!knownOperationIds.has(operationId)) {
-      throw new Error(`PROJECT_AGENT_TOOL_INITIAL_LOAD_ID_UNKNOWN:${operationId}`)
-    }
-  }
-  const loaded = new Set(initialIds)
   type BoundContract = ProjectAgentResolvedToolContract
   const contractsById = new Map<string, BoundContract>()
   const latestContractIdByOperation = new Map<string, string>()
-  const listLoaded = (): string[] => catalog
-    .filter((entry) => loaded.has(entry.operationId))
-    .map((entry) => entry.operationId)
 
   const bindOperation = async (
     operationId: string,
@@ -174,18 +168,17 @@ export function createProjectAgentToolDiscoveryState(params: {
       !operation
       || !operation.channels.tool
       || operation.toolExposure !== 'on_demand'
+      || !operation.bindToolInputSchema
     ) {
       throw new Error(`PROJECT_AGENT_TOOL_BOUND_OPERATION_INVALID:${operationId}`)
     }
-    const binding: ProjectAgentToolInputBinding<unknown> = operation.bindToolInputSchema
-      ? await operation.bindToolInputSchema(params.bindingContext)
-      : { inputSchema: operation.inputSchema }
-    const toolInputSchema = operation.bindToolInputSchema
-      ? createProjectAgentToolInputSchema({
-          operationId,
-          inputSchema: binding.inputSchema,
-        })
-      : operation.toolInputSchema
+    const binding: ProjectAgentToolInputBinding<unknown> = await operation.bindToolInputSchema(
+      params.bindingContext,
+    )
+    const toolInputSchema = createProjectAgentToolInputSchema({
+      operationId,
+      inputSchema: binding.inputSchema,
+    })
     const revision = stableArgsFingerprint({
       protocolVersion: PROJECT_AGENT_BOUND_TOOL_PROTOCOL_VERSION,
       operationId,
@@ -216,39 +209,43 @@ export function createProjectAgentToolDiscoveryState(params: {
 
   return {
     catalog,
-    isLoaded(operationId) {
-      return loaded.has(operationId)
-    },
     async load(operationIds) {
       const normalized = validateRequestedOperationIds({ operationIds, knownOperationIds })
-      const newlyLoaded = new Set<string>()
-      for (const operationId of normalized) {
-        if (!loaded.has(operationId)) newlyLoaded.add(operationId)
-        loaded.add(operationId)
-      }
-      const boundContracts = await Promise.all(normalized.map(loadContract))
-      return {
-        newlyLoadedOperationIds: catalog
-          .filter((entry) => newlyLoaded.has(entry.operationId))
-          .map((entry) => entry.operationId),
-        loadedOperationIds: listLoaded(),
-        operations: boundContracts.map((contract) => {
-          const operationId = contract.operationId
-          const entry = catalog.find((candidate) => candidate.operationId === operationId)
-          if (!entry) throw new Error(`PROJECT_AGENT_TOOL_LOAD_ID_UNKNOWN:${operationId}`)
+      const definitions = await Promise.all(normalized.map(async (
+        operationId,
+      ): Promise<ProjectAgentLoadedOperationDefinition> => {
+        const entry = catalog.find((candidate) => candidate.operationId === operationId)
+        if (!entry) throw new Error(`PROJECT_AGENT_TOOL_LOAD_ID_UNKNOWN:${operationId}`)
+        const operation = params.registry[operationId]
+        if (!operation?.channels.tool || operation.toolExposure !== 'on_demand') {
+          throw new Error(`PROJECT_AGENT_TOOL_LOAD_OPERATION_INVALID:${operationId}`)
+        }
+        if (!operation.bindToolInputSchema) {
           return {
-            operationId: entry.operationId,
-            contractId: contract.contractId,
-            revision: contract.revision,
+            kind: 'static',
+            operationId,
             description: entry.description,
-            parameters: contract.toolInputSchema,
+            parameters: entry.parameters,
           }
-        }),
+        }
+        const contract = await loadContract(operationId)
+        return {
+          kind: 'bound',
+          operationId,
+          contractId: contract.contractId,
+          revision: contract.revision,
+          description: entry.description,
+          parameters: contract.toolInputSchema,
+        }
+      }))
+      return {
+        operations: definitions,
         executeWith: {
           toolName: PROJECT_AGENT_OPERATION_GATEWAY_NAME,
           arguments: {
+            kind: 'Copy operations[].kind exactly',
             operationId: 'Copy operations[].operationId exactly',
-            contractId: 'Copy operations[].contractId exactly',
+            contractId: 'Copy operations[].contractId only when kind is bound',
             argumentsJson: 'JSON object matching operations[].parameters',
           },
         },
@@ -273,7 +270,6 @@ export function createProjectAgentToolDiscoveryState(params: {
         state: current.state,
       }
     },
-    loadedOperationIds: listLoaded,
   }
 }
 
@@ -294,12 +290,12 @@ function buildDiscoveryDescription(
   const catalogLines = catalog.map((entry) => (
     `[${entry.groupPath.join('/')}] ${entry.operationId} — ${entry.description}`
   ))
-  const introduction = `Read the full parameter definitions for the Operations needed by the current goal. Common tools already provided directly with complete Schemas are omitted from this catalog and should be called directly. The catalog below discovers only the remaining capabilities (exact id plus summary); it is never an argument contract, workflow, or call order. Before execution, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call; after reading the returned parameters, call execute_operation in a later model step. Never guess arguments or call a catalog Operation id as a tool name. Loaded Operations remain available for the current execution segment.`
+  const introduction = `Read the full parameter definitions for the Operations needed by the current goal. Common tools already provided directly with complete Schemas are omitted from this catalog and should be called directly. The catalog below discovers only the remaining capabilities (exact id plus summary); it is never an argument contract, workflow, or call order. Before execution, load the smallest sufficient set by exact id, up to ${PROJECT_AGENT_TOOL_LOAD_LIMIT} per call; after reading the returned parameters, call execute_operation in a later model step. Never guess arguments or call a catalog Operation id as a tool name. Static definitions use the canonical registry Schema and need no temporary contract. Bound definitions carry a contract valid only in the current execution segment.`
   return [introduction, 'Capability catalog:', ...catalogLines].join('\n')
 }
 
 export function buildProjectAgentOperationGatewayDescription(): string {
-  return 'Execute one Operation already loaded through load_tools. Copy operationId and contractId exactly from the same load result, and pass argumentsJson as a JSON object string matching its parameters. The server verifies that the contract still belongs to this execution segment and is current before parsing through the authoritative Operation registry.'
+  return 'Execute one Operation whose definition was read through load_tools. Copy kind and operationId exactly, and pass argumentsJson matching parameters. For kind=bound, also copy contractId from the same definition; kind=static has no contract. Static input is validated by the canonical registry Schema. Bound input is validated against its current execution-segment contract.'
 }
 
 export function createProjectAgentToolDiscoveryTool<Context>(params: {

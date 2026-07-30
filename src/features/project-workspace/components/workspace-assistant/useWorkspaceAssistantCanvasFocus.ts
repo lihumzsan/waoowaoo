@@ -51,24 +51,23 @@ function dedupeWorkspaceAssistantActiveTaskTargets(
 
 interface UseWorkspaceAssistantCanvasFocusParams {
   readonly sessionState: ProjectAgentSessionState | null
-  readonly pendingOperationId: string | null
-  readonly runtimeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
   readonly storageLoading: boolean
   readonly onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
 }
 
 export function useWorkspaceAssistantCanvasFocus({
   sessionState,
-  runtimeFocusRequest,
   storageLoading,
   onActiveOperationChange,
-}: UseWorkspaceAssistantCanvasFocusParams): string | null {
+}: UseWorkspaceAssistantCanvasFocusParams): void {
   const currentActivity = sessionState?.currentActivity ?? null
-  const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
-    ?? sessionState?.activeTasks.find((task) => Boolean(task.operationId))?.operationId
+  const focusBatch = sessionState?.taskBatches[0] ?? null
+  const batchTasks = useMemo(() => focusBatch?.tasks ?? [], [focusBatch])
+  const activeExternalTaskOperationId = batchTasks.find((task) => Boolean(task.operationId))?.operationId
+    ?? resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
     ?? null
   const activeTaskTargets = useMemo(() => {
-    const targets = (sessionState?.activeTasks ?? []).flatMap((task) => {
+    const targets = batchTasks.flatMap((task) => {
       const target = buildWorkspaceAssistantActiveTaskTarget({
         taskId: task.taskId,
         operationId: task.operationId,
@@ -80,36 +79,27 @@ export function useWorkspaceAssistantCanvasFocus({
       return target ? [target] : []
     })
     return dedupeWorkspaceAssistantActiveTaskTargets(targets)
-  }, [sessionState?.activeTasks])
+  }, [batchTasks])
 
   const externalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
-    activeExternalTaskOperationId
+    activeExternalTaskOperationId && focusBatch
       ? {
           operationId: activeExternalTaskOperationId,
-          requestKey: currentActivity?.type === 'waiting_task'
-            ? `${currentActivity.runId}:${currentActivity.activityId}:${activeExternalTaskOperationId}`
-            : `background-tasks:${activeTaskTargets.map((target) => target.taskId).sort().join(',')}`,
+          requestKey: `task-batch:${focusBatch.waitId}`,
+          taskTargets: activeTaskTargets,
         }
       : null
-  ), [activeExternalTaskOperationId, activeTaskTargets, currentActivity])
-
-  const focusRequest = useMemo(() => {
-    const baseFocusRequest = runtimeFocusRequest ?? externalTaskFocusRequest
-    if (!baseFocusRequest || activeTaskTargets.length === 0) return baseFocusRequest
-    return { ...baseFocusRequest, taskTargets: activeTaskTargets }
-  }, [activeTaskTargets, externalTaskFocusRequest, runtimeFocusRequest])
+  ), [activeExternalTaskOperationId, activeTaskTargets, focusBatch])
 
   const callbackRef = useRef(onActiveOperationChange)
   const signatureRef = useRef<string | null>(null)
   callbackRef.current = onActiveOperationChange
   useEffect(() => {
-    const next = storageLoading ? null : focusRequest
+    const next = storageLoading ? null : externalTaskFocusRequest
     const signature = JSON.stringify(next)
     if (signatureRef.current === signature) return
     signatureRef.current = signature
     callbackRef.current?.(next)
-  }, [focusRequest, storageLoading])
+  }, [externalTaskFocusRequest, storageLoading])
   useEffect(() => () => callbackRef.current?.(null), [])
-
-  return activeExternalTaskOperationId
 }

@@ -6,9 +6,9 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'project-agent/system',
     variableKeys: ['project_id', 'episode_id'],
   },
-  [AI_PROMPT_IDS.PROJECT_AGENT_CONVERSATION_SUMMARY]: {
-    pathStem: 'project-agent/conversation-summary',
-    variableKeys: ['previous_summary', 'new_transcript'],
+  [AI_PROMPT_IDS.PROJECT_AGENT_CONTEXT_CHECKPOINT]: {
+    pathStem: 'project-agent/context-checkpoint',
+    variableKeys: ['transcript'],
   },
 }
 

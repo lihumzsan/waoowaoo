@@ -33,10 +33,7 @@
         "fitView": "适应画布",
         "zoomIn": "放大",
         "zoomOut": "缩小",
-        "autoFollow": "自动跟随生成"
-      },
-      "focusFollow": {
-        "jumpToActive": "查看当前生成"
+        "autoFollow": "新增内容时适应画布"
       },
       "status": {
         "pending": "待处理",

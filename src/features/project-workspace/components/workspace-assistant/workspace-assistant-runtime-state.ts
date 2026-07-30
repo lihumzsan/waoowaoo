@@ -9,8 +9,6 @@ import {
   createProjectAgentControlVisibleUserMessageId,
   type ProjectAgentControlAction,
 } from '@/lib/project-agent/control'
-import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
-
 export type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 export type WorkspaceAssistantControlIntent = 'approve' | 'deny' | 'choice'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice'
@@ -145,36 +143,6 @@ export function resolveOperationIdFromActivity(activity: ProjectAgentSessionActi
   if (!activity || (activity.status !== 'running' && activity.status !== 'waiting')) return null
   if (activity.type === 'task_follow_up' || activity.type === 'awaiting_choice') return null
   return activity.operationId ?? activity.sourceOperationId
-}
-
-export function resolveWorkspaceAssistantPendingOperationId(
-  trackedRun: {
-    operationId: string | null
-    intent: WorkspaceAssistantControlIntent | null
-    status?: WorkspaceAssistantRunStatus
-  } | null,
-): string | null {
-  if (!trackedRun || trackedRun.intent === 'deny') return null
-  if (trackedRun.status && !isWorkspaceAssistantOperationPendingStatus(trackedRun.status)) return null
-  return trackedRun.operationId
-}
-
-export function resolveWorkspaceAssistantActiveFocusRequest(input: {
-  readonly pendingRun: { readonly runId: string } | null
-  readonly operationId: string | null
-  readonly activities: readonly (ProjectAgentSessionActivity | null)[]
-}): WorkspaceAssistantActiveFocusRequest | null {
-  if (!input.pendingRun || !input.operationId) return null
-  const activity = input.activities.find((candidate) => (
-    candidate?.runId === input.pendingRun?.runId
-    && resolveOperationIdFromActivity(candidate) === input.operationId
-  ))
-  return {
-    operationId: input.operationId,
-    requestKey: activity
-      ? `${activity.runId}:${activity.activityId}:${input.operationId}`
-      : `${input.pendingRun.runId}:${input.operationId}`,
-  }
 }
 
 export function resolveWorkspaceAssistantDisplayedPendingInteraction(input: {

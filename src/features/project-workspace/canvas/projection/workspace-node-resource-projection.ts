@@ -35,6 +35,22 @@ function groupingKey(card: CreativeResourceCardView): string {
   return card.resource.candidateSetId ?? card.resource.resourceId
 }
 
+function resourceGenerationOptions(resource: CreativeResourceView) {
+  return resource.pendingGeneration?.generationOptions
+    ?? resource.materialization?.provenance.generationOptions
+    ?? null
+}
+
+function resourceMediaDimensions(resource: CreativeResourceView): {
+  readonly width: number | null
+  readonly height: number | null
+} {
+  const content = resource.materialization?.content
+  return content?.kind === 'media'
+    ? { width: content.width ?? null, height: content.height ?? null }
+    : { width: null, height: null }
+}
+
 export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjectionContext): void {
   const {
     projectId, episodeName, projectAspectRatio, creativeResources, savedLayouts, translate, nodes, edges,
@@ -54,14 +70,24 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
     groupResources.forEach((resource) => nodeIdByResourceId.set(resource.resourceId, nodeId))
     const column = index % RESOURCE_COLUMNS
     const row = Math.floor(index / RESOURCE_COLUMNS)
+    const mediaDimensions = resourceMediaDimensions(card.resource)
+    const generationOptions = resourceGenerationOptions(card.resource)
     const mediaShell = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: card.resource.mediaType,
+      schemaId: card.resource.schemaId,
+      generationOptions,
+      mediaWidth: mediaDimensions.width,
+      mediaHeight: mediaDimensions.height,
       projectAspectRatio,
     })
     const size = resolveWorkspaceCanvasNodeSize({
       kind: 'resourceCard',
       mediaType: card.resource.mediaType,
+      schemaId: card.resource.schemaId,
+      generationOptions,
+      mediaWidth: mediaDimensions.width,
+      mediaHeight: mediaDimensions.height,
       projectAspectRatio,
     })
     nodes.push(createNode({

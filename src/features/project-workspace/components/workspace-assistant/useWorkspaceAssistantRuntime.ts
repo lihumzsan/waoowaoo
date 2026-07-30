@@ -12,7 +12,6 @@ import type {
   ProjectAgentSessionState,
 } from '@/lib/project-agent/session-state'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
-import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 import {
   useWorkspaceAssistantThreadSnapshotSync,
 } from './useWorkspaceAssistantThreadSnapshotSync'
@@ -21,10 +20,8 @@ import {
   buildWorkspaceAssistantChatId,
   isWorkspaceAssistantOperationPendingStatus,
   mergeWorkspaceAssistantStreamedMessage,
-  resolveWorkspaceAssistantActiveFocusRequest,
   resolveWorkspaceAssistantComposerPending,
   resolveWorkspaceAssistantDisplayedPendingInteraction,
-  resolveWorkspaceAssistantPendingOperationId,
   resolveOperationIdFromActivity,
   shouldSendWorkspaceAssistantAutomatically,
 } from './workspace-assistant-runtime-state'
@@ -72,8 +69,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   sessionStateError: string | null
   storageError: string | null
   storageLoading: boolean
-  pendingOperationId: string | null
-  activeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
   subagents: ProjectAgentSubagentView[]
   subagentStructuredOutputs: ReadonlyMap<string, string>
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
@@ -233,18 +228,6 @@ export function useWorkspaceAssistantRuntime({
   })
   const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const pendingRun = serverOperationRun ?? activeControlRun
-  const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(pendingRun)
-  const activeFocusRequest = useMemo(() => resolveWorkspaceAssistantActiveFocusRequest({
-    pendingRun,
-    operationId: pendingOperationId,
-    activities: [
-      sessionState?.currentActivity ?? null,
-    ],
-  }), [
-    pendingOperationId,
-    pendingRun,
-    sessionState?.currentActivity,
-  ])
   const composerPending = resolveWorkspaceAssistantComposerPending({
     replyInFlight,
     trackedRunStatus: pendingRun?.status ?? null,
@@ -274,8 +257,6 @@ export function useWorkspaceAssistantRuntime({
     sessionStateError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
-    pendingOperationId,
-    activeFocusRequest,
     subagents,
     subagentStructuredOutputs,
     pendingRunApproval,

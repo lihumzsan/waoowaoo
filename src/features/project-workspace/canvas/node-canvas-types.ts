@@ -23,6 +23,7 @@ export interface WorkspaceCanvasMediaShell {
   readonly form: WorkspaceCanvasMediaShellForm
   readonly width: number
   readonly height: number
+  readonly fit: 'cover' | 'contain'
 }
 
 export interface WorkspaceCanvasNodeData {

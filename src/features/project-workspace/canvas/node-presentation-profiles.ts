@@ -1,4 +1,11 @@
-import type { CreativeResourceMediaType } from '@/lib/creative-resource/contracts'
+import {
+  getAssetImageFormatPolicy,
+  resolveAssetImageKindForSchemaId,
+} from '@/lib/asset-generation'
+import type {
+  CreativeResourceJsonValue,
+  CreativeResourceMediaType,
+} from '@/lib/creative-resource/contracts'
 import type {
   WorkspaceCanvasMediaShell,
   WorkspaceCanvasMediaShellForm,
@@ -50,18 +57,54 @@ export function getWorkspaceCanvasNodePresentationProfile(
   return WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES[kind]
 }
 
-function parseFrameAspect(projectAspectRatio: string | null | undefined): {
+function parseFrameAspect(value: string | null | undefined): {
   readonly width: number
   readonly height: number
-} {
-  const match = projectAspectRatio?.trim().match(/^(\d+):(\d+)$/)
-  if (!match) return DEFAULT_FRAME_ASPECT
+} | null {
+  const match = value?.trim().match(/^(\d+):(\d+)$/)
+  if (!match) return null
   const width = Number(match[1])
   const height = Number(match[2])
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return DEFAULT_FRAME_ASPECT
+    return null
   }
   return { width, height }
+}
+
+function frozenAspectRatio(generationOptions: CreativeResourceJsonValue | null | undefined): string | null {
+  if (!generationOptions || typeof generationOptions !== 'object' || Array.isArray(generationOptions)) {
+    return null
+  }
+  const value = generationOptions.aspectRatio
+  return typeof value === 'string' && parseFrameAspect(value) ? value : null
+}
+
+function resolvedFrameAspect(input: {
+  readonly schemaId: string
+  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
+  readonly projectAspectRatio: string | null | undefined
+}): { readonly width: number; readonly height: number } {
+  const frozen = parseFrameAspect(frozenAspectRatio(input.generationOptions))
+  if (frozen) return frozen
+  if (
+    typeof input.mediaWidth === 'number'
+    && Number.isFinite(input.mediaWidth)
+    && input.mediaWidth > 0
+    && typeof input.mediaHeight === 'number'
+    && Number.isFinite(input.mediaHeight)
+    && input.mediaHeight > 0
+  ) {
+    return { width: input.mediaWidth, height: input.mediaHeight }
+  }
+  const assetKind = resolveAssetImageKindForSchemaId(input.schemaId)
+  const assetAspect = assetKind
+    ? parseFrameAspect(getAssetImageFormatPolicy(assetKind).aspectRatio)
+    : null
+  return assetAspect
+    ?? parseFrameAspect(input.projectAspectRatio)
+    ?? DEFAULT_FRAME_ASPECT
 }
 
 /**
@@ -71,6 +114,10 @@ function parseFrameAspect(projectAspectRatio: string | null | undefined): {
 export function resolveWorkspaceCanvasMediaShell(input: {
   readonly kind: WorkspaceCanvasNodeKind
   readonly mediaType: CreativeResourceMediaType
+  readonly schemaId: string
+  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
   readonly projectAspectRatio: string | null | undefined
 }): WorkspaceCanvasMediaShell {
   const presentation = getWorkspaceCanvasNodePresentationProfile(input.kind).media[input.mediaType]
@@ -79,9 +126,10 @@ export function resolveWorkspaceCanvasMediaShell(input: {
       form: presentation.form,
       width: presentation.maxMediaWidth,
       height: presentation.maxMediaHeight,
+      fit: 'contain',
     }
   }
-  const aspect = parseFrameAspect(input.projectAspectRatio)
+  const aspect = resolvedFrameAspect(input)
   const scale = Math.min(
     presentation.maxMediaWidth / aspect.width,
     presentation.maxMediaHeight / aspect.height,
@@ -90,12 +138,19 @@ export function resolveWorkspaceCanvasMediaShell(input: {
     form: 'frame',
     width: Math.round(aspect.width * scale),
     height: Math.round(aspect.height * scale),
+    fit: input.mediaType === 'video' || resolveAssetImageKindForSchemaId(input.schemaId)
+      ? 'contain'
+      : 'cover',
   }
 }
 
 export function resolveWorkspaceCanvasNodeSize(input: {
   readonly kind: WorkspaceCanvasNodeKind
   readonly mediaType: CreativeResourceMediaType
+  readonly schemaId: string
+  readonly generationOptions?: CreativeResourceJsonValue | null
+  readonly mediaWidth?: number | null
+  readonly mediaHeight?: number | null
   readonly projectAspectRatio: string | null | undefined
 }): WorkspaceCanvasNodeSize {
   const shell = resolveWorkspaceCanvasMediaShell(input)

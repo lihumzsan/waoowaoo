@@ -9,21 +9,22 @@ import { resolveUtilityModelKey } from '@/lib/ai-exec/utility-model'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getProviderKey } from '@/lib/ai-registry/selection'
 import {
-  PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION,
-  buildProjectAgentSummaryTranscript,
-  projectAgentConversationSummarySchema,
-  type ProjectAgentConversationSummary,
-} from './summary'
+  PROJECT_AGENT_CONTEXT_CHECKPOINT_VERSION,
+  buildProjectAgentCheckpointTranscript,
+  projectAgentContextCheckpointSchema,
+  type ProjectAgentContextCheckpoint,
+} from './checkpoint'
+import { PROJECT_AGENT_RESERVED_OUTPUT_TOKENS } from './budget'
 
-export async function extendProjectAgentConversationSummary(input: {
+export async function generateProjectAgentContextCheckpoint(input: {
   userId: string
-  previous: ProjectAgentConversationSummary | null
-  newlySummarized: readonly AgentInputItem[]
+  items: readonly AgentInputItem[]
   signal?: AbortSignal
-}): Promise<ProjectAgentConversationSummary | null> {
-  if (input.newlySummarized.length === 0) return input.previous
-  const transcript = buildProjectAgentSummaryTranscript(input.newlySummarized)
-  if (!transcript.trim()) return input.previous
+}): Promise<ProjectAgentContextCheckpoint> {
+  if (input.items.length === 0) {
+    throw new Error('PROJECT_AGENT_CONTEXT_CHECKPOINT_INPUT_EMPTY')
+  }
+  const transcript = buildProjectAgentCheckpointTranscript(input.items)
 
   const modelKey = await resolveUtilityModelKey(input.userId)
   const selection = await resolveLlmRuntimeModel(input.userId, modelKey)
@@ -35,16 +36,15 @@ export async function extendProjectAgentConversationSummary(input: {
   })
 
   const prompt = buildAiPrompt({
-    promptId: AI_PROMPT_IDS.PROJECT_AGENT_CONVERSATION_SUMMARY,
+    promptId: AI_PROMPT_IDS.PROJECT_AGENT_CONTEXT_CHECKPOINT,
     variables: {
-      previous_summary: input.previous?.summaryText ?? '',
-      new_transcript: transcript,
+      transcript,
     },
   })
 
   const providerKey = getProviderKey(selection.provider)
-  const summaryAction = 'assistant.context.summary'
-  // Shares the llm.raw.* summary log shape with every other LLM call point;
+  const checkpointAction = 'assistant.context.compress'
+  // Shares the llm.raw.* log shape with every other LLM call point;
   // no message or output content is logged.
   logLlmRawInput({
     userId: input.userId,
@@ -54,7 +54,7 @@ export async function extendProjectAgentConversationSummary(input: {
     stream: false,
     reasoning: false,
     reasoningEffort,
-    action: summaryAction,
+    action: checkpointAction,
     messages: [{ role: 'user', content: prompt }],
   })
   const generated = await generateText({
@@ -67,6 +67,7 @@ export async function extendProjectAgentConversationSummary(input: {
       reasoningEffort,
     }),
     prompt,
+    maxOutputTokens: PROJECT_AGENT_RESERVED_OUTPUT_TOKENS,
     // Matches the ai-exec sdk-runner: transport failures surface immediately
     // instead of being retried silently by the AI SDK.
     maxRetries: 0,
@@ -83,18 +84,18 @@ export async function extendProjectAgentConversationSummary(input: {
     modelId: selection.modelId,
     modelKey: selection.modelKey,
     stream: false,
-    action: summaryAction,
+    action: checkpointAction,
     text: projected.text,
     reasoning: projected.reasoning,
     termination: projected.termination,
     usage: projected.usage,
   })
 
-  const summaryText = generated.text.trim()
-  if (!summaryText) return input.previous
-  return projectAgentConversationSummarySchema.parse({
-    version: PROJECT_AGENT_CONVERSATION_SUMMARY_VERSION,
-    summarizedItemCount: (input.previous?.summarizedItemCount ?? 0) + input.newlySummarized.length,
-    summaryText,
-  } satisfies ProjectAgentConversationSummary)
+  const checkpointText = generated.text.trim()
+  if (!checkpointText) throw new Error('PROJECT_AGENT_CONTEXT_CHECKPOINT_EMPTY')
+  return projectAgentContextCheckpointSchema.parse({
+    version: PROJECT_AGENT_CONTEXT_CHECKPOINT_VERSION,
+    replacedItemCount: input.items.length,
+    checkpointText,
+  } satisfies ProjectAgentContextCheckpoint)
 }

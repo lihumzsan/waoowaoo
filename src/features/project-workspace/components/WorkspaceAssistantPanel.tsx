@@ -7,7 +7,6 @@ import { AppIcon } from '@/components/ui/icons'
 import { useAttachmentFilePicker } from '@/components/project-assistant/useAttachmentFilePicker'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import type { ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
@@ -56,7 +55,6 @@ import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspace
 import {
   parseWorkspaceAssistantFailureText,
   resolveWorkspaceAssistantFailureView,
-  shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldShowWorkspaceAssistantReplyLoading,
   shouldShowWorkspaceAssistantRunFailureNotice,
   type WorkspaceAssistantFailureView,
@@ -181,17 +179,15 @@ export default function WorkspaceAssistantPanel({
     sendMessage: assistantRuntime.sendMessage,
     sendHiddenMessage: assistantRuntime.sendHiddenMessage,
   })
-  const activeExternalTaskOperationId = useWorkspaceAssistantCanvasFocus({
+  useWorkspaceAssistantCanvasFocus({
     sessionState: assistantRuntime.sessionState,
-    pendingOperationId: assistantRuntime.pendingOperationId,
-    runtimeFocusRequest: assistantRuntime.activeFocusRequest,
     storageLoading: assistantRuntime.storageLoading,
     onActiveOperationChange,
   })
-  const activeExternalTasks = assistantRuntime.sessionState?.activeTasks ?? []
-  const activeExternalTaskOperationIds = Array.from(new Set(
-    activeExternalTasks.flatMap((task) => task.operationId ? [task.operationId] : []),
-  )).sort()
+  const taskBatches = useMemo(
+    () => assistantRuntime.sessionState?.taskBatches ?? [],
+    [assistantRuntime.sessionState?.taskBatches],
+  )
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
@@ -201,10 +197,6 @@ export default function WorkspaceAssistantPanel({
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     hideChoiceCards: true,
     onSubmitChoiceResponse: assistantRuntime.submitChoiceResponse,
-  })
-  const showExternalTaskRunCard = shouldShowWorkspaceAssistantExternalTaskRunCard({
-    storageLoading: assistantRuntime.storageLoading,
-    operationId: activeExternalTaskOperationId,
   })
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
@@ -216,9 +208,9 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
   })
-  // Both failure surfaces resolve through the same view resolver, so a run
-  // failure and a send failure explain themselves with the same canonical
-  // error catalogue instead of panel-local sentences.
+  // Run, send, and Task failures all resolve through the same view resolver,
+  // so every failure surface uses the canonical error catalogue instead of
+  // panel-local sentences or model-written guesses.
   const localizeErrorCode = useCallback(
     (code: string) => (tErrors.has(code) ? tErrors(code) : null),
     [tErrors],
@@ -241,6 +233,25 @@ export default function WorkspaceAssistantPanel({
       localizeCode: localizeErrorCode,
       unknownFallback: unknownFailureFallback,
     })
+  const taskBatchViews = useMemo(() => taskBatches.map((batch) => {
+    const operationIds = Array.from(new Set(batch.tasks.flatMap(
+      (task) => task.operationId ? [task.operationId] : [],
+    ))).sort()
+    const failures = Array.from(new Map(batch.tasks.flatMap((task) => {
+      if (!task.failure) return []
+      const failure = resolveWorkspaceAssistantFailureView({
+        facts: {
+          code: task.failure.errorCode?.trim() || null,
+          message: task.failure.message?.trim() || null,
+          requestId: null,
+        },
+        localizeCode: localizeErrorCode,
+        unknownFallback: unknownFailureFallback,
+      })
+      return [[`${failure.headline}\u0000${failure.technical ?? ''}`, failure] as const]
+    })).values())
+    return { batch, operationIds, failures }
+  }), [localizeErrorCode, taskBatches, unknownFailureFallback])
 
   return (
     <aside
@@ -314,14 +325,14 @@ export default function WorkspaceAssistantPanel({
                         {showRunFailureNotice ? (
                           <WorkspaceAssistantRunFailureNotice failure={runFailureView} />
                         ) : null}
-                        {showExternalTaskRunCard && activeExternalTaskOperationId && activeExternalTasks.length > 0 ? (
+                        {!assistantRuntime.storageLoading ? taskBatchViews.map((view) => (
                           <WorkspaceAssistantActiveRunCard
-                            operationIds={activeExternalTaskOperationIds.length > 0
-                              ? activeExternalTaskOperationIds
-                              : [activeExternalTaskOperationId]}
-                            taskCount={activeExternalTasks.length}
+                            key={view.batch.waitId}
+                            operationIds={view.operationIds}
+                            progress={view.batch.progress}
+                            failures={view.failures}
                           />
-                        ) : null}
+                        )) : null}
                         {serverPendingApproval ? (
                           <ConfirmationActionCard
                             operationId={serverPendingApproval.operationId}

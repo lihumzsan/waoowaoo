@@ -104,7 +104,7 @@ function collectSchemaFacts(schema: unknown): {
 interface MediaToolPairing {
   operationId: string
   parameters: ProjectAgentToolInputSchema
-  boundInputSchema: RuntimeSchema<unknown>
+  inputSchema: RuntimeSchema<unknown>
 }
 
 async function loadBillableMediaPairings(): Promise<{
@@ -118,13 +118,15 @@ async function loadBillableMediaPairings(): Promise<{
   const pairings: MediaToolPairing[] = []
   for (const operation of billable) {
     const loaded = await state.load([operation.id])
-    const contract = loaded.operations[0]
-    if (!contract) throw new Error(`BOUND_MEDIA_CONTRACT_REQUIRED:${operation.id}`)
-    const resolved = await state.resolveContract(operation.id, contract.contractId)
+    const definition = loaded.operations[0]
+    if (!definition) throw new Error(`MEDIA_TOOL_DEFINITION_REQUIRED:${operation.id}`)
+    const resolved = definition.kind === 'bound'
+      ? await state.resolveContract(operation.id, definition.contractId)
+      : null
     pairings.push({
       operationId: operation.id,
-      parameters: resolved.toolInputSchema,
-      boundInputSchema: resolved.inputSchema,
+      parameters: resolved?.toolInputSchema ?? definition.parameters,
+      inputSchema: resolved?.inputSchema ?? operation.inputSchema,
     })
   }
   return { registry, pairings }
@@ -199,11 +201,14 @@ function buildMinimalStrictInput(operationId: string): unknown {
   }
   if (operationId === 'generate_voice') {
     return {
-      description: 'Warm mid-range narrator voice.',
-      previewText: 'Hello, this is a short preview.',
-      language: VOICE_DESIGN_LANGUAGE_OPTIONS[0],
-      resource: { kind: 'new', name: 'Narrator' },
-      target: { kind: 'standalone' },
+      request: {
+        kind: 'single',
+        description: 'Warm mid-range narrator voice.',
+        previewText: 'Hello, this is a short preview.',
+        language: VOICE_DESIGN_LANGUAGE_OPTIONS[0],
+        resource: { name: 'Narrator' },
+        target: { kind: 'standalone' },
+      },
     }
   }
   throw new Error(`BILLABLE_MEDIA_MINIMAL_INPUT_MISSING:${operationId}`)
@@ -228,6 +233,8 @@ describe('project agent bound media contract conformance', () => {
     if (!image || !audio || !video) throw new Error('BOUND_MEDIA_CONTRACTS_REQUIRED')
 
     for (const operation of [image, audio, video]) {
+      expect(operation.kind).toBe('bound')
+      if (operation.kind !== 'bound') throw new Error('BOUND_MEDIA_CONTRACT_REQUIRED')
       const serialized = JSON.stringify(operation.parameters)
       expect(serialized).not.toContain('modelKey')
       expect(serialized).not.toContain(modelKeys.image)
@@ -291,7 +298,7 @@ describe('project agent bound media contract conformance', () => {
       const input = buildMinimalStrictInput(pairing.operationId)
       const validate = new Ajv({ allErrors: true, jsonPointers: true }).compile(pairing.parameters)
       expect(validate(input), `${pairing.operationId}: ${JSON.stringify(validate.errors)}`).toBe(true)
-      const boundParse = pairing.boundInputSchema.safeParse(input)
+      const boundParse = pairing.inputSchema.safeParse(input)
       expect(boundParse.success, pairing.operationId).toBe(true)
       const canonicalParse = operation.inputSchema.safeParse(input)
       expect(canonicalParse.success, `${pairing.operationId}: ${JSON.stringify(
@@ -300,7 +307,7 @@ describe('project agent bound media contract conformance', () => {
       const normalized = normalizeProjectAgentToolInput({
         operationId: pairing.operationId,
         input,
-        inputSchema: pairing.boundInputSchema,
+        inputSchema: pairing.inputSchema,
         toolInputSchema: pairing.parameters,
       })
       expect(normalized, pairing.operationId).toBe(input)
@@ -312,7 +319,7 @@ describe('project agent bound media contract conformance', () => {
     const state = createState(registry)
     const loaded = await state.load(['create_video'])
     const contract = loaded.operations[0]
-    if (!contract) throw new Error('BOUND_VIDEO_CONTRACT_REQUIRED')
+    if (!contract || contract.kind !== 'bound') throw new Error('BOUND_VIDEO_CONTRACT_REQUIRED')
     const resolved = await state.resolveContract('create_video', contract.contractId)
     const minimal = buildMinimalStrictInput('create_video') as {
       request: Record<string, unknown>

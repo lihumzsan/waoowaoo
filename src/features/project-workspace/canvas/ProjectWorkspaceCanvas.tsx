@@ -301,22 +301,20 @@ function ProjectWorkspaceCanvasContent({
     syncProjectionToReactFlow()
   }, [flowNodeSignature, projectionEdgeSignature, reactFlowReady, syncProjectionToReactFlow])
   const focusNodeIds = useMemo(
-    () => resolveWorkspaceCanvasFocusNodeIds(flowNodes),
-    [flowNodes],
+    () => resolveWorkspaceCanvasFocusNodeIds(
+      flowNodes,
+      activeAssistantFocusRequest?.taskTargets ?? [],
+    ),
+    [activeAssistantFocusRequest?.taskTargets, flowNodes],
   )
-  const focusRequestKey = focusNodeIds.length > 0
-    ? activeAssistantFocusRequest?.requestKey ?? null
-    : null
   const {
-    pendingFocusNodeIds,
-    focusNow: focusCurrentRunningNodes,
     notifyUserInteraction: notifyCanvasUserInteraction,
   } = useCanvasFocusFollow({
     reactFlow,
     containerRef: canvasRef,
     enabled: autoFollowEnabled,
     focusNodeIds,
-    focusRequestKey,
+    focusRequestKey: activeAssistantFocusRequest?.requestKey ?? null,
   })
 
   useEffect(() => {
@@ -425,11 +423,12 @@ function ProjectWorkspaceCanvasContent({
 
   const resetLayout = useCallback(() => {
     if (!episodeId) return
+    notifyCanvasUserInteraction()
     setUserNodePositions(new Map())
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [episodeId, resetSavedLayout])
+  }, [episodeId, notifyCanvasUserInteraction, resetSavedLayout])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -444,8 +443,9 @@ function ProjectWorkspaceCanvasContent({
     void reactFlow.zoomOut({ duration: 160 })
   }, [notifyCanvasUserInteraction, reactFlow])
   const toggleAutoFollow = useCallback(() => {
+    notifyCanvasUserInteraction()
     setAutoFollowEnabled((current) => !current)
-  }, [])
+  }, [notifyCanvasUserInteraction])
   const selectedNode = useMemo(
     () => flowNodes.find((node) => node.id === selectedNodeId) ?? null,
     [flowNodes, selectedNodeId],
@@ -536,22 +536,6 @@ function ProjectWorkspaceCanvasContent({
               onToggleAutoFollow={toggleAutoFollow}
             />
           </Panel>
-          {pendingFocusNodeIds.length > 0 ? (
-            <Panel
-              position="bottom-right"
-              className="!z-[70] !m-0"
-              style={{ right: 16, bottom: CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX + 16 }}
-            >
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/95 px-4 py-2 text-sm font-medium text-[var(--glass-text-primary)] shadow-lg backdrop-blur-md transition hover:bg-[var(--glass-bg-hover)]"
-                onClick={focusCurrentRunningNodes}
-              >
-                <AppIcon name="crosshair" className="h-4 w-4" />
-                {t('focusFollow.jumpToActive')}
-              </button>
-            </Panel>
-          ) : null}
         </ReactFlow>
       </div>
     </div>

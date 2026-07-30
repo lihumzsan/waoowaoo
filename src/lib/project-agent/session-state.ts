@@ -87,15 +87,32 @@ export interface ProjectAgentSessionTask {
   taskType: string
   targetType: string
   targetId: string
-  status: TaskStatus | string
+  status: TaskStatus
+  terminal: boolean
+  failure: {
+    errorCode: string | null
+    message: string | null
+  } | null
+}
+
+export interface ProjectAgentSessionTaskBatch {
+  waitId: string
+  status: ProjectAgentSessionWait['status']
+  terminalStatus: ProjectAgentSessionWait['terminalStatus']
+  tasks: ProjectAgentSessionTask[]
+  progress: {
+    total: number
+    terminal: number
+    failed: number
+    canceled: number
+  }
 }
 
 export interface ProjectAgentSessionState {
   currentRun: ProjectAgentSessionRun | null
   currentActivity: ProjectAgentSessionActivity | null
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
-  activeWaits: ProjectAgentSessionWait[]
-  activeTasks: ProjectAgentSessionTask[]
+  taskBatches: ProjectAgentSessionTaskBatch[]
   subagents: ProjectAgentSubagentView[]
   plan: ProjectAgentPlanSnapshot | null
 }
@@ -355,24 +372,38 @@ async function buildPendingInteraction(params: {
   return null
 }
 
-async function listActiveTasksForWaits(params: {
+function normalizeSessionTaskStatus(value: string): TaskStatus {
+  if (
+    value === TASK_STATUS.QUEUED
+    || value === TASK_STATUS.PROCESSING
+    || value === TASK_STATUS.COMPLETED
+    || value === TASK_STATUS.FAILED
+    || value === TASK_STATUS.CANCELED
+    || value === TASK_STATUS.DISMISSED
+  ) return value
+  throw new Error(`PROJECT_AGENT_SESSION_TASK_STATUS_INVALID:${value}`)
+}
+
+function isSessionTaskTerminal(status: TaskStatus): boolean {
+  return status === TASK_STATUS.COMPLETED
+    || status === TASK_STATUS.FAILED
+    || status === TASK_STATUS.CANCELED
+    || status === TASK_STATUS.DISMISSED
+}
+
+async function listTaskBatchesForWaits(params: {
   projectId: string
   userId: string
   waits: readonly ProjectAgentSessionWait[]
-}): Promise<ProjectAgentSessionTask[]> {
-  const taskIds = Array.from(new Set(params.waits
-    .filter((wait) => wait.status === 'collecting' || wait.status === 'pending')
-    .flatMap((wait) => wait.taskIds)))
+}): Promise<ProjectAgentSessionTaskBatch[]> {
+  const taskIds = Array.from(new Set(params.waits.flatMap((wait) => wait.taskIds)))
   if (taskIds.length === 0) return []
   const tasks = await prisma.task.findMany({
     where: {
       id: { in: taskIds },
       projectId: params.projectId,
       userId: params.userId,
-      type: { not: TASK_TYPE.CREATIVE_WORK },
-      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
     },
-    orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
       operationId: true,
@@ -380,16 +411,53 @@ async function listActiveTasksForWaits(params: {
       targetType: true,
       targetId: true,
       status: true,
+      errorCode: true,
+      errorMessage: true,
     },
   })
-  return tasks.map((task) => ({
-    taskId: task.id,
-    operationId: task.operationId,
-    taskType: task.type,
-    targetType: task.targetType,
-    targetId: task.targetId,
-    status: task.status,
-  }))
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const missingTaskIds = taskIds.filter((taskId) => !taskById.has(taskId))
+  if (missingTaskIds.length > 0) {
+    throw new Error(`PROJECT_AGENT_SESSION_WAIT_TASK_MISSING:${missingTaskIds.join(',')}`)
+  }
+
+  return params.waits.flatMap((wait) => {
+    const projectedTasks = wait.taskIds.flatMap((taskId): ProjectAgentSessionTask[] => {
+      const task = taskById.get(taskId)
+      if (!task) throw new Error(`PROJECT_AGENT_SESSION_WAIT_TASK_MISSING:${taskId}`)
+      if (task.type === TASK_TYPE.CREATIVE_WORK) return []
+      const status = normalizeSessionTaskStatus(task.status)
+      const failed = status === TASK_STATUS.FAILED || status === TASK_STATUS.DISMISSED
+      return [{
+        taskId: task.id,
+        operationId: task.operationId,
+        taskType: task.type,
+        targetType: task.targetType,
+        targetId: task.targetId,
+        status,
+        terminal: isSessionTaskTerminal(status),
+        failure: failed
+          ? {
+              errorCode: task.errorCode,
+              message: task.errorMessage,
+            }
+          : null,
+      }]
+    })
+    if (projectedTasks.length === 0) return []
+    return [{
+      waitId: wait.waitId,
+      status: wait.status,
+      terminalStatus: wait.terminalStatus,
+      tasks: projectedTasks,
+      progress: {
+        total: projectedTasks.length,
+        terminal: projectedTasks.filter((task) => task.terminal).length,
+        failed: projectedTasks.filter((task) => task.failure !== null).length,
+        canceled: projectedTasks.filter((task) => task.status === TASK_STATUS.CANCELED).length,
+      },
+    }]
+  })
 }
 
 async function listCreativeSubagents(params: {
@@ -491,10 +559,6 @@ async function buildProjectAgentSessionState(
   input: ProjectAgentSessionScopeInput,
 ): Promise<ProjectAgentSessionState> {
   const assistantId = input.assistantId ?? 'workspace-command'
-  const scope = {
-    ...input,
-    assistantId,
-  }
   const [activeRun, recentRuns, waits, pendingInterruption, openFacts, plan] = await Promise.all([
     readUniqueActiveProjectAgentRun({
       projectId: input.projectId,
@@ -555,11 +619,11 @@ async function buildProjectAgentSessionState(
     activity: currentActivity,
     openFacts,
   })
-  const [pendingInteraction, activeTasks, subagents] = await Promise.all([
+  const [pendingInteraction, taskBatches, subagents] = await Promise.all([
     buildPendingInteraction({
       interruption: facts.interruption,
     }),
-    listActiveTasksForWaits({
+    listTaskBatchesForWaits({
       projectId: input.projectId,
       userId: input.userId,
       waits,
@@ -584,8 +648,7 @@ async function buildProjectAgentSessionState(
     currentRun,
     currentActivity: facts.activity,
     pendingInteraction,
-    activeWaits: waits,
-    activeTasks,
+    taskBatches,
     subagents,
     plan,
   }

@@ -92,10 +92,12 @@ export function useWorkspaceAssistantHasRunningSurface(): boolean {
 
 function WorkspaceAssistantReasoningDisclosure({
   running,
+  failed = false,
   label,
   children,
 }: {
   readonly running: boolean
+  readonly failed?: boolean
   readonly label: string
   readonly children: ReactNode
 }) {
@@ -118,6 +120,8 @@ function WorkspaceAssistantReasoningDisclosure({
       >
         {running ? (
           <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+        ) : failed ? (
+          <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-danger-fg)]" aria-hidden="true" />
         ) : (
           <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white" aria-hidden="true">
             <AppIcon name="check" className="h-2.5 w-2.5" />
@@ -266,16 +270,30 @@ export function WorkspaceAssistantRunTraceGroup({
   const toolCallCount = useMessage((state) => (
     resolveWorkspaceAssistantRunTraceView(state.content).visibleToolCallCount
   ))
+  const runStatus = useMessage((state) => (
+    resolveWorkspaceAssistantRunTraceView(state.content).runStatus
+  ))
 
   if (groupKey !== WORKSPACE_ASSISTANT_RUN_TRACE_GROUP_KEY) return <>{children}</>
 
+  const failed = runStatus === 'failed' || runStatus === 'cancelled'
   const label = toolCallCount > 0
-    ? t('reasoning.executionCompleted', { count: toolCallCount })
-    : t('reasoning.completed')
+    ? t(
+        runStatus === 'running'
+          ? 'reasoning.executionRunning'
+          : failed
+            ? 'reasoning.executionFailed'
+            : 'reasoning.executionCompleted',
+        { count: toolCallCount },
+      )
+    : failed
+      ? t('reasoning.failed')
+      : t('reasoning.completed')
 
   return (
     <WorkspaceAssistantReasoningDisclosure
-      running={false}
+      running={runStatus === 'running'}
+      failed={failed}
       label={label}
     >
       <WorkspaceAssistantRunTraceGroupContext.Provider value>

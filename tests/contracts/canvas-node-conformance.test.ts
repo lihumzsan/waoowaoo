@@ -7,6 +7,7 @@ import {
   resolveWorkspaceCanvasNodeSize,
 } from '@/features/project-workspace/canvas/node-presentation-profiles'
 import { CREATIVE_RESOURCE_MEDIA_TYPES } from '@/lib/creative-resource/contracts'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('workspace Canvas node registry conformance', () => {
@@ -37,11 +38,13 @@ describe('workspace Canvas node registry conformance', () => {
       const shell = resolveWorkspaceCanvasMediaShell({
         kind: 'resourceCard',
         mediaType,
+        schemaId: mediaType === 'image' ? CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE : `generic.${mediaType}`,
         projectAspectRatio: '16:9',
       })
       const size = resolveWorkspaceCanvasNodeSize({
         kind: 'resourceCard',
         mediaType,
+        schemaId: mediaType === 'image' ? CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE : `generic.${mediaType}`,
         projectAspectRatio: '16:9',
       })
       expect(shell.width).toBeGreaterThan(0)
@@ -55,11 +58,13 @@ describe('workspace Canvas node registry conformance', () => {
     const wide = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'image',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       projectAspectRatio: '16:9',
     })
     const tall = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'image',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
       projectAspectRatio: '9:16',
     })
     expect(wide.form).toBe('frame')
@@ -70,8 +75,41 @@ describe('workspace Canvas node registry conformance', () => {
     const fallback = resolveWorkspaceCanvasMediaShell({
       kind: 'resourceCard',
       mediaType: 'video',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
       projectAspectRatio: null,
     })
     expect(fallback.width / fallback.height).toBeCloseTo(16 / 9, 1)
+  })
+
+  it('resolves frozen ratio, media dimensions, and asset policy before the project ratio', () => {
+    const frozen = resolveWorkspaceCanvasMediaShell({
+      kind: 'resourceCard',
+      mediaType: 'image',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      generationOptions: { aspectRatio: '1:1' },
+      mediaWidth: 1600,
+      mediaHeight: 900,
+      projectAspectRatio: '9:16',
+    })
+    expect(frozen.width / frozen.height).toBeCloseTo(1, 1)
+
+    const media = resolveWorkspaceCanvasMediaShell({
+      kind: 'resourceCard',
+      mediaType: 'image',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_IMAGE,
+      mediaWidth: 1600,
+      mediaHeight: 900,
+      projectAspectRatio: '9:16',
+    })
+    expect(media.width / media.height).toBeCloseTo(16 / 9, 1)
+
+    const asset = resolveWorkspaceCanvasMediaShell({
+      kind: 'resourceCard',
+      mediaType: 'image',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CHARACTER_IMAGE,
+      projectAspectRatio: '16:9',
+    })
+    expect(asset.width / asset.height).toBeCloseTo(4 / 3, 1)
+    expect(asset.fit).toBe('contain')
   })
 })

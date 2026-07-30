@@ -1,4 +1,5 @@
 import type { AgentInputItem } from '@openai/agents'
+import { AppError } from '@/lib/errors/app-error'
 import {
   estimateProjectAgentTextTokens,
   estimateProjectAgentUnknownTokens,
@@ -10,6 +11,7 @@ import {
 } from './budget'
 import { shedProjectAgentToolResults } from './tool-result'
 import type { ProjectAgentLocale } from '../locale'
+import { projectProjectAgentActiveContext } from './checkpoint'
 
 /**
  * The single authority for what this agent's model sees on any given step.
@@ -46,7 +48,7 @@ export type ProjectAgentModelInputFilterInput = {
    * their exact historical call/result pairs, but a later segment must not see
    * those expired definitions as reusable invocation authority.
    */
-  readonly staleToolDiscoveryCallIds: ReadonlySet<string>
+  readonly staleBoundToolDiscoveryCallIds: ReadonlySet<string>
 }
 
 /**
@@ -67,23 +69,52 @@ function readFunctionItemIdentity(item: AgentInputItem): {
   readonly type: 'function_call' | 'function_call_result'
   readonly callId: string
   readonly name: string
+  readonly argumentsJson: string | null
 } | null {
   const record = item as unknown as Record<string, unknown>
   if (record.type !== 'function_call' && record.type !== 'function_call_result') return null
   const callId = typeof record.callId === 'string' ? record.callId.trim() : ''
   const name = typeof record.name === 'string' ? record.name.trim() : ''
-  return callId && name ? { type: record.type, callId, name } : null
+  return callId && name
+    ? {
+        type: record.type,
+        callId,
+        name,
+        argumentsJson: record.type === 'function_call' && typeof record.arguments === 'string'
+          ? record.arguments
+          : null,
+      }
+    : null
 }
 
-export function collectProjectAgentFunctionCallIds(
+export function collectProjectAgentBoundToolDiscoveryCallIds(
   items: readonly AgentInputItem[],
   toolName: string,
+  boundOperationIds: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const normalizedToolName = toolName.trim()
   if (!normalizedToolName) throw new Error('PROJECT_AGENT_MODEL_INPUT_TOOL_NAME_REQUIRED')
   return new Set(items.flatMap((item) => {
     const identity = readFunctionItemIdentity(item)
-    return identity?.type === 'function_call' && identity.name === normalizedToolName
+    if (
+      identity?.type !== 'function_call'
+      || identity.name !== normalizedToolName
+      || !identity.argumentsJson
+    ) return []
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(identity.argumentsJson)
+    } catch {
+      return [identity.callId]
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return [identity.callId]
+    }
+    const toolIds = (parsed as Record<string, unknown>).toolIds
+    if (!Array.isArray(toolIds) || toolIds.some((toolId) => typeof toolId !== 'string')) {
+      return [identity.callId]
+    }
+    return toolIds.some((toolId) => boundOperationIds.has(toolId))
       ? [identity.callId]
       : []
   }))
@@ -100,13 +131,38 @@ function dropStaleToolDiscoveryPairs(
   })
 }
 
+/**
+ * Reuses the exact lossless preprocessing already chosen for an over-budget
+ * request as the input to its single context compression. Current-turn input
+ * contains no historical tool results, so replaying the recorded freed-token
+ * target over Session history clears the same oldest recoverable results.
+ */
+export function prepareProjectAgentContextCompressionInput(
+  config: ProjectAgentModelInputFilterInput,
+  historyItems: readonly AgentInputItem[],
+  freedTokens: number,
+): AgentInputItem[] {
+  const executionScopedHistory = dropStaleToolDiscoveryPairs(
+    projectProjectAgentActiveContext(historyItems),
+    config.staleBoundToolDiscoveryCallIds,
+  )
+  if (freedTokens <= 0) return executionScopedHistory
+  return shedProjectAgentToolResults({
+    items: executionScopedHistory,
+    locale: config.locale,
+    keepRecentResults: KEEP_RECENT_TOOL_RESULTS,
+    targetFreedTokens: freedTokens,
+    irreplaceableToolNames: config.irreplaceableToolNames,
+  }).items
+}
+
 export function decideProjectAgentModelInput(
   config: ProjectAgentModelInputFilterInput,
   modelData: { input: AgentInputItem[]; instructions?: string },
 ): ProjectAgentModelInputDecision {
   const executionScopedInput = dropStaleToolDiscoveryPairs(
-    modelData.input,
-    config.staleToolDiscoveryCallIds,
+    projectProjectAgentActiveContext(modelData.input),
+    config.staleBoundToolDiscoveryCallIds,
   )
   const instructionTokens = modelData.instructions
     ? estimateProjectAgentTextTokens(modelData.instructions)
@@ -157,4 +213,20 @@ export function decideProjectAgentModelInput(
     clearedResultCount: shedding?.clearedResultCount ?? 0,
     freedTokens: shedding?.freedTokens ?? 0,
   }
+}
+
+export function assertProjectAgentModelInputWithinBudget(
+  decision: ProjectAgentModelInputDecision,
+): void {
+  if (!decision.overBudget) return
+  throw new AppError(
+    'CONTEXT_BUDGET_EXCEEDED',
+    'PROJECT_AGENT_MODEL_INPUT_BUDGET_EXCEEDED',
+    {
+      details: {
+        availableInputTokens: decision.budget?.availableInputTokens ?? null,
+        estimatedInputTokens: decision.estimatedInputTokens,
+      },
+    },
+  )
 }

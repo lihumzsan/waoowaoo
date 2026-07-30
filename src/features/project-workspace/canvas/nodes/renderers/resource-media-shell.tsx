@@ -71,9 +71,11 @@ function FailedBody() {
 function MediaBody({
   resource,
   summary,
+  fit,
 }: {
   readonly resource: CreativeResourceView
   readonly summary: CreativeResourceSummaryView
+  readonly fit: WorkspaceCanvasMediaShell['fit']
 }) {
   if (summary.kind === 'media' && summary.url) {
     if (summary.mediaType === 'image') {
@@ -82,7 +84,7 @@ function MediaBody({
           sourceImageUrl={summary.url}
           alt={resource.name}
           buttonClassName="h-full w-full"
-          imageClassName="h-full w-full object-cover"
+          imageClassName={`h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
         />
       )
     }
@@ -141,9 +143,13 @@ export interface ResourceMediaShellItem {
   readonly summary: CreativeResourceSummaryView
 }
 
-function itemBody(item: ResourceMediaShellItem, lifecycle: WorkspaceCanvasLifecycle) {
+function itemBody(
+  item: ResourceMediaShellItem,
+  lifecycle: WorkspaceCanvasLifecycle,
+  fit: WorkspaceCanvasMediaShell['fit'],
+) {
   if (item.resource.status === 'ready') {
-    return <MediaBody resource={item.resource} summary={item.summary} />
+    return <MediaBody resource={item.resource} summary={item.summary} fit={fit} />
   }
   if (item.resource.status === 'pending') {
     return <GeneratingIndicator lifecycle={lifecycle} />
@@ -183,7 +189,7 @@ export function ResourceMediaShell({
         style={frameStyle}
         data-media-shell-form={shell.form}
       >
-        {item ? itemBody(item, lifecycle) : <EmptyMediaBody />}
+        {item ? itemBody(item, lifecycle, shell.fit) : <EmptyMediaBody />}
       </div>
     )
   }
@@ -198,7 +204,7 @@ export function ResourceMediaShell({
             key={item.resource.resourceId}
             className="overflow-hidden rounded-xl bg-slate-100"
           >
-            {itemBody(item, lifecycle)}
+          {itemBody(item, lifecycle, shell.fit)}
           </div>
         ))}
       </div>

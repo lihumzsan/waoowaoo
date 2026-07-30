@@ -33,10 +33,7 @@
         "fitView": "Fit view",
         "zoomIn": "Zoom in",
         "zoomOut": "Zoom out",
-        "autoFollow": "Auto-follow generation"
-      },
-      "focusFollow": {
-        "jumpToActive": "View current generation"
+        "autoFollow": "Fit when new content appears"
       },
       "status": {
         "pending": "Pending",

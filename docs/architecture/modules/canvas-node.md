@@ -19,17 +19,19 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据文案、有无字段、timer 或 refetch 推断 succeeded/failed。
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
 - **CN-06 — 视频只作为 Resource 或真实 Task 投影。** Canvas 不存在 Storyboard、Panel、VideoGroup、EditScript stage 或专用 `videoPlan` 流程节点。每个生成结果是独立 video Resource；需要表达 Chapter/镜头语义时由 schema 与真实 Lineage 附加，不能改变 lifecycle 或建立第二生成入口。
-- **CN-07 — 专业文字结果仍是 Resource。** 剧本、Story Canon、continuity analysis、asset/video prompt 与 music direction 通过 schema-aware Resource renderer 展示；不得恢复制作规划、镜头执行或风格预览专用阶段卡。
+- **CN-07 — 专业文字结果仍是 Resource。** 剧本、Chapter Continuity Plan、asset/video prompt 与 music direction 通过 schema-aware Resource renderer 展示；不得恢复独立 Story Canon、continuity analysis、制作规划、镜头执行或风格预览专用阶段卡。
 - **CN-08 — 同步与异步写入都精确交接 Query。** 同步 Operation、异步 Resource 的提交事务和 Task Terminal 只通过注册的 `affectedResources` 发布可 replay 事实；提交事件只公布已经持久化的 pending Resource，终态事件只公布 Terminal 已结算事实。客户端只 invalidate/refetch 正式 Query，禁止从 TaskType、target、operation output 或本地 baseline 猜更新。
 - **CN-09 — 最终成片仍是普通视频。** 完成的章节视频与最终渲染都投影为普通 video ResourceCard，只由名称、schemaId 或 Binding role 表达用途；不得注册 `finalTimeline/finalOutput/finalArtifact` 专用节点或 renderer。渲染中的 Task 由通用 Task/Assistant 生命周期展示，成功媒体到达后才作为普通 VideoCard 进入 Canvas。
 - **CN-10 — 连线只表达真实 Lineage。** Resource edge 必须来自持久 `inputResourceId → outputResourceId` Lineage；推荐顺序、Canvas 邻近、Workflow step、同批候选或共享 episode 都不能产生边。没有实际引用的两个独立节点保持不连接。
-- **CN-11 — 媒体 presentation 只来自 profile 契约。** 卡片形态与尺寸由 `node-presentation-profiles.ts` 按媒体族穷尽声明：image/video 为 `frame`（按项目 `videoRatio` 定宽高）、audio 为 `bar` 矮条、text 为固定 `card`；pending 生成外壳与就绪媒体共用同一 shell，完成时不跳变。projector 与 renderer 只消费解析后的 shell，禁止各自按媒体类型分支尺寸。折叠卡只显示标题、状态与媒体本体（或生成外壳），不显示提示词、引用列表、进度条或任何领域 ID；生成中呈现为阶段文案（submitted/queued/generating，`saving` 为预留映射位）加模拟百分比，超时后只显示已等待时长，永不钉在 99%。
+- **CN-11 — 媒体 presentation 只来自 profile 契约。** 卡片形态与尺寸由 `node-presentation-profiles.ts` 按媒体族穷尽声明：image/video 为 `frame`，其画幅只按“生成时冻结的 aspectRatio → 已完成媒体 width/height → Asset Format Policy → 项目 videoRatio”解析；audio 为 `bar` 矮条、text 为固定 `card`。pending 生成外壳与就绪媒体共用同一 shell，完成时不跳变；资产图由同一 shell 声明 `contain`，不得裁切人物、场景或道具。projector 与 renderer 只消费解析后的 shell，禁止各自按媒体类型分支尺寸。折叠卡只显示标题、状态与媒体本体（或生成外壳），不显示提示词、引用列表、进度条或任何领域 ID；生成中呈现为阶段文案（submitted/queued/generating，`saving` 为预留映射位）加模拟百分比，超时后只显示已等待时长，永不钉在 99%。
 - **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容只消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；UI 不得按 resourceId 零散请求或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
+- **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
 
 ## 权威入口
 
 - 节点 registry：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
 - 媒体 presentation 契约：`src/features/project-workspace/canvas/node-presentation-profiles.ts`（每媒体族 shell 声明与唯一尺寸 resolver）。
+- 新批次整体视口定位：`src/features/project-workspace/canvas/hooks/useCanvasFocusFollow.ts`；批次身份与 durable target 只来自 Assistant Session View。
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
 - 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx`，数据只来自 card View（prompt provenance + `inputSummaries`）。
@@ -57,6 +59,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - Canvas 收费按钮曾在依赖资源尚未完成时缓存 plan preflight 的 `NOT_READY`；Task 终态虽然通过显式 `affectedResources` 刷新了正式领域 Query，却没有让由这些资源派生的 operation plan preview 失效，执行计划已 `ready` 后按钮仍保持旧错误。当前统一资源变更同步会按 project 同时 invalidate 全部 plan preview；服务端 plan/execute 的内容重验证仍是审批正确性的唯一裁判，客户端失效只负责展示最新报价 View。
 - Resource 提交曾只显示 Assistant 回执，Canvas 要等媒体终态才看见节点和 prompt；专业源剧本 origin 匹配错误又生成 raw JSON 重复卡，规划 projector 还会凭来源种类创建空制作规划和主链假连线。当前 pending Resource 提交事务立即触发正式 Query，renderer 从冻结 Task payload 展示 prompt；专业 origin 只匹配真实专业 identity，所有非 Lineage 连线已删除。
 - Workflow action gating 删除后，旧 Video Segment 卡仍按资产审核/镜头计划状态预取付费 plan，说明删除 gate 没有删除固定链。当前该专用 action policy 和 projector 一并删除；新的生成或重试只由显式 Resource 输入调用通用 Operation。
+- Canvas 自动跟随最初为串行阶段设计：它持续选择“第一个 running 节点”，同批并发成员逐个终态时选择结果随之变化，并由 3 秒 timer 在用户操作后重新抢回视口。媒体卡同时把所有图片强塞进项目 `videoRatio` 外壳并使用 `object-cover`，4:3 资产图因此上下裁切。当前批次 identity 只触发一次全画布 `fitView`，用户操作立即终止；媒体 shell 由冻结执行事实、真实媒体尺寸和 Asset Format Policy 依次解析，资产完整显示。
 
 ## 修改检查表
 

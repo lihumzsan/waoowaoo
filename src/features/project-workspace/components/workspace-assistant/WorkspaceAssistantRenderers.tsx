@@ -54,16 +54,7 @@ import {
 } from './WorkspaceAssistantNotices'
 import { WebSearchDataCard } from './WorkspaceAssistantWebSearch'
 import { WorkspaceAssistantResourceLinks } from './WorkspaceAssistantResourceLinks'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
-  if (!isRecord(metadata)) return false
-  const custom = metadata.custom
-  return isRecord(custom) && custom.workspaceAssistantHidden === true
-}
+import { isWorkspaceAssistantHiddenThreadMessageMetadata } from './workspace-assistant-panel-state'
 
 type StandardMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
 type GroupedMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Unstable_PartsGrouped>['components']>
@@ -332,10 +323,9 @@ export function useWorkspaceAssistantMessagePartComponents({
   ])
 }
 
-function HiddenConversationSummaryMessage(props: { children: React.ReactNode }) {
+function HiddenWorkspaceAssistantInternalMessage(props: { children: React.ReactNode }) {
   const shouldHide = useMessage((state) => (
-    state.metadata.custom?.projectAgentConversationSummary === true
-      || isWorkspaceAssistantHiddenMetadata(state.metadata)
+    isWorkspaceAssistantHiddenThreadMessageMetadata(state.metadata)
   ))
   if (shouldHide) return null
   return <>{props.children}</>
@@ -357,14 +347,14 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
   return (
     <>
       <MessagePrimitive.If user>
-        <HiddenConversationSummaryMessage>
+        <HiddenWorkspaceAssistantInternalMessage>
           <div className="ml-auto flex w-full max-w-[88%] flex-col items-end">
             <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS}>
               <MessagePrimitive.Parts />
               <WorkspaceAssistantUserTextAttachments />
             </MessagePrimitive.Root>
           </div>
-        </HiddenConversationSummaryMessage>
+        </HiddenWorkspaceAssistantInternalMessage>
       </MessagePrimitive.If>
 
       <MessagePrimitive.If assistant>
@@ -380,13 +370,13 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
       </MessagePrimitive.If>
 
       <MessagePrimitive.If system>
-        <HiddenConversationSummaryMessage>
+        <HiddenWorkspaceAssistantInternalMessage>
           <div className="space-y-1">
             <MessagePrimitive.Root className="space-y-2 px-1 py-1 text-sm leading-5 text-[var(--glass-text-tertiary)]">
               <MessagePrimitive.Parts components={props.messagePartComponents.standard} />
             </MessagePrimitive.Root>
           </div>
-        </HiddenConversationSummaryMessage>
+        </HiddenWorkspaceAssistantInternalMessage>
       </MessagePrimitive.If>
     </>
   )

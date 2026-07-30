@@ -238,16 +238,12 @@ export interface ProjectAssistantContextSnapshot {
 /**
  * Surfaces a lossy context operation to the user.
  *
- * Shedding recoverable tool results is deliberately silent — the model can
- * re-read them, so a notice would be noise. Summarising conversation is not
- * recoverable, so it must be visible: otherwise a later gap in the assistant's
- * memory reads as the model being careless rather than as a known trade-off,
- * and the user has no way to tell which part was condensed.
+ * Recoverable tool-result shedding is silent. A completed context compression
+ * is visible once, without exposing the internal checkpoint body.
  */
 export interface ProjectAgentContextCompactedPartData {
   runId: string
-  summarizedItemCount: number
-  summaryText: string
+  replacedItemCount: number
 }
 
 export interface ProjectAgentResourceLinksPartData {
