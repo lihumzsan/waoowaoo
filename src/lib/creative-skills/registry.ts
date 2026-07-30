@@ -16,9 +16,9 @@ function defineSkill(
 export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeSkillDefinition>> = {
   'creative-core': defineSkill({
     id: 'creative-core',
-    version: '1.2.0',
+    version: '1.3.0',
     title: '创作核心',
-    summary: '所有专业创作工作的事实边界、目标忠实性、假设管理、通用时长估算与交付自检；由 Worker 自动预加载。',
+    summary: '所有专业创作工作的事实边界、目标忠实性、假设管理、剧本时间线纪律、通用时长估算与交付自检；由 Worker 自动预加载。',
     tags: ['core', 'creative', 'reasoning', 'quality', 'duration'],
   }),
   'story-development': defineSkill({
@@ -37,9 +37,9 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
-    version: '4.1.0',
+    version: '4.2.0',
     title: '创作方向',
-    summary: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究收敛为一份最终的视觉、叙事、导演、剪辑、声音和资产六领域方向。',
+    summary: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究收敛为一份只决定呈现、不改写剧本内容或时间线的六领域方向。',
     tags: ['creative-direction', 'style', 'narrative', 'directing', 'editing', 'sound', 'assets'],
   }),
   'asset-development': defineSkill({
@@ -51,9 +51,9 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '2.0.0',
+    version: '2.1.0',
     title: '视频导演与生成设计',
-    summary: '`outputKind=video_prompt_set` 的唯一专业 Skill：导演规划、镜头与分段设计、唯一最终提示词写法与输出前自检的完整方法。',
+    summary: '`outputKind=video_prompt_set` 的唯一专业 Skill：先从剧本派生整片时间线，再完成导演规划、分段装载、最终提示词与输出前自检。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
   }),
   'music-direction': defineSkill({
