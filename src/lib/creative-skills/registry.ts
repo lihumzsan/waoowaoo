@@ -51,7 +51,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'video-direction': defineSkill({
     id: 'video-direction',
-    version: '2.1.0',
+    version: '2.2.0',
     title: '视频导演与生成设计',
     summary: '`outputKind=video_prompt_set` 的唯一专业 Skill：先从剧本派生整片时间线，再完成导演规划、分段装载、最终提示词与输出前自检。',
     tags: ['video', 'director', 'prompt', 'editing', 'timeline', 'shot', 'camera', 'continuity', 'audio'],
