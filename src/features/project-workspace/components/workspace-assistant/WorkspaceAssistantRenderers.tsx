@@ -343,7 +343,36 @@ function WorkspaceAssistantUserTextAttachments() {
   )
 }
 
-export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: WorkspaceAssistantMessagePartComponents; subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']; onSelectSubagent: (subagentId: string) => void }) {
+/**
+ * "Undelivered" tag under the user bubble whose failed run rolled it back
+ * from the model history. Pure projection (AR-07): the id is derived by the
+ * panel from the persisted session run plus message order (see
+ * resolveWorkspaceAssistantUndeliveredUserMessage in
+ * workspace-assistant-panel-state.ts); this component stores no client-side
+ * send state of its own.
+ */
+function WorkspaceAssistantUserUndeliveredMarker(props: {
+  undeliveredUserMessageId: string | null
+}) {
+  const t = useTranslations('assistantAgent')
+  const isUndelivered = useMessage((state) => (
+    props.undeliveredUserMessageId !== null && state.id === props.undeliveredUserMessageId
+  ))
+  if (!isUndelivered) return null
+  return (
+    <div className="mt-1 flex items-center gap-1 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">
+      <AppIcon name="alert" className="h-3 w-3 shrink-0" />
+      <span>{t('panel.undelivered')}</span>
+    </div>
+  )
+}
+
+export function WorkspaceAssistantThreadMessage(props: {
+  messagePartComponents: WorkspaceAssistantMessagePartComponents
+  subagents: ComponentProps<typeof WorkspaceAssistantSubagentRecordsForMessage>['subagents']
+  onSelectSubagent: (subagentId: string) => void
+  undeliveredUserMessageId?: string | null
+}) {
   return (
     <>
       <MessagePrimitive.If user>
@@ -353,6 +382,9 @@ export function WorkspaceAssistantThreadMessage(props: { messagePartComponents: 
               <MessagePrimitive.Parts />
               <WorkspaceAssistantUserTextAttachments />
             </MessagePrimitive.Root>
+            <WorkspaceAssistantUserUndeliveredMarker
+              undeliveredUserMessageId={props.undeliveredUserMessageId ?? null}
+            />
           </div>
         </HiddenWorkspaceAssistantInternalMessage>
       </MessagePrimitive.If>

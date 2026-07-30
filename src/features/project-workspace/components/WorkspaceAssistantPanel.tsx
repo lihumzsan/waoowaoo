@@ -55,6 +55,8 @@ import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspace
 import {
   parseWorkspaceAssistantFailureText,
   resolveWorkspaceAssistantFailureView,
+  resolveWorkspaceAssistantResendDraft,
+  resolveWorkspaceAssistantUndeliveredUserMessage,
   shouldShowWorkspaceAssistantReplyLoading,
   shouldShowWorkspaceAssistantRunFailureNotice,
   type WorkspaceAssistantFailureView,
@@ -81,8 +83,10 @@ export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
 
 function WorkspaceAssistantRunFailureNotice({
   failure,
+  resend,
 }: {
   failure: WorkspaceAssistantFailureView
+  resend: { readonly pending: boolean; readonly onResend: () => void } | null
 }) {
   const t = useTranslations('assistantAgent')
   return (
@@ -96,6 +100,17 @@ function WorkspaceAssistantRunFailureNotice({
         <div className="break-words text-xs leading-4 opacity-80">{failure.headline}</div>
         {failure.technical ? (
           <div className="mt-0.5 break-all text-[11px] leading-4 opacity-60">{failure.technical}</div>
+        ) : null}
+        {resend ? (
+          <button
+            type="button"
+            disabled={resend.pending}
+            onClick={resend.onResend}
+            className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[var(--glass-tone-warn-fg)]/30 bg-white/70 px-2 py-1 text-xs font-medium text-[var(--glass-tone-warn-fg)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <AppIcon name="refresh" className="h-3 w-3 shrink-0" />
+            {resend.pending ? t('panel.sending') : t('panel.resend')}
+          </button>
         ) : null}
       </div>
     </div>
@@ -233,6 +248,31 @@ export default function WorkspaceAssistantPanel({
       localizeCode: localizeErrorCode,
       unknownFallback: unknownFailureFallback,
     })
+  // Undelivered marker + resend draft are derived from persisted facts only
+  // (failed `user_turn` current run + rendered message order); see the
+  // resolver's doc comment for the attribution boundary. No second copy of
+  // the message or its attachments is stored anywhere.
+  const undeliveredUserMessage = useMemo(() => resolveWorkspaceAssistantUndeliveredUserMessage({
+    messages: assistantRuntime.messages,
+    showRunFailureNotice,
+    currentRunControlKind: currentRun?.controlKind ?? null,
+  }), [assistantRuntime.messages, currentRun?.controlKind, showRunFailureNotice])
+  const resendDraft = useMemo(
+    () => resolveWorkspaceAssistantResendDraft(undeliveredUserMessage),
+    [undeliveredUserMessage],
+  )
+  const sendMessage = assistantRuntime.sendMessage
+  const resendUndeliveredMessage = useCallback(() => {
+    if (!resendDraft) return
+    // A resend is a brand-new user_turn through the single send authority.
+    // Its failures surface through chat.error/controlError exactly like
+    // composer sends; nothing may escape to the React overlay.
+    void sendMessage({
+      text: resendDraft.text,
+      attachments: resendDraft.attachments,
+      mediaAttachments: resendDraft.mediaAttachments,
+    }).catch(() => undefined)
+  }, [resendDraft, sendMessage])
   const taskBatchViews = useMemo(() => taskBatches.map((batch) => {
     const operationIds = Array.from(new Set(batch.tasks.flatMap(
       (task) => task.operationId ? [task.operationId] : [],
@@ -307,6 +347,7 @@ export default function WorkspaceAssistantPanel({
                               messagePartComponents={partComponents}
                               subagents={visibleSubagents}
                               onSelectSubagent={setSelectedSubagentId}
+                              undeliveredUserMessageId={undeliveredUserMessage?.id ?? null}
                             />
                           )}
                         </ThreadPrimitive.Messages>
@@ -323,7 +364,15 @@ export default function WorkspaceAssistantPanel({
                           </div>
                         ) : null}
                         {showRunFailureNotice ? (
-                          <WorkspaceAssistantRunFailureNotice failure={runFailureView} />
+                          <WorkspaceAssistantRunFailureNotice
+                            failure={runFailureView}
+                            resend={resendDraft
+                              ? {
+                                pending: assistantRuntime.pending || assistantRuntime.storageLoading,
+                                onResend: resendUndeliveredMessage,
+                              }
+                              : null}
+                          />
                         ) : null}
                         {!assistantRuntime.storageLoading ? taskBatchViews.map((view) => (
                           <WorkspaceAssistantActiveRunCard
