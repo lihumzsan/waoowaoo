@@ -1,13 +1,16 @@
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { APICallError, generateImage as generateImageWithAiSdk, NoContentGeneratedError } from 'ai'
+import { HTTPClient, OpenRouter } from '@openrouter/sdk'
+import type {
+  ImageGenerationResponse,
+  ImageGenerationUsage,
+  ImageStreamingResponseData,
+} from '@openrouter/sdk/models'
+import { BadRequestResponseError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
   decodeBase64WithLimit,
-  MAX_BASE64_IMAGE_REQUEST_BYTES,
   MAX_IMAGE_BYTES,
-  readResponseBufferWithLimit,
 } from '@/lib/http/body-limits'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import type {
@@ -29,44 +32,121 @@ function requireOpenRouterBaseUrl(baseUrl: string | undefined): string {
   return normalized
 }
 
-function resolveResponseMediaType(mediaTypeValue: string): string {
-  const mediaType = mediaTypeValue.trim().toLowerCase()
+function resolveResponseMediaType(
+  mediaTypeValue: string | undefined,
+  outputFormat: string,
+): string {
+  const mediaType = mediaTypeValue?.trim().toLowerCase() ?? ''
   if (mediaType === 'image/png' || mediaType === 'image/jpeg' || mediaType === 'image/webp') {
     return mediaType
+  }
+  if (!mediaType) {
+    if (outputFormat === 'jpeg') return 'image/jpeg'
+    if (outputFormat === 'webp') return 'image/webp'
+    if (outputFormat === 'png') return 'image/png'
   }
   throw new Error(`OPENROUTER_IMAGE_RESPONSE_MEDIA_TYPE_UNSUPPORTED: ${mediaType}`)
 }
 
 function isProviderAccountHardLimit(error: unknown): boolean {
-  if (!APICallError.isInstance(error) || error.statusCode !== 400 || !error.responseBody) return false
-  try {
-    const payload = JSON.parse(error.responseBody) as unknown
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
-    const root = payload as Record<string, unknown>
-    const detail = root.error
-    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return false
-    const message = (detail as Record<string, unknown>).message
-    if (typeof message !== 'string') return false
-    return message.trim().toLowerCase() === 'billing hard limit has been reached.'
-  } catch {
-    return false
+  return error instanceof BadRequestResponseError
+    && error.error.message.trim().toLowerCase() === 'billing hard limit has been reached.'
+}
+
+function createOpenRouterImageClient(input: {
+  baseUrl: string
+  apiKey: string
+}): OpenRouter {
+  return new OpenRouter({
+    apiKey: input.apiKey,
+    serverURL: input.baseUrl,
+    httpClient: new HTTPClient({
+      fetcher: async (requestInput, requestInit) => (
+        await fetchWithProviderProxy(requestInput, requestInit)
+      ),
+    }),
+    retryConfig: { strategy: 'none' },
+    timeoutMs: OPENROUTER_IMAGE_TIMEOUT_MS,
+  })
+}
+
+function projectOpenRouterUsage(
+  usage: ImageGenerationUsage | undefined,
+): Record<string, unknown> | null {
+  if (!usage) return null
+  return {
+    inputTokens: usage.promptTokens,
+    outputTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
   }
 }
 
-async function fetchBoundedOpenRouterImageResponse(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const response = await fetchWithProviderProxy(input, init)
-  const buffer = await readResponseBufferWithLimit(
-    response,
-    MAX_BASE64_IMAGE_REQUEST_BYTES,
-    'OpenRouter image response',
-  )
-  return new Response(buffer.toString('utf8'), {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
+function projectCompletedImage(input: {
+  imageBase64: string
+  mediaType?: string
+  outputFormat: string
+  usage?: ImageGenerationUsage
+}): GenerateResult {
+  decodeBase64WithLimit(input.imageBase64, MAX_IMAGE_BYTES, 'OpenRouter generated image')
+  const mediaType = resolveResponseMediaType(input.mediaType, input.outputFormat)
+  const usage = projectOpenRouterUsage(input.usage)
+  return {
+    success: true,
+    imageBase64: input.imageBase64,
+    imageUrl: `data:${mediaType};base64,${input.imageBase64}`,
+    ...(usage ? { metadata: { openRouterUsage: usage } } : {}),
+  }
+}
+
+function projectBufferedImage(
+  response: ImageGenerationResponse,
+  outputFormat: string,
+): GenerateResult {
+  if (response.data.length !== 1) {
+    throw new Error(`OPENROUTER_IMAGE_RESPONSE_IMAGE_COUNT_INVALID: ${response.data.length}`)
+  }
+  const image = response.data[0]
+  if (!image) throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE')
+  return projectCompletedImage({
+    imageBase64: image.b64Json,
+    mediaType: image.mediaType,
+    outputFormat,
+    usage: response.usage,
+  })
+}
+
+async function projectStreamingImage(
+  response: ReadableStream<ImageStreamingResponseData>,
+  outputFormat: string,
+): Promise<GenerateResult> {
+  let completed: Extract<
+    ImageStreamingResponseData,
+    { type: 'image_generation.completed' }
+  > | null = null
+
+  for await (const event of response) {
+    if (event.type === 'image_generation.partial_image') {
+      decodeBase64WithLimit(event.b64Json, MAX_IMAGE_BYTES, 'OpenRouter partial image')
+      continue
+    }
+    if (event.type === 'image_generation.completed') {
+      if (completed) throw new Error('OPENROUTER_IMAGE_STREAM_DUPLICATE_COMPLETED')
+      completed = event
+      continue
+    }
+    if (event.type === 'error') {
+      const code = event.error.code?.trim() || 'unknown'
+      throw new Error(`OPENROUTER_IMAGE_STREAM_ERROR: ${code}: ${event.error.message}`)
+    }
+    throw new Error(`OPENROUTER_IMAGE_STREAM_EVENT_UNSUPPORTED: ${String(event.type)}`)
+  }
+
+  if (!completed) throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE')
+  return projectCompletedImage({
+    imageBase64: completed.b64Json,
+    mediaType: completed.mediaType,
+    outputFormat,
+    usage: completed.usage,
   })
 }
 
@@ -97,32 +177,18 @@ export async function requestOpenRouterImage(input: {
     },
   })
 
-  const openRouter = createOpenRouter({
-    apiKey: input.apiKey,
-    baseURL: input.baseUrl,
-    compatibility: 'strict',
-    fetch: fetchBoundedOpenRouterImageResponse,
-  })
+  const openRouter = createOpenRouterImageClient(input)
   try {
-    const result = await generateImageWithAiSdk({
-      model: openRouter.imageModel(input.modelId),
-      prompt: resolved.prompt,
-      n: 1,
-      size: resolved.size,
-      providerOptions: resolved.providerOptions,
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(OPENROUTER_IMAGE_TIMEOUT_MS),
+    const response = await openRouter.images.generate({
+      imageGenerationRequest: {
+        model: input.modelId,
+        ...resolved.request,
+        stream: true,
+      },
     })
-    const imageBase64 = result.image.base64
-    decodeBase64WithLimit(imageBase64, MAX_IMAGE_BYTES, 'OpenRouter generated image')
-    const mediaType = resolveResponseMediaType(result.image.mediaType)
-    const hasUsage = Object.values(result.usage).some((value) => value !== undefined)
-    return {
-      success: true,
-      imageBase64,
-      imageUrl: `data:${mediaType};base64,${imageBase64}`,
-      ...(hasUsage ? { metadata: { openRouterUsage: result.usage } } : {}),
-    }
+    return response instanceof ReadableStream
+      ? await projectStreamingImage(response, resolved.outputFormat)
+      : projectBufferedImage(response, resolved.outputFormat)
   } catch (error) {
     if (isProviderAccountHardLimit(error)) {
       throw new ProviderPreAcceptRejectedError(
@@ -130,9 +196,6 @@ export async function requestOpenRouterImage(input: {
         'OpenRouter upstream provider account reached its billing hard limit before accepting the image request',
         { cause: error },
       )
-    }
-    if (NoContentGeneratedError.isInstance(error)) {
-      throw new Error('OPENROUTER_IMAGE_RESPONSE_MISSING_IMAGE', { cause: error })
     }
     throw error
   }

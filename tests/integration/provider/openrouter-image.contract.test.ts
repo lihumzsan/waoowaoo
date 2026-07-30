@@ -59,22 +59,38 @@ describe('provider contract - OpenRouter image', () => {
     })).toThrow('AI_OPTION_UNSUPPORTED')
   })
 
-  it('submits the dedicated image API payload and projects the buffered image response', async () => {
+  it('streams the dedicated image API exactly once and projects only the completed image', async () => {
     server!.defineScenario({
       method: 'POST',
       path: '/openrouter/images',
       mode: 'success',
       submitResponse: {
         status: 200,
-        body: {
-          data: [{ b64_json: PNG_1X1_BASE64, media_type: 'image/webp' }],
-          usage: {
-            prompt_tokens: 100,
-            completion_tokens: 4075,
-            total_tokens: 4175,
-            cost: 0.165,
-          },
-        },
+        headers: { 'content-type': 'text/event-stream' },
+        body: [
+          `data: ${JSON.stringify({
+            type: 'image_generation.partial_image',
+            partial_image_index: 0,
+            b64_json: PNG_1X1_BASE64,
+          })}`,
+          '',
+          `data: ${JSON.stringify({
+            type: 'image_generation.completed',
+            b64_json: PNG_1X1_BASE64,
+            media_type: 'image/webp',
+            created: 1_785_406_500,
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 4075,
+              total_tokens: 4175,
+              cost: 0.165,
+            },
+          })}`,
+          '',
+          'data: [DONE]',
+          '',
+          '',
+        ].join('\n'),
       },
     })
 
@@ -98,7 +114,7 @@ describe('provider contract - OpenRouter image', () => {
     expect(result).toEqual({
       success: true,
       imageBase64: PNG_1X1_BASE64,
-      imageUrl: `data:image/png;base64,${PNG_1X1_BASE64}`,
+      imageUrl: `data:image/webp;base64,${PNG_1X1_BASE64}`,
       metadata: {
         openRouterUsage: { inputTokens: 100, outputTokens: 4075, totalTokens: 4175 },
       },
@@ -120,12 +136,14 @@ describe('provider contract - OpenRouter image', () => {
       }],
       background: 'opaque',
       output_compression: 60,
+      stream: true,
       provider: {
         only: ['openai'],
         allow_fallbacks: false,
         options: { openai: { moderation: 'low' } },
       },
     })
+    expect(requests[0]?.headers.accept).toBe('text/event-stream')
   })
 
   it('does not retry an uncertain image POST', async () => {
@@ -147,6 +165,41 @@ describe('provider contract - OpenRouter image', () => {
       prompt: 'generate once',
       options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
     })).rejects.toMatchObject({ statusCode: 503 })
+
+    expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
+  })
+
+  it('surfaces a mid-stream provider failure without replaying the image POST', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/openrouter/images',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+        body: [
+          `data: ${JSON.stringify({
+            type: 'error',
+            error: {
+              code: 'server_error',
+              message: 'Generation failed',
+            },
+          })}`,
+          '',
+          'data: [DONE]',
+          '',
+          '',
+        ].join('\n'),
+      },
+    })
+
+    await expect(requestOpenRouterImage({
+      baseUrl: `${server!.baseUrl}/openrouter`,
+      apiKey: 'openrouter-image-key',
+      modelId: 'openai/gpt-image-2',
+      prompt: 'surface the stream failure',
+      options: normalizeImageOptions({ aspectRatio: '1:1', resolution: '1K', quality: 'low' }),
+    })).rejects.toThrow('OPENROUTER_IMAGE_STREAM_ERROR: server_error: Generation failed')
 
     expect(server!.getRequests('POST', '/openrouter/images')).toHaveLength(1)
   })
@@ -184,7 +237,11 @@ describe('provider contract - OpenRouter image', () => {
       method: 'POST',
       path: '/openrouter/images',
       mode: 'malformed_response',
-      submitResponse: { status: 200, body: { data: [] } },
+      submitResponse: {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+        body: 'data: [DONE]\n\n',
+      },
     })
 
     await expect(requestOpenRouterImage({

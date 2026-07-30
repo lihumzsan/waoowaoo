@@ -112,6 +112,7 @@ Prompt Set Resource 本身和实际媒体 Resource 都写入每段视频的 Line
 
 ## 历史回归
 
+- `CR-03` 已把 retry 定义为失败 Resource 的冻结输入重放，但 Primary Prompt 为阻止自主重复扣费，曾把所有 retry 一概限制为“修正输入且请求必须变化”。用户明确要求重新提交时，Primary 因而只读取旧 Task 并拒绝调用已有 retry 分支；planner、Task 和 Resource 防线本身都没有被触达。当前 Prompt 与 Assistant Run 契约共同区分活动 Task 的队列 attempt、用户明确授权后以新报价和新 Task 执行的 exact retry、以及创建新 Resource 的 corrected-input regenerate；exact retry 仍只接受失败 Resource ID，不增加第二执行入口或输入 writer。
 - Resource Lineage 的首次共享校验只验证 `userId + ready`，而 Binding 与 creativeData 又各自维护局部 Project/Episode 条件；同一用户可把另一 Project/Episode 的 ready Resource 冻结进生成输入，materializer 还会再次通过同一不完整校验。根因是 CR-10 没有落实为一个接收目标 scope 的权威裁判。当前 persistence validator 以输出 Resource 的 canonical scope 统一裁决 user/project/episode 兼容性，初次生成、retry、merge、creativeData 与终态物化全部复用；局部 scope 查询已删除。
 - 完整用户剧本的第一次来源捕获只覆盖可由服务端 substring 证明的当前消息文字；图片上传虽然已经物化为 Resource，却只能作为媒体生成引用，Primary 与 Worker都读取不到像素。真实运行因此创建了一个没有正文的 `project.screenplay` 占位 Resource。当前不新增 OCR 持久实体：Primary 看图后的转录仍经唯一 `create_text` 事务写入，服务端把当前附图 Resource 固定为 source Lineage 并拒绝非当前 turn、非图片或重复引用。模型 OCR 内容正确性仍是人工样本复验边界。
 - 初始 Resource spine 同时保存 Resource、Revision、head 和 origin；跨层又逐步只认 Revision，形成多个可合法出现但语义重叠的 identity。修补调用方只能减少某一种不一致，不能消除组合错误。本次直接删除 Revision/head/origin 协议。
