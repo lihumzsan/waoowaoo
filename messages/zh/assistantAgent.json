@@ -14,6 +14,8 @@
     "errorTitle": "发生错误",
     "errorHint": "请附上 requestId 以便排查；你也可以直接重试一次相同指令。",
     "runFailedTitle": "AI 运行失败",
+    "resend": "重新发送",
+    "undelivered": "未送达",
     "sessionStateError": "无法刷新助手状态，请重试或刷新页面后再继续。",
     "backgroundFollowUpRunning": "正在整理已完成任务的结果…",
     "settings": "助手设置",

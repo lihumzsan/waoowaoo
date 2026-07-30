@@ -1,7 +1,17 @@
+import type { UIMessage } from 'ai'
 import { parseApiErrorPayload } from '@/lib/api-error-payload'
 import { isWorkspaceAssistantStaleControlErrorText } from './workspace-assistant-runtime-state'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
+import type { ProjectAgentRunControlKind } from '@/lib/project-agent/runs'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
+import {
+  readProjectAssistantTextAttachmentsFromMessage,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
+import {
+  readProjectAssistantMediaAttachmentsFromMessage,
+  type ProjectAssistantMediaAttachment,
+} from '@/lib/project-agent/media-attachments'
 import type {
   ProjectAgentSubagentEventPartData,
   ProjectAgentSubagentStatus,
@@ -21,13 +31,6 @@ export function resolveWorkspaceAssistantActiveOperationPresentation(
   return WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS[
     operationId as keyof typeof WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS
   ] ?? 'genericRun'
-}
-
-export function shouldShowWorkspaceAssistantExternalTaskRunCard(params: {
-  storageLoading: boolean
-  operationId: string | null | undefined
-}): boolean {
-  return !params.storageLoading && Boolean(params.operationId)
 }
 
 export function resolveWorkspaceAssistantExternalTaskOperationId(
@@ -56,6 +59,90 @@ export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
   return !params.storageLoading
     && !params.replyInFlight
     && params.currentRunStatus === 'failed'
+}
+
+function isMetadataRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Single visibility rule for thread messages that must never render as
+ * bubbles (hidden internal sends marked `workspaceAssistantHidden`). The
+ * renderer and every message-order derivation (e.g. the undelivered marker)
+ * share this predicate so "visible message" has exactly one meaning.
+ */
+export function isWorkspaceAssistantHiddenThreadMessageMetadata(metadata: unknown): boolean {
+  if (!isMetadataRecord(metadata)) return false
+  const custom = metadata.custom
+  if (!isMetadataRecord(custom)) return false
+  return custom.workspaceAssistantHidden === true
+}
+
+/**
+ * Derives the user message whose failed run rolled it back from the model
+ * history, purely from persisted facts (AR-07): the session projection's
+ * current run plus thread message order. No second client-side send state is
+ * introduced.
+ *
+ * Boundary: the persisted run projection does not link a run to the message
+ * that started it, so this can only mark the LAST visible user message, and
+ * only while the failed run is a `user_turn` — approval/choice/task-follow-up
+ * runs consumed no new user message, so marking anything there would be a
+ * false positive. Once any newer send starts (replyInFlight clears the
+ * failure notice) or the run record changes, the marker disappears; older
+ * turns are never marked retroactively.
+ */
+export function resolveWorkspaceAssistantUndeliveredUserMessage(params: {
+  readonly messages: readonly UIMessage[]
+  readonly showRunFailureNotice: boolean
+  readonly currentRunControlKind: ProjectAgentRunControlKind | null
+}): UIMessage | null {
+  if (!params.showRunFailureNotice) return null
+  if (params.currentRunControlKind !== 'user_turn') return null
+  for (let index = params.messages.length - 1; index >= 0; index -= 1) {
+    const message = params.messages[index]
+    if (message.role !== 'user') continue
+    if (isWorkspaceAssistantHiddenThreadMessageMetadata(message.metadata)) continue
+    return message
+  }
+  return null
+}
+
+/** Send input rebuilt from an undelivered user message for a one-click resend. */
+export interface WorkspaceAssistantResendDraft {
+  readonly text: string
+  readonly attachments: readonly ProjectAssistantTextAttachment[]
+  readonly mediaAttachments: readonly ProjectAssistantMediaAttachment[]
+}
+
+/**
+ * Rebuilds the send input from the undelivered user message itself — the same
+ * message object the thread renders — so the resend duplicates no draft state.
+ * Returns null when the message carries nothing resendable or its attachment
+ * metadata fails strict parsing: a resend must be faithful, so a message that
+ * cannot be fully reconstructed gets no resend affordance instead of a
+ * silently degraded retry. Media attachments keep their original signed
+ * `attachmentToken`; the server-side resolve authority re-validates it on the
+ * new send and rejects legacy token-less refs explicitly.
+ */
+export function resolveWorkspaceAssistantResendDraft(
+  message: UIMessage | null,
+): WorkspaceAssistantResendDraft | null {
+  if (!message) return null
+  const text = message.parts
+    .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim()
+  let attachments: ProjectAssistantTextAttachment[]
+  let mediaAttachments: ProjectAssistantMediaAttachment[]
+  try {
+    attachments = readProjectAssistantTextAttachmentsFromMessage(message)
+    mediaAttachments = readProjectAssistantMediaAttachmentsFromMessage(message)
+  } catch {
+    return null
+  }
+  if (!text && attachments.length === 0 && mediaAttachments.length === 0) return null
+  return { text, attachments, mediaAttachments }
 }
 
 /**
