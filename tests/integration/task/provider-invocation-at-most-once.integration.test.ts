@@ -7,6 +7,7 @@ import {
   readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
 import { withLogContext } from '@/lib/logging/context'
+import { AppError } from '@/lib/errors/app-error'
 import { FetchStatusError } from '@/lib/retry'
 import { TASK_TYPE } from '@/lib/task/types'
 import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projector'
@@ -433,6 +434,33 @@ describe('provider invocation at-most-once DB integration', () => {
     expect(laterAttempt).not.toHaveBeenCalled()
     await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
       where: { taskId: 'provider-permanent-rejection-task' },
+      select: { state: true },
+    })).resolves.toEqual({ state: 'rejected' })
+  })
+
+  it('surfaces a typed pre-submission validation error instead of an unknown outcome', async () => {
+    await seedTask('provider-typed-validation-task')
+    const validationExecute = vi.fn(async () => {
+      throw new AppError('MUSIC_PROMPT_TOO_LONG', 'Music prompt is 1035 characters; the model accepts at most 1024', {
+        provider: 'mureka',
+        details: { requested: 1035, allowed: 1024 },
+      })
+    })
+    const laterAttempt = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
+
+    await expect(invoke('provider-typed-validation-task', validationExecute, 1)).rejects.toMatchObject({
+      code: 'MUSIC_PROMPT_TOO_LONG',
+      retryable: false,
+      details: { requested: 1035, allowed: 1024 },
+    })
+    await expect(invoke('provider-typed-validation-task', laterAttempt, 2)).rejects.toMatchObject({
+      retryable: false,
+    })
+
+    expect(validationExecute).toHaveBeenCalledTimes(1)
+    expect(laterAttempt).not.toHaveBeenCalled()
+    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
+      where: { taskId: 'provider-typed-validation-task' },
       select: { state: true },
     })).resolves.toEqual({ state: 'rejected' })
   })

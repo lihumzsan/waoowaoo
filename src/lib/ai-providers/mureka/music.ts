@@ -1,3 +1,4 @@
+import { AppError } from '@/lib/errors/app-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
@@ -29,9 +30,22 @@ function buildMurekaPrompt(prompt: string, options: MurekaMusicOptions): string 
   if (mood) lines.push(`Mood: ${mood}`)
   if (options.vocalMode === 'instrumental') lines.push('Instrumental only. Do not include vocals or lyrics.')
   const composed = lines.join('\n')
-  if (!composed.trim()) throw new Error('MUREKA_MUSIC_PROMPT_REQUIRED')
+  // Deterministic pre-submission validation must throw typed AppErrors: the
+  // provider fence treats plain Errors from execute() as an ambiguous
+  // submission outcome, which both hides the real reason and forbids the
+  // immediate corrected retry this input error allows.
+  if (!composed.trim()) {
+    throw new AppError('INVALID_PARAMS', 'Music prompt is required', { provider: 'mureka' })
+  }
   if (composed.length > MUREKA_PROMPT_MAX_CHARS) {
-    throw new Error(`MUREKA_MUSIC_PROMPT_TOO_LONG:${String(composed.length)}`)
+    throw new AppError(
+      'MUSIC_PROMPT_TOO_LONG',
+      `Music prompt is ${String(composed.length)} characters; the model accepts at most ${String(MUREKA_PROMPT_MAX_CHARS)}`,
+      {
+        provider: 'mureka',
+        details: { requested: composed.length, allowed: MUREKA_PROMPT_MAX_CHARS },
+      },
+    )
   }
   return composed
 }
@@ -89,7 +103,7 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
   if (!apiKey) throw new Error('MUREKA_API_KEY_MISSING')
   const modelId = requireSelectedModelId(input.selection, 'mureka:music')
   if (modelId !== MUREKA_9_MODEL_ID) {
-    throw new Error(`MUREKA_MUSIC_MODEL_UNSUPPORTED:${modelId}`)
+    throw new AppError('INVALID_PARAMS', `Mureka music model is unsupported: ${modelId}`, { provider: 'mureka' })
   }
 
   const prompt = buildMurekaPrompt(input.prompt, options)
@@ -101,7 +115,9 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
       : typeof options.durationSeconds === 'number'
         ? Math.round(options.durationSeconds * 1000)
         : null
-    if (!durationMs || durationMs <= 0) throw new Error('MUREKA_SOUNDTRACK_DURATION_REQUIRED')
+    if (!durationMs || durationMs <= 0) {
+      throw new AppError('INVALID_PARAMS', 'Soundtrack generation requires the reference video duration', { provider: 'mureka' })
+    }
     const videoId = await uploadMurekaSoundtrackVideo({ apiKey, baseUrl, videoUrl: referenceVideoUrl })
     const task = await postMurekaJson({
       path: '/v1/soundtrack/generate',

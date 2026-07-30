@@ -144,6 +144,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.MODEL_OUTPUT_TRUNCATED',
     defaultMessage: 'Model output was truncated by the token limit',
   },
+  CONTEXT_BUDGET_EXCEEDED: {
+    httpStatus: 413,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.CONTEXT_BUDGET_EXCEEDED',
+    defaultMessage: 'The assistant context is too large to process',
+  },
   PARSE_ERROR: {
     httpStatus: 502,
     retryable: true,
@@ -229,6 +236,13 @@ export const ERROR_CATALOG = {
     category: ERROR_CATEGORY.VALIDATION,
     userMessageKey: 'errors.VIDEO_API_FORMAT_UNSUPPORTED',
     defaultMessage: 'Video API format is unsupported',
+  },
+  MUSIC_PROMPT_TOO_LONG: {
+    httpStatus: 400,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.MUSIC_PROMPT_TOO_LONG',
+    defaultMessage: 'Music prompt exceeds the model limit',
   },
   GENERATION_FAILED: {
     httpStatus: 500,

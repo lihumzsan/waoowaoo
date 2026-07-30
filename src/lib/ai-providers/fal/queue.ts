@@ -1,7 +1,9 @@
-import { logDebug as _ulogDebug, logInfo as _ulogInfo, logWarn as _ulogWarn, logError as _ulogError } from '@/lib/logging/core'
+import { createScopedLogger } from '@/lib/logging/core'
 import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
+
+const falLogger = createScopedLogger({ module: 'ai-provider.fal', provider: 'fal' })
 
 export interface FalQueueStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
@@ -41,8 +43,12 @@ export async function submitFalTask(endpoint: string, input: FalQueueInput, apiK
     throw new Error('FAL未返回request_id')
   }
 
-  // Stryker disable next-line StringLiteral: observability text does not change the provider contract.
-  _ulogInfo(`[FAL Queue] 任务已提交: ${requestId}`)
+  // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the provider contract.
+  falLogger.info({
+    action: 'fal.queue.submitted',
+    message: 'FAL queue task submitted',
+    details: { endpoint, requestId },
+  })
   return requestId
 }
 
@@ -96,8 +102,12 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
         ? `FAL 错误: ${errorType}`
         : '无法获取结果'
 
-    // Stryker disable next-line StringLiteral: observability text does not change the terminal result.
-    _ulogError(`[FAL Status] 422 错误: ${errorMessage}`)
+    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the terminal result.
+    falLogger.error({
+      action: 'fal.queue.failed',
+      message: 'FAL result fetch returned 422 (permanent)',
+      details: { httpStatus: status, errorType, errorMessage, failureDisposition: 'permanent' },
+    })
     return {
       status: 'COMPLETED',
       completed: true,
@@ -112,8 +122,12 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
       ? 'FAL 下游服务错误：上游模型处理失败'
       : '下游服务错误'
 
-    // Stryker disable next-line StringLiteral: observability text does not change retry classification.
-    _ulogError(`[FAL Status] 500 错误，交由瞬时错误重试: ${errorDetail}`)
+    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change retry classification.
+    falLogger.error({
+      action: 'fal.queue.failed',
+      message: 'FAL result fetch returned 500, rethrown as transient for retry',
+      details: { httpStatus: status, errorDetail },
+    })
     throw new FetchStatusError(status, errorDetail)
   }
 
@@ -153,15 +167,24 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
 
   // 例行 pending 查询不是提交/计费/终态事实，按 provider-gateway 契约只记 DEBUG；
   // 受理、完成、明确失败与查询异常仍保留 INFO/ERROR 可观测性。
-  // Stryker disable next-line StringLiteral,MethodExpression: observability text does not change status handling.
-  _ulogDebug(`[FAL Status] requestId=${requestId.slice(0, 16)}... 状态=${status}`)
+  // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change status handling.
+  falLogger.debug({
+    action: 'fal.queue.status',
+    message: 'FAL queue status polled',
+    details: { endpoint, requestId, status },
+  })
 
   if (status === 'COMPLETED') {
     const resultUrl = typeof data.response_url === 'string'
       ? data.response_url
       : buildFalQueueUrl(`${endpoint}/requests/${requestId}`)
-    // Stryker disable next-line StringLiteral: observability text does not change result retrieval.
-    _ulogInfo(`[FAL Status] 任务已完成，获取结果: ${resultUrl}`)
+    // 只记 endpoint/requestId identity，不记结果 URL 原文（LG-03）。
+    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change result retrieval.
+    falLogger.info({
+      action: 'fal.queue.completed',
+      message: 'FAL queue task completed, fetching result',
+      details: { endpoint, requestId, status },
+    })
 
     const resultResponse = await fetchWithProviderProxy(resultUrl, {
       method: 'GET',
@@ -175,8 +198,12 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       const resultData = await resultResponse.json()
       const mediaUrl = readFalQueueResultUrl(resultData)
 
-      // Stryker disable next-line StringLiteral,BooleanLiteral: observability text does not change media validation.
-      _ulogInfo(`[FAL Status] 获取结果成功: hasMedia=${!!mediaUrl}`)
+      // Stryker disable next-line StringLiteral,ObjectLiteral,BooleanLiteral: observability text does not change media validation.
+      falLogger.info({
+        action: 'fal.queue.result',
+        message: 'FAL queue result fetched',
+        details: { endpoint, requestId, hasMedia: Boolean(mediaUrl) },
+      })
 
       if (!mediaUrl) {
         return {
@@ -197,8 +224,17 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
     }
 
     const errorText = await resultResponse.text()
-    // Stryker disable next-line StringLiteral,MethodExpression: observability text does not change error classification.
-    _ulogError(`[FAL Status] 获取结果失败 (${resultResponse.status}): ${errorText.slice(0, 300)}`)
+    // Stryker disable next-line StringLiteral,ObjectLiteral,MethodExpression: observability text does not change error classification.
+    falLogger.error({
+      action: 'fal.queue.failed',
+      message: 'FAL result fetch failed',
+      details: {
+        endpoint,
+        requestId,
+        httpStatus: resultResponse.status,
+        errorSnippet: errorText.slice(0, 300),
+      },
+    })
     const terminalError = parseFalResultFetchError(resultResponse.status, errorText)
     if (terminalError) {
       return terminalError
@@ -247,15 +283,28 @@ export async function cancelFalTask(endpoint: string, requestId: string, apiKey:
   })
 
   if (response.ok) {
-    // Stryker disable next-line StringLiteral: observability text does not change the cancel protocol.
-    _ulogInfo(`[FAL Cancel] 取消已受理: requestId=${requestId.slice(0, 16)}...`)
+    // Stryker disable next-line StringLiteral,ObjectLiteral: observability text does not change the cancel protocol.
+    falLogger.info({
+      action: 'fal.queue.cancelled',
+      message: 'FAL cancel accepted',
+      details: { endpoint, requestId },
+    })
     return
   }
 
   const errorText = await response.text()
   if (response.status >= 400 && response.status < 500) {
-    // Stryker disable next-line StringLiteral,MethodExpression: observability text does not change the tolerated outcome.
-    _ulogWarn(`[FAL Cancel] 请求已终态或无法取消 (${response.status}): ${errorText.slice(0, 300)}`)
+    // Stryker disable next-line StringLiteral,ObjectLiteral,MethodExpression: observability text does not change the tolerated outcome.
+    falLogger.warn({
+      action: 'fal.queue.cancel_rejected',
+      message: 'FAL cancel rejected: request already terminal or unknown',
+      details: {
+        endpoint,
+        requestId,
+        httpStatus: response.status,
+        errorSnippet: errorText.slice(0, 300),
+      },
+    })
     return
   }
   throw new FetchStatusError(response.status, errorText)

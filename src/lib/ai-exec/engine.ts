@@ -1,4 +1,3 @@
-import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { GenerateResult } from '@/lib/ai-providers/runtime-types'
 import type {
   AiModality,
@@ -44,6 +43,12 @@ import {
 } from '@/lib/task/provider-invocation'
 import { resolveProviderRouteSet } from '@/lib/ai-registry/provider-route-set'
 import type { AiResolvedSelection } from '@/lib/ai-registry/types'
+import {
+  logMediaModelSelectionResolved,
+  summarizeGenerateResult,
+  summarizeMediaRequestInput,
+  wrapMediaProviderExecution,
+} from '@/lib/ai-exec/media-observe'
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'voice'>
 
@@ -163,7 +168,11 @@ export async function executeMediaGeneration(
   }
 
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
-  _ulogInfo(`[ai-exec:${input.modality}] resolved model selection: ${selection.modelKey}`)
+  logMediaModelSelectionResolved({
+    modality: input.modality,
+    provider: selection.provider,
+    modelKey: selection.modelKey,
+  })
   const buildRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {
     const adapter = resolveAiProviderAdapter(routeSelection.provider)
     switch (input.modality) {
@@ -270,14 +279,33 @@ export async function executeMediaGeneration(
     }
     }
   }
+  // Logging-only wrapper around the provider execution throat; it swallows its
+  // own failures and rethrows execution errors unchanged (no control-flow change).
+  const buildObservedRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {
+    const route = buildRoute(routeSelection)
+    return {
+      ...route,
+      execute: () => wrapMediaProviderExecution(
+        {
+          provider: route.provider,
+          modelKey: route.modelKey,
+          modality: input.modality,
+          phase: 'execute',
+          requestSummary: () => summarizeMediaRequestInput(input),
+        },
+        route.execute,
+        summarizeGenerateResult,
+      ),
+    }
+  }
   const taskId = getLogContext().taskId
   let result: GenerateResult
   if (!taskId) {
-    result = await buildRoute(selection).execute()
+    result = await buildObservedRoute(selection).execute()
   } else {
     if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
     const routeSet = resolveProviderRouteSet(input.modality, selection.modelKey)
-    const routes = routeSet.routes.map((route) => buildRoute({
+    const routes = routeSet.routes.map((route) => buildObservedRoute({
       provider: route.provider,
       modelId: route.modelId,
       modelKey: route.modelKey,
@@ -297,12 +325,22 @@ export async function executeMediaGeneration(
   const externalId = result.externalId?.trim()
   if (!externalId) throw new Error(`ASYNC_${input.modality.toUpperCase()}_EXTERNAL_ID_MISSING`)
   try {
-    const completed = await waitForAsyncProviderResult({
-      externalId,
-      userId: input.userId,
-      beforePoll: wait?.beforePoll,
-      onPending: wait?.onPending,
-    })
+    const completed = await wrapMediaProviderExecution(
+      {
+        provider: selection.provider,
+        modelKey: selection.modelKey,
+        modality: input.modality,
+        phase: 'async_wait',
+        requestSummary: () => ({ externalId }),
+      },
+      () => waitForAsyncProviderResult({
+        externalId,
+        userId: input.userId,
+        beforePoll: wait?.beforePoll,
+        onPending: wait?.onPending,
+      }),
+      (finished) => ({ hasUrl: Boolean(finished.url) }),
+    )
     return {
       ...result,
       async: false,
