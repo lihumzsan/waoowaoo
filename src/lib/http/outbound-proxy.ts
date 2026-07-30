@@ -1,11 +1,13 @@
-import type { Dispatcher, RequestInit as UndiciRequestInit } from 'undici'
+import type { Dispatcher } from 'undici'
 
 type ProxyDispatcherCache = {
   proxyUrl: string
   dispatcher: Dispatcher
 }
 
-type RequestInitWithDispatcher = UndiciRequestInit & {
+// Node's built-in fetch accepts an undici dispatcher via this extra init
+// field; the DOM-typed RequestInit just doesn't declare it.
+type RequestInitWithDispatcher = RequestInit & {
   dispatcher: Dispatcher
 }
 
@@ -119,13 +121,14 @@ export async function fetchWithProviderProxy(
   const proxy = shouldProxyProviderUrl(input) ? await resolveProxyDispatcher() : null
   if (!proxy) return await fetch(input, init)
 
-  const { fetch: undiciFetch } = await import('undici')
-  type UndiciFetchInput = Parameters<typeof undiciFetch>[0]
+  // Proxied and direct requests must share Node's built-in fetch: the npm
+  // undici copy rejects globals like FormData from Node's bundled undici by
+  // identity, silently serialising multipart bodies to nothing on the wire.
   const requestInit: RequestInitWithDispatcher = {
-    ...((init ?? {}) as unknown as UndiciRequestInit),
+    ...(init ?? {}),
     dispatcher: proxy.dispatcher,
   }
-  return await undiciFetch(input as unknown as UndiciFetchInput, requestInit) as unknown as Response
+  return await fetch(input, requestInit)
 }
 
 export async function withProviderProxyDispatcher<T>(
