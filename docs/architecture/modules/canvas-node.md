@@ -34,7 +34,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - 新批次整体视口定位：`src/features/project-workspace/canvas/hooks/useCanvasFocusFollow.ts`；批次身份与 durable target 只来自 Assistant Session View。
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
-- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx`，数据只来自 card View（prompt provenance + `inputSummaries`）。
+- 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
 - 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
 - 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。

@@ -32,6 +32,8 @@
     "generate": "Generate",
     "regenerate": "Regenerate",
     "preview": "Preview",
+    "play": "Play",
+    "pause": "Pause",
     "download": "Download",
     "upload": "Upload",
     "select": "Select",

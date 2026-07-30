@@ -32,6 +32,8 @@
     "generate": "生成",
     "regenerate": "重新生成",
     "preview": "预览",
+    "play": "播放",
+    "pause": "暂停",
     "download": "下载",
     "upload": "上传",
     "select": "选择",

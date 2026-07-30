@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useContext, type ReactNode } from 'react'
+import React, { useContext } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { isWorkspaceCanvasLifecycleRunning } from '../../lifecycle/workspace-canvas-lifecycle'
@@ -43,15 +43,6 @@ export function PreviewableImage({
   )
 }
 /* eslint-enable @next/next/no-img-element */
-
-export function renderSection(title: string, children: ReactNode) {
-  return (
-    <section className="space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
-      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{title}</p>
-      {children}
-    </section>
-  )
-}
 
 export function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
   return isWorkspaceCanvasLifecycleRunning(data.lifecycle)
