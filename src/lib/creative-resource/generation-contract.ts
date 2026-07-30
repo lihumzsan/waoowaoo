@@ -152,6 +152,15 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
   mood: z.string().trim().min(1).optional(),
   bpm: z.number().int().min(20).max(300).optional(),
   outputFormat: z.enum(['mp3', 'wav']).optional(),
+  // Server-frozen score-cue window inside the referenced video. Only present
+  // for music generated from a music_direction cue; the provider scores this
+  // window instead of the whole video, and the final mix places the audio at
+  // startMs. Never model-supplied.
+  scoreCue: z.object({
+    key: z.string().trim().min(1).max(160),
+    startMs: z.number().int().nonnegative(),
+    endMs: z.number().int().positive(),
+  }).strict().optional(),
   count: z.literal(1),
   generationOptions: creativeResourceGenerationOptionsSchema,
 }).strict()
@@ -189,6 +198,7 @@ export function parseCreativeResourceGenerationTaskPayload(
     mood: parsed.mood,
     bpm: parsed.bpm,
     outputFormat: parsed.outputFormat,
+    scoreCue: parsed.scoreCue,
     count: parsed.count,
     generationOptions: parsed.generationOptions,
   })

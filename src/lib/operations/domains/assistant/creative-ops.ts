@@ -333,6 +333,36 @@ function canComposeDuration(target: number, options: readonly number[]): boolean
   return reachable[target] === 1
 }
 
+const MUSIC_DIRECTION_MAX_CUES = 8
+
+async function resolveMusicProductionContext(input: {
+  readonly projectId: string
+  readonly userId: string
+}): Promise<CreativeWorkTaskItem['productionContext']['music']> {
+  const modelKey = await resolveSystemModelKey({
+    userId: input.userId,
+    projectId: input.projectId,
+    purpose: 'music',
+  })
+  const music = resolveBuiltinCapabilitiesByModelKey('music', modelKey)?.music
+  const durationRange = music?.durationSecondsRange
+  if (!music || !durationRange) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CAPABILITY_MODEL_UNSUPPORTED',
+      field: 'requests',
+      modelKey,
+    })
+  }
+  return {
+    // The cue prompt budget is the configured music model's wire limit; the
+    // schema max is only the outer bound when a provider publishes none.
+    promptMaxCharacters: music.promptMaxChars ?? 2_000,
+    minCueDurationSeconds: Math.ceil(durationRange.min),
+    maxCueDurationSeconds: Math.floor(durationRange.max),
+    maxCues: MUSIC_DIRECTION_MAX_CUES,
+  }
+}
+
 async function resolveTaskRequests(input: {
   readonly requests: readonly CreativeWorkHydratedItem[]
   readonly projectId: string
@@ -340,6 +370,9 @@ async function resolveTaskRequests(input: {
   readonly adoptedCreativeDirection: AdoptedCreativeDirectionSnapshot | null
 }): Promise<CreativeWorkTaskItem[]> {
   const requests = input.requests.map(injectCreativeWorkSystemConstraints)
+  const musicContext = requests.some((request) => request.outputKind === 'music_direction')
+    ? await resolveMusicProductionContext(input)
+    : null
   const needsVideoProduction = requests.some((request) => request.outputKind === 'video_prompt_set')
   if (!needsVideoProduction) {
     return requests.map((request) => ({
@@ -348,7 +381,7 @@ async function resolveTaskRequests(input: {
         snapshot: input.adoptedCreativeDirection,
         outputKind: request.outputKind,
       }),
-      productionContext: { video: null },
+      productionContext: { video: null, music: request.outputKind === 'music_direction' ? musicContext : null },
     }))
   }
 
@@ -395,7 +428,7 @@ async function resolveTaskRequests(input: {
           snapshot: input.adoptedCreativeDirection,
           outputKind: request.outputKind,
         }),
-        productionContext: { video: null },
+        productionContext: { video: null, music: request.outputKind === 'music_direction' ? musicContext : null },
       }
     }
     const durationIntent = request.durationIntent
@@ -426,6 +459,7 @@ async function resolveTaskRequests(input: {
           maxReferenceImages,
           maxReferenceAudios,
         },
+        music: null,
       },
     }
   })

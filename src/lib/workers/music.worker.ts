@@ -97,6 +97,10 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
     ...(videoReference ? {
       referenceVideoUrl: videoReference.url,
       referenceVideoDurationMs: videoReference.durationMs ?? Math.round(durationSeconds * 1000),
+      ...(payload.scoreCue ? {
+        scoreWindowStartMs: payload.scoreCue.startMs,
+        scoreWindowEndMs: payload.scoreCue.endMs,
+      } : {}),
     } : {}),
   }, { key: 'media:music:primary' }, {
     // 与 image/video 参照物（workers/utils.ts waitExternalResult）对齐：

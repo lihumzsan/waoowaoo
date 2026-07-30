@@ -117,6 +117,13 @@ export const creativeWorkHydratedRequestSchema = z.object({
   }).strict(),
 }).strict()
 
+const creativeMusicProductionContextSchema = z.object({
+  promptMaxCharacters: z.number().int().positive(),
+  minCueDurationSeconds: z.number().int().positive(),
+  maxCueDurationSeconds: z.number().int().positive(),
+  maxCues: z.number().int().positive(),
+}).strict()
+
 const creativeVideoProductionContextSchema = z.object({
   aspectRatio: z.string().trim().min(1),
   allowedSegmentDurationsSeconds: z.array(z.number().int().positive()).min(1),
@@ -144,6 +151,7 @@ export const creativeWorkRequestSchema = creativeWorkHydratedRequestSchema.exten
     .describe('Complete exact adopted Creative Direction injected and frozen by the server for every output kind except creative_direction itself. The primary Agent cannot supply it.'),
   productionContext: z.object({
     video: creativeVideoProductionContextSchema.nullable(),
+    music: creativeMusicProductionContextSchema.nullable(),
   }).strict(),
 }).strict().describe('Server-compiled request for one isolated creative-worker run. Creative Direction and productionContext are supplied by the execution layer, never by the primary Agent.')
 

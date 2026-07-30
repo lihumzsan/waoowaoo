@@ -80,6 +80,61 @@ function normalizeIssue(issue: z.core.$ZodIssue): CreativeWorkerSubmissionIssue 
   }
 }
 
+// Deterministic score-cue validation. The model claims nothing here: cue
+// prompt budgets, durations, ordering and count are counted in code against
+// the injected music production context (the configured model's wire limits).
+function validateMusicOutputContext(input: {
+  readonly request: CreativeWorkRequest
+  readonly output: CreativeWorkOutput
+}): readonly CreativeWorkerSubmissionIssue[] {
+  if (input.output.kind !== 'music_direction') return []
+  const production = input.request.productionContext.music
+  if (!production) {
+    throw new CreativeWorkerError('CREATIVE_WORK_REQUEST_INVALID', {
+      outputKind: input.output.kind,
+      reason: 'music production context is required',
+    })
+  }
+  const issues: CreativeWorkerSubmissionIssue[] = []
+  if (input.output.cues.length > production.maxCues) {
+    issues.push({
+      path: '$.cues',
+      code: 'too_big',
+      message: `At most ${String(production.maxCues)} cues are allowed; got ${String(input.output.cues.length)}.`,
+    })
+  }
+  let previousEnd = -1
+  input.output.cues.forEach((cue, index) => {
+    if (cue.generationPrompt.length > production.promptMaxCharacters) {
+      issues.push({
+        path: `$.cues[${String(index)}].generationPrompt`,
+        code: 'too_big',
+        message: `Cue prompt is ${String(cue.generationPrompt.length)} characters; the music model accepts at most ${String(production.promptMaxCharacters)}.`,
+      })
+    }
+    const durationSeconds = cue.endSeconds - cue.startSeconds
+    if (
+      durationSeconds < production.minCueDurationSeconds
+      || durationSeconds > production.maxCueDurationSeconds
+    ) {
+      issues.push({
+        path: `$.cues[${String(index)}]`,
+        code: 'invalid_value',
+        message: `Cue duration ${durationSeconds.toFixed(3)}s is outside the model range ${String(production.minCueDurationSeconds)}-${String(production.maxCueDurationSeconds)}s.`,
+      })
+    }
+    if (cue.startSeconds < previousEnd) {
+      issues.push({
+        path: `$.cues[${String(index)}].startSeconds`,
+        code: 'invalid_value',
+        message: 'Cues must be ordered by startSeconds and must not overlap.',
+      })
+    }
+    previousEnd = Math.max(previousEnd, cue.endSeconds)
+  })
+  return issues
+}
+
 function validateVideoOutputContext(input: {
   readonly request: CreativeWorkRequest
   readonly output: CreativeWorkOutput
@@ -321,10 +376,10 @@ export function createCreativeWorkerOutputSubmission(input: {
           message: `Expected output kind "${input.request.outputKind}".`,
         }], outputChars, inputDiagnostic)
       }
-      const contextualIssues = validateVideoOutputContext({
-        request: input.request,
-        output,
-      })
+      const contextualIssues = [
+        ...validateVideoOutputContext({ request: input.request, output }),
+        ...validateMusicOutputContext({ request: input.request, output }),
+      ]
       if (contextualIssues.length > 0) {
         return rejectedSubmission(contextualIssues, outputChars, inputDiagnostic)
       }

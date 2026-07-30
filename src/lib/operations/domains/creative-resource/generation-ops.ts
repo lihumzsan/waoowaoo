@@ -261,9 +261,11 @@ const createAudioNewRequestSchema = z.object({
 const createAudioMusicDirectionRequestSchema = z.object({
   kind: z.literal('music_direction'),
   resourceId: z.string().trim().min(1).max(32)
-    .describe('Exact ready project.music_direction Resource whose score decision is non-null. The server reads the final score generation instruction directly; do not copy, summarize, or rewrite it.'),
+    .describe('Exact ready project.music_direction Resource with at least one score cue. The server reads the cue\'s generation instruction directly; do not copy, summarize, or rewrite it.'),
+  cueKey: z.string().trim().min(1).max(160)
+    .describe('Exact key of the one score cue to generate. Call this operation once per cue in the direction; each cue becomes one independent bgm_audio Resource.'),
   videoReference: creativeResourceInputRefSchema
-    .describe('Exact ready final video Resource this score was designed for. The server derives the soundtrack duration from this video and, when the configured music capability supports video conditioning, lets the model watch it.'),
+    .describe('Exact ready final video Resource this score was designed for. The server scores only the cue\'s time window of this video and derives the cue duration from the direction.'),
 }).strict()
 
 const createAudioInputSchema = z.object({
@@ -1400,6 +1402,7 @@ async function planNewMediaGeneration(
   ctx: ProjectAgentOperationContext,
   rawInput: NewMediaGenerationRequest,
   config: MediaPlanConfig,
+  extras?: { readonly scoreCue: { readonly key: string; readonly startMs: number; readonly endMs: number } },
 ): Promise<OperationPlan> {
   const input = resolveNewMediaGenerationSentinels(rawInput)
   const assetImageRequest = input.kind === 'asset' ? input : null
@@ -1644,6 +1647,7 @@ async function planNewMediaGeneration(
         ...((effectiveInput as CreateAudioNewRequest).mood ? { mood: (effectiveInput as CreateAudioNewRequest).mood } : {}),
         ...(typeof (effectiveInput as CreateAudioNewRequest).bpm === 'number' ? { bpm: (effectiveInput as CreateAudioNewRequest).bpm } : {}),
         ...((effectiveInput as CreateAudioNewRequest).outputFormat ? { outputFormat: (effectiveInput as CreateAudioNewRequest).outputFormat } : {}),
+        ...(extras?.scoreCue ? { scoreCue: extras.scoreCue } : {}),
       } : {}),
     }
     return createPlannedTask({
@@ -2593,11 +2597,20 @@ async function planMusicDirectionAudioGeneration(
     })
   }
   const direction = creativeWorkOutputSchemas.music_direction.parse(directionResource.contentJson)
-  if (direction.score === null) {
+  if (direction.cues.length === 0) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'MUSIC_DIRECTION_SCORE_ABSENT',
       field: 'request.resourceId',
       agentRetryableAfterCorrection: false,
+    })
+  }
+  const cue = direction.cues.find((candidate) => candidate.key === input.cueKey)
+  if (!cue) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MUSIC_DIRECTION_CUE_NOT_FOUND',
+      field: 'request.cueKey',
+      allowedValues: direction.cues.map((candidate) => candidate.key),
+      agentRetryableAfterCorrection: true,
     })
   }
   const videoResource = await prisma.creativeResource.findFirst({
@@ -2640,7 +2653,18 @@ async function planMusicDirectionAudioGeneration(
       agentRetryableAfterCorrection: false,
     })
   }
-  const durationSeconds = Math.ceil(durationMs / 1000)
+  const cueStartMs = Math.round(cue.startSeconds * 1000)
+  const cueEndMs = Math.round(cue.endSeconds * 1000)
+  if (cueEndMs > durationMs) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'MUSIC_DIRECTION_CUE_OUTSIDE_VIDEO',
+      field: 'request.cueKey',
+      requestedValue: cue.endSeconds,
+      allowedValues: [Math.floor(durationMs / 1000)],
+      agentRetryableAfterCorrection: false,
+    })
+  }
+  const durationSeconds = Math.ceil((cueEndMs - cueStartMs) / 1000)
   const boundState = readMediaGenerationBoundState(
     ctx.boundToolContractState,
     AUDIO_CONFIG.operationId,
@@ -2671,10 +2695,20 @@ async function planMusicDirectionAudioGeneration(
       agentRetryableAfterCorrection: false,
     })
   }
+  const promptMaxChars = capabilities.music?.promptMaxChars
+  if (promptMaxChars !== undefined && cue.generationPrompt.length > promptMaxChars) {
+    throw new ApiError('MUSIC_PROMPT_TOO_LONG', {
+      field: 'request.cueKey',
+      modelKey,
+      requestedValue: cue.generationPrompt.length,
+      allowedValues: [promptMaxChars],
+      agentRetryableAfterCorrection: false,
+    })
+  }
   const videoConditioned = (capabilities.music?.maxReferenceVideos ?? 0) >= 1
   const request: CreateAudioNewRequest = {
     kind: 'new',
-    prompt: direction.score.generationPrompt,
+    prompt: cue.generationPrompt,
     durationSeconds,
     contextReferences: [
       { resourceId: directionResource.id, role: 'music_direction' },
@@ -2685,7 +2719,9 @@ async function planMusicDirectionAudioGeneration(
       : {}),
     ...(videoResource.episodeId ? { episodeId: videoResource.episodeId } : {}),
   }
-  return await planNewMediaGeneration(ctx, request, AUDIO_CONFIG)
+  return await planNewMediaGeneration(ctx, request, AUDIO_CONFIG, {
+    scoreCue: { key: cue.key, startMs: cueStartMs, endMs: cueEndMs },
+  })
 }
 
 async function planMediaGeneration(

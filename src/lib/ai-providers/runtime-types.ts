@@ -129,6 +129,9 @@ export type AiProviderMusicExecutionContext = {
     outputFormat?: 'mp3' | 'wav'
     referenceVideoUrl?: string
     referenceVideoDurationMs?: number
+    /** Score only this window of the reference video (music_direction cue). */
+    scoreWindowStartMs?: number
+    scoreWindowEndMs?: number
     [key: string]: unknown
   }
 }

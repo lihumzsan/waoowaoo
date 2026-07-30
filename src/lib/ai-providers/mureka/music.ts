@@ -116,6 +116,14 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
     if (!durationMs || durationMs <= 0) {
       throw new AppError('INVALID_PARAMS', 'Soundtrack generation requires the reference video duration', { provider: 'mureka' })
     }
+    const windowStartMs = typeof options.scoreWindowStartMs === 'number' ? options.scoreWindowStartMs : 0
+    const windowEndMs = typeof options.scoreWindowEndMs === 'number' ? options.scoreWindowEndMs : durationMs
+    if (
+      !Number.isInteger(windowStartMs) || !Number.isInteger(windowEndMs)
+      || windowStartMs < 0 || windowEndMs <= windowStartMs || windowEndMs > durationMs
+    ) {
+      throw new AppError('INVALID_PARAMS', `Score window is invalid: ${String(windowStartMs)}..${String(windowEndMs)} within ${String(durationMs)}ms`, { provider: 'mureka' })
+    }
     const videoId = await uploadMurekaSoundtrackVideo({ apiKey, baseUrl, videoUrl: referenceVideoUrl })
     const task = await postMurekaJson({
       path: '/v1/soundtrack/generate',
@@ -126,8 +134,8 @@ export async function executeMurekaMusicGeneration(input: AiProviderMusicExecuti
         model: modelId,
         prompt,
         n: 1,
-        audio_start: 0,
-        audio_end: durationMs,
+        audio_start: windowStartMs,
+        audio_end: windowEndMs,
       },
       scope: 'mureka:music:soundtrack:submit',
     }) as { id?: unknown }
