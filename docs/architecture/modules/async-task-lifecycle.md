@@ -21,6 +21,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - **TL-11 — 本地媒体进程有界。** 视频合并只经 `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts` 与 `video-merge-audio.ts`。FFmpeg 禁止交互 stdin，deadline 从明确媒体时长派生，音轨按 canonical duration pad/trim/reset PTS，不能用多路 EOF 或 `-shortest` 裁决正确性。
 - **TL-12 — 进度文案不是协议。** Task progress 只能使用当前 registry 的通用 Task/阶段 label；删除 TaskType 时必须同时删除旧文案，禁止让 UI 暗示已不存在的流程。
 - **TL-13 — 进度持久化只有一个投影。** `reportTaskProgress` 可向 SSE 发送 provider/stream 细节，但 `Task.payload` 只能由 Task-owned runtime envelope 投影后写入；Creative Work 与 Creative Resource 的严格 payload parser 必须复用同一 envelope，禁止 worker 或领域 parser 各自维护字段白名单。
+- **TL-14 — SSE transport 连接必须持有分布式租约。** 鉴权后、订阅与 bootstrap 前必须原子取得 user、user+project 与 global 三层 Redis ZSET lease；连接定期续租，关闭立即释放，进程崩溃由 TTL 回收，丢失 lease 必须关闭流。Lease 只拥有 transport admission，不写 Task/Event/watermark，也不能用进程内计数或 UI 重连 timer 代替。
 
 ## 状态所有权
 
@@ -34,6 +35,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 | billing freeze/settlement | billing owner + Terminal Service | profile、审批 UI |
 | Wait 聚合与 continuation | OperationBatch/Wait + Terminal Service | Primary Agent |
 | SSE watermark/event | Task/Outbox/SSE owner | Query sync、UI |
+| SSE transport connection lease | `src/lib/sse/connection-lease.ts` | SSE route admission/cleanup |
 
 ## 权威入口
 
@@ -47,6 +49,7 @@ Task 是长运行执行的唯一运行事实。Operation 负责校验与提交�
 - 结果物化：`src/lib/creative-resource/task-materializer.ts`、`creative-work-materialization.ts`。
 - Agent 聚合：`src/lib/project-agent/operation-batch.ts`、`waits.ts`。
 - 资源变化：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`、`src/lib/query/workspace-sse-event-sync.ts`。
+- SSE 连接 admission：`src/lib/sse/connection-lease.ts`；`src/app/api/sse/route.ts` 只负责在鉴权后获取、续租和释放。
 - 视频合并：`src/lib/video-compose/video-merge-ffmpeg.ts`、`video-merge-audio.ts`。
 
 ## 验证

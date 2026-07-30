@@ -17,6 +17,10 @@ import {
   WorkspaceSseServerSession,
 } from '@/lib/sse/server-session'
 import { getSharedSubscriber } from '@/lib/sse/shared-subscriber'
+import {
+  acquireWorkspaceSseConnectionLease,
+  WORKSPACE_SSE_LEASE_RENEW_INTERVAL_MS,
+} from '@/lib/sse/connection-lease'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 
 function formatSSE(event: SSEEvent, transportCursor: string) {
@@ -40,6 +44,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     : await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
   const { session } = authResult
+  const connectionLease = await acquireWorkspaceSseConnectionLease({
+    userId: session.user.id,
+    projectId,
+  })
+  if (!connectionLease) {
+    throw new ApiError('RATE_LIMIT', {
+      code: 'SSE_CONNECTION_LIMIT_REACHED',
+      retryAfterSeconds: Math.ceil(WORKSPACE_SSE_LEASE_RENEW_INTERVAL_MS / 1000),
+    })
+  }
 
   const sharedSubscriber = getSharedSubscriber()
   const requestId = getRequestId(request)
@@ -54,6 +68,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     async start(controller) {
       let closed = false
       let timer: ReturnType<typeof setInterval> | null = null
+      let leaseTimer: ReturnType<typeof setInterval> | null = null
       let unsubscribe: (() => Promise<void>) | null = null
       let cleanupPromise: Promise<void> | null = null
       const logger = createScopedLogger({
@@ -87,6 +102,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
             clearInterval(timer)
             timer = null
           }
+          if (leaseTimer) {
+            clearInterval(leaseTimer)
+            leaseTimer = null
+          }
           const removeListener = unsubscribe
           unsubscribe = null
           try {
@@ -95,6 +114,17 @@ export const GET = apiHandler(async (request: NextRequest) => {
             logger.error({
               action: 'sse.unsubscribe.failed',
               message: 'failed to release sse subscriber listener',
+              error: error instanceof Error
+                ? { name: error.name, message: error.message, stack: error.stack }
+                : { message: describeUnknownError(error) },
+            })
+          }
+          try {
+            await connectionLease.release()
+          } catch (error) {
+            logger.error({
+              action: 'sse.connection_lease.release_failed',
+              message: 'failed to release sse connection lease',
               error: error instanceof Error
                 ? { name: error.name, message: error.message, stack: error.stack }
                 : { message: describeUnknownError(error) },
@@ -142,6 +172,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
         await close()
         return
       }
+      leaseTimer = setInterval(() => {
+        void connectionLease.renew().then((renewed) => {
+          if (!renewed) {
+            void fail(new Error('SSE_CONNECTION_LEASE_LOST'))
+          }
+        }).catch((error: unknown) => {
+          void fail(error)
+        })
+      }, WORKSPACE_SSE_LEASE_RENEW_INTERVAL_MS)
 
       try {
         const expectedChannel = getProjectChannel(projectId)
