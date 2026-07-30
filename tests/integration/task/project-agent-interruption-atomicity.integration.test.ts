@@ -68,7 +68,7 @@ function styleTaskPayload(runId: string, toolCallId: string) {
         constraints: [],
       },
       creativeDirection: null,
-      productionContext: { video: null },
+      productionContext: { video: null, music: null },
     },
     modelKey: 'golden:creative-model',
     inputFingerprint: 'a'.repeat(64),
