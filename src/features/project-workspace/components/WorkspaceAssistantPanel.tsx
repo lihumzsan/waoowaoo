@@ -36,6 +36,9 @@ import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssis
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
+  WorkspaceAssistantRepeatedToolCallGroupProvider,
+} from './workspace-assistant/WorkspaceAssistantToolCall'
+import {
   WorkspaceAssistantRunningSurfaceProvider,
 } from './workspace-assistant/WorkspaceAssistantReasoning'
 import {
@@ -316,7 +319,8 @@ export default function WorkspaceAssistantPanel({
           onPointerDown={panelResize.onResizePointerDown}
         />
         <div className="h-full opacity-100 transition-opacity duration-200">
-          <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
+          <WorkspaceAssistantRepeatedToolCallGroupProvider messages={assistantRuntime.messages}>
+            <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
               <ThreadPrimitive.Root key={`${projectId}:${episodeId ?? ''}`} className="relative flex h-full min-h-0 flex-col">
               <WorkspaceAssistantSettings />
               <WorkspaceAssistantSubagentTabs
@@ -456,7 +460,8 @@ export default function WorkspaceAssistantPanel({
                 </div>
               ) : null}
               </ThreadPrimitive.Root>
-          </AssistantRuntimeProvider>
+            </AssistantRuntimeProvider>
+          </WorkspaceAssistantRepeatedToolCallGroupProvider>
         </div>
       </div>
       {attachmentPicker.input}

@@ -149,6 +149,8 @@
     "success": "Success",
     "submitted": "Submitted",
     "progressSummary": "{succeeded} succeeded · {failed} failed · {canceled} canceled · {running} running",
+    "groupTitle": "{title} × {count}",
+    "groupProgressSummary": "{success} succeeded · {submitted} submitted · {failed} failed · {interrupted} incomplete · {needsAction} need action · {running} running",
     "partial": "Partially completed",
     "failed": "Failed",
     "interrupted": "Not completed",
