@@ -17,6 +17,11 @@ export interface ProjectAgentOperationContext {
   projectId: string
   context: ProjectAgentContext
   /**
+   * Runtime-owned invocation channel. The sole invocation entry overwrites
+   * this before executing an Operation; absent values must fail closed as Tool.
+   */
+  invocationChannel?: 'api' | 'tool'
+  /**
    * Operation invocation source (entry semantics).
    * - assistant-panel: initiated by assistant tools in chat
    * - project-ui/api: initiated by explicit GUI/API actions

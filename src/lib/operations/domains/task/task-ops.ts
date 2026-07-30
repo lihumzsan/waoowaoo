@@ -4,7 +4,10 @@ import { normalizeTaskError } from '@/lib/errors/normalize'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { cancelTask, getTaskById, queryTasks } from '@/lib/task/service'
 import { TASK_STATUS, TASK_TYPE, type TaskStatus, type TaskType } from '@/lib/task/types'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type {
+  ProjectAgentOperationContext,
+  ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 const taskStatusSchema = z.enum(Object.values(TASK_STATUS) as [TaskStatus, ...TaskStatus[]])
@@ -47,6 +50,17 @@ function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
   }
 }
 
+function isTaskVisibleInOperationContext(
+  ctx: ProjectAgentOperationContext,
+  task: NonNullable<Awaited<ReturnType<typeof getTaskById>>>,
+): boolean {
+  if (task.userId !== ctx.userId) return false
+  if (ctx.invocationChannel === 'api') return true
+  if (task.projectId !== ctx.projectId) return false
+  const episodeId = ctx.context.episodeId?.trim() || null
+  return !episodeId || task.episodeId === null || task.episodeId === episodeId
+}
+
 export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
   return {
     list_tasks: defineOperation({
@@ -65,8 +79,24 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       inputSchema: listTasksInputSchema,
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
+        const restrictedToAssistantScope = ctx.invocationChannel !== 'api'
+        if (
+          restrictedToAssistantScope
+          && input.projectId
+          && input.projectId !== ctx.projectId
+        ) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'TASK_PROJECT_SCOPE_INVALID',
+            field: 'projectId',
+          })
+        }
+        const episodeId = restrictedToAssistantScope
+          ? ctx.context.episodeId?.trim() || undefined
+          : undefined
         const tasks = await queryTasks({
-          projectId: input.projectId,
+          userId: ctx.userId,
+          projectId: restrictedToAssistantScope ? ctx.projectId : input.projectId,
+          episodeId,
           targetType: input.targetType,
           targetId: input.targetId,
           status: input.status,
@@ -74,10 +104,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           limit: input.limit ?? 50,
         })
 
-        const filtered = tasks
-          .filter((task) => task.userId === ctx.userId)
-          .map(withTaskError)
-        return { tasks: filtered }
+        return { tasks: tasks.map(withTaskError) }
       },
     }),
 
@@ -98,7 +125,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const task = await getTaskById(input.taskId)
-        if (!task || task.userId !== ctx.userId) {
+        if (!task || !isTaskVisibleInOperationContext(ctx, task)) {
           throw new ApiError('NOT_FOUND')
         }
 

@@ -210,6 +210,15 @@ export async function invokeProjectAgentOperation(params: {
   invocationMode?: 'default' | 'atomic_choice_commit'
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
+  if (
+    params.context.invocationChannel
+    && params.context.invocationChannel !== params.channel
+  ) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_CHANNEL_CONTEXT_MISMATCH:${params.operationId}:${params.channel}:${params.context.invocationChannel}`,
+    )
+  }
+  params.context.invocationChannel = params.channel
   const invocationMode = params.invocationMode ?? 'default'
   const atomicChoiceCommit = invocationMode === 'atomic_choice_commit'
   if (Boolean(params.transaction) !== atomicChoiceCommit) {
