@@ -6,6 +6,7 @@ import { getUserModelConfig } from '@/lib/config-service'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { resolveLlmRuntimeModel } from '@/lib/ai-exec/llm-runtime'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
+import { wrapLanguageModelWithRetry } from '@/lib/project-agent/model-stream-retry'
 import {
   resolveReasoningEffort,
   type ReasoningEffortPurpose,
@@ -77,11 +78,13 @@ export async function resolveProjectAgentLanguageModel(input: {
   return {
     // Retry posture: this LanguageModel is consumed by the @openai/agents
     // aisdk adapter, which invokes doGenerate/doStream directly — the AI SDK
-    // `maxRetries` wrapper (generateText/streamText) never runs here, so no
-    // silent transport retry exists on this path. Callers that do use bare
-    // generateText (e.g. model-input/summarizer) must pass `maxRetries: 0`
-    // to match the ai-exec sdk-runner.
-    languageModel: createAiLanguageModel({
+    // `maxRetries` wrapper (generateText/streamText) never runs here. The only
+    // transport retry on this path is wrapLanguageModelWithRetry: a single,
+    // logged retry for retryable failures that occur before any model output
+    // was produced. Callers that do use bare generateText (e.g.
+    // model-input/checkpoint-generator) must pass `maxRetries: 0` to match the ai-exec
+    // sdk-runner.
+    languageModel: wrapLanguageModelWithRetry(createAiLanguageModel({
       providerKey,
       selection,
       providerConfig,
@@ -90,6 +93,6 @@ export async function resolveProjectAgentLanguageModel(input: {
       reasoningEffort,
       ...(input.promptCacheHorizon === 'conversation' ? { promptCacheTtl: '1h' as const } : {}),
       openRouterSessionId: input.openRouterSessionId,
-    }),
+    })),
   }
 }
