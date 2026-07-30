@@ -9,6 +9,7 @@ import type {
   CreativeResourceMediaType,
   CreativeResourceScopeRef,
 } from './contracts'
+import { isCreativeResourceScopeKind } from './contracts'
 import {
   buildCreativeResourceId,
   buildDomainCreativeResourceId,
@@ -48,6 +49,10 @@ export interface MaterializeCreativeResourceInput {
 type LockedResourceRow = {
   id: string
   userId: string
+  projectId: string | null
+  episodeId: string | null
+  scopeKind: string
+  scopeId: string
   mediaType: string
   schemaId: string
   status: string
@@ -297,7 +302,8 @@ async function lockResource(
   resourceId: string,
 ): Promise<LockedResourceRow> {
   const rows = await tx.$queryRaw<LockedResourceRow[]>(Prisma.sql`
-    SELECT id, userId, mediaType, schemaId, status, taskId, materializedAt
+    SELECT id, userId, projectId, episodeId, scopeKind, scopeId,
+           mediaType, schemaId, status, taskId, materializedAt
     FROM creative_resources
     WHERE id = ${resourceId}
     FOR UPDATE
@@ -307,9 +313,60 @@ async function lockResource(
   return row
 }
 
+function scopeFromStoredResource(resource: {
+  readonly userId: string
+  readonly projectId: string | null
+  readonly episodeId: string | null
+  readonly scopeKind: string
+  readonly scopeId: string
+}): CreativeResourceScopeRef {
+  if (!isCreativeResourceScopeKind(resource.scopeKind)) {
+    throw new Error(`CREATIVE_RESOURCE_SCOPE_KIND_INVALID:${resource.scopeKind}`)
+  }
+  return {
+    kind: resource.scopeKind,
+    id: resource.scopeId,
+    userId: resource.userId,
+    projectId: resource.projectId,
+    episodeId: resource.episodeId,
+  }
+}
+
+function isInputScopeAllowed(
+  targetScope: CreativeResourceScopeRef,
+  resource: {
+    readonly userId: string
+    readonly projectId: string | null
+    readonly episodeId: string | null
+    readonly scopeKind: string
+    readonly scopeId: string
+  },
+): boolean {
+  if (resource.userId !== targetScope.userId) return false
+  if (resource.scopeKind === 'user') {
+    return resource.scopeId === targetScope.userId
+      && resource.projectId === null
+      && resource.episodeId === null
+  }
+  if (resource.scopeKind === 'project') {
+    return targetScope.projectId !== null
+      && resource.scopeId === targetScope.projectId
+      && resource.projectId === targetScope.projectId
+      && resource.episodeId === null
+  }
+  if (resource.scopeKind === 'episode') {
+    return targetScope.projectId !== null
+      && targetScope.episodeId !== null
+      && resource.scopeId === targetScope.episodeId
+      && resource.projectId === targetScope.projectId
+      && resource.episodeId === targetScope.episodeId
+  }
+  return false
+}
+
 export async function validateCreativeResourceInputReferencesInTransaction(
   tx: CreativeResourcePersistenceClient,
-  userId: string,
+  targetScope: CreativeResourceScopeRef,
   inputs: readonly CreativeResourceInputRef[],
 ): Promise<readonly CreativeResourceInputRef[]> {
   const positions = new Set<string>()
@@ -326,13 +383,23 @@ export async function validateCreativeResourceInputReferencesInTransaction(
   if (inputs.length === 0) return []
   const resources = await tx.creativeResource.findMany({
     where: { id: { in: inputs.map((reference) => reference.resourceId) } },
-    select: { id: true, userId: true, status: true },
+    select: {
+      id: true,
+      userId: true,
+      projectId: true,
+      episodeId: true,
+      scopeKind: true,
+      scopeId: true,
+      status: true,
+    },
   })
   const byId = new Map(resources.map((resource) => [resource.id, resource]))
   return inputs.map((reference) => {
     const resource = byId.get(reference.resourceId)
     if (!resource) throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
-    if (resource.userId !== userId) throw new Error('CREATIVE_RESOURCE_INPUT_NOT_OWNED')
+    if (!isInputScopeAllowed(targetScope, resource)) {
+      throw new Error(`CREATIVE_RESOURCE_INPUT_SCOPE_INVALID:${reference.resourceId}`)
+    }
     if (resource.status !== 'ready') {
       throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_READY:${reference.resourceId}`)
     }
@@ -376,7 +443,11 @@ export async function materializeCreativeResourceInTransaction(
   }
   if (resource.status === 'canceled') throw new Error(`CREATIVE_RESOURCE_CANCELED:${resourceId}`)
 
-  const references = await validateCreativeResourceInputReferencesInTransaction(tx, userId, input.inputs)
+  const references = await validateCreativeResourceInputReferencesInTransaction(
+    tx,
+    scopeFromStoredResource(resource),
+    input.inputs,
+  )
   const storage = contentStorage(input.content)
   if (storage.mediaId) {
     const media = await tx.mediaObject.findUnique({

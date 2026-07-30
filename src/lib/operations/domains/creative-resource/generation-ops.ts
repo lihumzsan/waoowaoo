@@ -24,6 +24,7 @@ import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   type CreativeResourceInputRef,
   type CreativeResourceMediaType,
+  type CreativeResourceScopeRef,
 } from '@/lib/creative-resource/contracts'
 import {
   CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS,
@@ -430,13 +431,13 @@ function normalizeMediaInputReferences(input: NewMediaGenerationRequest): {
 }
 
 async function assertInputReferences(
-  userId: string,
+  targetScope: CreativeResourceScopeRef,
   references: readonly CreativeResourceInputRef[],
   requiredMediaType: CreativeResourceMediaType | null,
   field: 'contextReferences' | 'imageReferences' | 'audioReferences' | 'videoReferences',
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await validateCreativeResourceInputReferencesInTransaction(tx, userId, references)
+    await validateCreativeResourceInputReferencesInTransaction(tx, targetScope, references)
     if (!requiredMediaType || references.length === 0) return
     const resources = await tx.creativeResource.findMany({
       where: { id: { in: references.map((reference) => reference.resourceId) } },
@@ -1449,8 +1450,13 @@ async function planNewMediaGeneration(
   const effectiveInput = prompt === input.prompt ? input : { ...input, prompt }
   const normalizedReferences = normalizeMediaInputReferences(effectiveInput)
   const references = normalizedReferences.inputs
+  const targetScope = resolveProjectCreativeResourceScope({
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    episodeId,
+  })
   await assertInputReferences(
-    ctx.userId,
+    targetScope,
     references,
     null,
     'contextReferences',
@@ -1679,6 +1685,11 @@ async function planMediaGenerationRetry(
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
   const episodeId = ctx.context.episodeId?.trim() || null
+  const targetScope = resolveProjectCreativeResourceScope({
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    episodeId,
+  })
   const candidates = await loadCreativeResourceRetryCandidates({
     userId: ctx.userId,
     projectId: ctx.projectId,
@@ -1737,15 +1748,15 @@ async function planMediaGenerationRetry(
       }
       return reference
     })
-    await assertInputReferences(ctx.userId, references, null, 'contextReferences')
+    await assertInputReferences(targetScope, references, null, 'contextReferences')
     await assertInputReferences(
-      ctx.userId,
+      targetScope,
       imageInputs,
       'image',
       'imageReferences',
     )
-    await assertInputReferences(ctx.userId, audioInputs, 'audio', 'audioReferences')
-    await assertInputReferences(ctx.userId, videoInputs, 'video', 'videoReferences')
+    await assertInputReferences(targetScope, audioInputs, 'audio', 'audioReferences')
+    await assertInputReferences(targetScope, videoInputs, 'video', 'videoReferences')
     if (config.mediaType === 'audio') {
       const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', candidate.payload.resource.modelKey)
         ?.music?.maxReferenceVideos

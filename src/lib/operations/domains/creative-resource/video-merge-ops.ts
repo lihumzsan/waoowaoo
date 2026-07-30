@@ -87,6 +87,11 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           })
         }
         const episodeId = ctx.context.episodeId?.trim() || null
+        const targetScope = resolveProjectCreativeResourceScope({
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          episodeId,
+        })
         const references = normalizeMergeInputs(input)
         const inputHash = stableArgsHash({ operationId: 'merge_videos', references })
         const requestId = [
@@ -142,16 +147,16 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           dedupeKey: `merge_videos:${resourceId}:${inputHash}`,
           locale: resolveOperationLocale(ctx.context),
           onTaskCreatedInTransaction: async (tx) => {
-            await validateCreativeResourceInputReferencesInTransaction(tx, ctx.userId, references)
+            await validateCreativeResourceInputReferencesInTransaction(tx, targetScope, references)
             const resources = await tx.creativeResource.findMany({
               where: { id: { in: references.map((reference) => reference.resourceId) } },
-              select: { id: true, projectId: true, mediaType: true },
+              select: { id: true, mediaType: true },
             })
             const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
             for (const reference of references) {
               const resource = resourceById.get(reference.resourceId)
               const expectedMediaType = reference.role === 'bgm_audio' ? 'audio' : 'video'
-              if (!resource || resource.mediaType !== expectedMediaType || (resource.projectId && resource.projectId !== ctx.projectId)) {
+              if (!resource || resource.mediaType !== expectedMediaType) {
                 throw new ApiError('INVALID_PARAMS', {
                   code: 'VIDEO_MERGE_INPUT_RESOURCE_INVALID',
                   field: reference.role === 'bgm_audio' ? 'music' : 'videos',
@@ -161,11 +166,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
               }
             }
             await reserveCreativeResourcesInTransaction(tx, {
-              scope: resolveProjectCreativeResourceScope({
-                userId: ctx.userId,
-                projectId: ctx.projectId,
-                episodeId,
-              }),
+              scope: targetScope,
               mediaType: 'video',
               schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId: 'merge_videos',

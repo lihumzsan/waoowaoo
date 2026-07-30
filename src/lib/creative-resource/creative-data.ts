@@ -5,6 +5,7 @@ import type {
   CreativeResourceJsonObject,
   CreativeResourceJsonValue,
 } from './contracts'
+import { isCreativeResourceScopeKind } from './contracts'
 import { validateCreativeResourceInputReferencesInTransaction } from './persistence'
 
 const MAX_EDIT_PATH_SEGMENTS = 24
@@ -215,8 +216,11 @@ export async function editCreativeResourceDataInTransaction(
     },
     select: {
       id: true,
+      userId: true,
       projectId: true,
       episodeId: true,
+      scopeKind: true,
+      scopeId: true,
       creativeData: true,
       creativeDataVersion: true,
     },
@@ -255,38 +259,19 @@ export async function editCreativeResourceDataInTransaction(
     role: 'creative_data_reference',
     position,
   }))
-  await validateCreativeResourceInputReferencesInTransaction(tx, input.userId, referenceInputs)
-  if (embeddedRefs.length > 0) {
-    const referencedResources = await tx.creativeResource.findMany({
-      where: { id: { in: embeddedRefs.map((reference) => reference.resourceId) } },
-      select: {
-        id: true,
-        projectId: true,
-        episodeId: true,
-      },
+  if (!isCreativeResourceScopeKind(resource.scopeKind)) {
+    throw new ApiError('INTERNAL_ERROR', {
+      code: 'CREATIVE_RESOURCE_SCOPE_KIND_INVALID',
+      resourceId: resource.id,
     })
-    const referencedById = new Map(referencedResources.map((referenced) => [referenced.id, referenced]))
-    for (const reference of embeddedRefs) {
-      const referenced = referencedById.get(reference.resourceId)
-      if (!referenced) {
-        throw new ApiError('NOT_FOUND', {
-          code: 'CREATIVE_RESOURCE_DATA_REFERENCE_NOT_FOUND',
-          field: '$resourceRef.resourceId',
-        })
-      }
-      const sameResourceScope = resource.projectId === null
-        ? referenced.projectId === null
-        : referenced.projectId === null || referenced.projectId === resource.projectId
-      const sameEpisodeScope = referenced.episodeId === null
-        || referenced.episodeId === resource.episodeId
-      if (!sameResourceScope || !sameEpisodeScope) {
-        throw new ApiError('NOT_FOUND', {
-          code: 'CREATIVE_RESOURCE_DATA_REFERENCE_SCOPE_INVALID',
-          field: '$resourceRef.resourceId',
-        })
-      }
-    }
   }
+  await validateCreativeResourceInputReferencesInTransaction(tx, {
+    kind: resource.scopeKind,
+    id: resource.scopeId,
+    userId: resource.userId,
+    projectId: resource.projectId,
+    episodeId: resource.episodeId,
+  }, referenceInputs)
 
   const nextVersion = result.changedPaths.length > 0
     ? resource.creativeDataVersion + 1
