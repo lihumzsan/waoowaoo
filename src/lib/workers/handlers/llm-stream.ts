@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import type { Job } from 'bullmq'
 import { type InternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { TaskTerminatedError } from '@/lib/task/errors'
@@ -225,7 +226,7 @@ export function createWorkerLLMStreamCallbacks(
           stage: 'worker_llm_error',
           stageLabel: 'progress.runtime.stage.llmFailed',
           displayMode: 'detail',
-          message: error instanceof Error ? error.message : String(error),
+          message: describeUnknownError(error),
           streamRunId: streamContext.streamRunId,
           ...(stepId ? { stepId } : {}),
           ...(stepAttempt ? { stepAttempt } : {}),

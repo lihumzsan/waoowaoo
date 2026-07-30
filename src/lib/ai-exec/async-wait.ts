@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { AppError } from '@/lib/errors/app-error'
 import { createScopedLogger } from '@/lib/logging/core'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
@@ -77,7 +78,7 @@ export async function cancelAsyncProviderTaskBestEffort(input: {
       details: { externalId: input.externalId },
       error: error instanceof Error
         ? { name: error.name, message: error.message }
-        : { message: String(error) },
+        : { message: describeUnknownError(error) },
     })
   }
 }

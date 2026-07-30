@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { UnrecoverableError, Worker, type Job } from 'bullmq'
 import { randomUUID } from 'node:crypto'
 import { queueRedis } from '@/lib/redis'
@@ -68,7 +69,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
           details: { outboxId },
           error: error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
         })
       })
   }, Math.max(1_000, Math.floor(outboxConfig.leaseMs / 3)))
@@ -78,7 +79,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
       payload = parseOutboxCommandPayload(row.payload)
     } catch (error) {
       throw new OutboxPermanentError(
-        error instanceof Error ? error.message : `OUTBOX_COMMAND_PAYLOAD_INVALID:${String(error)}`,
+        error instanceof Error ? error.message : `OUTBOX_COMMAND_PAYLOAD_INVALID:${describeUnknownError(error)}`,
       )
     }
     if (row.kind !== payload.kind) {
@@ -127,14 +128,12 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
     }
     const permanent = error instanceof OutboxPermanentError
     const dead = permanent || currentAttempt >= attempts
-    const message = error instanceof Error ? error.message : String(error)
+    const message = describeUnknownError(error)
     if (dead && payload?.kind === OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT) {
       try {
         await settleProjectAgentWaitContinuationDeliveryExhausted(payload, outboxId)
       } catch (settlementError) {
-        const settlementMessage = settlementError instanceof Error
-          ? settlementError.message
-          : String(settlementError)
+        const settlementMessage = describeUnknownError(settlementError)
         await releaseOutboxCommand({
           id: outboxId,
           leaseOwner,

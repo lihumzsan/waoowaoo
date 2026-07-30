@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { type Job } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
@@ -326,7 +327,7 @@ export async function resolveImageSourceFromGeneration(
         providerKey ? `providerKey=${providerKey}` : 'providerKey=<unset>',
         `options=${jsonStringifySafe(summarizeImageGenerationOptions(finalOptions))}`,
         `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
-        `cause=${error instanceof Error ? error.message : String(error)}`,
+        `cause=${describeUnknownError(error)}`,
       ].join(' '),
       { cause: error },
     )
@@ -478,7 +479,7 @@ export async function resolveImageSourcesFromGeneration(
         providerKey ? `providerKey=${providerKey}` : 'providerKey=<unset>',
         `options=${jsonStringifySafe(summarizeImageGenerationOptions(finalOptions))}`,
         `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
-        `cause=${error instanceof Error ? error.message : String(error)}`,
+        `cause=${describeUnknownError(error)}`,
       ].join(' '),
       { cause: error },
     )

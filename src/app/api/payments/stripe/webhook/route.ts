@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -29,7 +30,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     const code = readStripeWebhookErrorCode(error)
     const errorDetails = error instanceof Error
       ? { name: error.name, message: error.message, stack: error.stack }
-      : { name: 'UnknownError', message: String(error) }
+      : { name: 'UnknownError', message: describeUnknownError(error) }
     if (isPermanentStripeWebhookRejection(error)) {
       logger.error({
         action: 'stripe_webhook.rejected',

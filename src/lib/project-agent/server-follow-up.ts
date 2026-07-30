@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { randomUUID } from 'node:crypto'
 import { NextRequest } from 'next/server'
 import type { UIMessage } from 'ai'
@@ -358,7 +359,7 @@ async function runClaimedFollowUp(params: {
       details: {
         waitId: params.followUp.waitId,
         runId: run.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeUnknownError(error),
       },
     })
     throw error

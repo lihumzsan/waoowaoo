@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import net from 'node:net'
 import { lookup } from 'node:dns/promises'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -609,7 +610,7 @@ function toNormalizationIssue(
     input,
     code: 'OUTBOUND_IMAGE_UNKNOWN',
     stage: 'normalize_reference',
-    message: error instanceof Error ? error.message : String(error),
+    message: describeUnknownError(error),
   }
 }
 

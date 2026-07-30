@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import type { Job, Worker } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { LogLevel } from '@/lib/logging/types'
@@ -49,7 +50,7 @@ function errorDetails(error: unknown) {
   }
   return {
     name: typeof error,
-    message: String(error),
+    message: describeUnknownError(error),
   }
 }
 
@@ -295,7 +296,7 @@ process.on('unhandledRejection', (reason) => {
     details: runtimeDetails(),
     error: errorDetails(reason),
   })
-  const error = reason instanceof Error ? reason : new Error(String(reason))
+  const error = reason instanceof Error ? reason : new Error(describeUnknownError(reason))
   setImmediate(() => {
     throw error
   })

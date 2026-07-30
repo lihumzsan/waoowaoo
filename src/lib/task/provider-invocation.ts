@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors/app-error'
@@ -245,7 +246,7 @@ function outcomeUnknown(descriptor: ProviderInvocationDescriptor, cause?: unknow
       ? undefined
       : cause instanceof Error
         ? { name: cause.name, message: cause.message, stack: cause.stack }
-        : { message: String(cause) },
+        : { message: describeUnknownError(cause) },
   })
   return new AppError(
     'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
@@ -268,6 +269,10 @@ function rejected(
   message: string,
   cause?: unknown,
 ): AppError {
+  // A typed non-retryable AppError from the adapter is the authoritative
+  // rejection fact (e.g. deterministic pre-submission validation); wrapping
+  // it would bury the actionable code under the generic rejection envelope.
+  if (cause instanceof AppError && !cause.retryable) return cause
   return new AppError(
     'PROVIDER_SUBMISSION_REJECTED',
     message || 'Provider rejected the generation request',
@@ -610,13 +615,13 @@ function readStoredError(output: ProviderInvocationOutput): string {
 }
 
 function readErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return describeUnknownError(error)
 }
 
 function toStoredError(error: unknown): NonNullable<ProviderInvocationOutput['error']> {
   return error instanceof Error
     ? { name: error.name || 'Error', message: error.message.slice(0, 2_000) }
-    : { name: typeof error, message: String(error).slice(0, 2_000) }
+    : { name: typeof error, message: describeUnknownError(error).slice(0, 2_000) }
 }
 
 async function markCheckpointRetryable(params: {

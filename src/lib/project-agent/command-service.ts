@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import type { UIMessage } from 'ai'
 import type { Prisma } from '@prisma/client'
 import type { NextRequest } from 'next/server'
@@ -474,7 +475,7 @@ export async function executeProjectAgentCommand(
         command: command.kind,
         episodeId: scope.episodeId,
         controlTransitioned,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeUnknownError(error),
       },
     })
     if (run && controlTransitioned) {
@@ -487,7 +488,7 @@ export async function executeProjectAgentCommand(
           status: 'failed',
           stopReason: 'control_resolution_failed',
           errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage: describeUnknownError(error),
         })
       }
     }

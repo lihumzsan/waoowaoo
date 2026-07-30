@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import type { UIMessage } from 'ai'
@@ -915,7 +916,7 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
         message: 'Failed to release stale project agent run lock',
         details: {
           runId: run.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: describeUnknownError(error),
         },
       })
     })

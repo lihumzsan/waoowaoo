@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireUserAuth } from '@/lib/api-auth'
@@ -23,7 +24,7 @@ function mapTextAttachmentError(error: unknown): ApiError {
   }
   return new ApiError('INTERNAL_ERROR', {
     code: 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_PARSE_FAILED',
-    message: error instanceof Error ? error.message : String(error),
+    message: describeUnknownError(error),
   })
 }
 

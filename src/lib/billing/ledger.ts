@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { logInfo as _ulogInfo, logError as _ulogError, createScopedLogger } from '@/lib/logging/core'
 import type { ErrorFields } from '@/lib/logging/types'
 import { Prisma } from '@prisma/client'
@@ -18,7 +19,7 @@ function toErrorFields(error: unknown): ErrorFields {
       code: error instanceof BillingOperationError ? error.code : undefined,
     }
   }
-  return { message: String(error) }
+  return { message: describeUnknownError(error) }
 }
 
 type LedgerRecordParams = {
@@ -409,7 +410,7 @@ export async function freezeBalance(
         idempotencyKey: options?.idempotencyKey ?? null,
       }, error)
     }
-    throw new BillingOperationError('BILLING_FREEZE_FAILED', `freeze balance failed: ${String(error)}`, {
+    throw new BillingOperationError('BILLING_FREEZE_FAILED', `freeze balance failed: ${describeUnknownError(error)}`, {
       userId,
       amount: normalizedAmount,
       idempotencyKey: options?.idempotencyKey ?? null,
@@ -544,7 +545,7 @@ export async function confirmChargeWithRecord(
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_CONFIRM_FAILED', error.message, { freezeId }, error)
     }
-    throw new BillingOperationError('BILLING_CONFIRM_FAILED', `confirm charge failed: ${String(error)}`, { freezeId })
+    throw new BillingOperationError('BILLING_CONFIRM_FAILED', `confirm charge failed: ${describeUnknownError(error)}`, { freezeId })
   }
 }
 
@@ -704,7 +705,7 @@ export async function increasePendingFreezeAmount(freezeId: string, delta: numbe
     if (error instanceof Error) {
       throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', error.message, { freezeId, delta: normalizedDelta }, error)
     }
-    throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', `increase freeze failed: ${String(error)}`, { freezeId, delta: normalizedDelta })
+    throw new BillingOperationError('BILLING_FREEZE_EXPAND_FAILED', `increase freeze failed: ${describeUnknownError(error)}`, { freezeId, delta: normalizedDelta })
   }
 }
 

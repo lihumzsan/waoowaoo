@@ -17,7 +17,7 @@ import {
   TASK_RETRY_BACKOFF_BASE_MS,
 } from '@/lib/task/retry-policy'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
-import { normalizeAnyError } from '@/lib/errors/normalize'
+import { describeUnknownError, normalizeAnyError } from '@/lib/errors/normalize'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { getLogContext, withLogContext } from '@/lib/logging/context'
 import { commitTaskTerminal } from '@/lib/task/terminal'
@@ -207,7 +207,7 @@ export async function withTaskLifecycle(
           message: 'task heartbeat write failed',
           error: error instanceof Error
             ? { name: error.name, message: error.message }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
         })
       })
     }
@@ -363,7 +363,7 @@ export async function withTaskLifecycle(
         details: { queue: job.queueName, taskType: data.type },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
-          : { message: String(error) },
+          : { message: describeUnknownError(error) },
       })
       throw error
     }
@@ -410,7 +410,7 @@ export async function withTaskLifecycle(
             causeChain: errorCauseChain,
           }
           : {
-            message: String(error),
+            message: describeUnknownError(error),
             code: normalizedError.code,
             retryable: normalizedError.retryable,
             failureClass: normalizedError.failureClass,

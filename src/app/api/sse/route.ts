@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
@@ -96,7 +97,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
               message: 'failed to release sse subscriber listener',
               error: error instanceof Error
                 ? { name: error.name, message: error.message, stack: error.stack }
-                : { message: String(error) },
+                : { message: describeUnknownError(error) },
             })
           }
           signal.removeEventListener('abort', abortHandler)
@@ -112,7 +113,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
           message: 'sse stream failed and will be terminated',
           error: error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
         })
         await cleanup()
         controller.error(error)
@@ -170,7 +171,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
               message: 'invalid sse message',
               details: {
                 message,
-                error: error instanceof Error ? error.message : String(error),
+                error: describeUnknownError(error),
               },
             })
             void fail(error)

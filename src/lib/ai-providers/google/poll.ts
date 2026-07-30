@@ -2,6 +2,7 @@ import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-ta
 import { logInternal } from '@/lib/logging/semantic'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -9,13 +10,6 @@ interface UnknownRecord {
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === 'object' ? (value as UnknownRecord) : null
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  const record = asRecord(error)
-  if (record && typeof record.message === 'string') return record.message
-  return String(error)
 }
 
 function getErrorStatus(error: unknown): number | undefined {

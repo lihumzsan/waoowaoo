@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { addOutboxJob, observeOutboxJob } from './queue'
 import {
@@ -93,7 +94,7 @@ export async function dispatchCommittedOutboxCommands(commandIds: readonly strin
         details: { outboxId: commandId },
         error: error instanceof Error
           ? { name: error.name, message: error.message, stack: error.stack }
-          : { message: String(error) },
+          : { message: describeUnknownError(error) },
       })
     }
   }
@@ -151,7 +152,7 @@ export function startOutboxDispatcher(): void {
           message: 'durable outbox dispatch cycle failed',
           error: error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
         })
       })
       .finally(() => {

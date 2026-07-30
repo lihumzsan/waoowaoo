@@ -2,6 +2,8 @@ import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-ta
 import { logInternal } from '@/lib/logging/semantic'
 import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
+import { describeUnknownError } from '@/lib/errors/normalize'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -26,13 +28,6 @@ function readArkVideoUrl(content: unknown): string | undefined {
     }
   }
   return undefined
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  const record = asRecord(error)
-  if (record && typeof record.message === 'string') return record.message
-  return String(error)
 }
 
 export async function querySeedanceVideoStatus(taskId: string, apiKey: string): Promise<ProviderAsyncTaskStatus> {
@@ -85,7 +80,11 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
     }
 
     if (status === 'failed') {
-      const errorMessage = typeof queryData.error?.message === 'string' ? queryData.error.message : 'Unknown error'
+      const errorMessage = typeof queryData.error?.message === 'string'
+        ? queryData.error.message
+        : queryData.error
+          ? describeUnknownError(queryData.error)
+          : 'Unknown error'
       return { status: 'failed', failureDisposition: 'retryable', error: errorMessage }
     }
 

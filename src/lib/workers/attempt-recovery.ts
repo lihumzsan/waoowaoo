@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { TASK_STATUS } from '@/lib/task/types'
@@ -101,7 +102,7 @@ export async function releaseInFlightTaskAttempts(): Promise<number> {
         taskId: entry.taskId,
         error: error instanceof Error
           ? { name: error.name, message: error.message }
-          : { message: String(error) },
+          : { message: describeUnknownError(error) },
       })
     }
   }

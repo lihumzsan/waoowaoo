@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { HTTPClient, OpenRouter } from '@openrouter/sdk'
 import { fetchWithProviderProxy, shouldProxyProviderUrl } from '@/lib/http/outbound-proxy'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -35,7 +36,7 @@ function readAbortReasonForLog(signal: AbortSignal): {
   }
   return {
     abortReasonName: reason == null ? null : typeof reason,
-    abortReasonMessage: reason == null ? null : String(reason),
+    abortReasonMessage: reason == null ? null : describeUnknownError(reason),
   }
 }
 
@@ -52,7 +53,7 @@ export function serializeErrorForLog(error: unknown): {
       ...(typeof code === 'string' ? { code } : {}),
     }
   }
-  return { message: String(error) }
+  return { message: describeUnknownError(error) }
 }
 
 async function fetchOpenRouterSdkRequest(

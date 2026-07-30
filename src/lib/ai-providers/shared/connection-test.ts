@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { generateText, type LanguageModel } from 'ai'
 import { composeModelKey } from '@/lib/ai-registry/selection'
 import { DEFAULT_REASONING_EFFORT } from '@/lib/ai-registry/reasoning-effort'
@@ -20,7 +21,7 @@ export function connectionTestErrorMessage(error: unknown): string {
     if (error.message.includes('timeout') || error.name === 'TimeoutError') return 'Request timed out'
     return error.message.slice(0, 200)
   }
-  return String(error).slice(0, 200)
+  return describeUnknownError(error).slice(0, 200)
 }
 
 export function classifyConnectionProbeFailure(status: number): string {

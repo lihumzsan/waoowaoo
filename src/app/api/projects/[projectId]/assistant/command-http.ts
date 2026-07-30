@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 
@@ -134,6 +135,6 @@ export function mapProjectAgentCommandError(error: unknown): ApiError {
 
   return new ApiError('EXTERNAL_ERROR', {
     code: 'PROJECT_AGENT_RUNTIME_FAILED',
-    message: error instanceof Error ? error.message : String(error),
+    message: describeUnknownError(error),
   })
 }

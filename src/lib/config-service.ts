@@ -7,6 +7,7 @@
  * cloud 优先级：平台模型/参数配置 + 项目画幅
  */
 
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { prisma } from '@/lib/prisma'
 import {
   type CapabilitySelections,
@@ -343,7 +344,7 @@ export async function buildImageBillingPayload(input: {
       modelKey: imageModel,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Image model capability not configured'
+    const message = describeUnknownError(err)
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
@@ -381,7 +382,7 @@ export function buildImageBillingPayloadFromUserConfig(input: {
       capabilityDefaults: userModelConfig.capabilityDefaults,
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Image model capability not configured'
+    const message = describeUnknownError(err)
     throw Object.assign(new Error(message), { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 

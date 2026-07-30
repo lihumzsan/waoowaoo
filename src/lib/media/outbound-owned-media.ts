@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { resolveMediaMimeType } from '@/lib/media/media-mime'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { authorizeStorageObjectReadForUser } from '@/lib/media/storage-access-policy'
@@ -6,7 +7,7 @@ import { getObjectMetadata, getSignedObjectUrl } from '@/lib/storage'
 
 function storageErrorSummary(error: unknown): string {
   if (error instanceof Error) return `${error.name}: ${error.message}`
-  return String(error)
+  return describeUnknownError(error)
 }
 
 export type OwnedMediaOutboundErrorCode =

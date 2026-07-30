@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import type { Queue } from 'bullmq'
@@ -62,7 +63,7 @@ export async function observeTaskJobAcrossQueues(
         error:
           error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
       })
     }
   }
@@ -111,7 +112,7 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
   try {
     envelope = buildTaskJobEnvelope(task)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = describeUnknownError(error)
     const terminal = await failOrphanedTask(task, `Queued task recovery contract invalid: ${message}`)
     return terminal.applied ? 'failed' : 'retry_later'
   }
@@ -128,7 +129,7 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
     }
     return 'recovered'
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = describeUnknownError(error)
     await markTaskEnqueueFailed(task.id, message || 're-enqueue failed')
     logger.error({
       action: 'task.reconcile.reenqueue_failed',
@@ -289,7 +290,7 @@ export function startTaskReconciler(): void {
         error:
           error instanceof Error
             ? { name: error.name, message: error.message, stack: error.stack }
-            : { message: String(error) },
+            : { message: describeUnknownError(error) },
       })
     }
   }

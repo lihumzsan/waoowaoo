@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -66,7 +67,7 @@ export async function observeOutboxJobWithQueue(
       details: { outboxId },
       error: error instanceof Error
         ? { name: error.name, message: error.message, stack: error.stack }
-        : { message: String(error) },
+        : { message: describeUnknownError(error) },
     })
     return 'unavailable'
   }

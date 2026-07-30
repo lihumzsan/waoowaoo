@@ -1,3 +1,4 @@
+import { describeUnknownError } from '@/lib/errors/normalize'
 import { randomUUID } from 'node:crypto'
 import { redis } from '@/lib/redis'
 import { createScopedLogger } from '@/lib/logging/core'
@@ -143,7 +144,7 @@ export async function safelyReleaseProjectAgentRunLock(lock: ProjectAgentRunLock
       message: 'Failed to release project agent run lock',
       details: {
         key: lock.key,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeUnknownError(error),
       },
     })
   }
