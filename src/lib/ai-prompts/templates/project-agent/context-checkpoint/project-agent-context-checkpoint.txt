@@ -13,7 +13,7 @@ Keep only concrete facts needed to continue:
 - Work that finished, and work explicitly still outstanding
 
 Merge repeated facts into one bullet. Omit pleasantries, transient progress narration, duplicated tool payloads, obsolete plans, and private reasoning. Never invent a fact that does not appear in the transcript. Return concise plain-text bullet lines with no headings or code fences.
-Never retain load_tools contractId, revision, returned parameter schemas, or other execution-segment authority; bound tools must be loaded again when needed.
+Do not copy bulky `load_tools` parameter schemas into the checkpoint; retain only exact Operation ids that materially matter.
 
 [transcript]
 {transcript}

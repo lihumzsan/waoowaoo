@@ -102,7 +102,6 @@ async function createPersistedProjectAgentOperationPlan<Input>(params: {
   context: ProjectAgentContext
   source: string
   input: unknown
-  boundToolContractState?: unknown
   toolCallId?: string | null
 }): Promise<OperationPlanView> {
   if (!params.operation.plan) {
@@ -124,7 +123,6 @@ async function createPersistedProjectAgentOperationPlan<Input>(params: {
       source: params.source,
       writer: null,
       toolCallId: params.toolCallId,
-      boundToolContractState: params.boundToolContractState,
     },
     input: prepared.input,
   })
@@ -144,7 +142,6 @@ export async function authorizeProjectAgentToolAutomatically<Input>(params: {
   context: ProjectAgentContext
   source: string
   input: unknown
-  boundToolContractState?: unknown
   toolCallId: string
 }): Promise<PlannedOperationInvocation> {
   if (params.operation.confirmation.kind !== 'billable_media') {
@@ -177,7 +174,6 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
   context: ProjectAgentContext
   source: string
   input: unknown
-  boundToolContractState?: unknown
   toolCallId?: string | null
   store: ProjectAgentApprovalPreflightStore
 }): Promise<boolean> {

@@ -39,7 +39,6 @@ export async function executeProjectAgentOperationFromTool(params: {
   executionFence: ProjectAgentOperationExecutionFence
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
   approvedInvocation?: PlannedOperationInvocation | null
-  boundToolContractState?: unknown
 }): Promise<ProjectAgentToolExecutionResult> {
   const registry = createProjectAgentOperationRegistry()
   const operation = registry[params.operationId]
@@ -62,7 +61,6 @@ export async function executeProjectAgentOperationFromTool(params: {
     activityId: params.activityId ?? null,
     executionFence: params.executionFence,
     taskBatchBinding: params.taskBatchBinding ?? null,
-    boundToolContractState: params.boundToolContractState,
   }
   try {
     const result = await invokeProjectAgentOperation({

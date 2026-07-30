@@ -147,15 +147,6 @@ export function withOperationPack(
     if (toolExposure === 'direct' && !channels.tool) {
       throw new Error(`PROJECT_AGENT_OPERATION_DIRECT_TOOL_CHANNEL_REQUIRED:${operationId}`)
     }
-    if (operation.bindToolInputSchema && !channels.tool) {
-      throw new Error(`PROJECT_AGENT_OPERATION_BOUND_TOOL_CHANNEL_REQUIRED:${operationId}`)
-    }
-    if (operation.bindToolInputSchema && toolExposure !== 'on_demand') {
-      throw new Error(`PROJECT_AGENT_OPERATION_BOUND_TOOL_ON_DEMAND_REQUIRED:${operationId}`)
-    }
-    if (operation.bindToolInputSchema && operation.toolInputSchema) {
-      throw new Error(`PROJECT_AGENT_OPERATION_BOUND_TOOL_SCHEMA_AMBIGUOUS:${operationId}`)
-    }
     const normalized = {
       ...operation,
       summary: normalizeOperationSummary(operation),

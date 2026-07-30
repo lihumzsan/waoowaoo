@@ -60,7 +60,6 @@ import {
 } from './context-telemetry'
 import {
   assertProjectAgentModelInputWithinBudget,
-  collectProjectAgentBoundToolDiscoveryCallIds,
   decideProjectAgentModelInput,
   prepareProjectAgentContextCompressionInput,
 } from './model-input/filter'
@@ -1037,12 +1036,6 @@ export async function createProjectAgentChatResponse(input: {
   })
   const toolDiscoveryState = createProjectAgentToolDiscoveryState({
     catalog: toolCatalog,
-    registry: operations,
-    bindingContext: {
-      userId: input.userId,
-      projectId: input.projectId,
-      context,
-    },
   })
   const projectStateInputItem = buildProjectStateInputItem({
     projectId: input.projectId,
@@ -1246,7 +1239,6 @@ export async function createProjectAgentChatResponse(input: {
   const operationTools = createProjectAgentOperationTools({
     request: input.request,
     registry: operations,
-    discoveryState: toolDiscoveryState,
     description: buildProjectAgentOperationGatewayDescription(),
     directOperations: toolset.directOperationIds.map((operationId) => {
       const operation = operations[operationId]
@@ -1345,15 +1337,6 @@ export async function createProjectAgentChatResponse(input: {
     modelKey: assistantModelKey,
     toolSchemaTokens: estimateProjectAgentTokens(toolSchemaMeasurement),
     locale,
-    staleBoundToolDiscoveryCallIds: collectProjectAgentBoundToolDiscoveryCallIds(
-      sessionHistoryItems,
-      PROJECT_AGENT_TOOL_DISCOVERY_NAME,
-      new Set(
-        Object.values(operations)
-          .filter((operation) => Boolean(operation.bindToolInputSchema))
-          .map((operation) => operation.id),
-      ),
-    ),
     // Enumerated from the production registry so a new Operation whose result
     // cannot be re-fetched is protected by declaring it, not by editing a
     // second list here.

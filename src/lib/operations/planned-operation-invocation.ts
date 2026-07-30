@@ -291,9 +291,8 @@ function assertGrantMatchesSnapshot(params: {
  * granted plan. Approval resume executes this snapshot: normalization happens
  * exactly once, at preflight, and the persisted snapshot the user approved is
  * the only input authority afterwards. Re-normalizing the model's original
- * tool arguments on resume is forbidden — a dialect difference between the
- * bound contract used at preflight and the schemas available at resume would
- * silently change what executes versus what was approved.
+ * tool arguments on resume is forbidden because it would create a second
+ * interpretation path and could change what executes versus what was approved.
  */
 export async function loadApprovedOperationExecutionInput(params: {
   userId: string

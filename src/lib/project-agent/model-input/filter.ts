@@ -43,12 +43,6 @@ export type ProjectAgentModelInputFilterInput = {
   readonly toolSchemaTokens: number
   readonly locale: ProjectAgentLocale
   readonly irreplaceableToolNames: ReadonlySet<string>
-  /**
-   * Tool discovery contracts are bound to one execution segment. Session keeps
-   * their exact historical call/result pairs, but a later segment must not see
-   * those expired definitions as reusable invocation authority.
-   */
-  readonly staleBoundToolDiscoveryCallIds: ReadonlySet<string>
 }
 
 /**
@@ -65,72 +59,6 @@ const KEEP_RECENT_TOOL_RESULTS = 5
  */
 const SHED_TARGET_RATIO = 0.7
 
-function readFunctionItemIdentity(item: AgentInputItem): {
-  readonly type: 'function_call' | 'function_call_result'
-  readonly callId: string
-  readonly name: string
-  readonly argumentsJson: string | null
-} | null {
-  const record = item as unknown as Record<string, unknown>
-  if (record.type !== 'function_call' && record.type !== 'function_call_result') return null
-  const callId = typeof record.callId === 'string' ? record.callId.trim() : ''
-  const name = typeof record.name === 'string' ? record.name.trim() : ''
-  return callId && name
-    ? {
-        type: record.type,
-        callId,
-        name,
-        argumentsJson: record.type === 'function_call' && typeof record.arguments === 'string'
-          ? record.arguments
-          : null,
-      }
-    : null
-}
-
-export function collectProjectAgentBoundToolDiscoveryCallIds(
-  items: readonly AgentInputItem[],
-  toolName: string,
-  boundOperationIds: ReadonlySet<string>,
-): ReadonlySet<string> {
-  const normalizedToolName = toolName.trim()
-  if (!normalizedToolName) throw new Error('PROJECT_AGENT_MODEL_INPUT_TOOL_NAME_REQUIRED')
-  return new Set(items.flatMap((item) => {
-    const identity = readFunctionItemIdentity(item)
-    if (
-      identity?.type !== 'function_call'
-      || identity.name !== normalizedToolName
-      || !identity.argumentsJson
-    ) return []
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(identity.argumentsJson)
-    } catch {
-      return [identity.callId]
-    }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return [identity.callId]
-    }
-    const toolIds = (parsed as Record<string, unknown>).toolIds
-    if (!Array.isArray(toolIds) || toolIds.some((toolId) => typeof toolId !== 'string')) {
-      return [identity.callId]
-    }
-    return toolIds.some((toolId) => boundOperationIds.has(toolId))
-      ? [identity.callId]
-      : []
-  }))
-}
-
-function dropStaleToolDiscoveryPairs(
-  items: readonly AgentInputItem[],
-  staleCallIds: ReadonlySet<string>,
-): AgentInputItem[] {
-  if (staleCallIds.size === 0) return [...items]
-  return items.filter((item) => {
-    const identity = readFunctionItemIdentity(item)
-    return !identity || !staleCallIds.has(identity.callId)
-  })
-}
-
 /**
  * Reuses the exact lossless preprocessing already chosen for an over-budget
  * request as the input to its single context compression. Current-turn input
@@ -142,10 +70,7 @@ export function prepareProjectAgentContextCompressionInput(
   historyItems: readonly AgentInputItem[],
   freedTokens: number,
 ): AgentInputItem[] {
-  const executionScopedHistory = dropStaleToolDiscoveryPairs(
-    projectProjectAgentActiveContext(historyItems),
-    config.staleBoundToolDiscoveryCallIds,
-  )
+  const executionScopedHistory = projectProjectAgentActiveContext(historyItems)
   if (freedTokens <= 0) return executionScopedHistory
   return shedProjectAgentToolResults({
     items: executionScopedHistory,
@@ -160,10 +85,7 @@ export function decideProjectAgentModelInput(
   config: ProjectAgentModelInputFilterInput,
   modelData: { input: AgentInputItem[]; instructions?: string },
 ): ProjectAgentModelInputDecision {
-  const executionScopedInput = dropStaleToolDiscoveryPairs(
-    projectProjectAgentActiveContext(modelData.input),
-    config.staleBoundToolDiscoveryCallIds,
-  )
+  const executionScopedInput = projectProjectAgentActiveContext(modelData.input)
   const instructionTokens = modelData.instructions
     ? estimateProjectAgentTextTokens(modelData.instructions)
     : 0

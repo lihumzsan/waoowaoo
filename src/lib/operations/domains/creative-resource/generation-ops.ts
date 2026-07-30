@@ -72,9 +72,6 @@ import {
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationRegistryDraft,
-  ProjectAgentToolInputBinding,
-  ProjectAgentToolInputBindingContext,
-  RuntimeSchema,
 } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
@@ -103,9 +100,8 @@ const audioVideoReferencesSchema = z.array(creativeResourceInputRefSchema)
 
 /**
  * Model-facing sentinel meaning "the server decides this capability option".
- * Bound tool schemas expose it as a required enum member so the strict schema
- * never needs a nullable field; canonical schemas accept it and the single
- * plan owner strips it back to absence before freezing generation options.
+ * Canonical schemas accept it and the single plan owner strips it back to
+ * absence before freezing generation options.
  */
 const CAPABILITY_AUTO = 'auto'
 
@@ -786,13 +782,6 @@ interface MediaPlanConfig {
 
 type ProjectGenerationModelConfig = Awaited<ReturnType<typeof getProjectModelConfig>>
 
-interface MediaGenerationBoundState {
-  readonly kind: 'media_generation'
-  readonly operationId: MediaPlanConfig['operationId']
-  readonly modelKey: string
-  readonly projectConfig: ProjectGenerationModelConfig
-}
-
 type MediaCapabilityModelType = 'image' | 'music' | 'video'
 
 function requireMediaGenerationCapabilities(
@@ -826,338 +815,6 @@ function requirePositiveCapabilityLimit(input: {
     modelKey: input.modelKey,
     agentRetryableAfterCorrection: false,
   })
-}
-
-function readMediaGenerationBoundState(
-  value: unknown,
-  operationId: MediaPlanConfig['operationId'],
-): MediaGenerationBoundState | null {
-  if (value === undefined) return null
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`CREATIVE_RESOURCE_BOUND_CONTRACT_INVALID:${operationId}`)
-  }
-  const candidate = value as Partial<MediaGenerationBoundState>
-  if (
-    candidate.kind !== 'media_generation'
-    || candidate.operationId !== operationId
-    || typeof candidate.modelKey !== 'string'
-    || !candidate.modelKey.trim()
-    || !candidate.projectConfig
-    || typeof candidate.projectConfig !== 'object'
-  ) {
-    throw new Error(`CREATIVE_RESOURCE_BOUND_CONTRACT_INVALID:${operationId}`)
-  }
-  return candidate as MediaGenerationBoundState
-}
-
-function stringCapabilityValues(
-  values: readonly CapabilityValue[] | undefined,
-): string[] {
-  return (values ?? []).filter((value): value is string => typeof value === 'string')
-}
-
-function numberCapabilityValues(
-  values: readonly CapabilityValue[] | undefined,
-): number[] {
-  return (values ?? []).filter((value): value is number => (
-    typeof value === 'number' && Number.isFinite(value)
-  ))
-}
-
-function booleanCapabilityValues(
-  values: readonly CapabilityValue[] | undefined,
-): boolean[] {
-  return (values ?? []).filter((value): value is boolean => typeof value === 'boolean')
-}
-
-const CAPABILITY_AUTO_DESCRIPTION = `Pick one supported value exactly, or "${CAPABILITY_AUTO}" to let the system decide.`
-
-function stringCapabilityAutoSchema(
-  values: readonly CapabilityValue[] | undefined,
-): z.ZodType<string> | null {
-  const options = stringCapabilityValues(values)
-  return options.length > 0
-    ? z.literal([CAPABILITY_AUTO, ...options])
-        .describe(CAPABILITY_AUTO_DESCRIPTION)
-    : null
-}
-
-function numberCapabilityAutoSchema(
-  values: readonly CapabilityValue[] | undefined,
-): z.ZodType<number | typeof CAPABILITY_AUTO> | null {
-  const options = numberCapabilityValues(values)
-  return options.length > 0
-    ? z.union([
-        z.literal(options as [number, ...number[]]),
-        z.literal(CAPABILITY_AUTO),
-      ]).describe(CAPABILITY_AUTO_DESCRIPTION)
-    : null
-}
-
-function booleanCapabilityAutoSchema(
-  values: readonly CapabilityValue[] | undefined,
-): z.ZodType<boolean | typeof CAPABILITY_AUTO> | null {
-  const options = booleanCapabilityValues(values)
-  return options.length > 0
-    ? z.union([
-        z.literal(options as [boolean, ...boolean[]]),
-        z.literal(CAPABILITY_AUTO),
-      ]).describe(CAPABILITY_AUTO_DESCRIPTION)
-    : null
-}
-
-/**
- * Bound tool schemas use the same reference identity as the canonical schemas
- * but require an explicit role: strict mode would otherwise have to publish
- * the optional role as nullable, and null is not part of the tool dialect.
- */
-const boundCreativeResourceInputRefSchema = z.object({
-  resourceId: z.string().trim().min(1)
-    .describe('Globally unique immutable Resource identity. The server resolves its schema, owner, scope, and content.'),
-  role: z.string().trim().min(1)
-    .describe('Semantic role of this reference in the new output. Use "context" for creative-lineage references and "reference" for media inputs when nothing more specific applies.'),
-}).strict()
-
-const boundVideoAudioCompatibleImageReferenceSchema = z.object({
-  resourceId: z.string().trim().min(1)
-    .describe('Globally unique immutable image Resource identity.'),
-  role: z.string().trim().min(1)
-    .regex(/^(?!first_frame$|last_frame$).+$/)
-    .describe('Semantic role; first_frame and last_frame are unavailable when audio references are present. Use "reference" when nothing more specific applies.'),
-}).strict()
-
-const boundContextReferenceSchema = z.array(boundCreativeResourceInputRefSchema)
-  .max(8)
-  .describe('Exact immutable Resources used as creative context and lineage only. Text, Creative Direction, audio, video, and image Resources are allowed here; these references are never sent to an image input channel. Pass an empty array when there is none.')
-
-const boundImageReferenceSchema = z.array(boundCreativeResourceInputRefSchema)
-  .max(8)
-  .describe('Exact ready image Resources to send through the provider image-input channel. Never put text, Creative Direction, audio, or video Resources here. Pass an empty array when there is none.')
-
-const boundMediaNameSchema = z.string().trim().min(1).max(200)
-  .describe('Display name for the generated Resource or candidate set.')
-
-const boundCandidateCountSchema = z.number().int().min(1).max(6)
-  .describe('Number of new candidates to generate. Use 1 for a single result.')
-
-const boundCommonNewMediaGenerationShape = {
-  kind: z.literal('new'),
-  name: boundMediaNameSchema,
-  prompt: commonNewMediaGenerationShape.prompt,
-  contextReferences: boundContextReferenceSchema,
-} as const
-
-async function resolveMediaGenerationBoundState(
-  context: ProjectAgentToolInputBindingContext,
-  config: MediaPlanConfig,
-): Promise<MediaGenerationBoundState> {
-  const [modelKey, projectConfig] = await Promise.all([
-    resolveSystemModelKey({
-      userId: context.userId,
-      projectId: context.projectId,
-      purpose: config.modelPurpose,
-    }),
-    getProjectModelConfig(context.projectId, context.userId),
-  ])
-  return {
-    kind: 'media_generation',
-    operationId: config.operationId,
-    modelKey,
-    projectConfig,
-  }
-}
-
-function createBoundImageInputSchema(
-  state: MediaGenerationBoundState,
-): RuntimeSchema<CreateImageInput> {
-  const capabilities = requireMediaGenerationCapabilities('image', state.modelKey)
-  const optionFields = getCapabilityOptionFields('image', capabilities)
-  const resolution = stringCapabilityAutoSchema(optionFields.resolution)
-  const quality = stringCapabilityAutoSchema(optionFields.quality)
-  const capabilityShape = {
-    ...(resolution ? { resolution } : {}),
-    ...(quality ? { quality } : {}),
-  }
-  const newRequest = z.object({
-    ...boundCommonNewMediaGenerationShape,
-    count: boundCandidateCountSchema,
-    imageReferences: boundImageReferenceSchema,
-    schemaId: z.enum(independentImageSchemaIds as [string, ...string[]])
-      .describe('Professional meaning of an independent image Resource. Use generic.image unless a more specific schema applies.'),
-    ...capabilityShape,
-  }).strict()
-  const assetRequest = z.object({
-    kind: z.literal('asset'),
-    name: boundMediaNameSchema,
-    prompt: z.string().trim().min(1)
-      .describe('Complete visual design instruction for this exact Project asset.'),
-    contextReferences: boundContextReferenceSchema,
-    imageReferences: boundImageReferenceSchema,
-    assetBinding: createAssetImageRequestSchema.shape.assetBinding,
-  }).strict()
-  const manifestAssetsRequest = z.object({
-    kind: z.literal('manifest_assets'),
-    resourceId: createImageManifestAssetsRequestSchema.shape.resourceId,
-    manifestAssetIds: z.array(z.string().trim().min(1).max(80)).max(1_024)
-      .describe('Exact manifestAssetId subset to generate now. Pass an empty array to generate every asset in the adopted manifest.'),
-  }).strict()
-  return z.object({
-    request: z.discriminatedUnion('kind', [
-      newRequest,
-      assetRequest,
-      manifestAssetsRequest,
-      retryMediaGenerationRequestSchema,
-    ]),
-  }).strict() as unknown as RuntimeSchema<CreateImageInput>
-}
-
-function createBoundAudioInputSchema(
-  state: MediaGenerationBoundState,
-): RuntimeSchema<CreateAudioInput> {
-  const capabilities = requireMediaGenerationCapabilities('music', state.modelKey)
-  const optionFields = getCapabilityOptionFields('music', capabilities)
-  const durationValues = numberCapabilityValues(optionFields.durationSeconds)
-  const durationRange = capabilities?.music?.durationSecondsRange
-  if (durationValues.length === 0 && !durationRange) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'CAPABILITY_REQUIRED',
-      field: 'durationSeconds',
-      modelKey: state.modelKey,
-      agentRetryableAfterCorrection: false,
-    })
-  }
-  const durationSeconds = durationValues.length > 0
-    ? z.literal(durationValues as [number, ...number[]])
-    : z.number().int().min(Math.ceil(durationRange!.min)).max(Math.floor(durationRange!.max))
-  const vocalMode = stringCapabilityAutoSchema(optionFields.vocalMode)
-  const outputFormat = stringCapabilityAutoSchema(optionFields.outputFormat)
-  const bpm = numberCapabilityAutoSchema(optionFields.bpm)
-  const maxReferenceVideos = capabilities.music?.maxReferenceVideos ?? 0
-  const capabilityShape = {
-    ...(vocalMode ? { vocalMode } : {}),
-    ...(outputFormat ? { outputFormat } : {}),
-    ...(bpm ? { bpm } : {}),
-    ...(maxReferenceVideos > 0
-      ? {
-          videoReferences: z.array(boundCreativeResourceInputRefSchema)
-            .max(Math.min(maxReferenceVideos, 1))
-            .describe('Exact ready video Resource the configured music model watches to compose a matching soundtrack. Pass an empty array when there is none.'),
-        }
-      : {}),
-  }
-  const newRequest = z.object({
-    ...boundCommonNewMediaGenerationShape,
-    durationSeconds,
-    genre: z.string().trim()
-      .describe('Musical genre. Pass an empty string when unspecified.'),
-    mood: z.string().trim()
-      .describe('Musical mood. Pass an empty string when unspecified.'),
-    ...capabilityShape,
-  }).strict()
-  const musicDirectionRequest = z.object({
-    kind: z.literal('music_direction'),
-    resourceId: createAudioMusicDirectionRequestSchema.shape.resourceId,
-    videoReference: boundCreativeResourceInputRefSchema
-      .describe('Exact ready final video Resource this score was designed for. The server derives the soundtrack duration from this video and, when the configured music capability supports video conditioning, lets the model watch it.'),
-  }).strict()
-  return z.object({
-    request: z.discriminatedUnion('kind', [
-      newRequest,
-      musicDirectionRequest,
-      retryMediaGenerationRequestSchema,
-    ]),
-  }).strict() as unknown as RuntimeSchema<CreateAudioInput>
-}
-
-function createBoundVideoInputSchema(
-  state: MediaGenerationBoundState,
-): RuntimeSchema<CreateVideoInput> {
-  const capabilities = requireMediaGenerationCapabilities('video', state.modelKey)
-  const optionFields = getCapabilityOptionFields('video', capabilities)
-  const durationValues = numberCapabilityValues(optionFields.duration)
-    .filter((value) => value <= CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
-  if (durationValues.length === 0) {
-    throw new Error(`CREATIVE_RESOURCE_VIDEO_DURATION_CAPABILITY_REQUIRED:${state.operationId}`)
-  }
-  const resolution = stringCapabilityAutoSchema(optionFields.resolution)
-  const generateAudio = booleanCapabilityAutoSchema(optionFields.generateAudio)
-  const capabilityShape = {
-    ...(resolution ? { resolution } : {}),
-    ...(generateAudio ? { generateAudio } : {}),
-  }
-  const commonShape = {
-    ...boundCommonNewMediaGenerationShape,
-    count: boundCandidateCountSchema,
-    schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video as [string, ...string[]])
-      .describe('Professional meaning of the video Resource. Use generic.video unless a more specific schema applies.'),
-    durationSeconds: z.literal(durationValues as [number, ...number[]])
-      .describe('Exact duration for this one generated video segment, chosen from the values supported by the configured video model.'),
-    ...capabilityShape,
-  } as const
-  const maxReferenceImages = requirePositiveCapabilityLimit({
-    field: 'maxReferenceImages',
-    value: capabilities.video?.maxReferenceImages,
-    modelKey: state.modelKey,
-  })
-  const maxReferenceAudios = capabilities?.video?.maxReferenceAudios ?? 0
-  const imageReferences = z.array(boundCreativeResourceInputRefSchema)
-    .max(maxReferenceImages)
-    .describe(`At most ${String(maxReferenceImages)} ready image Resources for the configured video capability. Pass an empty array when there is none.`)
-  const noAudioRequest = z.object({
-    ...commonShape,
-    imageReferences: supportsTextToVideoModel(state.modelKey)
-      ? imageReferences
-      : imageReferences.min(1),
-    ...(maxReferenceAudios > 0
-      ? {
-          audioReferences: z.array(boundCreativeResourceInputRefSchema).max(0)
-            .describe('This branch takes no audio conditioning; pass an empty array.'),
-        }
-      : {}),
-  }).strict()
-  const newRequests = maxReferenceAudios > 0
-    ? [
-        noAudioRequest,
-        z.object({
-          ...commonShape,
-          imageReferences: z.array(boundVideoAudioCompatibleImageReferenceSchema)
-            .min(1)
-            .max(maxReferenceImages),
-          audioReferences: z.array(boundCreativeResourceInputRefSchema)
-            .min(1)
-            .max(maxReferenceAudios)
-            .describe('Ready audio Resources sent to the configured video model together with at least one image reference.'),
-        }).strict(),
-      ]
-    : [noAudioRequest]
-  return z.object({
-    request: z.union([
-      ...newRequests,
-      createVideoPromptSetRequestSchema,
-      retryMediaGenerationRequestSchema,
-    ]),
-  }).strict() as unknown as RuntimeSchema<CreateVideoInput>
-}
-
-async function bindImageGenerationToolInputSchema(
-  context: ProjectAgentToolInputBindingContext,
-): Promise<ProjectAgentToolInputBinding<CreateImageInput>> {
-  const state = await resolveMediaGenerationBoundState(context, IMAGE_CONFIG)
-  return { inputSchema: createBoundImageInputSchema(state), state }
-}
-
-async function bindAudioGenerationToolInputSchema(
-  context: ProjectAgentToolInputBindingContext,
-): Promise<ProjectAgentToolInputBinding<CreateAudioInput>> {
-  const state = await resolveMediaGenerationBoundState(context, AUDIO_CONFIG)
-  return { inputSchema: createBoundAudioInputSchema(state), state }
-}
-
-async function bindVideoGenerationToolInputSchema(
-  context: ProjectAgentToolInputBindingContext,
-): Promise<ProjectAgentToolInputBinding<CreateVideoInput>> {
-  const state = await resolveMediaGenerationBoundState(context, VIDEO_CONFIG)
-  return { inputSchema: createBoundVideoInputSchema(state), state }
 }
 
 function preferredCapabilityValue(
@@ -1205,16 +862,14 @@ function requireCapabilityField(params: {
 }
 
 async function resolveFrozenGenerationOptions(input: {
-  readonly ctx: ProjectAgentOperationContext
   readonly config: MediaPlanConfig
   readonly schemaId: string
   readonly modelKey: string
   readonly publicInput: NewMediaGenerationRequest
-  readonly projectConfig?: ProjectGenerationModelConfig
+  readonly projectConfig: ProjectGenerationModelConfig
 }): Promise<Record<string, string | number | boolean>> {
   const modelType: UnifiedModelType = input.config.mediaType === 'audio' ? 'music' : input.config.mediaType
   const projectConfig = input.projectConfig
-    ?? await getProjectModelConfig(input.ctx.projectId, input.ctx.userId)
   const capabilities = requireMediaGenerationCapabilities(modelType, input.modelKey)
   const optionFields = getCapabilityOptionFields(modelType, capabilities)
   const optionFieldNames = new Set(Object.keys(optionFields))
@@ -1470,15 +1125,13 @@ async function planNewMediaGeneration(
     normalizedReferences.providerInputs,
     config.mediaType,
   )
-  const boundState = readMediaGenerationBoundState(
-    ctx.boundToolContractState,
-    config.operationId,
-  )
-  const modelKey = boundState?.modelKey
-    ?? await resolveGenerationModel({
+  const [modelKey, projectConfig] = await Promise.all([
+    resolveGenerationModel({
       ctx,
       purpose: config.modelPurpose,
-    })
+    }),
+    getProjectModelConfig(ctx.projectId, ctx.userId),
+  ])
   if (config.mediaType === 'video') {
     if (providerReferences.audioInputs.length > 0 && providerReferences.imageInputs.length === 0) {
       throw new ApiError('INVALID_PARAMS', {
@@ -1553,12 +1206,11 @@ async function planNewMediaGeneration(
     }
   }
   const generationOptions = await resolveFrozenGenerationOptions({
-    ctx,
     config,
     schemaId,
     modelKey,
     publicInput: effectiveInput,
-    projectConfig: boundState?.projectConfig,
+    projectConfig,
   })
   const inputHash = hashTaskInput({
     operationId: config.operationId,
@@ -1943,12 +1595,10 @@ async function planVideoPromptSetGeneration(
       lineage.inputResource,
     ]),
   )
-  const boundState = readMediaGenerationBoundState(
-    ctx.boundToolContractState,
-    VIDEO_CONFIG.operationId,
-  )
-  const modelKey = boundState?.modelKey
-    ?? await resolveGenerationModel({ ctx, purpose: VIDEO_CONFIG.modelPurpose })
+  const [modelKey, projectConfig] = await Promise.all([
+    resolveGenerationModel({ ctx, purpose: VIDEO_CONFIG.modelPurpose }),
+    getProjectModelConfig(ctx.projectId, ctx.userId),
+  ])
   const capabilities = requireMediaGenerationCapabilities('video', modelKey).video
   if (!capabilities) throw new Error(`CREATIVE_RESOURCE_VIDEO_CAPABILITY_REQUIRED:${modelKey}`)
   const maxReferenceImages = requirePositiveCapabilityLimit({
@@ -1957,8 +1607,6 @@ async function planVideoPromptSetGeneration(
     modelKey,
   })
   const maxReferenceAudios = capabilities.maxReferenceAudios ?? 0
-  const projectConfig = boundState?.projectConfig
-    ?? await getProjectModelConfig(ctx.projectId, ctx.userId)
   const planFingerprint = stableArgsHash({
     promptSetResourceId: promptSetResource.id,
     promptSet,
@@ -2093,7 +1741,6 @@ async function planVideoPromptSetGeneration(
           imageReferences,
         }
     const generationOptions = await resolveFrozenGenerationOptions({
-      ctx,
       config: VIDEO_CONFIG,
       schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
       modelKey,
@@ -2411,12 +2058,10 @@ async function planManifestAssetImageGeneration(
     select: { slotKey: true, version: true },
   })
   const bindingVersionBySlot = new Map(bindingRows.map((row) => [row.slotKey, row.version]))
-  const boundState = readMediaGenerationBoundState(
-    ctx.boundToolContractState,
-    IMAGE_CONFIG.operationId,
-  )
-  const modelKey = boundState?.modelKey
-    ?? await resolveGenerationModel({ ctx, purpose: IMAGE_CONFIG.modelPurpose })
+  const [modelKey, projectConfig] = await Promise.all([
+    resolveGenerationModel({ ctx, purpose: IMAGE_CONFIG.modelPurpose }),
+    getProjectModelConfig(ctx.projectId, ctx.userId),
+  ])
   const locale = resolveOperationLocale(ctx.context)
   const planFingerprint = stableArgsHash({
     manifestResourceId: manifestResource.id,
@@ -2466,12 +2111,11 @@ async function planManifestAssetImageGeneration(
       assetBinding,
     }
     const generationOptions = await resolveFrozenGenerationOptions({
-      ctx,
       config: IMAGE_CONFIG,
       schemaId,
       modelKey,
       publicInput,
-      projectConfig: boundState?.projectConfig,
+      projectConfig,
     })
     const inputs: CreativeResourceInputRef[] = [
       {
@@ -2665,12 +2309,10 @@ async function planMusicDirectionAudioGeneration(
     })
   }
   const durationSeconds = Math.ceil((cueEndMs - cueStartMs) / 1000)
-  const boundState = readMediaGenerationBoundState(
-    ctx.boundToolContractState,
-    AUDIO_CONFIG.operationId,
-  )
-  const modelKey = boundState?.modelKey
-    ?? await resolveGenerationModel({ ctx, purpose: AUDIO_CONFIG.modelPurpose })
+  const modelKey = await resolveGenerationModel({
+    ctx,
+    purpose: AUDIO_CONFIG.modelPurpose,
+  })
   const capabilities = requireMediaGenerationCapabilities('music', modelKey)
   const optionFields = getCapabilityOptionFields('music', capabilities)
   const durationValues = optionFields.durationSeconds
@@ -2927,7 +2569,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
-      bindToolInputSchema: bindImageGenerationToolInputSchema,
       inputSchema: createImageInputSchema,
       outputSchema: mediaTaskOutputSchema,
       plan: async (ctx, input) => await planMediaGeneration(ctx, input, IMAGE_CONFIG),
@@ -2948,7 +2589,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
-      bindToolInputSchema: bindAudioGenerationToolInputSchema,
       inputSchema: createAudioInputSchema,
       outputSchema: mediaTaskOutputSchema,
       plan: async (ctx, input) => await planMediaGeneration(ctx, input, AUDIO_CONFIG),
@@ -2969,7 +2609,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
-      bindToolInputSchema: bindVideoGenerationToolInputSchema,
       inputSchema: createVideoInputSchema,
       outputSchema: mediaTaskOutputSchema,
       plan: async (ctx, input) => await planMediaGeneration(ctx, input, VIDEO_CONFIG),
