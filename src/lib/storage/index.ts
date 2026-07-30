@@ -10,6 +10,7 @@ import type {
 } from '@/lib/storage/types'
 import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
 
 const storageLogger = createScopedLogger({
   module: 'storage.provider',
@@ -109,7 +110,7 @@ export async function downloadAndUploadImage(
       maxAttempts: Math.max(1, Math.floor(retryAttempts)),
     },
     run: async () => {
-      const response = await fetch(toFetchableUrl(imageUrl))
+      const response = await fetchSafeOutboundMedia(toFetchableUrl(imageUrl))
       if (!response.ok) {
         throw new Error(`Failed to download image: ${response.status} ${response.statusText}`)
       }
@@ -143,7 +144,7 @@ export async function downloadAndUploadVideo(
       maxAttempts: Math.max(1, Math.floor(retryAttempts)),
     },
     run: async () => {
-      const response = await fetch(toFetchableUrl(videoUrl), {
+      const response = await fetchSafeOutboundMedia(toFetchableUrl(videoUrl), {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; VideoDownloader/1.0)',
           ...(requestHeaders || {}),

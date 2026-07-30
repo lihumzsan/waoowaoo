@@ -1,9 +1,11 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
-import net from 'node:net'
-import { lookup } from 'node:dns/promises'
 import { createScopedLogger } from '@/lib/logging/core'
-import { getInternalBaseUrl } from '@/lib/env'
 import { resolveMediaMimeType } from '@/lib/media/media-mime'
+import {
+  assertSafeOutboundMediaUrl,
+  fetchSafeOutboundMedia,
+  OutboundMediaSecurityError,
+} from '@/lib/media/outbound-fetch'
 import {
   OwnedMediaOutboundError,
   resolveOwnedMediaForGeneration,
@@ -116,186 +118,18 @@ function isHttpUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://')
 }
 
-function ipv4ToInt(ip: string): number | null {
-  const parts = ip.split('.')
-  if (parts.length !== 4) return null
-  const nums = parts.map((part) => Number(part))
-  if (nums.some((num) => !Number.isInteger(num) || num < 0 || num > 255)) return null
-  return (((nums[0] << 24) >>> 0) + (nums[1] << 16) + (nums[2] << 8) + nums[3]) >>> 0
-}
-
-function isIpv4InRange(ip: string, cidr: { base: string; maskBits: number }): boolean {
-  const ipInt = ipv4ToInt(ip)
-  const baseInt = ipv4ToInt(cidr.base)
-  if (ipInt === null || baseInt === null) return false
-  const mask = cidr.maskBits === 0 ? 0 : (~((1 << (32 - cidr.maskBits)) - 1) >>> 0) >>> 0
-  return (ipInt & mask) === (baseInt & mask)
-}
-
-function isPrivateOrReservedIp(ip: string): boolean {
-  const family = net.isIP(ip)
-  if (family === 4) {
-    const ipv4Ranges: Array<{ base: string; maskBits: number }> = [
-      { base: '0.0.0.0', maskBits: 8 },
-      { base: '10.0.0.0', maskBits: 8 },
-      { base: '100.64.0.0', maskBits: 10 },
-      { base: '127.0.0.0', maskBits: 8 },
-      { base: '169.254.0.0', maskBits: 16 },
-      { base: '172.16.0.0', maskBits: 12 },
-      { base: '192.0.0.0', maskBits: 24 },
-      { base: '192.0.2.0', maskBits: 24 },
-      { base: '192.88.99.0', maskBits: 24 },
-      { base: '192.168.0.0', maskBits: 16 },
-      { base: '198.18.0.0', maskBits: 15 },
-      { base: '198.51.100.0', maskBits: 24 },
-      { base: '203.0.113.0', maskBits: 24 },
-      { base: '224.0.0.0', maskBits: 4 },
-      { base: '240.0.0.0', maskBits: 4 },
-      { base: '255.255.255.255', maskBits: 32 },
-    ]
-    return ipv4Ranges.some((range) => isIpv4InRange(ip, range))
-  }
-
-  if (family === 6) {
-    const normalized = ip.toLowerCase()
-    if (normalized === '::' || normalized === '::1') return true
-    if (normalized.startsWith('ff')) return true
-    if (/^(fc|fd)/.test(normalized)) return true
-    if (/^fe[89ab]/.test(normalized)) return true
-    if (normalized.startsWith('2001:db8')) return true
-    const v4MappedIndex = normalized.lastIndexOf('::ffff:')
-    if (v4MappedIndex !== -1) {
-      const v4 = normalized.slice(v4MappedIndex + '::ffff:'.length)
-      return isPrivateOrReservedIp(v4)
-    }
-    return false
-  }
-
-  return true
-}
-
-function isLikelyInternalHostname(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  if (lower === 'localhost' || lower.endsWith('.localhost')) return true
-  if (lower.endsWith('.local')) return true
-  if (lower === 'metadata.google.internal') return true
-  if (lower === 'metadata' || lower === 'metadata.internal') return true
-  return false
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const lower = hostname.toLowerCase()
-  return lower === 'localhost' || lower === '127.0.0.1' || lower === '::1'
-}
-
-function readHostnameFromUrl(value: string): string | null {
-  const raw = typeof value === 'string' ? value.trim() : ''
-  if (!raw) return null
-  try {
-    return new URL(raw).hostname.toLowerCase()
-  } catch {
-    return null
-  }
-}
-
-function getAllowedInternalHostnames(): Set<string> {
-  const candidates: string[] = [
-    getInternalBaseUrl(),
-    process.env.INTERNAL_APP_URL || '',
-    process.env.INTERNAL_TASK_API_BASE_URL || '',
-    process.env.NEXTAUTH_URL || '',
-  ]
-  const hostnames = candidates
-    .map(readHostnameFromUrl)
-    .filter((item): item is string => Boolean(item))
-  return new Set(hostnames)
-}
-
 async function assertSafeOutboundHttpUrl(input: string, stage: OutboundImageNormalizeStage): Promise<void> {
-  let url: URL
   try {
-    url = new URL(input)
-  } catch {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
-      stage,
-      input,
-      message: `invalid outbound http url: ${input}`,
-    })
-  }
-
-  if (url.username || url.password) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: 'outbound url with credentials is not allowed',
-    })
-  }
-
-  const hostname = url.hostname.toLowerCase()
-  const allowedInternalHosts = getAllowedInternalHostnames()
-  if (allowedInternalHosts.has(hostname)) return
-  if (isLoopbackHostname(hostname) && [...allowedInternalHosts].some(isLoopbackHostname)) return
-
-  if (isLikelyInternalHostname(hostname)) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: `outbound url hostname is not allowed: ${hostname}`,
-    })
-  }
-
-  if (net.isIP(hostname)) {
-    if (isPrivateOrReservedIp(hostname)) {
-      throw new OutboundImageNormalizeError({
-        code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-        stage,
-        input,
-        message: `outbound url resolves to private ip: ${hostname}`,
-      })
-    }
-    return
-  }
-
-  let resolved: Array<{ address: string }> = []
-  try {
-    const lookupResult = await lookup(hostname, { all: true, verbatim: true }) as unknown
-    const candidates = Array.isArray(lookupResult) ? lookupResult : [lookupResult]
-    resolved = candidates
-      .map((item): { address: string } | null => {
-        if (!item || typeof item !== 'object') return null
-        const address = (item as { address?: unknown }).address
-        if (typeof address !== 'string' || !address.trim()) return null
-        return { address: address.trim() }
-      })
-      .filter((item): item is { address: string } => item !== null)
+    await assertSafeOutboundMediaUrl(input)
   } catch (error) {
     throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
+      code: error instanceof OutboundMediaSecurityError
+        && error.code === 'OUTBOUND_MEDIA_URL_INVALID'
+        ? 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT'
+        : 'OUTBOUND_IMAGE_UNSAFE_URL',
       stage,
       input,
-      message: `outbound url dns lookup failed: ${error instanceof Error ? error.message : String(error)}`,
-    })
-  }
-
-  if (resolved.length === 0) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: 'outbound url dns lookup returned no results',
-    })
-  }
-
-  const firstPrivate = resolved.find((item) => isPrivateOrReservedIp(item.address))
-  if (firstPrivate) {
-    throw new OutboundImageNormalizeError({
-      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
-      stage,
-      input,
-      message: `outbound url resolves to private ip: ${firstPrivate.address}`,
+      message: error instanceof Error ? error.message : 'outbound image URL validation failed',
     })
   }
 }
@@ -448,10 +282,6 @@ export async function normalizeToOriginalMediaUrl(input: string): Promise<string
   }
 
   if (unwrappedInput.startsWith('/')) {
-    if (unwrappedInput.startsWith('/api/')) {
-      const apiPath = unwrappedInput
-      return await toFetchableAbsoluteUrl(apiPath)
-    }
     const rootStorageKey = unwrappedInput.slice(1)
     if (isStorageKey(rootStorageKey)) {
       return await signStorageKey(rootStorageKey)
@@ -489,28 +319,21 @@ export async function normalizeToBase64ForGeneration(input: string): Promise<str
   }
 
   const fetchUrl = await toFetchableAbsoluteUrl(normalizedUrl)
-  const MAX_REDIRECTS = 3
 
   let response: Response | null = null
   try {
-    let currentUrl = fetchUrl
-    for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
-      if (isHttpUrl(currentUrl)) {
-        await assertSafeOutboundHttpUrl(currentUrl, 'normalize_base64')
-      }
-      response = await fetch(currentUrl, { redirect: 'manual' })
-      const status = response.status
-      if (status >= 300 && status < 400) {
-        const location = response.headers.get('location')
-        if (!location) break
-        currentUrl = new URL(location, currentUrl).toString()
-        continue
-      }
-      break
-    }
+    response = await fetchSafeOutboundMedia(fetchUrl)
   } catch (error) {
     if (error instanceof OutboundImageNormalizeError) {
       throw error
+    }
+    if (error instanceof OutboundMediaSecurityError) {
+      throw new OutboundImageNormalizeError({
+        code: 'OUTBOUND_IMAGE_UNSAFE_URL',
+        stage: 'normalize_base64',
+        input: normalizedUrl,
+        message: error.message,
+      })
     }
     throw new OutboundImageNormalizeError({
       code: 'OUTBOUND_IMAGE_FETCH_EXCEPTION',

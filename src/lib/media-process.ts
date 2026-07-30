@@ -1,6 +1,7 @@
 import { downloadAndUploadImage, downloadAndUploadVideo, generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { decodeBase64WithLimit, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, readResponseBufferWithLimit } from '@/lib/http/body-limits'
+import { fetchSafeOutboundMedia } from '@/lib/media/outbound-fetch'
 
 export interface ProcessMediaOptions {
   source: string | Buffer
@@ -59,7 +60,7 @@ export async function processMediaResult(options: ProcessMediaOptions): Promise<
       return await downloadAndUploadVideo(source, key, 3, downloadHeaders)
     }
 
-    const response = await fetch(toFetchableUrl(source), {
+    const response = await fetchSafeOutboundMedia(toFetchableUrl(source), {
       headers: downloadHeaders,
     })
     if (!response.ok) {

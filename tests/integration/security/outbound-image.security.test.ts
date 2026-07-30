@@ -89,9 +89,11 @@ describe('outbound-image normalization', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('normalizes api relative path to absolute fetchable url', async () => {
-    const normalized = await normalizeToOriginalMediaUrl('/api/files/images%2Fa.png')
-    expect(normalized).toBe('https://app.example.com/api/files/images%2Fa.png')
+  it('rejects retired internal api file routes', async () => {
+    await expect(normalizeToOriginalMediaUrl('/api/files/images%2Fa.png')).rejects.toMatchObject({
+      code: 'OUTBOUND_IMAGE_UNSUPPORTED_INPUT',
+      stage: 'normalize_original',
+    })
   })
 
   it('fails explicitly on unsupported root-relative input', async () => {
@@ -111,6 +113,39 @@ describe('outbound-image normalization', () => {
       code: 'OUTBOUND_IMAGE_UNSAFE_URL',
       stage: 'normalize_original',
     })
+  })
+
+  it('rejects hostnames whose DNS answer contains a private address', async () => {
+    dnsLookupMock.mockResolvedValue(
+      [{ address: '10.0.0.8', family: 4 }] as never,
+    )
+    await expect(normalizeToOriginalMediaUrl('https://attacker.example/a.png')).rejects.toMatchObject({
+      code: 'OUTBOUND_IMAGE_UNSAFE_URL',
+      stage: 'normalize_original',
+    })
+  })
+
+  it('resolves transparent-proxy fake IPs through trusted public DNS', async () => {
+    dnsLookupMock.mockResolvedValue(
+      [{ address: '198.18.0.8', family: 4 }] as never,
+    )
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith('https://cloudflare-dns.com/dns-query')) {
+        return new Response(JSON.stringify({
+          Answer: [{ type: 1, data: '93.184.216.34' }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/dns-json' },
+        })
+      }
+      return new Response(Uint8Array.from([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      })
+    })
+
+    await expect(normalizeToBase64ForGeneration('https://example.com/a.png'))
+      .resolves.toBe('data:image/png;base64,AQID')
   })
 
   it('rejects outbound redirect to private ip', async () => {
