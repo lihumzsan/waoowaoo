@@ -37,7 +37,7 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
-    version: '4.2.0',
+    version: '4.3.0',
     title: '创作方向',
     summary: '`outputKind=creative_direction` 必须读取：把用户意图与必要研究收敛为一份只决定呈现、不改写剧本内容或时间线的六领域方向。',
     tags: ['creative-direction', 'style', 'narrative', 'directing', 'editing', 'sound', 'assets'],
