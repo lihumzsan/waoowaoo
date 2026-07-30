@@ -20,6 +20,9 @@ export const MUREKA_9_MODEL_ID = 'mureka-9'
  */
 export const MUREKA_MUSIC_DURATION_SECONDS_RANGE = { min: 3, max: 270 } as const
 
+/** Official wire limit: soundtrack/instrumental prompts accept at most 1024 characters. */
+export const MUREKA_MUSIC_PROMPT_MAX_CHARS = 1024
+
 export const MUREKA_PLATFORM_MODEL_PRESETS = [
   { provider: 'mureka', modelId: MUREKA_9_MODEL_ID, name: 'Mureka V9', type: 'music' },
 ] as const satisfies ReadonlyArray<PlatformModelPreset>
@@ -38,6 +41,7 @@ export const MUREKA_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         vocalModeOptions: ['instrumental'],
         outputFormatOptions: ['mp3'],
         maxReferenceVideos: 1,
+        promptMaxChars: MUREKA_MUSIC_PROMPT_MAX_CHARS,
       },
     },
   },

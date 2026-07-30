@@ -277,6 +277,11 @@ export interface MusicCapabilities {
    * generation conditioning (video-to-soundtrack). Absent means unsupported.
    */
   maxReferenceVideos?: number
+  /**
+   * Provider wire limit for one generation prompt, in characters. Absent means
+   * the provider publishes no such limit.
+   */
+  promptMaxChars?: number
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -336,6 +341,7 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'outputFormatOptions',
   'bpmOptions',
   'maxReferenceVideos',
+  'promptMaxChars',
   'fieldI18n',
 ])
 
@@ -747,6 +753,17 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.music.maxReferenceVideos',
       message: 'maxReferenceVideos must be a positive integer',
+    })
+  }
+
+  if (
+    raw.promptMaxChars !== undefined
+    && (!Number.isInteger(raw.promptMaxChars) || (raw.promptMaxChars as number) <= 0)
+  ) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.music.promptMaxChars',
+      message: 'promptMaxChars must be a positive integer',
     })
   }
 
