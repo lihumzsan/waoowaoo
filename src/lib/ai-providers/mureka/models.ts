@@ -64,7 +64,12 @@ export function resolveMurekaOptionSchema(modality: MediaModality, modelId: stri
     throw new Error(`MUREKA_MODALITY_UNSUPPORTED:${modality}:${modelId}`)
   }
   return buildMediaOptionSchema('music', {
-    allowedKeys: ['referenceVideoUrl', 'referenceVideoDurationMs'],
+    allowedKeys: [
+      'referenceVideoUrl',
+      'referenceVideoDurationMs',
+      'scoreWindowStartMs',
+      'scoreWindowEndMs',
+    ],
     validators: {
       negativePrompt: nonEmptyStringValidator(),
       durationSeconds: numberRangeValidator(MUREKA_MUSIC_DURATION_SECONDS_RANGE),
@@ -75,6 +80,32 @@ export function resolveMurekaOptionSchema(modality: MediaModality, modelId: stri
       outputFormat: enumValidator(['mp3']),
       referenceVideoUrl: nonEmptyStringValidator(),
       referenceVideoDurationMs: integerRangeValidator({ min: 1 }),
+      scoreWindowStartMs: integerRangeValidator({ min: 0 }),
+      scoreWindowEndMs: integerRangeValidator({ min: 1 }),
     },
+    objectValidators: [
+      (options) => {
+        const startMs = options.scoreWindowStartMs
+        const endMs = options.scoreWindowEndMs
+        const hasStart = startMs !== undefined
+        const hasEnd = endMs !== undefined
+        if (hasStart !== hasEnd) return { ok: false, reason: 'score_window_pair_required' }
+        if (!hasStart || !hasEnd) return { ok: true }
+        if (typeof options.referenceVideoUrl !== 'string' || !options.referenceVideoUrl.trim()) {
+          return { ok: false, reason: 'score_window_requires_reference_video' }
+        }
+        const durationMs = options.referenceVideoDurationMs
+        if (typeof durationMs !== 'number') {
+          return { ok: false, reason: 'score_window_requires_reference_video_duration' }
+        }
+        if (typeof startMs !== 'number' || typeof endMs !== 'number' || endMs <= startMs) {
+          return { ok: false, reason: 'score_window_order_invalid' }
+        }
+        if (endMs > durationMs) {
+          return { ok: false, reason: 'score_window_exceeds_reference_video' }
+        }
+        return { ok: true }
+      },
+    ],
   })
 }

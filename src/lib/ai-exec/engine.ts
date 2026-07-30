@@ -89,6 +89,9 @@ export type AiMusicExecutionOptions = {
   /** Video conditioning input; only valid when the selected music model declares `maxReferenceVideos`. */
   referenceVideoUrl?: string
   referenceVideoDurationMs?: number
+  /** Score only this window of the reference video (music_direction cue). */
+  scoreWindowStartMs?: number
+  scoreWindowEndMs?: number
 }
 
 export type AiVoiceExecutionOptions = {
@@ -173,6 +176,9 @@ export async function executeMediaGeneration(
     provider: selection.provider,
     modelKey: selection.modelKey,
   })
+  // Descriptor resolution and option normalization are local preflight. They
+  // must finish before executeTaskProviderInvocation claims the durable
+  // "submitting" fence; only adapter execution may cross that boundary.
   const buildRoute = (routeSelection: AiResolvedSelection): TaskProviderInvocationRoute<GenerateResult> => {
     const adapter = resolveAiProviderAdapter(routeSelection.provider)
     switch (input.modality) {
@@ -181,24 +187,22 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
+      const descriptor = modalityAdapter.describe(routeSelection)
+      const options = normalizeAiOptions({
+        schema: descriptor.optionSchema,
+        options: input.options,
+        context: `${input.modality}:${routeSelection.modelKey}`,
+      }) as AiImageExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: { ...input, modelKey: routeSelection.modelKey },
-        execute: async () => {
-          const descriptor = modalityAdapter.describe(routeSelection)
-          const options = normalizeAiOptions({
-            schema: descriptor.optionSchema,
-            options: input.options,
-            context: `${input.modality}:${routeSelection.modelKey}`,
-          }) as AiImageExecutionOptions | undefined
-          return await modalityAdapter.execute({
-            userId: input.userId,
-            selection: routeSelection,
-            prompt: input.prompt,
-            options,
-          })
-        },
+        execute: async () => await modalityAdapter.execute({
+          userId: input.userId,
+          selection: routeSelection,
+          prompt: input.prompt,
+          options,
+        }),
       }
     }
     case 'video': {
@@ -206,24 +210,22 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
+      const descriptor = modalityAdapter.describe(routeSelection)
+      const options = normalizeAiOptions({
+        schema: descriptor.optionSchema,
+        options: input.options,
+        context: `${input.modality}:${routeSelection.modelKey}`,
+      }) as AiVideoExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: { ...input, modelKey: routeSelection.modelKey },
-        execute: async () => {
-          const descriptor = modalityAdapter.describe(routeSelection)
-          const options = normalizeAiOptions({
-            schema: descriptor.optionSchema,
-            options: input.options,
-            context: `${input.modality}:${routeSelection.modelKey}`,
-          }) as AiVideoExecutionOptions | undefined
-          return await modalityAdapter.execute({
-            userId: input.userId,
-            selection: routeSelection,
-            imageUrl: input.imageUrl,
-            options,
-          })
-        },
+        execute: async () => await modalityAdapter.execute({
+          userId: input.userId,
+          selection: routeSelection,
+          imageUrl: input.imageUrl,
+          options,
+        }),
       }
     }
     case 'music': {
@@ -231,24 +233,22 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
+      const descriptor = modalityAdapter.describe(routeSelection)
+      const options = normalizeAiOptions({
+        schema: descriptor.optionSchema,
+        options: input.options,
+        context: `${input.modality}:${routeSelection.modelKey}`,
+      }) as AiMusicExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: { ...input, modelKey: routeSelection.modelKey },
-        execute: async () => {
-          const descriptor = modalityAdapter.describe(routeSelection)
-          const options = normalizeAiOptions({
-            schema: descriptor.optionSchema,
-            options: input.options,
-            context: `${input.modality}:${routeSelection.modelKey}`,
-          }) as AiMusicExecutionOptions | undefined
-          return await modalityAdapter.execute({
-            userId: input.userId,
-            selection: routeSelection,
-            prompt: input.prompt,
-            options,
-          })
-        },
+        execute: async () => await modalityAdapter.execute({
+          userId: input.userId,
+          selection: routeSelection,
+          prompt: input.prompt,
+          options,
+        }),
       }
     }
     case 'voice': {
@@ -256,25 +256,23 @@ export async function executeMediaGeneration(
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${routeSelection.provider}:${input.modality}`)
       }
+      const descriptor = modalityAdapter.describe(routeSelection)
+      const options = normalizeAiOptions({
+        schema: descriptor.optionSchema,
+        options: input.options,
+        context: `${input.modality}:${routeSelection.modelKey}`,
+      }) as AiVoiceExecutionOptions | undefined
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
         request: { ...input, modelKey: routeSelection.modelKey },
-        execute: async () => {
-          const descriptor = modalityAdapter.describe(routeSelection)
-          const options = normalizeAiOptions({
-            schema: descriptor.optionSchema,
-            options: input.options,
-            context: `${input.modality}:${routeSelection.modelKey}`,
-          }) as AiVoiceExecutionOptions | undefined
-          return await modalityAdapter.execute({
-            userId: input.userId,
-            selection: routeSelection,
-            description: input.description,
-            text: input.text,
-            options,
-          })
-        },
+        execute: async () => await modalityAdapter.execute({
+          userId: input.userId,
+          selection: routeSelection,
+          description: input.description,
+          text: input.text,
+          options,
+        }),
       }
     }
     }
