@@ -24,6 +24,7 @@
 - **ASO-11 — Asset Hub 虚拟 Project identity 唯一。** 所有 API、SSE、Task、计费和 Operation scope 判断必须引用 `GLOBAL_ASSET_PROJECT_ID`；只有该常量定义可以包含协议字面量。调用方散布同名字面量会形成不可穷尽的 scope 解释源，禁止作为“只是字符串”保留。
 - **ASO-12 — manifest asset 映射只有一个 writer。** `ProjectCharacter/ProjectLocation/Prop.manifestAssetId` 在 Project 内唯一，只由 `project-asset-writer` 建立或复用。Asset Worker 只返回资产事实、逐字来源证据与生成设计，不能自定义数据库 key；稳定 `manifestAssetId` 由服务端对 `kind + normalized canonicalName` 编译。已有同名资产可在无冲突时被该 writer 一次性附加 manifest identity；同 ID 指向不同 kind/name、名称/别名歧义或来源证据不存在必须失败，不得用数组位置或“最近资产”合并。
 - **ASO-13 — 资产设计、identity 与图片分权。** `asset-development` Skill 决定外观和最终 Prompt；`adopt_asset_manifest` 物化 identity；`create_image` 是唯一图片生成入口。专业 asset schema 由统一 policy 强制 4:3 和固定后缀，Task 成功后才以 `project_asset_image + variantId` Binding 绑定图片；不得在 manifest adoption 内启动 Task，也不得恢复角色/场景/道具专用图片 worker。
+- **ASO-15 — 主动下载外部媒体必须与 owner 投影分层。** 自有媒体先由 relation-based policy 证明 owner 并投影短期外部 HTTPS URL；应用随后主动读取该 URL 或 Provider result 时只能经 `src/lib/media/outbound-fetch.ts` 的 SSRF-safe socket/redirect 边界。storage key、internal app hostname 与签名 URL 都不能成为私网 fetch allowlist。
 
 ## 权威入口
 
@@ -39,6 +40,7 @@
 | upload/render 写入 | `src/lib/assets/services/project-upload-render.ts` | `prepareTransaction` 在事务外完成 target ownership 预检、图片上传与空间分析；短事务以 target identity + prepare `updatedAt` 单条 CAS 取得版本写权并一次提交业务关系、输出与资源 Outbox；失败只按 prepare identity 补偿本次新临时 key，事务结果不明时先以 owner + target identity + key 查询精确关系，关系已存在则拒绝删除 |
 | API 与 Operation 入口 | unified asset routes、`src/lib/operations/api-only/assets-api-ops.ts` | Route 鉴权 + service 返回的 scoped authority |
 | 媒体对象读取与签名 | `src/lib/media/storage-access-policy.ts`，由 `/m`、`/api/storage/sign` 与 `src/lib/media/outbound-owned-media.ts` 共同调用 | MediaObject 的 owner relation registry；Task userId 只作为裁决输入，不是读取旁路；后台投影只返回 HTTPS |
+| 外部媒体主动下载 | `src/lib/media/outbound-fetch.ts` | 绝对 HTTP(S) URL、逐跳 DNS 与实际 socket 地址 policy；下载后仍受共享 body limit |
 | 物理对象存储、运维枚举与启动验证 | `src/lib/storage/s3-config.ts`、`providers/s3.ts`、`bootstrap.ts`、`scripts/media-{safety-backup,build-unreferenced-index}.ts` | 单一 `S3_*` 部署配置、预建 bucket、S3 object key；运行时与运维脚本均无本地 writer、provider-specific 配置或建桶 writer |
 
 Route body 中的 ID、UI card identity、Operation context、最近记录或裸 variant ID 都不是所有权事实。调用方不得自行补充部分查询，也不得在 resolver 失败后回退到无 scope 的 `findUnique({ id })`。
@@ -66,6 +68,7 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 旧风格预览链曾写入 storage 却未登记 MediaObject，暴露受保护媒体关系、Next 图片优化器 session 与本地签名 origin 三类断点。固定预览链已删除；用户显式要求的任意预览现在只走通用图片 Resource 路径，因此必须像其他图片一样先登记 MediaObject、使用受保护同源读取并保持 owner relation，不能恢复专用存储旁路。
 - 顶层资产删除曾同时存在 Project character/location、Asset Hub character/location 和 generic location/prop 五个 Operation，部分路径直接调用 Prisma delete，Agent 又只有按图片组/单图分裂的旧重生成工具。用户无法从统一资产 identity 表达“删除后重做”或“原地重生成”，调用方也可能用 create 新增同义资产。当前五条顶层 delete 收敛为 `delete_asset` 并统一经过 scoped `removeAsset`；两个旧重生成 Operation 收敛为 `regenerate_asset`，复用既有 generation planner、共享资产 writer 和 asset identity。variant 删除不属于顶层资产入口，仍保留其精确 parent/variant 契约。
 - 资产管线曾让 Worker 直接给出实体 key，并在采用结果时同步创建图片任务；随后 canonical screenplay 又提前登记生产资产候选，使剧本身份、资产筛选、数据库 identity 和媒体生命周期彼此耦合，剧本漏登时下游无法补救。当前 asset manifest 是生产资产范围唯一 owner，服务端生成稳定 manifest identity，共享 Project asset writer 唯一建立领域 identity，manifest adoption 只采用，`create_image` 只生成并在终态绑定。当前验证盲区是真实 MySQL 下同名历史资产与新 `manifestAssetId` 并发采用的完整竞争组合。
+- 媒体读取权限收紧后，外部下载仍有两套解释：`outbound-image` 允许配置 hostname 绕过私网检查，storage/media-process 又直接 fetch Provider result。该分裂既允许跨端口访问内部服务，也留下 DNS 预检与连接解析的竞态。当前 owner relation 与网络目标 policy 明确分层，所有主动 body 下载复用同一 socket-pinned 出口；目标部署桶的真实签名域名与 DNS/代理组合仍是发布复验边界。
 
 ## 修改检查表
 
