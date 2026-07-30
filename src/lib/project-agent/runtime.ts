@@ -95,6 +95,7 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
+  type ProjectAgentContinuationFailure,
   type ProjectAgentContinuationTerminalOutcome,
   prepareProjectAgentApprovalExecutionHandoff,
   settleProjectAgentPreparedApprovalHandoff,
@@ -261,11 +262,20 @@ export type ProjectAgentResolvedControl =
     followUp: ProjectAgentWaitFollowUp
   }
 
-export interface ProjectAgentTaskFollowUpSettlement {
-  outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'completed' | 'failed'>
+export type ProjectAgentTaskFollowUpSettlement = {
   message: UIMessage
-  modelHistoryCommit: ProjectAssistantModelHistoryCommit
-}
+} & (
+  | {
+      outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'completed' | 'failed'>
+      modelHistoryCommit: ProjectAssistantModelHistoryCommit
+      failure?: never
+    }
+  | {
+      outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'failed'>
+      modelHistoryCommit?: never
+      failure: ProjectAgentContinuationFailure
+    }
+)
 
 function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -1693,7 +1703,17 @@ export async function createProjectAgentChatResponse(input: {
       }
     })()
     let runStatusFinalized = false
-    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlement['outcome'] | null = null
+    let taskFollowUpSettlement:
+      | {
+          kind: 'commit'
+          outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'completed' | 'failed'>
+        }
+      | {
+          kind: 'discard'
+          outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'failed'>
+          failure: ProjectAgentContinuationFailure
+        }
+      | null = null
     let taskFollowUpSettlementCommittedInline = false
     let pendingRunSettlement: {
       status: ProjectAgentRunStatus
@@ -2078,7 +2098,12 @@ export async function createProjectAgentChatResponse(input: {
             chunks.push(createDataChunk('data-assistant-choice-card', choiceSuspension.card))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
-            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'failed'
+            if (input.settleTaskFollowUp) {
+              taskFollowUpSettlement = {
+                kind: 'commit',
+                outcome: 'failed',
+              }
+            }
             else pendingRunSettlement = {
                 status: 'failed',
                 stopReason: 'tool_error',
@@ -2089,7 +2114,10 @@ export async function createProjectAgentChatResponse(input: {
             runStatusFinalized = true
           } else {
             if (input.settleTaskFollowUp) {
-              taskFollowUpSettlement = 'completed'
+              taskFollowUpSettlement = {
+                kind: 'commit',
+                outcome: 'completed',
+              }
             }
             else pendingRunSettlement = {
                 status: 'completed',
@@ -2136,7 +2164,44 @@ export async function createProjectAgentChatResponse(input: {
           return
         }
         if (input.settleTaskFollowUp) {
-          reportTaskFollowUpSettlementFailure(effectiveError)
+          // A lost continuation claim or transport owner still has an
+          // ambiguous handoff and must be recovered by the Outbox protocol.
+          // A model/provider rejection observed by this live owner is a known
+          // terminal failure and can be settled atomically without replaying
+          // the model invocation.
+          if (ownershipLoss || clientDisconnect) {
+            reportTaskFollowUpSettlementFailure(effectiveError)
+            return
+          }
+          const failureTerminal = resolveProjectAgentRunFailureTerminal({
+            ownershipLoss,
+            clientDisconnect,
+            stopReason: 'stream_error',
+            errorCode: normalized.code,
+            errorMessage,
+          })
+          if (
+            failureTerminal.status !== 'failed'
+            || !failureTerminal.errorCode
+            || !failureTerminal.errorMessage
+          ) {
+            reportTaskFollowUpSettlementFailure(effectiveError)
+            return
+          }
+          taskFollowUpSettlement = {
+            kind: 'discard',
+            outcome: 'failed',
+            failure: {
+              stopReason: failureTerminal.stopReason,
+              errorCode: failureTerminal.errorCode,
+              errorMessage: failureTerminal.errorMessage,
+            },
+          }
+          recordAssistantChunk(createRuntimeStatusChunk(
+            failureTerminal.status,
+            failureTerminal.stopReason,
+          ))
+          runStatusFinalized = true
           return
         }
         const failureTerminal = resolveProjectAgentRunFailureTerminal({
@@ -2176,11 +2241,20 @@ export async function createProjectAgentChatResponse(input: {
               await input.confirmTaskFollowUpSettlement()
             } else {
               if (!taskFollowUpSettlement) throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_SETTLEMENT_MISSING')
-              await input.settleTaskFollowUp({
-                outcome: taskFollowUpSettlement,
-                message: await buildAssistantMessageOnce(),
-                modelHistoryCommit: await activeModelSession.buildCommit(),
-              })
+              const message = await buildAssistantMessageOnce()
+              if (taskFollowUpSettlement.kind === 'commit') {
+                await input.settleTaskFollowUp({
+                  outcome: taskFollowUpSettlement.outcome,
+                  message,
+                  modelHistoryCommit: await activeModelSession.buildCommit(),
+                })
+              } else {
+                await input.settleTaskFollowUp({
+                  outcome: taskFollowUpSettlement.outcome,
+                  message,
+                  failure: taskFollowUpSettlement.failure,
+                })
+              }
             }
           } else {
             await persistAssistantMessageOrSettleRun()

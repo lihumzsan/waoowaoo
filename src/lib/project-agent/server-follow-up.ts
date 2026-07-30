@@ -324,17 +324,28 @@ async function runClaimedFollowUp(params: {
       },
       settleTaskFollowUp: async (settlement) => {
         try {
-          await settleProjectAgentContinuationTerminalHandoff({
+          const commonSettlement = {
             runId: continuationRunId,
             waitId: params.followUp.waitId,
             commandId: params.commandId,
             claimOwner: params.claimOwner,
             projectId: params.projectId,
             userId: params.userId,
-            outcome: settlement.outcome,
             message: settlement.message,
-            modelHistoryCommit: settlement.modelHistoryCommit,
-          })
+          }
+          if (settlement.failure) {
+            await settleProjectAgentContinuationTerminalHandoff({
+              ...commonSettlement,
+              outcome: 'failed',
+              failure: settlement.failure,
+            })
+          } else {
+            await settleProjectAgentContinuationTerminalHandoff({
+              ...commonSettlement,
+              outcome: settlement.outcome,
+              modelHistoryCommit: settlement.modelHistoryCommit,
+            })
+          }
           settleCompletion()
         } catch (error) {
           failCompletion(error)

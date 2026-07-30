@@ -60,6 +60,12 @@ type ProjectAgentContinuationDiscardedOutcome = Exclude<
   ProjectAgentContinuationCommittedOutcome
 >
 
+export interface ProjectAgentContinuationFailure {
+  stopReason: string
+  errorCode: string
+  errorMessage: string
+}
+
 export interface ProjectAgentContinuationCheckpoint {
   commandId: string
   waitId: string
@@ -740,6 +746,7 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
     commandId: string
     claimOwner: string
     outcome: ProjectAgentContinuationTerminalOutcome
+    failure?: ProjectAgentContinuationFailure
   },
 ): Promise<void> {
   const waitActivityId = requireIdentity(
@@ -748,10 +755,34 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
   )
   const run = await tx.projectAgentRun.findUnique({
     where: { id: input.runId },
-    select: { id: true, runVersion: true, eventSeq: true },
+    select: {
+      id: true,
+      runVersion: true,
+      eventSeq: true,
+      status: true,
+      stopReason: true,
+      errorCode: true,
+      errorMessage: true,
+    },
   })
   if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
   const runFence = createProjectAgentRunFence(run)
+  const failure = input.failure
+    ?? (
+      run.status === 'failed'
+      && run.stopReason
+      && run.errorCode
+        ? {
+            stopReason: run.stopReason,
+            errorCode: run.errorCode,
+            errorMessage: run.errorMessage ?? run.errorCode,
+          }
+        : {
+            stopReason: 'tool_error',
+            errorCode: 'PROJECT_AGENT_TOOL_ERROR',
+            errorMessage: 'Project agent continuation reached a tool error',
+          }
+    )
   const terminalRunEvent = input.outcome === 'completed'
     ? {
         runFence,
@@ -769,9 +800,7 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
           event: {
             kind: 'run.failed' as const,
             runId: input.runId,
-            stopReason: 'tool_error',
-            errorCode: 'PROJECT_AGENT_TOOL_ERROR',
-            errorMessage: 'Project agent continuation reached a tool error',
+            ...failure,
           },
         }
       : input.outcome === 'outcome_unknown'
@@ -838,10 +867,17 @@ type ProjectAgentContinuationTerminalHandoffInput = {
   | {
       outcome: ProjectAgentContinuationCommittedOutcome
       modelHistoryCommit: ProjectAssistantModelHistoryCommit
+      failure?: never
+    }
+  | {
+      outcome: Extract<ProjectAgentContinuationTerminalOutcome, 'failed'>
+      modelHistoryCommit?: never
+      failure: ProjectAgentContinuationFailure
     }
   | {
       outcome: ProjectAgentContinuationDiscardedOutcome
       modelHistoryCommit?: never
+      failure?: never
     }
 )
 
@@ -914,6 +950,7 @@ export async function settleProjectAgentContinuationTerminalHandoff(
       commandId: input.commandId,
       claimOwner: input.claimOwner,
       outcome: input.outcome,
+      ...('failure' in input ? { failure: input.failure } : {}),
     })
     return {
       commandId: input.commandId,

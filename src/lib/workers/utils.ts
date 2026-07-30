@@ -317,6 +317,10 @@ export async function resolveImageSourceFromGeneration(
       }),
     )
   } catch (error) {
+    // The Provider Gateway is the sole classifier for durable submission
+    // outcomes. Preserve its typed error so an ambiguous POST remains
+    // non-retryable instead of being flattened into GENERATION_FAILED.
+    if (error instanceof AppError) throw error
     const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
       ? (finalOptions as { provider: string }).provider
       : (params.options?.provider || '')
@@ -469,6 +473,7 @@ export async function resolveImageSourcesFromGeneration(
       }),
     )
   } catch (error) {
+    if (error instanceof AppError) throw error
     const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
       ? (finalOptions as { provider: string }).provider
       : (params.options?.provider || '')

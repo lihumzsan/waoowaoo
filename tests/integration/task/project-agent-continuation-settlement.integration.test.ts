@@ -324,6 +324,88 @@ describe('Project Agent continuation settlement DB integration', () => {
     })
   })
 
+  it('atomically preserves a known model failure and discards only its pending model history', async () => {
+    const { user, project, episode } = await seedClaimedContinuation()
+    await expect(
+      beginProjectAgentWaitContinuationExecution({
+        runId: RUN_ID,
+        waitId: WAIT_ID,
+        commandId: COMMAND_ID,
+        claimOwner: FIRST_CLAIM,
+        projectId: project.id,
+        userId: user.id,
+      }),
+    ).resolves.toBe('started')
+    const threadIdentity = {
+      projectId: project.id,
+      userId: user.id,
+      episodeId: episode.id,
+      assistantId: 'workspace-command' as const,
+    }
+    const executionSegmentId = createProjectAgentExecutionSegment({
+      kind: 'task_follow_up',
+      commandId: COMMAND_ID,
+    }).id
+    await stageUnreadyProjectAgentModelHistory(threadIdentity, executionSegmentId)
+    const beforeSettlement = await loadProjectAssistantModelHistory(threadIdentity)
+    const message: UIMessage = {
+      id: `workspace-continuation-rate-limit:${COMMAND_ID}`,
+      role: 'assistant',
+      parts: [{
+        type: 'data-agent-run',
+        data: {
+          runId: RUN_ID,
+          requestId: COMMAND_ID,
+          status: 'failed',
+          controlKind: 'task_follow_up',
+          stopReason: 'stream_error',
+        },
+      }],
+    }
+
+    await settleProjectAgentContinuationTerminalHandoff({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+      outcome: 'failed',
+      message,
+      failure: {
+        stopReason: 'stream_error',
+        errorCode: 'RATE_LIMIT',
+        errorMessage: 'Provider rate limit exceeded',
+      },
+    })
+
+    const [run, wait, checkpoint, thread, modelHistory] = await Promise.all([
+      prisma.projectAgentRun.findUnique({ where: { id: RUN_ID } }),
+      prisma.projectAgentWait.findUnique({ where: { id: WAIT_ID } }),
+      loadProjectAgentContinuationCheckpoint({
+        waitId: WAIT_ID,
+        runId: RUN_ID,
+        commandId: COMMAND_ID,
+      }),
+      loadProjectAssistantThread(threadIdentity),
+      loadProjectAssistantModelHistory(threadIdentity),
+    ])
+    expect(run).toMatchObject({
+      status: 'failed',
+      stopReason: 'stream_error',
+      errorCode: 'RATE_LIMIT',
+      errorMessage: 'Provider rate limit exceeded',
+    })
+    expect(wait).toMatchObject({ status: 'followed', claimId: FIRST_CLAIM })
+    expect(checkpoint).toMatchObject({ outcome: 'failed', messageId: message.id })
+    expect(thread?.messages).toEqual([message])
+    expect(modelHistory).toMatchObject({
+      version: beforeSettlement.version,
+      items: beforeSettlement.items,
+      pending: null,
+    })
+  })
+
   it('never discards a pending snapshot owned by another execution segment', async () => {
     const { user, project, episode } = await seedClaimedContinuation()
     await expect(

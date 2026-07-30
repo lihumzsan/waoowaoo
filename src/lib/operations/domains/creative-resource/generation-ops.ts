@@ -1342,16 +1342,11 @@ async function planMediaGenerationRetry(
   input: RetryMediaGenerationRequest,
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
-  const episodeId = ctx.context.episodeId?.trim() || null
-  const targetScope = resolveProjectCreativeResourceScope({
-    userId: ctx.userId,
-    projectId: ctx.projectId,
-    episodeId,
-  })
+  const callerEpisodeId = ctx.context.episodeId?.trim() || null
   const candidates = await loadCreativeResourceRetryCandidates({
     userId: ctx.userId,
     projectId: ctx.projectId,
-    episodeId,
+    callerEpisodeId,
     operationId: config.operationId,
     taskType: config.taskType,
     mediaType: config.mediaType,
@@ -1366,8 +1361,23 @@ async function planMediaGenerationRetry(
       agentRetryableAfterCorrection: true,
     })
   }
+  const episodeIds = new Set(candidates.map((candidate) => candidate.episodeId))
+  if (episodeIds.size !== 1) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'CREATIVE_RESOURCE_RETRY_SCOPE_MIXED',
+      field: 'request.resourceIds',
+      requestedValue: input.resourceIds,
+      agentRetryableAfterCorrection: true,
+    })
+  }
+  const episodeId = candidates[0]?.episodeId ?? null
   const schemaId = requireSchemaForMedia(candidates[0]?.schemaId ?? config.schemaId, config.mediaType)
   for (const candidate of candidates) {
+    const targetScope = resolveProjectCreativeResourceScope({
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      episodeId: candidate.episodeId,
+    })
     const references = candidate.payload.resource.inputs
     const inputByPosition = new Map(references.map((reference) => [reference.position, reference]))
     const imageInputs = candidate.payload.resource.imageInputPositions.map((position) => {
@@ -1496,7 +1506,7 @@ async function planMediaGenerationRetry(
       targetId: candidate.resourceId,
       payload,
       locale: resolveOperationLocale(ctx.context),
-      episodeId,
+      episodeId: candidate.episodeId,
       dedupeKey: `${config.operationId}:retry:${stableArgsHash({
         requestId,
         resourceId: candidate.resourceId,

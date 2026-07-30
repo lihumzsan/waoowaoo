@@ -14,10 +14,11 @@ import { createScopedLogger } from '@/lib/logging/core'
  *
  * Safety boundary: a stream attempt is only retried while it has not produced
  * any output-bearing part yet. Once anything beyond the neutral prelude
- * (stream-start / response-metadata) reached the consumer, partial output is
- * already flowing downstream and a retry would duplicate content — the error
- * is then surfaced untouched. doGenerate has no partial-output window, so a
- * retryable failure retries the whole call once.
+ * (stream-start / response-metadata / raw provider envelope) reached the
+ * consumer, partial semantic output is already flowing downstream and a retry
+ * would duplicate content — the error is then surfaced untouched. doGenerate
+ * has no partial-output window, so a retryable failure retries the whole call
+ * once.
  *
  * This is a transport-attempt retry below the Run lifecycle (AGENTS.md §8:
  * one failed attempt is not the business-final failure); it never converts
@@ -31,14 +32,18 @@ const RETRY_BACKOFF_BASE_MS = 2_000
 const RETRY_BACKOFF_JITTER_MS = 500
 
 /**
- * Parts that carry no model output. A retried attempt re-emits its own
- * prelude, so the first attempt's prelude is held back until we know whether
- * the attempt survives past it. Everything else (text/reasoning/tool parts,
- * finish, raw passthrough chunks) closes the retry gate.
+ * Parts that carry no semantic model output. A retried attempt re-emits its
+ * own prelude, so the first attempt's prelude is held back until we know
+ * whether the attempt survives past it. OpenRouter emits each provider SSE
+ * envelope as `raw` before its normalized part; in particular a 429 arrives
+ * as `raw(error) -> error`. Treating `raw` as output would make the retry gate
+ * close immediately before seeing the typed rejection. Text, reasoning,
+ * files, tool parts and finish still close the gate.
  */
 const PRELUDE_STREAM_PART_TYPES: ReadonlySet<string> = new Set([
   'stream-start',
   'response-metadata',
+  'raw',
 ])
 
 type StreamPartLike = { type: string; error?: unknown }

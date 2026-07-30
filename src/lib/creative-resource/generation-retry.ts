@@ -22,6 +22,7 @@ export interface CreativeResourceRetryCandidate {
   readonly resourceId: string
   readonly name: string
   readonly schemaId: string
+  readonly episodeId: string | null
   readonly candidateIndex: number
   readonly candidateSetId: string | null
   readonly sourceTaskId: string
@@ -61,7 +62,7 @@ function retryError(code: string, resourceId: string): ApiError {
 export async function loadCreativeResourceRetryCandidates(params: {
   readonly userId: string
   readonly projectId: string
-  readonly episodeId: string | null
+  readonly callerEpisodeId: string | null
   readonly operationId: string
   readonly taskType: TaskType
   readonly mediaType: Exclude<CreativeResourceMediaType, 'text'>
@@ -99,7 +100,10 @@ export async function loadCreativeResourceRetryCandidates(params: {
     if (
       resource.status !== 'failed'
       || resource.mediaType !== params.mediaType
-      || resource.episodeId !== params.episodeId
+      || (
+        resource.episodeId !== null
+        && resource.episodeId !== params.callerEpisodeId
+      )
     ) {
       throw retryError('CREATIVE_RESOURCE_RETRY_TARGET_INVALID', resourceId)
     }
@@ -109,7 +113,6 @@ export async function loadCreativeResourceRetryCandidates(params: {
     where: {
       userId: params.userId,
       projectId: params.projectId,
-      episodeId: params.episodeId,
       type: params.taskType,
       targetType: 'CreativeResource',
       targetId: { in: [...params.resourceIds] },
@@ -118,6 +121,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
     select: {
       id: true,
       targetId: true,
+      episodeId: true,
       status: true,
       payload: true,
       operationExecution: {
@@ -133,8 +137,11 @@ export async function loadCreativeResourceRetryCandidates(params: {
   })
   const originalTasksByResource = new Map<string, typeof candidateTasks>()
   for (const task of candidateTasks) {
+    const resource = resourceById.get(task.targetId)
     if (
-      task.status !== 'failed'
+      !resource
+      || task.episodeId !== resource.episodeId
+      || task.status !== 'failed'
       || !initialGenerationInputIdentitySchema.safeParse(
         task.operationExecution?.planSnapshot.normalizedInput,
       ).success
@@ -176,6 +183,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
       resourceId,
       name: resource.name,
       schemaId: resource.schemaId,
+      episodeId: resource.episodeId,
       candidateIndex: resource.candidateIndex ?? position,
       candidateSetId: resource.candidateSetId,
       sourceTaskId: root.id,
