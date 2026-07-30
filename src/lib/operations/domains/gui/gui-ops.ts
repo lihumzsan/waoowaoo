@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -366,7 +365,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           kind: 'location',
           name,
           summary,
-          stableDescription: removeLocationPromptSuffix(description),
+          stableDescription: description,
           imageSlotCount: count,
         })
 
@@ -414,7 +413,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         if (input.imageIndex !== undefined && input.description) {
-          const cleanDescription = removeLocationPromptSuffix(input.description.trim())
+          const cleanDescription = input.description.trim()
           const image = await transaction.locationImage.update({
             where: {
               locationId_imageIndex: { locationId: input.locationId, imageIndex: input.imageIndex },
