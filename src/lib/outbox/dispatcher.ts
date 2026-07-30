@@ -35,6 +35,23 @@ async function dispatchOutboxCommand(commandId: string): Promise<void> {
 
 export async function dispatchPendingOutboxCommands(limit = 100): Promise<number> {
   const commands = await listOutboxCommandsAwaitingEnqueue(limit)
+  // deliveryCount === 0 means no worker ever received this command, so the
+  // committing owner never fast-dispatched it: either a real missing dispatch
+  // owner or a crash between commit and dispatch. Re-armed retries always
+  // carry a delivery, so they stay silent here.
+  const missedFastDispatch = commands.filter((command) => command.deliveryCount === 0)
+  const oldestMissed = missedFastDispatch[0]
+  if (oldestMissed) {
+    logger.warn({
+      action: 'outbox.periodic_dispatch.missed_fast_dispatch',
+      message: 'periodic dispatcher recovered commands that no committing owner dispatched',
+      details: {
+        count: missedFastDispatch.length,
+        kinds: [...new Set(missedFastDispatch.map((command) => command.kind))],
+        oldestAgeMs: Date.now() - oldestMissed.createdAt.getTime(),
+      },
+    })
+  }
   let dispatched = 0
   for (const command of commands) {
     await dispatchOutboxCommand(command.id)

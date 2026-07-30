@@ -11,6 +11,8 @@ import {
   getProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
 import { persistSubmittedTaskBatchInTransaction } from '@/lib/task/transactional-create'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
+import { createOutboxCommitCollector } from '@/lib/outbox/repository'
 import { prisma } from '@/lib/prisma'
 import { buildBillingReceiptView } from '@/lib/billing/task-billing-view'
 import { InsufficientBalanceError } from '@/lib/billing'
@@ -103,8 +105,10 @@ export async function submitOperationTaskBatch(
     throw new Error('OPERATION_TASK_BATCH_OPERATION_ID_MISMATCH')
   }
   let persisted: Awaited<ReturnType<typeof persistSubmittedTaskBatchInTransaction>>
+  const outboxCollector = createOutboxCommitCollector()
   try {
     persisted = await prisma.$transaction(async (tx) => {
+      outboxCollector.bindTransaction(tx)
       if (executionFence) {
         await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
       }
@@ -137,6 +141,10 @@ export async function submitOperationTaskBatch(
     throw error
   }
   executionFence?.taskBatchBinding?.markCommitted()
+  // Commit succeeded: this owner dispatches every command its transaction
+  // created — task enqueue, lifecycle broadcast, and any resource broadcast a
+  // caller wrote through onTaskCreatedInTransaction.
+  await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
   return await Promise.all(persisted.map(async ({ task, deduped }) => {
     if (!isTaskType(task.type)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.type}`)
     return {

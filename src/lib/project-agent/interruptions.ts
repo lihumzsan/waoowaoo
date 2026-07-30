@@ -6,6 +6,8 @@ import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
+import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
+import { createOutboxCommitCollector } from '@/lib/outbox/repository'
 import type { ProjectAssistantId } from './types'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
@@ -546,8 +548,10 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   visibleMessages?: UIMessage[]
 }): Promise<ProjectAgentConsumedChoiceInterruptionRecord | null> {
   const { assistantId, scopeRef } = buildScope(params)
+  const outboxCollector = createOutboxCommitCollector()
   try {
     const consumed = await prisma.$transaction(async (tx) => {
+      outboxCollector.bindTransaction(tx)
       const runFence = await lockCurrentInterruptionConsumeRunFence(tx, {
         ...params,
         assistantId,
@@ -719,6 +723,9 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
         },
       }
     })
+    // Commit succeeded: the choice-commit transaction owns the dispatch for the
+    // atomic commitment's resource broadcast and any task it submitted.
+    await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
     if (!consumed) return null
     return consumed.interruption
   } catch (error) {
