@@ -121,23 +121,25 @@ export const storyCanonBundleSchema = z.object({
 
 export type StoryCanonBundle = z.infer<typeof storyCanonBundleSchema>
 
-export const creativeChapterPlanItemSchema = editSourceRangeSchema.extend({
+export const chapterContinuityPlanItemSchema = editSourceRangeSchema.extend({
   chapterIndex: z.number().int().min(0),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   targetDurationSec: z.number().int().positive(),
 }).strict()
 
-export type CreativeChapterPlanItem = z.infer<typeof creativeChapterPlanItemSchema>
+export type ChapterContinuityPlanItem = z.infer<typeof chapterContinuityPlanItemSchema>
 
-export const creativeChapterPlanOutputSchema = z.object({
-  kind: z.literal('chapter_plan'),
+export const chapterContinuityPlanOutputSchema = z.object({
+  kind: z.literal('chapter_continuity_plan'),
+  storyCanon: rawStoryCanonBundleSchema
+    .describe('The single global Story Canon and continuity ledger shared by every Chapter in this plan.'),
   rationale: z.string().trim().min(1).max(12_000),
-  chapters: z.array(creativeChapterPlanItemSchema.safeExtend({
+  chapters: z.array(chapterContinuityPlanItemSchema.safeExtend({
     title: z.string().trim().min(1).max(300),
     summary: z.string().trim().min(1).max(8_000),
     targetDurationSec: z.number().int().positive().max(CREATIVE_CHAPTER_MAX_DURATION_SECONDS),
-  }).strict()).min(1).max(128),
+  }).strict()).min(2).max(128),
   assumptions: z.array(z.string().trim().min(1).max(2_000)).max(64),
   warnings: z.array(z.string().trim().min(1).max(2_000)).max(64),
 }).strict().superRefine((output, context) => {
@@ -147,21 +149,21 @@ export const creativeChapterPlanOutputSchema = z.object({
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['chapters', index, 'chapterIndex'],
-        message: 'CREATIVE_CHAPTER_PLAN_INDEX_NOT_CONTIGUOUS',
+        message: 'CHAPTER_CONTINUITY_PLAN_INDEX_NOT_CONTIGUOUS',
       })
     }
     if (chapter.sourceStart < previousEnd) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['chapters', index, 'sourceStart'],
-        message: 'CREATIVE_CHAPTER_PLAN_RANGE_OVERLAP',
+        message: 'CHAPTER_CONTINUITY_PLAN_RANGE_OVERLAP',
       })
     }
     previousEnd = chapter.sourceEnd
   }
 })
 
-export type CreativeChapterPlanOutput = z.infer<typeof creativeChapterPlanOutputSchema>
+export type ChapterContinuityPlanOutput = z.infer<typeof chapterContinuityPlanOutputSchema>
 
 export const getStoryCanonInputSchema = z.object({
   episodeId: z.string().trim().min(1),

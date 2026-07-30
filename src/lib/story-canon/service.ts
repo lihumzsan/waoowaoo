@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { validateStoryCanonBundle } from './cross-check'
 import { CREATIVE_CHAPTER_MAX_DURATION_SECONDS } from './constraints'
 import {
-  creativeChapterPlanOutputSchema,
+  chapterContinuityPlanOutputSchema,
   storyCanonBeatSheetSchema,
   storyCanonEmotionalCurveSchema,
   storyCanonSchema,
@@ -26,7 +26,7 @@ import {
   type StoryCanon,
   type StoryCanonBeatSheet,
   type StoryCanonBundle,
-  type CreativeChapterPlanItem,
+  type ChapterContinuityPlanItem,
   type StoryCanonEmotionalCurve,
 } from './schemas'
 import {
@@ -54,7 +54,7 @@ export interface PersistedStoryCanonBundle {
   readonly emotionalCurve: StoryCanonEmotionalCurve
 }
 
-export interface PersistedEditChapterPlan extends CreativeChapterPlanItem {
+export interface PersistedEditChapterPlan extends ChapterContinuityPlanItem {
   readonly id: string
   readonly beatIds: readonly string[]
   readonly eventIds: readonly string[]
@@ -169,9 +169,8 @@ async function resolveCreativeTextResource(input: {
   readonly resourceId: string
   readonly schemaId:
     | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
-    | typeof CREATIVE_RESOURCE_SCHEMA.STORY_CANON
-    | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
-  readonly outputKind: 'screenplay' | 'story_canon' | 'chapter_plan'
+    | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN
+  readonly outputKind: 'screenplay' | 'chapter_continuity_plan'
   readonly resourceScope: 'project' | 'episode'
 }) {
   const resource = await input.tx.creativeResource.findFirst({
@@ -233,134 +232,26 @@ async function resolveCreativeTextResource(input: {
   return resource
 }
 
-export async function adoptStoryCanonResources(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly screenplay: { readonly resourceId: string }
-  readonly storyCanon: { readonly resourceId: string }
-  readonly expectedVersion?: number | null
-  readonly client?: Prisma.TransactionClient
-}): Promise<PersistedStoryCanonBundle> {
-  const adopt = async (tx: Prisma.TransactionClient): Promise<PersistedStoryCanonBundle> => {
-    await assertEpisodeAccess({ ...input, client: tx })
-    const [screenplayResource, storyCanonResource] = await Promise.all([
-      resolveCreativeTextResource({
-        tx,
-        ...input,
-        ...input.screenplay,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
-        outputKind: 'screenplay',
-        resourceScope: 'project',
-      }),
-      resolveCreativeTextResource({
-        tx,
-        ...input,
-        ...input.storyCanon,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
-        outputKind: 'story_canon',
-        resourceScope: 'project',
-      }),
-    ])
-    if (screenplayResource.contentJson === null || storyCanonResource.contentJson === null) {
-      throw new Error('STORY_CANON_RESOURCE_CONTENT_INVALID')
-    }
-    const screenplayText = screenplaySchema.parse(screenplayResource.contentJson).screenplayText
-    const sourceLineage = storyCanonResource.outputLineage.filter((lineage) => (
-      lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
-    ))
-    if (sourceLineage.length !== 1) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'STORY_CANON_SCREENPLAY_LINEAGE_REQUIRED',
-        field: 'storyCanon.resourceId',
-        agentRetryableAfterCorrection: true,
-      })
-    }
-    const sourceDocument = await materializeScreenplayResourceProjection({
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId,
-      resourceId: screenplayResource.id,
-      text: screenplayText,
-      client: tx,
-    })
-    const bundle = normalizeStoryCanonResourceBundle({
-      rawBundle: storyCanonResource.contentJson,
-      sourceText: sourceDocument.normalizedText,
-    })
-    await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
-    `)
-    const current = await tx.projectStoryCanon.findUnique({
-      where: { episodeId: input.episodeId },
-      select: persistedStoryCanonSelect,
-    })
-    if (current?.storyCanonResourceId === storyCanonResource.id) {
-      if (
-        current.sourceDocumentId !== sourceDocument.id
-      ) {
-        throw new Error(`STORY_CANON_ADOPTION_COLLISION:${storyCanonResource.id}`)
-      }
-      return mapPersistedStoryCanon(current, input.projectId)
-    }
-    const expectedVersion = input.expectedVersion ?? null
-    if ((current?.version ?? null) !== expectedVersion) {
-      throw new ApiError('CONFLICT', {
-        code: 'STORY_CANON_ADOPTION_VERSION_CONFLICT',
-        expectedVersion,
-        actualVersion: current?.version ?? null,
-      })
-    }
-    const data = {
-      sourceDocumentId: sourceDocument.id,
-      storyCanonJson: toInputJsonValue(bundle.storyCanon),
-      beatSheetJson: toInputJsonValue(bundle.beatSheet),
-      ledgerJson: toInputJsonValue(bundle.ledger),
-      emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
-      storyCanonResourceId: storyCanonResource.id,
-      version: (current?.version ?? 0) + 1,
-    }
-    const stored = current
-      ? await tx.projectStoryCanon.update({ where: { id: current.id }, data, select: persistedStoryCanonSelect })
-      : await tx.projectStoryCanon.create({
-          data: { episodeId: input.episodeId, ...data },
-          select: persistedStoryCanonSelect,
-        })
-    return mapPersistedStoryCanon(stored, input.projectId)
-  }
-  return input.client ? await adopt(input.client) : await prisma.$transaction(adopt)
-}
-
 interface ExactCreativeResourceRef {
   readonly resourceId: string
 }
 
-interface ChapterPlanProvenance {
+interface ChapterContinuityPlanProvenance {
   readonly sourceResourceId: string
-  readonly chapterPlanResourceId: string
-  readonly storyCanon: ExactCreativeResourceRef | null
-  readonly contextResources: readonly (ExactCreativeResourceRef & { readonly schemaId: string })[]
+  readonly chapterContinuityPlanResourceId: string
   readonly beatIds: readonly string[]
   readonly eventIds: readonly string[]
 }
 
 function chapterFacts(input: {
-  readonly bundle: StoryCanonBundle | null
-  readonly plan: CreativeChapterPlanItem
+  readonly bundle: StoryCanonBundle
+  readonly plan: ChapterContinuityPlanItem
 }): {
   readonly beatIds: readonly string[]
   readonly eventIds: readonly string[]
   readonly events: readonly Ledger['events'][number][]
   readonly entrySnapshot: ReturnType<typeof projectLedgerSnapshotAtSourceOffset>
 } {
-  if (!input.bundle) {
-    return {
-      beatIds: [],
-      eventIds: [],
-      events: [],
-      entrySnapshot: { sourceEnd: input.plan.sourceStart, facts: [], entities: [] },
-    }
-  }
   const overlappingBeats = input.bundle.beatSheet.beats.filter((beat) => (
     beat.sourceStart < input.plan.sourceEnd && beat.sourceEnd > input.plan.sourceStart
   ))
@@ -380,13 +271,14 @@ function chapterFacts(input: {
   }
 }
 
-async function writeAdoptedChapterPlan(input: {
+async function writeAdoptedChapters(input: {
   readonly tx: Prisma.TransactionClient
   readonly episodeId: string
   readonly sourceDocumentId: string
-  readonly provenance: Omit<ChapterPlanProvenance, 'beatIds' | 'eventIds'>
-  readonly bundle: StoryCanonBundle | null
-  readonly plans: readonly CreativeChapterPlanItem[]
+  readonly sourceResourceId: string
+  readonly chapterContinuityPlanResourceId: string
+  readonly bundle: StoryCanonBundle
+  readonly plans: readonly ChapterContinuityPlanItem[]
   readonly planVersion: number
 }): Promise<readonly PersistedEditChapterPlan[]> {
   await input.tx.projectEditChapter.deleteMany({
@@ -395,8 +287,9 @@ async function writeAdoptedChapterPlan(input: {
   const chapters: PersistedEditChapterPlan[] = []
   for (const plan of input.plans) {
     const facts = chapterFacts({ bundle: input.bundle, plan })
-    const provenance: ChapterPlanProvenance = {
-      ...input.provenance,
+    const provenance: ChapterContinuityPlanProvenance = {
+      sourceResourceId: input.sourceResourceId,
+      chapterContinuityPlanResourceId: input.chapterContinuityPlanResourceId,
       beatIds: facts.beatIds,
       eventIds: facts.eventIds,
     }
@@ -426,25 +319,21 @@ async function writeAdoptedChapterPlan(input: {
   return chapters
 }
 
-function exactResourceRef(input: {
-  readonly id: string
-}): ExactCreativeResourceRef {
-  return {
-    resourceId: input.id,
-  }
-}
-
-export async function adoptCreativeChapterPlan(input: {
+export async function adoptChapterContinuityPlan(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
   readonly screenplay: ExactCreativeResourceRef
-  readonly chapterPlan: ExactCreativeResourceRef
+  readonly chapterContinuityPlan: ExactCreativeResourceRef
+  readonly expectedVersion?: number | null
   readonly client?: Prisma.TransactionClient
-}): Promise<readonly PersistedEditChapterPlan[]> {
-  const adopt = async (tx: Prisma.TransactionClient): Promise<readonly PersistedEditChapterPlan[]> => {
+}): Promise<{
+  readonly storyCanon: PersistedStoryCanonBundle
+  readonly chapters: readonly PersistedEditChapterPlan[]
+}> {
+  const adopt = async (tx: Prisma.TransactionClient) => {
     await assertEpisodeAccess({ ...input, client: tx })
-    const [screenplayResource, chapterPlanResource] = await Promise.all([
+    const [screenplayResource, planResource] = await Promise.all([
       resolveCreativeTextResource({
         tx,
         ...input,
@@ -456,106 +345,27 @@ export async function adoptCreativeChapterPlan(input: {
       resolveCreativeTextResource({
         tx,
         ...input,
-        ...input.chapterPlan,
-        schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
-        outputKind: 'chapter_plan',
+        ...input.chapterContinuityPlan,
+        schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN,
+        outputKind: 'chapter_continuity_plan',
         resourceScope: 'episode',
       }),
     ])
-    if (screenplayResource.contentJson === null || chapterPlanResource.contentJson === null) {
-      throw new Error('CREATIVE_CHAPTER_PLAN_RESOURCE_CONTENT_INVALID')
+    if (screenplayResource.contentJson === null || planResource.contentJson === null) {
+      throw new Error('CHAPTER_CONTINUITY_PLAN_RESOURCE_CONTENT_INVALID')
     }
     const screenplayText = screenplaySchema.parse(screenplayResource.contentJson).screenplayText
-    const screenplayLineage = chapterPlanResource.outputLineage.filter((lineage) => (
+    const screenplayLineage = planResource.outputLineage.filter((lineage) => (
       lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
     ))
     if (screenplayLineage.length !== 1) {
       throw new ApiError('INVALID_PARAMS', {
-        code: 'CREATIVE_CHAPTER_PLAN_SCREENPLAY_LINEAGE_REQUIRED',
-        field: 'chapterPlan.resourceId',
+        code: 'CHAPTER_CONTINUITY_PLAN_SCREENPLAY_LINEAGE_REQUIRED',
+        field: 'chapterContinuityPlan.resourceId',
         agentRetryableAfterCorrection: true,
       })
     }
-    const lineageResourceIds = chapterPlanResource.outputLineage.map((lineage) => lineage.inputResourceId)
-    const uniqueLineageResourceIds = [...new Set(lineageResourceIds)]
-    const scopedLineageResources = await tx.creativeResource.findMany({
-      where: {
-        id: { in: uniqueLineageResourceIds },
-        userId: input.userId,
-        projectId: input.projectId,
-        status: 'ready',
-        materializedAt: { not: null },
-        OR: [{ episodeId: input.episodeId }, { episodeId: null }],
-      },
-      select: {
-        id: true,
-        contentJson: true,
-        taskId: true,
-        task: { select: { type: true, status: true, payload: true } },
-        outputLineage: { select: { inputResourceId: true, role: true } },
-        schemaId: true,
-        mediaType: true,
-        sourceType: true,
-      },
-    })
-    if (scopedLineageResources.length !== uniqueLineageResourceIds.length) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'CREATIVE_CHAPTER_PLAN_CONTEXT_LINEAGE_SCOPE_INVALID',
-        field: 'chapterPlan.resourceId',
-        agentRetryableAfterCorrection: true,
-      })
-    }
-    const storyCanonCandidates = scopedLineageResources.filter((resource) => (
-      resource.schemaId === CREATIVE_RESOURCE_SCHEMA.STORY_CANON
-      && resource.mediaType === 'text'
-      && resource.sourceType === 'CreativeWorkResult'
-    ))
-    if (storyCanonCandidates.length > 1) {
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'CREATIVE_CHAPTER_PLAN_STORY_CANON_LINEAGE_AMBIGUOUS',
-        field: 'chapterPlan.resourceId',
-        agentRetryableAfterCorrection: true,
-      })
-    }
-    const storyCanonResource = storyCanonCandidates[0] ?? null
-    const contextResources = scopedLineageResources
-      .filter((resource) => resource.id !== screenplayResource.id)
-      .map((resource) => ({
-        ...exactResourceRef(resource),
-        schemaId: resource.schemaId,
-      }))
-      .sort((left, right) => left.resourceId.localeCompare(right.resourceId))
-    let storyCanonBundle: StoryCanonBundle | null = null
-    let storyCanonRef: ExactCreativeResourceRef | null = null
-    if (storyCanonResource) {
-      const payload = storyCanonResource.task?.payload
-      const request = payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as { request?: { outputKind?: unknown } }).request
-        : null
-      const hasScreenplayLineage = storyCanonResource.outputLineage.some((lineage) => (
-        lineage.inputResourceId === screenplayResource.id && lineage.role === 'source_material'
-      ))
-      if (
-        !storyCanonResource.taskId
-        || storyCanonResource.task?.type !== TASK_TYPE.CREATIVE_WORK
-        || storyCanonResource.task.status !== TASK_STATUS.COMPLETED
-        || request?.outputKind !== 'story_canon'
-        || storyCanonResource.contentJson === null
-        || !hasScreenplayLineage
-      ) {
-        throw new ApiError('INVALID_PARAMS', {
-          code: 'CREATIVE_CHAPTER_PLAN_STORY_CANON_LINEAGE_INVALID',
-          field: 'chapterPlan.resourceId',
-          agentRetryableAfterCorrection: true,
-        })
-      }
-      storyCanonBundle = normalizeStoryCanonResourceBundle({
-        rawBundle: storyCanonResource.contentJson,
-        sourceText: screenplayText,
-      })
-      storyCanonRef = exactResourceRef(storyCanonResource)
-    }
-    const output = creativeChapterPlanOutputSchema.parse(chapterPlanResource.contentJson)
+    const output = chapterContinuityPlanOutputSchema.parse(planResource.contentJson)
     assertOrderedNonOverlappingSourceRanges(screenplayText, output.chapters)
     for (const chapter of output.chapters) {
       if (chapter.targetDurationSec > CREATIVE_CHAPTER_MAX_DURATION_SECONDS) {
@@ -581,40 +391,85 @@ export async function adoptCreativeChapterPlan(input: {
       text: screenplayText,
       client: tx,
     })
+    const bundle = normalizeStoryCanonResourceBundle({
+      rawBundle: output.storyCanon,
+      sourceText: sourceDocument.normalizedText,
+    })
     await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id FROM project_episodes WHERE id = ${input.episodeId} FOR UPDATE
     `)
-    const existing = await tx.projectEditChapter.findMany({
-      where: { episodeId: input.episodeId },
-      select: { planVersion: true, provenanceJson: true },
-    })
-    const alreadyAdopted = existing.length === output.chapters.length && existing.every((chapter) => {
-      const provenance = chapter.provenanceJson
-      return provenance && typeof provenance === 'object' && !Array.isArray(provenance)
-        && (provenance as { chapterPlanResourceId?: unknown }).chapterPlanResourceId === chapterPlanResource.id
-    })
-    if (alreadyAdopted) {
-      return await readEpisodeEditChapters({
-        projectId: input.projectId,
-        episodeId: input.episodeId,
-        client: tx,
+    const [current, existingChapters] = await Promise.all([
+      tx.projectStoryCanon.findUnique({
+        where: { episodeId: input.episodeId },
+        select: persistedStoryCanonSelect,
+      }),
+      tx.projectEditChapter.findMany({
+        where: { episodeId: input.episodeId },
+        select: { provenanceJson: true },
+      }),
+    ])
+    const chaptersUsePlan = existingChapters.length === output.chapters.length
+      && existingChapters.every((chapter) => {
+        const provenance = chapter.provenanceJson
+        return provenance !== null && typeof provenance === 'object' && !Array.isArray(provenance)
+          && (provenance as { chapterContinuityPlanResourceId?: unknown })
+            .chapterContinuityPlanResourceId === planResource.id
+      })
+    if (current?.storyCanonResourceId === planResource.id && chaptersUsePlan) {
+      if (current.sourceDocumentId !== sourceDocument.id) {
+        throw new Error(`CHAPTER_CONTINUITY_PLAN_ADOPTION_COLLISION:${planResource.id}`)
+      }
+      return {
+        storyCanon: mapPersistedStoryCanon(current, input.projectId),
+        chapters: await readEpisodeEditChapters({
+          projectId: input.projectId,
+          episodeId: input.episodeId,
+          client: tx,
+        }),
+      }
+    }
+    const expectedVersion = input.expectedVersion ?? null
+    if ((current?.version ?? null) !== expectedVersion) {
+      throw new ApiError('CONFLICT', {
+        code: 'CHAPTER_CONTINUITY_PLAN_ADOPTION_VERSION_CONFLICT',
+        expectedVersion,
+        actualVersion: current?.version ?? null,
       })
     }
-    const planVersion = Math.max(0, ...existing.map((chapter) => chapter.planVersion)) + 1
-    return await writeAdoptedChapterPlan({
+    const version = (current?.version ?? 0) + 1
+    const canonData = {
+      sourceDocumentId: sourceDocument.id,
+      storyCanonJson: toInputJsonValue(bundle.storyCanon),
+      beatSheetJson: toInputJsonValue(bundle.beatSheet),
+      ledgerJson: toInputJsonValue(bundle.ledger),
+      emotionalCurveJson: toInputJsonValue(bundle.emotionalCurve),
+      storyCanonResourceId: planResource.id,
+      version,
+    }
+    const storedCanon = current
+      ? await tx.projectStoryCanon.update({
+          where: { id: current.id },
+          data: canonData,
+          select: persistedStoryCanonSelect,
+        })
+      : await tx.projectStoryCanon.create({
+          data: { episodeId: input.episodeId, ...canonData },
+          select: persistedStoryCanonSelect,
+        })
+    const chapters = await writeAdoptedChapters({
       tx,
       episodeId: input.episodeId,
       sourceDocumentId: sourceDocument.id,
-      provenance: {
-        sourceResourceId: screenplayResource.id,
-        chapterPlanResourceId: chapterPlanResource.id,
-        storyCanon: storyCanonRef,
-        contextResources,
-      },
-      bundle: storyCanonBundle,
+      sourceResourceId: screenplayResource.id,
+      chapterContinuityPlanResourceId: planResource.id,
+      bundle,
       plans: output.chapters,
-      planVersion,
+      planVersion: version,
     })
+    return {
+      storyCanon: mapPersistedStoryCanon(storedCanon, input.projectId),
+      chapters,
+    }
   }
   return input.client ? await adopt(input.client) : await prisma.$transaction(adopt)
 }

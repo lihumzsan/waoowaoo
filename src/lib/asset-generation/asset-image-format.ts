@@ -2,6 +2,7 @@ import {
   CREATIVE_RESOURCE_SCHEMA,
   type CreativeResourceSchemaId,
 } from '@/lib/creative-resource/schema-registry'
+import type { CreativeDirection } from '@/lib/creative-direction/contracts'
 
 export type AssetImageKind = 'character' | 'location' | 'prop'
 export type AssetImageFormatLocale = 'zh' | 'en'
@@ -61,20 +62,30 @@ export function resolveAssetImageKindForSchemaId(schemaId: string): AssetImageKi
   return ASSET_IMAGE_KIND_BY_SCHEMA_ID.get(schemaId as CreativeResourceSchemaId) ?? null
 }
 
-function stripAssetImageFormatPolicy(prompt: string, kind: AssetImageKind): string {
-  const policy = getAssetImageFormatPolicy(kind)
-  return (Object.values(policy.instruction) as string[])
-    .reduce((value, instruction) => value.replaceAll(instruction, ''), prompt)
-    .replace(/[，,]\s*$/, '')
-    .trim()
-}
-
-export function applyAssetImageFormatPolicy(input: {
-  readonly prompt: string
+/** The only compiler that turns stable asset facts into an executable asset-image prompt. */
+export function compileAssetImagePrompt(input: {
+  readonly stableDescription: string
+  readonly creativeDirection: CreativeDirection | null
   readonly kind: AssetImageKind
   readonly locale?: string | null
 }): string {
-  const cleanPrompt = stripAssetImageFormatPolicy(input.prompt, input.kind)
-  const instruction = getAssetImageFormatPolicy(input.kind).instruction[normalizeLocale(input.locale)]
-  return cleanPrompt ? `${cleanPrompt}\n\n${instruction}` : instruction
+  const locale = normalizeLocale(input.locale)
+  const direction = input.creativeDirection
+  const semanticPrompt = direction
+    ? locale === 'en'
+      ? [
+          `Stable asset design: ${input.stableDescription.trim()}`,
+          `Project visual style: ${direction.visual.visualStyle}`,
+          `Asset-image lighting: ${direction.visual.assetImageStyle.lighting}`,
+          `Asset-image texture: ${direction.visual.assetImageStyle.texture}`,
+        ].join('\n')
+      : [
+          `稳定资产设计：${input.stableDescription.trim()}`,
+          `项目视觉风格：${direction.visual.visualStyle}`,
+          `资产图灯光：${direction.visual.assetImageStyle.lighting}`,
+          `资产图材质：${direction.visual.assetImageStyle.texture}`,
+        ].join('\n')
+    : input.stableDescription.trim()
+  const instruction = getAssetImageFormatPolicy(input.kind).instruction[locale]
+  return semanticPrompt ? `${semanticPrompt}\n\n${instruction}` : instruction
 }

@@ -1,8 +1,6 @@
 export const CREATIVE_WORK_OUTPUT_KINDS = [
   'screenplay',
-  'story_canon',
-  'chapter_plan',
-  'continuity_analysis',
+  'chapter_continuity_plan',
   'creative_direction',
   'asset_manifest',
   'video_prompt_set',

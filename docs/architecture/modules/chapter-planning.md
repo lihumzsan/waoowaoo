@@ -1,65 +1,70 @@
 <!-- architecture-module: chapter-planning -->
 
-# Chapter、连续性与并行创作单元
+# Chapter、Story Canon 与并行创作单元
 
 ## 设计理念
 
-Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段。它只在一个作品需要多个相对独立的工作单元、并行处理、局部失败恢复或有界上下文时提供价值；单一连续上下文即使很长，也不必被系统强制拆分。
+Chapter 是可选、可版本化的创作上下文单元，不是工作流阶段。只有当一个作品确实需要至少两个相对独立的生产单元，或者用户明确要求分 Chapter 时，Primary 才委派一次 `chapter_continuity_plan`。
 
-连续性不是“存在多个 Chapter”的同义词。Primary Agent 依据共享 canon、跨单元人物/场景/道具状态、时间顺序、视觉与声音延续、上下文预算和用户目标，决定是否委派 `continuity_analysis`、采用 Story Canon 或建立 Chapters。总时长大于 180 秒只是强规划信号，不是代码分支。
+跨 Chapter 一致性只有一个专业输出：同一个 Resource 同时保存 Story Canon 与全部 Chapter 边界。Story Canon 是共享稳定事实的唯一权威；Chapter Context 是服务端从该 Canon、精确剧本范围和 Chapter 投影派生的局部输入，不是第二份 Canon。系统不存在通用 `continuity_analysis` 或成片审计能力。
 
 ## 不变量
 
-- **CP-01 — Chapter 可选且独立。** Chapter 可以由显式 Operation 从精确剧本 Resource 或用户给出的结构创建、修改和删除；采用 Story Canon 不自动创建 Chapter，创建 Chapter 不自动生成 Story Canon、连续性分析、资产、视频或渲染。
-- **CP-02 — 没有时长状态机。** 服务端不得按 `<=15`、`15–180`、`>180` 自动选择流程、Operation 或 Worker。`>180s` 只进入 Primary 的规划提示；最终判断还必须考虑独立工作单元、共享事实、上下文与恢复价值。Primary 已经选择委派 `chapter_plan` 后，`adopt_chapters` 只校验每个已给独立单元不超过 180 秒；它不决定章数或边界。
-- **CP-11 — Chapter 估时是规划事实，不是交付预算。** `targetDurationSec` 只服务分章判断、每章 180 秒上限校验与规划展示。它不得被服务端自动转成下游交付时长：按 Chapter 委派 `video_prompt_set` 时，交付时长权威只有调用方显式给出的 `durationIntent`，`mode=fixed` 仅用于承接用户明确说明并正在被分配的总时长，其余情况使用 `mode=derive` 由 Worker 从真实内容推导。Chapter 估时仍随编译上下文作为参考事实提供给 Worker。
-- **CP-03 — 精确 screenplay Resource 是来源。** Chapter 必须显式引用一个精确 `screenplay` Resource；resourceId 是唯一跨层身份，服务端回库读取剧本文本。该 Resource 可以来自 `creative_work(outputKind=screenplay)`，也可以是 `create_text.current_user_text + classification.kind=screenplay` 精确捕获的用户完整剧本；Story Canon/Chapter/continuity 不得强迫后一种来源先经过另一个 screenplay Subagent。`ProjectEpisodeSourceDocument` 只是该 Resource 的严格领域投影，不拥有第二份内容解释权。不存在 `confirmed_screenplay`、最近剧本、“正式剧本”副本或 scene/entity registry 前置。
-- **CP-04 — Story Canon、连续性分析与 Chapter 分权。** Story Canon 是可采用的全局 canon Resource，continuity analysis 是针对一组精确输入 Resources 的专业结果，Chapter 是执行上下文单元。三者各有唯一 writer，互不自动派生，消费者必须显式传入实际使用的 Resource IDs。
-- **CP-05 — 并行不产生 WorkerGroup。** Primary 可对多个 Chapter 调用 `delegate_creative_work({delegation:{source:'chapters'}})`；每个 Chapter 对应一个独立 `creative_work` Task，聚合只复用 OperationBatch/Wait。系统不持久化 WorkerGroup、章节批次状态机或跨 Task 共享可变内存。
-- **CP-06 — 最小上下文纯派生。** Context Compiler 只从显式 canonical screenplay/Story Canon/Chapter/asset Resource ID 为一个 Chapter 构造有界输入；缺失、scope 或 schema 不符必须失败。它不读取或投影 Creative Direction，不写事实、不选择 Skill、不创建 Task、不决定执行顺序。后续唯一 Task 输入编译器在 Task 创建时，向每个非方向生产者统一冻结完整已采纳 Direction；这不改变 Chapter context 的事实边界。
-- **CP-07 — 连续事实有唯一 owner。** 全局 canon 只由被采用的 Story Canon Resource 解释；一次 continuity analysis 只描述其精确输入的分析结果，不能覆盖 Story Canon。Chapter 局部状态只属于该 Chapter；跨单元冲突由 Primary 重新委派分析或显式采用新 Resource，不能由晚到 Task 覆盖。
-- **CP-08 — 媒体执行仍按精确输入。** 视频、资产和音乐 Resource 可以直接从任意合法 Resources 生成，也可以消费 Chapter context；是否使用 Chapter 不改变 Operation eligibility。provider 的单次时长/引用数量约束由 capability registry 在执行前校验，不得反向变成创作工作流。
-- **CP-09 — UI 只显示真实事实。** Canvas 可显示持久 Chapter、Resource、Task 与 Lineage，但不得投影“当前阶段”“下一章”“全局连续性已完成”或按时长自动生成节点。连线只来自实际 Resource lineage。
-- **CP-10 — Chapter ID 是计划内叙事身份。** 同一 `chapter_plan` Resource 的重复采用必须返回原有 Chapter IDs；采用不同 Resource 时必须在一个 Episode 锁和同一事务内删除旧投影并创建全部新 IDs。`chapterIndex` 只负责新计划内部排序与唯一位置，不能通过 upsert 让旧计划的叙事 identity 漂移到新内容。
+- **CP-01 — Chapter 可选且至少为二。** 单一连续上下文不创建 Chapter、Story Canon 或连续性分析。只有 Primary 判断至少两个 Chapter 有并行、恢复或上下文价值，或者用户明确要求分 Chapter时，才委派 `creative_work(outputKind=chapter_continuity_plan)`；strict 输出 `chapters` 至少两项。
+- **CP-02 — 没有时长状态机。** 服务端不按 `<=15`、`15–180`、`>180` 自动选择流程、Operation 或 Worker。总时长超过 180 秒只是 Primary 的规划信号；已经决定分 Chapter 后，每章 `targetDurationSec` 不得超过 180 秒。
+- **CP-03 — 精确 screenplay Resource 是唯一来源。** 计划必须精确引用一个 `project.screenplay` Resource，服务端回库读取真实内容并验证 Lineage。该 Resource 可以来自 Creative Worker，也可以是 `create_text` 精确捕获的用户完整剧本；不存在 confirmed screenplay、最近剧本或正式副本。
+- **CP-04 — Canon 与 Chapters 同源同版本。** `chapter_continuity_plan` 的一个 Resource 同时包含 Story Canon、Beat/Ledger 和全部 Chapter 范围。`adopt_chapter_continuity_plan` 在一个 Episode 锁和一个事务内采用 Canon并创建或替换全部 Chapter；二者绑定相同 Resource ID 和 plan version，任一步失败全部回滚。
+- **CP-05 — 一个专业 Skill。** output registry 把 `chapter_continuity_plan` 唯一映射到 `chapter-continuity-planning`。Worker 只加载 `creative-core + chapter-continuity-planning`，不得读取 `story-development`、已删除的 `continuity-memory` 或其他专业 Skill。
+- **CP-06 — Chapter Context 纯派生。** Context Compiler 从同一个 adopted plan Resource、精确 screenplay 范围、持久 Chapter 和显式资产 Resource 为每章构造局部输入。入口状态、范围内事件、出口变化和相关 Canon 实体从共享 Ledger 派生，不在 Chapter 再写一份竞争事实。
+- **CP-07 — 不审片、不写执行 Prompt。** `chapter_continuity_plan` 不设计镜头、Video Prompt、图片、音频或下游 Task，也不能审看成片或声称完成媒体连续性检查。局部视频执行约束只属于 `video_prompt_set`。
+- **CP-08 — 并行不产生 WorkerGroup。** `delegation.source=chapters` 为每个持久 Chapter 创建一个独立 Creative Task，聚合只复用 OperationBatch/Wait；没有 WorkerGroup 表、跨 Task 共享可变内存或第二恢复协议。
+- **CP-09 — 精确 identity 与原子替换。** 同一 Plan Resource 重复采用返回原 Chapter IDs；采用不同 Resource 时原子删除旧 Chapter 投影并创建新 IDs。`chapterIndex` 只在同一计划内部排序。
+- **CP-10 — UI 只显示真实事实。** Canvas 可以显示持久 Chapter、Resource、Task 与 Lineage，但不得投影“当前阶段”“全局连续性已验证”或成片审计结论。
 
 ## 状态所有权
 
 | 事实 | 唯一 owner / writer | 消费者 |
 | --- | --- | --- |
-| 剧本文本与写作元信息 | `screenplay` Creative Resource / Creative Task terminal materializer | Primary、Story Canon/continuity/Chapter Operations |
-| 全局 canon | 被采用的 Story Canon Resource / Story Canon adoption Operation | Context Compiler、Primary、显式下游调用 |
-| Chapter identity 与版本 | `adopt_chapters` / Chapter service；同 Plan 幂等、不同 Plan 原子重建 | Primary、Context Compiler、Canvas |
-| 连续性分析结果 | `creative_work(outputKind=continuity_analysis)` 终态 Resource | Primary；除非显式采用，不写其他事实 |
-| Chapter 专业结果 | 每 Chapter 的独立 `creative_work` Task/Resource | Primary、显式下游 Operation |
+| 剧本文本 | `project.screenplay` Resource | Primary、Chapter continuity Worker |
+| Story Canon + Chapter 边界 | `project.chapter_continuity_plan` Resource / Creative Task terminal materializer | 原子采用 Operation |
+| 当前 Canon 投影 + Chapter identities | `adopt_chapter_continuity_plan` 单事务 | Primary、Context Compiler、Canvas |
+| 单章入口、事件、出口与相关 Canon | Chapter Context Compiler 纯派生 | 每 Chapter Creative Worker |
+| 每章专业结果 | 独立 `creative_work` Task/Resource | Primary、显式下游 Operation |
 | 并行聚合与恢复 | OperationBatch + collecting Wait | Assistant continuation |
 
 ## 权威入口
 
-- Chapter 创作判断：`creative_work(outputKind=chapter_plan)` 与相关 Skill；领域投影的显式采用：`adopt_chapters`。
-- Creative Worker 输出协议：`src/lib/creative-worker/output-registry.ts`。
-- Chapter 最小上下文：`src/lib/creative-worker/context-compiler.ts`、`src/lib/edit-chapter/creative-context-service.ts`。
-- Primary 规划规则：`src/lib/ai-prompts/templates/project-agent/system/**`；它只能提供判断标准，不能实现服务端分支。
-- 并行与恢复：`src/lib/project-agent/operation-batch.ts`、`waits.ts` 与 Task terminal continuation。
+- 专业输出与 Skill：`src/lib/creative-worker/output-registry.ts`、`src/lib/creative-skills/skills/chapter-continuity-planning/SKILL.md`。
+- 严格 Schema：`src/lib/story-canon/schemas.ts`。
+- 唯一采用入口：`adopt_chapter_continuity_plan`、`src/lib/story-canon/service.ts`。
+- Chapter Context：`src/lib/creative-worker/context-compiler.ts`、`src/lib/edit-chapter/creative-context-service.ts`。
+- 并行与恢复：既有 OperationBatch、Wait 与 Task terminal continuation。
+
+## 时序
+
+1. Primary 确认至少两个 Chapter 有实际价值，或用户明确要求。
+2. 一次委派以精确 screenplay Resource 生成一个 `chapter_continuity_plan` Resource。
+3. `adopt_chapter_continuity_plan` 回库校验 Resource、scope、Lineage、Canon 和 Chapter 范围。
+4. 同一事务写 Canon 投影并原子替换全部 Chapter，二者使用同一 Resource/version。
+5. 后续按需以精确 Chapter IDs 并行委派局部任务；Context Compiler 从同一计划派生最小上下文。
 
 ## 验证
 
-- Operation/Task conformance 应证明 Chapter、Story Canon 与 continuity analysis 是独立能力，没有自动下游提交或 WorkerGroup identity。
-- 不使用 Chapter、多个 Chapter 并行、Story Canon/Chapter 独立采用和刷新后的内容一致性依赖真实模型规划，作为人工产品复验；不再以 Prompt token guard 或脚本 Journey 伪装模型行为证据。
+- 生产 Registry conformance 应证明旧 `story_canon`、`chapter_plan`、`continuity_analysis` output kind 和两个旧采用入口不存在，且新 output kind 恰好绑定一个专业 Skill。
+- strict Schema 应拒绝少于两个 Chapter、索引不连续、范围重叠和单章超过 180 秒。
+- 原子采用的事务、重复采用和替换 identity 需要真实数据库边界验证；模型是否正确选择分章和边界仍需人工产品复验。
 
 ## 历史回归
 
-- 旧 Edit-first 把确认剧本、Story Canon、Chapter、核心剪辑、资产和视频编码成连续阶段；自由 Operation registry 上线后仍保留这条“专业主链”，形成两个入口和两个状态解释器。首次修正只把 WorkflowView 降级为 recommendation，没有删除 splitter、固定 Choice、旧 writer 与 stage Golden，因此真实剧本成功后仍弹出“确认剧本，生成制作规划”。当前删除整条流程解释权，Chapter 只作为独立事实存在。
-- 首次长视频修正用 `>180s` 自动启用 Source/Story Canon/Chapter，并把 15–180 秒写成另一固定配方。它能提醒模型注意上下文，却把启发式变成第二工作流，无法表达短但多线并行、长但单场连续等真实情况。当前只保留 Primary 可见的强信号，代码没有时长分支。
-- 旧 splitter 在采用 Story Canon 的同一事务创建全部 Chapter，导致 Story Canon writer 同时拥有执行分组；随后 `delegation.source=chapters` 容易被误解为持久 WorkerGroup。当前 Story Canon 与 Chapter writer 分离，一个 Chapter 一个 Task，批量只属于既有 Wait 聚合协议。
-- Chapter 委派曾把 `chapter.targetDurationSec` 直接写成下游 `targetDurationSeconds`，使规划估时未经区分成为视频交付硬预算：Worker 必须让分段之和精确等于它，估算虚高部分只能由拖慢的表演填满。当前删除该自动映射，交付时长只由调用方显式 `durationIntent` 决定，Chapter 估时退回规划与上限校验职责，仍作为参考事实进入编译上下文。
-- Chapter 投影最初按 `(episodeId, chapterIndex)` upsert；采用新计划时数据库 ID 不变但标题、范围和事件已全部替换，使 provenance 中的 chapterId 同时表示“位置”和“叙事单元”。当前同 Plan 重试保留 IDs，不同 Plan 原子 delete+create，位置只在单个计划内部有意义。
-- Project 删除曾同时级联 Episode、Source Document 与 Story Canon；Story Canon 对 Source Document 的 `RESTRICT` 会在两条级联路径完成前拒绝删除。单独的权限 Golden 只删空项目，自由 Resource Golden 又不删除，因而没有反证这个真实组合。当前 `delete_project` 仍是唯一入口，但先调用 Chapter Planning owner，按 Story Canon → Chapter → Source Document 的依赖顺序删除项目叙事投影，再删除 Project；外键语义和单实体 writer 均未放宽。
+- 旧 Edit-first 把 Story Canon、Chapter 和媒体生产编码成固定阶段；随后虽改为自由 Operation，仍留下三个专业 output kind、两个采用 writer 和一个可被误用为成片审计的 `continuity_analysis`。真实单 Episode 在没有 Chapter 时也生成了“审看十段成片”的连续性报告，而 Worker 实际没有媒体读取能力。
+- 第一轮长视频修正只取消 `>180s` 代码分支，却继续让 Story Canon、Chapter Plan 和 continuity analysis 由模型分别决定、分别生成、分别采用，产生中间状态和职责重叠。当前删除三个旧 output kind、两个旧采用入口和 `continuity-memory`，改为一个计划 Resource 与一次原子采用。
+- Chapter 曾按 `(episodeId, chapterIndex)` upsert，使新计划复用旧 ID 并漂移叙事 identity。当前同 Plan 重试保留 IDs，不同 Plan 原子 delete+create。
+- Chapter 估时曾被直接写成下游视频固定时长，导致规划估计变成交付预算。当前 `targetDurationSec` 只用于规划和每章上限；视频时长仍只由显式 `durationIntent` 裁决。
 
 ## 修改检查表
 
-1. Chapter 是否仍是可选独立事实，而不是阶段或时长分支？
-2. Story Canon、continuity analysis、Chapter 是否各有唯一 writer，且互不自动创建？
-3. 每个输入是否只引用精确 Resource ID 并由服务端回读，而非最近记录、内容副本或确认副本？
-4. 多 Chapter 是否只复用 OperationBatch/Wait，没有 WorkerGroup 或第二恢复协议？
-5. Context Compiler 是否纯派生且 fail closed？
-6. UI/Canvas 是否只显示真实事实，没有阶段、下一步或伪造 Lineage？
+1. 是否只在至少两个 Chapter 或用户明确要求时委派？
+2. Canon 与全部 Chapters 是否来自同一个 Resource/version 和同一采用事务？
+3. 是否仍存在旧 output kind、旧采用入口、第二 Canon 或成片 continuity analysis？
+4. Context Compiler 是否只派生局部事实且 fail closed？
+5. 并行是否只复用既有 Task Batch/Wait？

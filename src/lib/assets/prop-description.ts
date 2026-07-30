@@ -1,11 +1,9 @@
-import { removePropPromptSuffix } from '@/lib/constants'
-
 function normalizeText(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
 export function normalizePropVisualDescription(description: string | null | undefined): string {
-  return removePropPromptSuffix(normalizeText(description))
+  return normalizeText(description)
 }
 
 export function resolvePropVisualDescription(input: {

@@ -1,7 +1,7 @@
 export const CREATIVE_SKILL_IDS = [
   'creative-core',
   'story-development',
-  'continuity-memory',
+  'chapter-continuity-planning',
   'creative-direction',
   'asset-development',
   'video-direction',

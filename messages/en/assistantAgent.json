@@ -40,8 +40,10 @@
   "reasoning": {
     "running": "Thinking",
     "completed": "Thinking complete",
+    "failed": "Execution failed",
     "executionRunning": "Working · {count, plural, one {# tool called} other {# tools called}}",
-    "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}"
+    "executionCompleted": "Work complete · {count, plural, one {# tool call} other {# tool calls}}",
+    "executionFailed": "Execution failed · {count, plural, one {# tool call} other {# tool calls}}"
   },
   "subagents": {
     "label": "Subagent",
@@ -74,9 +76,7 @@
     },
     "outputKinds": {
       "screenplay": "Screenplay",
-      "storyCanon": "Story Canon",
-      "continuityAnalysis": "Continuity Analysis",
-      "chapterPlan": "Chapter Planning",
+      "chapterContinuityPlan": "Chapter Continuity Plan",
       "creativeDirection": "Creative Direction",
       "assetManifest": "Asset Manifest",
       "videoPromptSet": "Video Generation Design",
@@ -148,7 +148,8 @@
     "title": "Tool Call",
     "success": "Success",
     "submitted": "Submitted",
-    "taskCount": "{count} tasks",
+    "progressSummary": "{succeeded} succeeded · {failed} failed · {canceled} canceled · {running} running",
+    "partial": "Partially completed",
     "failed": "Failed",
     "interrupted": "Not completed",
     "failedDetail": "The operation could not be completed. Please retry.",
@@ -210,6 +211,8 @@
     "projectContext": "Project Context",
     "workspaceLabel": "Workspace",
     "toolErrorBoundary": "Tool call failed",
+    "toolErrorCorrection": "Correct the operation input or configuration, then retry.",
+    "toolErrorListSeparator": ", ",
     "confirmationRequired": "Confirmation required",
     "billingQuotePreview": "Billing preview for the generation task",
     "billingActionSummary": "Generate {items}",
@@ -237,7 +240,7 @@
     "choiceCustomOptionLabel": "Other {label}",
     "choiceCustomOptionPlaceholder": "Other {label}",
     "choiceCustomOptionSubmit": "Select other {label}",
-    "contextCompacted": "Condensed {count} earlier conversation records"
+    "contextCompacted": "Compressed {count} earlier context records"
   },
   "choiceCard": {
     "groupProgress": "Question {current} of {total}"

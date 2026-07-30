@@ -10,7 +10,10 @@ import {
   type CompiledCreativeChapterContextResult,
   type CreativeContextAsset,
 } from '@/lib/creative-worker'
-import { normalizeStoryCanonResourceBundle } from '@/lib/story-canon'
+import {
+  chapterContinuityPlanOutputSchema,
+  normalizeStoryCanonResourceBundle,
+} from '@/lib/story-canon'
 import type { LedgerEntityRef } from '@/lib/edit-ledger'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -64,46 +67,35 @@ interface ResolvedCreativeContextResource {
   readonly content: CreativeResourceContent
 }
 
-const exactResourceSchema = z.object({
-  resourceId: z.string().trim().min(1),
-}).strict()
-
 const chapterProvenanceSchema = z.object({
   sourceResourceId: z.string().trim().min(1),
-  chapterPlanResourceId: z.string().trim().min(1),
-  storyCanon: exactResourceSchema.nullable(),
-  contextResources: z.array(exactResourceSchema.extend({
-    schemaId: z.string().trim().min(1),
-  }).strict()),
+  chapterContinuityPlanResourceId: z.string().trim().min(1),
   beatIds: z.array(z.string().trim().min(1)),
   eventIds: z.array(z.string().trim().min(1)),
 }).strict()
 
-type ExactResourceRef = z.infer<typeof exactResourceSchema>
-
-function exactReferenceKey(reference: ExactResourceRef): string {
-  return reference.resourceId
+interface ExactResourceRef {
+  readonly resourceId: string
 }
 
-async function resolveOptionalStoryCanonBundle(input: {
+async function resolveChapterContinuityPlanBundle(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
   readonly sourceResourceId: string
   readonly sourceText: string
-  readonly reference: ExactResourceRef | null
+  readonly reference: ExactResourceRef
 }) {
-  if (!input.reference) return null
   const resource = await prisma.creativeResource.findFirst({
     where: {
       id: input.reference.resourceId,
       userId: input.userId,
       projectId: input.projectId,
-      episodeId: null,
+      episodeId: input.episodeId,
       status: 'ready',
       materializedAt: { not: null },
       mediaType: 'text',
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN,
       sourceType: 'CreativeWorkResult',
     },
     select: {
@@ -120,8 +112,9 @@ async function resolveOptionalStoryCanonBundle(input: {
   ) {
     fail('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', { resourceId: input.reference.resourceId })
   }
+  const plan = chapterContinuityPlanOutputSchema.parse(resource.contentJson)
   return normalizeStoryCanonResourceBundle({
-    rawBundle: resource.contentJson,
+    rawBundle: plan.storyCanon,
     sourceText: input.sourceText,
   })
 }
@@ -272,19 +265,11 @@ export async function compileEpisodeChapterContexts(
     }
     return { chapter, provenance: provenance.data }
   })
-  const storyCanonRefs = new Map<string, ExactResourceRef>()
-  const storyCanonRefKeys = new Set<string>()
-  for (const parsed of parsedChapters) {
-    if (parsed.provenance.storyCanon) {
-      const key = exactReferenceKey(parsed.provenance.storyCanon)
-      storyCanonRefKeys.add(key)
-      storyCanonRefs.set(key, parsed.provenance.storyCanon)
-    } else {
-      storyCanonRefKeys.add('none')
-    }
-  }
-  if (storyCanonRefKeys.size > 1) {
-    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterStoryCanonResources' })
+  const planResourceIds = new Set(
+    parsedChapters.map((parsed) => parsed.provenance.chapterContinuityPlanResourceId),
+  )
+  if (planResourceIds.size !== 1) {
+    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterContinuityPlanResources' })
   }
   const firstChapter = parsedChapters[0]
   if (!firstChapter) fail('CREATIVE_CONTEXT_CHAPTER_NOT_FOUND', { episodeId: input.episodeId })
@@ -292,13 +277,17 @@ export async function compileEpisodeChapterContexts(
   if (commonSourceResourceIds.size !== 1) {
     fail('CREATIVE_CONTEXT_SOURCE_MISMATCH', { episodeId: input.episodeId })
   }
-  const storyCanonBundle = await resolveOptionalStoryCanonBundle({
+  const chapterContinuityPlanResourceId = planResourceIds.values().next().value
+  if (!chapterContinuityPlanResourceId) {
+    fail('CREATIVE_CONTEXT_INPUT_INVALID', { label: 'chapterContinuityPlanResourceId' })
+  }
+  const storyCanonBundle = await resolveChapterContinuityPlanBundle({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
     sourceResourceId: firstChapter.provenance.sourceResourceId,
     sourceText: firstChapter.chapter.sourceDocument.normalizedText,
-    reference: storyCanonRefs.values().next().value ?? null,
+    reference: { resourceId: chapterContinuityPlanResourceId },
   })
   const referencedAssets = referencedResources.map((resource) => resource.asset)
   const chapterById = new Map(parsedChapters.map((parsed) => [parsed.chapter.id, parsed.chapter]))

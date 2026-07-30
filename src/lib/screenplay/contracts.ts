@@ -30,9 +30,7 @@ const assetManifestItemWorkerSchema = z.object({
   canonicalName,
   aliases: textList(64, 300),
   stableDescription: z.string().min(1).max(16_000)
-    .describe('Stable visible identity and structure only; exclude transient action and project visual-style wording.'),
-  generationPrompt: z.string().min(1).max(24_000)
-    .describe('Final asset image prompt using the exact supplied Creative Direction and the grounded asset facts.'),
+    .describe('Stable visible identity and structure only. Exclude transient action, framing, layout, background format, multi-view instructions, provider parameters, and any final-prompt wording.'),
 }).strict()
 
 export const assetManifestWorkerOutputSchema = z.object({

@@ -23,9 +23,7 @@ import { CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT } from './system-constraints'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay,
-  creativeWorkOutputSchemas.story_canon,
-  creativeWorkOutputSchemas.chapter_plan,
-  creativeWorkOutputSchemas.continuity_analysis,
+  creativeWorkOutputSchemas.chapter_continuity_plan,
   creativeWorkOutputSchemas.creative_direction,
   creativeWorkOutputSchemas.asset_manifest,
   creativeWorkOutputSchemas.video_prompt_set,
@@ -321,12 +319,8 @@ export function summarizeCreativeWorkOutput(output: CreativeWorkOutput): string 
   switch (output.kind) {
     case 'screenplay':
       return output.logline || output.synopsis || output.title
-    case 'story_canon':
-      return output.bundle.storyCanon.logline || output.bundle.storyCanon.synopsis
-    case 'chapter_plan':
+    case 'chapter_continuity_plan':
       return output.rationale
-    case 'continuity_analysis':
-      return output.summary
     case 'creative_direction':
       return output.creativeDirection.styleSummary
     case 'asset_manifest':

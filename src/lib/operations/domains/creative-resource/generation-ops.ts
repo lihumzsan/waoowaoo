@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import {
-  applyAssetImageFormatPolicy,
+  compileAssetImagePrompt,
   getAssetImageFormatPolicy,
   resolveAssetImageKindForSchemaId,
 } from '@/lib/asset-generation'
@@ -19,6 +19,7 @@ import type {
 } from '@/lib/ai-registry/types'
 import { supportsTextToVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import { getProjectModelConfig } from '@/lib/config-service'
+import { creativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import {
   CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
@@ -211,7 +212,7 @@ const createAssetImageRequestSchema = z.object({
   name: z.string().trim().min(1).max(200).optional()
     .describe('Optional display name for the generated asset image Resource.'),
   prompt: z.string().trim().min(1)
-    .describe('Complete visual design instruction for this exact Project asset.'),
+    .describe('Stable visible design of this exact Project asset. Do not include aspect ratio, layout, background format, multi-view instructions, or provider parameters; the server compiles the final prompt.'),
   contextReferences: contextReferenceSchema,
   imageReferences: imageReferenceSchema,
   assetBinding: z.object({
@@ -226,7 +227,7 @@ const createAssetImageRequestSchema = z.object({
 const createImageManifestAssetsRequestSchema = z.object({
   kind: z.literal('manifest_assets'),
   resourceId: z.string().trim().min(1).max(32)
-    .describe('Exact currently adopted project.asset_manifest Resource. The server reads every selected asset\'s final generationPrompt and asset binding directly and creates one image Task per asset; do not copy or rewrite prompts.'),
+    .describe('Exact currently adopted project.asset_manifest Resource. The server compiles every selected asset from stableDescription, its frozen Creative Direction, and the asset-format policy, then creates one image Task per asset.'),
   manifestAssetIds: z.array(z.string().trim().min(1).max(80)).max(1_024).optional()
     .describe('Exact manifestAssetId subset to generate now. Omit or pass an empty array to generate every asset in the adopted manifest.'),
 }).strict()
@@ -1441,8 +1442,9 @@ async function planNewMediaGeneration(
     }
   }
   const prompt = assetImageKind
-    ? applyAssetImageFormatPolicy({
-        prompt: input.prompt,
+    ? compileAssetImagePrompt({
+        stableDescription: input.prompt,
+        creativeDirection: null,
         kind: assetImageKind,
         locale: resolveOperationLocale(ctx.context),
       })
@@ -2221,7 +2223,28 @@ async function planManifestAssetImageGeneration(
       schemaId: CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
       sourceType: 'CreativeWorkResult',
     },
-    select: { id: true, contentJson: true },
+    select: {
+      id: true,
+      contentJson: true,
+      outputLineage: {
+        where: { role: 'creative_direction' },
+        select: {
+          inputResource: {
+            select: {
+              id: true,
+              userId: true,
+              projectId: true,
+              episodeId: true,
+              status: true,
+              materializedAt: true,
+              mediaType: true,
+              schemaId: true,
+              contentJson: true,
+            },
+          },
+        },
+      },
+    },
   })
   if (!manifestResource || manifestResource.contentJson === null) {
     throw new ApiError('NOT_FOUND', {
@@ -2232,6 +2255,28 @@ async function planManifestAssetImageGeneration(
   const manifest = validateAssetManifest({
     manifest: assetManifestSchema.parse(manifestResource.contentJson),
   })
+  if (manifestResource.outputLineage.length > 1) {
+    throw new Error(`ASSET_MANIFEST_CREATIVE_DIRECTION_LINEAGE_AMBIGUOUS:${manifestResource.id}`)
+  }
+  const creativeDirectionResource = manifestResource.outputLineage[0]?.inputResource ?? null
+  if (
+    creativeDirectionResource
+    && (
+      creativeDirectionResource.userId !== ctx.userId
+      || creativeDirectionResource.projectId !== ctx.projectId
+      || creativeDirectionResource.episodeId !== null
+      || creativeDirectionResource.status !== 'ready'
+      || creativeDirectionResource.materializedAt === null
+      || creativeDirectionResource.mediaType !== 'text'
+      || creativeDirectionResource.schemaId !== CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION
+      || creativeDirectionResource.contentJson === null
+    )
+  ) {
+    throw new Error(`ASSET_MANIFEST_CREATIVE_DIRECTION_LINEAGE_INVALID:${manifestResource.id}`)
+  }
+  const creativeDirection = creativeDirectionResource
+    ? creativeDirectionSchema.parse(creativeDirectionResource.contentJson)
+    : null
   if (manifest.assets.length === 0) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'ASSET_MANIFEST_ASSETS_EMPTY',
@@ -2399,8 +2444,9 @@ async function planManifestAssetImageGeneration(
     const resource = resources[candidateIndex]
     if (!resource) throw new Error(`ASSET_MANIFEST_IMAGE_RESOURCE_PLAN_MISSING:${String(candidateIndex)}`)
     const schemaId = getAssetImageFormatPolicy(entry.asset.kind).schemaId
-    const prompt = applyAssetImageFormatPolicy({
-      prompt: entry.asset.generationPrompt,
+    const prompt = compileAssetImagePrompt({
+      stableDescription: entry.asset.stableDescription,
+      creativeDirection,
       kind: entry.asset.kind,
       locale,
     })
@@ -2423,11 +2469,20 @@ async function planManifestAssetImageGeneration(
       publicInput,
       projectConfig: boundState?.projectConfig,
     })
-    const inputs: CreativeResourceInputRef[] = [{
-      resourceId: manifestResource.id,
-      role: 'asset_manifest',
-      position: 0,
-    }]
+    const inputs: CreativeResourceInputRef[] = [
+      {
+        resourceId: manifestResource.id,
+        role: 'asset_manifest',
+        position: 0,
+      },
+      ...(creativeDirectionResource
+        ? [{
+            resourceId: creativeDirectionResource.id,
+            role: 'creative_direction' as const,
+            position: 1,
+          }]
+        : []),
+    ]
     const inputHash = hashTaskInput({
       operationId: IMAGE_CONFIG.operationId,
       manifestResourceId: manifestResource.id,
@@ -2823,7 +2878,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_image: defineOperation({
       id: 'create_image',
-      summary: 'Generate image Resources. Use request.kind=new for independent images. Use request.kind=manifest_assets with only the adopted project.asset_manifest resourceId to generate Project asset reference images; the server reads every selected asset\'s final generationPrompt, binding, fixed format, ratio, and defaults directly — never copy manifest prompts. Use request.kind=asset with the exact assetBinding only for one asset image that has no manifest entry. To retry, use request.kind=retry with only exact failed Resource IDs.',
+      summary: 'Generate image Resources. Use request.kind=new for independent images. Use request.kind=manifest_assets with only the adopted project.asset_manifest resourceId to generate Project asset reference images; the server compiles every selected asset from its stable design, frozen Creative Direction, fixed format, ratio, and defaults. Use request.kind=asset with the exact assetBinding only for one asset image that has no manifest entry. To retry, use request.kind=retry with only exact failed Resource IDs.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {

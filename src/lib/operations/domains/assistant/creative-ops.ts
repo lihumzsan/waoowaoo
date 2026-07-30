@@ -274,14 +274,18 @@ async function hydrateExactResourceMaterials(input: {
         agentRetryableAfterCorrection: true,
       })
     }
-    if (request.outputKind === 'asset_manifest') {
-      const screenplaySources = resourceSchemas.filter(
-        (source) => source.schemaId === CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
+    const outputDefinition = readCreativeWorkOutputDefinition(request.outputKind)
+    for (const requiredSchemaId of outputDefinition.requiredSourceSchemaIds) {
+      const matchingSources = resourceSchemas.filter(
+        (source) => source.schemaId === requiredSchemaId,
       )
-      if (screenplaySources.length !== 1) {
+      if (matchingSources.length !== 1) {
         throw new ApiError('INVALID_PARAMS', {
-          code: 'ASSET_MANIFEST_SCREENPLAY_SOURCE_REQUIRED',
+          code: 'CREATIVE_WORK_REQUIRED_RESOURCE_SOURCE_INVALID',
           field: 'sourceMaterials',
+          outputKind: request.outputKind,
+          requiredSchemaId,
+          actualCount: matchingSources.length,
           agentRetryableAfterCorrection: true,
         })
       }

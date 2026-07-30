@@ -363,7 +363,11 @@ export async function listProjectCreativeResourceCards(input: {
       ...(input.status ? { status: input.status } : {}),
     },
     include: resourceInclude,
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    orderBy: [
+      { createdAt: 'asc' },
+      { candidateIndex: { sort: 'asc', nulls: 'last' } },
+      { id: 'asc' },
+    ],
     take: limit,
   })
   const pending = await loadPendingGenerations(client, rows.map((row) => row.id))

@@ -9,9 +9,7 @@ export const CREATIVE_RESOURCE_SCHEMA = {
   GENERIC_IMAGE: 'generic.image',
   GENERIC_VIDEO: 'generic.video',
   SCREENPLAY: 'project.screenplay',
-  STORY_CANON: 'project.story_canon',
-  CHAPTER_PLAN: 'project.chapter_plan',
-  CONTINUITY_ANALYSIS: 'project.continuity_analysis',
+  CHAPTER_CONTINUITY_PLAN: 'project.chapter_continuity_plan',
   CREATIVE_DIRECTION: 'project.creative_direction',
   ASSET_MANIFEST: 'project.asset_manifest',
   VIDEO_PROMPT_SET: 'project.video_prompt_set',
@@ -79,26 +77,20 @@ const STRUCTURED_SUMMARY_PROJECTORS: Partial<
       stringValue(object, 'screenplayText'),
     )
   },
-  [CREATIVE_RESOURCE_SCHEMA.STORY_CANON]: (data) => {
-    const storyCanon = objectField(objectValue(data), 'storyCanon')
+  [CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN]: (data) => {
+    const plan = objectValue(data)
+    const storyCanonBundle = objectField(plan, 'storyCanon')
+    const storyCanon = objectField(storyCanonBundle, 'storyCanon')
+    const firstChapter = objectValue(arrayField(plan, 'chapters')[0] ?? null)
     return firstText(
       stringValue(storyCanon, 'logline'),
       stringValue(storyCanon, 'synopsis'),
       stringValue(storyCanon, 'title'),
-    )
-  },
-  [CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN]: (data) => {
-    const object = objectValue(data)
-    const firstChapter = objectValue(arrayField(object, 'chapters')[0] ?? null)
-    return firstText(
-      stringValue(object, 'rationale'),
+      stringValue(plan, 'rationale'),
       stringValue(firstChapter, 'summary'),
       stringValue(firstChapter, 'title'),
     )
   },
-  [CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS]: (data) => (
-    stringValue(objectValue(data), 'summary')
-  ),
   [CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION]: (data) => (
     stringValue(objectValue(data), 'styleSummary')
   ),
@@ -127,9 +119,7 @@ export const CREATIVE_RESOURCE_SCHEMA_IDS_BY_MEDIA = {
   text: [
     CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
     CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
-    CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
-    CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
-    CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS,
+    CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN,
     CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET,

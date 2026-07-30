@@ -40,8 +40,10 @@
   "reasoning": {
     "running": "思考中",
     "completed": "思考完成",
+    "failed": "执行失败",
     "executionRunning": "执行中 · 已调用 {count} 次工具",
-    "executionCompleted": "执行完成 · 调用 {count} 次工具"
+    "executionCompleted": "执行完成 · 调用 {count} 次工具",
+    "executionFailed": "执行失败 · 调用 {count} 次工具"
   },
   "subagents": {
     "label": "Subagent",
@@ -74,9 +76,7 @@
     },
     "outputKinds": {
       "screenplay": "剧本",
-      "storyCanon": "故事设定集",
-      "continuityAnalysis": "连续性分析",
-      "chapterPlan": "章节规划",
+      "chapterContinuityPlan": "跨 Chapter 连续性规划",
       "creativeDirection": "创作方向",
       "assetManifest": "资产设计清单",
       "videoPromptSet": "视频生成设计",
@@ -148,7 +148,8 @@
     "title": "工具调用",
     "success": "成功",
     "submitted": "已提交",
-    "taskCount": "{count} 个任务",
+    "progressSummary": "成功 {succeeded} · 失败 {failed} · 取消 {canceled} · 进行中 {running}",
+    "partial": "部分完成",
     "failed": "失败",
     "interrupted": "未完成",
     "failedDetail": "操作未能完成，请重试。",
@@ -210,6 +211,8 @@
     "projectContext": "项目上下文",
     "workspaceLabel": "工作区",
     "toolErrorBoundary": "工具调用失败",
+    "toolErrorCorrection": "请修正该操作的输入或配置后重试。",
+    "toolErrorListSeparator": "、",
     "confirmationRequired": "需要确认",
     "billingQuotePreview": "即将提交的生成任务计费预览",
     "billingActionSummary": "生成 {items}",
@@ -237,7 +240,7 @@
     "choiceCustomOptionLabel": "其他{label}",
     "choiceCustomOptionPlaceholder": "其他{label}",
     "choiceCustomOptionSubmit": "选择其他{label}",
-    "contextCompacted": "已压缩较早的 {count} 条对话记录"
+    "contextCompacted": "已压缩较早的 {count} 条上下文记录"
   },
   "choiceCard": {
     "groupProgress": "第 {current} / {total} 组"

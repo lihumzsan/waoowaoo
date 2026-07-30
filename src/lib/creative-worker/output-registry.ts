@@ -1,8 +1,6 @@
 import { z } from 'zod'
-import {
-  creativeChapterPlanOutputSchema,
-  rawStoryCanonBundleSchema,
-} from '@/lib/story-canon/schemas'
+import { chapterContinuityPlanOutputSchema } from '@/lib/story-canon/schemas'
+import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import { creativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import {
   assetManifestWorkerOutputSchema,
@@ -16,34 +14,6 @@ const nullableText = (max: number) => z.string().max(max).nullable()
 const textList = (maxItems: number, maxLength: number) => z.array(
   z.string().trim().min(1).max(maxLength),
 ).max(maxItems)
-
-const storyCanonBundleOutputSchema = z.object({
-  kind: z.literal('story_canon'),
-  bundle: rawStoryCanonBundleSchema,
-  assumptions: textList(64, 2_000),
-  warnings: textList(64, 2_000),
-}).strict()
-
-const continuityAnalysisOutputSchema = z.object({
-  kind: z.literal('continuity_analysis'),
-  summary: z.string().min(1).max(20_000),
-  canonFacts: z.array(z.object({
-    subject: z.string().trim().min(1).max(300),
-    fact: z.string().min(1).max(4_000),
-    scope: z.string().min(1).max(1_000),
-    source: nullableText(2_000),
-    confidence: z.enum(['explicit', 'inferred', 'proposed']),
-  }).strict()).max(2_000),
-  stateTransitions: z.array(z.object({
-    subject: z.string().trim().min(1).max(300),
-    before: nullableText(3_000),
-    change: z.string().min(1).max(4_000),
-    after: z.string().min(1).max(3_000),
-    source: nullableText(2_000),
-  }).strict()).max(2_000),
-  unresolved: textList(256, 4_000),
-  assumptions: textList(64, 2_000),
-}).strict()
 
 const creativeDirectionOutputSchema = z.object({
   kind: z.literal('creative_direction'),
@@ -92,9 +62,7 @@ const musicDirectionOutputSchema = z.object({
 
 export const creativeWorkOutputSchemas = {
   screenplay: screenplayWorkerOutputSchema,
-  story_canon: storyCanonBundleOutputSchema,
-  chapter_plan: creativeChapterPlanOutputSchema,
-  continuity_analysis: continuityAnalysisOutputSchema,
+  chapter_continuity_plan: chapterContinuityPlanOutputSchema,
   creative_direction: creativeDirectionOutputSchema,
   asset_manifest: assetManifestWorkerOutputSchema,
   video_prompt_set: videoPromptSetOutputSchema,
@@ -113,6 +81,7 @@ export interface CreativeWorkOutputDefinition {
   injectCreativeDirection: boolean
   systemConstraints: readonly CreativeWorkSystemConstraintId[]
   workerTools: readonly ('web_search')[]
+  requiredSourceSchemaIds: readonly string[]
 }
 
 export const creativeWorkOutputRegistry = {
@@ -124,33 +93,17 @@ export const creativeWorkOutputRegistry = {
     injectCreativeDirection: true,
     systemConstraints: [],
     workerTools: [],
+    requiredSourceSchemaIds: [],
   },
-  story_canon: {
-    kind: 'story_canon',
-    professionalSkillId: 'continuity-memory',
-    schema: creativeWorkOutputSchemas.story_canon,
-    resourceScope: 'project',
-    injectCreativeDirection: true,
-    systemConstraints: [],
-    workerTools: [],
-  },
-  chapter_plan: {
-    kind: 'chapter_plan',
-    professionalSkillId: 'story-development',
-    schema: creativeWorkOutputSchemas.chapter_plan,
+  chapter_continuity_plan: {
+    kind: 'chapter_continuity_plan',
+    professionalSkillId: 'chapter-continuity-planning',
+    schema: creativeWorkOutputSchemas.chapter_continuity_plan,
     resourceScope: 'episode',
     injectCreativeDirection: true,
     systemConstraints: [],
     workerTools: [],
-  },
-  continuity_analysis: {
-    kind: 'continuity_analysis',
-    professionalSkillId: 'continuity-memory',
-    schema: creativeWorkOutputSchemas.continuity_analysis,
-    resourceScope: 'episode',
-    injectCreativeDirection: true,
-    systemConstraints: [],
-    workerTools: [],
+    requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
   creative_direction: {
     kind: 'creative_direction',
@@ -160,6 +113,7 @@ export const creativeWorkOutputRegistry = {
     injectCreativeDirection: false,
     systemConstraints: ['human_visual_safety'],
     workerTools: ['web_search'],
+    requiredSourceSchemaIds: [],
   },
   asset_manifest: {
     kind: 'asset_manifest',
@@ -169,6 +123,7 @@ export const creativeWorkOutputRegistry = {
     injectCreativeDirection: true,
     systemConstraints: ['human_visual_safety'],
     workerTools: [],
+    requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
   video_prompt_set: {
     kind: 'video_prompt_set',
@@ -178,6 +133,7 @@ export const creativeWorkOutputRegistry = {
     injectCreativeDirection: true,
     systemConstraints: ['human_visual_safety'],
     workerTools: [],
+    requiredSourceSchemaIds: [],
   },
   music_direction: {
     kind: 'music_direction',
@@ -187,6 +143,7 @@ export const creativeWorkOutputRegistry = {
     injectCreativeDirection: true,
     systemConstraints: [],
     workerTools: [],
+    requiredSourceSchemaIds: [],
   },
 } as const satisfies Record<CreativeWorkOutputKind, CreativeWorkOutputDefinition>
 

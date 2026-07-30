@@ -493,6 +493,7 @@
       "title": "资产 Scope 所有权",
       "sourcePaths": [
         "src/lib/assets/services/asset-scope-ownership.ts",
+        "src/lib/assets/prop-description.ts",
         "src/lib/assets/services/asset-actions.ts",
         "src/lib/assets/services/project-asset-writer.ts",
         "src/lib/assets/services/location-backed-assets.ts",

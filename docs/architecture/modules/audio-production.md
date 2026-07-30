@@ -17,9 +17,9 @@
 - **AP-05 — 最终混音只消费精确输入。** 混音必须显式列出有序视频 Resource ID、可选音乐 Resource ID、时间范围和 automation；stitched video duration 是输出时长权威。所有输入先由服务端回库验证 owner/scope/content，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。不得从“当前 BGM”“最近音乐”或旧 BgmDesign 推断。
 - **AP-06 — 声音能力不产生后续链。** 音乐 Task 终态只恢复 Primary；Choice 只处理当前音频选择决定；采用某个音频 Resource 不渲染视频。收费 Approval 只授权当前精确媒体计划，不能授权未来混音或渲染。
 - **AP-07 — 被删除能力不得残留入口。** 旧固定 BGM plan/generate、环境音/音效规划、专用 Canvas stage、TaskType、worker writer、状态字段和 Workflow recommendation 必须删除；历史名字只可出现在迁移删除语句或历史说明。
-- **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice` 每次创建一个新的不可变音色 Resource；Agent 只提交描述、试听文字、语言、显示名与可选绑定目标。服务端解析正式 Voice Design 模型，报价和结算按同一冻结试听文字计算。
-- **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。生成期间发生较新换绑时保留新 Resource 并返回显式 conflict。
-- **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Resource，缺失则按剧本、用户要求和已有角色事实调用 `generate_voice target=character`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Resource 与音色设计描述作为 Worker source material，Worker 把精确 Resource ID 写入 Prompt Set，执行层按顺序映射为 `@AudioN`；试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 Resource，也不从角色名、最新音色或试听内容推断引用。
+- **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice.request.kind=single|characters` 是唯一生成契约：`single` 创建一个新的不可变音色 Resource，`characters` 在一个精确 Operation Plan 中展开所列角色，每个成员创建一个独立 Resource 与 Task；整批只形成一次总报价和一次批准，成员终态彼此独立，部分失败不会撤销成功成员，后续显式调用只需重新提交失败角色。Agent 为每个成员提交描述、试听文字、语言和显示名，角色成员还必须提交精确角色 ID；服务端解析同一个正式 Voice Design 模型，并按每个 Task 冻结的试听文字分别计费、汇总报价。两种分支都复用通用 OperationBatch/Wait，不建立音色专用批次状态。
+- **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。单个或批量生成都在计划时分别冻结每个角色的 Binding version；生成期间发生较新换绑时保留对应的新 Resource 并返回显式 conflict，其他成员不受影响。
+- **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Resource，缺失一个时按剧本、用户要求和已有角色事实调用 `generate_voice` 的 `request.kind=single + request.target.kind=character`，同时缺失多个时使用一次 `request.kind=characters`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Resource 与音色设计描述作为 Worker source material，Worker 把精确 Resource ID 写入 Prompt Set，执行层按顺序映射为 `@AudioN`；试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 Resource，也不从角色名、最新音色或试听内容推断引用。
 - **AP-10 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未生成中、未绑定且未被 Lineage 引用的音色 Resource；MediaObject 仍由独立生命周期拥有。
 - **AP-12 — 视频条件音乐生成由 capability registry 唯一裁决。** `create_audio` 只可在 `videoReference` 携带恰好一个 ready 视频 Resource 作为音乐模型的画面条件输入；是否允许只由生产 music capability 的 `maxReferenceVideos` 声明（缺失即不支持，提交前原地失败）。视频引用作为 `videoInputPositions` 冻结进 Task payload，worker 回库校验 owner/ready/mediaType 后经共享 outbound media 入口投影为有界 HTTPS 签名 URL，再交给 provider adapter；相对 route、storageKey 和 Data URL 均不得进入 Gateway。soundtrack 的时间边界跟随该视频的真实时长。整片配乐一次生成，不得拆段分别生成再拼接；不存在从“最近视频”或历史消息推断条件输入的路径。
 
@@ -51,6 +51,7 @@
 - 固定流水线删除（skills 重构）时，final-render 的 BGM 混音基元被改名保留为 `video-merge-audio.ts`，但新架构只接回了分段源音频路径：`muxVideoMergeAudio` 等 BGM 函数失去全部生产调用方，Primary 能设计并生成整片配乐，却没有任何 Operation 能把 BGM 混入成片，双语 Prompt 也在“生成整片配乐”处断链且明确禁止主动配乐。集成测试只验证基元本身，未反证“能力仍有生产入口”。当前 `merge_videos` 按 AP-05 增加可选 `music` 输入（`role=bgm_audio` 冻结进 inputs/lineage，音量冻结在 generationOptions），worker 在 BGM 分支复用同一混音基元；双语 Prompt 把超过 60 秒完整成片的配乐设为默认交付评估（spotting 判断可得出刻意不配乐），并把混音步骤显式接到 `merge_videos music`。真实端到端组合（生成 BGM → 混音 → Canvas 展示）仍是未验证盲区。
 - 固定 Qwen Voice Design 初次上线时，能力、价格、adapter 与 Binding 生命周期测试全部通过，但运行时启用模型清单没有登记该 `voice` identity，且 provider contract mock 掉了真实 runtime selection；首个真实三音色批次因此全部在 Provider HTTP 前失败。当前固定模型由 FAL production identity 同时进入 platform/API runtime catalog，真实 catalog selection 成为 provider contract 的前置断言。
 - `generate_voice` 初版用两个同级可选字段表达新建与重生成，后来虽改成 `new|regenerate` 分支，仍把新的不可变内容挂到旧 Resource identity。当前每次生成只创建新 Resource；当前角色音色只由 Binding CAS 决定，不再存在原位重生成协议。
+- 三个角色需要音色时，Primary 曾只能发出三个独立 `generate_voice` 调用，从而产生三份 Plan、报价与审批往返；底层 `OperationPlan`、批准 Task 批次、OperationBatch/Wait 和终态 CAS 本已支持多 Task，缺口只在 Voice Operation 仍把输入、metadata 和 output 固定为单成员。当前 `request.kind=characters` 由同一个 planner 展开独立成员，commit 复用既有原子批次提交，未新增审批、Task、Wait 或 Binding writer。
 
 ## 修改检查表
 
@@ -59,4 +60,4 @@
 3. provider 的单次时长能力是否只作为执行约束，而非创作分支？
 4. 混音是否只消费显式精确 Resources 与时间线？
 5. 是否仍有旧 BgmDesign/环境音 Workflow、Task、Canvas 或 writer 回流？
-6. 音色是否仍只由 `generate_voice` 与 Binding service 拥有，且 Primary 会为跨镜头复用的说话声音先取得精确 Binding、不会把单个孤立对白变成固定门禁？
+6. 音色是否仍只由 `generate_voice` 与 Binding service 拥有，多个角色是否由一次 `request.kind=characters` 形成一个计划和一次审批、每个成员保持独立 Task/终态，且 Primary 会为跨镜头复用的说话声音先取得精确 Binding、不会把单个孤立对白变成固定门禁？

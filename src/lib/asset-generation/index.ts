@@ -1,6 +1,6 @@
 export {
   ASSET_IMAGE_FORMAT_POLICIES,
-  applyAssetImageFormatPolicy,
+  compileAssetImagePrompt,
   getAssetImageFormatPolicy,
   resolveAssetImageKindForSchemaId,
   type AssetImageFormatLocale,

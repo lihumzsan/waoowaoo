@@ -23,17 +23,17 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'story-development': defineSkill({
     id: 'story-development',
-    version: '2.5.0',
+    version: '3.0.0',
     title: '故事与剧本开发',
-    summary: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill，也是 `outputKind=chapter_plan` 的章节规划 Skill；不提取生产资产或第二套实体清单。',
+    summary: '`outputKind=screenplay` 必须读取的唯一剧本创作 Skill；只创作或修改剧本，不规划 Chapter、不提取 Canon、不登记生产资产。',
     tags: ['story', 'script', 'screenplay', 'writing'],
   }),
-  'continuity-memory': defineSkill({
-    id: 'continuity-memory',
-    version: '1.6.0',
-    title: '连续性记忆',
-    summary: '`outputKind=story_canon` 与 `outputKind=continuity_analysis` 必须读取：从原文提取稳定事实、剧情节拍与持续状态，并为可选 Chapter 边界提供连续性判断。',
-    tags: ['continuity', 'canon', 'story', 'state', 'analysis'],
+  'chapter-continuity-planning': defineSkill({
+    id: 'chapter-continuity-planning',
+    version: '1.0.0',
+    title: '跨 Chapter 连续性规划',
+    summary: '`outputKind=chapter_continuity_plan` 必须读取：从一个精确剧本同时产出全局 Story Canon 与至少两个 Chapter 的连续性边界；不设计镜头、视频提示词或成片审计。',
+    tags: ['chapter', 'continuity', 'canon', 'story', 'state', 'planning'],
   }),
   'creative-direction': defineSkill({
     id: 'creative-direction',
@@ -44,9 +44,9 @@ export const CREATIVE_SKILL_REGISTRY: Readonly<Record<CreativeSkillId, CreativeS
   }),
   'asset-development': defineSkill({
     id: 'asset-development',
-    version: '2.4.0',
-    title: '资产设计与生成提示词',
-    summary: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：在一个 Task 内从精确剧本筛选可复用生产资产、设计外观并生成最终 Prompt；不生图、不写项目。',
+    version: '3.0.0',
+    title: '资产范围与视觉设计',
+    summary: '`outputKind=asset_manifest` 的唯一资产范围与设计 Skill：从精确剧本筛选可复用生产资产并记录稳定可见设计；不编写最终媒体 Prompt、不生图、不写项目。',
     tags: ['asset', 'image', 'character', 'location', 'prop', 'reference', 'candidate'],
   }),
   'video-direction': defineSkill({

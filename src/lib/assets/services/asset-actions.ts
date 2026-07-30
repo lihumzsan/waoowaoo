@@ -1,11 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import {
-  PRIMARY_APPEARANCE_INDEX,
-  removeLocationPromptSuffix,
-  removePropPromptSuffix,
-} from '@/lib/constants'
+import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { AssetKind } from '@/lib/assets/contracts'
 import {
@@ -636,10 +632,9 @@ async function updateGlobalAssetVariant(input: AssetVariantUpdateInput, transact
   if (input.kind === 'prop') {
     const trimmedDescription = normalizeString(input.body.description)
     if (!trimmedDescription) throw new ApiError('INVALID_PARAMS')
-    const cleanDescription = removePropPromptSuffix(trimmedDescription)
     const image = await transaction.globalLocationImage.update({
       where: { id: input.variantId },
-      data: { description: cleanDescription },
+      data: { description: trimmedDescription },
     })
     return { success: true, image }
   }
@@ -675,19 +670,17 @@ async function updateProjectAssetVariant(input: AssetVariantUpdateInput, transac
   if (input.kind === 'prop') {
     const trimmedDescription = normalizeString(input.body.description)
     if (!trimmedDescription) throw new ApiError('INVALID_PARAMS')
-    const cleanDescription = removePropPromptSuffix(trimmedDescription)
     const image = await transaction.locationImage.update({
       where: { id: input.variantId },
-      data: { description: cleanDescription },
+      data: { description: trimmedDescription },
     })
     return { success: true, image }
   }
   const trimmedDescription = normalizeString(input.body.description)
   if (!trimmedDescription) throw new ApiError('INVALID_PARAMS')
-  const cleanDescription = removeLocationPromptSuffix(trimmedDescription)
   const image = await transaction.locationImage.update({
     where: { id: input.variantId },
-    data: { description: cleanDescription },
+    data: { description: trimmedDescription },
   })
   return { success: true, image }
 }

@@ -28,9 +28,7 @@ export interface CreativeWorkResourceMaterializationOutput {
   readonly mediaType: 'text'
   readonly schemaId:
     | typeof CREATIVE_RESOURCE_SCHEMA.SCREENPLAY
-    | typeof CREATIVE_RESOURCE_SCHEMA.STORY_CANON
-    | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN
-    | typeof CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS
+    | typeof CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN
     | typeof CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION
     | typeof CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST
     | typeof CREATIVE_RESOURCE_SCHEMA.VIDEO_PROMPT_SET
@@ -145,29 +143,14 @@ export function planCreativeWorkResourceMaterialization(input: {
       }],
     }
   }
-  if (output.kind === 'story_canon') {
+  if (output.kind === 'chapter_continuity_plan') {
     return structuredOutput({
       ...common,
       taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.STORY_CANON,
-      name: output.bundle.storyCanon.title
-        || output.bundle.storyCanon.logline
-        || 'Story Canon',
-      data: output.bundle,
-      generationOptions: {
-        outputKind: output.kind,
-        requestKey: payload.requestKey,
-        assumptions: output.assumptions,
-        warnings: output.warnings,
-      },
-    })
-  }
-  if (output.kind === 'chapter_plan') {
-    return structuredOutput({
-      ...common,
-      taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_PLAN,
-      name: 'Chapter plan',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN,
+      name: output.storyCanon.storyCanon.title
+        || output.storyCanon.storyCanon.logline
+        || 'Chapter continuity plan',
       data: output,
       generationOptions: {
         outputKind: output.kind,
@@ -175,16 +158,6 @@ export function planCreativeWorkResourceMaterialization(input: {
         assumptions: output.assumptions,
         warnings: output.warnings,
       },
-    })
-  }
-  if (output.kind === 'continuity_analysis') {
-    return structuredOutput({
-      ...common,
-      taskId: input.taskId,
-      schemaId: CREATIVE_RESOURCE_SCHEMA.CONTINUITY_ANALYSIS,
-      name: 'Continuity analysis',
-      data: output,
-      generationOptions: { outputKind: output.kind, requestKey: payload.requestKey },
     })
   }
   if (output.kind === 'asset_manifest') {
