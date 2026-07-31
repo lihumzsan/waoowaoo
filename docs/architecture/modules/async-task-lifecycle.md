@@ -1,92 +1,249 @@
 <!-- architecture-module: async-task-lifecycle -->
 
-# 异步 Task 生命周期
+# Temporal 异步 Task 生命周期
 
 ## 设计理念
 
-Task 是长运行执行的唯一运行事实。Operation 负责校验与提交，Task registry 声明能力，worker 只执行一次 attempt，Terminal Service 统一提交终态并物化 Creative Resource。Agent、Canvas、SSE 和 Query 都消费这些正式事实，不从文案、历史消息、timer 或 provider 轮询次数推断状态。
+Task 是长运行执行的唯一业务事实；Temporal `TaskWorkflow` 是 attempt、retry、timeout、
+cancel 与恢复的唯一执行许可 owner。Operation 负责校验、计费批准和原子创建 Task；
+Task registry 穷尽声明能力；Activity 只执行一个稳定 business attempt；Terminal Service
+统一提交 Task、Billing、Resource、Lineage 与 FollowUpBatch 终态。
+
+不再使用 BullMQ、Outbox、DB claim/lease/heartbeat、reconciler 或 Redis user concurrency
+gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Provider事实也不
+反向决定 Workflow 是否有执行许可。共享边界见
+[Temporal 持久执行边界](durable-execution.md)。
 
 ## 不变量
 
-- **TL-01 — 单一提交入口。** Task、billing freeze、Created Event 与 `task.enqueue` Outbox 只能由共享 submitter/事务 primitive 创建。route、Operation 和 worker 不得直接写队列或复制提交协议。
-- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须在 `src/lib/task/definition.ts` 声明 queue、handler、retry、billing、scope、execution deadline、terminal resource impact 与 result projection。当前专业创作只有 `creative_work`；媒体执行只有通用 Creative Resource image/audio/voice/video/video-merge Task，以及把外部网页图片导入自有存储的 `creative_resource_web_reference` Task。终态是否要求 handler 回传 modelKey 也是 registry 声明（`terminalModelKeyRequirement`），不运行模型的 Task 声明 `none`；materializer 和 worker handler 不得按 Task 类型内联另一份 deadline 或终态规则。
-- **TL-03 — attempt 唯一执行者。** worker 以 DB CAS 领取 `queued → processing`，携带 `taskId + taskAttempt` 写 heartbeat、progress、provider checkpoint 与终态。只有这个 attempt owner 可以按 TaskDefinition 创建 execution deadline AbortSignal 并传给 handler；重复、晚到或旧 attempt 无写权。
-- **TL-04 — 提交失败原子回滚，提交与终态对称即时运输。** Task、freeze、Wait member、Event 或 Outbox 任一步失败必须整体回滚。Redis 只负责运输；创建 Outbox 命令的事务 owner（Terminal transaction、`invokeProjectAgentOperation` 自有事务、`invokeApprovedOperationPlan`、`submitOperationTaskBatch`、choice-commit consume 事务）在 commit 成功后必须立即把本次事务创建的精确 Outbox IDs 交给 `dispatchCommittedOutboxCommands`。事务内命令 id 由唯一写入入口 `createOutboxCommandInTransaction` 记录进 owner 显式绑定的 per-transaction collector（`createOutboxCommitCollector`），不得用全局可变状态或事后启发式查询重建。运输失败不回滚已提交业务事实，并由持久 Outbox dispatcher 恢复；周期扫描只承担崩溃恢复，不承担正常路径延迟，也不得以调小扫描间隔冒充快投递。
-- **TL-05 — provider 调用有幂等 fence。** 同 attempt 不重复提交；明确临时拒绝只能由更高 Task attempt 重试；结果未知、鉴权、余额、内容安全与配置错误不得自动重提。
-- **TL-06 — 终态 writer 唯一。** worker 不能自行把 Task 或 Resource 写成最终失败。Terminal Service 负责最终 completed/failed/canceled、billing settlement、Task Event、Resource materialization、workspace impact 与 Assistant continuation。
-- **TL-07 — Creative Work 结果只物化一次。** `creative_work` 的严格 outputKind 由统一 materializer 转成 Resource/Lineage；worker Task.result 是交接输入，不是第二领域数据库。相同 Task/结果重放必须幂等。
-- **TL-08 — Resource 是媒体目标。** 通用媒体 Task 的 target 是 CreativeResource，输入冻结全局唯一 Resource ID，并在提交前回库校验真实内容与 scope。旧 edit script、style preview、video segment、BGM design、final output 等专用 target/writer 不得恢复。
-- **TL-09 — Wait 只聚合，不编排业务。** OperationBatch/Wait 可等待多个独立 Task，并在 seal 后处理早到、重复、失败和取消终态；它不表达固定阶段、WorkerGroup 或下一个 Operation。
-- **TL-10 — UI 不解释生命周期。** SSE 只传递持久事件；断线后按 watermark replay。Canvas 收到终态影响后重新读取正式 Resource/Task View，不能依赖轮询、TTL、历史卡片或本地 overlay 完成业务交接。
-- **TL-11 — 本地媒体进程有界。** 视频合并只经 `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts` 与 `video-merge-audio.ts`。FFmpeg 禁止交互 stdin，deadline 从明确媒体时长派生，音轨按 canonical duration pad/trim/reset PTS，不能用多路 EOF 或 `-shortest` 裁决正确性。
-- **TL-12 — 进度文案不是协议。** Task progress 只能使用当前 registry 的通用 Task/阶段 label；删除 TaskType 时必须同时删除旧文案，禁止让 UI 暗示已不存在的流程。
-- **TL-13 — 进度持久化只有一个投影。** `reportTaskProgress` 可向 SSE 发送 provider/stream 细节，但 `Task.payload` 只能由 Task-owned runtime envelope 投影后写入；Creative Work 与 Creative Resource 的严格 payload parser 必须复用同一 envelope，禁止 worker 或领域 parser 各自维护字段白名单。
-- **TL-14 — SSE transport 连接必须持有分布式租约。** 鉴权后、订阅与 bootstrap 前必须原子取得 user、user+project 与 global 三层 Redis ZSET lease；连接定期续租，关闭立即释放，进程崩溃由 TTL 回收，丢失 lease 必须关闭流。Lease 只拥有 transport admission，不写 Task/Event/watermark，也不能用进程内计数或 UI 重连 timer 代替。
+- **TL-01 — Task 创建只有事务入口。** Agent Tool/API route先以stable execution identity
+  启动OperationExecutionWorkflow；只有它的persistence Activity可调用共享Task
+  submitter/transaction primitive，原子创建Task、billing freeze、Created Event、
+  pending Resource与可选FollowUpBatch成员。route、model Activity、Worker与调用方不得
+  直接拼装Task row或在commit后带外启动Workflow。API直接发起task-producing Operation
+  必须提供显式`Idempotency-Key`作为stable source identity；缺失即拒绝，不能回退随机
+  requestId、进程UUID或普通trace identity。
+- **TL-02 — Task registry 穷尽。** 每个 TaskType 必须声明 handler、scheduler class、
+  business retry、execution deadline、billing、scope、terminal modelKey requirement、
+  result projection、Resource impact、materializer 与 `followUpPolicy`。新增实例主要增加
+  registry声明；多处switch表示契约未穷尽。
+- **TL-03 — 只有七类生产 Task。** 当前长期能力为 `creative_work`、image、
+  web-reference、audio、voice、video、video-merge。固定创作阶段、风格预览、EditScript、
+  BGM plan、final render等专用Task不得恢复。
+- **TL-04 — 所有 Task 只经 Scheduler。** Task创建事务提交后，唯一Temporal client以
+  `taskId` 向 `UserTaskSchedulerWorkflow(userId)` 提交。Scheduler按registry class与服务端
+  用户并发配置排队；caller不能传并发上限，Activity不能绕过Scheduler直接启动顶层
+  TaskWorkflow。
+- **TL-05 — TaskWorkflow 是 attempt唯一owner。** Workflow创建稳定 attemptId，短
+  Activity把该business attempt原子投影到Task，再运行长Activity。Worker进程、DB status、
+  Redis lease、heartbeat freshness或队列job均无权另行claim attempt。
+- **TL-06 — Activity retry 不消耗business attempt。** infrastructure retry始终复用同一
+  attemptId。只有handler返回确定且已规范化的failure，并经registry retry policy裁决，
+  Workflow才推进下一business attempt。仍可重试时不得写Task/Resource/Billing最终失败。
+- **TL-07 — heartbeat只报告Activity存活。** 长Activity每10秒heartbeat并携带有界
+  checkpoint；heartbeat timeout、Worker丢失或shutdown由Temporal恢复同一attempt。它不
+  解释Provider成功、Task终态或UI进度。
+- **TL-08 — provider调用有独立幂等fence。** Provider invocation ledger冻结logical
+  identity、input fingerprint、route、external id与result。明确未受理或Provider支持同一
+  idempotency identity才可重试；受理结果不明写`outcome_unknown`并停止自动提交。收费
+  媒体handler必须在成功交接前从该ledger读取实际accepted route，并以它的`modelKey +
+  provider`写terminal result与Resource provenance；请求中的primary model不是成功来源
+  事实，即使当前route set只有一个成员也不得建立旁路。
+- **TL-09 — Task terminal writer唯一。** 长Activity不直接写completed/failed/canceled。
+  Terminal Service在一个事务中校验attempt、提交Task terminal、结算Billing、物化
+  Resource/Lineage、写Task Event、更新FollowUpBatch member并构造正式Resource impact。
+  exact replay返回相同terminal receipt。
+- **TL-10 — committed result优先于并发cancel。** handler result checkpoint一旦提交，
+  即使Activity completion尚未被Temporal确认、cancellation随后到达或Workflow进入失败
+  settlement，terminal owner也必须从该checkpoint完成Task；不得改写为cancel/failed/
+  refund。Workflow接受cancel后提交canceled terminal前必须重读canonical checkpoint，
+  commit返回completed时以业务结果为准。cancel只中止尚未发生的执行，Task terminal不可
+  重开。
+- **TL-11 — Scheduler容量与通知分离。** terminal事务提交后，TaskWorkflow发送幂等
+  `capacityReleased(taskId, terminalIdentity)`；Scheduler立即从`capacityActive`删除。
+  Agent follow-up通知失败可持续重试，但不能占槽。Scheduler不得保存第二份Task业务状态。
+- **TL-12 — FollowUpBatch成员创建时冻结。** 一个Tool call创建多个Task必须同事务全建
+  或全滚，并在该事务中冻结完整member set。Batch不存在collecting/seal阶段；早到、重复、
+  乱序terminal都由member identity幂等收口。最后一个member使Batch ready。
+- **TL-13 — followUpPolicy来自registry。** `after_all_terminal`创建Batch并在全部成员
+  terminal后通知Thread Coordinator；`none`不创建Batch。调用方不得根据Operation名字、
+  TaskType或结果内容决定是否续跑。
+- **TL-14 — 一个Batch最多一个新Turn。** Coordinator以
+  `threadId + sourceKind=task_follow_up + sourceId=batchId`创建Turn。前台Turn活跃时按FIFO
+  排队，不抢占；Thread已clear或Batch已cancelled时通知只返回稳定no-op。
+- **TL-15 — generic TaskSubmissionWorkflow不存在。** 生产Task创建只允许
+  OperationExecutionWorkflow persistence Activity进入共享事务submitter。该Workflow只
+  接受registry中的精确Operation与冻结normalized input；收费执行校验Plan/Grant，免费
+  Task Operation明确声明无需Grant。未来producer必须注册Operation channel，不能恢复
+  “任意调用方提交任意Task payload”的第二编排层。
+- **TL-15a — Operation execution是一条一次性链路。**
+  `OperationExecutionWorkflow`直接以stable immutable envelope作为input，执行Activity后
+  完成；不使用Update-With-Start、Query、Trigger或等待命令状态。Workflow start ACK丢失
+  只能读取同一Workflow result，不能重复执行domain写入。
+- **TL-16 — Resource是媒体目标。** 通用媒体Task target为CreativeResource，提交前校验
+  canonical Resource ID、owner、scope与真实输入；成功时唯一materializer写内容与Lineage。
+  Task result是交接输入，不是第二领域数据库。
+- **TL-17 — Creative Work结果只物化一次。** `creative_work` strict outputKind由统一
+  materializer转换为Resource/Lineage；相同Task/结果replay必须幂等。Worker没有领域writer。
+- **TL-18 — 进度不是协议。** Task progress、Provider phase和estimated percentage只服务
+  View/SSE。`Task.payload`运行字段只能由`progress-payload.ts`的唯一envelope投影写入；
+  handler或领域parser不能各维护字段白名单。
+- **TL-19 — UI不解释Task生命周期。** Query/View只读取Task与Resource正式事实，SSE只
+  通知刷新或叠加瞬时进度。timer、poll、refetch、Canvas节点、消息文案与本地overlay均
+  不能完成/失败/retry Task。
+- **TL-20 — Resource changed refs是正式terminal输出。** Terminal事务返回registry声明的
+  affected Resource refs；SSE广播失败不回滚terminal，也不阻止capacity release或
+  follow-up。消费者只按refs invalidate正式Query。
+- **TL-21 — 本地媒体进程有界。** 视频合并只经
+  `video-compose/ffmpeg-command.ts`、`video-merge-ffmpeg.ts`与
+  `video-merge-audio.ts`。FFmpeg禁止交互stdin，deadline从明确媒体时长派生，音轨按
+  canonical duration pad/trim/reset PTS，不能用多路EOF或`-shortest`裁决正确性。
+- **TL-22 — Temporal不可用时提交失败关闭。** OperationExecutionWorkflow必须在Task业务
+  事务之前成为持久重试owner；它用stable execution identity exact replay persistence
+  Activity，并在commit后可靠调度Task。无法确认Temporal接受时route/model Activity不得
+  宣称Task已提交，禁止fire-and-forget、BullMQ、Outbox或周期扫描兜底。
 
-## 状态所有权
+## 状态与写入者
 
-| 事实 | 唯一 owner / writer | 消费者 |
+| 事实 | 唯一 owner/writer | 主要消费者 |
 | --- | --- | --- |
-| Task identity、status、attempt | Task service / Terminal Service | worker、Agent、UI |
-| Task 持久进度 envelope | Task service + `progress-payload.ts` | 严格 payload parser、Task View |
-| provider invocation/checkpoint | provider invocation fence | 当前 attempt worker |
-| Task result | 当前 attempt worker，终态后不可变 | Terminal Service/materializer |
-| Resource/Lineage | Creative Resource materializer 或同步 Resource Operation | Primary、Canvas、后续 Operation |
-| billing freeze/settlement | billing owner + Terminal Service | profile、审批 UI |
-| Wait 聚合与 continuation | OperationBatch/Wait + Terminal Service | Primary Agent |
-| SSE watermark/event | Task/Outbox/SSE owner | Query sync、UI |
-| SSE transport connection lease | `src/lib/sse/connection-lease.ts` | SSE route admission/cleanup |
+| Task identity/input/status/result | Task service/Terminal Service | Workflow、UI、Agent |
+| business attempt number | TaskWorkflow；短Activity投影 | handler、diagnostic |
+| Activity retry/timeout/cancel | TaskWorkflow | Temporal Worker |
+| 用户容量/FIFO | UserTaskSchedulerWorkflow | Task producer/debug View |
+| Provider受理/checkpoint | provider invocation ledger | handler |
+| Resource/Lineage | terminal materializer | Agent、Canvas、后续Operation |
+| Billing settlement | Billing owner + Terminal事务 | profile、approval |
+| FollowUpBatch/member | Task创建/terminal事务 | Coordinator |
+| progress envelope | Task service | Task View |
+| SSE delta | stream publisher | UI overlay |
 
 ## 权威入口
 
-- Task 定义：`src/lib/task/definition.ts`。
-- Task 持久进度投影：`src/lib/task/progress-payload.ts`、`src/lib/task/service.ts`。
-- 提交与原子创建：`src/lib/task/submitter.ts`、`transactional-create.ts`、`approved-plan-submitter.ts`、`src/lib/operations/submit-operation-task.ts`。
-- attempt 与恢复：`src/lib/task/claim.ts`、`retry-policy.ts`、`reconcile.ts`、`src/lib/workers/shared.ts`。
-- provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。
+- Task定义：`src/lib/task/definition.ts`。
+- 原子创建：`src/lib/task/submitter.ts`、`transactional-create.ts`、
+  `approved-plan-submitter.ts`与Operation Task submitter。
+- Temporal调度：`src/lib/temporal/task-client.ts`、
+  `workflows/user-task-scheduler.ts`、`workflows/task.ts`。
+- Task Activities：`src/lib/temporal/activities/task.ts`与共享handler registry。
+- Provider fence：`src/lib/task/provider-invocation.ts`、`src/lib/ai-exec/engine.ts`。
 - 终态：`src/lib/task/terminal/**`。
-- 持久 Outbox 与提交后即时运输：`src/lib/outbox/repository.ts`（唯一写入入口 + per-transaction commit collector）、`dispatcher.ts`（`dispatchCommittedOutboxCommands` 快路径 + 周期崩溃恢复）、`src/lib/workers/outbox.worker.ts`；dispatcher 只从同一持久命令恢复，不创建第二业务事实。快投递只依赖 prisma 与惰性 `queueRedis`，web 与 worker 进程均可调用；周期 dispatcher 仍只在 worker 进程启动。
-- 结果物化：`src/lib/creative-resource/task-materializer.ts`、`creative-work-materialization.ts`。
-- Agent 聚合：`src/lib/project-agent/operation-batch.ts`、`waits.ts`。
-- 资源变化：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`、`src/lib/query/workspace-sse-event-sync.ts`。
-- SSE 连接 admission：`src/lib/sse/connection-lease.ts`；`src/app/api/sse/route.ts` 只负责在鉴权后获取、续租和释放。
-- 视频合并：`src/lib/video-compose/video-merge-ffmpeg.ts`、`video-merge-audio.ts`。
+- 结果物化：`src/lib/creative-resource/task-materializer.ts`与
+  `creative-work-materialization.ts`。
+- Agent接力：`src/lib/agent-turn/follow-up-batch.ts`与Thread Coordinator client。
+- 资源影响：`src/lib/workspace-resource/resource-impact.ts`与正式changed refs投影。
+- SSE route只负责transport admission与已提交事件/stream的传输。
+
+## 正常、失败与恢复时序
+
+### 创建与执行
+
+```text
+Operation/Tool校验并冻结normalized input
+→ OperationExecutionWorkflow
+→ persistence Activity校验适用Plan/Grant并在MySQL事务创建Task、freeze、pending Resource、可选Batch成员
+→ commit
+→ Workflow向Scheduler Update-With-Start（稳定taskId）
+→ Scheduler启动TaskWorkflow
+→ beginAttempt Activity
+→ handler Activity + heartbeat/provider ledger
+→ terminal Activity
+```
+
+### 终态与接力
+
+```text
+Task/Billing/Resource/Batch terminal事务
+→ exact terminal receipt
+→ capacityReleased
+→ Scheduler释放slot
+→ 若Batch ready则可靠通知Thread Coordinator
+→ TaskWorkflow完成
+```
+
+| 崩溃窗口 | 恢复 |
+| --- | --- |
+| Task事务commit、Scheduler ACK前 | 同taskId重试schedule；不得创建第二Task |
+| beginAttempt commit、Activity ACK前 | 同attemptId exact replay |
+| Provider受理、response丢失 | ledger outcome_unknown/external id裁决 |
+| handler result checkpoint、Activity ACK前 | 同attempt exact replay结果 |
+| terminal commit、Activity ACK前 | terminal receipt exact replay |
+| capacity release ACK前 | 相同terminal identity重发 |
+| capacity release后、follow-up前 | 槽已空；notify继续retry |
+| duplicate/late terminal | Task与Batch member均返回原terminal |
+| Thread clear后late notify | cancelled Batch稳定no-op |
+
+## 被替代并必须删除
+
+- `src/lib/task/queues.ts`、`enqueue.ts`与全部BullMQ worker host
+- `src/lib/outbox/**`、`outbox.worker.ts`与Bull Board
+- `src/lib/task/reconcile.ts`
+- `src/lib/workers/attempt-recovery.ts`
+- `src/lib/workers/user-concurrency-gate.ts`
+- DB attempt claim/heartbeat freshness/stalled takeover
+- ProjectAgent Wait/OperationBatch collecting/continuation Outbox
+- generic TaskSubmissionWorkflow
+
+业务handler、Provider fence、Resource materializer、Billing与Terminal事务逻辑保留，但必须
+从BullMQ wrapper中拆出为Activity可调用的纯生产入口。
 
 ## 验证
 
-- `tests/contracts/task-definition-conformance.test.ts` 从生产 registry 穷尽所有 Task 定义。
-- `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts`、`outbox-delivery-lifecycle.integration.test.ts` 验证真实 MySQL/Redis 的原子提交、去重与恢复。
-- `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`provider-invocation-at-most-once.integration.test.ts` 验证 attempt、late/replay 和 provider fence。
-- `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证多 Task Wait seal 与单 continuation。
-- `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 验证提交后精确即时入队（含事务 operation commit 后无需任何 dispatcher 周期即完成投递）、stale 恢复、毒消息与预期 contention 不消耗 delivery failure budget。
+- 从生产Task registry穷尽七类handler、scheduler class、retry/deadline、billing、
+  materializer、Resource impact与followUpPolicy。
+- 真实Temporal+MySQL故障注入：schedule ACK loss、Worker kill、heartbeat timeout、
+  duplicate/late、cancel、terminal ACK loss、capacity release、Scheduler CAN与多Task Batch。
+- Provider Critical：external id、明确拒绝、outcome_unknown与零盲目重提。
+- Billing/Resource Critical：真实事务的freeze/settlement/materialization exact replay。
+- 人工产品复验：长任务刷新/断线、并发排队、Canvas pending/terminal、Subagent详情与多Task
+  单次follow-up。
 
-LLM 创作组合、媒体呈现和 FFmpeg 产物质量没有保留脚本 Journey 或 fixture 测试；它们属于真实输入下的人工/发布复验边界。
+真实收费Provider、生产规模并发、长视频/音乐/Voice生成、Temporal集群故障和部署切换仍是
+发布环境盲区；未运行不得宣称架构完成。
 
 ## 发布边界
 
-本次删除固定创作表和旧 TaskType 的 migration 必须与新应用、worker 一次性切换；部署前排空旧版本 queued/processing Task 与非终态 Assistant Run/Wait。仓库只创建 migration 文件；未经数据迁移授权不得执行、回填或清理共享数据库。系统没有旧 payload 双读、旧表 fallback 或按 TaskType 猜测兼容逻辑。
+切换必须排空旧queued/processing Task与非终态Run/Wait；应用、Temporal Worker和migration
+原子发布。仓库只创建migration/preflight文件；未经用户额外授权不执行共享或生产数据库
+migration、回填、删除或清理。
+
+没有BullMQ fallback、旧payload双读、Outbox保险、reconciler或feature flag双轨。
 
 ## 历史回归
 
-- 最初分镜页面把“用户关闭失败提示”实现为 Task `failed → dismissed` 持久状态写入；页面移除后，route、React mutation、Operation 与 service writer 仍保留，并在 Agent 工具面全开后让模型能够改写真实失败终态。该动作不删除或修复 Task，只让 resolver 把失败投影成取消，因此形成了第二种失败解释。当前 `dismiss_failed_tasks` 的 Tool/API/前端入口和唯一 writer 已删除，失败 Task 保持 `failed` 并由 Agent 如实解释或在输入修正后精确重试。数据库枚举与 reader 暂时只为读取既有 `dismissed` 历史行而保留；本次未获数据迁移授权，未回填或删除这些行，彻底移除该状态仍需单独迁移与排空。
-- 旧 edit-first 为每个剧本、风格预览、镜头、BGM、视频段和最终渲染各建 TaskType、target 状态与 terminal projector，形成多套 writer。只删除 UI 卡片无法阻止 worker、投影与 guard 继续解释旧状态。当前整条专用链、表、writer、测试和治理入口一次删除，创作结果统一为 Resource，执行统一为六类通用 Task。
-- 旧 `generationTaskId/renderTaskId` owner fence 把 Task 生命周期复制到每个领域表，随后 target projector 与 reconciler 同时解释失败。当前 Task 是运行事实，Resource status/materialization 是领域事实，终态只由 Terminal Service 交接；不再存在专用 target ownership registry。
-- Creative Worker 初版在同步 Tool call 内返回完整结果，刷新后无法恢复且长片上下文膨胀。当前一个创作请求对应一个 `creative_work` Task，完整结果留在 Task.result，终态只向 continuation 投影引用并物化正式 Resource。
-- 旧前台 suspension 把一个 Task 绑定为当前 Run 的固定下一步，导致用户无法在后台执行时继续创作。当前 OperationBatch/Wait 只聚合独立 Task，用户新 turn 与后台 continuation 互不伪造状态。
-- 旧媒体完成依赖轮询、refetch、target overlay 与 timer 接力。当前 Terminal Event 携带 registry 声明的 resource impact，SSE 可 replay，Query 只重读正式事实。
-- 旧最终混音把编码 EOF 与 `-shortest` 当作终止裁判，真实任务会在 99% 停滞。当前通用视频合并使用 canonical duration、PCM 临时原声、显式 `-t` 与 FFmpeg deadline。
-- 旧 style parent Task 及其 migration preflight 在旧表删除后仍作为治理入口存在，反而要求恢复已删除身份。当前这些专用 guard/preflight 一并删除；新 migration 的排空条件由发布流程读取通用 active Task/Run/Wait 事实，不在应用仓保留旧类型统计器。
-- MutationBatch 最初为旧 panel、voice line 和专用媒体 writer 提供整批撤销；这些 writer 删除后，生产代码已经没有创建调用，但两个撤销 Operation、独立 route、SSE event/replay/checkpoint、结果 `canUndo` 投影和 v3 游标水位仍继续声明这项能力。当前这些零 writer 运行时入口和第二状态协议已一起删除，SSE 一次切换为只包含 Task/Assistant/Resource 水位的 v4；数据库模型只为未获迁移授权的历史行暂留，不再有应用 writer、reader 或恢复入口，后续 schema/data 删除需单独迁移和排空授权。
-- 长模型 Task 曾在具体 handler 内各自读取全局 timeout，attempt owner 只无条件写 heartbeat；这使 registry 不知道执行是否有界，也把“worker 进程还活着”误当成“供应商仍有进展”。第一版 registry deadline 为 `creative_work` 固定 5 分钟，真实长方向结果在首次校验拒绝后的纠正轮被 299.96 秒安全阀截断，证明该值会裁掉合法 attempt。当前 execution deadline 仍是 TaskDefinition 的唯一穷尽事实，但校准为 20 分钟 safety bound；通用 attempt owner 创建 AbortSignal 并以 canonical `GENERATION_TIMEOUT` 进入既有 registry retry policy，heartbeat 与 UI 阶段事件都只证明活动，不承担 stall 或完成裁决。
-- Task terminal 曾只写 durable continuation Outbox，正常路径也等待周期 dispatcher；Outbox 与 continuation claim 又使用十分钟级 lease，worker 被重启后虽有完整持久事实却长期无人可领取。预期的前台 Run/Choice contention 还会增加 deliveryCount，最终把可恢复占用误判成 dead delivery。当前 terminal commit 后立即 enqueue 精确 Outbox IDs，失败仍由同一持久 dispatcher 恢复；运输与 continuation claim 使用 30 秒 lease/heartbeat，typed defer 原子撤销本次 deliveryCount。没有新增轮询、第二队列协议或客户端续跑入口。
-- Task terminal 获得 commit 后即时投递后，提交路径（Operation 事务、批准计划 commit）仍把 Outbox 命令 id 丢弃在事务内：`createWorkspaceResourceBroadcastsInTransaction` 返回 void，`transactional-create` 的 lifecycle/enqueue 命令无人接收，两个事务 owner commit 后不做任何投递；而周期 dispatcher 只在 worker 进程启动，web 进程 instrumentation 只启动 reconciler。后果是 worker 在跑时新画布节点与任务入队固定晚约 5 秒，worker 不在时提交路径的 SSE 永远不发、用户必须刷新——终态防线（上一条）没有覆盖对称的提交路径。当前 `createOutboxCommandInTransaction` 作为唯一写入入口把 id 记录进 owner 显式绑定的 per-transaction collector，`invokeProjectAgentOperation` 与 `invokeApprovedOperationPlan` 两个事务 owner commit 后立即调用同一个 `dispatchCommittedOutboxCommands`，workspace broadcast writer 与 `transactional-create` 同时返回精确 id；快投递失败只记结构化日志，周期 dispatcher 角色收敛为纯崩溃恢复。首轮修复只覆盖两个 Operation 事务 owner，`submitOperationTaskBatch` 自有事务与 choice-commit consume 事务仍依赖周期扫描：批量提交（含 `delegate_creative_work`）的 task enqueue/lifecycle broadcast 与 Choice 确认产生的 commitment 变更因此继续晚约 5 秒，worker 不在时不发；web reference/video merge 当时靠调用方 commit 后补投 broadcast，是同一事务的第二个投递入口。当前两个 owner 均绑定同一 collector 并在 commit 后投递，调用方补投旁路删除；周期 dispatcher 对 `deliveryCount=0` 的恢复输出 `outbox.periodic_dispatch.missed_fast_dispatch` WARN，使未来任何漏接 owner 的写路径自报而不是等用户报“要刷新”。
-- 上述 collector 防线引入后，Terminal transaction 仍只显式返回 Task lifecycle broadcast 与 Wait continuation command IDs；`appendProjectAgentEventsInTransaction` 在同一事务内嵌套创建的 `project_agent.session_broadcast` 没有进入这份返回值。结果是 Task lifecycle 已快投递，Assistant Session 刷新事件却仍等待周期 dispatcher，浏览器可能继续显示旧 Task View。根因不是 SSE 或数据库写入失败，而是 transaction owner 没有绑定已经存在的 per-transaction collector。当前 Terminal Service 在进入事务前创建 collector、在事务首行绑定并于 commit 后把 collector 与 replay 所需显式 IDs 的并集交给同一 dispatcher；没有新增客户端 refetch fallback、第二 Outbox 或第二终态 writer。真实 DB/Redis 集成场景以 `task.terminal` 对应 session broadcast 的 `enqueuedAt` 反证这一嵌套命令再次遗漏。
-- `get_task` 首次公开严格字段 Schema 时仍用 `includeEvents` 与独立可选 `eventsLimit` 表达事件读取；关闭或省略 events 时携带 limit 在 Schema 中合法，却被 executor 静默忽略。当前输入改为 `events.kind=none|include`，只有 include 分支拥有可选 limit，Task route 也拒绝 limit 与关闭事件的矛盾查询后再构造同一 canonical 分支。Task 生命周期和事件 writer 均未改变；本次只收敛读取命令语义。
+- 旧Task同时由BullMQ job、DB status/attempt/heartbeat、Worker shutdown release与
+  reconciler解释“谁在运行”。每次修复一个进程窗口都会引入新的stale时间窗。当前
+  TaskWorkflow唯一拥有attempt，数据库只保存业务投影和结果。
+- Task terminal与Agent continuation曾依赖Wait、seal、claim、Outbox和server-follow-up；
+  早到/晚到/部分失败/lease丢失不断叠加分支。当前Batch成员在创建事务中冻结，最后一个
+  terminal只产生一个新Turn。
+- Outbox快速投递曾先后遗漏Operation、batch submit、Choice commitment和terminal内嵌
+  session broadcast；持久命令存在但用户仍需刷新。当前changed refs是正式结果，SSE不再
+  决定事实是否可见或执行是否继续。
+- Provider execution字段多次击穿严格Task payload；reconciler随后重放已受理调用。当前
+  进度envelope、handler checkpoint与Provider invocation ledger分权，outcome_unknown不
+  允许Temporal重提。
+- B+初次移植时image handler已从Provider ledger读取实际accepted route，video、music与
+  voice却仍把请求payload中的primary model写入terminal result；当前只有image声明跨
+  Provider等价route，因此尚未产生已知错误历史数据，但为其他模态增加route set后会把
+  Resource provenance与结果provider静默记错。现在四类收费媒体统一要求submitted ledger
+  route，缺失即失败关闭；单route和failover走同一交接入口。
+- 音视频本地进程曾以`-shortest`、多路EOF或固定timer判断完成，出现99%停滞。确定性媒体
+  primitive和deadline继续保留，迁移transport不得削弱这项业务执行防线。
+- 旧Worker的shutdown release、stale attempt takeover与Task cancel分别判断执行是否已经
+  停止；迁入Temporal后，Activity在handler checkpoint已提交、completion尚未ACK的窗口
+  接收cancel，Workflow仍可能先观察到CancelledFailure并请求canceled terminal。这是
+  “已提交业务结果优先于晚到控制”不变量换transport复发，而非新的重试策略。当前cancel、
+  Workflow failure与terminal replay都先读取同一handler checkpoint；存在结果时只允许
+  completed，容量、Billing与Resource随后按该唯一终态结算。
 
 ## 修改检查表
 
-1. 新执行是否登记在唯一 Task registry，还是增加了第二提交/worker/终态入口？
-2. Task 与 Resource 的 writer 是否各自唯一，失败、取消、重试、晚到和 replay 是否明确？
-3. 输入是否只冻结精确 Resource ID，并由服务端回库校验 scope？
-4. 是否删除被替代的 TaskType、target、文案、测试、guard 与查询，而非增加兼容分支？
-5. 是否按风险运行了适用的保留验证，并明确 DB/Redis/provider 与真实产品盲区？
+1. 新Task是否进入生产registry和唯一submitter/Scheduler？
+2. Activity retry与business attempt是否使用同一稳定identity？
+3. Provider outcome_unknown是否仍fail closed？
+4. terminal、capacity release与follow-up是否严格解耦？
+5. 多Task member是否创建时冻结并只产生一个新Turn？
+6. 是否重新引入queue/outbox/reconcile/lease/timer或第二terminal writer？
+7. handler业务是否从旧Bull wrapper拆出且没有复制一份？
+8. 旧入口、writer、reader和测试治理引用是否一起删除？

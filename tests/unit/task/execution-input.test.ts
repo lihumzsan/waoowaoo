@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildTaskJobEnvelope } from '@/lib/task/job-envelope'
-import type { TaskJobEnvelopeSource } from '@/lib/task/job-envelope'
+import {
+  buildTaskExecutionData,
+  type TaskExecutionDataSource,
+} from '@/lib/task/execution-input'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const validBillingInfo = {
@@ -17,7 +19,9 @@ const validBillingInfo = {
   status: 'frozen' as const,
 }
 
-function validSource(overrides: Partial<TaskJobEnvelopeSource> = {}): TaskJobEnvelopeSource {
+function validSource(
+  overrides: Partial<TaskExecutionDataSource> = {},
+): TaskExecutionDataSource {
   return {
     id: 'task-1',
     parentTaskId: 'parent-1',
@@ -27,7 +31,6 @@ function validSource(overrides: Partial<TaskJobEnvelopeSource> = {}): TaskJobEnv
     targetType: 'CreativeResource',
     targetId: 'resource-1',
     payload: { meta: { locale: 'zh', trace: { requestId: 'request-trace-1' } } },
-    batchKey: 'batch-1',
     billingInfo: validBillingInfo,
     userId: 'user-1',
     operationId: 'generate_creative_resource_video',
@@ -36,13 +39,12 @@ function validSource(overrides: Partial<TaskJobEnvelopeSource> = {}): TaskJobEnv
     operationExecutionId: 'execution-1',
     operationPlanTaskId: 'plan-task-1',
     operationRequestId: 'operation-request-1',
-    priority: 7,
     ...overrides,
   }
 }
 
-describe('task job envelope', () => {
-  it('preserves every durable recovery field in the BullMQ payload', () => {
+describe('Task execution input', () => {
+  it('projects every durable execution field from the Task row', () => {
     const billingInfo = validBillingInfo
     const payload = {
       resourceId: 'resource-1',
@@ -52,7 +54,7 @@ describe('task job envelope', () => {
       },
     }
 
-    const envelope = buildTaskJobEnvelope({
+    const data = buildTaskExecutionData({
       id: 'task-1',
       parentTaskId: 'parent-1',
       type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
@@ -61,7 +63,6 @@ describe('task job envelope', () => {
       targetType: 'CreativeResource',
       targetId: 'resource-1',
       payload,
-      batchKey: 'batch-1',
       billingInfo,
       userId: 'user-1',
       operationId: 'generate_creative_resource_video',
@@ -70,12 +71,9 @@ describe('task job envelope', () => {
       operationExecutionId: 'execution-1',
       operationPlanTaskId: 'plan-task-1',
       operationRequestId: 'operation-request-1',
-      priority: 7,
     })
 
-    expect(envelope).toEqual({
-      priority: 7,
-      data: {
+    expect(data).toEqual({
         taskId: 'task-1',
         parentTaskId: 'parent-1',
         type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
@@ -85,7 +83,6 @@ describe('task job envelope', () => {
         targetType: 'CreativeResource',
         targetId: 'resource-1',
         payload,
-        batchKey: 'batch-1',
         billingInfo,
         userId: 'user-1',
         operationId: 'generate_creative_resource_video',
@@ -95,12 +92,11 @@ describe('task job envelope', () => {
         operationPlanTaskId: 'plan-task-1',
         operationRequestId: 'operation-request-1',
         trace: { requestId: 'request-trace-1' },
-      },
     })
   })
 
   it('fails explicitly when the durable payload has no locale', () => {
-    expect(() => buildTaskJobEnvelope({
+    expect(() => buildTaskExecutionData({
       id: 'task-2',
       parentTaskId: null,
       type: TASK_TYPE.CREATIVE_RESOURCE_IMAGE,
@@ -109,7 +105,6 @@ describe('task job envelope', () => {
       targetType: 'CreativeResource',
       targetId: 'resource-1',
       payload: { resourceId: 'resource-1' },
-      batchKey: null,
       billingInfo: null,
       userId: 'user-1',
       operationId: null,
@@ -118,12 +113,11 @@ describe('task job envelope', () => {
       operationExecutionId: null,
       operationPlanTaskId: null,
       operationRequestId: null,
-      priority: 0,
     })).toThrow('task locale is missing')
   })
 
   it('fails explicitly for an unknown persisted task type', () => {
-    expect(() => buildTaskJobEnvelope({
+    expect(() => buildTaskExecutionData({
       id: 'task-3',
       parentTaskId: null,
       type: 'unknown_task_type',
@@ -132,7 +126,6 @@ describe('task job envelope', () => {
       targetType: 'Project',
       targetId: 'project-1',
       payload: { meta: { locale: 'en' } },
-      batchKey: null,
       billingInfo: null,
       userId: 'user-1',
       operationId: null,
@@ -141,12 +134,11 @@ describe('task job envelope', () => {
       operationExecutionId: null,
       operationPlanTaskId: null,
       operationRequestId: null,
-      priority: 0,
     })).toThrow('invalid task type: unknown_task_type')
   })
 
   it('fails explicitly when billable recovery metadata belongs to another task type', () => {
-    expect(() => buildTaskJobEnvelope({
+    expect(() => buildTaskExecutionData({
       id: 'task-4',
       parentTaskId: null,
       type: TASK_TYPE.CREATIVE_RESOURCE_VIDEO,
@@ -155,7 +147,6 @@ describe('task job envelope', () => {
       targetType: 'CreativeResource',
       targetId: 'resource-1',
       payload: { meta: { locale: 'en' } },
-      batchKey: null,
       billingInfo: {
         billable: true,
         source: 'task',
@@ -174,29 +165,28 @@ describe('task job envelope', () => {
       operationExecutionId: 'execution-4',
       operationPlanTaskId: 'plan-task-4',
       operationRequestId: null,
-      priority: 0,
     })).toThrow('TASK_BILLING_INFO_INVALID:contract')
   })
 
   it('accepts every billing enum value and non-billable metadata', () => {
     for (const apiType of ['text', 'image', 'video', 'music', 'voice'] as const) {
       for (const unit of ['token', 'image', 'video', 'second', 'call', 'character'] as const) {
-        expect(buildTaskJobEnvelope(validSource({
+        expect(buildTaskExecutionData(validSource({
           billingInfo: { ...validBillingInfo, apiType, unit },
-        })).data.billingInfo).toMatchObject({ apiType, unit })
+        })).billingInfo).toMatchObject({ apiType, unit })
       }
     }
-    expect(buildTaskJobEnvelope(validSource({ billingInfo: { billable: false } })).data.billingInfo).toEqual({ billable: false })
-    expect(buildTaskJobEnvelope(validSource({ billingInfo: null })).data.billingInfo).toBeNull()
-    expect(buildTaskJobEnvelope(validSource({ billingInfo: undefined })).data.billingInfo).toBeNull()
+    expect(buildTaskExecutionData(validSource({ billingInfo: { billable: false } })).billingInfo).toEqual({ billable: false })
+    expect(buildTaskExecutionData(validSource({ billingInfo: null })).billingInfo).toBeNull()
+    expect(buildTaskExecutionData(validSource({ billingInfo: undefined })).billingInfo).toBeNull()
   })
 
   it('rejects each malformed billable field at the durable boundary', () => {
     for (const billingInfo of ['billing', []]) {
-      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
+      expect(() => buildTaskExecutionData(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
     }
     for (const billingInfo of [{}, { ...validBillingInfo, billable: 'yes' }]) {
-      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
+      expect(() => buildTaskExecutionData(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
     }
     const invalidBillableContracts: unknown[] = [
       { ...validBillingInfo, source: 'route' },
@@ -215,28 +205,28 @@ describe('task job envelope', () => {
       { ...validBillingInfo, action: '   ' },
     ]
     for (const billingInfo of invalidBillableContracts) {
-      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow(
+      expect(() => buildTaskExecutionData(validSource({ billingInfo }))).toThrow(
         'TASK_BILLING_INFO_INVALID',
       )
     }
-    expect(buildTaskJobEnvelope(validSource({
+    expect(buildTaskExecutionData(validSource({
       billingInfo: { ...validBillingInfo, maxFrozenCost: 0 },
-    })).data.billingInfo).toMatchObject({ maxFrozenCost: 0 })
+    })).billingInfo).toMatchObject({ maxFrozenCost: 0 })
   })
 
   it('rejects every non-object payload at the durable boundary', () => {
     for (const payload of ['payload', 1, true, []]) {
-      expect(() => buildTaskJobEnvelope(validSource({ payload }))).toThrow('task payload must be an object or null')
+      expect(() => buildTaskExecutionData(validSource({ payload }))).toThrow('task payload must be an object or null')
     }
     for (const payload of [null, undefined]) {
-      expect(() => buildTaskJobEnvelope(validSource({ payload }))).toThrow('task locale is missing')
+      expect(() => buildTaskExecutionData(validSource({ payload }))).toThrow('task locale is missing')
     }
   })
 
   it('uses a trimmed payload trace only when its nested shape is valid', () => {
-    expect(buildTaskJobEnvelope(validSource({
+    expect(buildTaskExecutionData(validSource({
       payload: { meta: { locale: 'zh', trace: { requestId: '  trace-id  ' } } },
-    })).data.trace).toEqual({ requestId: 'trace-id' })
+    })).trace).toEqual({ requestId: 'trace-id' })
 
     const fallbackPayloads: unknown[] = [
       { locale: 'zh', meta: null },
@@ -247,10 +237,10 @@ describe('task job envelope', () => {
       { meta: { locale: 'zh', trace: { requestId: '   ' } } },
     ]
     for (const payload of fallbackPayloads) {
-      expect(buildTaskJobEnvelope(validSource({
+      expect(buildTaskExecutionData(validSource({
         payload,
         operationRequestId: 'operation-fallback',
-      })).data.trace).toEqual({ requestId: 'operation-fallback' })
+      })).trace).toEqual({ requestId: 'operation-fallback' })
     }
   })
 })

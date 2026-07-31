@@ -5,7 +5,10 @@ import { prepareFreshTestServices, waitForTestServices } from './test-services'
 export default async function globalSetup() {
   loadTestEnv()
 
-  const shouldBootstrap = process.env.BILLING_TEST_BOOTSTRAP === '1' || process.env.SYSTEM_TEST_BOOTSTRAP === '1'
+  const shouldBootstrap =
+    process.env.BILLING_TEST_BOOTSTRAP === '1'
+    || process.env.SYSTEM_TEST_BOOTSTRAP === '1'
+    || process.env.TEMPORAL_TEST_BOOTSTRAP === '1'
   if (!shouldBootstrap) {
     return async () => {}
   }

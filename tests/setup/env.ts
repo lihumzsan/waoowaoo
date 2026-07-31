@@ -47,6 +47,16 @@ export function loadTestEnv() {
   setIfMissing('REDIS_HOST', '127.0.0.1')
   setIfMissing('REDIS_PORT', '6380')
 
+  if (mutableEnv.TEMPORAL_TEST_BOOTSTRAP === '1') {
+    setIfMissing('TEMPORAL_ADDRESS', '127.0.0.1:7233')
+    setIfMissing('TEMPORAL_NAMESPACE', 'waoowaoo-test')
+    setIfMissing('TEMPORAL_TASK_QUEUE', 'waoowaoo-test-temporal')
+    setIfMissing('TEMPORAL_TLS_ENABLED', 'false')
+    setIfMissing('TEMPORAL_WORKER_DEPLOYMENT_NAME', 'waoowaoo-test')
+    setIfMissing('TEMPORAL_WORKER_BUILD_ID', 'test')
+    setIfMissing('TEMPORAL_WORKER_VERSIONING_ENABLED', 'false')
+  }
+
   if (mutableEnv.ALLOW_TEST_NETWORK !== '1') {
     mutableEnv.NO_PROXY = '*'
     mutableEnv.no_proxy = '*'

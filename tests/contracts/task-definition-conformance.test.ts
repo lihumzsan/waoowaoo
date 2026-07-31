@@ -5,7 +5,6 @@ import {
   TASK_DEFINITIONS,
 } from '@/lib/task/definition'
 import { TASK_TYPE } from '@/lib/task/types'
-import { getQueueTypeByTaskType } from '@/lib/task/queues'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
 
 describe('TaskDefinition conformance', () => {
@@ -15,9 +14,8 @@ describe('TaskDefinition conformance', () => {
 
     for (const taskType of taskTypes) {
       const definition = TASK_DEFINITIONS[taskType]
-      expect(getQueueTypeByTaskType(taskType)).toBe(definition.queue)
       expect(getTaskMaxAttempts(taskType)).toBe(definition.maxAttempts)
-      expect(definition.workerHandler.length).toBeGreaterThan(0)
+      expect(definition.executionHandler.length).toBeGreaterThan(0)
       expect(isBillableTaskType(taskType)).toBe(definition.billingPolicy !== 'none')
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')

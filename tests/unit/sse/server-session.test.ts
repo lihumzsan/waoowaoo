@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SSEEvent } from '@/lib/task/types'
+import type { SSEEvent } from '@/lib/sse/events'
 import {
   SseBootstrapBufferOverflowError,
   SseEventIdentityConflictError,

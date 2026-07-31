@@ -57,7 +57,7 @@ describe('transactional Task batch dedupe', () => {
     await resetBillingState()
   })
 
-  it('creates Task, Created event, and two Outbox responsibilities in one transaction', async () => {
+  it('creates the Task and its Created event in one transaction', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const input = buildInput({ userId: user.id, projectId: project.id, suffix: 'single' })
@@ -66,9 +66,6 @@ describe('transactional Task batch dedupe', () => {
 
     expect(created).toMatchObject({ deduped: false, task: { status: TASK_STATUS.QUEUED } })
     await expect(prisma.taskEvent.count({ where: { taskId: created?.task.id } })).resolves.toBe(1)
-    await expect(prisma.outboxCommand.count({
-      where: { aggregateType: 'task', aggregateId: created?.task.id },
-    })).resolves.toBe(2)
   })
 
   it('rejects an optional episode scope that belongs to another project', async () => {
@@ -115,9 +112,6 @@ describe('transactional Task batch dedupe', () => {
     expect(replayed).toMatchObject({ deduped: true, task: { id: first?.task.id } })
     await expect(prisma.task.count()).resolves.toBe(1)
     await expect(prisma.taskEvent.count()).resolves.toBe(1)
-    await expect(prisma.outboxCommand.count({
-      where: { aggregateType: 'task', aggregateId: first?.task.id },
-    })).resolves.toBe(2)
   })
 
   it('supports partial and all-deduped batches while preserving input order', async () => {
@@ -147,9 +141,6 @@ describe('transactional Task batch dedupe', () => {
     expect(new Set(results.map((batch) => batch[0]?.task.id)).size).toBe(1)
     await expect(prisma.task.count()).resolves.toBe(1)
     await expect(prisma.taskEvent.count()).resolves.toBe(1)
-    await expect(prisma.outboxCommand.count({
-      where: { aggregateType: 'task', aggregateId: results[0]?.[0]?.task.id },
-    })).resolves.toBe(2)
   })
 
   it('fails closed on a terminal Task that still owns the dedupe key', async () => {
@@ -211,14 +202,12 @@ describe('transactional Task batch dedupe', () => {
     }])).rejects.toThrow('TASK_BATCH_IDENTITY_CONFLICT')
   })
 
-  it('rolls back every Task, event, and Outbox row when the batch callback fails', async () => {
+  it('rolls back every Task and event when the batch callback fails', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const inputs = ['rollback-a', 'rollback-b'].map((suffix) => (
       buildInput({ userId: user.id, projectId: project.id, suffix })
     ))
-    const outboxCountBefore = await prisma.outboxCommand.count()
-
     await expect(persistBatch(inputs, async (_tx, tasks) => {
       expect(tasks).toHaveLength(2)
       throw new Error('wait binding failed')
@@ -226,7 +215,6 @@ describe('transactional Task batch dedupe', () => {
 
     await expect(prisma.task.count()).resolves.toBe(0)
     await expect(prisma.taskEvent.count()).resolves.toBe(0)
-    await expect(prisma.outboxCommand.count()).resolves.toBe(outboxCountBefore)
   })
 
   it('preserves Task input fields while updating current-attempt progress', async () => {

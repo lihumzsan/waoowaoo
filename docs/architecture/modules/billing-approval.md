@@ -15,25 +15,25 @@
 - **BA-01 — 审批分类唯一。** `none`、`billable_media`、`destructive` 是 operation confirmation 的唯一分类；LLM 文本任务必须显式属于 `none`，不是漏配后的默认值。
 - **BA-02 — 精确计划先于媒体审批。** `billable_media` 的审批前必须确定真实 Task、目标、模型、输入、数量和准确报价。需要 LLM 先生成媒体 Prompt 的用户可见长流程必须先作为独立文本 Task 完成；媒体 plan 只读其持久结果，不得在 approval preflight 调用 LLM、写领域记录或形成第二生命周期。不得先批准、再让 LLM 或媒体 worker 决定实际收费内容。
 - **BA-03 — 批准必须有不可变来源。** 最终收费任务只能携带 `OperationPlanSnapshot → ApprovalGrant → OperationExecution → operationPlanTaskId` provenance；计划 identity、不可变 payload/quote hash、Snapshot 唯一 `executionContractRevision`、Grant identity 与 CAS `version` 才是授权裁决事实。该 revision 必须来自生产 Operation registry 的 `planContractRevision`，只在 Snapshot 保存一次，并且真实选择审批后的 planner/commit 协议；Grant 与 Execution 禁止复制。三个审批表仍不得重复持久化永远固定、没有 reader 分支的 `contractVersion`。`operationConfirmed` 布尔字段已退役，route、worker、Task payload 和恢复 envelope 都不得重建该布尔轨道。
-- **BA-04 — 统一最终门禁。** 未批准的收费媒体不得创建 Task、入队或调用供应商；UI、Agent、route、worker 的任何遗漏都不能绕过提交边界。
+- **BA-04 — 统一最终门禁。** 未批准的收费媒体不得创建 Task、启动 TaskWorkflow 或调用供应商；UI、Agent、route、Activity 的任何遗漏都不能绕过提交边界。
 - **BA-05 — Choice 不得隐含媒体授权。** 通用 Choice 只解决当前决定；即使 Offer 带有原子 commitment，也只允许 registry 明示的非收费、事务型单一 Operation。Creative Direction 的创建或采用不授权预览图，剧本/Story Canon/Chapter 决定不授权任何下游媒体。每次收费图片、音频或视频都必须独立经过自己的 `plan → quote → approval → commit`。
 - **BA-06 — 父子计划不可扩大。** 父操作只能提交其已报价且获批准计划中的子任务；文本任务不得自动派生新的收费子任务。
-- **BA-07 — Grant、业务投影与整批责任一次提交。** `invokeApprovedOperationPlan` 持有唯一 Prisma interactive transaction；Grant 消费、OperationExecution、operation-specific 业务写入、全部 Task、全部额度冻结、Created lifecycle event 与每个 Task 的 durable enqueue responsibility 必须一起 commit 或一起 rollback。BullMQ 入队只消费 commit 后才可见的 `task.enqueue` Outbox，不再使用 `availableAt=9999` 暂存、第二阶段 release 或逐 Task 补偿。
+- **BA-07 — Grant、业务投影与整批责任一次提交。** `invokeApprovedOperationPlan` 持有唯一 Prisma interactive transaction；Grant 消费、OperationExecution、operation-specific 业务写入、全部 Task、全部额度冻结、Created TaskEvent 与 FollowUpBatch membership 必须一起 commit 或一起 rollback。OperationExecutionWorkflow 只在该事务返回正式 Task receipt 后把 Task 交给 Temporal Scheduler；不存在 BullMQ、Outbox 或第二阶段 release。
 - **BA-08 — 不存在可持久化的中间 Execution。** `committing` 仅存在于尚未提交的事务快照，数据库外只能观察到完整 `completed` execution；进程在任意语句后退出都会由 MySQL 回滚。相同 Grant 的并发/重复调用先锁定 Grant 行，完成后只返回同一持久 output，不另建 lease、attempt、`submitted` 或 `failed` 状态机。
 - **BA-09 — 收费 operation 只有 plan/commit 入口。** `billable_media` definition 必须声明 plan 与 commit，且禁止声明 execute；非收费/破坏性 operation 才能声明 direct execute。registry runtime conformance、TypeScript discriminated definition 与 CI guard 共同阻止第二执行入口。
 - **BA-10 — 投影只能发生在 commit 之后。** operation commit 期间产生的 Assistant structured parts 先写入 invocation-owned buffer；唯一事务成功后才向原 writer flush，失败/kill 时全部丢弃。commit 内不得直接调用 Redis、provider 或其他不可回滚外部副作用。
-- **BA-12 — Channel 不得形成审批旁路。** API 与 Tool 共用 `invokeProjectAgentOperation`；`billable_media` 在任一 channel 都只能消费不可变 ApprovalGrant，direct operation 不得接收或忽略 Grant provenance。`channels` 必须在输入解析和任何业务执行之前强制。
+- **BA-12 — Channel 不得形成审批旁路。** API adapter 与 Agent Tool adapter都从同一 Operation registry解析 `billable_media`，并只把不可变 ApprovalGrant交给 OperationExecutionWorkflow；同步 `invokeProjectAgentOperation` 明确拒绝执行收费 Operation。direct operation不得接收或忽略 Grant provenance，`channels` 必须在任何业务执行之前强制。
 - **BA-11 — Grant 只有一个消费写入者。** `invokeApprovedOperationPlan` 在锁定 Grant、创建 `OperationExecution` 后无条件消费 Grant；零 Task 与有 Task 计划使用同一条边。`approved-plan-submitter` 只验证 Grant 已绑定当前 execution 并创建计划内 Task，不得更新 Grant。通用 Task submitter 不接收 Grant/Execution/planTask 授权参数，任何收费媒体输入必须显式失败并回到批准计划入口。
-- **BA-13 — Task runtime 不得启动同步计费。** 普通 Task 与批准 Task 必须通过 `transactional-create.ts` 在 Task/Created event/enqueue Outbox 同一事务内 freeze，Terminal Service 拥有 settle/rollback；不得保留 Task 创建后再授权计费的第二事务。worker 内部调用 `withTextBilling` 等同步包装时只执行 provider 并把 usage 留给外层 Task collector；不得创建第二个 sync freeze/confirm 生命周期，也不得让嵌套 collector 吞掉 Task usage。
+- **BA-13 — Task runtime 不得启动同步计费。** 普通 Task 与批准 Task 必须通过 `transactional-create.ts` 在 Task/Created TaskEvent 同一事务内 freeze，Terminal Service 拥有 settle/rollback；不得保留 Task 创建后再授权计费的第二事务。Task Activity 内部调用 `withTextBilling` 等同步包装时只执行 provider并把 usage留给外层 Task collector；不得创建第二个 sync freeze/confirm生命周期。
 - **BA-14 — 一个 Task type 只对应一种成本语义。** 同一 handler 可以复用实现，但文本分析与收费媒体生成必须使用不同 TaskType/Operation identity。`reference_character_description_extract` 属文本直提交流程；`reference_to_character` 属图片 `plan → quote → ApprovalGrant → commit`。payload 布尔值不得在 worker 内把一种 billing policy 变成另一种。
 - **BA-15 — 计划预留 identity 必须显式。** plan 阶段创建、commit 阶段才物化且不等于 Task target 的实体 identity，必须由 `OperationPlan.reservedIdentityIds` 穷尽声明。不可变 snapshot、quote 与 Approval payload 共用这份 identity 契约；禁止只把父实体 ID 藏在 operation-specific metadata。任何合法作用域迁移必须显式重写 reserved identity、Task target、payload、metadata 与 dedupe identity 后再计算 hash，未映射 identity 必须失败或生成新 canonical identity，不得复用另一 project/attempt 的预留主键。
-- **BA-16 — 零新 Task 计划仍走原子 commit。** `billable_media` 的最终计划允许因全部目标已复用而包含零个待提交 Task；Grant、Execution 与 operation-specific plan writes 仍由同一 commit transaction 结算，Task submitter 返回空结果。没有 active dependency 时 invocation 投影为 `noop`；存在 `taskDependencies` 时 Assistant 投影为对既有 Task 的同一 durable Wait。零新 Task 不得与重复 Task identity 混为无效计划，也不得伪造占位 Task、跳过 plan writes 或建立第二条 commit 分支。
+- **BA-16 — 零新 Task 计划仍走原子 commit。** `billable_media` 的最终计划允许因全部目标已复用而包含零个待提交 Task；Grant、Execution 与 operation-specific plan writes 仍由同一 commit transaction 结算。没有 active dependency 时不创建 FollowUpBatch；存在 `taskDependencies` 时把其精确成员冻结进当前 FollowUpBatch。零新 Task 不得伪造占位 Task、跳过 plan writes 或建立第二条 commit 分支。
 - **BA-17 — 直接 UI 批准只能消费当前展示计划。** 任何直接媒体操作入口若把用户点击视为批准，控件必须持有完整 `OperationPlanView`，Grant 与 execute 消费同一 `planSnapshotId`；禁止预览 plan A、点击后重新 plan B，或用未展示报价的普通按钮提交收费媒体。当前 Canvas 只展示 Resource/Task，没有专用收费 action。
 - **BA-18 — Episode scope 由计划产物裁决，Resource scope 由动作显式携带。** planner 必须从经过 ownership 校验的 CreativeResource target 与输入 Resource ID 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝混合 episode。registry 在 planner 前回库解析每个 Resource ID，并拒绝缺失 scope、非法 schema 或跨 project 输入，禁止通过默认 Chapter、数组位置或最近记录推断。
-- **BA-19 — 计划只因契约或内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验先比较 Snapshot 的 `executionContractRevision` 与当前 registry definition；不一致时禁止再次调用旧/新 planner 解释同一输入，并在 Grant 锁事务撤销授权。revision 一致时才重新调用当前纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才消费 Grant，任一变化都不得创建 Execution、Task、冻结或 Outbox。已完成 Execution 的幂等重放直接返回同一持久 output，不受后续契约或计划变化影响。planner 必须对相同事实确定性输出；随机预留 identity、时间戳或调用顺序不得进入计划 Hash。
-- **BA-20 — 聚合 Approval 不合并执行身份。** 一张 Assistant Approval 卡可以表示同一模型步骤的多个收费成员并合计 quote，但每个成员仍拥有独立的 `toolCallId + OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链。`issueApprovalGrantGroup` 只把“全部成员可授权或全部不授权”放进一个事务，任一 snapshot/owner/identity 错误必须整组回滚；恢复时不得用 operationId、首成员 plan 或聚合 quote 代替成员 Grant。成员 Task 可进入同一个 OperationBatch Wait，但各自 commit、冻结、Execution 与幂等重放保持独立。
+- **BA-19 — 计划只因契约或内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验先比较 Snapshot 的 `executionContractRevision` 与当前 registry definition；不一致时禁止再次调用旧/新 planner解释同一输入，并在 Grant锁事务撤销授权。revision一致时才重新调用当前纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才消费 Grant，任一变化都不得创建 Execution、Task或冻结。已完成 Execution的幂等重放直接返回同一持久 output，不受后续契约或计划变化影响。
+- **BA-20 — 聚合 Approval 不合并执行身份。** 一张 Assistant Approval 卡可以表示同一模型步骤的多个收费成员并合计 quote，但每个成员仍拥有独立的 `toolCallId + OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链。`issueApprovalGrantGroup` 只把“全部成员可授权或全部不授权”放进一个事务；成员 Task 可进入各自 OperationExecution 冻结的 FollowUpBatch，但各自 commit、冻结、Execution 与幂等重放保持独立。
 - **BA-21 — 计划必须在批准前证明 Task 资源作用域结构完整。** quote 与不可变 snapshot 写入都必须从 `TaskDefinition.terminalResourceImpact` 穷尽解析每个 PlannedTask 的必需 project/episode scope；最终 Task 提交还必须在写入前验证 episode 真实属于该 project。禁止让缺失必需 scope 的计划先获得报价或 Grant，也禁止让越权 scope 写入任何 Task。Operation planner、snapshot writer 和 Task submitter 必须复用同一个 resolver，不得各自维护 TaskType 或资源名单。
-- **BA-22 — 已运行 Task 是不可变计划依赖，不是待提交 Task。** planner 发现同 canonical target、同输入签名的 active Task 时，必须把其完整 identity、TaskType、target 与 episode 冻结为 `OperationPlan.taskDependencies`，并从报价与新 Task 列表中排除。snapshot writer 在批准前校验该 Task 仍 active 且属于同一 user/project/episode/type/target；变化则使计划失效并重新报价。批准 commit 不得重新提交或重复收费 dependency；Assistant 只能把它与本 Tool member 的新 Task 原子加入当前 OperationBatch Wait。同签名 completed target 直接跳过，active target 输入签名冲突必须显式失败，禁止覆盖运行中的生成。
+- **BA-22 — 已运行 Task 是不可变计划依赖，不是待提交 Task。** planner 发现同 canonical target、同输入签名的 active Task 时，必须把其完整 identity、TaskType、target 与 episode 冻结为 `OperationPlan.taskDependencies`，并从报价与新 Task 列表中排除。批准 commit不得重新提交或重复收费 dependency；只能把它与本 Tool member的新 Task原子加入当前 FollowUpBatch。
 - **BA-23 — 失败重试重新报价，不继承授权。** Agent 可以根据 Task terminal 的失败 refs 显式调用同一或其他收费 Operation，但每次调用都必须重新构造当前 exact plan/quote，并按当前用户设置重新取得显式 Approval 或这一次精确报价的自动 Grant。失败 Task、旧 Grant、同一 Run 或用户先前的批准均不构成预算授权；系统不得在没有新 Tool call 时静默重提收费工作。
 - **BA-23A — 等价 Provider 路由不产生第二次计费。** Provider Gateway 只有在生产 registry 证明 route set 成员使用同一产品 capability、同一 canonical options 与同一冻结价格时，才可在 typed pre-accept rejection 后推进路由。推进继续消费原 `OperationPlanSnapshot → ApprovalGrant → OperationExecution → Task`，不得重新报价、重新申请 Approval、再次冻结 credits 或创建第二 Execution；任何价格不等价必须在 registry 构造时 fail closed，而不是运行时补差价。
 - **BA-24 — 外部支付终态必须进入同一账本。** Stripe Checkout 充值以 `payment_intent` 作为 canonical external identity，并把 credits、最小货币单位金额与币种冻结在充值流水；refund 以及 `charge.dispute.funds_withdrawn` 只能由已验签 webhook 通过 ledger 的唯一 adjustment writer 按精确比例扣回。退款失败或 `charge.dispute.funds_reinstated` 只恢复此前同一 Stripe object 的实际 debit；`dispute.created/closed` 不解释资金事实。事件乱序、重复、跨币种、超额或找不到原充值必须 fail closed，禁止按用户最近充值猜测。
@@ -46,27 +46,26 @@
 - operation confirmation 分类：`src/lib/operations/types.ts` 和 `src/lib/operations/registry.ts`。
 - 不可变计划、执行契约 revision 与 hash：`src/lib/operations/operation-plan-snapshot.ts`；revision 的生产声明由同一个 Operation registry definition 的 `planContractRevision` 提供。
 - Grant 发放、聚合 Approval 的全有或全无 `issueApprovalGrantGroup`、registry 驱动的当前计划重验证、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
-- Assistant 计费确认设置的唯一持久事实是 `UserPreference.assistantBillingConfirmationRequired`；UI 只通过既有 `/api/user-preference` Operation writer 更新，runtime 只通过 `src/lib/project-agent/billing-confirmation.ts` 读取。自动模式仍由 `approval-preflight.ts` 创建不可变 snapshot 并通过既有 Grant issuer 授权，不得建立第二种扣费凭证。
+- Assistant 计费确认设置的唯一持久事实是 `UserPreference.assistantBillingConfirmationRequired`；UI只通过既有 `/api/user-preference` Operation writer更新，Agent Turn approval owner通过 `src/lib/project-agent/billing-confirmation.ts`读取。自动模式仍创建同一种不可变 snapshot与精确 Grant，不得建立第二种扣费凭证。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
-- API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
+- API/Tool 收费分流：`src/lib/adapters/api/execute-project-agent-operation.ts` 与 `src/lib/agent-turn/tools.ts`；同步 Operation 调用入口 `src/lib/operations/invocation.ts` 不执行收费计划。
 - Project UI 的唯一收费执行 route：`src/app/api/projects/[projectId]/operations/[operationId]/execute/route.ts`；route 只鉴权并把 immutable Grant provenance 交给统一 invocation，不解释媒体类型或 episode。
 - Assistant 收费卡片与审批 transport：`src/features/project-workspace/components/workspace-assistant/billing-action-items.ts` 及 Project Agent approval 协议；可见 quote 与点击授权必须来自同一 snapshot。
 - ApprovalGrant 与充值/支付 route：`src/app/api/operation-approval-grants/**`、`src/app/api/payments/**` 只负责鉴权、参数和调用既有 grant/payment service，不得建立第二审批或账本 writer。
 - Stripe 外部协议入口：`src/lib/payments/stripe-client.ts` 创建关闭网络重试的官方 client，`src/lib/payments/stripe-checkout.ts` 创建 Checkout Session，`src/lib/payments/stripe-webhook.ts` 只从官方 `constructEvent` 解释已验签外部事实；余额变更全部调用 `src/lib/billing/ledger.ts` 的 recharge/adjustment transaction writer。
 - 批准计划的唯一 Task 创建入口：`src/lib/task/approved-plan-submitter.ts`；它只消费已经由当前 invocation 绑定的 execution context，不拥有 Grant 消费权。
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
-- 批准 Task 的 durable enqueue：`src/lib/outbox/types.ts` 的 `task.enqueue` → `src/lib/task/enqueue.ts`。
+- 批准 Task 的唯一持久调度：`src/lib/temporal/operation-execution/**` → `UserTaskSchedulerWorkflow` → `TaskWorkflow`。
 - TaskType 的 billing policy：`src/lib/task/definition.ts`；`src/lib/billing/task-policy.ts` 只执行 registry 指定的 policy，不维护第二份 TaskType 集合或 switch。
 - 计划 Task 的资源作用域结构校验：`src/lib/operations/planning.ts` 的 `assertOperationPlanTaskResourceScopes` 复用 `TaskDefinition.terminalResourceImpact`；quote 与 snapshot writer 都必须在持久化或发放 Grant 前调用它。episode/project 归属由共享 Task 提交 primitive 在任何 Task 写入前验证。
-- 计划中既有 active Task dependency 的解析与批准前 scope/status 校验：`src/lib/operations/operation-plan-snapshot.ts`；批准提交只由 `src/lib/operations/planned-operation-invocation.ts` 把 dependency identity 交给既有 Assistant Wait，不创建或计费第二个 Task。
+- 计划中既有 active Task dependency 的解析与批准前 scope/status 校验：`src/lib/operations/operation-plan-snapshot.ts`；批准提交只由 `src/lib/operations/planned-operation-invocation.ts` 把 dependency identity 冻结进 FollowUpBatch，不创建或计费第二个 Task。
 - `standards/pricing/**` 当前是 `scripts/check-pricing-catalog.mjs` 的校验输入，不是生产运行时计费 writer；生产金额由 `src/lib/ai-registry/pricing-*` 与 provider code catalog 解析。修改 standards pricing 必须同时审计运行时 catalog 与 `BUILTIN_PRICING_VERSION`，在双表示收敛前不得仅凭 JSON 变更宣称生产价格已改变。
 
 调用层不得自行维护媒体类型名单、确认布尔值或报价任务的平行集合。
 
 ## 验证
 
-- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、久置且内容未变的 Grant 仍可消费、两个审批表不存在 `expiresAt`、执行契约变化时不重跑 planner 并原子撤销、计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。
-- `tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts` 还验证已运行 dependency 不会生成第二个 Task 或第二笔收费，并与本次新 Task 一起进入唯一 durable Wait。
+- `tests/integration/task/approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。Temporal ACK-loss、worker kill与 FollowUp通知重试必须由真实 Temporal Test Server/数据库边界验证，不能由旧 Bull/Outbox mock测试替代。
 - `tests/unit/operations/planning.test.ts` 只验证计划 scope、identity 与冻结输入的纯逻辑；`tests/integration/task/create-task-dedupe.integration.test.ts` 使用真实数据库验证 Task 提交去重与 scope。
 - `tests/integration/billing/{ledger,service,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `stripe-recharge.integration.test.ts` 使用 Stripe SDK 生成真实签名 header，并验证部分退款、重复事件、退款失败恢复、争议创建/关闭不改余额、资金扣回/恢复事件和未知 payment intent 拒绝。
@@ -76,13 +75,13 @@
 
 | 事实                                                           | 唯一所有者 / 写入者                                                                | 消费者                                        |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------- |
-| 规范化输入、最终新 Task、既有 active Task dependency 与报价   | `OperationPlanSnapshot` / plan endpoint                                            | Grant issuer、Execution、Assistant Wait、审计 |
+| 规范化输入、最终新 Task、既有 active Task dependency 与报价   | `OperationPlanSnapshot` / plan endpoint                                            | Grant issuer、Execution、FollowUpBatch、审计 |
 | 用户对该计划的授权、内容重验证与单次消费                       | `ApprovalGrant` / `issueApprovalGrant` 发放、`invokeApprovedOperationPlan` 唯一重验证、撤销或消费 | 原子批次提交入口                              |
 | 一次幂等执行与原子 output                                      | `OperationExecution` / `invokeApprovedOperationPlan`                               | 重复调用、审计                                |
-| operation 业务投影、计划内 Task、冻结与入队责任 | `invokeApprovedOperationPlan` 的同一 transaction；各 commit 只使用授权 transaction | Outbox dispatcher、Task worker、UI projection |
-| BullMQ job                                                     | `task.enqueue` Outbox consumer                                                     | worker；不得解释审批或报价                    |
+| operation 业务投影、计划内 Task、冻结与Batch成员 | `invokeApprovedOperationPlan` 的同一 transaction；各 commit 只使用授权 transaction | OperationExecutionWorkflow、TaskWorkflow、UI |
+| Task执行许可                                                   | Temporal TaskWorkflow + Scheduler                                                  | Task Activity；不得解释审批或报价             |
 
-写入者变化：删除 Task/Job 的 `operationConfirmed`、收费 operation 的 direct execute、OperationExecution lease/attempt/submitted release 状态机和 operation-specific 事务外补偿。Grant 消费写入者从 `invokeApprovedOperationPlan` 的零 Task 分支与 `approved-plan-submitter` 的有 Task 分支两个收敛为前者一个；删除通用 submitter 的 `assertTaskApprovalAuthorization` 旁路。Task enqueue 从 HTTP commit 的即时外部副作用改为同事务持久 Outbox responsibility。
+写入者变化：删除 Task/Job 的 `operationConfirmed`、收费 operation 的 direct execute、OperationExecution lease/attempt/submitted release 状态机和 operation-specific事务外补偿。Grant消费写入者收敛为 `invokeApprovedOperationPlan` 一个；Task transport从 BullMQ/Outbox收敛为 OperationExecutionWorkflow → Scheduler → TaskWorkflow。
 
 ## 历史回归
 
@@ -107,5 +106,5 @@
 
 1. 该 operation 是 `none`、`billable_media` 还是 `destructive`？理由是什么？
 2. 若收费媒体，审批时最终输入和价格是否已经确定？
-3. 是否复用统一 snapshot、Grant、Execution、计划级批次与 Outbox enqueue，而非新增局部确认逻辑？
+3. 是否复用统一 snapshot、Grant、Execution、FollowUpBatch 与 Temporal durable dispatch，而非新增局部确认或第二 transport？
 4. 是否新增“未批准、计划变化、重复提交、父子任务扩大”的负向测试？

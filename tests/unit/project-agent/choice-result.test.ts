@@ -9,8 +9,6 @@ import type { ProjectAgentChoiceOffer } from '@/lib/project-agent/choice-offer'
 const selectionOffer: ProjectAgentChoiceOffer = {
   card: {
     cardId: 'choice-1',
-    runId: 'run-1',
-    interruptionId: 'interruption-1',
     toolCallId: 'tool-1',
     mode: 'select_or_text',
     replyMode: 'whole_card',

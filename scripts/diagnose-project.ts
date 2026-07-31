@@ -122,16 +122,6 @@ async function diagnoseProject(projectId: string) {
     const pingResult = await redis.ping()
     console.log(`  ✅ Redis 连接: ${pingResult}`)
     
-    // 检查 BullMQ 队列
-    const queueKeys = await redis.keys('bull:*:id')
-    console.log(`  BullMQ 队列数量: ${queueKeys.length}`)
-    
-    for (const key of queueKeys.slice(0, 5)) {
-      const queueName = key.replace('bull:', '').replace(':id', '')
-      const jobCounts = await redis.hgetall(`bull:${queueName}:id`)
-      console.log(`    - ${queueName}`)
-    }
-    
     redis.disconnect()
   } catch (error) {
     console.log(`  ❌ Redis 连接失败:`, error)

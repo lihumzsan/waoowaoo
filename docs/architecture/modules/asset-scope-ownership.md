@@ -37,7 +37,7 @@
 | 资产图片计划与关联 | `create_image` + `src/lib/asset-generation/asset-image-format.ts` 的唯一 Prompt Compiler + Task terminal materializer | stableDescription、精确 Direction Lineage、唯一 4:3/纯白背景/固定构图 Policy、精确 asset/variant ownership、Binding CAS |
 | 已有资产重生成 | `regenerate_asset` Operation → asset generation planner/commit | 原 assetId、精确 appearance/image variant 与新的 Task；不创建顶层资产 |
 | location-backed 资产操作 | `src/lib/assets/services/location-backed-assets.ts`，仅由 scoped asset actions 调用 | 已验证的 project/global asset identity |
-| upload/render 写入 | `src/lib/assets/services/project-upload-render.ts` | `prepareTransaction` 在事务外完成 target ownership 预检、图片上传与空间分析；短事务以 target identity + prepare `updatedAt` 单条 CAS 取得版本写权并一次提交业务关系、输出与资源 Outbox；失败只按 prepare identity 补偿本次新临时 key，事务结果不明时先以 owner + target identity + key 查询精确关系，关系已存在则拒绝删除 |
+| upload/render 写入 | `src/lib/assets/services/project-upload-render.ts` | `prepareTransaction` 在事务外完成 target ownership 预检、图片上传与空间分析；短事务以 target identity + prepare `updatedAt` 单条 CAS 取得版本写权并一次提交业务关系与输出，Operation registry 从正式结果投影 authoritative changed refs，commit 后仅 best-effort 发布 SSE；失败只按 prepare identity 补偿本次新临时 key，事务结果不明时先以 owner + target identity + key 查询精确关系，关系已存在则拒绝删除 |
 | API 与 Operation 入口 | unified asset routes、`src/lib/operations/api-only/assets-api-ops.ts` | Route 鉴权 + service 返回的 scoped authority |
 | 媒体对象读取与签名 | `src/lib/media/storage-access-policy.ts`，由 `/m`、`/api/storage/sign` 与 `src/lib/media/outbound-owned-media.ts` 共同调用 | MediaObject 的 owner relation registry；Task userId 只作为裁决输入，不是读取旁路；后台投影只返回 HTTPS |
 | 外部媒体主动下载 | `src/lib/media/outbound-fetch.ts` | 绝对 HTTP(S) URL、逐跳 DNS 与实际 socket 地址 policy；下载后仍受共享 body limit |
@@ -67,6 +67,14 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - 媒体 route 收紧为浏览器 session 后，真实产品复验又发现 video/image worker 仍把本地 key 转成 `/api/files` 再通过 HTTP 回读；worker 没有也不应拥有浏览器 Cookie，因此合法参考图被 401 拒绝、视频阶段永久停留在 processing。后台读取先改为 owner-aware 直接读取并编码，随后参考声音暴露 OpenRouter 只接受 HTTPS 且 Base64 请求体显著放大。当前后台唯一投影复用同一 owner policy，只读取 HeadObject metadata 并签发 24 小时 HTTPS URL；完整对象由外部 Provider 直接从部署桶读取，应用不再承担参考媒体 body 中转。
 - 旧风格预览链曾写入 storage 却未登记 MediaObject，暴露受保护媒体关系、Next 图片优化器 session 与本地签名 origin 三类断点。固定预览链已删除；用户显式要求的任意预览现在只走通用图片 Resource 路径，因此必须像其他图片一样先登记 MediaObject、使用受保护同源读取并保持 owner relation，不能恢复专用存储旁路。
 - 顶层资产删除曾同时存在 Project character/location、Asset Hub character/location 和 generic location/prop 五个 Operation，部分路径直接调用 Prisma delete，Agent 又只有按图片组/单图分裂的旧重生成工具。用户无法从统一资产 identity 表达“删除后重做”或“原地重生成”，调用方也可能用 create 新增同义资产。当前五条顶层 delete 收敛为 `delete_asset` 并统一经过 scoped `removeAsset`；两个旧重生成 Operation 收敛为 `regenerate_asset`，复用既有 generation planner、共享资产 writer 和 asset identity。variant 删除不属于顶层资产入口，仍保留其精确 parent/variant 契约。
+- `delete_asset` 收敛完成后，旧资产 generation 父 pack 在 `0c5c954e5` 被整体删除，
+  但独立 `domains/asset/delete.ts` 与六条生产 API route 继续存在；生产 registry 因此完全
+  漏接该 Operation，既有 conformance 只能验证“已经注册的实例”，无法发现整个实例消失，
+  所有顶层删除最终都以 `OPERATION_NOT_FOUND` 失败。当前将现有
+  `createAssetDeleteOperations()` 作为独立 `['asset']` pack直接接回唯一生产 registry，
+  不复制 Operation 或恢复 generation 父 pack；Project/Asset Hub/generic route仍只调用
+  同一个 `delete_asset`。后续删除或重组父 pack必须枚举仍存活的生产 route operationId，
+  不能以目录父子关系推断子实例已经退役。
 - 资产管线曾让 Worker 直接给出实体 key，并在采用结果时同步创建图片任务；随后 canonical screenplay 又提前登记生产资产候选，使剧本身份、资产筛选、数据库 identity 和媒体生命周期彼此耦合，剧本漏登时下游无法补救。当前 asset manifest 是生产资产范围唯一 owner，服务端生成稳定 manifest identity，共享 Project asset writer 唯一建立领域 identity，manifest adoption 只采用，`create_image` 只生成并在终态绑定。当前验证盲区是真实 MySQL 下同名历史资产与新 `manifestAssetId` 并发采用的完整竞争组合。
 - Asset Worker 曾输出自由媒体生成文本，服务端又追加固定资产格式后缀；旧 `constants.ts` 同时保留相反的 16:9、左全身右特写、非白底规则。三个 writer 让同一次执行同时要求不同画幅和构图，逐字剥离旧 policy 的 helper 也只能删除完全相同字符串，无法消除 Worker 自由措辞。当前 Manifest 删除最终 Prompt 字段，旧 suffix/helper 一次性删除，服务端 Compiler 成为唯一 writer；真实 Provider 对固定构图的服从度仍需生成样本复验。
 - 媒体读取权限收紧后，外部下载仍有两套解释：`outbound-image` 允许配置 hostname 绕过私网检查，storage/media-process 又直接 fetch Provider result。该分裂既允许跨端口访问内部服务，也留下 DNS 预检与连接解析的竞态。当前 owner relation 与网络目标 policy 明确分层，所有主动 body 下载复用同一 socket-pinned 出口；目标部署桶的真实签名域名与 DNS/代理组合仍是发布复验边界。

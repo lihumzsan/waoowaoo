@@ -63,7 +63,7 @@
 
 1. planner 解析所有显式 Resource ID，验证 scope、状态、schema、媒体类型和 capability。
 2. plan snapshot 冻结 model/config、输入顺序、报价和审批事实。
-3. commit 事务按 `operationId + requestId + candidateIndex` 预留短 Resource ID，创建 Task 与 outbox。
+3. commit 事务按 `operationId + requestId + candidateIndex` 预留短 Resource ID，原子创建 Resource、Task、Created TaskEvent 与 FollowUpBatch membership。
 4. Worker 只消费冻结 payload；provider 受理 identity 由 Task checkpoint 保存。
 5. terminal success 在一个事务中投影领域事实、物化 Resource、写 Lineage、结算 Task/event/continuation。
 6. 重复 terminal 或 replay 必须返回相同事实；不同 Task 不能物化已成功的 Resource。

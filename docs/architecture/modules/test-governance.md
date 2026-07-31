@@ -26,6 +26,10 @@
 - **TG-10 — Harness fail closed。** retained suite 的 required case 缺失、skip/todo、依赖不可用、浏览器异常或报告不完整必须显式失败；未运行只能报告未验证。Harness 自行启动的长期进程必须持有 canonical process identity，成功、失败与取消都只有在整个进程树已确认退出后才算完成；只发送终止信号或只观察直接子进程退出不构成清理成功。
 - **TG-11 — 无隐式挂载。** Git hooks 不运行测试。CI 只运行本模块列出的保留集合；任何新增测试都必须先更新本模块的准入说明，而不是靠目录匹配自动扩张。
 - **TG-12 — 如实交付。** 交付只列实际执行的命令、结果和盲区。不得用未执行、已删除或只自证的测试暗示产品行为已验证。
+- **TG-13 — 静态检查必须覆盖真实入口。** `npm run typecheck`除应用源码外，还必须通过
+  `tsconfig.runtime-scripts.json`穷尽列出`package.json`实际以`tsx`运行的运维、迁移、备份、
+  校验与测试服务TypeScript入口。不得以已删除脚本、生成文件或空include让第二段检查表面
+  成功；新增/删除runtime script必须同步这一唯一清单。
 
 ## 保留集合与权威入口
 
@@ -34,12 +38,19 @@
 | Logic | `npm run test:logic` | 独立规格的纯逻辑、状态机、算法、identity，以及 retained harness 的 fail-closed 校验 |
 | Conformance | `npm run test:conformance` | 从生产 Task、Operation、Canvas、Provider 等 registry 穷尽检查接线 |
 | Provider Critical | `npm run test:critical:provider` | 真实 adapter/wire 协议、零隐式重提与明确失败 |
-| Task Critical | `npm run test:critical:task` | 真实 MySQL/Redis 的提交原子性、attempt、Outbox、Wait、并发与 at-most-once |
+| Task Critical | `npm run test:critical:task` | 真实 MySQL/Redis 的 Task/Operation 提交原子性、幂等、并发与账本边界 |
+| Temporal Critical | `npm run test:critical:temporal` | 真实 Temporal 1.31.2 + MySQL 的 Workflow/Activity、Worker 丢失、heartbeat、ACK 丢失与跨系统重放 |
 | Billing Critical | `npm run test:critical:billing`、`npm run test:critical:billing-concurrency` | 余额、冻结、结算、Stripe 逆向资金事件与并发账本 |
 | Security Critical | `npm run test:critical:security` | 真实 owner/scope、媒体读取与跨项目写入拒绝 |
 | Browser Security | `npm run test:security` | 四个最小 authenticated/unauthenticated 权限边界 |
 
 `npm run test:critical` 只聚合上述 Critical 子集。仓库没有 `test:journey`、Golden scenario registry、脚本模型 Provider 或创作行为自动化入口。
+
+Temporal Critical 只有在 `TEMPORAL_TEST_BOOTSTRAP=1` 时才激活
+`docker-compose.test.yml` 的 `temporal` profile。该 profile 在当前 worktree 的独立
+Compose project 中启动真实 Temporal Server、专用 `temporal`/`temporal_visibility`
+MySQL schema 和测试 namespace，并向测试进程注入随机本机端口；其他保留集合不得隐式
+启动 Temporal。依赖或 namespace 未就绪必须失败，禁止退回 mock server 或内存 Workflow。
 
 ## 新测试准入记录
 
@@ -59,6 +70,13 @@
 - CI 长期常红后仍继续开发，说明红灯已失去阻塞语义。保留集合必须始终可解释：失败要么修复真实缺陷，要么删除失效测试，不允许把常红当正常状态。
 - 过去纠正性提交中的测试多数是修复后的同步工作，而不是缺陷发现来源。当前取消“任何修复都补测试”的默认要求，把维护预算集中在资金、并发、幂等、权限和生产 registry 漏接。
 - `afd320ca` 精简 Golden Journey 时保留了四项浏览器安全边界，但同时删除了环境协调器、退出等待和超时强制终止。Playwright 结束后，已脱离的 Turbopack Next 进程组因直接子进程先退出而成为 PID 1 的孤儿，继续重连已销毁的 MySQL/Redis，并长期占用 CPU 与 IOAccelerator 内存。当前防线由环境进程统一持有 app process-group identity，正常结束通过带令牌的协调器请求 owner 清理，失败或取消等待整个进程树退出并在超时后强制终止；global teardown 只在 owner 不可用时按同一 identity 恢复清理。该防线已覆盖 macOS 实际进程组路径，Windows `taskkill /T` 分支仍只有静态验证。
+- `ee0d9070`删除独立log cleanup进程时，`tsconfig.runtime-scripts.json`仍只include已删除的
+  `scripts/log-cleanup.ts`和未跟踪的Next生成声明；当工作区恰有`next-env.d.ts`时第二段
+  typecheck可以成功却没有检查任何runtime script，干净worktree才以TS18003暴露。当前配置
+  直接枚举`package.json`真实tsx入口，删除生成文件占位；空输入和漏接新脚本都不能继续
+  冒充静态验证。首次真正检查随即发现两份图片健康脚本仍引用已删除的三类旧Task；它们现
+  只观察生产registry中实际触达outbound image边界的`creative_resource_image +
+  creative_resource_video`，没有旧枚举兼容或双读。
 
 ## 修改检查表
 
@@ -68,3 +86,4 @@
 4. 失败测试是否先完成有效性审计，而不是让生产代码迁就它？
 5. CI 与 package scripts 是否只指向本页保留集合？
 6. 实际验证与未验证范围是否如实说明？
+7. package中的TypeScript runtime script是否同步进入`tsconfig.runtime-scripts.json`？

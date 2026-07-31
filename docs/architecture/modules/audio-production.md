@@ -17,17 +17,17 @@
 - **AP-05 — 最终混音只消费精确输入。** 混音必须显式列出有序视频 Resource ID、可选音乐 Resource ID、时间范围和 automation；stitched video duration 是输出时长权威。所有输入先由服务端回库验证 owner/scope/content，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。不得从“当前 BGM”“最近音乐”或旧 BgmDesign 推断。
 - **AP-06 — 声音能力不产生后续链。** 音乐 Task 终态只恢复 Primary；Choice 只处理当前音频选择决定；采用某个音频 Resource 不渲染视频。收费 Approval 只授权当前精确媒体计划，不能授权未来混音或渲染。
 - **AP-07 — 被删除能力不得残留入口。** 旧固定 BGM plan/generate、环境音/音效规划、专用 Canvas stage、TaskType、worker writer、状态字段和 Workflow recommendation 必须删除；历史名字只可出现在迁移删除语句或历史说明。
-- **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice.request.kind=single|characters` 是唯一生成契约：`single` 创建一个新的不可变音色 Resource，`characters` 在一个精确 Operation Plan 中展开所列角色，每个成员创建一个独立 Resource 与 Task；整批只形成一次总报价和一次批准，成员终态彼此独立，部分失败不会撤销成功成员，后续显式调用只需重新提交失败角色。Agent 为每个成员提交描述、试听文字、语言和显示名，角色成员还必须提交精确角色 ID；服务端解析同一个正式 Voice Design 模型，并按每个 Task 冻结的试听文字分别计费、汇总报价。两种分支都复用通用 OperationBatch/Wait，不建立音色专用批次状态。
+- **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice.request.kind=single|characters` 是唯一生成契约：`single` 创建一个新的不可变音色 Resource，`characters` 在一个精确 Operation Plan 中展开所列角色，每个成员创建一个独立 Resource 与 Task；整批只形成一次总报价和一次批准，成员终态彼此独立，部分失败不会撤销成功成员。两种分支都复用通用 FollowUpBatch，不建立音色专用批次状态。
 - **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。单个或批量生成都在计划时分别冻结每个角色的 Binding version；生成期间发生较新换绑时保留对应的新 Resource 并返回显式 conflict，其他成员不受影响。
 - **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Resource，缺失一个时按剧本、用户要求和已有角色事实调用 `generate_voice` 的 `request.kind=single + request.target.kind=character`，同时缺失多个时使用一次 `request.kind=characters`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Resource 与音色设计描述作为 Worker source material，Worker 把精确 Resource ID 写入 Prompt Set，执行层按顺序映射为 `@AudioN`；试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 Resource，也不从角色名、最新音色或试听内容推断引用。
 - **AP-10 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未生成中、未绑定且未被 Lineage 引用的音色 Resource；MediaObject 仍由独立生命周期拥有。
-- **AP-12 — 视频条件音乐生成由 capability registry 与正式 option schema 共同裁决。** `create_audio` 只可携带恰好一个 ready 视频 Resource 作为音乐模型的画面条件输入；是否允许只由生产 music capability 的 `maxReferenceVideos` 声明（缺失即不支持，提交前原地失败）。视频引用作为 `videoInputPositions` 冻结进 Task payload，worker 回库校验 owner/ready/mediaType 后经共享 outbound media 入口投影为有界 HTTPS 签名 URL，再交给 provider adapter；相对 route、storageKey 和 Data URL 均不得进入 Gateway。普通视频条件音乐覆盖所请求的完整区间；`music_direction` cue 额外把服务端冻结的 `scoreWindowStartMs/scoreWindowEndMs` 作为一对 canonical option 交给 Mureka，使一次请求只观看和配乐该 cue 窗口。窗口必须成对、非负、递增且不超过视频真实时长；不存在从“最近视频”、历史消息或 adapter 默认值推断 cue 的路径。
+- **AP-12 — 视频条件音乐生成由 capability registry 与正式 option schema 共同裁决。** `create_audio` 只可携带恰好一个 ready 视频 Resource 作为音乐模型的画面条件输入；是否允许只由生产 music capability 的 `maxReferenceVideos` 声明。视频引用作为 `videoInputPositions` 冻结进 Task payload，Task Activity 回库校验 owner/ready/mediaType 后经共享 outbound media入口投影为有界 HTTPS签名 URL，再交给 provider adapter。
 
 ## 权威入口
 
 - 音乐创意知识与输出：`src/lib/creative-skills/skills/music-direction/**`、`src/lib/creative-worker/output-registry.ts`。
 - 独立音频 Operation：`src/lib/operations/domains/creative-resource/generation-ops.ts` 的 `create_audio`（含 `request.kind=music_direction` 引用执行窄分支）；媒体执行复用通用 Task、Provider Gateway、计费与 Resource materializer。
-- 音乐 Task 执行与视频条件装载：`src/lib/workers/music.worker.ts`；视频条件 soundtrack 的唯一 provider adapter：`src/lib/ai-providers/mureka/**`（上传、soundtrack/instrumental 提交与 `MUREKA:MUSIC` 轮询协议）。
+- 音乐 Task 执行与视频条件装载：`src/lib/task/execution/handlers/creative-resource-audio.ts`；视频条件 soundtrack 的唯一 provider adapter：`src/lib/ai-providers/mureka/**`。
 - 模型时长能力：生产 capability registry 与 provider adapter；调用方不得复制范围。
 - 确定性混音 primitive：`src/lib/video-compose/video-merge-audio.ts`；只由通用 `merge_videos` Resource Task 显式消费，没有固定最终渲染阶段。
 - 角色音色：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts` 与共享 Binding service。

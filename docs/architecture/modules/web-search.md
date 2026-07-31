@@ -33,7 +33,7 @@ Search Agent 只生产本次调用的研究报告和结构化证据，不拥有 
 - Primary Operation：`src/lib/operations/domains/web-search/web-search-ops.ts`；能力发现与执行仍由生产 Operation registry 和固定 gateway 负责。
 - Worker 能力声明：`src/lib/creative-worker/output-registry.ts`；外层预算、工具执行与证据投影：`tools.ts`、`research.ts`、`runtime.ts`。
 - Task/Resource 研究元数据：`src/lib/creative-worker/task-contract.ts`、`src/lib/creative-resource/creative-work-materialization.ts`。
-- 网页图片导入：Operation `src/lib/operations/domains/creative-resource/reference-image-ops.ts`；payload 与出处契约 `src/lib/creative-resource/web-reference-contract.ts`；worker `src/lib/workers/handlers/creative-resource-web-reference.ts`；Task 声明 `src/lib/task/definition.ts`。
+- 网页图片导入：Operation `src/lib/operations/domains/creative-resource/reference-image-ops.ts`；payload 与出处契约 `src/lib/creative-resource/web-reference-contract.ts`；Task执行器 `src/lib/task/execution/handlers/creative-resource-web-reference.ts`；Task声明 `src/lib/task/definition.ts`。
 - 研究判断与翻译协议：双语 Primary Prompt、仅搜索能力 Worker 接收的 system Prompt 片段、`creative-direction` Skill。
 - 环境变量示例：`.env.example`、`.env.cloud.example`。真实 key 只能存在于忽略的环境配置。
 

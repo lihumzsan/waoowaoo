@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { Connection } from '@temporalio/client'
 import mysql from 'mysql2/promise'
 import Redis from 'ioredis'
 import { loadTestEnv } from './env'
@@ -22,12 +23,20 @@ export interface TestServiceEndpoints {
   readonly databaseUrl: string
   readonly redisHost: string
   readonly redisPort: number
+  readonly temporal: TemporalTestServiceEndpoints | null
+}
+
+export interface TemporalTestServiceEndpoints {
+  readonly address: string
+  readonly namespace: string
+  readonly taskQueue: string
 }
 
 export interface TestServiceReadinessOptions {
   readonly mysqlMaxAttempts?: number
   readonly mysqlConnectTimeoutMs?: number
   readonly redisMaxAttempts?: number
+  readonly temporalMaxAttempts?: number
 }
 
 function parseDbUrl(dbUrl: string): DbConfig {
@@ -55,11 +64,16 @@ function resolveScope(scope?: TestServiceScope): Required<TestServiceScope> {
   }
 }
 
+function temporalBootstrapEnabled(): boolean {
+  return process.env.TEMPORAL_TEST_BOOTSTRAP === '1'
+}
+
 function composeArgs(scope: Required<TestServiceScope>, args: readonly string[]): string[] {
   return [
     'compose',
     '-p', scope.composeProjectName,
     '-f', 'docker-compose.test.yml',
+    ...(temporalBootstrapEnabled() ? ['--profile', 'temporal'] : []),
     ...args,
   ]
 }
@@ -71,6 +85,7 @@ function runCompose(scope: Required<TestServiceScope>, args: readonly string[]):
       ...process.env,
       TEST_MYSQL_PORT: '0',
       TEST_REDIS_PORT: '0',
+      TEST_TEMPORAL_PORT: '0',
     },
     stdio: 'inherit',
   })
@@ -78,8 +93,8 @@ function runCompose(scope: Required<TestServiceScope>, args: readonly string[]):
 
 function readPublishedPort(
   scope: Required<TestServiceScope>,
-  service: 'mysql' | 'redis',
-  containerPort: 3306 | 6379,
+  service: 'mysql' | 'redis' | 'temporal',
+  containerPort: 3306 | 6379 | 7233,
 ): number {
   const output = execFileSync('docker', composeArgs(scope, ['port', service, String(containerPort)]), {
     cwd: process.cwd(),
@@ -87,6 +102,7 @@ function readPublishedPort(
       ...process.env,
       TEST_MYSQL_PORT: '0',
       TEST_REDIS_PORT: '0',
+      TEST_TEMPORAL_PORT: '0',
     },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
@@ -104,6 +120,18 @@ function applyEndpoints(endpoints: TestServiceEndpoints): void {
   process.env.DATABASE_URL = endpoints.databaseUrl
   process.env.REDIS_HOST = endpoints.redisHost
   process.env.REDIS_PORT = String(endpoints.redisPort)
+  if (endpoints.temporal) {
+    process.env.TEMPORAL_ADDRESS = endpoints.temporal.address
+    process.env.TEMPORAL_NAMESPACE = endpoints.temporal.namespace
+    process.env.TEMPORAL_TASK_QUEUE = endpoints.temporal.taskQueue
+    process.env.TEMPORAL_TLS_ENABLED = 'false'
+    process.env.TEMPORAL_API_KEY = ''
+    process.env.TEMPORAL_TLS_SERVER_NAME = ''
+    process.env.TEMPORAL_WORKER_DEPLOYMENT_NAME =
+      `${endpoints.scope.composeProjectName}-worker`
+    process.env.TEMPORAL_WORKER_BUILD_ID = 'test'
+    process.env.TEMPORAL_WORKER_VERSIONING_ENABLED = 'false'
+  }
 }
 
 function readEndpoints(scope?: TestServiceScope): TestServiceEndpoints {
@@ -116,11 +144,19 @@ function readEndpoints(scope?: TestServiceScope): TestServiceEndpoints {
   const databaseUrl = new URL(configuredDatabaseUrl)
   databaseUrl.hostname = '127.0.0.1'
   databaseUrl.port = String(mysqlPort)
+  const temporal = temporalBootstrapEnabled()
+    ? {
+        address: `127.0.0.1:${String(readPublishedPort(resolvedScope, 'temporal', 7233))}`,
+        namespace: process.env.TEST_TEMPORAL_NAMESPACE?.trim() || 'waoowaoo-test',
+        taskQueue: `${resolvedScope.composeProjectName}-temporal`,
+      }
+    : null
   const endpoints = {
     scope: resolvedScope,
     databaseUrl: databaseUrl.toString(),
     redisHost: '127.0.0.1',
     redisPort,
+    temporal,
   }
   applyEndpoints(endpoints)
   return endpoints
@@ -185,6 +221,40 @@ export async function waitForRedis(maxAttempts = 60) {
   throw new Error('Redis test service did not become ready in time')
 }
 
+export async function waitForTemporal(
+  endpoints: TemporalTestServiceEndpoints,
+  maxAttempts = 120,
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let connection: Connection | null = null
+    try {
+      connection = await Connection.connect({
+        address: endpoints.address,
+        tls: false,
+        connectTimeout: '3s',
+      })
+      await connection.workflowService.describeNamespace({
+        namespace: endpoints.namespace,
+      })
+      return
+    } catch (error) {
+      if (attempt === 1 || attempt % 10 === 0) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn(
+          `[test-services] Temporal readiness attempt ${String(attempt)} failed: ${message}`,
+        )
+      }
+      await sleep(1_000)
+    } finally {
+      if (connection) {
+        await connection.close()
+      }
+    }
+  }
+
+  throw new Error('Temporal test service did not become ready in time')
+}
+
 export function startTestServices(scope?: TestServiceScope): TestServiceEndpoints {
   loadTestEnv()
   const resolvedScope = resolveScope(scope)
@@ -204,6 +274,9 @@ export async function waitForTestServices(
   const endpoints = readEndpoints(scope)
   await waitForMysql(options.mysqlMaxAttempts, options.mysqlConnectTimeoutMs)
   await waitForRedis(options.redisMaxAttempts)
+  if (endpoints.temporal) {
+    await waitForTemporal(endpoints.temporal, options.temporalMaxAttempts)
+  }
   return endpoints
 }
 

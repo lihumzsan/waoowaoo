@@ -1,4 +1,4 @@
-import type { SSEEvent } from '@/lib/task/types'
+import type { SSEEvent } from '@/lib/sse/events'
 
 export function lifecycleEvent(id: string, progress: number): SSEEvent {
   return {

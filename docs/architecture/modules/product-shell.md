@@ -16,10 +16,11 @@
 - **PS-06 — 一个用户动作只有一个页面后继。** 创建或保存成功后若必须导航到另一产品表面，不得同时启动只服务于当前页面的 refetch；留在当前页时才由当前页刷新自己的 View。
 - **PS-07 — 权威父资源成功后才可初始化子资源。** 空数组、缺失 View 或 loading 结束不能证明用户拥有父资源。自动创建默认剧集等 setup 写入必须先取得成功且已鉴权的 Project；父资源 401/403/404 或读取错误后必须停止全部派生写入。
 - **PS-08 — 浏览器会话是用户 API 的唯一身份来源。** 受保护 HTTP route 只接受 NextAuth session 中的持久 user id；固定内部 token、调用方提供的 user id、用户名或邮箱不得成为并行身份入口。日志下载和其他运维数据还必须经过显式管理员授权，不能由 deployment feature visibility 代替鉴权。
-- **PS-09 — 认证防线与部署配置失败关闭。** 注册、初次设置和修改密码必须共同复用唯一密码策略，当前最小长度为 8 位；不得由页面、route 或运维写入绕过。登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后从右侧可信代理链解析客户端 IP；无法验证来源使用共享桶，Redis 不可用时拒绝认证尝试。cloud preflight 必须显式区分本地开发与正式部署：本地只允许 loopback HTTP、无代理或明确的非负代理跳数，以及仅 loopback 暴露的无认证 Bull Board；正式部署必须拒绝缺失、弱密钥、非 HTTPS 公网地址和未知代理拓扑。Compose 不得提供可用的默认密码或把基础设施默认绑定到公网。
+- **PS-09 — 认证防线与部署配置失败关闭。** 注册、初次设置和修改密码必须共同复用唯一密码策略；不得由页面、route或运维写入绕过。登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后解析可信代理链。cloud preflight必须显式区分本地开发与正式部署；正式部署必须拒绝缺失、弱密钥、非 HTTPS公网地址、可变或`local` Temporal Worker build identity、关闭Worker Versioning、非PINNED默认行为和未知代理拓扑。Compose不得提供可用默认密码或把基础设施默认绑定到公网。
 - **PS-10 — 首页初始化是一个原子构造。** 首页已展示并保存的画面比例不再触发模型 Choice；“开始创作”只能通过 `create_project` 的一个事务创建 Project、写入该显式比例并创建首 Episode。任一步失败必须全部回滚，浏览器不得用 create → config PATCH → episode POST 拼出半初始化项目。其他没有比例的合法入口仍保留 `videoRatio=null`，真正需要媒体执行时由 Primary 发起通用 Choice，并且只提交当前比例决定。
 - **PS-11 — 认证入口与账号初始化唯一。** 产品只有一个登录/注册页面；受信身份已存在时登录，不存在时在同一次认证动作中创建 `User` 与 `UserBalance`。所有认证方式必须复用 `src/lib/auth/account-onboarding.ts` 这一账号初始化 writer。Cloud 只注册手机号与 Google provider，密码 provider、独立注册 route、密码设置 API 必须同时关闭；self-hosted 只注册用户名密码 provider。个人资料可见性不能等同于密码能力：Cloud 仍须允许已登录用户修改非身份显示名称并主动绑定 Google，密码写入则必须继续由 `enablePasswordAuth` 独立失败关闭。手机号 canonical identity 是归一化 E.164，并由 `Account(provider="phone", providerAccountId)` 唯一键持久化；修改 `User.name` 不得改写这一登录 identity。`sms-destinations.ts` 是已启用短信目的地 identity、国内/国际通道与 Sender ID policy 的穷尽 registry；国家/地区选择只帮助构造并验证 canonical E.164，不得成为第二持久 identity。registry 只能声明现有审核能力可直接发送、且不需要额外目的地 Sender/品牌注册的地区；需要新增审核的目的地不得作为潜在实例、隐藏配置或运行时开关预埋。登录页直接穷尽消费该 registry，绕过 UI 的未启用目的地必须在发送前原地失败。腾讯云国内短信必须使用国内模板与签名，国际/港澳台短信必须使用国际模板且不得携带国内签名或 Sender ID。短信验证码只在 Redis 中保存带 TTL 的 HMAC，发送、失败补偿、尝试计数与一次性消费由 `phone-verification.ts` 唯一裁决；发送短信前的图形挑战由 `image-captcha.ts` 生成、绑定可信客户端来源并一次性消费，Redis 或挑战状态不可判定时失败关闭。页面倒计时不承担安全或终态正确性。
 - **PS-12 — 对象存储是必需外部基础设施。** Cloud、self-hosted 与本地开发共用一个预建 S3-compatible bucket；`S3_ENDPOINT` 必须是公网 HTTPS，启动必须在应用/worker 前严格解析配置并完成 HeadBucket。Compose 只编排 MySQL、Redis 与应用，不捆绑 MinIO；启动不得创建桶、回退本地目录、启用 tunnel 或按 deployment edition 选择第二存储协议。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
+- **PS-13 — 错误identity与本地化copy分离。** HTTP/API只返回稳定typed error code及必要的非敏感identity；当前locale的i18n catalog是用户文案唯一owner。route、Temporal failure、Provider message、Error.cause和英文开发文案不得直接成为用户copy；未知内部错误对外收敛为稳定code，原cause只进入服务端诊断。
 
 ## 权威入口
 
@@ -28,7 +29,8 @@
 - 部署能力：`src/lib/deployment/config.ts`、`src/lib/deployment/features.ts`、`/api/deployment`；用户 Provider 配置后端能力统一由 `src/lib/user-api/availability.ts` 裁决。
 - 注册/登录和资源 owner：`src/lib/auth/account-onboarding.ts`、`src/lib/auth/password-auth.ts`、`src/lib/auth/phone-verification.ts`、`src/lib/auth/image-captcha.ts`、`src/lib/auth/sms-destinations.ts`、`src/lib/auth/tencent-sms.ts`、生产 auth routes、NextAuth session 与项目鉴权 service。
 - API session、管理员权限和错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/api-errors.ts`。
-- 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/bull-board.ts`、`src/lib/storage/{s3-config,bootstrap,init}.ts` 与 `next.config.ts`。
+- Assistant命令错误边界：`src/app/api/projects/[projectId]/assistant/command-http.ts`与`messages/{en,zh}/errors.json`。
+- 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/temporal/**`、`src/lib/temporal/**`、`src/lib/storage/{s3-config,bootstrap,init}.ts` 与 `next.config.ts`。
 - 首页 Project 构造：`create_project` Operation；Episode 行锁与编号由 `src/lib/projects/episode-service.ts` 统一写入，比例初始值和后续 `update_project_config` 共同复用 `video-ratio-write.ts` 的唯一事实 writer。
 
 ## 验证
@@ -39,6 +41,7 @@
 - 匿名 route 必须显式枚举；手机号图形挑战与短信发送是显式公开认证 route，其他认证与用户 API 仍必须显式鉴权。
 - `tests/unit/auth/rate-limit-client-ip.test.ts` 反证伪造 X-Forwarded-For 绕过；`docker compose config` 与 cloud env preflight 分别验证自托管、cloud 启动契约。
 - 对象存储启动契约以 `docker compose config --quiet` 和实际目标环境的 `npm run storage:init` 复验；没有真实目标桶时只能验证配置解析，不能宣称 Provider 已可下载签名对象。
+- Temporal正式部署配置必须反证`local`/可变build identity、关闭Versioning与非PINNED默认行为均不能启动；真实滚动升级和旧Workflow排空仍需目标环境复验。
 - i18n、deployment capability、首页默认 Project/Episode 和 Assistant ratio Choice 通过人工产品复验，不再复制成脚本 Journey。
 
 ## 历史回归
@@ -53,7 +56,7 @@
 - 自托管 Compose 曾把 MySQL、Redis、MinIO、NextAuth、Cron、API 加密和 Bull Board 凭据写死，并把数据库、存储和队列面板绑定全部网卡；旧健康检查只证明服务可达，反而固化了公开弱凭据。第一轮只把 MinIO 密钥改为显式配置，仍让本地文件、内网 MinIO 与公网对象存储成为三种部署/Provider 组合。当前 Compose 只编排 MySQL、Redis 和应用，所有环境必须显式配置同一外部 HTTPS S3-compatible bucket；storage startup 只验证预建桶，不创建基础设施或回退。既有 local/MinIO 数据必须由部署者在升级前迁移，本次没有执行数据复制；真实目标云的权限、域名和 Provider 可达性仍需在目标环境复验。
 - 清理 Remotion 依赖时曾用仓库检索判定其传递依赖可一并删除，却遗漏 worker 与运维脚本对未声明 `dotenv` 的直接导入；Remotion 移除后，Cloud 启动器虽已注入完整环境，worker 仍在队列连接前因 `dotenv/config` 无法解析而崩溃。根因是运行入口同时依赖权威启动器和偶然存在的第二环境加载器。当前应用与 worker 只消费 package script 或 `run-with-env.mjs` 注入的环境，独立脚本通过显式 `tsx --env-file` 启动，不再依赖传递包；类型检查不能独立证明运行时 side-effect import 可解析，依赖清理仍须核对生产入口的直接导入。
 - 代理信任改为显式配置后，真实权限 Journey 在无可信代理的本地部署连续创建多个测试用户时触发了共享注册桶：原先每分钟 3 次的阈值会把同一 NAT/未知来源下的正常注册误判成攻击。注册桶调整为每分钟 10 次，仍由 Redis 原子滑窗限制批量滥用；登录继续保持更严格阈值，无法确认客户端来源时仍不信任来路 header，也不回退为无限制。
-- 安全部署加固曾把正式公网 cloud 的管理员、Bull Board 认证、HTTPS 和正数代理跳数要求无条件加入 `.env.cloud.local` preflight；结构检查和生产构建只证明规则足够严格，没有运行仍由同一入口驱动的本地 `dev:cloud`，导致没有管理员、反向代理或公网 Bull Board 的正常开发环境无法启动。当前保留一个 fail-closed 校验器，由 package script 显式选择 development 或 production profile；development 只放宽不存在的运维能力，公网 HTTP、半套 Bull Board 凭据、非 loopback 无认证暴露和非法代理值仍原地失败。
+- 安全部署加固曾把正式公网 cloud 的管理员、Bull Board认证、HTTPS和正数代理跳数要求无条件加入开发 preflight，导致正常开发环境无法启动。Bull控制面现已物理删除；当前保留一个 fail-closed校验器，由package script显式选择development或production profile，并额外冻结Temporal Worker build identity。
 - Cloud API 配置页面虽由 deployment feature 隐藏，共享的读取、写入和连接诊断 route 仍只校验登录，主 Agent registry 也继续暴露读写配置 Tool；正常生成因为 `platform-key` 忽略用户持久配置而未被改写，但隐藏 UI 并未关闭后端能力。当前 `providerCredentialMode` 同时派生 API 配置可见性和后端 availability，Cloud 在数据库或外部连接前统一拒绝，Agent 配置 Operation 改为 API-only；Self-hosted 的个人设置 writer 保持不变。
 - 首页增加比例选择后曾用三个独立 HTTP 事务依次创建 Project、PATCH 比例、创建 Episode；后两步失败会留下无比例或无 Episode 的孤儿 Project。当前首页 payload 只调用现有 `create_project`，构造事务复用比例与 Episode 的权威 writer；独立 Project/Episode API 仍服务非首页显式操作，不是首页 fallback。
 - 手机号认证接入前，密码注册通过 `/api/auth/register → auth_register_user` 创建 `User + UserBalance`，Google adapter 又独立复制同一初始化事务；页面同时保留 signin/signup 两套入口，deployment feature 只控制 Google 按钮和 provider，继续新增手机号会形成第三个 writer，并可能让 Cloud 隐藏密码 UI 后仍保留 credentials callback、注册 API 与密码设置 API。当前删除独立 signup、register route、注册 Operation 与旧结果协议，Google、手机号和 self-hosted 密码共同复用一个 onboarding writer；Cloud feature 同时裁决页面、NextAuth provider、短信发送 route 与密码设置 route。腾讯云明确拒绝时按 challenge identity 补偿，网络结果不明时保留短期 challenge，避免已送达验证码被本地误删。初始 SDK 接入曾假设模板同时接收验证码和有效分钟数，真实已审核模板只声明 `{1}` 验证码，导致参数数量不一致时发送必然被拒；当前发送契约只传一个验证码参数，5 分钟有效期仍由 Redis challenge TTL 唯一裁决，不从短信文案解释状态。真实运营商到达率与目标生产反向代理组合仍是外部盲区。
@@ -61,6 +64,16 @@
 - 国际目的地 registry 首版直接使用 `libphonenumber-js/min` 的预绑定 metadata 入口；Vitest 能加载且类型检查通过，但真实 `tsx` worker 的 CommonJS loader 把该入口内部 `require()` 的 JSON 包成 `{ default }`，导致 worker 在顶层构造 registry 时崩溃。此前 `dotenv/config` 缺失也曾在类型检查通过后令 worker 启动失败，说明类型检查和非生产模块加载器不能证明 worker 运行时依赖可执行。当前号码解析与 registry 共同使用库的 `core` 入口，并把同一 `metadata.min` 显式作为最后参数传入，删除预绑定入口的隐藏加载差异；验证必须包含真实 `tsx` 导入与 Cloud worker 启动。实际短信发送和运营商送达仍是外部盲区。
 - 手机号认证收敛 Cloud 密码入口时，`showAccountSecurity` 被整体关闭，导致本应继续存在的显示名称管理和已登录 Google 绑定也随密码表单一起消失；deployment 单测只证明总开关为 false，未证明 Cloud 真实个人中心仍覆盖非密码身份管理。当前个人资料可见性与 `enablePasswordAuth` 分离：Cloud 恢复资料与 Google 绑定，密码卡和密码写 route 继续失败关闭；Google 已绑定其他用户时仍由 NextAuth 拒绝，不自动合并持久 identity。真实 Google OAuth 回调仍依赖外部 provider，是本地验证盲区。
 - `update_project` 首次公开严格字段 Schema 时仍把 `name`、`description` 都声明为可选，并只在 executor 内拒绝空对象和校验裁剪后的长度；模型因此能生成 Schema 合法、运行时失败的空命令，HTTP 调用方也各自拼接同义字段组合。当前唯一 Operation 输入改为 `command.kind=name|description|details` 的穷尽结构，每个分支在 Schema 中冻结实际字符串边界，两个页面调用方直接提交同一 canonical command；executor 不再拥有隐藏的“至少一个字段”裁判。真实浏览器的重命名与完整编辑交互仍由既有产品 Journey 作为发布复验边界。
+- 认证/权限加固曾发现5xx响应直接携带内部错误详情；Temporal Agent接入初版又在命令route
+  为不同异常拼接固定英文message，形成新的copy owner，也可能把transport包装后的内部
+  message泄露给UI。这是稳定错误identity与本地化边界在新入口上的漏接。当前命令route只
+  分类并返回stable code，已知Agent code由`messages/{en,zh}/errors.json`解析，未知cause
+  只挂在服务端Error链供诊断。真实双locale错误呈现仍需产品复验。
+- cloud preflight曾把production约束误用于development，说明“一个校验器”本身不能代替
+  明确profile；Temporal接入后如果production仍接受`local` build ID或Versioning=false，
+  则旧Workflow可能被不兼容代码接管。当前development可显式使用local/false，production
+  同时由runtime config和preflight强制immutable build、Versioning与PINNED；目标Temporal
+  集群的实际deployment rollout仍是外部盲区。
 
 ## 修改检查表
 
