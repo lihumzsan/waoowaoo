@@ -65,10 +65,6 @@ function parsePlannedTask(value: unknown): PlannedTask {
   const payload = readRecord(record.payload, 'tasks[].payload')
   const billingInfo = readRecord(record.billingInfo, 'tasks[].billingInfo') as PlannedTask['billingInfo']
   const locale = readString(record, 'locale') as PlannedTask['locale']
-  const priority = record.priority
-  if (priority !== undefined && (typeof priority !== 'number' || !Number.isFinite(priority))) {
-    throw new Error('OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:tasks[].priority')
-  }
   return {
     id: readString(record, 'id'),
     taskType: readString(record, 'taskType') as PlannedTask['taskType'],
@@ -81,7 +77,6 @@ function parsePlannedTask(value: unknown): PlannedTask {
     locale,
     episodeId: readNullableString(record, 'episodeId'),
     dedupeKey: readNullableString(record, 'dedupeKey'),
-    ...(typeof priority === 'number' ? { priority } : {}),
   }
 }
 

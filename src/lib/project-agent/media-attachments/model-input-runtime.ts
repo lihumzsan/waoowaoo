@@ -34,8 +34,9 @@ const LEGACY_ATTACHMENT_PLACEHOLDER_TEXT = '[uploaded image unavailable: this at
  * they are replaced with an explicit placeholder and logged, never resolved
  * and never silently dropped.
  *
- * This server runtime is shared by Next commands and Outbox continuations.
- * It must not import Next-only boundary markers such as `server-only`.
+ * This server runtime is shared by Next command validation and the Temporal
+ * Agent Turn Activity. It must not import Next-only boundary markers such as
+ * `server-only`.
  */
 export async function resolveProjectAssistantModelInputMedia(input: {
   readonly items: readonly AgentInputItem[]

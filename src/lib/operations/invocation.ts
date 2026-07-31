@@ -1,31 +1,21 @@
-import { randomUUID } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import {
-  assertProjectAgentOperationExecutionFenceCurrent,
-  assertProjectAgentOperationExecutionFenceInTransaction,
-  requireProjectAgentChoiceHandoffReceipt,
-  runWithProjectAgentOperationExecutionFence,
-} from '@/lib/project-agent/operation-execution-fence'
-import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
-import { createOutboxCommitCollector } from '@/lib/outbox/repository'
-import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+import { publishOperationMutationReceipt } from '@/lib/workspace-resource/resource-change-publisher'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
 import {
   buildProjectAgentToolInputCorrections,
   normalizeProjectAgentToolInput,
 } from './tool-input-schema'
 import {
-  invokeApprovedOperationPlan,
   splitPlannedOperationInvocation,
   type PlannedOperationInvocation,
 } from './planned-operation-invocation'
 import type {
+  OperationMutationReceipt,
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
-  ProjectAgentOperationOutcome,
   ProjectAgentOperationRegistry,
 } from './types'
 import { assertAssistantToolWriteAuthority } from './write-authority'
@@ -33,21 +23,16 @@ import {
   assertOperationChannelAllowed,
   type OperationInvocationChannel,
 } from './channel-policy'
+import { projectOperationMutationReceipt } from './mutation-receipt'
 
 export type { OperationInvocationChannel } from './channel-policy'
 
-export type ProjectAgentOperationInvocationResult =
-  | {
-      kind: 'executed'
-      data: unknown
-      operation: ProjectAgentOperationDefinition
-      outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }>
-    }
-  | {
-      kind: 'approval_required'
-      operation: ProjectAgentOperationDefinition
-      outcome: Extract<ProjectAgentOperationOutcome, { kind: 'wait_approval' }>
-    }
+export interface ProjectAgentOperationInvocationResult {
+  kind: 'executed'
+  data: unknown
+  operation: ProjectAgentOperationDefinition
+  mutationReceipt: OperationMutationReceipt | null
+}
 
 function requireOperation(
   registry: ProjectAgentOperationRegistry,
@@ -129,22 +114,6 @@ function assertPrerequisites(params: {
   return effectiveEpisode.episodeId
 }
 
-function operationMayCompleteWithoutTasks(operation: ProjectAgentOperationDefinition): boolean {
-  // An approved plan is allowed to contain zero Tasks: that is the registry
-  // declared Noop case. A direct transactional-task operation, by contrast,
-  // declares that its successful tool execution has atomically submitted a
-  // Task batch; it must fail closed if no committed receipt exists.
-  return operation.confirmation.kind === 'billable_media'
-}
-
-function operationRequiresTaskBatchBinding(operation: ProjectAgentOperationDefinition): boolean {
-  return operation.effects.writes
-    && (
-      operation.confirmation.kind === 'billable_media'
-      || operation.assistantWriteAuthority?.kind === 'transactional_task_submission'
-    )
-}
-
 export function prepareProjectAgentOperationInput(params: {
   channel: OperationInvocationChannel
   operation: ProjectAgentOperationDefinition
@@ -205,9 +174,12 @@ export async function invokeProjectAgentOperation(params: {
   context: ProjectAgentOperationContext
   input: unknown
   approvedInvocation?: PlannedOperationInvocation | null
-  returnApprovalRequired?: boolean
   transaction?: Prisma.TransactionClient
-  invocationMode?: 'default' | 'atomic_choice_commit'
+  invocationMode?:
+    | 'default'
+    | 'atomic_choice_commit'
+    | 'agent_tool_effect'
+    | 'durable_operation_execution'
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
   if (
@@ -221,26 +193,63 @@ export async function invokeProjectAgentOperation(params: {
   params.context.invocationChannel = params.channel
   const invocationMode = params.invocationMode ?? 'default'
   const atomicChoiceCommit = invocationMode === 'atomic_choice_commit'
-  if (Boolean(params.transaction) !== atomicChoiceCommit) {
+  const agentToolEffect = invocationMode === 'agent_tool_effect'
+  const durableOperationExecution =
+    invocationMode === 'durable_operation_execution'
+  if (Boolean(params.transaction) !== (atomicChoiceCommit || agentToolEffect)) {
     throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`)
   }
-  const executionFence = params.context.executionFence ?? null
-  if (params.channel === 'tool' && !executionFence) {
-    throw new Error(`PROJECT_AGENT_OPERATION_EXECUTION_FENCE_REQUIRED:${params.operationId}`)
-  }
-  if (executionFence && !params.transaction) {
-    await assertProjectAgentOperationExecutionFenceCurrent(executionFence)
+  if (
+    params.channel === 'tool'
+    && !durableOperationExecution
+    && !agentToolEffect
+    && operation.effects.writes
+  ) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_DURABLE_WRITE_OWNER_REQUIRED:${params.operationId}`,
+    )
   }
 
-  const invoke = async (): Promise<ProjectAgentOperationInvocationResult> => {
   if (params.channel === 'tool') {
     assertAssistantToolWriteAuthority(
       operation.id,
       operation as unknown as Record<string, unknown>,
     )
-    if (operationRequiresTaskBatchBinding(operation) && !params.context.taskBatchBinding) {
-      throw new Error(`PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED:${operation.id}`)
-    }
+  }
+  if (
+    durableOperationExecution
+    && (
+      operation.assistantWriteAuthority?.kind
+        !== 'temporal_operation_execution'
+      || !params.context.operationExecutionId?.trim()
+      || !params.context.requestId?.trim()
+      || params.transaction
+    )
+  ) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_DURABLE_EXECUTION_CONTRACT_INVALID:${operation.id}`,
+    )
+  }
+  if (
+    agentToolEffect
+    && (
+      params.channel !== 'tool'
+      || operation.intent !== 'act'
+      || !operation.effects.writes
+      || operation.effects.billable
+      || operation.effects.externalSideEffects
+      || operation.effects.longRunning
+      || operation.confirmation.kind !== 'none'
+      || operation.agentFlow?.suspendsFor
+      || !operation.executeInTransaction
+      || operation.prepareTransaction
+      || operation.compensateTransactionFailure
+      || !params.transaction
+    )
+  ) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_TOOL_EFFECT_CONTRACT_INVALID:${operation.id}`,
+    )
   }
   if (
     atomicChoiceCommit
@@ -288,8 +297,6 @@ export async function invokeProjectAgentOperation(params: {
   ) {
     throw new Error(`OPERATION_RESOURCE_TRANSACTION_REQUIRED:${operation.id}`)
   }
-  const resourceInvocationId = randomUUID()
-
   const parseOutput = (value: unknown): unknown => {
     const parsedOutput = operation.outputSchema.safeParse(value)
     if (!parsedOutput.success) {
@@ -304,24 +311,11 @@ export async function invokeProjectAgentOperation(params: {
   }
 
   let parsedOutputData: unknown
+  let mutationReceipt: OperationMutationReceipt | null = null
   if (operation.confirmation.kind === 'billable_media') {
-    if (!prepared.invocation) {
-      if (params.returnApprovalRequired) {
-        return { kind: 'approval_required', operation, outcome: { kind: 'wait_approval' } }
-      }
-      throw new ApiError('INVALID_PARAMS', {
-        code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
-        operationId: operation.id,
-        message: 'approve the immutable operation plan before execution',
-      })
-    }
-    const result = await invokeApprovedOperationPlan({
-      operation,
-      ctx: params.context,
-      normalizedInput: parsedInput,
-      invocation: prepared.invocation,
-    })
-    parsedOutputData = parseOutput(result)
+    throw new Error(
+      `OPERATION_BILLABLE_DURABLE_EXECUTION_REQUIRED:${operation.id}`,
+    )
   } else {
     if (prepared.invocation) {
       throw new ApiError('INVALID_PARAMS', {
@@ -341,25 +335,10 @@ export async function invokeProjectAgentOperation(params: {
       let transactionOutput: unknown
       let hasTransactionOutput = false
       const executeTransaction = async (tx: Prisma.TransactionClient): Promise<unknown> => {
-        if (executionFence) {
-          await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
-        }
         const output = await executeInTransaction(params.context, parsedInput, tx, preparedTransaction)
         transactionOutput = output
         hasTransactionOutput = true
-        if (executionFence) {
-          await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
-        }
         const parsed = parseOutput(output)
-        if (affectedResources.length > 0) {
-          await createWorkspaceResourceBroadcastsInTransaction({
-            tx,
-            invocationId: resourceInvocationId,
-            affectedResources,
-            userId: params.context.userId,
-            operationId: operation.id,
-          })
-        }
         return parsed
       }
       if (params.transaction) {
@@ -367,10 +346,8 @@ export async function invokeProjectAgentOperation(params: {
         // any post-commit dispatch; nothing has committed at this point.
         parsedOutputData = await executeTransaction(params.transaction)
       } else {
-        const outboxCollector = createOutboxCommitCollector()
         try {
           parsedOutputData = await prisma.$transaction(async (tx) => {
-            outboxCollector.bindTransaction(tx)
             return await executeTransaction(tx)
           })
         } catch (error) {
@@ -392,10 +369,18 @@ export async function invokeProjectAgentOperation(params: {
           }
           throw error
         }
-        // Commit succeeded: hand the exact command ids created inside this
-        // transaction to the existing fast dispatch. A transport failure only
-        // logs; the periodic dispatcher recovers from the same durable rows.
-        await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
+      }
+      mutationReceipt = projectOperationMutationReceipt({
+        operation,
+        projectId: params.context.projectId,
+        episodeId: prepared.effectiveEpisodeId || null,
+      })
+      if (!params.transaction) {
+        await publishOperationMutationReceipt({
+          projectId: params.context.projectId,
+          userId: params.context.userId,
+          receipt: mutationReceipt,
+        })
       }
     } else {
       const execute = operation.execute
@@ -403,40 +388,13 @@ export async function invokeProjectAgentOperation(params: {
         throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
       }
       const result = await execute(params.context, parsedInput)
-      if (
-        params.channel === 'tool'
-        && operation.effects.writes
-        && operation.assistantWriteAuthority?.kind === 'transactional_task_submission'
-        && !params.context.taskBatchBinding?.isCommitted()
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_TASK_SUBMISSION_NOT_COMMITTED:${operation.id}`)
-      }
       parsedOutputData = parseOutput(result)
     }
   }
-  const choiceHandoff = executionFence && operation.agentFlow?.suspendsFor === 'choice'
-    ? requireProjectAgentChoiceHandoffReceipt({
-        fence: executionFence,
-        operationId: operation.id,
-      })
-    : null
-  const taskSubmission = params.context.taskBatchBinding?.getCommittedReceipt() ?? null
-  const outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }> = choiceHandoff
-    ? { kind: 'wait_choice', data: parsedOutputData, choiceHandoff }
-    : taskSubmission
-      ? { kind: 'submitted_tasks', data: parsedOutputData, receipt: taskSubmission }
-      : params.channel === 'tool' && operationMayCompleteWithoutTasks(operation)
-        ? { kind: 'noop', data: parsedOutputData }
-        : { kind: 'completed', data: parsedOutputData }
   return {
     kind: 'executed',
     data: parsedOutputData,
     operation,
-    outcome,
+    mutationReceipt,
   }
-  }
-
-  return executionFence
-    ? await runWithProjectAgentOperationExecutionFence(executionFence, invoke)
-    : await invoke()
 }

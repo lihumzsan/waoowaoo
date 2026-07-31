@@ -338,6 +338,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'edit_resource',
       summary: 'Edit only the AI/user-owned creativeData document of one existing Resource without generating media, creating a Task, charging credits, changing the current file, or rewriting immutable history. Use this sparingly: call it only when the user explicitly asks to save or change Resource creative data, or when saving that data is strictly necessary to complete the user’s stated goal. If the user says not to modify or save Resource data, never call this tool. Do not call it to summarize conversation, restate facts already stored elsewhere, improve wording without a request, infer missing facts, manufacture provenance, or pre-emptively add speculative fields. Always call get_resource first, copy its exact creativeDataVersion into expectedVersion, preserve unrelated fields, and apply the smallest possible paths. Use exact $resourceRef objects for Resource references. This tool cannot modify Resource identity/scope/status, media, head Resource, actual generation prompt/model/options, lineage, Binding, Task, billing, or timestamps. A successful edit is data storage only and must never be described as generation, adoption, rendering, or completion.',
       intent: 'act',
+      toolContractRevision: 'edit_resource/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',
@@ -377,6 +378,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
       id: 'adopt_resource',
       summary: 'Adopt an exact immutable Resource into a named project or episode role. Generation and adoption remain separate; this does not modify the Resource.',
       intent: 'act',
+      toolContractRevision: 'adopt_resource/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',

@@ -3,13 +3,15 @@ import { redis } from '@/lib/redis'
 import {
   TASK_EVENT_TYPE,
   TASK_TERMINAL_EVENT_TYPES,
-  TASK_SSE_EVENT_TYPE,
   isTaskTerminalEventType,
   type TaskEventType,
   type TaskLifecycleEventType,
-  type TaskSSEEvent,
   type WorkspaceResourceRef,
 } from './types'
+import {
+  TASK_SSE_EVENT_TYPE,
+  type TaskSSEEvent,
+} from '@/lib/sse/events'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
 

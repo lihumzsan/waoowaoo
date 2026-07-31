@@ -193,7 +193,7 @@ export const creativeWorkTaskLifecycleProjectionSchema = z.object({
   events: z.array(creativeWorkTaskProgressEventSchema).max(64),
 }).strict()
 
-export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v14' as const
+export const CREATIVE_WORK_TASK_PROTOCOL = 'creative_work_v15' as const
 
 export const creativeWorkTaskPayloadSchema = z.object({
   protocol: z.literal(CREATIVE_WORK_TASK_PROTOCOL),
@@ -202,8 +202,8 @@ export const creativeWorkTaskPayloadSchema = z.object({
   modelKey: z.string().trim().min(1).max(500),
   inputFingerprint: z.string().trim().min(1).max(200),
   origin: z.object({
-    runId: z.string().trim().min(1),
-    toolCallId: z.string().trim().min(1),
+    turnId: z.string().trim().min(1),
+    callId: z.string().trim().min(1),
   }).strict(),
   lifecycleProjection: creativeWorkTaskLifecycleProjectionSchema,
   ...taskRuntimePayloadEnvelopeShape,

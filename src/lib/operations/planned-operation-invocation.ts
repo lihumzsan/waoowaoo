@@ -9,16 +9,20 @@ import {
 } from './types'
 import { loadOperationPlanSnapshot } from './operation-plan-snapshot'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
-import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
 import {
   buildCurrentOperationPlanArtifactHashes,
   changedOperationPlanArtifacts,
 } from './operation-plan-revalidation'
-import { dispatchCommittedOutboxCommands } from '@/lib/outbox/dispatcher'
-import { createOutboxCommitCollector } from '@/lib/outbox/repository'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { schedulePersistedTask } from '@/lib/temporal/task-client'
+import type {
+  PersistedTaskReference,
+  ScheduledTaskReceipt,
+} from '@/lib/temporal/task/contracts'
+import { isTaskType } from '@/lib/task/types'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
+const APPROVED_OPERATION_MAX_TASKS = 64
 
 export interface PlannedOperationInvocation {
   approvalGrantId: string
@@ -41,7 +45,27 @@ export interface IssuedApprovalGrant extends PlannedOperationInvocation {
   operationId: string
 }
 
-export function requireOperationExecutionTransaction(ctx: ProjectAgentOperationContext): Prisma.TransactionClient {
+export interface ApprovedOperationExecutionTaskReceipt {
+  reference: PersistedTaskReference
+  schedule: ScheduledTaskReceipt
+}
+
+export interface ApprovedOperationExecutionReceipt {
+  operationExecutionId: string
+  approvalGrantId: string
+  operationRequestId: string
+  outputHash: string
+  tasks: readonly ApprovedOperationExecutionTaskReceipt[]
+}
+
+export interface ApprovedOperationPlanInvocationResult<Output> {
+  output: Output
+  receipt: ApprovedOperationExecutionReceipt
+}
+
+export function requireOperationExecutionTransaction(
+  ctx: ProjectAgentOperationContext,
+): Prisma.TransactionClient {
   const transaction = ctx.executionAuthorization?.transaction
   if (!transaction) {
     throw new ApiError('INVALID_PARAMS', {
@@ -63,18 +87,26 @@ export function splitPlannedOperationInvocation(input: unknown): {
   if ('confirmed' in input || 'confirmedMaxCost' in input) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'LEGACY_OPERATION_CONFIRMATION_UNSUPPORTED',
-      message: 'boolean operation confirmation is not accepted; approve the immutable plan snapshot',
+      message:
+        'boolean operation confirmation is not accepted; approve the immutable plan snapshot',
     })
   }
   const approvalGrantId = input.approvalGrantId
   const requestId = input.operationRequestId
   const businessInput = Object.fromEntries(
-    Object.entries(input).filter(([key]) => key !== 'approvalGrantId' && key !== 'operationRequestId'),
+    Object.entries(input).filter(
+      ([key]) => key !== 'approvalGrantId' && key !== 'operationRequestId',
+    ),
   )
   if (approvalGrantId === undefined && requestId === undefined) {
     return { invocation: null, businessInput }
   }
-  if (typeof approvalGrantId !== 'string' || !approvalGrantId.trim() || typeof requestId !== 'string' || !requestId.trim()) {
+  if (
+    typeof approvalGrantId !== 'string' ||
+    !approvalGrantId.trim() ||
+    typeof requestId !== 'string' ||
+    !requestId.trim()
+  ) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'OPERATION_PLAN_INVOCATION_INVALID',
       message: 'approvalGrantId and operationRequestId are both required',
@@ -91,8 +123,96 @@ export function splitPlannedOperationInvocation(input: unknown): {
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   const serialized = JSON.stringify(value)
-  if (serialized === undefined) throw new Error('OPERATION_EXECUTION_OUTPUT_NOT_JSON')
+  if (serialized === undefined)
+    throw new Error('OPERATION_EXECUTION_OUTPUT_NOT_JSON')
   return JSON.parse(serialized) as Prisma.InputJsonValue
+}
+
+export async function issueApprovalGrantGroupInTransaction(
+  tx: Prisma.TransactionClient,
+  params: {
+    userId: string
+    requests: readonly ApprovalGrantRequest[]
+  },
+): Promise<IssuedApprovalGrant[]> {
+  if (params.requests.length === 0) return []
+  const planSnapshotIds = params.requests.map((request) =>
+    request.planSnapshotId.trim(),
+  )
+  if (
+    planSnapshotIds.some((id) => !id) ||
+    new Set(planSnapshotIds).size !== planSnapshotIds.length
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'APPROVAL_GROUP_PLAN_SNAPSHOT_INVALID',
+    })
+  }
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM operation_plan_snapshots
+    WHERE id IN (${Prisma.join([...planSnapshotIds].sort())})
+    ORDER BY id
+    FOR UPDATE
+  `)
+  if (locked.length !== planSnapshotIds.length) {
+    throw new ApiError('NOT_FOUND', {
+      code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
+    })
+  }
+  const issued: IssuedApprovalGrant[] = []
+  for (const request of params.requests) {
+    const snapshot = await loadOperationPlanSnapshot(request.planSnapshotId, tx)
+    if (!snapshot) {
+      throw new ApiError('NOT_FOUND', {
+        code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
+      })
+    }
+    if (snapshot.userId !== params.userId) {
+      throw new ApiError('FORBIDDEN', {
+        code: 'OPERATION_PLAN_SCOPE_MISMATCH',
+      })
+    }
+    const existing = await tx.approvalGrant.findUnique({
+      where: { planSnapshotId: snapshot.id },
+    })
+    if (existing) {
+      if (existing.userId !== params.userId || existing.revokedAt) {
+        throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
+      }
+      issued.push({
+        planSnapshotId: snapshot.id,
+        operationId: snapshot.operationId,
+        approvalGrantId: existing.id,
+        requestId: existing.requestId,
+      })
+      continue
+    }
+    const grant = await tx.approvalGrant.create({
+      data: {
+        id: randomUUID(),
+        userId: snapshot.userId,
+        scopeKind: snapshot.scopeKind,
+        scopeId: snapshot.scopeId,
+        projectId: snapshot.projectId,
+        episodeId: snapshot.episodeId,
+        operationId: snapshot.operationId,
+        planSnapshotId: snapshot.id,
+        requestId: request.requestId,
+        inputHash: snapshot.inputHash,
+        planHash: snapshot.planHash,
+        quoteHash: snapshot.quoteHash,
+        quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
+        currency: snapshot.quote.currency ?? null,
+      },
+    })
+    issued.push({
+      planSnapshotId: snapshot.id,
+      operationId: snapshot.operationId,
+      approvalGrantId: grant.id,
+      requestId: grant.requestId,
+    })
+  }
+  return issued
 }
 
 export async function issueApprovalGrantGroup(params: {
@@ -100,72 +220,9 @@ export async function issueApprovalGrantGroup(params: {
   requests: readonly ApprovalGrantRequest[]
 }): Promise<IssuedApprovalGrant[]> {
   if (params.requests.length === 0) return []
-  const planSnapshotIds = params.requests.map((request) => request.planSnapshotId.trim())
-  if (planSnapshotIds.some((id) => !id) || new Set(planSnapshotIds).size !== planSnapshotIds.length) {
-    throw new ApiError('INVALID_PARAMS', { code: 'APPROVAL_GROUP_PLAN_SNAPSHOT_INVALID' })
-  }
-  return await prisma.$transaction(async (tx) => {
-    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id
-      FROM operation_plan_snapshots
-      WHERE id IN (${Prisma.join([...planSnapshotIds].sort())})
-      ORDER BY id
-      FOR UPDATE
-    `)
-    if (locked.length !== planSnapshotIds.length) {
-      throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
-    }
-    const issued: IssuedApprovalGrant[] = []
-    for (const request of params.requests) {
-      const snapshot = await loadOperationPlanSnapshot(request.planSnapshotId, tx)
-      if (!snapshot) {
-        throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
-      }
-      if (snapshot.userId !== params.userId) {
-        throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
-      }
-      const existing = await tx.approvalGrant.findUnique({
-        where: { planSnapshotId: snapshot.id },
-      })
-      if (existing) {
-        if (existing.userId !== params.userId || existing.revokedAt) {
-          throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
-        }
-        issued.push({
-          planSnapshotId: snapshot.id,
-          operationId: snapshot.operationId,
-          approvalGrantId: existing.id,
-          requestId: existing.requestId,
-        })
-        continue
-      }
-      const grant = await tx.approvalGrant.create({
-        data: {
-          id: randomUUID(),
-          userId: snapshot.userId,
-          scopeKind: snapshot.scopeKind,
-          scopeId: snapshot.scopeId,
-          projectId: snapshot.projectId,
-          episodeId: snapshot.episodeId,
-          operationId: snapshot.operationId,
-          planSnapshotId: snapshot.id,
-          requestId: request.requestId,
-          inputHash: snapshot.inputHash,
-          planHash: snapshot.planHash,
-          quoteHash: snapshot.quoteHash,
-          quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
-          currency: snapshot.quote.currency ?? null,
-        },
-      })
-      issued.push({
-        planSnapshotId: snapshot.id,
-        operationId: snapshot.operationId,
-        approvalGrantId: grant.id,
-        requestId: grant.requestId,
-      })
-    }
-    return issued
-  })
+  return await prisma.$transaction(
+    async (tx) => await issueApprovalGrantGroupInTransaction(tx, params),
+  )
 }
 
 export async function issueApprovalGrant(params: {
@@ -175,10 +232,12 @@ export async function issueApprovalGrant(params: {
 }): Promise<{ approvalGrantId: string; operationRequestId: string }> {
   const [issued] = await issueApprovalGrantGroup({
     userId: params.userId,
-    requests: [{
-      planSnapshotId: params.planSnapshotId,
-      requestId: params.requestId,
-    }],
+    requests: [
+      {
+        planSnapshotId: params.planSnapshotId,
+        requestId: params.requestId,
+      },
+    ],
   })
   if (!issued) throw new Error('APPROVAL_GRANT_ISSUANCE_EMPTY')
   return {
@@ -195,18 +254,23 @@ function assertSnapshotScope(params: {
   normalizedInput: unknown
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
 }): void {
-  const expectedScopeKind = params.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
+  const expectedScopeKind =
+    params.projectId === GLOBAL_ASSET_PROJECT_ID
+      ? 'global_asset_hub'
+      : 'project'
   const requestedEpisodeId = params.episodeId ?? null
   if (
     params.snapshot.userId !== params.userId ||
     params.snapshot.scopeKind !== expectedScopeKind ||
     params.snapshot.scopeId !== params.projectId ||
     params.snapshot.operationId !== params.operationId ||
-    (requestedEpisodeId !== null && params.snapshot.episodeId !== requestedEpisodeId)
+    (requestedEpisodeId !== null &&
+      params.snapshot.episodeId !== requestedEpisodeId)
   ) {
     throw new ApiError('FORBIDDEN', {
       code: 'OPERATION_PLAN_SCOPE_MISMATCH',
-      message: 'the approved plan does not belong to this user, scope, episode, or operation',
+      message:
+        'the approved plan does not belong to this user, scope, episode, or operation',
     })
   }
   if (hashCanonicalJson(params.normalizedInput) !== params.snapshot.inputHash) {
@@ -217,7 +281,10 @@ function assertSnapshotScope(params: {
   }
 }
 
-async function lockApprovalGrant(tx: Prisma.TransactionClient, approvalGrantId: string): Promise<void> {
+async function lockApprovalGrant(
+  tx: Prisma.TransactionClient,
+  approvalGrantId: string,
+): Promise<void> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT id
     FROM approval_grants
@@ -233,7 +300,11 @@ async function settleApprovalGrant(
   tx: Prisma.TransactionClient,
   params:
     | { readonly kind: 'revoke'; readonly grantId: string }
-    | { readonly kind: 'consume'; readonly grantId: string; readonly executionId: string },
+    | {
+        readonly kind: 'consume'
+        readonly grantId: string
+        readonly executionId: string
+      },
 ): Promise<void> {
   const settled = await tx.approvalGrant.updateMany({
     where: {
@@ -243,19 +314,22 @@ async function settleApprovalGrant(
       consumedExecutionId: null,
       revokedAt: null,
     },
-    data: params.kind === 'consume'
-      ? {
-          consumedAt: new Date(),
-          consumedExecutionId: params.executionId,
-          version: { increment: 1 },
-        }
-      : {
-          revokedAt: new Date(),
-          version: { increment: 1 },
-        },
+    data:
+      params.kind === 'consume'
+        ? {
+            consumedAt: new Date(),
+            consumedExecutionId: params.executionId,
+            version: { increment: 1 },
+          }
+        : {
+            revokedAt: new Date(),
+            version: { increment: 1 },
+          },
   })
   if (settled.count !== 1) {
-    throw new Error(`APPROVAL_GRANT_${params.kind === 'consume' ? 'CONSUME' : 'REVOKE'}_RACED:${params.grantId}`)
+    throw new Error(
+      `APPROVAL_GRANT_${params.kind === 'consume' ? 'CONSUME' : 'REVOKE'}_RACED:${params.grantId}`,
+    )
   }
 }
 
@@ -302,12 +376,19 @@ export async function loadApprovedOperationExecutionInput(params: {
   const grant = await prisma.approvalGrant.findUnique({
     where: { id: params.invocation.approvalGrantId },
   })
-  if (!grant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
-  if (grant.userId !== params.userId || grant.operationId !== params.operationId) {
+  if (!grant)
+    throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  if (
+    grant.userId !== params.userId ||
+    grant.operationId !== params.operationId
+  ) {
     throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
   }
   const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId)
-  if (!snapshot) throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+  if (!snapshot)
+    throw new ApiError('NOT_FOUND', {
+      code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
+    })
   assertGrantMatchesSnapshot({
     grant,
     requestId: params.invocation.requestId,
@@ -340,9 +421,15 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   const previewGrant = await prisma.approvalGrant.findUnique({
     where: { id: params.invocation.approvalGrantId },
   })
-  if (!previewGrant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
-  const previewSnapshot = await loadOperationPlanSnapshot(previewGrant.planSnapshotId)
-  if (!previewSnapshot) throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+  if (!previewGrant)
+    throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  const previewSnapshot = await loadOperationPlanSnapshot(
+    previewGrant.planSnapshotId,
+  )
+  if (!previewSnapshot)
+    throw new ApiError('NOT_FOUND', {
+      code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
+    })
   assertGrantMatchesSnapshot({
     grant: previewGrant,
     requestId: params.invocation.requestId,
@@ -360,27 +447,36 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
     where: { approvalGrantId: previewGrant.id },
     select: { id: true },
   })
-  const executionContractChanged = !existingExecution
-    && previewSnapshot.executionContractRevision !== planContractRevision
-  const currentArtifacts = existingExecution || executionContractChanged
-    ? null
-    : await buildCurrentOperationPlanArtifactHashes({
-        operation: params.operation,
-        ctx: params.ctx,
-        normalizedInput: params.normalizedInput,
-      })
-  const outboxCollector = createOutboxCommitCollector()
+  const executionContractChanged =
+    !existingExecution &&
+    previewSnapshot.executionContractRevision !== planContractRevision
+  const currentArtifacts =
+    existingExecution || executionContractChanged
+      ? null
+      : await buildCurrentOperationPlanArtifactHashes({
+          operation: params.operation,
+          ctx: params.ctx,
+          normalizedInput: params.normalizedInput,
+        })
   const transactionResult = await prisma.$transaction(
     async (tx) => {
-      outboxCollector.bindTransaction(tx)
-      if (params.ctx.executionFence) {
-        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+      const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id
+        FROM projects
+        WHERE id = ${params.ctx.projectId}
+        FOR UPDATE
+      `)
+      if (projects.length !== 1) {
+        throw new Error(
+          `OPERATION_EXECUTION_PROJECT_NOT_FOUND:${params.ctx.projectId}`,
+        )
       }
       await lockApprovalGrant(tx, params.invocation.approvalGrantId)
       const grant = await tx.approvalGrant.findUnique({
         where: { id: params.invocation.approvalGrantId },
       })
-      if (!grant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+      if (!grant)
+        throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
       const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId, tx)
       if (!snapshot)
         throw new ApiError('NOT_FOUND', {
@@ -405,10 +501,9 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       })
       if (existing) {
         if (existing.status !== 'completed' || existing.output === null) {
-          throw new Error(`OPERATION_EXECUTION_DURABLE_INTERMEDIATE_STATE:${existing.id}:${existing.status}`)
-        }
-        if (params.ctx.executionFence) {
-          await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+          throw new Error(
+            `OPERATION_EXECUTION_DURABLE_INTERMEDIATE_STATE:${existing.id}:${existing.status}`,
+          )
         }
         return { kind: 'output' as const, output: existing.output as Output }
       }
@@ -428,7 +523,10 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       if (!currentArtifacts) {
         throw new Error(`OPERATION_PLAN_REVALIDATION_MISSING:${grant.id}`)
       }
-      const changedArtifacts = changedOperationPlanArtifacts(snapshot, currentArtifacts)
+      const changedArtifacts = changedOperationPlanArtifacts(
+        snapshot,
+        currentArtifacts,
+      )
       if (changedArtifacts.length > 0) {
         await settleApprovalGrant(tx, {
           kind: 'revoke',
@@ -475,7 +573,8 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         snapshot.plan,
       )
 
-      const parsedOutput = params.operation.outputSchema.safeParse(committedOutput)
+      const parsedOutput =
+        params.operation.outputSchema.safeParse(committedOutput)
       if (!parsedOutput.success) {
         throw new ApiError('EXTERNAL_ERROR', {
           code: 'OPERATION_OUTPUT_INVALID',
@@ -488,36 +587,42 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         where: { operationExecutionId: execution.id },
         select: { id: true },
       })
-      const [consumedGrant, enqueueCommands] = await Promise.all([
-        tx.approvalGrant.findUnique({ where: { id: grant.id } }),
-        tx.outboxCommand.count({
-          where: {
-            kind: 'task.enqueue',
-            aggregateType: 'task',
-            aggregateId: { in: tasks.map((task) => task.id) },
-          },
-        }),
-      ])
+      const consumedGrant = await tx.approvalGrant.findUnique({
+        where: { id: grant.id },
+      })
       if (
         !consumedGrant?.consumedAt ||
         consumedGrant.consumedExecutionId !== execution.id ||
-        tasks.length !== snapshot.plan.tasks.length ||
-        enqueueCommands !== snapshot.plan.tasks.length
+        tasks.length !== snapshot.plan.tasks.length
       ) {
-        throw new Error(`OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE:${execution.id}`)
+        throw new Error(
+          `OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE:${execution.id}`,
+        )
       }
-      if (params.ctx.executionFence) {
-        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
-      }
-      const waitTaskIds = Array.from(new Set([
-        ...tasks.map((task) => task.id),
-        ...(snapshot.plan.taskDependencies ?? []).map((dependency) => dependency.taskId),
-      ])).sort()
-      if (waitTaskIds.length > 0) {
-        await params.ctx.taskBatchBinding?.bindInTransaction(tx, {
+      const followUpTaskIds = Array.from(
+        new Set([
+          ...tasks.map((task) => task.id),
+          ...(snapshot.plan.taskDependencies ?? []).map(
+            (dependency) => dependency.taskId,
+          ),
+        ]),
+      ).sort()
+      if (followUpTaskIds.length > 0) {
+        await params.ctx.followUpBatchBinding?.bindInTransaction(tx, {
           operationId: params.operation.id,
-          taskIds: waitTaskIds,
+          taskIds: followUpTaskIds,
         })
+      }
+      if (
+        followUpTaskIds.length > 0
+        && (
+          !params.ctx.followUpBatchBinding
+          || !params.ctx.followUpBatchBinding.isBound()
+        )
+      ) {
+        throw new Error(
+          `OPERATION_EXECUTION_FOLLOW_UP_BATCH_MISSING:${params.operation.id}`,
+        )
       }
       await tx.operationExecution.update({
         where: { id: execution.id },
@@ -527,9 +632,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           completedAt: new Date(),
         },
       })
-      if (params.ctx.executionFence && !params.ctx.taskBatchBinding?.isBound()) {
-        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
-      }
       return { kind: 'output' as const, output }
     },
     {
@@ -543,15 +645,121 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       changedArtifacts: transactionResult.changedArtifacts,
     })
   }
-  params.ctx.taskBatchBinding?.markCommitted()
-  // Commit succeeded: immediately hand the exact Task enqueue/lifecycle and
-  // workspace broadcast commands created inside this transaction to the
-  // existing fast dispatch (symmetric with the task terminal path). An
-  // idempotent replay of a completed execution collects nothing. Transport
-  // failure only logs; the periodic dispatcher recovers the same durable rows.
-  await dispatchCommittedOutboxCommands(outboxCollector.commandIds)
   for (const part of bufferedParts) {
     params.ctx.writer?.write(part)
   }
   return transactionResult.output
+}
+
+async function loadApprovedOperationExecutionReceipt(params: {
+  approvalGrantId: string
+  operationRequestId: string
+  userId: string
+  projectId: string
+  operationId: string
+}): Promise<ApprovedOperationExecutionReceipt> {
+  const execution = await prisma.operationExecution.findUnique({
+    where: { approvalGrantId: params.approvalGrantId },
+    include: { tasks: true },
+  })
+  if (
+    !execution ||
+    execution.status !== 'completed' ||
+    execution.output === null ||
+    execution.userId !== params.userId ||
+    execution.projectId !== params.projectId ||
+    execution.operationId !== params.operationId ||
+    execution.approvalGrantId !== params.approvalGrantId ||
+    execution.planSnapshotId === null ||
+    execution.requestId !== params.operationRequestId ||
+    execution.tasks.length > APPROVED_OPERATION_MAX_TASKS
+  ) {
+    throw new Error(
+      `OPERATION_EXECUTION_RECEIPT_DIVERGED:${params.approvalGrantId}`,
+    )
+  }
+  const snapshot = await loadOperationPlanSnapshot(execution.planSnapshotId)
+  if (
+    !snapshot ||
+    snapshot.userId !== params.userId ||
+    snapshot.projectId !== params.projectId ||
+    snapshot.operationId !== params.operationId ||
+    snapshot.plan.tasks.length !== execution.tasks.length
+  ) {
+    throw new Error(`OPERATION_EXECUTION_TASK_BATCH_DIVERGED:${execution.id}`)
+  }
+
+  const byPlanTaskId = new Map(
+    execution.tasks.map((task) => [task.operationPlanTaskId, task]),
+  )
+  if (byPlanTaskId.has(null) || byPlanTaskId.size !== execution.tasks.length) {
+    throw new Error(
+      `OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED:${execution.id}`,
+    )
+  }
+  const orderedTasks = snapshot.plan.tasks.map((planTask) => {
+    const task = byPlanTaskId.get(planTask.id)
+    if (!task) {
+      throw new Error(
+        `OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED:${execution.id}`,
+      )
+    }
+    return task
+  })
+  const tasks: ApprovedOperationExecutionTaskReceipt[] = []
+  for (const task of orderedTasks) {
+    if (
+      task.userId !== params.userId ||
+      task.projectId !== params.projectId ||
+      task.operationId !== params.operationId ||
+      task.approvalGrantId !== params.approvalGrantId ||
+      task.operationExecutionId !== execution.id ||
+      task.operationRequestId !== params.operationRequestId ||
+      !isTaskType(task.type)
+    ) {
+      throw new Error(
+        `OPERATION_EXECUTION_TASK_RECEIPT_DIVERGED:${execution.id}:${task.id}`,
+      )
+    }
+    const reference: PersistedTaskReference = {
+      taskId: task.id,
+      userId: task.userId,
+      taskType: task.type,
+    }
+    tasks.push({
+      reference,
+      schedule: await schedulePersistedTask(reference),
+    })
+  }
+  return {
+    operationExecutionId: execution.id,
+    approvalGrantId: params.approvalGrantId,
+    operationRequestId: params.operationRequestId,
+    outputHash: hashCanonicalJson(execution.output),
+    tasks,
+  }
+}
+
+export async function invokeApprovedOperationPlanWithReceipt<
+  Input,
+  Output,
+>(params: {
+  operation: ProjectAgentOperationDefinition<Input, Output>
+  ctx: ProjectAgentOperationContext
+  normalizedInput: Input
+  invocation: PlannedOperationInvocation
+}): Promise<ApprovedOperationPlanInvocationResult<Output>> {
+  const output = await invokeApprovedOperationPlan({
+    ...params,
+  })
+  return {
+    output,
+    receipt: await loadApprovedOperationExecutionReceipt({
+      approvalGrantId: params.invocation.approvalGrantId,
+      operationRequestId: params.invocation.requestId,
+      userId: params.ctx.userId,
+      projectId: params.ctx.projectId,
+      operationId: params.operation.id,
+    }),
+  }
 }

@@ -16,7 +16,6 @@ export const taskRuntimePayloadEnvelopeShape = {
   flowStageIndex: z.number().optional(),
   flowStageTotal: z.number().optional(),
   flowStageTitle: z.string().optional(),
-  runId: z.string().optional(),
   stage: z.string().optional(),
   stageLabel: z.string().optional(),
   displayMode: z.string().optional(),

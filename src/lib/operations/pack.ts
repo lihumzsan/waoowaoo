@@ -143,6 +143,18 @@ export function withOperationPack(
       defaultsGroupPath: normalizedDefaults.groupPath,
     })
     const channels = normalizeChannels(operation.channels ?? normalizedDefaults.channels)
+    const planContractRevision = 'planContractRevision' in operation
+      ? operation.planContractRevision
+      : undefined
+    const toolContractRevision =
+      channels.tool && operation.effects.writes
+        ? operation.confirmation?.kind === 'billable_media'
+          ? planContractRevision
+          : operation.assistantWriteAuthority?.kind
+              === 'temporal_operation_execution'
+            ? operation.assistantWriteAuthority.contractRevision
+            : operation.toolContractRevision
+        : null
     const toolExposure = operation.toolExposure ?? 'on_demand'
     if (toolExposure === 'direct' && !channels.tool) {
       throw new Error(`PROJECT_AGENT_OPERATION_DIRECT_TOOL_CHANNEL_REQUIRED:${operationId}`)
@@ -163,6 +175,7 @@ export function withOperationPack(
         kind: 'none' as const,
         reason: 'operation does not create a Creative Resource',
       },
+      toolContractRevision,
       toolInputSchema: channels.tool
         ? createProjectAgentToolInputSchema({
             operationId,

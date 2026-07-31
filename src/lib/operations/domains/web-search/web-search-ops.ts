@@ -13,6 +13,7 @@
 import { ApiError } from '@/lib/api-errors'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
+  requireProjectAgentOperationSignal,
   writeOperationDataPart,
   type ProjectAgentOperationRegistryDraft,
 } from '@/lib/operations/types'
@@ -108,7 +109,7 @@ export function createWebSearchOperations(
         try {
           const response = await executeSearch({
             request: input,
-            signal: ctx.request.signal,
+            signal: requireProjectAgentOperationSignal(ctx),
             onProgress: (event) => {
               if (event.phase !== 'searching') return
               publish({

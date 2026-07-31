@@ -70,7 +70,6 @@ export interface CreativeResourceGenerationProvenance {
   readonly inputHash: string | null
   readonly taskId: string | null
   readonly operationExecutionId: string | null
-  readonly executionSegmentId: string | null
   readonly toolCallId: string | null
   readonly prompt: string | null
   readonly modelKey: string | null

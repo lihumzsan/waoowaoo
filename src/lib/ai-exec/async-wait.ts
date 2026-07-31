@@ -3,10 +3,10 @@ import { AppError } from '@/lib/errors/app-error'
 import { createScopedLogger } from '@/lib/logging/core'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import {
-  getWorkerExternalPollMs,
-  getWorkerExternalQueueTimeoutMs,
-  getWorkerExternalTimeoutMs,
-} from '@/lib/workers/runtime-config'
+  getProviderGenerationTimeoutMs,
+  getProviderPollIntervalMs,
+  getProviderQueueTimeoutMs,
+} from './async-runtime-config'
 import type { AsyncPendingPhase } from '@/lib/ai-providers/async-task-types'
 import { cancelAsyncTask, pollAsyncTask } from './async-poll'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from './provider-errors'
@@ -92,9 +92,9 @@ export async function waitForAsyncProviderResult(input: {
   readonly beforePoll?: () => Promise<void>
   readonly onPending?: (progress: AsyncProviderPendingProgress) => Promise<void>
 }): Promise<AsyncProviderResult> {
-  const timeoutMs = input.timeoutMs ?? getWorkerExternalTimeoutMs()
-  const queueTimeoutMs = input.queueTimeoutMs ?? getWorkerExternalQueueTimeoutMs()
-  const intervalMs = input.intervalMs ?? getWorkerExternalPollMs()
+  const timeoutMs = input.timeoutMs ?? getProviderGenerationTimeoutMs()
+  const queueTimeoutMs = input.queueTimeoutMs ?? getProviderQueueTimeoutMs()
+  const intervalMs = input.intervalMs ?? getProviderPollIntervalMs()
 
   // 排队与生成分开计时：provider 报告 `queued` 的时间只消耗排队预算，
   // `running`（或未声明 phase 的 pending）才消耗生成预算。两者互不透支。

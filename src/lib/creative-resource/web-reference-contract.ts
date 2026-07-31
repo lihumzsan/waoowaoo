@@ -64,7 +64,6 @@ export const creativeResourceWebReferenceTaskPayloadSchema = z.object({
     inputHash: z.string().trim().min(1),
     inputs: z.tuple([]),
     generationOptions: webReferenceImageProvenanceSchema,
-    executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
   }).strict(),
 }).strict()

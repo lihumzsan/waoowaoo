@@ -36,3 +36,84 @@ services:
       timeout: 5s
       retries: 30
       start_period: 5s
+
+  temporal-db-bootstrap:
+    image: mysql:8.0
+    profiles: ["temporal"]
+    restart: "no"
+    logging: *default-logging
+    network_mode: "service:mysql"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_ROOT_PASSWORD: root
+      TEMPORAL_MYSQL_USER: temporal
+      TEMPORAL_MYSQL_PASSWORD: temporal-test-only
+    volumes:
+      - ./scripts/temporal/bootstrap-mysql.sh:/scripts/bootstrap-mysql.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/bootstrap-mysql.sh"]
+
+  temporal-schema:
+    image: temporalio/admin-tools:1.31.2
+    profiles: ["temporal"]
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      temporal-db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      MYSQL_SEEDS: mysql
+      MYSQL_USER: temporal
+      SQL_PASSWORD: temporal-test-only
+      DB_PORT: "3306"
+    volumes:
+      - ./scripts/temporal/setup-schema.sh:/scripts/setup-schema.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/setup-schema.sh"]
+
+  temporal:
+    image: temporalio/server:1.31.2
+    profiles: ["temporal"]
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      temporal-schema:
+        condition: service_completed_successfully
+    environment:
+      DB: mysql8
+      DB_PORT: "3306"
+      MYSQL_SEEDS: mysql
+      MYSQL_USER: temporal
+      MYSQL_PWD: temporal-test-only
+      BIND_ON_IP: 0.0.0.0
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/waoowaoo.yaml
+    ports:
+      - "127.0.0.1:${TEST_TEMPORAL_PORT:-0}:7233"
+    volumes:
+      - ./scripts/temporal/dynamicconfig.yaml:/etc/temporal/config/dynamicconfig/waoowaoo.yaml:ro
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "7233"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+  temporal-create-namespace:
+    image: temporalio/admin-tools:1.31.2
+    profiles: ["temporal"]
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: "${TEST_TEMPORAL_NAMESPACE:-waoowaoo-test}"
+      TEMPORAL_NAMESPACE_RETENTION: 1d
+      TEMPORAL_HEALTH_CHECK_MAX_ATTEMPTS: "60"
+      TEMPORAL_HEALTH_CHECK_SLEEP_SECONDS: "1"
+    volumes:
+      - ./scripts/temporal/create-namespace.sh:/scripts/create-namespace.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/create-namespace.sh"]

@@ -35,7 +35,6 @@ export const creativeResourceVideoMergeTaskPayloadSchema = z.object({
     inputHash: z.string().trim().min(1),
     inputs: videoMergeInputsSchema,
     generationOptions: creativeResourceGenerationOptionsSchema,
-    executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
   }).strict(),
 }).strict()

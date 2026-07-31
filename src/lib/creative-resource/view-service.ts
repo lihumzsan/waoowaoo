@@ -142,7 +142,6 @@ function materializationView(row: ResourceRow): CreativeResourceMaterializationV
       inputHash: row.inputHash,
       taskId: row.taskId,
       operationExecutionId: row.operationExecutionId,
-      executionSegmentId: row.executionSegmentId,
       toolCallId: row.toolCallId,
       prompt: row.prompt,
       modelKey: row.modelKey,

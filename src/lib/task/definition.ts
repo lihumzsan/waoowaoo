@@ -1,25 +1,20 @@
-import { TASK_TYPE, type QueueType, type TaskType } from './types'
+import { TASK_TYPE, type TaskType } from './types'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
+import type { WorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
+
+export type TaskSchedulerClass = keyof WorkflowConcurrencyConfig
 
 export type TaskTargetTerminalProjector =
   | 'none'
 
-export type ImageTaskHandlerKey =
+export type TaskExecutionHandlerKey =
+  | 'creative_work'
   | 'creative_resource_image'
   | 'creative_resource_web_reference'
-
-export type VideoTaskHandlerKey = 'creative_resource_video' | 'creative_resource_video_merge'
-export type MusicTaskHandlerKey = 'creative_resource_audio'
-export type VoiceTaskHandlerKey = 'creative_resource_voice'
-export type TextTaskHandlerKey = 'creative_work'
-
-type TaskHandlerByQueue = {
-  image: ImageTaskHandlerKey
-  video: VideoTaskHandlerKey
-  music: MusicTaskHandlerKey
-  voice: VoiceTaskHandlerKey
-  text: TextTaskHandlerKey
-}
+  | 'creative_resource_audio'
+  | 'creative_resource_voice'
+  | 'creative_resource_video'
+  | 'creative_resource_video_merge'
 
 export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 'voice'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
@@ -32,11 +27,11 @@ export type TaskLifecyclePayloadProjection = 'full' | 'reference'
 
 export const CREATIVE_WORK_EXECUTION_DEADLINE_MS = 20 * 60_000
 
-export type TaskDefinition<Q extends QueueType = QueueType> = {
-  queue: Q
-  workerHandler: TaskHandlerByQueue[Q]
+export type TaskDefinition = {
+  executionHandler: TaskExecutionHandlerKey
   billingPolicy: TaskBillingPolicy
   maxAttempts: number
+  schedulerClass: TaskSchedulerClass | null
   executionProtocol: TaskExecutionProtocol
   terminalSuccessHandoff: TaskTerminalSuccessHandoff
   terminalOutputMaterializer: TaskTerminalOutputMaterializer
@@ -55,11 +50,11 @@ export type TaskDefinition<Q extends QueueType = QueueType> = {
   terminalModelKeyRequirement: TaskTerminalModelKeyRequirement
 }
 
-function definition<Q extends QueueType>(
-  queue: Q,
-  workerHandler: TaskHandlerByQueue[Q],
+function definition(
+  executionHandler: TaskExecutionHandlerKey,
   billingPolicy: TaskBillingPolicy,
   maxAttempts: number,
+  schedulerClass: TaskSchedulerClass | null,
   terminalResourceImpact: WorkspaceResourceImpact,
   terminalFailureProjector: TaskTargetTerminalProjector,
   terminalCancelProjector: TaskTargetTerminalProjector,
@@ -69,12 +64,12 @@ function definition<Q extends QueueType>(
   lifecyclePayloadProjection: TaskLifecyclePayloadProjection = 'full',
   terminalModelKeyRequirement: TaskTerminalModelKeyRequirement = 'required',
   executionDeadlineMs: number | null = null,
-): TaskDefinition<Q> {
+): TaskDefinition {
   return {
-    queue,
-    workerHandler,
+    executionHandler,
     billingPolicy,
     maxAttempts,
+    schedulerClass,
     executionProtocol: 'handler_result_checkpoint',
     terminalSuccessHandoff: 'handler_result_checkpoint',
     terminalOutputMaterializer,
@@ -91,10 +86,10 @@ function definition<Q extends QueueType>(
 
 export const TASK_DEFINITIONS = {
   [TASK_TYPE.CREATIVE_WORK]: definition(
-    'text',
     'creative_work',
     'none',
     3,
+    'analysis',
     'creative_resources',
     'none',
     'none',
@@ -105,24 +100,16 @@ export const TASK_DEFINITIONS = {
     'required',
     CREATIVE_WORK_EXECUTION_DEADLINE_MS,
   ),
-  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('image', 'creative_resource_image', 'image', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
-  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition('image', 'creative_resource_web_reference', 'none', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
-  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('music', 'creative_resource_audio', 'music', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition('voice', 'creative_resource_voice', 'voice', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('video', 'creative_resource_video', 'video', 3, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
-  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('video', 'creative_resource_video_merge', 'none', 1, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
+  [TASK_TYPE.CREATIVE_RESOURCE_IMAGE]: definition('creative_resource_image', 'image', 3, 'image', 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE]: definition('creative_resource_web_reference', 'none', 3, 'image', 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
+  [TASK_TYPE.CREATIVE_RESOURCE_AUDIO]: definition('creative_resource_audio', 'music', 3, null, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VOICE]: definition('creative_resource_voice', 'voice', 3, null, 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO]: definition('creative_resource_video', 'video', 3, 'video', 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference'),
+  [TASK_TYPE.CREATIVE_RESOURCE_VIDEO_MERGE]: definition('creative_resource_video_merge', 'none', 1, 'video', 'creative_resources', 'none', 'none', 'none', 'creative_resource', 'reference', 'reference', 'none'),
 } satisfies Record<TaskType, TaskDefinition>
 
 export function getTaskDefinition(type: TaskType): TaskDefinition {
   const taskDefinition = TASK_DEFINITIONS[type] as TaskDefinition | undefined
   if (!taskDefinition) throw new Error(`TASK_DEFINITION_MISSING:${String(type)}`)
   return taskDefinition
-}
-
-export function getTaskDefinitionForQueue<Q extends QueueType>(type: TaskType, queue: Q): TaskDefinition<Q> {
-  const taskDefinition = getTaskDefinition(type)
-  if (taskDefinition.queue !== queue) {
-    throw new Error(`TASK_QUEUE_MISMATCH:${type}:${taskDefinition.queue}:${queue}`)
-  }
-  return taskDefinition as TaskDefinition<Q>
 }

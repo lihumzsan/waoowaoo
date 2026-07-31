@@ -44,6 +44,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
       id: 'adopt_asset_manifest',
       summary: 'Adopt one exact project.asset_manifest Resource grounded in one exact screenplay, then create or reuse the corresponding Project asset identities. Any adopted Creative Direction was already frozen into the generating Task by the server and is not an adoption gate. This operation never generates images or starts downstream Tasks.',
       intent: 'act',
+      toolContractRevision: 'adopt_asset_manifest/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_assets',

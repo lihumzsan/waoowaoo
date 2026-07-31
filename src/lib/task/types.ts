@@ -22,19 +22,6 @@ export const TASK_EVENT_TYPE = {
 
 export type TaskEventType = (typeof TASK_EVENT_TYPE)[keyof typeof TASK_EVENT_TYPE]
 
-export const TASK_SSE_EVENT_TYPE = {
-  LIFECYCLE: 'task.lifecycle',
-  STREAM: 'task.stream',
-} as const
-
-export const WORKSPACE_SSE_EVENT_TYPE = {
-  RESOURCE_CHANGED: 'resource.changed',
-  ASSISTANT_SESSION_CHANGED: 'assistant.session.changed',
-} as const
-
-export type TaskSSEEventType = (typeof TASK_SSE_EVENT_TYPE)[keyof typeof TASK_SSE_EVENT_TYPE]
-export type WorkspaceSSEEventType = (typeof WORKSPACE_SSE_EVENT_TYPE)[keyof typeof WORKSPACE_SSE_EVENT_TYPE]
-
 export const TASK_LIFECYCLE_EVENT_TYPES = [
   TASK_EVENT_TYPE.CREATED,
   TASK_EVENT_TYPE.PROCESSING,
@@ -78,8 +65,6 @@ export function isTaskType(value: unknown): value is TaskType {
   return typeof value === 'string' && TASK_TYPE_VALUES.has(value)
 }
 
-export type QueueType = 'image' | 'video' | 'music' | 'voice' | 'text'
-
 export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'
 
 export type TaskBillingInfo =
@@ -107,7 +92,7 @@ export type TaskBillingInfo =
     chargedCost?: number
   }
 
-export type TaskJobData = {
+export type TaskExecutionData = {
   taskId: string
   parentTaskId?: string | null
   type: TaskType
@@ -117,7 +102,6 @@ export type TaskJobData = {
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
-  batchKey?: string | null
   billingInfo?: TaskBillingInfo | null
   userId: string
   operationId?: string | null
@@ -129,29 +113,6 @@ export type TaskJobData = {
   trace?: {
     requestId?: string | null
   } | null
-}
-
-export type TaskJobEnvelope = {
-  data: TaskJobData
-  priority: number
-}
-
-export type TaskSSEEvent = {
-  id: string
-  type: TaskSSEEventType
-  taskId: string
-  projectId: string
-  userId: string
-  ts: string
-  taskType?: string | null
-  targetType?: string | null
-  targetId?: string | null
-  episodeId?: string | null
-  payload?: (Record<string, unknown> & {
-    lifecycleType?: TaskLifecycleEventType
-    coveredTargets?: readonly { readonly targetType: string; readonly targetId: string }[]
-    affectedResources?: readonly WorkspaceResourceRef[]
-  }) | null
 }
 
 export type WorkspaceResourceName =
@@ -169,32 +130,6 @@ export type WorkspaceResourceRef = {
   episodeId?: string | null
 }
 
-export type ResourceChangedSSEEvent = {
-  id: string
-  type: typeof WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED
-  projectId: string
-  userId: string
-  ts: string
-  affectedResources: WorkspaceResourceRef[]
-}
-
-export type AssistantSessionChangedSSEEvent = {
-  id: string
-  type: typeof WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED
-  projectId: string
-  userId: string
-  ts: string
-  episodeId: string | null
-  assistantId: string
-  scopeRef: string
-  agentEventId: string
-}
-
-export type SSEEvent =
-  | TaskSSEEvent
-  | ResourceChangedSSEEvent
-  | AssistantSessionChangedSSEEvent
-
 export type CreateTaskInput = {
   userId: string
   projectId: string
@@ -205,8 +140,6 @@ export type CreateTaskInput = {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  batchKey?: string | null
-  priority?: number
   billingInfo?: TaskBillingInfo | null
   operationId?: string | null
   operationSource?: string | null

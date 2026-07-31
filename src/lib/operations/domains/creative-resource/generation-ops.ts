@@ -76,7 +76,6 @@ import type {
 import { prisma } from '@/lib/prisma'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
-import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
 const contextReferenceSchema = z.array(creativeResourceInputRefSchema)
   .max(8)
@@ -701,7 +700,7 @@ async function createTextResources(
         text: currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text,
       }]
   const requestId = ctx.toolCallId?.trim()
-    ? `${ctx.context.runId ?? 'run'}:${ctx.toolCallId.trim()}`
+    ? `${ctx.context.turnId ?? 'turn'}:${ctx.toolCallId.trim()}`
     : randomUUID()
   const candidateSetId = candidates.length > 1
     ? buildCreativeResourceCandidateSetId({ operationId: 'create_text', requestId })
@@ -752,7 +751,6 @@ async function createTextResources(
         inputHash,
         taskId: null,
         operationExecutionId: null,
-        executionSegmentId: ctx.context.executionSegmentId ?? null,
         toolCallId: ctx.toolCallId ?? null,
         prompt: input.prompt,
         modelKey: null,
@@ -1238,7 +1236,7 @@ async function planNewMediaGeneration(
     ctx.userId,
     ctx.projectId,
     episodeId ?? 'project',
-    ctx.context.runId?.trim() || 'no-run',
+    ctx.context.turnId?.trim() || 'no-turn',
     ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
@@ -1271,7 +1269,6 @@ async function planNewMediaGeneration(
       // Approval revalidates the frozen plan in a later decision segment. The
       // stable toolCallId identifies the creative invocation across both
       // segments; the commit receives its own operationExecutionId.
-      executionSegmentId: null,
       toolCallId: ctx.toolCallId?.trim() || null,
       ...(requestedAssetBinding ? {
         binding: {
@@ -1487,7 +1484,7 @@ async function planMediaGenerationRetry(
     userId: ctx.userId,
     projectId: ctx.projectId,
     episodeId,
-    runId: ctx.context.runId?.trim() || null,
+    turnId: ctx.context.turnId?.trim() || null,
     toolCallId: ctx.toolCallId?.trim() || null,
     resources: candidates.map((candidate) => ({
       resourceId: candidate.resourceId,
@@ -1628,7 +1625,7 @@ async function planVideoPromptSetGeneration(
     ctx.userId,
     ctx.projectId,
     promptSetResource.episodeId,
-    ctx.context.runId?.trim() || 'no-run',
+    ctx.context.turnId?.trim() || 'no-turn',
     ctx.toolCallId?.trim() || planFingerprint,
     planFingerprint,
   ].join(':')
@@ -1807,7 +1804,6 @@ async function planVideoPromptSetGeneration(
         audioInputPositions,
         videoInputPositions: [],
         generationOptions,
-        executionSegmentId: null,
         toolCallId: ctx.toolCallId?.trim() || null,
       },
       videoModel: modelKey,
@@ -2083,7 +2079,7 @@ async function planManifestAssetImageGeneration(
     ctx.userId,
     ctx.projectId,
     'project',
-    ctx.context.runId?.trim() || 'no-run',
+    ctx.context.turnId?.trim() || 'no-turn',
     ctx.toolCallId?.trim() || planFingerprint,
     planFingerprint,
   ].join(':')
@@ -2171,7 +2167,6 @@ async function planManifestAssetImageGeneration(
         audioInputPositions: [],
         videoInputPositions: [],
         generationOptions,
-        executionSegmentId: null,
         toolCallId: ctx.toolCallId?.trim() || null,
         binding: { kind: 'project_asset_image' as const, ...assetBinding },
       },
@@ -2460,17 +2455,6 @@ async function commitMediaGeneration(
     })
   }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: config.operationId })
-  await createWorkspaceResourceBroadcastsInTransaction({
-    tx: authorization.transaction,
-    invocationId: authorization.operationExecutionId,
-    affectedResources: [{
-      kind: 'creativeResources',
-      projectId: ctx.projectId,
-      episodeId: metadata.episodeId,
-    }],
-    userId: ctx.userId,
-    operationId: config.operationId,
-  })
   const results = plan.tasks.map((task) => {
     const result = submitted.get(task.id)
     if (!result) throw new Error(`CREATIVE_RESOURCE_TASK_RESULT_MISSING:${task.id}`)
@@ -2538,6 +2522,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
       id: 'create_text',
       summary: 'Persist one or more generic text Resources authored in this Agent turn; persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text; or faithfully transcribe an image attached to this exact user turn with content.kind=current_user_media_transcription and its sourceResourceId. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text otherwise. Creative authoring and resource still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
       intent: 'act',
+      toolContractRevision: 'create_text/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',

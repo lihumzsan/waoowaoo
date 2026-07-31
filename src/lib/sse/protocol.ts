@@ -1,21 +1,16 @@
 import {
   TASK_SSE_EVENT_TYPE,
   WORKSPACE_SSE_EVENT_TYPE,
+  isAgentTurnStreamSseEvent,
   type SSEEvent,
-} from '@/lib/task/types'
+} from '@/lib/sse/events'
 
 export type WorkspaceSseCursor = {
   taskEventId: number
-  agentEventId: string
-  resourceEventAtMs: number
-  resourceOutboxId: string | null
 }
 
 export const EMPTY_WORKSPACE_SSE_CURSOR: WorkspaceSseCursor = {
   taskEventId: 0,
-  agentEventId: '0',
-  resourceEventAtMs: 0,
-  resourceOutboxId: null,
 }
 
 function parsePositiveInteger(value: string): number {
@@ -25,74 +20,23 @@ function parsePositiveInteger(value: string): number {
   return parsed
 }
 
-function parseCanonicalBigInt(value: string): string {
-  if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error('SSE_CURSOR_BIGINT_INVALID')
-  return value
-}
-
-function maxCanonicalBigInt(left: string, right: string): string {
-  return BigInt(left) >= BigInt(right) ? left : right
-}
-
-function parseAgentEventIdentity(value: string): string | null {
-  const match = /^agent:(\d+)$/.exec(value)
-  return match ? parseCanonicalBigInt(match[1]) : null
-}
-
-function parseResourceEventIdentity(value: string): { resourceEventAtMs: number; resourceOutboxId: string } | null {
-  const match = /^wr:(\d+):(.+)$/.exec(value)
-  if (!match) return null
-  const resourceEventAtMs = parsePositiveInteger(match[1])
-  const resourceOutboxId = match[2]
-  if (resourceEventAtMs <= 0 || !resourceOutboxId) throw new Error('SSE_RESOURCE_CURSOR_INVALID')
-  return { resourceEventAtMs, resourceOutboxId }
-}
-
 export function parseWorkspaceSseCursor(value: string | null | undefined): WorkspaceSseCursor {
   const trimmed = value?.trim() ?? ''
   if (!trimmed) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
-  const match = /^v4;t=(\d+);a=(\d+);r=(\d+):(.+|-)$/.exec(trimmed)
+  const match = /^v5;t=(\d+)$/.exec(trimmed)
   if (!match) throw new Error('SSE_CURSOR_INVALID')
-  const taskEventId = parsePositiveInteger(match[1])
-  const resourceEventAtMs = parsePositiveInteger(match[3])
-  const encodedResourceOutboxId = match[4]
-  const resourceOutboxId = encodedResourceOutboxId === '-' ? null : decodeURIComponent(encodedResourceOutboxId)
-  if ((resourceEventAtMs === 0) !== (resourceOutboxId === null)) {
-    throw new Error('SSE_RESOURCE_CURSOR_INVALID')
-  }
-  return {
-    taskEventId,
-    agentEventId: parseCanonicalBigInt(match[2]),
-    resourceEventAtMs,
-    resourceOutboxId,
-  }
+  return { taskEventId: parsePositiveInteger(match[1]) }
 }
 
 export function serializeWorkspaceSseCursor(cursor: WorkspaceSseCursor): string {
-  const normalized = parseWorkspaceSseCursor(
-    `v4;t=${String(cursor.taskEventId)};a=${cursor.agentEventId};r=${String(cursor.resourceEventAtMs)}:${cursor.resourceOutboxId ? encodeURIComponent(cursor.resourceOutboxId) : '-'}`,
-  )
-  return `v4;t=${String(normalized.taskEventId)};a=${normalized.agentEventId};r=${String(normalized.resourceEventAtMs)}:${normalized.resourceOutboxId ? encodeURIComponent(normalized.resourceOutboxId) : '-'}`
+  const normalized = parseWorkspaceSseCursor(`v5;t=${String(cursor.taskEventId)}`)
+  return `v5;t=${String(normalized.taskEventId)}`
 }
 
 export function advanceWorkspaceSseCursor(cursor: WorkspaceSseCursor, event: SSEEvent): WorkspaceSseCursor {
   const numericTaskEventId = /^\d+$/.test(event.id) ? parsePositiveInteger(event.id) : 0
-  const agentEventId = parseAgentEventIdentity(event.id)
-  const resource = parseResourceEventIdentity(event.id)
-  const shouldAdvanceResource = Boolean(resource) && (
-    resource!.resourceEventAtMs > cursor.resourceEventAtMs
-    || (
-      resource!.resourceEventAtMs === cursor.resourceEventAtMs
-      && resource!.resourceOutboxId > (cursor.resourceOutboxId ?? '')
-    )
-  )
   return {
     taskEventId: Math.max(cursor.taskEventId, numericTaskEventId),
-    agentEventId: agentEventId
-      ? maxCanonicalBigInt(cursor.agentEventId, agentEventId)
-      : cursor.agentEventId,
-    resourceEventAtMs: shouldAdvanceResource ? resource!.resourceEventAtMs : cursor.resourceEventAtMs,
-    resourceOutboxId: shouldAdvanceResource ? resource!.resourceOutboxId : cursor.resourceOutboxId,
   }
 }
 
@@ -117,14 +61,43 @@ export function isWorkspaceSseEvent(value: unknown): value is SSEEvent {
   if (record.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
     return Array.isArray(record.affectedResources)
   }
-  if (record.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
-    return typeof record.assistantId === 'string'
-      && record.assistantId.length > 0
-      && typeof record.scopeRef === 'string'
-      && record.scopeRef.length > 0
-      && typeof record.agentEventId === 'string'
-      && /^(0|[1-9]\d*)$/.test(record.agentEventId)
-      && record.id === `agent:${record.agentEventId}`
+  if (record.type === WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED) {
+    return record.protocol === 'agent_session_view_changed_v1'
+      && record.assistantId === 'workspace-command'
+      && typeof record.threadId === 'string'
+      && record.threadId.length > 0
+      && (typeof record.turnId === 'string' || record.turnId === null)
+      && (
+        record.attempt === null
+        || (
+          typeof record.attempt === 'number'
+          && Number.isSafeInteger(record.attempt)
+          && record.attempt > 0
+        )
+      )
+      && typeof record.reason === 'string'
+      && record.reason.length > 0
+      && (typeof record.episodeId === 'string' || record.episodeId === null)
+  }
+  if (record.type === WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM) {
+    return record.protocol === 'agent_turn_stream_v1'
+      && record.assistantId === 'workspace-command'
+      && typeof record.threadId === 'string'
+      && record.threadId.length > 0
+      && typeof record.turnId === 'string'
+      && record.turnId.length > 0
+      && typeof record.attempt === 'number'
+      && Number.isSafeInteger(record.attempt)
+      && record.attempt > 0
+      && record.lane === 'ui'
+      && typeof record.seq === 'number'
+      && Number.isSafeInteger(record.seq)
+      && record.seq > 0
+      && typeof record.messageId === 'string'
+      && record.messageId.length > 0
+      && !!record.chunk
+      && typeof record.chunk === 'object'
+      && !Array.isArray(record.chunk)
       && (typeof record.episodeId === 'string' || record.episodeId === null)
   }
   const type = record.type
@@ -163,7 +136,12 @@ export function parseWorkspaceSseBootstrap(value: unknown): WorkspaceSseBootstra
   if (typeof record.mode !== 'string' || record.mode.length === 0) {
     throw new Error('SSE_BOOTSTRAP_MODE_INVALID')
   }
-  if (!Array.isArray(record.events) || !record.events.every(isWorkspaceSseEvent)) {
+  if (
+    !Array.isArray(record.events)
+    || !record.events.every(
+      (event) => isWorkspaceSseEvent(event) && !isAgentTurnStreamSseEvent(event),
+    )
+  ) {
     throw new Error('SSE_BOOTSTRAP_EVENTS_INVALID')
   }
   return {

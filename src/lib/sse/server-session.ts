@@ -1,4 +1,7 @@
-import type { SSEEvent } from '@/lib/task/types'
+import {
+  isAgentTurnStreamSseEvent,
+  type SSEEvent,
+} from '@/lib/sse/events'
 import { getWorkspaceSseEventIdentity } from './protocol'
 
 export const DEFAULT_SSE_BOOTSTRAP_BUFFER_LIMIT = 1000
@@ -61,6 +64,12 @@ export class WorkspaceSseServerSession {
 
   receiveLiveEvent(event: SSEEvent): void {
     if (this.phase === 'closed') return
+    if (isAgentTurnStreamSseEvent(event)) {
+      if (this.phase === 'live') {
+        this.emit(event)
+      }
+      return
+    }
     if (this.phase === 'live') {
       this.emitOnce(event)
       return
@@ -76,6 +85,9 @@ export class WorkspaceSseServerSession {
       throw new Error(`SSE_BOOTSTRAP_PHASE_INVALID phase=${this.phase}`)
     }
     for (const event of events) {
+      if (isAgentTurnStreamSseEvent(event)) {
+        throw new Error('SSE_BOOTSTRAP_EPHEMERAL_EVENT_FORBIDDEN')
+      }
       this.emitOnce(event)
     }
     const buffered = this.bufferedEvents

@@ -61,6 +61,9 @@ export const googleVideoAsyncTaskProvider: AsyncTaskProviderRegistration = {
       failureDisposition: result.failureDisposition,
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
+      downloadHeaders: result.videoUrl
+        ? { 'x-goog-api-key': apiKey }
+        : undefined,
       error: result.error,
     })
   },

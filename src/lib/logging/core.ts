@@ -104,7 +104,8 @@ function write(level: LogLevel, event: Omit<LogEvent, 'ts' | 'level' | 'service'
     requestId: event.requestId || context.requestId,
     taskId: event.taskId || context.taskId,
     taskAttempt: event.taskAttempt ?? context.taskAttempt,
-    runId: event.runId || context.runId,
+    threadId: event.threadId || context.threadId,
+    turnId: event.turnId || context.turnId,
     operationId: event.operationId || context.operationId,
     projectId: event.projectId || context.projectId,
     userId: event.userId || context.userId,
@@ -138,7 +139,8 @@ function logWithLevel(level: LogLevel, context: Partial<LogContext> | undefined,
     requestId: context?.requestId,
     taskId: context?.taskId,
     taskAttempt: context?.taskAttempt,
-    runId: context?.runId,
+    threadId: context?.threadId,
+    turnId: context?.turnId,
     operationId: context?.operationId,
     projectId: context?.projectId,
     userId: context?.userId,
@@ -156,7 +158,8 @@ type ScopedLogInput = {
   requestId?: string
   taskId?: string
   taskAttempt?: number
-  runId?: string
+  threadId?: string
+  turnId?: string
   operationId?: string
   projectId?: string
   userId?: string
@@ -187,7 +190,8 @@ function mergeScopedEvent(
     requestId: input.requestId || baseContext.requestId,
     taskId: input.taskId || baseContext.taskId,
     taskAttempt: input.taskAttempt ?? baseContext.taskAttempt,
-    runId: input.runId || baseContext.runId,
+    threadId: input.threadId || baseContext.threadId,
+    turnId: input.turnId || baseContext.turnId,
     operationId: input.operationId || baseContext.operationId,
     projectId: input.projectId || baseContext.projectId,
     userId: input.userId || baseContext.userId,
@@ -216,7 +220,8 @@ function logScoped(level: LogLevel, baseContext: Partial<SemanticContext>, args:
     requestId: baseContext.requestId,
     taskId: baseContext.taskId,
     taskAttempt: baseContext.taskAttempt,
-    runId: baseContext.runId,
+    threadId: baseContext.threadId,
+    turnId: baseContext.turnId,
     operationId: baseContext.operationId,
     projectId: baseContext.projectId,
     userId: baseContext.userId,

@@ -66,7 +66,6 @@ export const creativeResourceGenerationTaskPayloadSchema = z.object({
         }
       }),
     generationOptions: creativeResourceGenerationOptionsSchema,
-    executionSegmentId: z.string().trim().min(1).nullable(),
     toolCallId: z.string().trim().min(1).nullable(),
     binding: z.discriminatedUnion('kind', [
       z.object({

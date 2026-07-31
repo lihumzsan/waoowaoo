@@ -6,7 +6,10 @@ import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-ur
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { buildCharacterDescriptionFields } from '@/lib/assets/description-fields'
 import { deleteObject, generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   requireOwnedAssetTarget,
@@ -573,7 +576,7 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       prepareTransaction: async (ctx) => {
         return await prepareAssetHubImageUpload(
           ctx.userId,
-          ctx.request,
+          requireProjectAgentOperationRequest(ctx),
         )
       },
       executeInTransaction: async (ctx, _input, transaction, prepared) => {

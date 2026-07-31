@@ -1,7 +1,5 @@
 import { Prisma, type Task } from '@prisma/client'
 import { prepareTaskBillingInTransaction } from '@/lib/billing'
-import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
-import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { getTaskDefinition } from './definition'
 import { buildTaskLifecycleEventPayload } from './publisher'
@@ -42,13 +40,7 @@ async function assertTaskSubmissionScope(
 
 type PersistedSubmittedTask = {
   readonly task: Task
-  /**
-   * The exact durable outbox commands (lifecycle broadcast + enqueue) created
-   * with this Task in the same transaction. The transaction owner hands them
-   * to `dispatchCommittedOutboxCommands` after a successful commit; the
-   * periodic dispatcher recovers the same rows on crash.
-   */
-  readonly outboxCommandIds: readonly string[]
+  readonly createdEventId: number
 }
 
 async function persistValidatedSubmittedTaskInTransaction(params: {
@@ -74,9 +66,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       status: TASK_STATUS.QUEUED,
       progress: 0,
       attempt: 0,
-      priority: input.priority ?? 0,
       dedupeKey: input.dedupeKey || null,
-      batchKey: input.batchKey || null,
       operationId: input.operationId || null,
       operationSource: input.operationSource || null,
       approvalGrantId: input.approvalGrantId ?? null,
@@ -134,27 +124,7 @@ async function persistValidatedSubmittedTaskInTransaction(params: {
       })),
     },
   })
-  const broadcastCommand = await createOutboxCommandInTransaction(params.tx, {
-    idempotencyKey: `task-lifecycle-broadcast:${event.id}`,
-    aggregateType: 'task',
-    aggregateId: stored.id,
-    payload: {
-      kind: OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST,
-      eventId: event.id,
-      taskId: stored.id,
-    },
-  })
-  const enqueueCommand = await createOutboxCommandInTransaction(params.tx, {
-    idempotencyKey: `task-enqueue:${stored.id}`,
-    aggregateType: 'task',
-    aggregateId: stored.id,
-    payload: {
-      kind: OUTBOX_COMMAND_KIND.TASK_ENQUEUE,
-      taskId: stored.id,
-      operationExecutionId: stored.operationExecutionId,
-    },
-  })
-  return { task: stored, outboxCommandIds: [broadcastCommand.id, enqueueCommand.id] }
+  return { task: stored, createdEventId: event.id }
 }
 
 export async function persistSubmittedTaskInTransaction(params: {
@@ -167,20 +137,22 @@ export async function persistSubmittedTaskInTransaction(params: {
   ) => Promise<void>
 }): Promise<PersistedSubmittedTask> {
   await assertTaskSubmissionScope(params.tx, params.input)
-  return await persistValidatedSubmittedTaskInTransaction(params)
+  return await persistValidatedSubmittedTaskInTransaction({
+    ...params,
+  })
 }
 
 type PersistedBatchTask = {
   readonly task: Task
   readonly deduped: boolean
-  readonly outboxCommandIds: readonly string[]
+  readonly createdEventId: number
 }
 
 async function assertExistingSubmissionBundle(
   tx: Prisma.TransactionClient,
   task: Task,
   input: CreateTaskInput & { readonly id?: string },
-): Promise<void> {
+): Promise<number> {
   const expectedFingerprint = createTaskExecutionFingerprint(input)
   if (task.executionFingerprint !== expectedFingerprint) {
     throw new Error(`TASK_BATCH_IDENTITY_CONFLICT:${task.id}`)
@@ -195,17 +167,7 @@ async function assertExistingSubmissionBundle(
     FOR UPDATE
   `))[0] ?? null
   if (!event) throw new Error(`TASK_BATCH_CREATED_EVENT_MISSING:${task.id}`)
-  const commandKeys = [
-    `task-enqueue:${task.id}`,
-    `task-lifecycle-broadcast:${event.id}`,
-  ]
-  const commands = await tx.$queryRaw<Array<{ idempotencyKey: string }>>(Prisma.sql`
-    SELECT idempotencyKey
-    FROM outbox_commands
-    WHERE idempotencyKey IN (${Prisma.join(commandKeys)})
-    FOR UPDATE
-  `)
-  if (commands.length !== 2) throw new Error(`TASK_BATCH_OUTBOX_BUNDLE_MISSING:${task.id}`)
+  return event.id
 }
 
 async function loadExistingBatchTask(
@@ -281,8 +243,12 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
     const existingCandidate = await loadExistingBatchTask(params.tx, input)
     if (existingCandidate) {
       const existing = await lockExistingBatchTaskById(params.tx, existingCandidate.id)
-      await assertExistingSubmissionBundle(params.tx, existing, input)
-      ordered.push({ task: existing, deduped: true, outboxCommandIds: [] })
+      const createdEventId = await assertExistingSubmissionBundle(
+        params.tx,
+        existing,
+        input,
+      )
+      ordered.push({ task: existing, deduped: true, createdEventId })
       continue
     }
     try {
@@ -299,8 +265,12 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
       if (!identityCollision) throw error
       const collided = await loadCollidedBatchTaskForUpdate(params.tx, input)
       if (!collided) throw error
-      await assertExistingSubmissionBundle(params.tx, collided, input)
-      ordered.push({ task: collided, deduped: true, outboxCommandIds: [] })
+      const createdEventId = await assertExistingSubmissionBundle(
+        params.tx,
+        collided,
+        input,
+      )
+      ordered.push({ task: collided, deduped: true, createdEventId })
     }
   }
   await params.onBatchCreatedInTransaction?.(params.tx, ordered)

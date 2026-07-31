@@ -473,7 +473,6 @@ export async function materializeCreativeResourceInTransaction(
       inputHash: input.provenance.inputHash?.trim() || null,
       taskId,
       operationExecutionId: input.provenance.operationExecutionId?.trim() || null,
-      executionSegmentId: input.provenance.executionSegmentId?.trim() || null,
       toolCallId: input.provenance.toolCallId?.trim() || null,
       materializedAt: new Date(),
       status: 'ready',

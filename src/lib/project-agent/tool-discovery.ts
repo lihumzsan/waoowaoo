@@ -10,6 +10,84 @@ export const PROJECT_AGENT_OPERATION_GATEWAY_NAME = 'execute_operation'
 export const PROJECT_AGENT_TOOL_LOAD_LIMIT = 4
 export const PROJECT_AGENT_TOOL_CATALOG_DESCRIPTION_LIMIT = 160
 
+export interface ProjectAgentOperationGatewayInput {
+  readonly operationId: string
+  readonly arguments: Record<string, unknown>
+}
+
+export const PROJECT_AGENT_OPERATION_GATEWAY_INPUT_SCHEMA: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    operationId: {
+      type: 'string',
+      description: 'Exact loaded Operation id returned by load_tools.',
+    },
+    argumentsJson: {
+      type: 'string',
+      description: 'A JSON object serialized as a string and matching the loaded Operation parameters exactly.',
+    },
+  },
+  required: ['operationId', 'argumentsJson'],
+  additionalProperties: false,
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function readProjectAgentOperationGatewayOperationId(
+  input: unknown,
+): string {
+  if (!isObjectRecord(input)) {
+    throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_INPUT_INVALID')
+  }
+  const operationId = typeof input.operationId === 'string'
+    ? input.operationId.trim()
+    : ''
+  if (!operationId) {
+    throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_OPERATION_ID_REQUIRED')
+  }
+  return operationId
+}
+
+export function resolveProjectAgentOperationGatewayToolIdentity(
+  input: unknown,
+): string {
+  try {
+    return readProjectAgentOperationGatewayOperationId(input)
+  } catch {
+    return PROJECT_AGENT_OPERATION_GATEWAY_NAME
+  }
+}
+
+export function readProjectAgentOperationGatewayInput(
+  input: unknown,
+): ProjectAgentOperationGatewayInput {
+  const operationId = readProjectAgentOperationGatewayOperationId(input)
+  if (!isObjectRecord(input)) {
+    throw new Error('PROJECT_AGENT_OPERATION_GATEWAY_INPUT_INVALID')
+  }
+  if (typeof input.argumentsJson !== 'string' || !input.argumentsJson.trim()) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_REQUIRED:${operationId}`,
+    )
+  }
+  let parsedArguments: unknown
+  try {
+    parsedArguments = JSON.parse(input.argumentsJson)
+  } catch {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_JSON_INVALID:${operationId}`,
+    )
+  }
+  if (!isObjectRecord(parsedArguments)) {
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_GATEWAY_ARGUMENTS_OBJECT_REQUIRED:${operationId}`,
+    )
+  }
+  return { operationId, arguments: parsedArguments }
+}
+
 export interface ProjectAgentToolCatalogEntry {
   readonly operationId: string
   readonly groupPath: readonly string[]

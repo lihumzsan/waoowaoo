@@ -1,6 +1,5 @@
 import type { AgentInputItem } from '@openai/agents'
 import { AppError } from '@/lib/errors/app-error'
-import type { ProjectAgentModelSession } from '../model-session'
 import { generateProjectAgentContextCheckpoint } from './checkpoint-generator'
 import {
   buildProjectAgentContextCheckpointItem,
@@ -80,7 +79,10 @@ export async function runProjectAgentContextCompactionWithinDeadline<T>(input: {
  * the original items durable in the same canonical Session.
  */
 export async function compressProjectAgentContext(input: {
-  session: ProjectAgentModelSession
+  session: {
+    getItems(): Promise<AgentInputItem[]>
+    replaceItems(items: readonly AgentInputItem[]): Promise<void>
+  }
   inputItems: readonly AgentInputItem[]
   userId: string
   signal?: AbortSignal

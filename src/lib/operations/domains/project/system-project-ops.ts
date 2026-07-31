@@ -11,7 +11,10 @@ import {
 } from '@/lib/projects/validation'
 import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { createProjectEpisodeInTransaction } from '@/lib/projects/episode-service'
 import {
@@ -222,7 +225,10 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         const draft = readProjectDraftBody(input)
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
-          const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'
+          const locale = resolveTaskLocale(
+            requireProjectAgentOperationRequest(ctx),
+            input,
+          ) ?? 'zh'
           throw new ApiError('INVALID_PARAMS', {
             code: validationIssue.code,
             field: validationIssue.field,

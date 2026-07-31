@@ -69,6 +69,7 @@ export function createCreativeResourceUploadedMediaOperations(): ProjectAgentOpe
       id: 'register_uploaded_media',
       summary: 'Materialize one chat-uploaded attachment (image or audio) as a ready project upload Resource, using the exact attachmentToken from its <uploaded_media> tag. Call this before passing user-uploaded material into generation references, lineage, or transcription; afterwards only the returned resourceId identifies the material. The same uploaded content converges to the same Resource, so repeated calls are safe and return reused=true.',
       intent: 'act',
+      toolContractRevision: 'register_uploaded_media/v1',
       channels: { tool: true, api: false },
       effects: {
         writes: true,
@@ -171,7 +172,6 @@ export function createCreativeResourceUploadedMediaOperations(): ProjectAgentOpe
             inputHash: payload.sha256,
             taskId: null,
             operationExecutionId: null,
-            executionSegmentId: ctx.context.executionSegmentId?.trim() || null,
             toolCallId: ctx.toolCallId?.trim() || null,
             prompt: null,
             modelKey: null,

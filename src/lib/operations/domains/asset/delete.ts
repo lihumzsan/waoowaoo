@@ -76,6 +76,7 @@ export function createAssetDeleteOperations(): ProjectAgentOperationRegistryDraf
       id: 'delete_asset',
       summary: 'Delete one exact existing character, location, prop, or unbound voice asset without deleting shared media objects. A voice must be unbound and unused before deletion.',
       intent: 'act',
+      toolContractRevision: 'delete_asset/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'scoped_assets_and_creative_resources',

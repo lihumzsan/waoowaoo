@@ -6,6 +6,8 @@ export function assertAssistantToolWriteAuthority(
   const effects = operation.effects as { writes?: unknown } | undefined
   const authority = operation.assistantWriteAuthority as {
     kind?: unknown
+    contractRevision?: unknown
+    followUpPolicy?: unknown
   } | undefined
   const toolWrite = channels?.tool === true && effects?.writes === true
 
@@ -31,8 +33,17 @@ export function assertAssistantToolWriteAuthority(
     return
   }
 
-  if (authority?.kind === 'transactional_task_submission') {
-    if (typeof operation.execute !== 'function') {
+  if (authority?.kind === 'temporal_operation_execution') {
+    if (
+      typeof operation.execute !== 'function'
+      || typeof authority.contractRevision !== 'string'
+      || !authority.contractRevision.trim()
+      || authority.contractRevision !== authority.contractRevision.trim()
+      || (
+        authority.followUpPolicy !== 'after_all_terminal'
+        && authority.followUpPolicy !== 'none'
+      )
+    ) {
       throw new Error(`PROJECT_AGENT_OPERATION_TASK_SUBMISSION_EXECUTOR_REQUIRED:${operationId}`)
     }
     return

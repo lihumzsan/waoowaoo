@@ -16,8 +16,8 @@ import { createScopedLogger } from '@/lib/logging/core'
  * never rotated or cleaned automatically — delete them manually when done.
  *
  * Each line is { ts, pid, kind: 'trace_start' | 'trace_end' | 'span',
- * projectId, userId, runId, data }. Correlation ids come from the caller's
- * run-level `traceMetadata` (see project-agent runtime); spans inherit them
+ * projectId, userId, threadId, turnId, data }. Correlation ids come from the
+ * current AgentTurn `traceMetadata`; spans inherit them
  * from their parent trace via traceId. OPENAI_AGENTS_DISABLE_TRACING=true
  * remains the upstream kill switch: spans become no-ops and nothing reaches
  * this sink.
@@ -47,7 +47,8 @@ async function ensureTraceDir(): Promise<void> {
 type AgentTraceCorrelation = {
   projectId: string | null
   userId: string | null
-  runId: string | null
+  threadId: string | null
+  turnId: string | null
 }
 
 function readCorrelationField(metadata: Record<string, unknown> | undefined, key: string): string | null {
@@ -59,7 +60,8 @@ function readTraceCorrelation(trace: { metadata?: Record<string, unknown> }): Ag
   return {
     projectId: readCorrelationField(trace.metadata, 'projectId'),
     userId: readCorrelationField(trace.metadata, 'userId'),
-    runId: readCorrelationField(trace.metadata, 'runId'),
+    threadId: readCorrelationField(trace.metadata, 'threadId'),
+    turnId: readCorrelationField(trace.metadata, 'turnId'),
   }
 }
 
@@ -84,7 +86,8 @@ function enqueueTraceLine(
     kind,
     projectId: correlation.projectId,
     userId: correlation.userId,
-    runId: correlation.runId,
+    threadId: correlation.threadId,
+    turnId: correlation.turnId,
     data,
   })}\n`
   const fileName = `${now.toISOString().slice(0, 10)}.jsonl`
@@ -108,7 +111,8 @@ function enqueueTraceLine(
 const EMPTY_CORRELATION: AgentTraceCorrelation = {
   projectId: null,
   userId: null,
-  runId: null,
+  threadId: null,
+  turnId: null,
 }
 
 export function createAgentsTraceFileProcessor(): TracingProcessor {

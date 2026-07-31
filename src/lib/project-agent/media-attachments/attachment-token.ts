@@ -13,9 +13,10 @@ import { z } from 'zod'
  * signature and the scope before touching the media. The token is issued and
  * verified only here; no second attachment ownership judge may exist.
  *
- * This module must stay loadable from both Next commands and Outbox workers,
- * so it only uses node:crypto and the shared NEXTAUTH_SECRET-derived HMAC
- * pattern already used by auth (image-captcha, phone-verification).
+ * This module must stay loadable from both Next command boundaries and the
+ * Temporal Agent Turn Activity, so it only uses node:crypto and the shared
+ * NEXTAUTH_SECRET-derived HMAC pattern already used by auth
+ * (image-captcha, phone-verification).
  */
 
 const PROJECT_ASSISTANT_ATTACHMENT_TOKEN_PREFIX = 'pama1'

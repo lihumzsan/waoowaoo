@@ -1,5 +1,7 @@
 export type TaskTerminalFence =
-  { kind: 'attempt'; attempt: number } | { kind: 'snapshot'; updatedAt: Date } | { kind: 'active' }
+  | { kind: 'attempt'; attempt: number }
+  | { kind: 'snapshot'; updatedAt: Date }
+  | { kind: 'active' }
 
 type TaskTerminalBase = {
   taskId: string
@@ -17,7 +19,7 @@ export type TaskTerminalCommitIntent =
       errorCode: string
       errorMessage: string
       errorDetails?: Record<string, unknown> | null
-      source: 'worker' | 'enqueue' | 'validation' | 'reconciler' | 'timeout'
+      source: 'worker' | 'workflow' | 'timeout'
     })
   | (TaskTerminalBase & {
       kind: 'canceled'
@@ -30,26 +32,26 @@ export type TaskTerminalCommitResult =
       applied: true
       status: 'completed' | 'failed' | 'canceled'
       terminalEventId: number
-      outboxCommandIds: readonly string[]
+      readyFollowUpBatchIds: readonly string[]
     }
   | {
       applied: false
       reason: 'already_terminal'
       existingStatus: string
       terminalEventId: number
-      outboxCommandIds: readonly string[]
+      readyFollowUpBatchIds: readonly string[]
     }
   | {
       applied: false
       reason: 'stale_fence'
       existingStatus: string
       terminalEventId: null
-      outboxCommandIds: readonly []
+      readyFollowUpBatchIds: readonly []
     }
   | {
       applied: false
       reason: 'completion_pending'
       existingStatus: string
       terminalEventId: null
-      outboxCommandIds: readonly []
+      readyFollowUpBatchIds: readonly []
     }

@@ -137,7 +137,6 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
   return {
     operationId,
     taskId: task.id,
-    runId: readString(payload, 'runId'),
     taskType: task.type,
     status: normalizeStatus(task.status),
     source: task.operationSource,

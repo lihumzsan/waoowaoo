@@ -4,7 +4,6 @@ import { resolveRedisRuntimeConfig } from './redis-config'
 
 type RedisSingleton = {
   app?: Redis
-  queue?: Redis
 }
 
 const globalForRedis = globalThis as typeof globalThis & {
@@ -42,16 +41,6 @@ function createAppRedis() {
   return client
 }
 
-function createQueueRedis() {
-  const client = new Redis({
-    ...buildBaseConfig(),
-    // BullMQ requires null to avoid command retry side effects.
-    maxRetriesPerRequest: null,
-  })
-  onConnectLog('queue', client)
-  return client
-}
-
 const singleton = globalForRedis.__waoowaooRedis || {}
 if (!globalForRedis.__waoowaooRedis) {
   globalForRedis.__waoowaooRedis = singleton
@@ -59,10 +48,6 @@ if (!globalForRedis.__waoowaooRedis) {
 
 function getAppRedis() {
   return singleton.app || (singleton.app = createAppRedis())
-}
-
-function getQueueRedis() {
-  return singleton.queue || (singleton.queue = createQueueRedis())
 }
 
 function createLazyRedisProxy(getClient: () => Redis) {
@@ -88,7 +73,6 @@ function createLazyRedisProxy(getClient: () => Redis) {
 }
 
 export const redis = createLazyRedisProxy(getAppRedis)
-export const queueRedis = createLazyRedisProxy(getQueueRedis)
 
 export function createSubscriber() {
   const client = new Redis({

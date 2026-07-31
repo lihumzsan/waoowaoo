@@ -1,0 +1,5 @@
+# Keep the self-hosted dynamic configuration explicit and production-safe.
+# Operational changes belong here; application code must not infer them.
+limit.maxIDLength:
+  - value: 255
+    constraints: {}

@@ -1,14 +1,28 @@
 import type { NextRequest } from 'next/server'
-import { ApiError } from '@/lib/api-errors'
+import { ApiError, getIdempotencyKey } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
-import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
+import {
+  invokeProjectAgentOperation,
+  prepareProjectAgentOperationInput,
+} from '@/lib/operations/invocation'
+import {
+  buildDirectOperationInvocationIdentity,
+  executeApprovedTaskOperationViaTemporal,
+  executeDirectTaskOperationViaTemporal,
+} from '@/lib/operations/durable-dispatch'
+import { isBillablePlannedOperation } from '@/lib/operations/types'
 import {
   extractPrismaMissingColumn,
   inferApiErrorCodeFromMessage,
   toOperationErrorMessage,
 } from '@/lib/adapters/operation-error-normalizer'
+import {
+  OPERATION_MUTATION_RESPONSE_PROTOCOL,
+  type OperationMutationResponse,
+} from '@/lib/operations/mutation-receipt'
+import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
 
-export async function executeProjectAgentOperationFromApi(params: {
+interface ExecuteProjectAgentOperationFromApiParams {
   request: NextRequest
   operationId: string
   projectId: string
@@ -21,8 +35,41 @@ export async function executeProjectAgentOperationFromApi(params: {
   }
   input: unknown
   source?: string
-}) {
+  responseContract?: 'operation_mutation_response_v1'
+}
+
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams & {
+    responseContract: 'operation_mutation_response_v1'
+  },
+): Promise<OperationMutationResponse>
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams & {
+    responseContract?: undefined
+  },
+): Promise<unknown>
+export async function executeProjectAgentOperationFromApi(
+  params: ExecuteProjectAgentOperationFromApiParams,
+): Promise<unknown> {
   const registry = createProjectAgentOperationRegistryForApi()
+  const operation = registry[params.operationId]
+  const requiresMutationResponse = Boolean(
+    operation?.effects.writes
+    && operation.effects.workspaceResourceImpact !== WORKSPACE_RESOURCE_IMPACT.NONE,
+  )
+  const requestedMutationResponse =
+    params.responseContract === OPERATION_MUTATION_RESPONSE_PROTOCOL
+  if (
+    operation
+    && requiresMutationResponse !== requestedMutationResponse
+  ) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: requiresMutationResponse
+        ? 'OPERATION_MUTATION_RESPONSE_CONTRACT_REQUIRED'
+        : 'OPERATION_MUTATION_RESPONSE_CONTRACT_FORBIDDEN',
+      operationId: params.operationId,
+    })
+  }
   const operationContext = {
     request: params.request,
     userId: params.userId,
@@ -40,6 +87,64 @@ export async function executeProjectAgentOperationFromApi(params: {
   }
 
   try {
+    if (operation && isBillablePlannedOperation(operation)) {
+      const prepared = prepareProjectAgentOperationInput({
+        channel: 'api',
+        operation,
+        context: operationContext.context,
+        input: params.input,
+      })
+      if (!prepared.invocation) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
+          operationId: operation.id,
+          message: 'approve the immutable operation plan before execution',
+        })
+      }
+      const result = await executeApprovedTaskOperationViaTemporal({
+        registry,
+        operationId: operation.id,
+        userId: params.userId,
+        projectId: params.projectId,
+        source: operationContext.source,
+        invocation: prepared.invocation,
+        context: operationContext.context,
+        origin: { kind: 'api' },
+      })
+      return result.data
+    }
+    if (
+      operation?.assistantWriteAuthority?.kind
+        === 'temporal_operation_execution'
+    ) {
+      const stableSourceId = getIdempotencyKey(params.request)
+      if (!stableSourceId) {
+        throw new ApiError('INVALID_PARAMS', {
+          code: 'OPERATION_IDEMPOTENCY_KEY_REQUIRED',
+          header: 'Idempotency-Key',
+          operationId: params.operationId,
+        })
+      }
+      const identity = buildDirectOperationInvocationIdentity({
+        channel: 'api',
+        projectId: params.projectId,
+        operationId: params.operationId,
+        stableSourceId,
+      })
+      const result = await executeDirectTaskOperationViaTemporal({
+        registry,
+        channel: 'api',
+        operationId: params.operationId,
+        userId: params.userId,
+        projectId: params.projectId,
+        source: operationContext.source,
+        context: operationContext.context,
+        input: params.input,
+        ...identity,
+        origin: { kind: 'api' },
+      })
+      return result.data
+    }
     const result = await invokeProjectAgentOperation({
       registry,
       channel: 'api',
@@ -49,6 +154,23 @@ export async function executeProjectAgentOperationFromApi(params: {
     })
     if (result.kind !== 'executed') {
       throw new Error(`API_OPERATION_APPROVAL_RESULT_INVALID:${params.operationId}`)
+    }
+    if (requestedMutationResponse) {
+      if (!result.mutationReceipt || result.mutationReceipt.changedRefs.length === 0) {
+        throw new Error(
+          `OPERATION_MUTATION_RESPONSE_RECEIPT_REQUIRED:${params.operationId}`,
+        )
+      }
+      return {
+        protocol: OPERATION_MUTATION_RESPONSE_PROTOCOL,
+        data: result.data,
+        mutationReceipt: result.mutationReceipt,
+      } satisfies OperationMutationResponse
+    }
+    if (result.mutationReceipt?.changedRefs.length) {
+      throw new Error(
+        `OPERATION_MUTATION_RESPONSE_CONTRACT_REQUIRED:${params.operationId}`,
+      )
     }
     return result.data
   } catch (error) {

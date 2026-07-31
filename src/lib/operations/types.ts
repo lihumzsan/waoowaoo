@@ -1,18 +1,43 @@
 import type { FlexibleSchema, UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
-import type { ProjectAgentContext, WorkspaceAssistantPartType } from '@/lib/project-agent/types'
+import type {
+  ProjectAgentContext,
+  WorkspaceAssistantPartType,
+} from '@/lib/project-agent/types'
 import type { OperationPlan } from './planning'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
-import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
-import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
 import type { CreativeResourceOperationContract } from '@/lib/creative-resource/contracts'
+import type { WorkspaceResourceRef } from '@/lib/task/types'
+import type {
+  ProjectAgentChoiceCardDefinition,
+  ProjectAgentChoiceCommitment,
+  ProjectAgentChoiceSubject,
+} from '@/lib/project-agent/choice-offer'
 
 export type ProjectAgentOperationId = string
 
+/**
+ * The authoritative invalidation result of one synchronous Operation
+ * mutation. The refs are projected from the production Operation registry;
+ * callers must never derive them from an Operation's output and may publish
+ * them only after the transaction owner has committed.
+ */
+export interface OperationMutationReceipt {
+  protocol: 'operation_mutation_receipt_v1'
+  operationId: ProjectAgentOperationId
+  changedRefs: readonly WorkspaceResourceRef[]
+}
+
 export interface ProjectAgentOperationContext {
-  request: NextRequest
+  /**
+   * HTTP request only exists for an HTTP-owned invocation. Durable Activities
+   * receive explicit requestId/cancellation facts and must not fabricate one.
+   */
+  request: NextRequest | null
+  requestId?: string | null
+  signal?: AbortSignal
   userId: string
   projectId: string
   context: ProjectAgentContext
@@ -31,45 +56,56 @@ export interface ProjectAgentOperationContext {
   toolCallId?: string | null
   /** Host-owned Activity identity for nested execution projection only. */
   activityId?: string | null
+  /** Durable Operation owner for Task foreign keys and exact replay. */
+  operationExecutionId?: string | null
+  /** Outer Operation transaction that atomically owns Task creation/output. */
+  operationExecutionTransaction?: Prisma.TransactionClient | null
   executionAuthorization?: OperationExecutionAuthorization | null
-  executionFence?: ProjectAgentOperationExecutionFence | null
-  taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
+  followUpBatchBinding?: ProjectAgentFollowUpBatchBinding | null
+  choiceOfferWriter?:
+    | ((offer: {
+        operationId: string
+        callId: string
+        card: ProjectAgentChoiceCardDefinition
+        subject: ProjectAgentChoiceSubject
+        commitments: readonly ProjectAgentChoiceCommitment[]
+        modelArguments: unknown
+      }) => Promise<{ offerId: string }>)
+    | null
 }
 
-export interface ProjectAgentOperationTaskBatchBinding {
+export function requireProjectAgentOperationRequest(
+  context: ProjectAgentOperationContext,
+): NextRequest {
+  if (!context.request) {
+    throw new Error('PROJECT_AGENT_OPERATION_HTTP_REQUEST_REQUIRED')
+  }
+  return context.request
+}
+
+export function requireProjectAgentOperationSignal(
+  context: ProjectAgentOperationContext,
+): AbortSignal {
+  const signal = context.signal ?? context.request?.signal
+  if (!signal) {
+    throw new Error('PROJECT_AGENT_OPERATION_SIGNAL_REQUIRED')
+  }
+  return signal
+}
+
+export interface ProjectAgentFollowUpBatchBinding {
   bindInTransaction(
     transaction: Prisma.TransactionClient,
     batch: { operationId: string; taskIds: readonly string[] },
-  ): Promise<ProjectAgentTaskSubmissionReceipt | null>
+  ): Promise<void>
   isBound(): boolean
-  markCommitted(): void
-  isCommitted(): boolean
-  getCommittedReceipt(): ProjectAgentTaskSubmissionReceipt | null
 }
-
-/**
- * Durable Task submission identity returned to the Agent without suspending
- * the foreground model loop. The background Run/Wait pair owns completion.
- */
-export interface ProjectAgentTaskSubmissionReceipt {
-  kind: 'task_submission'
-  batchId: string
-  backgroundRunId: string
-  waitId: string
-  operationId: string
-  taskIds: readonly string[]
-}
-
-export type ProjectAgentOperationOutcome =
-  | { kind: 'completed'; data: unknown }
-  | { kind: 'noop'; data: unknown }
-  | { kind: 'submitted_tasks'; data: unknown; receipt: ProjectAgentTaskSubmissionReceipt }
-  | { kind: 'wait_choice'; data: unknown; choiceHandoff: ProjectAgentChoiceHandoffReceipt }
-  | { kind: 'wait_approval' }
-  | { kind: 'failed'; error: ProjectAgentToolError }
 
 type BivariantOperationExecute<Input, Output> = {
-  bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<Output>
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+  ): Promise<Output>
 }['bivarianceHack']
 
 type BivariantTransactionalOperationExecute<Input, Output> = {
@@ -99,11 +135,18 @@ type BivariantTransactionalOperationCompensate<Input, Output> = {
 }['bivarianceHack']
 
 type BivariantOperationPlan<Input> = {
-  bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<OperationPlan>
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+  ): Promise<OperationPlan>
 }['bivarianceHack']
 
 type BivariantOperationCommit<Input, Output> = {
-  bivarianceHack(context: ProjectAgentOperationContext, input: Input, plan: OperationPlan): Promise<Output>
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+    plan: OperationPlan,
+  ): Promise<Output>
 }['bivarianceHack']
 
 export type OperationIntent = 'query' | 'plan' | 'act'
@@ -121,8 +164,12 @@ export interface OperationChannels {
 
 export type OperationToolExposure = 'direct' | 'on_demand'
 
-export const OPERATION_MODEL_RESULT_RETENTIONS = ['recoverable', 'irreplaceable'] as const
-export type OperationModelResultRetention = (typeof OPERATION_MODEL_RESULT_RETENTIONS)[number]
+export const OPERATION_MODEL_RESULT_RETENTIONS = [
+  'recoverable',
+  'irreplaceable',
+] as const
+export type OperationModelResultRetention =
+  (typeof OPERATION_MODEL_RESULT_RETENTIONS)[number]
 
 type OperationEffectFlags = {
   billable: boolean
@@ -133,19 +180,22 @@ type OperationEffectFlags = {
   longRunning: boolean
 }
 
-export type OperationEffects = OperationEffectFlags & (
-  | {
-      writes: false
-      workspaceResourceImpact?: never
-    }
-  | {
-      writes: true
-      workspaceResourceImpact: WorkspaceResourceImpact
-    }
-)
+export type OperationEffects = OperationEffectFlags &
+  (
+    | {
+        writes: false
+        workspaceResourceImpact?: never
+      }
+    | {
+        writes: true
+        workspaceResourceImpact: WorkspaceResourceImpact
+      }
+  )
 
 export type AssistantOperationWriteAuthority = {
-  kind: 'transactional_task_submission'
+  kind: 'temporal_operation_execution'
+  contractRevision: string
+  followUpPolicy: 'after_all_terminal' | 'none'
 }
 
 export type OperationApprovalKind = 'none' | 'billable_media' | 'destructive'
@@ -180,7 +230,8 @@ export interface OperationChoiceCommit {
   enabled: true
 }
 
-export type RuntimeSchemaSafeParseResult<T> = { success: true; data: T } | { success: false; error: { issues: unknown } }
+export type RuntimeSchemaSafeParseResult<T> =
+  { success: true; data: T } | { success: false; error: { issues: unknown } }
 
 export type RuntimeSchema<T> = FlexibleSchema<T> & {
   safeParse: (input: unknown) => RuntimeSchemaSafeParseResult<T>
@@ -230,8 +281,21 @@ export type ProjectAgentToolResult<T> =
       error: ProjectAgentToolError
     }
 
-interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknown> {
+interface ProjectAgentOperationDefinitionFields<
+  Input = unknown,
+  Output = unknown,
+> {
   id: ProjectAgentOperationId
+  /**
+   * Immutable meaning of one model-visible synchronous write Operation.
+   * Planned and Temporal-owned writes derive the same fact from their
+   * existing plan/dispatch contract revision.
+   *
+   * Bump this value whenever the same accepted Tool input could produce a
+   * different business mutation. Approval checkpoints and ToolEffect replay
+   * both fence on this revision.
+   */
+  toolContractRevision?: string
   /**
    * Command-style summary used for tool prompt, logs, and review.
    * Must be a non-empty string after trimming.
@@ -285,9 +349,12 @@ type NonTransactionalDirectOperationBehavior<Input, Output> = {
   executeInTransaction?: never
   prepareTransaction?: never
   compensateTransactionFailure?: never
-  assistantWriteAuthority?: Extract<AssistantOperationWriteAuthority, {
-    kind: 'transactional_task_submission'
-  }>
+  assistantWriteAuthority?: Extract<
+    AssistantOperationWriteAuthority,
+    {
+      kind: 'temporal_operation_execution'
+    }
+  >
 }
 
 type TransactionalDirectOperationBehaviorBase<Input, Output> = {
@@ -302,16 +369,20 @@ type TransactionalDirectOperationBehaviorBase<Input, Output> = {
 }
 
 type TransactionalDirectOperationBehavior<Input, Output> =
-  TransactionalDirectOperationBehaviorBase<Input, Output> & (
-    | {
-        prepareTransaction?: never
-        compensateTransactionFailure?: never
-      }
-    | {
-        prepareTransaction: BivariantTransactionalOperationPrepare<Input>
-        compensateTransactionFailure: BivariantTransactionalOperationCompensate<Input, Output>
-      }
-  )
+  TransactionalDirectOperationBehaviorBase<Input, Output> &
+    (
+      | {
+          prepareTransaction?: never
+          compensateTransactionFailure?: never
+        }
+      | {
+          prepareTransaction: BivariantTransactionalOperationPrepare<Input>
+          compensateTransactionFailure: BivariantTransactionalOperationCompensate<
+            Input,
+            Output
+          >
+        }
+    )
 
 type DirectOperationBehavior<Input, Output> =
   | NonTransactionalDirectOperationBehavior<Input, Output>
@@ -337,8 +408,14 @@ type BillablePlannedOperationBehavior<Input, Output> = {
   assistantWriteAuthority?: never
 }
 
-export type ProjectAgentOperationDefinitionBase<Input = unknown, Output = unknown> = ProjectAgentOperationDefinitionFields<Input, Output> &
-  (DirectOperationBehavior<Input, Output> | BillablePlannedOperationBehavior<Input, Output>)
+export type ProjectAgentOperationDefinitionBase<
+  Input = unknown,
+  Output = unknown,
+> = ProjectAgentOperationDefinitionFields<Input, Output> &
+  (
+    | DirectOperationBehavior<Input, Output>
+    | BillablePlannedOperationBehavior<Input, Output>
+  )
 
 type NormalizedOperationFields = {
   groupPath: OperationGroupPath
@@ -348,28 +425,35 @@ type NormalizedOperationFields = {
   prerequisites: OperationPrerequisites
   toolInputSchema: ProjectAgentToolInputSchema
   resourceContract: CreativeResourceOperationContract
+  toolContractRevision: string | null
 }
 
-type NormalizedDirectOperationBehavior<Input, Output> = DirectOperationBehavior<Input, Output> & {
+type NormalizedDirectOperationBehavior<Input, Output> = DirectOperationBehavior<
+  Input,
+  Output
+> & {
   confirmation: OperationConfirmation & { kind: 'none' | 'destructive' }
 }
 
-type NormalizedBillableOperationBehavior<Input, Output> = BillablePlannedOperationBehavior<Input, Output> & {
-  confirmation: OperationConfirmation & {
-    kind: 'billable_media'
-    required: true
+type NormalizedBillableOperationBehavior<Input, Output> =
+  BillablePlannedOperationBehavior<Input, Output> & {
+    confirmation: OperationConfirmation & {
+      kind: 'billable_media'
+      required: true
+    }
   }
-}
 
-export type BillableProjectAgentOperationDefinition<Input = unknown, Output = unknown> =
-  ProjectAgentOperationDefinitionFields<Input, Output> &
+export type BillableProjectAgentOperationDefinition<
+  Input = unknown,
+  Output = unknown,
+> = ProjectAgentOperationDefinitionFields<Input, Output> &
   NormalizedOperationFields &
   NormalizedBillableOperationBehavior<Input, Output>
 
 export type ProjectAgentOperationDefinition<Input = unknown, Output = unknown> =
   | (ProjectAgentOperationDefinitionFields<Input, Output> &
-    NormalizedOperationFields &
-    NormalizedDirectOperationBehavior<Input, Output>)
+      NormalizedOperationFields &
+      NormalizedDirectOperationBehavior<Input, Output>)
   | BillableProjectAgentOperationDefinition<Input, Output>
 
 export function isBillablePlannedOperation<Input, Output>(
@@ -378,9 +462,15 @@ export function isBillablePlannedOperation<Input, Output>(
   return operation.confirmation.kind === 'billable_media'
 }
 
-export type ProjectAgentOperationRegistryDraft = Record<ProjectAgentOperationId, ProjectAgentOperationDefinitionBase>
+export type ProjectAgentOperationRegistryDraft = Record<
+  ProjectAgentOperationId,
+  ProjectAgentOperationDefinitionBase
+>
 
-export type ProjectAgentOperationRegistry = Record<ProjectAgentOperationId, ProjectAgentOperationDefinition>
+export type ProjectAgentOperationRegistry = Record<
+  ProjectAgentOperationId,
+  ProjectAgentOperationDefinition
+>
 
 export function writeOperationDataPart<T>(
   writer: UIMessageStreamWriter<UIMessage> | null | undefined,

@@ -18,7 +18,10 @@ import {
 import { detectMimeFromBuffer } from '@/lib/media/outbound-image'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { defineOperation } from '@/lib/operations/define-operation'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { buildProjectAssistantAttachmentToken } from '@/lib/project-agent/media-attachments/attachment-token'
 import { deleteObject, uploadObject } from '@/lib/storage'
@@ -178,7 +181,9 @@ export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryD
       inputSchema: z.object({}).passthrough(),
       outputSchema: uploadMediaOutputSchema,
       prepareTransaction: async (ctx) => {
-        return await prepareUserMediaUpload(ctx.request)
+        return await prepareUserMediaUpload(
+          requireProjectAgentOperationRequest(ctx),
+        )
       },
       executeInTransaction: async (ctx, _input, transaction, preparedValue) => {
         const prepared = preparedUserUploadSchema.parse(preparedValue)

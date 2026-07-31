@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type {
@@ -16,7 +15,6 @@ import {
   type ProjectAgentChoiceCommitment,
   type ProjectAgentChoiceCommitmentRequest,
 } from '@/lib/project-agent/choice-offer'
-import { prepareProjectAgentChoiceExecutionHandoff } from '@/lib/project-agent/execution-handoff'
 import { prisma } from '@/lib/prisma'
 
 const requestChoiceInputSchema = z.object({
@@ -44,29 +42,23 @@ const EFFECTS_NONE = {
 } as const
 
 function requireChoiceInvocationIdentity(context: {
-  readonly runId?: string | null
-  readonly executionSegmentId?: string | null
+  readonly turnId?: string | null
   readonly toolCallId?: string | null
-}): { runId: string; executionSegmentId: string; toolCallId: string } {
-  const runId = context.runId?.trim() || ''
-  const executionSegmentId = context.executionSegmentId?.trim() || ''
+}): { turnId: string; toolCallId: string } {
+  const turnId = context.turnId?.trim() || ''
   const toolCallId = context.toolCallId?.trim() || ''
-  if (!runId) throw new Error('PROJECT_AGENT_CHOICE_RUN_ID_REQUIRED')
-  if (!executionSegmentId) throw new Error('PROJECT_AGENT_CHOICE_EXECUTION_SEGMENT_ID_REQUIRED')
+  if (!turnId) throw new Error('PROJECT_AGENT_CHOICE_TURN_ID_REQUIRED')
   if (!toolCallId) throw new Error('PROJECT_AGENT_CHOICE_TOOL_CALL_ID_REQUIRED')
-  return { runId, executionSegmentId, toolCallId }
+  return { turnId, toolCallId }
 }
 
 function createChoiceCardId(params: {
-  runId: string
-  executionSegmentId: string
+  turnId: string
   toolCallId: string
   input: RequestChoiceInput
 }): string {
   const digest = createHash('sha256')
-    .update(params.runId)
-    .update('\n')
-    .update(params.executionSegmentId)
+    .update(params.turnId)
     .update('\n')
     .update(params.toolCallId)
     .update('\n')
@@ -122,15 +114,11 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
       outputSchema: requestChoiceOutputSchema,
       execute: async (context, input) => {
         const identity = requireChoiceInvocationIdentity({
-          runId: context.context.runId,
-          executionSegmentId: context.context.executionSegmentId,
+          turnId: context.context.turnId,
           toolCallId: context.toolCallId,
         })
-        if (!context.executionFence) {
-          throw new Error('PROJECT_AGENT_CHOICE_EXECUTION_FENCE_REQUIRED')
-        }
-        if (context.executionFence.runFence.runId !== identity.runId) {
-          throw new Error(`PROJECT_AGENT_CHOICE_RUN_FENCE_MISMATCH:${identity.runId}`)
+        if (!context.choiceOfferWriter) {
+          throw new Error('PROJECT_AGENT_CHOICE_OFFER_WRITER_REQUIRED')
         }
         const authored = buildProjectAgentChoiceCardFromAuthoring({
           authoring: input.card,
@@ -150,24 +138,17 @@ export function createAssistantChoiceOperations(): ProjectAgentOperationRegistry
             commitments,
           })
         ))
-        const handoff = await prepareProjectAgentChoiceExecutionHandoff({
-          executionFence: context.executionFence,
-          executionSegmentId: identity.executionSegmentId,
-          projectId: context.projectId,
-          userId: context.userId,
-          episodeId: context.context.episodeId ?? null,
-          locale: context.context.locale ?? null,
-          assistantId: 'workspace-command',
+        const receipt = await context.choiceOfferWriter({
           operationId: 'request_choice',
-          toolCallId: identity.toolCallId,
+          callId: identity.toolCallId,
           card,
           subject,
           commitments,
-          modelArguments: input as unknown as Prisma.InputJsonValue,
+          modelArguments: input,
         })
         return requestChoiceOutputSchema.parse({
           emitted: true,
-          cardId: handoff.card.cardId,
+          cardId: receipt.offerId,
         })
       },
     }),

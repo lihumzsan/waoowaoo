@@ -35,7 +35,6 @@ import {
   bindCharacterVoiceInTransaction,
   type CharacterVoiceSelection,
 } from '@/lib/voice/voice-resource-service'
-import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
 const voiceTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('standalone') }).strict(),
@@ -264,7 +263,7 @@ async function planGenerateVoice(
     'generate_voice',
     ctx.userId,
     ctx.projectId,
-    ctx.context.runId?.trim() ?? 'no-run',
+    ctx.context.turnId?.trim() ?? 'no-turn',
     ctx.toolCallId?.trim() ?? planFingerprint,
     planFingerprint,
   ].join(':')
@@ -308,7 +307,6 @@ async function planGenerateVoice(
       audioInputPositions: [],
       videoInputPositions: [],
       generationOptions,
-      executionSegmentId: null,
       toolCallId: ctx.toolCallId?.trim() || null,
       ...(member.target.kind === 'character' ? {
         binding: {
@@ -390,13 +388,6 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
     })),
   })
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
-  await createWorkspaceResourceBroadcastsInTransaction({
-    tx: authorization.transaction,
-    invocationId: authorization.operationExecutionId,
-    affectedResources: [{ kind: 'creativeResources', projectId: ctx.projectId, episodeId: null }],
-    userId: ctx.userId,
-    operationId: 'generate_voice',
-  })
   const results = plan.tasks.map((task) => {
     const result = submitted.get(task.id)
     if (!result) throw new Error(`VOICE_TASK_RESULT_MISSING:${task.id}`)
@@ -460,6 +451,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       id: 'bind_voice',
       summary: 'Bind, replace, or unbind the exact immutable audio Resource used as one project character\'s voice. Accepts a designed project.voice_reference Resource or a user-uploaded project.upload_audio Resource. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
       intent: 'act',
+      toolContractRevision: 'bind_voice/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',

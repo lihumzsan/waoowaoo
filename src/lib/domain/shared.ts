@@ -3,7 +3,6 @@ export type DomainMutationActor = 'assistant' | 'system' | 'user' | 'operation'
 export interface DomainMutationContext {
   actor: DomainMutationActor
   operationId?: string | null
-  runId?: string | null
   taskId?: string | null
   idempotencyKey?: string | null
 }

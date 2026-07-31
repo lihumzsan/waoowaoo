@@ -1,6 +1,6 @@
 import type { AgentInputItem } from '@openai/agents'
 import type {
-  ProjectAgentChoiceCardPartData,
+  ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCommitment,
   ProjectAgentChoiceOffer,
 } from './choice-offer'
@@ -51,7 +51,7 @@ function parseSelection(value: unknown): ProjectAgentChoiceSelection | null {
 }
 
 function parseSelections(params: {
-  card: ProjectAgentChoiceCardPartData
+  card: ProjectAgentChoiceCardDefinition
   response: UnknownRecord
 }): ProjectAgentChoiceSelection[] {
   if (!Array.isArray(params.response.selections)) {
@@ -91,7 +91,7 @@ function parseSelections(params: {
 }
 
 export function parseProjectAgentChoiceDecision(params: {
-  card: ProjectAgentChoiceCardPartData
+  card: ProjectAgentChoiceCardDefinition
   response: unknown
 }): ProjectAgentChoiceDecision {
   if (!isRecord(params.response)) throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')

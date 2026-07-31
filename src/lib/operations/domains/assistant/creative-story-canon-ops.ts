@@ -43,6 +43,7 @@ export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegi
       id: 'adopt_chapter_continuity_plan',
       summary: 'Atomically adopt one exact chapter_continuity_plan Resource derived from one exact screenplay Resource. The same Resource/version becomes the Story Canon authority and creates or replaces every Chapter projection. Use only when the user explicitly wants Chapters or professional planning has determined that at least two Chapters are useful. This starts no downstream work.',
       intent: 'act',
+      toolContractRevision: 'adopt_chapter_continuity_plan/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',

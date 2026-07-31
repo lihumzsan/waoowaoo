@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
-import { cancelTask, getTaskById, queryTasks } from '@/lib/task/service'
+import { getTaskById, queryTasks } from '@/lib/task/service'
+import { cancelTemporalTask } from '@/lib/temporal/task-client'
 import { TASK_STATUS, TASK_TYPE, type TaskStatus, type TaskType } from '@/lib/task/types'
 import type {
   ProjectAgentOperationContext,
@@ -172,14 +173,25 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND')
         }
 
-        const { task: updatedTask, cancelled } = await cancelTask(input.taskId)
+        const active =
+          task.status === TASK_STATUS.QUEUED
+          || task.status === TASK_STATUS.PROCESSING
+        const workflow = active
+          ? await cancelTemporalTask({
+              taskId: task.id,
+              reason: 'Task cancelled by user',
+            })
+          : null
+        const updatedTask = await getTaskById(input.taskId)
         if (!updatedTask) {
           throw new ApiError('NOT_FOUND')
         }
 
         return {
           success: true,
-          cancelled,
+          cancelAccepted:
+            workflow?.cancelRequested === true
+            || workflow?.status === 'canceled',
           task: {
             ...updatedTask,
             error: normalizeTaskError(updatedTask.errorCode, updatedTask.errorMessage),

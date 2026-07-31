@@ -12,7 +12,6 @@ export const taskSubmitOperationOutputSchemaBase = z.object({
   taskId: z.string().min(1),
   taskType: z.custom<TaskType>(isTaskType, { message: 'TASK_SUBMIT_OUTPUT_TASK_TYPE_INVALID' }),
   status: z.string().min(1),
-  runId: z.string().nullable(),
   deduped: z.boolean(),
 }).passthrough()
 

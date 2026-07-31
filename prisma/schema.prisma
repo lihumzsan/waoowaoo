@@ -78,7 +78,7 @@ model LocationImage {
 model ProjectCharacter {
   id                      String                @id @default(uuid())
   projectId               String
-  manifestAssetId        String?               @db.VarChar(80)
+  manifestAssetId         String?               @db.VarChar(80)
   name                    String
   aliases                 String?               @db.Text
   createdAt               DateTime              @default(now())
@@ -133,7 +133,7 @@ model ProjectEpisode {
   project           Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   chapters          ProjectEditChapter[]
   sourceDocuments   ProjectEpisodeSourceDocument[]
-  storyCanon         ProjectStoryCanon?
+  storyCanon        ProjectStoryCanon?
   canvasLayout      ProjectCanvasLayout?
   creativeResources CreativeResource[]
   creativeBindings  CreativeResourceBinding[]
@@ -247,33 +247,99 @@ model MutationEntry {
 }
 
 model ProjectAssistantThread {
-  id           String   @id @default(uuid())
-  projectId    String
-  userId       String
-  episodeId    String?
-  assistantId  String
-  scopeRef     String
-  messagesJson Json
+  id                  String             @id @default(uuid())
+  projectId           String
+  userId              String
+  episodeId           String?
+  assistantId         String
+  scopeRef            String
+  messagesJson        Json
   /// Complete OpenAI Agents SDK transcript. This is the sole model-history
   /// authority; messagesJson remains the independent UI projection.
   modelHistoryJson    Json
-  modelHistoryVersion Int    @default(0)
-  /// The SDK writes the current execution segment here while it runs. Only the
-  /// existing settlement transaction may promote a ready snapshot.
-  pendingModelHistoryJson        Json?
-  pendingModelHistorySegmentId   String? @db.VarChar(191)
-  pendingModelHistoryBaseVersion Int?
-  pendingModelHistoryReady       Boolean @default(false)
-  planJson     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelHistoryVersion Int                @default(0)
+  planJson            Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  turns               ProjectAgentTurn[]
 
   @@unique([projectId, userId, assistantId, scopeRef])
   @@index([projectId, episodeId, updatedAt])
   @@index([userId, updatedAt])
   @@map("project_assistant_threads")
+}
+
+model ProjectAgentTurn {
+  id                      String                 @id @db.VarChar(191)
+  threadId                String
+  projectId               String
+  userId                  String
+  episodeId               String?
+  sourceKind              String                 @db.VarChar(32)
+  sourceId                String                 @db.VarChar(191)
+  payloadHash             String                 @db.VarChar(64)
+  requestId               String                 @db.VarChar(128)
+  status                  String                 @default("queued") @db.VarChar(32)
+  attempt                 Int                    @default(0)
+  executionOwnerId        String?                @db.VarChar(191)
+  userMessageJson         Json?
+  contextJson             Json
+  modelHistoryBaseVersion Int?
+  assistantMessageId      String?                @db.VarChar(191)
+  stopReason              String?                @db.VarChar(64)
+  errorCode               String?                @db.VarChar(128)
+  errorMessage            String?                @db.Text
+  cancelRequestId         String?                @db.VarChar(128)
+  cancelReason            String?                @db.Text
+  startedAt               DateTime?
+  finishedAt              DateTime?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  thread                  ProjectAssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  toolEffects             AgentToolEffect[]
+  interactions            AgentTurnInteraction[]
+
+  @@unique([threadId, sourceKind, sourceId])
+  @@index([threadId, status, createdAt])
+  @@index([projectId, userId, status, createdAt])
+  @@map("project_agent_turns")
+}
+
+model AgentToolEffect {
+  id               String           @id @db.VarChar(191)
+  turnId           String
+  callId           String           @db.VarChar(191)
+  operationId      String           @db.VarChar(128)
+  contractRevision String           @db.VarChar(128)
+  inputHash        String           @db.VarChar(64)
+  resultJson       Json
+  completedAt      DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  turn             ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@unique([turnId, callId])
+  @@index([operationId, completedAt])
+  @@map("agent_tool_effects")
+}
+
+model AgentTurnInteraction {
+  id           String           @id @db.VarChar(191)
+  turnId       String
+  kind         String           @db.VarChar(32)
+  status       String           @default("pending") @db.VarChar(32)
+  payloadJson  Json
+  runState     String?          @db.LongText
+  responseJson Json?
+  version      Int              @default(0)
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  turn         ProjectAgentTurn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([turnId, status, createdAt])
+  @@map("agent_turn_interactions")
 }
 
 /// 用户清空会话时的系统内归档：对用户不可见，仅供依权限的滥用调查/争议追溯。
@@ -293,220 +359,10 @@ model ProjectAssistantThreadArchive {
   archivedAt       DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([threadId])
   @@index([projectId, userId, archivedAt])
   @@index([userId, archivedAt])
   @@map("project_assistant_thread_archives")
-}
-
-model ProjectAgentWait {
-  id                     String                              @id @default(uuid())
-  runId                  String?
-  activityId             String?
-  projectId              String
-  userId                 String
-  assistantId            String                              @db.VarChar(64)
-  scopeRef               String                              @db.VarChar(64)
-  episodeId              String?
-  operationId            String                              @db.VarChar(128)
-  taskIds                Json
-  followUpMode           String                              @default("resume_agent") @db.VarChar(32)
-  status                 String                              @default("pending") @db.VarChar(32)
-  runVersion             Int                                 @default(0)
-  eventSeq               BigInt                              @default(0)
-  terminalStatus         String?                             @db.VarChar(32)
-  terminalTaskIds        Json?
-  failedTaskIds          Json?
-  canceledTaskIds        Json?
-  followUpKey            String?                             @db.VarChar(96)
-  followUpCommandId      String?                             @db.VarChar(191)
-  claimId                String?                             @db.VarChar(36)
-  claimedAt              DateTime?
-  claimExpiresAt         DateTime?
-  followedAt             DateTime?
-  createdAt              DateTime                            @default(now())
-  updatedAt              DateTime                            @updatedAt
-  resolvedAt             DateTime?
-  run                    ProjectAgentRun?                    @relation(fields: [runId], references: [id], onDelete: SetNull)
-  activity               ProjectAgentActivity?               @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  continuationCheckpoint ProjectAgentContinuationCheckpoint?
-  project                Project                             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user                   User                                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([runId])
-  @@index([activityId])
-  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
-  @@index([projectId, status, createdAt])
-  @@index([followUpKey])
-  @@index([followUpCommandId])
-  @@index([claimId])
-  @@map("project_agent_waits")
-}
-
-model ProjectAgentContinuationCheckpoint {
-  commandId   String           @id @db.VarChar(191)
-  waitId      String           @unique
-  runId       String
-  status      String           @default("running") @db.VarChar(32)
-  outcome     String?          @db.VarChar(32)
-  messageId   String?          @db.VarChar(191)
-  messageJson Json?
-  startedAt   DateTime         @default(now())
-  completedAt DateTime?
-  wait        ProjectAgentWait @relation(fields: [waitId], references: [id], onDelete: Cascade)
-
-  @@index([runId, startedAt])
-  @@map("project_agent_continuation_checkpoints")
-}
-
-model ProjectAgentRun {
-  id                String                         @id @default(uuid())
-  projectId         String
-  userId            String
-  assistantId       String                         @db.VarChar(64)
-  scopeRef          String                         @db.VarChar(64)
-  episodeId         String?
-  requestId         String                         @db.VarChar(96)
-  status            String                         @default("running") @db.VarChar(32)
-  runVersion        Int                            @default(1)
-  eventSeq          BigInt                         @default(0)
-  terminalEventSeq  BigInt?
-  controlKind       String                         @db.VarChar(32)
-  stopReason        String?                        @db.VarChar(64)
-  errorCode         String?                        @db.VarChar(128)
-  errorMessage      String?                        @db.Text
-  startedAt         DateTime                       @default(now())
-  heartbeatAt       DateTime?
-  completedAt       DateTime?
-  failedAt          DateTime?
-  cancelledAt       DateTime?
-  createdAt         DateTime                       @default(now())
-  updatedAt         DateTime                       @updatedAt
-  waits             ProjectAgentWait[]
-  interruptions     ProjectAgentInterruption[]
-  activities        ProjectAgentActivity[]
-  executionHandoffs ProjectAgentExecutionHandoff[]
-  project           Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user              User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
-  @@index([projectId, status, createdAt])
-  @@index([projectId, userId, assistantId, scopeRef, status, heartbeatAt], map: "project_agent_runs_scope_status_heartbeat_idx")
-  @@index([requestId])
-  @@map("project_agent_runs")
-}
-
-model ProjectAgentExecutionHandoff {
-  id                 String          @id @default(uuid())
-  executionSegmentId String          @unique @db.VarChar(191)
-  runId              String
-  projectId          String
-  userId             String
-  assistantId        String          @db.VarChar(64)
-  scopeRef           String          @db.VarChar(64)
-  episodeId          String?
-  locale             String          @default("en") @db.VarChar(16)
-  kind               String          @db.VarChar(32)
-  status             String          @default("prepared") @db.VarChar(32)
-  operationId        String          @db.VarChar(128)
-  payload            Json
-  settledAt          DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  run                ProjectAgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-
-  @@index([runId, status])
-  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
-  @@map("project_agent_execution_handoffs")
-}
-
-model ProjectAgentActivity {
-  id                String                     @id @default(uuid())
-  runId             String
-  projectId         String
-  userId            String
-  assistantId       String                     @db.VarChar(64)
-  scopeRef          String                     @db.VarChar(64)
-  episodeId         String?
-  type              String                     @db.VarChar(48)
-  status            String                     @default("running") @db.VarChar(32)
-  operationId       String?                    @db.VarChar(128)
-  sourceOperationId String?                    @db.VarChar(128)
-  toolCallId        String?                    @db.VarChar(128)
-  errorCode         String?                    @db.VarChar(128)
-  errorMessage      String?                    @db.Text
-  startedAt         DateTime                   @default(now())
-  completedAt       DateTime?
-  failedAt          DateTime?
-  cancelledAt       DateTime?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  run               ProjectAgentRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
-  waits             ProjectAgentWait[]
-  interruptions     ProjectAgentInterruption[]
-  project           Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([runId, status, createdAt])
-  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
-  @@index([projectId, status, createdAt])
-  @@index([operationId])
-  @@map("project_agent_activities")
-}
-
-model ProjectAgentEvent {
-  id             BigInt   @id @default(autoincrement())
-  projectId      String
-  userId         String
-  assistantId    String   @db.VarChar(64)
-  scopeRef       String   @db.VarChar(64)
-  episodeId      String?
-  runId          String?
-  activityId     String?
-  kind           String   @db.VarChar(64)
-  idempotencyKey String?  @unique @db.VarChar(191)
-  payload        Json
-  createdAt      DateTime @default(now())
-  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([projectId, userId, assistantId, scopeRef, id])
-  @@index([runId, id])
-  @@index([activityId, id])
-  @@map("project_agent_events")
-}
-
-model ProjectAgentInterruption {
-  id          String                @id @default(uuid())
-  runId       String?
-  activityId  String?
-  projectId   String
-  userId      String
-  assistantId String                @db.VarChar(64)
-  scopeRef    String                @db.VarChar(64)
-  episodeId   String?
-  type        String                @db.VarChar(32)
-  status      String                @default("pending") @db.VarChar(32)
-  runVersion  Int                   @default(0)
-  eventSeq    BigInt                @default(0)
-  operationId String                @db.VarChar(128)
-  approvalId  String                @db.VarChar(128)
-  toolCallId  String?               @db.VarChar(128)
-  payload     Json
-  runState    String?               @db.LongText
-  response    Json?
-  consumedAt  DateTime?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  run         ProjectAgentRun?      @relation(fields: [runId], references: [id], onDelete: SetNull)
-  activity    ProjectAgentActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([runId, status, createdAt])
-  @@index([activityId])
-  @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
-  @@index([userId])
-  @@map("project_agent_interruptions")
 }
 
 model ProjectAssistantToolSelection {
@@ -552,11 +408,6 @@ model Project {
   user                    User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
   usageCosts              UsageCost[]
   assistantThreads        ProjectAssistantThread[]
-  agentRuns               ProjectAgentRun[]
-  agentActivities         ProjectAgentActivity[]
-  agentEvents             ProjectAgentEvent[]
-  agentWaits              ProjectAgentWait[]
-  agentInterruptions      ProjectAgentInterruption[]
   assistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches         MutationBatch[]
   episodes                ProjectEpisode[]
@@ -670,11 +521,6 @@ model User {
   taskEvents                     TaskEvent[]
   projectAssistantThreads        ProjectAssistantThread[]
   projectAssistantThreadArchives ProjectAssistantThreadArchive[]
-  projectAgentRuns               ProjectAgentRun[]
-  projectAgentActivities         ProjectAgentActivity[]
-  projectAgentEvents             ProjectAgentEvent[]
-  projectAgentWaits              ProjectAgentWait[]
-  projectAgentInterruptions      ProjectAgentInterruption[]
   projectAssistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches                MutationBatch[]
   inviteRedemptions              InviteRedemption[]
@@ -838,10 +684,7 @@ model Task {
   status               String    @default("queued")
   progress             Int       @default(0)
   attempt              Int       @default(0)
-  priority             Int       @default(0)
   dedupeKey            String?   @unique
-  batchKey             String?
-  externalId           String?
   operationId          String?   @db.VarChar(128)
   operationSource      String?   @db.VarChar(64)
   operationRequestId   String?   @db.VarChar(128)
@@ -858,10 +701,6 @@ model Task {
   queuedAt             DateTime  @default(now())
   startedAt            DateTime?
   finishedAt           DateTime?
-  heartbeatAt          DateTime?
-  enqueuedAt           DateTime?
-  enqueueAttempts      Int       @default(0)
-  lastEnqueueError     String?   @db.Text
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -873,41 +712,83 @@ model Task {
   approvalGrant        ApprovalGrant?            @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
   creativeResources    CreativeResource[]
+  followUpMemberships  FollowUpBatchMember[]
 
   @@unique([operationExecutionId, operationPlanTaskId])
   @@index([status])
   @@index([type])
   @@index([targetType, targetId])
   @@index([projectId])
-  @@index([batchKey])
   @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
   @@index([approvalGrantId])
   @@index([operationExecutionId])
   @@index([userId])
-  @@index([heartbeatAt])
   @@map("tasks")
 }
 
+model FollowUpBatch {
+  id                     String                @id @db.VarChar(191)
+  executionKey           String                @unique @db.VarChar(191)
+  threadId               String                @db.VarChar(191)
+  originTurnId           String                @db.VarChar(191)
+  callId                 String                @db.VarChar(191)
+  projectId              String
+  userId                 String
+  episodeId              String?
+  assistantId            String                @db.VarChar(64)
+  operationId            String                @db.VarChar(128)
+  contextJson            Json
+  status                 String                @default("pending") @db.VarChar(32)
+  readyByTaskId          String?               @db.VarChar(191)
+  readyByTerminalEventId Int?
+  notifiedTurnId         String?               @db.VarChar(191)
+  readyAt                DateTime?
+  notifiedAt             DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  members                FollowUpBatchMember[]
+
+  @@index([threadId, status, createdAt])
+  @@index([projectId, userId, status, createdAt])
+  @@map("follow_up_batches")
+}
+
+model FollowUpBatchMember {
+  batchId         String
+  taskId          String
+  status          String        @default("pending") @db.VarChar(32)
+  terminalEventId Int?
+  settledAt       DateTime?
+  createdAt       DateTime      @default(now())
+  batch           FollowUpBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@id([batchId, taskId])
+  @@index([taskId, status, batchId])
+  @@map("follow_up_batch_members")
+}
+
 model OperationPlanSnapshot {
-  id              String               @id @default(uuid())
-  userId          String
-  scopeKind       String               @db.VarChar(32)
-  scopeId         String               @db.VarChar(191)
-  projectId       String?
-  episodeId       String?
-  operationId     String               @db.VarChar(128)
+  id                        String               @id @default(uuid())
+  userId                    String
+  scopeKind                 String               @db.VarChar(32)
+  scopeId                   String               @db.VarChar(191)
+  projectId                 String?
+  episodeId                 String?
+  operationId               String               @db.VarChar(128)
   executionContractRevision String               @db.VarChar(128)
-  normalizedInput Json
-  inputHash       String               @db.VarChar(64)
-  planSnapshot    Json
-  planHash        String               @db.VarChar(64)
-  quoteSnapshot   Json
-  quoteHash       String               @db.VarChar(64)
-  createdAt       DateTime             @default(now())
-  approvalGrants  ApprovalGrant[]
-  executions      OperationExecution[]
+  normalizedInput           Json
+  inputHash                 String               @db.VarChar(64)
+  planSnapshot              Json
+  planHash                  String               @db.VarChar(64)
+  quoteSnapshot             Json
+  quoteHash                 String               @db.VarChar(64)
+  createdAt                 DateTime             @default(now())
+  approvalGrants            ApprovalGrant[]
+  executions                OperationExecution[]
 
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
   @@map("operation_plan_snapshots")
@@ -946,27 +827,33 @@ model ApprovalGrant {
 }
 
 model OperationExecution {
-  id                String                @id @default(uuid())
+  id                String                 @id @default(uuid())
+  executionKind     String                 @default("approved_plan") @db.VarChar(32)
+  commandId         String?                @unique @db.VarChar(191)
+  payloadHash       String?                @db.VarChar(64)
+  contractRevision  String?                @db.VarChar(128)
+  normalizedInput   Json?
+  contextSnapshot   Json?
+  source            String?                @db.VarChar(64)
   userId            String
-  scopeKind         String                @db.VarChar(32)
-  scopeId           String                @db.VarChar(191)
+  scopeKind         String                 @db.VarChar(32)
+  scopeId           String                 @db.VarChar(191)
   projectId         String?
   episodeId         String?
-  operationId       String                @db.VarChar(128)
-  planSnapshotId    String
-  approvalGrantId   String
-  requestId         String                @db.VarChar(128)
-  status            String                @db.VarChar(32)
+  operationId       String                 @db.VarChar(128)
+  planSnapshotId    String?
+  approvalGrantId   String?                @unique
+  requestId         String                 @db.VarChar(128)
+  status            String                 @db.VarChar(32)
   output            Json?
   completedAt       DateTime?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  planSnapshot      OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant     ApprovalGrant         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  planSnapshot      OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  approvalGrant     ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
   tasks             Task[]
   creativeResources CreativeResource[]
 
-  @@unique([approvalGrantId])
   @@unique([planSnapshotId, requestId])
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
   @@index([status, updatedAt])
@@ -1007,30 +894,6 @@ model TaskEvent {
   @@index([taskId])
   @@index([userId])
   @@map("task_events")
-}
-
-model OutboxCommand {
-  id             String    @id @default(uuid())
-  kind           String    @db.VarChar(64)
-  idempotencyKey String    @unique @db.VarChar(191)
-  aggregateType  String    @db.VarChar(64)
-  aggregateId    String    @db.VarChar(96)
-  payload        Json
-  availableAt    DateTime  @default(now())
-  enqueuedAt     DateTime?
-  acceptedAt     DateTime?
-  deadAt         DateTime?
-  deliveryCount  Int       @default(0)
-  leaseOwner     String?   @db.VarChar(96)
-  leaseExpiresAt DateTime?
-  lastError      String?   @db.Text
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@index([acceptedAt, deadAt, availableAt])
-  @@index([leaseExpiresAt])
-  @@index([aggregateType, aggregateId])
-  @@map("outbox_commands")
 }
 
 // ==================== 资产中心 ====================
@@ -1200,7 +1063,6 @@ model CreativeResource {
   inputHash            String?                   @db.VarChar(64)
   taskId               String?
   operationExecutionId String?
-  executionSegmentId   String?                   @db.VarChar(191)
   toolCallId           String?                   @db.VarChar(191)
   errorCode            String?                   @db.VarChar(128)
   errorMessage         String?                   @db.Text

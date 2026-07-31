@@ -26,13 +26,19 @@ const COMMON_REQUIRED_KEYS = [
   'PAYMENT_PUBLIC_BASE_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
+  'TEMPORAL_ADDRESS',
+  'TEMPORAL_NAMESPACE',
+  'TEMPORAL_TASK_QUEUE',
+  'TEMPORAL_TLS_ENABLED',
+  'TEMPORAL_API_KEY',
+  'TEMPORAL_WORKER_DEPLOYMENT_NAME',
+  'TEMPORAL_WORKER_BUILD_ID',
+  'TEMPORAL_WORKER_VERSIONING_ENABLED',
 ]
 
 const PRODUCTION_REQUIRED_KEYS = [
   'ADMIN_USER_IDS',
   'ADMIN_CREDIT_TOKEN',
-  'BULL_BOARD_USER',
-  'BULL_BOARD_PASSWORD',
   'TRUSTED_PROXY_HOPS',
 ]
 
@@ -187,17 +193,24 @@ if (validationMode === 'production') {
   missing.push('TRUSTED_PROXY_HOPS=non-negative-integer')
 }
 
-const bullBoardUserMissing = isMissing(env.BULL_BOARD_USER)
-const bullBoardPasswordMissing = isMissing(env.BULL_BOARD_PASSWORD)
-if (bullBoardUserMissing !== bullBoardPasswordMissing) {
-  missing.push('BULL_BOARD_AUTH=both-user-and-password-or-neither')
+if (env.TEMPORAL_TLS_ENABLED !== 'true') {
+  missing.push('TEMPORAL_TLS_ENABLED=true')
 }
-if (!bullBoardPasswordMissing && isWeakSecret(env.BULL_BOARD_PASSWORD)) {
-  missing.push('BULL_BOARD_PASSWORD=strong-secret-at-least-24-characters')
+if (
+  validationMode === 'production'
+  && env.TEMPORAL_WORKER_BUILD_ID?.trim().toLowerCase() === 'local'
+) {
+  missing.push('TEMPORAL_WORKER_BUILD_ID=immutable-release-id')
 }
-const bullBoardHost = env.BULL_BOARD_HOST || '127.0.0.1'
-if (validationMode === 'development' && !isLoopbackHost(bullBoardHost) && (bullBoardUserMissing || bullBoardPasswordMissing)) {
-  missing.push('BULL_BOARD_AUTH=required-for-non-loopback-host')
+if (validationMode === 'production') {
+  if (env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'true') {
+    missing.push('TEMPORAL_WORKER_VERSIONING_ENABLED=true')
+  }
+} else if (
+  env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'true'
+  && env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'false'
+) {
+  missing.push('TEMPORAL_WORKER_VERSIONING_ENABLED=true-or-false')
 }
 
 const requiredPlatformKeys = new Set()

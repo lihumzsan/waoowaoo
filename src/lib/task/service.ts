@@ -1,30 +1,13 @@
 import { Prisma } from '@prisma/client'
-import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { TASK_STATUS, type TaskBillingInfo, type TaskStatus } from './types'
-import { commitTaskTerminal } from './terminal'
 import { projectPersistedTaskProgressPayload } from './progress-payload'
 
-const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
-const logger = createScopedLogger({ module: 'task.service' })
 const taskModel = prisma.task
 
 function isActiveStatus(status: string) {
   return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
-}
-
-type TaskTerminalStatus =
-  | typeof TASK_STATUS.COMPLETED
-  | typeof TASK_STATUS.FAILED
-  | typeof TASK_STATUS.CANCELED
-  | typeof TASK_STATUS.DISMISSED
-
-function isTerminalStatus(status: string): status is TaskTerminalStatus {
-  return status === TASK_STATUS.COMPLETED
-    || status === TASK_STATUS.FAILED
-    || status === TASK_STATUS.CANCELED
-    || status === TASK_STATUS.DISMISSED
 }
 
 function toObject(value: unknown): Record<string, unknown> {
@@ -97,33 +80,6 @@ export async function queryTasks(filters: {
   })
 }
 
-export async function markTaskEnqueueFailed(taskId: string, error: string) {
-  return await taskModel.update({
-    where: { id: taskId },
-    data: {
-      enqueueAttempts: { increment: 1 },
-      lastEnqueueError: error.slice(0, 500),
-    },
-  })
-}
-
-export async function markTaskEnqueued(taskId: string) {
-  return await taskModel.update({
-    where: { id: taskId },
-    data: {
-      enqueuedAt: new Date(),
-      lastEnqueueError: null,
-    },
-  })
-}
-
-function activeTaskWhere(taskId: string) {
-  return {
-    id: taskId,
-    status: { in: [...ACTIVE_STATUSES] },
-  }
-}
-
 export async function isTaskActive(taskId: string) {
   const task = await withRetry({
     scope: 'prisma:task.isActive',
@@ -137,100 +93,12 @@ export async function isTaskActive(taskId: string) {
   return isActiveStatus(task.status)
 }
 
-export type TaskAttemptClaimResult =
-  | { kind: 'claimed'; attempt: number }
-  | { kind: 'already_processing'; attempt: number }
-  | { kind: 'terminal'; status: TaskTerminalStatus; attempt: number }
-  | { kind: 'missing' }
-
-export async function tryClaimTaskAttempt(params: {
-  readonly taskId: string
-  readonly externalId?: string | null
-}): Promise<TaskAttemptClaimResult> {
-  const data: Prisma.TaskUpdateManyMutationInput = {
-    status: TASK_STATUS.PROCESSING,
-    startedAt: new Date(),
-    heartbeatAt: new Date(),
-    attempt: { increment: 1 },
-  }
-  if (params.externalId !== undefined) {
-    data.externalId = params.externalId || null
-  }
-
-  return await prisma.$transaction(async (tx) => {
-    const result = await tx.task.updateMany({
-      where: {
-        id: params.taskId,
-        status: TASK_STATUS.QUEUED,
-      },
-      data,
-    })
-    const current = await tx.task.findUnique({
-      where: { id: params.taskId },
-      select: { status: true, attempt: true },
-    })
-    if (!current) return { kind: 'missing' }
-    if (result.count === 1) {
-      if (current.status !== TASK_STATUS.PROCESSING || current.attempt < 1) {
-        throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}`)
-      }
-      return { kind: 'claimed', attempt: current.attempt }
-    }
-    if (current.status === TASK_STATUS.PROCESSING) {
-      if (current.attempt < 1) {
-        throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}:${current.status}:${current.attempt}`)
-      }
-      return { kind: 'already_processing', attempt: current.attempt }
-    }
-    if (isTerminalStatus(current.status)) {
-      return { kind: 'terminal', status: current.status, attempt: current.attempt }
-    }
-    throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}:${current.status}`)
-  })
-}
-
-export async function trySetTaskExternalId(taskId: string, externalId: string) {
-  const value = typeof externalId === 'string' ? externalId.trim() : ''
-  if (!value) return false
-  const result = await taskModel.updateMany({
-    where: {
-      ...activeTaskWhere(taskId),
-      OR: [
-        { externalId: null },
-        { externalId: '' },
-      ],
-    },
-    data: {
-      externalId: value,
-    },
-  })
-  return result.count > 0
-}
-
-export async function clearTaskExternalId(taskId: string) {
-  const result = await taskModel.updateMany({
-    where: activeTaskWhere(taskId),
-    data: {
-      externalId: null,
-    },
-  })
-  return result.count > 0
-}
-
 function processingAttemptWhere(taskId: string, attempt: number) {
   return {
     id: taskId,
     status: TASK_STATUS.PROCESSING,
     attempt,
   }
-}
-
-export async function touchTaskHeartbeat(taskId: string, attempt: number) {
-  const result = await taskModel.updateMany({
-    where: processingAttemptWhere(taskId, attempt),
-    data: { heartbeatAt: new Date() },
-  })
-  return result.count > 0
 }
 
 export async function tryUpdateTaskProgress(
@@ -268,62 +136,4 @@ export async function tryUpdateTaskProgress(
     },
   })
   return result.count > 0
-}
-
-export async function tryMarkTaskQueuedForRetry(taskId: string, attempt: number) {
-  const result = await taskModel.updateMany({
-    where: {
-      id: taskId,
-      status: TASK_STATUS.PROCESSING,
-      attempt,
-    },
-    data: {
-      status: TASK_STATUS.QUEUED,
-      startedAt: null,
-      heartbeatAt: null,
-    },
-  })
-  return result.count > 0
-}
-
-export async function cancelTask(taskId: string, reason = 'Task cancelled by user') {
-  const snapshot = await taskModel.findUnique({
-    where: { id: taskId },
-    select: {
-      id: true,
-      status: true,
-    },
-  })
-  if (!snapshot) {
-    return {
-      task: null,
-      cancelled: false,
-    }
-  }
-
-  const active = isActiveStatus(snapshot.status)
-  const terminal = active
-    ? await commitTaskTerminal({
-        kind: 'canceled',
-        taskId,
-        fence: { kind: 'active' },
-        source: 'user',
-        reason,
-        eventPayload: { stage: 'canceled', canceled: true },
-      })
-    : null
-  const cancelled = terminal?.applied === true
-  if (cancelled) {
-    logger.info({
-      action: 'task.canceled',
-      message: 'task canceled',
-      taskId,
-      details: { previousStatus: snapshot.status, reason },
-    })
-  }
-  const task = await taskModel.findUnique({ where: { id: taskId } })
-  return {
-    task,
-    cancelled,
-  }
 }

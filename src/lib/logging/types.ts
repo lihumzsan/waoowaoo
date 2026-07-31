@@ -12,7 +12,8 @@ export interface LogContext {
   requestId?: string
   taskId?: string
   taskAttempt?: number
-  runId?: string
+  threadId?: string
+  turnId?: string
   operationId?: string
   projectId?: string
   userId?: string
@@ -39,7 +40,8 @@ export interface LogEvent {
   requestId?: string
   taskId?: string
   taskAttempt?: number
-  runId?: string
+  threadId?: string
+  turnId?: string
   operationId?: string
   projectId?: string
   userId?: string

@@ -275,14 +275,7 @@ export const projectAgentChoiceCardAuthoringSchema = z.discriminatedUnion('kind'
   }).strict(),
 ])
 
-export const projectAgentChoiceCardSchema = z.object({
-  ...choiceCardDefinitionFields,
-  runId: z.string().trim().min(1).max(191),
-  interruptionId: z.string().trim().min(1).max(191),
-}).strict().superRefine(validateChoiceCard)
-
 export type ProjectAgentChoiceCardDefinition = z.infer<typeof projectAgentChoiceCardDefinitionSchema>
-export type ProjectAgentChoiceCardPartData = z.infer<typeof projectAgentChoiceCardSchema>
 export type ProjectAgentChoiceCardAuthoring = z.infer<typeof projectAgentChoiceCardAuthoringSchema>
 
 type ProjectAgentChoiceCommitmentTargetRequest = z.infer<
@@ -535,13 +528,13 @@ export type ProjectAgentChoiceCommitmentRequest = z.infer<typeof projectAgentCho
 export type ProjectAgentChoiceCommitment = z.infer<typeof projectAgentChoiceCommitmentSchema>
 
 const projectAgentChoiceOfferSchema = z.object({
-  card: projectAgentChoiceCardSchema,
+  card: projectAgentChoiceCardDefinitionSchema,
   subject: projectAgentChoiceSubjectSchema,
   commitments: z.array(projectAgentChoiceCommitmentSchema).max(12),
 }).strict()
 
 export interface ProjectAgentChoiceOffer {
-  card: ProjectAgentChoiceCardPartData
+  card: ProjectAgentChoiceCardDefinition
   subject: ProjectAgentChoiceSubject
   commitments: ProjectAgentChoiceCommitment[]
 }
@@ -574,12 +567,9 @@ export function fingerprintProjectAgentChoiceSubject(kind: ProjectAgentChoiceSub
 }
 
 function cardDefinitionFromPersistedCard(
-  card: ProjectAgentChoiceCardPartData,
+  card: ProjectAgentChoiceCardDefinition,
 ): ProjectAgentChoiceCardDefinition {
-  const definition: Record<string, unknown> = { ...card }
-  delete definition.runId
-  delete definition.interruptionId
-  return projectAgentChoiceCardDefinitionSchema.parse(definition)
+  return projectAgentChoiceCardDefinitionSchema.parse(card)
 }
 
 function assertUniqueResourceRequests(
@@ -756,19 +746,13 @@ export function assertProjectAgentChoiceCommitmentsMatchCard(params: {
 }
 
 export function buildProjectAgentChoiceOffer(params: {
-  runId: string
-  interruptionId: string
   card: ProjectAgentChoiceCardDefinition
   subject: ProjectAgentChoiceSubject
   commitments: readonly ProjectAgentChoiceCommitment[]
 }): ProjectAgentChoiceOffer {
   assertProjectAgentChoiceCommitmentsMatchCard({ card: params.card, commitments: params.commitments })
   return parseProjectAgentChoiceOffer({
-    card: {
-      ...params.card,
-      runId: params.runId,
-      interruptionId: params.interruptionId,
-    },
+    card: params.card,
     subject: params.subject,
     commitments: [...params.commitments],
   })

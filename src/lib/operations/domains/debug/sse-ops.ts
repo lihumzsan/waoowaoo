@@ -7,24 +7,17 @@ import {
 } from '@/lib/task/publisher'
 import {
   TASK_EVENT_TYPE,
-  TASK_SSE_EVENT_TYPE,
   TASK_STATUS,
-  WORKSPACE_SSE_EVENT_TYPE,
-  type ResourceChangedSSEEvent,
-  type TaskSSEEvent,
 } from '@/lib/task/types'
+import {
+  TASK_SSE_EVENT_TYPE,
+  type TaskSSEEvent,
+} from '@/lib/sse/events'
 import { coerceTaskIntent } from '@/lib/task/intent'
 import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { parseWorkspaceSseCursor } from '@/lib/sse/protocol'
-import { listLatestProjectAgentSessionChangedEvent } from '@/lib/project-agent/session-event'
-import { listWorkspaceResourceReplayEvents } from '@/lib/workspace-resource/resource-change-events'
-import {
-  GLOBAL_ASSET_PROJECT_ID,
-  resolveWorkspaceResourceRefs,
-  WORKSPACE_RESOURCE_IMPACT,
-} from '@/lib/workspace-resource/resource-impact'
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -36,28 +29,6 @@ function uniqueTaskEvents(events: TaskSSEEvent[]): TaskSSEEvent[] {
     eventsById.set(event.id, event)
   }
   return Array.from(eventsById.values())
-}
-
-function buildRecoveryResourceCheckpoint(params: {
-  projectId: string
-  userId: string
-  episodeId: string | null
-}): ResourceChangedSSEEvent {
-  const checkpointAt = new Date()
-  return {
-    id: `wr:${checkpointAt.getTime()}:!snapshot:${params.projectId}`,
-    type: WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
-    projectId: params.projectId,
-    userId: params.userId,
-    ts: checkpointAt.toISOString(),
-    affectedResources: resolveWorkspaceResourceRefs({
-      impact: params.projectId === GLOBAL_ASSET_PROJECT_ID
-        ? WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS
-        : WORKSPACE_RESOURCE_IMPACT.PROJECT_WORKSPACE,
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-    }),
-  }
 }
 
 async function listActiveLifecycleSnapshot(params: {
@@ -172,7 +143,6 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({
         episodeId: z.string().optional().nullable(),
-        assistantId: z.literal('workspace-command').optional(),
         lastEventId: z.string().optional().nullable(),
         includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
@@ -184,37 +154,14 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
         const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
         const episodeId = input.episodeId?.trim() || ctx.context.episodeId?.trim() || null
-        const assistantId = input.assistantId ?? 'workspace-command'
 
-        if (
-          cursor.taskEventId > 0
-          || cursor.agentEventId !== '0'
-          || cursor.resourceEventAtMs > 0
-        ) {
+        if (cursor.taskEventId > 0) {
           const replayLimit = input.replayLimit ?? 5000
-          const [taskEvents, assistantEvents, resourceEvents] = await Promise.all([
-            cursor.taskEventId > 0
-              ? listEventsAfter(ctx.projectId, cursor.taskEventId, replayLimit)
-              : Promise.resolve([]),
-            listLatestProjectAgentSessionChangedEvent({
-              projectId: ctx.projectId,
-              userId: ctx.userId,
-              episodeId,
-              assistantId,
-              afterEventId: cursor.agentEventId,
-            }),
-            cursor.resourceEventAtMs > 0 && cursor.resourceOutboxId
-              ? listWorkspaceResourceReplayEvents({
-                  projectId: ctx.projectId,
-                  userId: ctx.userId,
-                  after: {
-                    createdAt: new Date(cursor.resourceEventAtMs),
-                    outboxId: cursor.resourceOutboxId,
-                  },
-                  limit: replayLimit,
-                })
-              : Promise.resolve([]),
-          ])
+          const taskEvents = await listEventsAfter(
+            ctx.projectId,
+            cursor.taskEventId,
+            replayLimit,
+          )
           const userTaskEvents = taskEvents.filter((event) => event.userId === ctx.userId)
           const recoverableTaskEvents = includeRecoverableSnapshot
             ? await listRecoverableTaskSnapshot({
@@ -225,22 +172,9 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
                 terminalLimit: Math.min(input.snapshotLimit ?? 500, 200),
               })
             : []
-          const resourceRecoveryCheckpoint = (
-            cursor.resourceEventAtMs === 0
-            || resourceEvents.length === replayLimit
-          )
-            ? [buildRecoveryResourceCheckpoint({
-                projectId: ctx.projectId,
-                userId: ctx.userId,
-                episodeId,
-              })]
-            : []
           const events = [
             ...userTaskEvents,
-            ...assistantEvents,
-            ...resourceEvents,
             ...recoverableTaskEvents,
-            ...resourceRecoveryCheckpoint,
           ]
             .sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
           return {
@@ -262,30 +196,17 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const snapshotLimit = input.snapshotLimit ?? 500
-        const [events, assistantEvents] = await Promise.all([
-          listRecoverableTaskSnapshot({
-            projectId: ctx.projectId,
-            episodeId,
-            userId: ctx.userId,
-            activeLimit: snapshotLimit,
-            terminalLimit: Math.min(snapshotLimit, 200),
-          }),
-          listLatestProjectAgentSessionChangedEvent({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-            episodeId,
-            assistantId,
-            afterEventId: '0',
-          }),
-        ])
+        const events = await listRecoverableTaskSnapshot({
+          projectId: ctx.projectId,
+          episodeId,
+          userId: ctx.userId,
+          activeLimit: snapshotLimit,
+          terminalLimit: Math.min(snapshotLimit, 200),
+        })
         return {
           channel,
           mode: 'recoverable_snapshot',
-          events: [...events, ...assistantEvents, buildRecoveryResourceCheckpoint({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-            episodeId,
-          })],
+          events,
         }
       },
     }),

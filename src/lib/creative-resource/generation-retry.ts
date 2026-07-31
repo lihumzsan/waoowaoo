@@ -37,7 +37,6 @@ export function buildCreativeResourceRetryTaskPayload(params: {
     ...params.frozenPayload,
     resource: {
       ...params.frozenPayload.resource,
-      executionSegmentId: null,
       toolCallId: params.toolCallId,
     },
   })
@@ -143,7 +142,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
       || task.episodeId !== resource.episodeId
       || task.status !== 'failed'
       || !initialGenerationInputIdentitySchema.safeParse(
-        task.operationExecution?.planSnapshot.normalizedInput,
+        task.operationExecution?.planSnapshot?.normalizedInput,
       ).success
     ) {
       continue

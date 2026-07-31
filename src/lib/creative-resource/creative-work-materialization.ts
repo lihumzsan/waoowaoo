@@ -119,7 +119,7 @@ export function planCreativeWorkResourceMaterialization(input: {
     inputFingerprint: payload.inputFingerprint,
     prompt: payload.request.goal,
     modelKey: payload.modelKey,
-    toolCallId: payload.origin.toolCallId,
+    toolCallId: payload.origin.callId,
     inputs: resourceInputsFromPayload(payload),
   }
   if (output.kind === 'screenplay') {

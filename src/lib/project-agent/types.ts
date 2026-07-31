@@ -6,20 +6,10 @@ import type {
 } from '@/lib/project-context/types'
 import type { ProjectAgentChoiceDecision } from './choice-result'
 import type {
-  ProjectAgentChoiceCardPartData,
+  ProjectAgentChoiceCardDefinition,
 } from './choice-offer'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
-import type { OperationPlanView } from '@/lib/operations/planning'
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
-import type {
-  ProjectAgentRunControlKind,
-  ProjectAgentRunStatus,
-} from './runs'
-import type {
-  ProjectAgentActivityStatus,
-  ProjectAgentActivityType,
-} from './event'
-import type { ProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentSubagentEventPartData } from './subagent-events'
 import type { CreativeResourceLinkView } from '@/lib/creative-resource/contracts'
 
@@ -30,10 +20,8 @@ export type ProjectAssistantId = 'workspace-command'
 export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
-  runId?: string | null
-  runFence?: ProjectAgentRunFence | null
-  /** Immutable identity of the current model/tool execution segment. */
-  executionSegmentId?: string | null
+  /** Canonical B+ model execution identity. */
+  turnId?: string | null
   /** Exact visible text from the user message that started this user-turn segment. */
   userTurnText?: string | null
   /** Server-resolved Resource identities attached to this exact user turn. */
@@ -43,30 +31,6 @@ export interface ProjectAgentContext {
   selectedAssetId?: string | null
   /** Exact approved invocation keyed by the SDK tool-call identity. */
   approvedInvocationByToolCallId?: Record<string, PlannedOperationInvocation>
-}
-
-export interface ProjectAgentRunPartData {
-  runId: string
-  requestId: string
-  status: ProjectAgentRunStatus
-  controlKind: ProjectAgentRunControlKind
-  stopReason?: string | null
-}
-
-export interface ProjectAgentOperationStartPartData {
-  runId?: string | null
-  operationId: string
-  toolCallId?: string | null
-}
-
-export interface ProjectAgentActivityPartData {
-  activityId: string
-  runId: string
-  type: ProjectAgentActivityType
-  status: ProjectAgentActivityStatus
-  operationId?: string | null
-  sourceOperationId?: string | null
-  toolCallId?: string | null
 }
 
 export type ProjectAgentSubagentPartData = ProjectAgentSubagentEventPartData
@@ -96,101 +60,16 @@ export interface ProjectAgentWebSearchPartData {
   }[]
 }
 
-export type ProjectAgentStopPartData =
-  | {
-    reason: 'awaiting_user_confirmation'
-    stepCount: number
-    operationIds: string[]
-  }
-  | {
-    reason: 'tool_error'
-    stepCount: number
-    operationIds: string[]
-    codes: string[]
-  }
-
-export interface ProjectAgentInterruptionPartData {
-  runId: string
-  requestId: string
-  interruptionId: string
-  approvalId: string
-  operationId: string
-  toolCallId?: string | null
-  inputHash: string
-  display: {
-    title: string
-    description: string
-  }
-  operationPlan?: OperationPlanView | null
-}
-
-export interface ProjectAgentOperationPlanPreviewPartData {
-  operationId: string
-  toolCallId?: string | null
-  operationPlan: OperationPlanView
-}
-
-export type ProjectAgentInterruptionOutcome = 'approved' | 'rejected' | 'superseded'
-
-export interface ProjectAgentInterruptionResolvedPartData {
-  runId?: string | null
-  interruptionId: string
-  approvalId: string
-  outcome: ProjectAgentInterruptionOutcome
-}
-
-export interface ProjectAgentChoiceResolvedPartData {
-  runId?: string | null
-  interruptionId?: string | null
-  toolCallId?: string | null
-  cardId?: string | null
-}
-
-export interface AgentDebugPartData {
-  requestId: string
-  toolsetSource: string
-  operationIds: string[]
-}
-
-export interface AgentRuntimeContextPartData {
-  runtime: 'openai-agents-sdk'
-  requestId: string
-  modelKey: string
-  locale: string
-  billingConfirmationRequired: boolean
-  projectId: string
-  episodeId?: string | null
-  messageCounts: {
-    normalized: number
-    runtime: number
-    model: number
-  }
-  contextTokenEstimate: number | null
-  toolset: {
-    source: string
-    operationIds: string[]
-    directOperationIds: string[]
-    onDemandOperationIds: string[]
-    disabledOperationIds: string[]
-  }
-  selectedTools: Array<{
-    operationId: string
-    description: string
-  }>
-}
-
 export type {
   ProjectAgentChoiceCardDefinition,
-  ProjectAgentChoiceCardPartData,
 } from './choice-offer'
-export type ProjectAgentChoiceCardGroup = ProjectAgentChoiceCardPartData['groups'][number]
+export type ProjectAgentChoiceCardGroup = ProjectAgentChoiceCardDefinition['groups'][number]
 export type ProjectAgentChoiceCardOption = ProjectAgentChoiceCardGroup['options'][number]
 
 export interface TaskSubmittedPartData {
   operationId: string
   taskId: string
   status: string
-  runId?: string | null
   deduped?: boolean
   billingReceipt?: BillingReceiptView | null
   projectId?: string
@@ -235,17 +114,6 @@ export interface ProjectAssistantContextSnapshot {
   }
 }
 
-/**
- * Surfaces a lossy context operation to the user.
- *
- * Recoverable tool-result shedding is silent. A completed context compression
- * is visible once, without exposing the internal checkpoint body.
- */
-export interface ProjectAgentContextCompactedPartData {
-  runId: string
-  replacedItemCount: number
-}
-
 export interface ProjectAgentResourceLinksPartData {
   resources: readonly CreativeResourceLinkView[]
 }
@@ -262,21 +130,8 @@ export interface ProjectAssistantThreadSnapshot {
 }
 
 export type WorkspaceAssistantPartType =
-  | 'data-agent-debug'
-  | 'data-agent-run'
-  | 'data-agent-interruption'
-  | 'data-agent-interruption-resolved'
-  | 'data-agent-runtime-context'
-  | 'data-agent-operation-start'
-  | 'data-agent-operation-plan-preview'
-  | 'data-agent-activity'
   | 'data-agent-subagent-event'
-  | 'data-agent-stop'
-  | 'data-assistant-context-compacted'
-  | 'data-assistant-choice-card'
-  | 'data-assistant-choice-resolved'
   | 'data-assistant-resource-links'
-  | 'data-task-submitted'
   | 'data-task-batch-submitted'
   | 'data-project-context'
   | 'data-web-search'

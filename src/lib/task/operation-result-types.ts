@@ -22,7 +22,6 @@ export interface RecentOperationError {
 export interface RecentOperationResult {
   operationId: string
   taskId: string
-  runId?: string | null
   taskType: string
   status: OperationResultStatus
   source?: string | null

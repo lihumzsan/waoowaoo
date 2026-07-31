@@ -2,7 +2,10 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import type { CreativeResourceInputRef } from '@/lib/creative-resource/contracts'
 import { creativeResourceInputRefSchema } from '@/lib/creative-resource/generation-contract'
-import { buildCreativeResourceId, resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
+import {
+  buildCreativeResourceId,
+  resolveProjectCreativeResourceScope,
+} from '@/lib/creative-resource/identity'
 import {
   reserveCreativeResourcesInTransaction,
   validateCreativeResourceInputReferencesInTransaction,
@@ -11,42 +14,69 @@ import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registr
 import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
-import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
+import {
+  refineTaskSubmitOperationOutputSchema,
+  taskSubmitOperationOutputSchemaBase,
+} from '@/lib/operations/output-schemas'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { TASK_TYPE } from '@/lib/task/types'
-import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
 
-const mergeVideosInputSchema = z.object({
-  name: z.string().trim().min(1).max(200).optional()
-    .describe('Optional display name for the merged ordinary video Resource.'),
-  videos: z.array(creativeResourceInputRefSchema).min(1).max(50)
-    .describe('Exact ready video Resources in playback order. The array order is the merge order. A single video is only accepted together with music.'),
-  music: creativeResourceInputRefSchema.optional()
-    .describe('Optional exact ready audio Resource mixed under the whole merged timeline as background music. The server loudness-normalizes, fades, and ducks it under source dialogue deterministically; the merged video duration trims or pads the music. Never put video or text Resources here.'),
-}).strict()
+const mergeVideosInputSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        'Optional display name for the merged ordinary video Resource.',
+      ),
+    videos: z
+      .array(creativeResourceInputRefSchema)
+      .min(1)
+      .max(50)
+      .describe(
+        'Exact ready video Resources in playback order. The array order is the merge order. A single video is only accepted together with music.',
+      ),
+    music: creativeResourceInputRefSchema
+      .optional()
+      .describe(
+        'Optional exact ready audio Resource mixed under the whole merged timeline as background music. The server loudness-normalizes, fades, and ducks it under source dialogue deterministically; the merged video duration trims or pads the music. Never put video or text Resources here.',
+      ),
+  })
+  .strict()
 
 const MERGE_VIDEOS_BGM_VOLUME = 1
 
 const mergeVideosOutputSchema = refineTaskSubmitOperationOutputSchema(
-  taskSubmitOperationOutputSchemaBase.extend({
-    resourceId: z.string().min(1),
-  }).passthrough(),
+  taskSubmitOperationOutputSchemaBase
+    .extend({
+      resourceId: z.string().min(1),
+    })
+    .passthrough(),
 )
 
 function normalizeMergeInputs(
   input: z.infer<typeof mergeVideosInputSchema>,
 ): CreativeResourceInputRef[] {
-  const videos: CreativeResourceInputRef[] = input.videos.map((video, position) => ({
-    resourceId: video.resourceId,
-    role: 'source_video',
-    position,
-  }))
+  const videos: CreativeResourceInputRef[] = input.videos.map(
+    (video, position) => ({
+      resourceId: video.resourceId,
+      role: 'source_video',
+      position,
+    }),
+  )
   if (!input.music) return videos
   return [
     ...videos,
-    { resourceId: input.music.resourceId, role: 'bgm_audio', position: input.videos.length },
+    {
+      resourceId: input.music.resourceId,
+      role: 'bgm_audio',
+      position: input.videos.length,
+    },
   ]
 }
 
@@ -54,7 +84,8 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
   return {
     merge_videos: defineOperation({
       id: 'merge_videos',
-      summary: 'Merge one or more exact ready video Resources into one ordinary video Resource, in the provided order, optionally mixing one exact ready audio Resource under the whole timeline as background music. This preserves and loudness-normalizes source audio, ducks music under source dialogue, performs no generative model call, and does not require the professional chapter pipeline. A single video is only accepted together with music.',
+      summary:
+        'Merge one or more exact ready video Resources into one ordinary video Resource, in the provided order, optionally mixing one exact ready audio Resource under the whole timeline as background music. This preserves and loudness-normalizes source audio, ducks music under source dialogue, performs no generative model call, and does not require the professional chapter pipeline. A single video is only accepted together with music.',
       intent: 'act',
       effects: {
         writes: true,
@@ -75,7 +106,11 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
         supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
-      assistantWriteAuthority: { kind: 'transactional_task_submission' },
+      assistantWriteAuthority: {
+        kind: 'temporal_operation_execution',
+        contractRevision: 'merge_videos:v1',
+        followUpPolicy: 'after_all_terminal',
+      },
       inputSchema: mergeVideosInputSchema,
       outputSchema: mergeVideosOutputSchema,
       execute: async (ctx, input) => {
@@ -93,13 +128,16 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           episodeId,
         })
         const references = normalizeMergeInputs(input)
-        const inputHash = stableArgsHash({ operationId: 'merge_videos', references })
+        const inputHash = stableArgsHash({
+          operationId: 'merge_videos',
+          references,
+        })
         const requestId = [
           'merge-videos',
           ctx.userId,
           ctx.projectId,
           episodeId ?? 'project',
-          ctx.context.runId?.trim() || 'no-run',
+          ctx.context.turnId?.trim() || 'no-turn',
           ctx.toolCallId?.trim() || inputHash,
           inputHash,
         ].join(':')
@@ -110,15 +148,20 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
         })
         const resourceName = input.name ?? 'Merged video'
         const generationOptions = input.music
-          ? { mergeMode: 'ordered_concat' as const, bgmVolume: MERGE_VIDEOS_BGM_VOLUME }
+          ? {
+              mergeMode: 'ordered_concat' as const,
+              bgmVolume: MERGE_VIDEOS_BGM_VOLUME,
+            }
           : { mergeMode: 'ordered_concat' as const }
         const payload = {
-          lifecycleProjection: buildCreativeResourceLifecycleProjection([{
-            resourceId,
-            mediaType: 'video',
-            schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
-            name: resourceName,
-          }]),
+          lifecycleProjection: buildCreativeResourceLifecycleProjection([
+            {
+              resourceId,
+              mediaType: 'video',
+              schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
+              name: resourceName,
+            },
+          ]),
           resource: {
             resourceId,
             mediaType: 'video' as const,
@@ -128,12 +171,12 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
             inputHash,
             inputs: references,
             generationOptions,
-            executionSegmentId: ctx.context.executionSegmentId?.trim() || null,
             toolCallId: ctx.toolCallId?.trim() || null,
           },
         }
         const result = await submitOperationTask({
           request: ctx.request,
+          requestId: ctx.requestId,
           userId: ctx.userId,
           projectId: ctx.projectId,
           episodeId,
@@ -142,20 +185,32 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
           targetId: resourceId,
           operationId: 'merge_videos',
           source: ctx.source,
+          operationExecutionId: ctx.operationExecutionId,
+          operationExecutionTransaction: ctx.operationExecutionTransaction,
+          followUpBatchBinding: ctx.followUpBatchBinding,
           payload,
           decoratePayload: false,
           dedupeKey: `merge_videos:${resourceId}:${inputHash}`,
           locale: resolveOperationLocale(ctx.context),
           onTaskCreatedInTransaction: async (tx) => {
-            await validateCreativeResourceInputReferencesInTransaction(tx, targetScope, references)
+            await validateCreativeResourceInputReferencesInTransaction(
+              tx,
+              targetScope,
+              references,
+            )
             const resources = await tx.creativeResource.findMany({
-              where: { id: { in: references.map((reference) => reference.resourceId) } },
+              where: {
+                id: { in: references.map((reference) => reference.resourceId) },
+              },
               select: { id: true, mediaType: true },
             })
-            const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
+            const resourceById = new Map(
+              resources.map((resource) => [resource.id, resource]),
+            )
             for (const reference of references) {
               const resource = resourceById.get(reference.resourceId)
-              const expectedMediaType = reference.role === 'bgm_audio' ? 'audio' : 'video'
+              const expectedMediaType =
+                reference.role === 'bgm_audio' ? 'audio' : 'video'
               if (!resource || resource.mediaType !== expectedMediaType) {
                 throw new ApiError('INVALID_PARAMS', {
                   code: 'VIDEO_MERGE_INPUT_RESOURCE_INVALID',
@@ -171,14 +226,9 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
               schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId: 'merge_videos',
               requestId,
-              candidates: [{ resourceId, name: resourceName, candidateIndex: 0 }],
-            })
-            await createWorkspaceResourceBroadcastsInTransaction({
-              tx,
-              invocationId: requestId,
-              affectedResources: [{ kind: 'creativeResources', projectId: ctx.projectId, episodeId }],
-              userId: ctx.userId,
-              operationId: 'merge_videos',
+              candidates: [
+                { resourceId, name: resourceName, candidateIndex: 0 },
+              ],
             })
           },
         })

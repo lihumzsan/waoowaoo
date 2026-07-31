@@ -58,8 +58,6 @@ function preparePlannedTask(params: {
     targetId: params.task.target.targetId,
     payload,
     dedupeKey: params.task.dedupeKey ?? null,
-    batchKey: null,
-    priority: params.task.priority ?? 0,
     billingInfo: params.task.billingInfo,
     operationId: params.operationId,
     operationSource: params.operationSource,
@@ -84,6 +82,7 @@ export async function submitApprovedOperationPlanTasks(params: {
     !execution
     || execution.status !== 'committing'
     || execution.approvalGrantId !== params.approvalGrantId
+    || execution.planSnapshotId === null
   ) {
     throw new Error(`OPERATION_EXECUTION_AUTHORIZATION_INVALID:${params.operationExecutionId}`)
   }
@@ -129,7 +128,7 @@ export async function submitApprovedOperationPlanTasks(params: {
   })
   logger.info({
     action: 'task.submit.persisted',
-    message: 'approved operation plan tasks persisted with enqueue outbox commands',
+    message: 'approved operation plan tasks persisted for Temporal scheduling',
     operationId: execution.operationId,
     projectId: snapshot.plan.projectId,
     userId: execution.userId,
@@ -173,7 +172,6 @@ async function buildSubmitTaskResults(
       async: true,
       taskId: task.id,
       taskType: task.taskType,
-      runId: null,
       status: task.status,
       deduped: task.deduped,
       billingReceiptView: await buildBillingReceiptView(billingInfo),

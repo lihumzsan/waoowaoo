@@ -16,7 +16,10 @@ import {
   type ProjectDraftInput,
   type ProjectUpdateInput,
 } from '@/lib/projects/validation'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import {
+  requireProjectAgentOperationRequest,
+  type ProjectAgentOperationRegistryDraft,
+} from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 const updateProjectInputSchema: z.ZodType<ProjectUpdateInput> = z.object({
@@ -85,6 +88,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       id: 'update_project',
       summary: 'Update project name/description for the project owner.',
       intent: 'act',
+      toolContractRevision: 'update_project/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_data',
@@ -118,7 +122,10 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
               }
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
-          const locale = resolveTaskLocale(ctx.request, input) ?? 'zh'
+          const locale = resolveTaskLocale(
+            requireProjectAgentOperationRequest(ctx),
+            input,
+          ) ?? 'zh'
           throw new ApiError('INVALID_PARAMS', {
             code: validationIssue.code,
             field: validationIssue.field,

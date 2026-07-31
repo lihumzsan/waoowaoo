@@ -1,32 +1,21 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { prisma } from '@/lib/prisma'
-import { isTaskType, TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
+import { type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
   getBillingMode,
-  InsufficientBalanceError,
   isBillableTaskType,
 } from '@/lib/billing'
 import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
-import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
+import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
-import { persistSubmittedTaskBatchInTransaction } from './transactional-create'
 import type { Prisma } from '@prisma/client'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, unknown>
-}
-
-export function isActiveTaskStatus(status: string | null | undefined) {
-  return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
-}
-
-export function shouldAttachNewTaskToReusableRun(reusableRunTaskStatus: string | null | undefined) {
-  return !isActiveTaskStatus(reusableRunTaskStatus)
 }
 
 export interface SubmitTaskResult {
@@ -35,7 +24,6 @@ export interface SubmitTaskResult {
   async: boolean
   taskId: string
   taskType: TaskType
-  runId: string | null
   status: string
   deduped: boolean
   billingReceiptView?: BillingReceiptView | null
@@ -103,13 +91,12 @@ export type SubmitTaskParams = {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
-  batchKey?: string | null
-  priority?: number
   billingInfo?: TaskBillingInfo | null
   billingInfoSource?: 'auto' | 'planned'
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
+  operationExecutionId?: string | null
   operationRequestId?: string | null
   onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
@@ -190,76 +177,13 @@ export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Prom
     targetId: params.targetId,
     payload: normalizedPayload,
     dedupeKey: params.dedupeKey || null,
-    batchKey: params.batchKey || null,
-    priority: params.priority,
     billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
     approvalGrantId: null,
-    operationExecutionId: null,
+    operationExecutionId: params.operationExecutionId ?? null,
     operationPlanTaskId: null,
     operationRequestId,
   } satisfies CreateTaskInput
   return { input: taskInput, billingMode }
-}
-
-export async function submitTask(params: SubmitTaskParams): Promise<SubmitTaskResult> {
-  const logger = createScopedLogger({
-    module: 'task.submitter',
-    action: 'task.submit',
-    requestId: params.requestId || undefined,
-    projectId: params.projectId,
-    userId: params.userId,
-  })
-  const prepared = await prepareTaskSubmissionInput(params)
-  let created: Awaited<ReturnType<typeof persistSubmittedTaskBatchInTransaction>>
-  try {
-    created = await prisma.$transaction(async (tx) => await persistSubmittedTaskBatchInTransaction({
-        tx,
-        inputs: [prepared.input],
-        billingMode: prepared.billingMode,
-        onBatchCreatedInTransaction: params.onTaskCreatedInTransaction
-          ? async (transaction, tasks) => {
-              const first = tasks[0]
-              if (!first || tasks.length !== 1) throw new Error('TASK_SINGLE_BATCH_RESULT_INVALID')
-              await params.onTaskCreatedInTransaction!(transaction, first.task)
-            }
-          : undefined,
-      }))
-  } catch (error) {
-    if (error instanceof InsufficientBalanceError) {
-      throw new ApiError('INSUFFICIENT_BALANCE', {
-        message: error.message,
-        required: error.required,
-        available: error.available,
-      })
-    }
-    throw error
-  }
-  const first = created[0]
-  if (!first || created.length !== 1) throw new Error('TASK_SINGLE_BATCH_RESULT_INVALID')
-  const { task, deduped } = first
-  if (!isTaskType(task.type)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.type}`)
-  const preparedBillingInfo = (task.billingInfo || null) as TaskBillingInfo | null
-  logger.info({
-    action: deduped ? 'task.submit.deduped' : 'task.submit.persisted',
-    message: deduped ? 'existing Task reused' : 'Task and enqueue Outbox persisted',
-    taskId: task.id,
-    details: {
-      type: params.type,
-      targetType: params.targetType,
-      targetId: params.targetId,
-    },
-  })
-
-  return {
-    success: true,
-    async: true,
-    taskId: task.id,
-    taskType: task.type,
-    runId: null,
-    status: task.status,
-    deduped,
-    billingReceiptView: await buildBillingReceiptView(preparedBillingInfo),
-  }
 }

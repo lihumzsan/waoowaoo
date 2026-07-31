@@ -41,7 +41,6 @@ export interface PlannedTask {
   billingInfo: TaskBillingInfo
   episodeId?: string | null
   dedupeKey?: string | null
-  priority?: number
   locale: Locale
 }
 
@@ -241,7 +240,6 @@ export function createPlannedTask(params: {
   locale: PlannedTask['locale']
   episodeId?: string | null
   dedupeKey?: string | null
-  priority?: number
 }): PlannedTask {
   return {
     id: params.id,
@@ -255,7 +253,6 @@ export function createPlannedTask(params: {
     locale: params.locale,
     episodeId: params.episodeId ?? null,
     dedupeKey: params.dedupeKey ?? null,
-    priority: params.priority,
   }
 }
 

@@ -45,6 +45,7 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
       id: 'adopt_creative_direction',
       summary: 'Adopt one exact immutable project.creative_direction Resource selected by the current action. The Creative Task already materialized it; this operation only updates the canonical adopted_creative_direction Binding and starts no downstream work.',
       intent: 'act',
+      toolContractRevision: 'adopt_creative_direction/v1',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',

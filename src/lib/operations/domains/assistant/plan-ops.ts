@@ -13,6 +13,7 @@ export function createAssistantPlanOperations(): ProjectAgentOperationRegistryDr
       id: 'update_plan',
       summary: 'Replace the current advisory progress plan for complex work. The plan is a visible model notebook only and never controls tools, Tasks, Workflows, Resources, or project state.',
       intent: 'plan',
+      toolContractRevision: 'update_plan/v1',
       toolExposure: 'direct',
       effects: {
         writes: true,

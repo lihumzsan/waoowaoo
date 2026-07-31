@@ -95,6 +95,13 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     } else if (effects.workspaceResourceImpact !== undefined) {
       throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_IMPACT_FORBIDDEN:${operationId}`)
     }
+    if (channels.tool === true && effects.writes === true) {
+      mustTrimmedString(op.toolContractRevision, 'TOOL_CONTRACT_REVISION')
+    } else if (op.toolContractRevision !== null) {
+      throw new Error(
+        `PROJECT_AGENT_OPERATION_TOOL_CONTRACT_REVISION_FORBIDDEN:${operationId}`,
+      )
+    }
     const agentFlow = op.agentFlow as
       | {
           suspendsFor?: unknown
@@ -207,6 +214,18 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_COMPENSATION_REQUIRED:${operationId}`)
       }
+    }
+    if (
+      effects.writes === true
+      && effects.workspaceResourceImpact !== WORKSPACE_RESOURCE_IMPACT.NONE
+      && (
+        confirmation.kind === 'billable_media'
+        || typeof op.executeInTransaction !== 'function'
+      )
+    ) {
+      throw new Error(
+        `PROJECT_AGENT_OPERATION_CHANGED_REFS_OWNER_INVALID:${operationId}`,
+      )
     }
     assertAssistantToolWriteAuthority(operationId, op)
     const toolInputSchema = op.toolInputSchema as

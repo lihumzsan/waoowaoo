@@ -7,8 +7,8 @@ import {
 const projectAgentSubagentEventPartDataSchema = z.object({
   subagentId: z.string().trim().min(1),
   taskId: z.string().trim().min(1),
-  runId: z.string().trim().min(1),
-  toolCallId: z.string().trim().min(1),
+  originTurnId: z.string().trim().min(1),
+  callId: z.string().trim().min(1),
   sequence: z.number().int().positive(),
   occurredAt: z.string().datetime(),
   event: creativeWorkTraceEventSchema,
@@ -17,8 +17,8 @@ const projectAgentSubagentEventPartDataSchema = z.object({
 export interface ProjectAgentSubagentEventPartData {
   subagentId: string
   taskId: string
-  runId: string
-  toolCallId: string
+  originTurnId: string
+  callId: string
   sequence: number
   occurredAt: string
   event: CreativeWorkTraceEvent
@@ -29,8 +29,8 @@ export type ProjectAgentSubagentStatus = 'running' | 'completed' | 'failed' | 'c
 export interface ProjectAgentSubagentView {
   subagentId: string
   taskId: string
-  runId: string
-  toolCallId: string
+  originTurnId: string
+  callId: string
   outputKind: Extract<CreativeWorkTraceEvent, { kind: 'started' }>['outputKind']
   goal: string
   status: ProjectAgentSubagentStatus
@@ -88,8 +88,8 @@ export function resolveProjectAgentSubagentViews(
       if (
         event.subagentId !== subagentId
         || event.taskId !== first.taskId
-        || event.runId !== first.runId
-        || event.toolCallId !== first.toolCallId
+        || event.originTurnId !== first.originTurnId
+        || event.callId !== first.callId
         || event.subagentId !== event.taskId
       ) {
         throw new Error(`PROJECT_AGENT_SUBAGENT_EVENT_IDENTITY_MISMATCH:${subagentId}:${String(event.sequence)}`)
@@ -113,8 +113,8 @@ export function resolveProjectAgentSubagentViews(
     return {
       subagentId,
       taskId: first.taskId,
-      runId: first.runId,
-      toolCallId: first.toolCallId,
+      originTurnId: first.originTurnId,
+      callId: first.callId,
       outputKind: startEvent.outputKind,
       goal: startEvent.goal,
       status,
