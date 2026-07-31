@@ -36,6 +36,7 @@ import { createFixtureEpisode, createFixtureProject } from '../../helpers/fixtur
 import { prisma } from '../../helpers/prisma'
 import {
   startAgentAdmissionWorker,
+  startAgentSupersedeWorker,
   type AgentAdmissionWorkerHarness,
 } from './helpers/agent-admission-worker'
 import {
@@ -238,6 +239,146 @@ describe('Agent Thread Temporal admission durability', () => {
       await removeAgentTurnFixture(fixture)
     }
   }, 90_000)
+
+  it('keeps rapid user corrections and drains the superseded Activity before the latest Turn starts', async () => {
+    const fixture = await createAgentTurnFixture()
+    const connected = await connectTemporalClient()
+    const supersedeWorker = await startAgentSupersedeWorker()
+    const workflowId = buildAgentThreadWorkflowId(fixture.threadId)
+    const handle = connected.client.workflow.getHandle(workflowId)
+    const client = new TemporalAgentThreadClient(
+      connected.client.workflow,
+      supersedeWorker.taskQueue,
+    )
+    const firstCommand = buildUserTurnCommand(fixture, '短一点，三十秒这样，休闲的。')
+    const secondCommand = buildUserTurnCommand(
+      {
+        ...fixture,
+        sourceId: `user-source-${randomUUID()}`,
+      },
+      '短一点，三十秒这样，修仙的。',
+    )
+    const thirdCommand = buildUserTurnCommand(
+      {
+        ...fixture,
+        sourceId: `user-source-${randomUUID()}`,
+      },
+      '最终按三十秒修仙短片执行。',
+    )
+    let latestTurnId: string | null = null
+    try {
+      const first = await client.submit(firstCommand)
+      if (first.outcome !== 'accepted') {
+        throw new Error('AGENT_FIRST_CORRECTION_TURN_UNEXPECTEDLY_IGNORED')
+      }
+      await supersedeWorker.waitForEvent(`started:${first.turn.id}`)
+
+      const second = await client.submit(secondCommand)
+      if (second.outcome !== 'accepted') {
+        throw new Error('AGENT_SECOND_CORRECTION_TURN_UNEXPECTEDLY_IGNORED')
+      }
+      const third = await client.submit(thirdCommand)
+      if (third.outcome !== 'accepted') {
+        throw new Error('AGENT_THIRD_CORRECTION_TURN_UNEXPECTEDLY_IGNORED')
+      }
+      latestTurnId = third.turn.id
+
+      await supersedeWorker.waitForEvent(`cancelled:${first.turn.id}`)
+      await supersedeWorker.waitForEvent(`started:${third.turn.id}`)
+
+      const [turns, thread, continuation] = await Promise.all([
+        prisma.projectAgentTurn.findMany({
+          where: {
+            id: { in: [first.turn.id, second.turn.id, third.turn.id] },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+        prisma.projectAssistantThread.findUniqueOrThrow({
+          where: { id: fixture.threadId },
+        }),
+        loadInterruptedTurnContinuationInputs(third.turn.id),
+      ])
+      expect(turns).toHaveLength(3)
+      expect(turns.find((turn) => turn.id === first.turn.id)).toMatchObject({
+        status: 'cancelled',
+        attempt: 1,
+        stopReason: 'superseded_by_user_turn',
+      })
+      expect(turns.find((turn) => turn.id === second.turn.id)).toMatchObject({
+        status: 'cancelled',
+        attempt: 0,
+        stopReason: 'superseded_by_user_turn',
+      })
+      expect(turns.find((turn) => turn.id === third.turn.id)).toMatchObject({
+        status: 'running',
+        attempt: 1,
+      })
+      expect(thread.messagesJson).toEqual([
+        firstCommand.userMessage,
+        secondCommand.userMessage,
+        thirdCommand.userMessage,
+      ])
+      expect(JSON.stringify(continuation)).toContain('短一点，三十秒这样，休闲的。')
+      expect(JSON.stringify(continuation)).toContain('短一点，三十秒这样，修仙的。')
+
+      const eventsBeforeStop = supersedeWorker.readEvents()
+      expect(eventsBeforeStop.indexOf(`cancelled:${first.turn.id}`)).toBeLessThan(
+        eventsBeforeStop.indexOf(`started:${third.turn.id}`),
+      )
+      expect(eventsBeforeStop).not.toContain(`started:${second.turn.id}`)
+
+      const cancellation = await client.cancel({
+        protocol: 'agent_turn_cancel_v1',
+        threadId: fixture.threadId,
+        turnId: third.turn.id,
+        projectId: fixture.projectId,
+        userId: fixture.userId,
+        requestId: `cancel-latest-${randomUUID()}`,
+        reason: '用户停止最新一轮。',
+      })
+      expect(cancellation).toMatchObject({
+        turnId: third.turn.id,
+        status: 'cancelled',
+        stopReason: 'user_cancelled',
+      })
+      // The cancellation Update is not acknowledged until the Activity has
+      // exited, so the stop button cannot report success while tools still run.
+      expect(supersedeWorker.readEvents()).toContain(`cancelled:${third.turn.id}`)
+      await expect(handle.result()).resolves.toMatchObject({
+        workflowId,
+        threadId: fixture.threadId,
+        lastTurn: {
+          turnId: third.turn.id,
+          status: 'cancelled',
+          stopReason: 'user_cancelled',
+        },
+      })
+    } finally {
+      const description = await handle.describe().catch(() => null)
+      if (description?.status.name === 'RUNNING') {
+        if (latestTurnId) {
+          await client
+            .cancel({
+              protocol: 'agent_turn_cancel_v1',
+              threadId: fixture.threadId,
+              turnId: latestTurnId,
+              projectId: fixture.projectId,
+              userId: fixture.userId,
+              requestId: `cleanup-latest-${randomUUID()}`,
+              reason: '测试清理。',
+            })
+            .catch(() => undefined)
+        }
+        const current = await handle.describe().catch(() => null)
+        if (current?.status.name === 'RUNNING') {
+          await handle.terminate('AGENT_SUPERSEDE_TEST_CLEANUP')
+        }
+      }
+      await supersedeWorker.close()
+      await connected.close()
+      await removeAgentTurnFixture(fixture)
+    }
+  }, 60_000)
 
   it('replays approval and cancellation through a new Coordinator execution after HTTP acknowledgement loss', async () => {
     const fixture = await createAgentTurnFixture()

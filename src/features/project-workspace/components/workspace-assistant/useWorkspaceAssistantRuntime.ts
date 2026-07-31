@@ -721,7 +721,7 @@ export function useWorkspaceAssistantRuntime({
   return {
     runtime,
     messages,
-    pending: commandPending || isActiveTurn(view),
+    pending: commandPending,
     canStopReply: Boolean(view?.thread && isActiveTurn(view)),
     replyInFlight,
     backgroundFollowUpActive,

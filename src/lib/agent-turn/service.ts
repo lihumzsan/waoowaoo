@@ -7,7 +7,6 @@ import {
   appendProjectAssistantThreadMessagesInTransaction,
   commitProjectAssistantTurnInTransaction,
   parseProjectAssistantModelHistory,
-  serializeProjectAssistantModelHistory,
   validateProjectAssistantThreadMessages,
 } from '@/lib/project-agent/persistence'
 import {
@@ -22,11 +21,7 @@ import {
   type AgentTurnStatus,
 } from './contracts'
 import { assertAgentTurnEnvelope, buildAgentTurnId } from './identity'
-import {
-  buildAgentTurnApprovalTerminalResults,
-  closeAgentTurnApprovalHistoryInTransaction,
-  readAgentTurnApprovalCallIds,
-} from './approval-history'
+import { closeAgentTurnApprovalHistoryInTransaction } from './approval-history'
 import { recordAgentTurnUsageFactsInTransaction } from './usage'
 
 export type AgentTurnAdmissionDecision =
@@ -349,18 +344,22 @@ export async function acceptAgentTurnCommand(
         const waitingTurns = await tx.$queryRaw<
           Array<{
             id: string
-            payloadJson: Prisma.JsonValue
+            interactionId: string
+            interactionStatus: string
           }>
         >(
           Prisma.sql`
-            SELECT turn.id, interaction.payloadJson
+            SELECT turn.id,
+                   interaction.id AS interactionId,
+                   interaction.status AS interactionStatus
             FROM project_agent_turns turn
             JOIN agent_turn_interactions interaction
               ON interaction.turnId = turn.id
             WHERE turn.threadId = ${command.threadId}
               AND turn.status = 'waiting_approval'
               AND interaction.kind = 'approval'
-              AND interaction.status = 'pending'
+              AND interaction.status IN ('pending', 'approved', 'rejected')
+              AND interaction.runState IS NOT NULL
             FOR UPDATE
           `,
         )
@@ -370,60 +369,56 @@ export async function acceptAgentTurnCommand(
         }
         if (supersededApprovalTurnIds.length > 0) {
           const now = new Date()
-          const modelHistory = parseProjectAssistantModelHistory(thread.modelHistoryJson)
-          const approvalCallIds = readAgentTurnApprovalCallIds(
-            waitingTurns.map((interaction) => interaction.payloadJson),
-          )
-          const rejectionResults = buildAgentTurnApprovalTerminalResults({
-            modelHistory,
-            approvalCallIds,
+          const waitingTurn = waitingTurns[0]
+          if (!waitingTurn) {
+            throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_MISSING:${thread.id}`)
+          }
+          acceptedModelHistoryVersion = await closeAgentTurnApprovalHistoryInTransaction({
+            tx,
+            thread,
+            turnId: waitingTurn.id,
             terminalMessage: 'The user rejected this pending operation by sending a new message.',
           })
-          if (rejectionResults.length !== approvalCallIds.size) {
-            throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_HISTORY_DIVERGED:${thread.id}`)
+          const resolvedInteraction = waitingTurn.interactionStatus === 'pending'
+            ? await tx.agentTurnInteraction.updateMany({
+                where: {
+                  id: waitingTurn.interactionId,
+                  status: 'pending',
+                  runState: { not: null },
+                },
+                data: {
+                  status: 'rejected',
+                  responseJson: toJson({
+                    protocol: 'agent_turn_approval_response_v1',
+                    requestId: command.requestId,
+                    decision: 'reject',
+                    reason: 'superseded_by_user_turn',
+                    grants: [],
+                    via: 'user_message',
+                    successorTurnId,
+                  }),
+                  runState: null,
+                  version: { increment: 1 },
+                  resolvedAt: now,
+                },
+              })
+            : await tx.agentTurnInteraction.updateMany({
+                where: {
+                  id: waitingTurn.interactionId,
+                  status: waitingTurn.interactionStatus,
+                  runState: { not: null },
+                },
+                data: {
+                  status: 'cancelled',
+                  runState: null,
+                  version: { increment: 1 },
+                  resolvedAt: now,
+                },
+              })
+          if (resolvedInteraction.count !== 1) {
+            throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_INTERACTION_CONFLICT:${thread.id}`)
           }
-          if (rejectionResults.length > 0) {
-            const updatedHistory = await tx.projectAssistantThread.updateMany({
-              where: {
-                id: thread.id,
-                modelHistoryVersion: thread.modelHistoryVersion,
-              },
-              data: {
-                modelHistoryJson: serializeProjectAssistantModelHistory([
-                  ...modelHistory,
-                  ...rejectionResults,
-                ]),
-                modelHistoryVersion: { increment: 1 },
-              },
-            })
-            if (updatedHistory.count !== 1) {
-              throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_HISTORY_CONFLICT:${thread.id}`)
-            }
-            acceptedModelHistoryVersion += 1
-          }
-          await tx.agentTurnInteraction.updateMany({
-            where: {
-              turnId: { in: supersededApprovalTurnIds },
-              kind: 'approval',
-              status: 'pending',
-            },
-            data: {
-              status: 'rejected',
-              responseJson: toJson({
-                protocol: 'agent_turn_approval_response_v1',
-                requestId: command.requestId,
-                decision: 'reject',
-                reason: 'superseded_by_user_turn',
-                grants: [],
-                via: 'user_message',
-                successorTurnId,
-              }),
-              runState: null,
-              version: { increment: 1 },
-              resolvedAt: now,
-            },
-          })
-          await tx.projectAgentTurn.updateMany({
+          const cancelledApproval = await tx.projectAgentTurn.updateMany({
             where: {
               id: { in: supersededApprovalTurnIds },
               status: 'waiting_approval',
@@ -439,6 +434,78 @@ export async function acceptAgentTurnCommand(
               finishedAt: now,
             },
           })
+          if (cancelledApproval.count !== 1) {
+            throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_CONFLICT:${thread.id}`)
+          }
+        }
+        const supersededRunningTurns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+          SELECT *
+          FROM project_agent_turns
+          WHERE threadId = ${command.threadId}
+            AND status = 'running'
+          FOR UPDATE
+        `)
+        if (supersededRunningTurns.length > 1) {
+          throw new Error(`AGENT_TURN_RUNNING_SUPERSEDE_AMBIGUOUS:${thread.id}`)
+        }
+        if (supersededApprovalTurnIds.length > 0 && supersededRunningTurns.length > 0) {
+          throw new Error(`AGENT_TURN_ACTIVE_SUPERSEDE_AMBIGUOUS:${thread.id}`)
+        }
+        const supersededRunningTurn = supersededRunningTurns[0] ?? null
+        if (supersededRunningTurn) {
+          acceptedModelHistoryVersion = await closeAgentTurnApprovalHistoryInTransaction({
+            tx,
+            thread,
+            turnId: supersededRunningTurn.id,
+            terminalMessage:
+              'The user superseded this Turn with a newer message. Durable Tool, Task, Provider, Billing, and Resource facts remain authoritative.',
+          })
+        }
+        const supersededQueuedTurns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+          SELECT *
+          FROM project_agent_turns
+          WHERE threadId = ${command.threadId}
+            AND status = 'queued'
+            AND sourceKind <> ${AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP}
+          ORDER BY createdAt ASC, id ASC
+          FOR UPDATE
+        `)
+        const supersededForegroundTurnIds = [
+          ...(supersededRunningTurn ? [supersededRunningTurn.id] : []),
+          ...supersededQueuedTurns.map((turn) => turn.id),
+        ]
+        if (supersededForegroundTurnIds.length > 0) {
+          const now = new Date()
+          await tx.agentTurnInteraction.updateMany({
+            where: {
+              turnId: { in: supersededForegroundTurnIds },
+              status: { in: ['pending', 'approved', 'rejected'] },
+            },
+            data: {
+              status: 'cancelled',
+              runState: null,
+              version: { increment: 1 },
+              resolvedAt: now,
+            },
+          })
+          const cancelled = await tx.projectAgentTurn.updateMany({
+            where: {
+              id: { in: supersededForegroundTurnIds },
+              status: { in: ['queued', 'running'] },
+            },
+            data: {
+              status: 'cancelled',
+              stopReason: 'superseded_by_user_turn',
+              cancelRequestId: command.requestId,
+              cancelReason: 'superseded_by_user_turn',
+              errorCode: null,
+              errorMessage: null,
+              finishedAt: now,
+            },
+          })
+          if (cancelled.count !== supersededForegroundTurnIds.length) {
+            throw new Error(`AGENT_TURN_FOREGROUND_SUPERSEDE_CONFLICT:${thread.id}`)
+          }
         }
         await tx.agentTurnInteraction.updateMany({
           where: {

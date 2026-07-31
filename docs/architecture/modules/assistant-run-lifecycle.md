@@ -26,7 +26,9 @@ Operation。
 - **AR-02 — Turn 是最小运行单元。** 一个 Turn 只允许
   `queued → running → waiting_approval|completed|failed|interrupted|cancelled`
   的单调转换；waiting_approval只可恢复到running或cancelled；终态不可重开。一个Thread
-  同时最多一个 active Turn。
+  同时最多一个 active Turn。用户在前台Turn运行或排队期间发送的新消息是新的持久Turn，
+  不是对旧Turn的内存附注；最新消息原子supersede旧前台Turn，但不得取消已经创建的长期
+  Task、FollowUpBatch或其他durable effect。
 - **AR-03 — Turn source 唯一。** `threadId + sourceKind + sourceId` 唯一，其中
   sourceKind 穷尽为 `user|choice_response|task_follow_up`。同 identity 同 payload 返回原 Turn；
   不同 payload fail closed。模型或 UI 不能创建 fallback identity。
@@ -38,8 +40,9 @@ Operation。
   模型、不写Turn、不抢锁、不续heartbeat、不读取UI Thread猜恢复输入。浏览器在同一
   Thread scope 内持久保存尚未被View确认的命令identity；HTTP结果不明、刷新或精确重试
   必须复用它，View出现对应消息后才可删除。
-- **AR-05 — 模型 Activity 是一次性执行。** `maximumAttempts=1`，heartbeat 10 秒，
-  timeout 45 秒。刷新、SSE 断线或 HTTP 断开不取消 Turn；Worker/Activity 丢失把 Turn
+- **AR-05 — 模型 Activity 是一次性执行。** `maximumAttempts=1`，交互式Agent heartbeat
+  每1秒发送且Worker heartbeat throttle上限为1秒，heartbeat timeout 45 秒。刷新、SSE
+  断线或 HTTP 断开不取消 Turn；Worker/Activity 丢失把 Turn
   结算为 interrupted，不自动重放原模型调用。
 - **AR-06 — 完整 snapshot 才能进入模型历史。** token、reasoning delta 与未完成文本
   只进入 SSE overlay。只有 Agents SDK Session owner 产生的完整 snapshot 可在 settlement
@@ -100,7 +103,10 @@ Operation。
   失效 pending Approval、Choice 与 RunState；resume 前再次校验 Turn 仍可运行。旧卡片
   点击不能复活 dead Turn。普通user消息supersede waiting Approval时，必须先在同一事务
   追加冻结call的rejection result、推进history、拒绝interaction并取消旧Turn，再创建具有
-  新base version的前台Turn；它在内存队列和Coordinator恢复队列中都优先于旧后台follow-up。
+  新base version的前台Turn；普通user消息supersede running或queued前台Turn时，同一事务
+  保留全部用户消息、把旧前台Turn置为cancelled并只让最新Turn留在前台队列。Coordinator
+  必须取消旧Activity且等它真正退出后才启动最新Turn；stop/clear的成功回执也不得早于对应
+  Activity退出。新Turn在内存队列和Coordinator恢复队列中都优先于旧后台follow-up。
 - **AR-17 — clear 以 Thread identity 关闭全部旧恢复。** clear 经 Coordinator 串行，
   同一事务归档 Thread、取消其 pending FollowUpBatch、失效 interaction 与 RunState。
   新会话创建新 threadId；旧 Task 晚到不能在新 Thread 创建 ghost follow-up。
@@ -200,6 +206,7 @@ Operation。
 ```text
 route鉴权 → get/create Thread → Coordinator UWS
 → command Activity写user message+Turn
+→ 若存在旧前台Turn：事务取消旧Turn，Coordinator排空旧Activity并保留durable effects
 → model Activity运行
 → 完整snapshot+Turn terminal事务
 → View/SSE
@@ -237,9 +244,9 @@ Activity heartbeat timeout
 
 - 真实 Temporal + MySQL：并发 user turn、UWS complete race、command commit/ACK loss、
   已完成Coordinator后的Approval/cancel replay、deterministic update failure、Worker kill、
-  heartbeat timeout、cancel/clear、foreground/background恢复顺序、未完成source连续投影、
-  Approval checkpoint terminal closure、clear exact receipt、合法空Thread/version 0
-  interaction与跨Project Episode拒绝。
+  heartbeat timeout、运行中快速连续user消息、cancel回执等待Activity排空、cancel/clear、
+  foreground/background恢复顺序、未完成source连续投影、Approval checkpoint terminal
+  closure、clear exact receipt、合法空Thread/version 0 interaction与跨Project Episode拒绝。
 - 真实 Agents SDK：callId、Approval RunState跨Worker恢复、schema/graph版本拒绝。
 - 生产 registry conformance：Tool exposure/effect owner/outcome/choice commit/changed refs。
 - 人工产品复验：刷新、SSE断线、多标签页、interrupted、Approval/Choice、Subagent、
@@ -250,6 +257,14 @@ RunState 排空是环境盲区；未验证不得宣称架构完成。
 
 ## 历史回归
 
+- B+ 首版把运行中普通user消息直接拒绝为`AGENT_THREAD_BUSY`，并让stop/clear在MySQL已经
+  写cancelled、但旧Activity及Tool仍可能运行时就返回成功；旧防线只覆盖waiting Approval
+  supersede与持久终态，没有到达“真实运行Activity + 快速连续消息”的产品路径。这是从旧
+  Agent loop迁移Turn语义时的新实例漏接。当前用户消息在同一事务保留source并supersede旧
+  running/queued前台Turn，Coordinator以Temporal cancellation排空旧Activity后才启动最新
+  Turn；Tool入口再次检查同一AbortSignal，stop/clear也等待Activity退出。真实Temporal +
+  MySQL场景验证第一Turn已运行、第二Turn尚未启动又被第三Turn替换、全部source保留且只有
+  最新Turn执行。
 - B+ 首版把模型 Activity 与 Turn 终态收敛完成，却只保留日志级 context telemetry，
   没有调用账务模块已经声明的免费 usage writer；所有 Assistant token成本因此从项目统计
   消失。当前 runner 返回每段供应商 Usage，settlement 按 `turnId + attempt + phase` 与 Turn

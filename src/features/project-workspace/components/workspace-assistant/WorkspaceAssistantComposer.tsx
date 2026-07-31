@@ -122,19 +122,21 @@ export function WorkspaceAssistantComposer({
               <AppIcon name="plus" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
-          {canStopReply ? (
-            <button
-              type="button"
-              aria-label={t('panel.stopGenerating')}
-              title={t('panel.stopGenerating')}
-              onClick={() => {
-                void onStopReply()
-              }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
-            >
-              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
-            </button>
-          ) : (
+          <div className="flex items-center gap-1.5">
+            {canStopReply ? (
+              <button
+                type="button"
+                aria-label={t('panel.stopGenerating')}
+                title={t('panel.stopGenerating')}
+                disabled={pending}
+                onClick={() => {
+                  void onStopReply()
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--glass-stroke-base)] bg-white text-[var(--glass-text-primary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label={t('panel.send')}
@@ -149,7 +151,7 @@ export function WorkspaceAssistantComposer({
             >
               <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-          )}
+          </div>
         </div>
       </div>
       {error ? (

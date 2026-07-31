@@ -49,6 +49,7 @@ async function loadInterruptedTurnEffectDigest(currentTurnId: string): Promise<{
       threadId: true,
       status: true,
       startedAt: true,
+      createdAt: true,
       modelHistoryBaseVersion: true,
     },
   })
@@ -66,14 +67,15 @@ async function loadInterruptedTurnEffectDigest(currentTurnId: string): Promise<{
       threadId: current.threadId,
       status: { in: ['interrupted', 'failed', 'cancelled'] },
       modelHistoryBaseVersion: current.modelHistoryBaseVersion,
-      startedAt: { lte: current.startedAt },
+      createdAt: { lte: current.createdAt },
     },
-    orderBy: [{ startedAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
       id: true,
       sourceKind: true,
       sourceId: true,
       status: true,
+      stopReason: true,
       userMessageJson: true,
     },
   })
@@ -189,10 +191,12 @@ async function loadInterruptedTurnEffectDigest(currentTurnId: string): Promise<{
           } else {
             throw new Error(`INTERRUPTED_TURN_SOURCE_KIND_INVALID:${turn.id}:${turn.sourceKind}`)
           }
-          const cancelledInstruction =
-            turn.status === 'cancelled'
-              ? 'This source belonged to a cancelled Turn. Preserve it as conversation context, but do not execute it unless the current Turn explicitly asks.'
-              : 'This source belonged to an unfinished Turn whose assistant output was not committed. Preserve its meaning when answering the current Turn.'
+          const continuationInstruction =
+            turn.status === 'cancelled' && turn.stopReason === 'superseded_by_user_turn'
+              ? 'A newer user message superseded this Turn before its assistant output completed. Preserve this source as preceding conversation context, reconcile it with the newer input, and let the latest user instruction win.'
+              : turn.status === 'cancelled'
+                ? 'This source belonged to a cancelled Turn. Preserve it as conversation context, but do not execute it unless the current Turn explicitly asks.'
+                : 'This source belonged to an unfinished Turn whose assistant output was not committed. Preserve its meaning when answering the current Turn.'
           return [
             {
               role: 'user',
@@ -201,7 +205,7 @@ async function loadInterruptedTurnEffectDigest(currentTurnId: string): Promise<{
                 `turnId=${turn.id}`,
                 `sourceKind=${turn.sourceKind}`,
                 `terminalStatus=${turn.status}`,
-                cancelledInstruction,
+                continuationInstruction,
               ].join('\n'),
             } satisfies AgentInputItem,
             sourceInput,

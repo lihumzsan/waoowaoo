@@ -179,6 +179,7 @@ export function createAgentTurnOperationTools<Context>(
     input: unknown,
     callId: string,
   ): Promise<ProjectAgentToolResult<unknown>> => {
+    params.signal.throwIfAborted()
     identify(callId, operation.id)
     try {
       if (terminalChoiceCallId && terminalChoiceCallId !== callId) {
@@ -341,6 +342,7 @@ export function createAgentTurnOperationTools<Context>(
       })
       return { ok: true, data: result.data }
     } catch (error) {
+      params.signal.throwIfAborted()
       return failedResult(operation.id, error, operation)
     }
   }
@@ -349,6 +351,7 @@ export function createAgentTurnOperationTools<Context>(
     operation: ProjectAgentOperationDefinition,
     callId: string,
   ): Promise<boolean> => {
+    params.signal.throwIfAborted()
     identify(callId, operation.id)
     if (params.approvedInvocationByCallId?.[callId]) return false
     return (
@@ -368,6 +371,7 @@ export function createAgentTurnOperationTools<Context>(
       input: unknown,
       callId?: string,
     ) => {
+      params.signal.throwIfAborted()
       const invocation = readProjectAgentOperationGatewayInput(input)
       const operation = params.registry[invocation.operationId]
       if (!operation?.channels.tool) return false
@@ -400,6 +404,7 @@ export function createAgentTurnOperationTools<Context>(
         }
         return await executeOperation(operation, invocation.arguments, callId)
       } catch (error) {
+        params.signal.throwIfAborted()
         return failedResult(operationId, error, params.registry[operationId])
       }
     },

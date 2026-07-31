@@ -427,25 +427,30 @@ export async function agentThreadCoordinatorWorkflow(
         return replay
       }
       const foreground = envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP
+      const userTurn = envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
       const canSupersedeApproval =
         lastTurn?.status === 'waiting_approval' &&
-        approvalResolution === null &&
-        envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
+        userTurn
       if (
         foreground &&
         lastTurn?.status === 'waiting_approval' &&
-        (envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.USER || approvalResolution !== null)
+        !userTurn
       ) {
         return fail('AGENT_THREAD_BUSY', lastTurn.turnId)
       }
       if (
         foreground &&
+        !userTurn &&
         (activeTurnId !== null ||
           (queued.length > 0 && pendingChoiceTurnId === null && !canSupersedeApproval))
       ) {
         return fail('AGENT_THREAD_BUSY', activeTurnId ?? queued[0]?.turn.id)
       }
-      if (queued.length >= 64) {
+      const replaceableForegroundCount = userTurn
+        ? queued.filter((entry) => entry.turn.sourceKind !== AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP)
+            .length
+        : 0
+      if (queued.length - replaceableForegroundCount >= 64) {
         return fail('AGENT_THREAD_FOLLOW_UP_QUEUE_EXHAUSTED')
       }
       admissionInFlight = true
@@ -454,20 +459,48 @@ export async function agentThreadCoordinatorWorkflow(
           workflowId: input.workflowId,
           envelope,
         })
+        const admitsUserSuccessor =
+          userTurn && receipt.outcome === 'accepted' && receipt.turn.status === 'queued'
         const supersedesChoice =
           pendingChoiceTurnId !== null &&
-          envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
-        const supersedesApproval = canSupersedeApproval
+          pendingChoiceTurnId !== receipt.turn?.id &&
+          admitsUserSuccessor
+        const supersedesApproval =
+          canSupersedeApproval &&
+          lastTurn?.turnId !== receipt.turn?.id &&
+          admitsUserSuccessor
         const supersededApprovalTurnId = supersedesApproval ? (lastTurn?.turnId ?? null) : null
-        const recorded = recordAdmission(envelope, receipt, supersedesChoice || supersedesApproval)
+        const supersedesActiveTurn =
+          admitsUserSuccessor && activeTurnId !== null && activeTurnId !== receipt.turn?.id
+        if (admitsUserSuccessor) {
+          for (let index = queued.length - 1; index >= 0; index -= 1) {
+            const entry = queued[index]
+            if (
+              entry &&
+              entry.turn.id !== receipt.turn.id &&
+              entry.turn.sourceKind !== AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP
+            ) {
+              queued.splice(index, 1)
+            }
+          }
+        }
+        const recorded = recordAdmission(
+          envelope,
+          receipt,
+          admitsUserSuccessor || supersedesChoice || supersedesApproval,
+        )
         if (supersedesChoice) pendingChoiceTurnId = null
         if (supersededApprovalTurnId) {
+          approvalResolution = null
           lastTurn = {
             turnId: supersededApprovalTurnId,
             status: 'cancelled',
             stopReason: 'superseded_by_user_turn',
             errorCode: null,
           }
+        }
+        if (supersedesActiveTurn) {
+          activeExecutionScope?.cancel()
         }
         return recorded
       } finally {
@@ -585,6 +618,7 @@ export async function agentThreadCoordinatorWorkflow(
         }
         if (isActive) {
           activeExecutionScope?.cancel()
+          await condition(() => activeTurnId !== command.turnId)
         }
         return receipt
       } finally {
@@ -640,7 +674,11 @@ export async function agentThreadCoordinatorWorkflow(
               errorCode: null,
             }
           }
+          const drainingTurnId = activeTurnId
           activeExecutionScope?.cancel()
+          if (drainingTurnId !== null) {
+            await condition(() => activeTurnId !== drainingTurnId)
+          }
           return receipt
         } finally {
           lifecycleInFlight = false

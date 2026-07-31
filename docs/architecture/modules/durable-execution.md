@@ -52,8 +52,9 @@ SQLite 影子 schema 已删除，不允许再维护第二套模型或把它当�
   `threadId` 构造。Project、Episode、user、assistant 或 UI scope 组合不能替代 Thread
   identity；Thread clear 后新建的 Thread 必须得到新的 Coordinator identity。
 - **DE-03 — Coordinator 必须极薄。** 只允许 command admission、active Turn 互斥、
-  waiting Approval、pending Choice Offer、pending follow-up FIFO、前台命令优先、cancel/clear
-  与 model Activity 调度；同一优先级顺序必须可从MySQL恢复，不能只存在Workflow内存。
+  waiting Approval、pending Choice Offer、pending follow-up FIFO、最新前台user Turn优先、
+  前台supersede、cancel/clear与 model Activity 调度；同一优先级顺序必须可从MySQL恢复，
+  不能只存在Workflow内存。
   Coordinator 内禁止业务 timer、poll、lease、heartbeat state、fence、reconciler、
   Prompt、导演步骤或完整模型历史。
 - **DE-04 — Workflow 确定性，I/O 全部在 Activity。** 数据库、Redis、SSE、模型、
@@ -64,7 +65,9 @@ SQLite 影子 schema 已删除，不允许再维护第二套模型或把它当�
   再按threadId提交typed Update-With-Start；Approval、Choice、cancel与clear同样不得
   退回只适用于存活execution的普通Update。首个Activity在一个业务事务中写入用户消息与
   AgentTurn；事务提交后Update才能返回accepted。Temporal接收Update本身不能代表产品已
-  接受命令。
+  接受命令。运行中或排队中的普通user Turn不构成拒绝新user消息的busy条件；admission
+  Activity原子保留新source、终止旧前台Turn，Workflow负责排空旧Activity并只调度最新前台
+  Turn。Choice response等非user前台命令仍按其精确生命周期失败关闭。
 - **DE-06 — 跨 Workflow execution 去重属于 MySQL。** Turn source唯一键为
   `threadId + sourceKind + sourceId`，Approval/cancel等生命周期命令也由其MySQL owner保存
   write-once决定/终态receipt；所有命令另冻结包含reason等完整字段的canonical payload
@@ -76,10 +79,10 @@ SQLite 影子 schema 已删除，不允许再维护第二套模型或把它当�
   无 active Turn、无 pending command、无 pending follow-up，且
   `allHandlersFinished()`。Client 遇到 Workflow 刚完成的 UWS 竞态，使用同一业务 identity
   重试。
-- **DE-08 — Agent model Activity 不透明重跑。** heartbeat 每 10 秒，heartbeat timeout
-  45 秒，`maximumAttempts=1`。Worker 丢失、timeout 或不可恢复的进程中断把当前 Turn
-  结算为 `interrupted`；不得重新请求模型生成原 Turn，不恢复 token 位置或 JavaScript
-  Promise。
+- **DE-08 — Agent model Activity 不透明重跑。** 交互式Agent heartbeat每1秒，Worker
+  heartbeat throttle上限1秒，heartbeat timeout 45秒，`maximumAttempts=1`。Worker丢失、
+  timeout或不可恢复的进程中断把当前Turn结算为`interrupted`；不得重新请求模型生成原
+  Turn，不恢复token位置或JavaScript Promise。
 - **DE-09 — 只提交完整模型历史。** UI 流式增量可丢；只有完整且通过 SDK Session owner
   提交的 model snapshot 才进入 Thread 历史。`interrupted` Turn 已经产生的 Tool、Task、
   Provider、Billing 和 Resource 事实不会回滚，也不得伪造为未发生。Approval snapshot已
@@ -213,6 +216,8 @@ Agent Tool/API以stable identity和immutable envelope启动OperationExecutionWor
 | Task terminal commit后Worker丢失 | terminal exact replay，再执行capacity release与notify |
 | 重复/乱序Task terminal | Task terminal与Batch member均按identity幂等 |
 | 前台Turn与follow-up并发 | follow-up FIFO排队，不抢占前台Turn |
+| 运行中连续发送user消息 | 每条source持久化；旧running/queued前台Turn原子supersede，旧Activity退出后只启动最新Turn |
+| stop/clear与仍运行Activity | Temporal等待Activity取消完成后才确认成功；Tool入口同时观察同一AbortSignal |
 | cancel与已提交完成竞争 | 已提交业务事实优先；cancel只阻止尚未发生的执行 |
 | Task handler checkpoint提交后cancel/Workflow failure | terminal owner重读checkpoint并提交completed；不得改写cancel/failed |
 | cancel/supersede与旧审批点击 | 同事务失效interaction；resume再次校验Turn仍可恢复 |
@@ -260,7 +265,8 @@ revision发生分歧时必须失败关闭。Operation业务事务成功后，Tem
 只保留符合测试治理准入的证据：
 
 - 真实 Temporal + MySQL 的 Turn/Task identity、事务重放、重复/乱序、Worker kill、
-  heartbeat timeout、commit/ACK loss 与 capacity release；
+  heartbeat timeout、commit/ACK loss、运行中快速user消息supersede、cancel drain与
+  capacity release；
 - Provider invocation 的 external id 与 outcome_unknown；
 - 从生产 Task/Operation/Tool registry 穷尽的 conformance；
 - Approval 的真实 Agents SDK RunState 跨 Worker 恢复；
@@ -282,6 +288,15 @@ cloud/self-hosted Temporal 运维仍属于发布环境盲区；未实际验证�
 
 ## 历史回归
 
+- B+ 首版把正在运行的前台Turn解释成新user消息的硬busy条件，同时cancel/clear只保证DB
+  终态提交，没有等待`WAIT_CANCELLATION_COMPLETED`对应的Activity真实退出；因此用户快速
+  修正文案会看到Busy，点击停止后立刻发送仍可能与旧Tool重叠。旧Approval supersede与
+  terminal settlement测试没有覆盖真实Activity取消顺序；Temporal SDK默认还会把45秒
+  timeout的heartbeat节流约36秒，使cancel即使已请求也迟迟到不了Activity。当前MySQL
+  admission是唯一supersede writer，Temporal只负责取消并排空旧执行，最新Turn复用现有
+  队列优先级；没有
+  新增mailbox、timer、表或Workflow。真实Temporal history与MySQL事实共同证明旧Activity
+  `cancelled`事件先于最新Turn `started`，stop回执也晚于Activity退出。
 - 旧控制面先后叠加 DB Run、Redis lock/heartbeat、Wait、Outbox、ExecutionHandoff、
   continuation claim/fence、Task reconciler 和 UI event reducer。每一层都修复一个崩溃
   窗口，却同时增加新的合法状态解释者，导致“修复后换形式复发”。当前防线是删除竞争

@@ -212,7 +212,7 @@ function startTurnHeartbeat(params: { turnId: string; executionOwnerId: string }
     })
   }
   beat()
-  const timer = setInterval(beat, 10_000)
+  const timer = setInterval(beat, 1_000)
   timer.unref()
   return () => clearInterval(timer)
 }
