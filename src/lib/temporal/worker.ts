@@ -3,26 +3,19 @@ import { VersioningBehavior } from '@temporalio/common'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { createScopedLogger } from '@/lib/logging/core'
 import * as activities from './activities'
-import {
-  buildTemporalConnectionOptions,
-  getTemporalRuntimeConfig,
-} from './config'
+import { buildTemporalConnectionOptions, getTemporalWorkerRuntimeConfig } from './config'
 
 const logger = createScopedLogger({ module: 'temporal.worker' })
 
 async function runTemporalWorker(): Promise<void> {
-  const config = getTemporalRuntimeConfig()
-  const connection = await NativeConnection.connect(
-    buildTemporalConnectionOptions(config),
-  )
+  const config = getTemporalWorkerRuntimeConfig()
+  const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   try {
     const worker = await Worker.create({
       connection,
       namespace: config.namespace,
       taskQueue: config.taskQueue,
-      workflowsPath: fileURLToPath(
-        new URL('./workflows/index.ts', import.meta.url),
-      ),
+      workflowsPath: fileURLToPath(new URL('./workflows/index.ts', import.meta.url)),
       activities,
       workerDeploymentOptions: config.workerVersioningEnabled
         ? {
@@ -62,13 +55,14 @@ void runTemporalWorker().catch((error: unknown) => {
   logger.error({
     action: 'temporal.worker.failed',
     message: 'Temporal worker failed',
-    error: error instanceof Error
-      ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-        }
-      : { message: String(error) },
+    error:
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          }
+        : { message: String(error) },
   })
   process.exitCode = 1
 })

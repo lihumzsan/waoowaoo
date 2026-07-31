@@ -1,7 +1,4 @@
-import {
-  getDeploymentConfig,
-  type DeploymentConfig,
-} from '@/lib/deployment/config'
+import { getDeploymentConfig, type DeploymentConfig } from '@/lib/deployment/config'
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 
@@ -12,33 +9,26 @@ export interface TemporalRuntimeConfig {
   apiKey: string | null
   tlsEnabled: boolean
   tlsServerName: string | null
+}
+
+export interface TemporalWorkerRuntimeConfig extends TemporalRuntimeConfig {
   workerDeploymentName: string
   workerBuildId: string
   workerVersioningEnabled: boolean
 }
 
-function readOptionalString(
-  env: RuntimeEnvironment,
-  name: string,
-): string | null {
+function readOptionalString(env: RuntimeEnvironment, name: string): string | null {
   const value = env[name]?.trim()
   return value || null
 }
 
-function readRequiredString(
-  env: RuntimeEnvironment,
-  name: string,
-): string {
+function readRequiredString(env: RuntimeEnvironment, name: string): string {
   const value = readOptionalString(env, name)
   if (!value) throw new Error(`${name}_REQUIRED`)
   return value
 }
 
-function readBoolean(
-  env: RuntimeEnvironment,
-  name: string,
-  defaultValue: boolean,
-): boolean {
+function readBoolean(env: RuntimeEnvironment, name: string, defaultValue: boolean): boolean {
   const value = readOptionalString(env, name)
   if (value === null) return defaultValue
   if (value === 'true') return true
@@ -50,40 +40,26 @@ function isProductionRuntime(env: RuntimeEnvironment): boolean {
   return env.NODE_ENV === 'production'
 }
 
-function readWorkerBuildId(
-  env: RuntimeEnvironment,
-  defaultValue: string | null,
-): string {
+function readWorkerBuildId(env: RuntimeEnvironment, defaultValue: string | null): string {
   const buildId =
-    readOptionalString(env, 'TEMPORAL_WORKER_BUILD_ID')
-    ?? defaultValue
-    ?? readRequiredString(env, 'TEMPORAL_WORKER_BUILD_ID')
-  if (
-    isProductionRuntime(env)
-    && buildId.toLowerCase() === 'local'
-  ) {
+    readOptionalString(env, 'TEMPORAL_WORKER_BUILD_ID') ??
+    defaultValue ??
+    readRequiredString(env, 'TEMPORAL_WORKER_BUILD_ID')
+  if (isProductionRuntime(env) && buildId.toLowerCase() === 'local') {
     throw new Error('TEMPORAL_WORKER_BUILD_ID_IMMUTABLE_REQUIRED')
   }
   return buildId
 }
 
-function readWorkerVersioningEnabled(
-  env: RuntimeEnvironment,
-): boolean {
-  const enabled = readBoolean(
-    env,
-    'TEMPORAL_WORKER_VERSIONING_ENABLED',
-    false,
-  )
+function readWorkerVersioningEnabled(env: RuntimeEnvironment): boolean {
+  const enabled = readBoolean(env, 'TEMPORAL_WORKER_VERSIONING_ENABLED', false)
   if (isProductionRuntime(env) && !enabled) {
     throw new Error('TEMPORAL_WORKER_VERSIONING_REQUIRED_PRODUCTION')
   }
   return enabled
 }
 
-function readSelfHostedConfig(
-  env: RuntimeEnvironment,
-): TemporalRuntimeConfig {
+function readSelfHostedConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
   const apiKey = readOptionalString(env, 'TEMPORAL_API_KEY')
   if (apiKey) throw new Error('TEMPORAL_API_KEY_FORBIDDEN_SELF_HOSTED')
   const tlsEnabled = readBoolean(env, 'TEMPORAL_TLS_ENABLED', false)
@@ -98,19 +74,10 @@ function readSelfHostedConfig(
     apiKey: null,
     tlsEnabled,
     tlsServerName,
-    workerDeploymentName:
-      readOptionalString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME') ?? 'waoowaoo',
-    workerBuildId: readWorkerBuildId(
-      env,
-      isProductionRuntime(env) ? null : 'local',
-    ),
-    workerVersioningEnabled: readWorkerVersioningEnabled(env),
   }
 }
 
-function readCloudConfig(
-  env: RuntimeEnvironment,
-): TemporalRuntimeConfig {
+function readCloudConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
   if (!readBoolean(env, 'TEMPORAL_TLS_ENABLED', true)) {
     throw new Error('TEMPORAL_TLS_REQUIRED_CLOUD')
   }
@@ -121,12 +88,6 @@ function readCloudConfig(
     apiKey: readRequiredString(env, 'TEMPORAL_API_KEY'),
     tlsEnabled: true,
     tlsServerName: readOptionalString(env, 'TEMPORAL_TLS_SERVER_NAME'),
-    workerDeploymentName: readRequiredString(
-      env,
-      'TEMPORAL_WORKER_DEPLOYMENT_NAME',
-    ),
-    workerBuildId: readWorkerBuildId(env, null),
-    workerVersioningEnabled: readWorkerVersioningEnabled(env),
   }
 }
 
@@ -134,14 +95,26 @@ export function getTemporalRuntimeConfig(
   env: RuntimeEnvironment = process.env,
   deployment: DeploymentConfig = getDeploymentConfig(),
 ): TemporalRuntimeConfig {
-  return deployment.edition === 'cloud'
-    ? readCloudConfig(env)
-    : readSelfHostedConfig(env)
+  return deployment.edition === 'cloud' ? readCloudConfig(env) : readSelfHostedConfig(env)
 }
 
-export function buildTemporalConnectionOptions(
-  config: TemporalRuntimeConfig,
-): {
+export function getTemporalWorkerRuntimeConfig(
+  env: RuntimeEnvironment = process.env,
+  deployment: DeploymentConfig = getDeploymentConfig(),
+): TemporalWorkerRuntimeConfig {
+  const runtime = getTemporalRuntimeConfig(env, deployment)
+  return {
+    ...runtime,
+    workerDeploymentName:
+      deployment.edition === 'cloud'
+        ? readRequiredString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME')
+        : (readOptionalString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME') ?? 'waoowaoo'),
+    workerBuildId: readWorkerBuildId(env, isProductionRuntime(env) ? null : 'local'),
+    workerVersioningEnabled: readWorkerVersioningEnabled(env),
+  }
+}
+
+export function buildTemporalConnectionOptions(config: TemporalRuntimeConfig): {
   address: string
   apiKey?: string
   tls: false | true | { serverNameOverride: string }
