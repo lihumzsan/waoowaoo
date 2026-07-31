@@ -20,12 +20,15 @@ interface AppendProjectAssistantThreadMessagesInput extends ProjectAssistantThre
   messages: unknown
 }
 
-export interface CommitProjectAssistantTurnInput
-  extends ProjectAssistantThreadIdentity {
+export interface CommitProjectAssistantTurnInput extends ProjectAssistantThreadIdentity {
   threadId: string
   expectedModelHistoryVersion: number
   messages: unknown
   modelHistoryItems: readonly AgentInputItem[]
+}
+
+export interface ProjectAssistantThreadLockInput extends ProjectAssistantThreadIdentity {
+  threadId: string
 }
 
 interface ReplaceProjectAssistantThreadPlanInput extends ProjectAssistantThreadIdentity {
@@ -52,9 +55,7 @@ function validateModelHistoryItem(value: unknown): AgentInputItem {
   return structuredClone(value) as AgentInputItem
 }
 
-export function parseProjectAssistantModelHistory(
-  value: unknown,
-): AgentInputItem[] {
+export function parseProjectAssistantModelHistory(value: unknown): AgentInputItem[] {
   if (!Array.isArray(value)) throw new Error('PROJECT_ASSISTANT_MODEL_HISTORY_INVALID')
   return value.map(validateModelHistoryItem)
 }
@@ -81,7 +82,10 @@ export async function validateProjectAssistantThreadMessages(
   return ensureUniqueUIMessages(validation.data)
 }
 
-function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[]): ProjectAssistantThreadSnapshot {
+function toThreadSnapshot(
+  record: ProjectAssistantThread,
+  messages: UIMessage[],
+): ProjectAssistantThreadSnapshot {
   return {
     id: record.id,
     assistantId: record.assistantId as ProjectAssistantId,
@@ -112,7 +116,8 @@ function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMe
       const prior = toolPartLocations.get(part.toolCallId)
       if (!prior) return true
       const priorMessage = nextMessages[prior.messageIndex]
-      if (!priorMessage) throw new Error(`PROJECT_ASSISTANT_TOOL_CALL_MESSAGE_MISSING:${part.toolCallId}`)
+      if (!priorMessage)
+        throw new Error(`PROJECT_ASSISTANT_TOOL_CALL_MESSAGE_MISSING:${part.toolCallId}`)
       priorMessage.parts[prior.partIndex] = part
       return false
     })
@@ -177,7 +182,9 @@ export async function getOrCreateProjectAssistantThread(
 export async function appendProjectAssistantThreadMessages(
   input: AppendProjectAssistantThreadMessagesInput,
 ): Promise<ProjectAssistantThreadSnapshot> {
-  return await prisma.$transaction(async (tx) => appendProjectAssistantThreadMessagesInTransaction(tx, input))
+  return await prisma.$transaction(async (tx) =>
+    appendProjectAssistantThreadMessagesInTransaction(tx, input),
+  )
 }
 
 export async function appendProjectAssistantThreadMessagesInTransaction(
@@ -285,9 +292,33 @@ export async function commitProjectAssistantTurnInTransaction(
   const threadId = input.threadId.trim()
   if (!threadId) throw new Error('PROJECT_ASSISTANT_THREAD_ID_REQUIRED')
   const appendedMessages = await validateProjectAssistantThreadMessages(input.messages)
-  const serializedModelHistory = serializeProjectAssistantModelHistory(
-    input.modelHistoryItems,
-  )
+  const serializedModelHistory = serializeProjectAssistantModelHistory(input.modelHistoryItems)
+  const record = await lockProjectAssistantThreadScopeInTransaction(tx, input)
+  if (record.modelHistoryVersion !== input.expectedModelHistoryVersion) {
+    throw new Error(
+      `PROJECT_ASSISTANT_MODEL_HISTORY_VERSION_CONFLICT:${record.modelHistoryVersion}:${input.expectedModelHistoryVersion}`,
+    )
+  }
+  const existingMessages = await readThreadMessages(record)
+  const nextMessages = mergeAppendMessages(existingMessages, appendedMessages)
+  const updated = await tx.projectAssistantThread.update({
+    where: { id: threadId },
+    data: {
+      messagesJson: serializeProjectAssistantThreadMessages(nextMessages),
+      modelHistoryJson: serializedModelHistory,
+      modelHistoryVersion: { increment: 1 },
+    },
+  })
+  return toThreadSnapshot(updated, nextMessages)
+}
+
+/** Acquire the repository-wide Project -> Thread lock order and validate scope. */
+export async function lockProjectAssistantThreadScopeInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: ProjectAssistantThreadLockInput,
+): Promise<ProjectAssistantThread> {
+  const threadId = input.threadId.trim()
+  if (!threadId) throw new Error('PROJECT_ASSISTANT_THREAD_ID_REQUIRED')
   const scopeRef = buildProjectAssistantScopeRef(input)
   const lockedProjects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT id
@@ -311,31 +342,16 @@ export async function commitProjectAssistantTurnInTransaction(
     where: { id: threadId },
   })
   if (
-    !record
-    || record.projectId !== input.projectId
-    || record.userId !== input.userId
-    || record.assistantId !== input.assistantId
-    || record.episodeId !== (input.episodeId || null)
-    || record.scopeRef !== scopeRef
+    !record ||
+    record.projectId !== input.projectId ||
+    record.userId !== input.userId ||
+    record.assistantId !== input.assistantId ||
+    record.episodeId !== (input.episodeId || null) ||
+    record.scopeRef !== scopeRef
   ) {
     throw new Error(`PROJECT_ASSISTANT_THREAD_SCOPE_DIVERGED:${threadId}`)
   }
-  if (record.modelHistoryVersion !== input.expectedModelHistoryVersion) {
-    throw new Error(
-      `PROJECT_ASSISTANT_MODEL_HISTORY_VERSION_CONFLICT:${record.modelHistoryVersion}:${input.expectedModelHistoryVersion}`,
-    )
-  }
-  const existingMessages = await readThreadMessages(record)
-  const nextMessages = mergeAppendMessages(existingMessages, appendedMessages)
-  const updated = await tx.projectAssistantThread.update({
-    where: { id: threadId },
-    data: {
-      messagesJson: serializeProjectAssistantThreadMessages(nextMessages),
-      modelHistoryJson: serializedModelHistory,
-      modelHistoryVersion: { increment: 1 },
-    },
-  })
-  return toThreadSnapshot(updated, nextMessages)
+  return record
 }
 
 export async function replaceProjectAssistantThreadPlanInTransaction(

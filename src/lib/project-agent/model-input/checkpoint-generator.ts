@@ -8,6 +8,7 @@ import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import { resolveUtilityModelKey } from '@/lib/ai-exec/utility-model'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getProviderKey } from '@/lib/ai-registry/selection'
+import { projectAiLlmUsage, type LlmUsageFact } from '@/lib/billing/llm-usage'
 import {
   PROJECT_AGENT_CONTEXT_CHECKPOINT_VERSION,
   buildProjectAgentCheckpointTranscript,
@@ -20,7 +21,10 @@ export async function generateProjectAgentContextCheckpoint(input: {
   userId: string
   items: readonly AgentInputItem[]
   signal?: AbortSignal
-}): Promise<ProjectAgentContextCheckpoint> {
+}): Promise<{
+  checkpoint: ProjectAgentContextCheckpoint
+  usage: LlmUsageFact
+}> {
   if (input.items.length === 0) {
     throw new Error('PROJECT_AGENT_CONTEXT_CHECKPOINT_INPUT_EMPTY')
   }
@@ -93,9 +97,16 @@ export async function generateProjectAgentContextCheckpoint(input: {
 
   const checkpointText = generated.text.trim()
   if (!checkpointText) throw new Error('PROJECT_AGENT_CONTEXT_CHECKPOINT_EMPTY')
-  return projectAgentContextCheckpointSchema.parse({
-    version: PROJECT_AGENT_CONTEXT_CHECKPOINT_VERSION,
-    replacedItemCount: input.items.length,
-    checkpointText,
-  } satisfies ProjectAgentContextCheckpoint)
+  return {
+    checkpoint: projectAgentContextCheckpointSchema.parse({
+      version: PROJECT_AGENT_CONTEXT_CHECKPOINT_VERSION,
+      replacedItemCount: input.items.length,
+      checkpointText,
+    } satisfies ProjectAgentContextCheckpoint),
+    usage: projectAiLlmUsage({
+      phase: 'context_compaction',
+      modelKey: selection.modelKey,
+      usage: projected.usage,
+    }),
+  }
 }

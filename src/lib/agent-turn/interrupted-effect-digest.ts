@@ -1,12 +1,25 @@
 import type { AgentInputItem } from '@openai/agents'
 import { prisma } from '@/lib/prisma'
+import { validateProjectAssistantThreadMessages } from '@/lib/project-agent/persistence'
+import { AGENT_TURN_SOURCE_KIND } from './contracts'
+import { loadResolvedAgentTurnChoiceInput } from './choice'
+import { loadAgentTurnFollowUpInput } from './follow-up-batch'
+import { buildAgentTurnUserInputItem } from './runner-input'
 
 const INTERRUPTED_EFFECT_DIGEST_MAX_BYTES = 1_024 * 1_024
 
 export interface InterruptedTurnEffectDigest {
-  protocol: 'interrupted_turn_effect_digest_v1'
-  priorTurnId: string
+  protocol: 'interrupted_turn_continuation_v3'
+  priorTurnIds: readonly string[]
+  sourceFacts: readonly {
+    turnId: string
+    sourceKind: string
+    sourceId: string
+    terminalStatus: string
+    sourceCommittedToHistory: boolean
+  }[]
   completedEffects: readonly {
+    turnId: string
     callId: string
     operationId: string
     result: unknown
@@ -14,6 +27,7 @@ export interface InterruptedTurnEffectDigest {
   createdTaskIds: readonly string[]
   createdResourceIds: readonly string[]
   outcomeUnknownEffects: readonly {
+    turnId: string
     taskId: string
     operationId: string | null
     errorCode: string
@@ -24,9 +38,10 @@ function cloneJson(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value)) as unknown
 }
 
-async function loadInterruptedTurnEffectDigest(
-  currentTurnId: string,
-): Promise<InterruptedTurnEffectDigest | null> {
+async function loadInterruptedTurnEffectDigest(currentTurnId: string): Promise<{
+  digest: InterruptedTurnEffectDigest
+  sourceInputs: readonly AgentInputItem[]
+} | null> {
   const current = await prisma.projectAgentTurn.findUnique({
     where: { id: currentTurnId },
     select: {
@@ -38,44 +53,46 @@ async function loadInterruptedTurnEffectDigest(
     },
   })
   if (
-    !current
-    || current.status !== 'running'
-    || current.startedAt === null
-    || current.modelHistoryBaseVersion === null
+    !current ||
+    current.status !== 'running' ||
+    current.startedAt === null ||
+    current.modelHistoryBaseVersion === null
   ) {
-    throw new Error(
-      `INTERRUPTED_EFFECT_DIGEST_CURRENT_TURN_INVALID:${currentTurnId}`,
-    )
+    throw new Error(`INTERRUPTED_EFFECT_DIGEST_CURRENT_TURN_INVALID:${currentTurnId}`)
   }
-  const prior = await prisma.projectAgentTurn.findFirst({
+  const priorTurns = await prisma.projectAgentTurn.findMany({
     where: {
       id: { not: current.id },
       threadId: current.threadId,
-      status: 'interrupted',
+      status: { in: ['interrupted', 'failed', 'cancelled'] },
       modelHistoryBaseVersion: current.modelHistoryBaseVersion,
       startedAt: { lte: current.startedAt },
     },
-    orderBy: [
-      { startedAt: 'desc' },
-      { createdAt: 'desc' },
-      { id: 'desc' },
-    ],
-    select: { id: true },
+    orderBy: [{ startedAt: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      sourceKind: true,
+      sourceId: true,
+      status: true,
+      userMessageJson: true,
+    },
   })
-  if (!prior) return null
-  const [effects, batches] = await Promise.all([
+  if (priorTurns.length === 0) return null
+  const priorTurnIds = priorTurns.map((turn) => turn.id)
+  const [effects, batches, approvalCheckpoints] = await Promise.all([
     prisma.agentToolEffect.findMany({
-      where: { turnId: prior.id },
-      orderBy: [{ completedAt: 'asc' }, { callId: 'asc' }],
+      where: { turnId: { in: priorTurnIds } },
+      orderBy: [{ completedAt: 'asc' }, { turnId: 'asc' }, { callId: 'asc' }],
       select: {
+        turnId: true,
         callId: true,
         operationId: true,
         resultJson: true,
       },
     }),
     prisma.followUpBatch.findMany({
-      where: { originTurnId: prior.id },
-      orderBy: { id: 'asc' },
+      where: { originTurnId: { in: priorTurnIds } },
+      orderBy: [{ originTurnId: 'asc' }, { id: 'asc' }],
       include: {
         members: {
           orderBy: { taskId: 'asc' },
@@ -95,61 +112,127 @@ async function loadInterruptedTurnEffectDigest(
         },
       },
     }),
+    prisma.agentTurnInteraction.findMany({
+      where: {
+        turnId: { in: priorTurnIds },
+        kind: 'approval',
+      },
+      select: { turnId: true },
+      distinct: ['turnId'],
+    }),
   ])
-  const tasks = batches.flatMap((batch) => (
-    batch.members.map((member) => member.task)
-  ))
+  const sourceCommittedTurnIds = new Set(
+    approvalCheckpoints.map((interaction) => interaction.turnId),
+  )
+  const tasks = batches.flatMap((batch) =>
+    batch.members.map((member) => ({
+      ...member.task,
+      turnId: batch.originTurnId,
+    })),
+  )
   const digest: InterruptedTurnEffectDigest = {
-    protocol: 'interrupted_turn_effect_digest_v1',
-    priorTurnId: prior.id,
+    protocol: 'interrupted_turn_continuation_v3',
+    priorTurnIds,
+    sourceFacts: priorTurns.map((turn) => ({
+      turnId: turn.id,
+      sourceKind: turn.sourceKind,
+      sourceId: turn.sourceId,
+      terminalStatus: turn.status,
+      sourceCommittedToHistory: sourceCommittedTurnIds.has(turn.id),
+    })),
     completedEffects: effects.map((effect) => ({
+      turnId: effect.turnId,
       callId: effect.callId,
       operationId: effect.operationId,
       result: cloneJson(effect.resultJson),
     })),
     createdTaskIds: [...new Set(tasks.map((task) => task.id))].sort(),
     createdResourceIds: [
-      ...new Set(
-        tasks.flatMap((task) => (
-          task.creativeResources.map((resource) => resource.id)
-        )),
-      ),
+      ...new Set(tasks.flatMap((task) => task.creativeResources.map((resource) => resource.id))),
     ].sort(),
     outcomeUnknownEffects: tasks
-      .filter(
-        (task) => task.errorCode === 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
-      )
+      .filter((task) => task.errorCode === 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN')
       .map((task) => ({
+        turnId: task.turnId,
         taskId: task.id,
         operationId: task.operationId,
         errorCode: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
       }))
       .sort((left, right) => left.taskId.localeCompare(right.taskId)),
   }
-  const serialized = JSON.stringify(digest)
-  if (
-    Buffer.byteLength(serialized, 'utf8')
-    > INTERRUPTED_EFFECT_DIGEST_MAX_BYTES
-  ) {
-    throw new Error(
-      `INTERRUPTED_EFFECT_DIGEST_TOO_LARGE:${prior.id}`,
+  const sourceInputs = (
+    await Promise.all(
+      priorTurns
+        .flatMap((turn) => (sourceCommittedTurnIds.has(turn.id) ? [] : [turn]))
+        .map(async (turn) => {
+          let sourceInput: AgentInputItem
+          if (turn.sourceKind === AGENT_TURN_SOURCE_KIND.USER) {
+            if (turn.userMessageJson === null) {
+              throw new Error(`INTERRUPTED_TURN_USER_SOURCE_MISSING:${turn.id}`)
+            }
+            const messages = await validateProjectAssistantThreadMessages([turn.userMessageJson])
+            const message = messages[0]
+            if (!message || message.role !== 'user') {
+              throw new Error(`INTERRUPTED_TURN_USER_SOURCE_INVALID:${turn.id}`)
+            }
+            sourceInput = buildAgentTurnUserInputItem(message)
+          } else if (turn.sourceKind === AGENT_TURN_SOURCE_KIND.CHOICE_RESPONSE) {
+            sourceInput = await loadResolvedAgentTurnChoiceInput({
+              turnId: turn.id,
+              offerId: turn.sourceId,
+            })
+          } else if (turn.sourceKind === AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP) {
+            sourceInput = await loadAgentTurnFollowUpInput({
+              turnId: turn.id,
+              batchId: turn.sourceId,
+            })
+          } else {
+            throw new Error(`INTERRUPTED_TURN_SOURCE_KIND_INVALID:${turn.id}:${turn.sourceKind}`)
+          }
+          const cancelledInstruction =
+            turn.status === 'cancelled'
+              ? 'This source belonged to a cancelled Turn. Preserve it as conversation context, but do not execute it unless the current Turn explicitly asks.'
+              : 'This source belonged to an unfinished Turn whose assistant output was not committed. Preserve its meaning when answering the current Turn.'
+          return [
+            {
+              role: 'user',
+              content: [
+                '[interrupted_turn_source]',
+                `turnId=${turn.id}`,
+                `sourceKind=${turn.sourceKind}`,
+                `terminalStatus=${turn.status}`,
+                cancelledInstruction,
+              ].join('\n'),
+            } satisfies AgentInputItem,
+            sourceInput,
+            {
+              role: 'user',
+              content: '[/interrupted_turn_source]',
+            } satisfies AgentInputItem,
+          ]
+        }),
     )
+  ).flat()
+  const serialized = JSON.stringify({ digest, sourceInputs })
+  if (Buffer.byteLength(serialized, 'utf8') > INTERRUPTED_EFFECT_DIGEST_MAX_BYTES) {
+    throw new Error(`INTERRUPTED_EFFECT_DIGEST_TOO_LARGE:${priorTurnIds.join(',')}`)
   }
-  return digest
+  return { digest, sourceInputs }
 }
 
-export async function loadInterruptedTurnEffectDigestInput(
+export async function loadInterruptedTurnContinuationInputs(
   currentTurnId: string,
-): Promise<AgentInputItem | null> {
-  const digest = await loadInterruptedTurnEffectDigest(currentTurnId)
-  if (!digest) return null
-  return {
+): Promise<readonly AgentInputItem[]> {
+  const continuation = await loadInterruptedTurnEffectDigest(currentTurnId)
+  if (!continuation) return []
+  const digestInput = {
     role: 'user',
     content: [
-      '[interrupted_turn_effect_digest]',
-      JSON.stringify(digest),
-      'The prior Turn was interrupted after these durable effects were committed. Treat them as already performed. Do not repeat an effect merely because its unfinished model output is absent.',
-      '[/interrupted_turn_effect_digest]',
+      '[interrupted_turn_continuation]',
+      JSON.stringify(continuation.digest),
+      'The preceding preserved source items came from prior unfinished Turns. Treat listed durable effects as already performed and do not repeat them merely because unfinished assistant output is absent.',
+      '[/interrupted_turn_continuation]',
     ].join('\n'),
   } satisfies AgentInputItem
+  return [...continuation.sourceInputs, digestInput]
 }

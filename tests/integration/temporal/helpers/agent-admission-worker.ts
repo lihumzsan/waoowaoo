@@ -5,13 +5,11 @@ import type { AgentTurnAdmissionReceipt } from '@/lib/agent-turn/contracts'
 import {
   admitAgentTurn,
   cancelAgentTurn,
+  recoverAgentThread,
   resolveAgentTurnApproval,
 } from '@/lib/temporal/activities/agent-thread'
 import type { AdmitAgentTurnActivityInput } from '@/lib/temporal/agent-thread/contracts'
-import {
-  buildTemporalConnectionOptions,
-  getTemporalRuntimeConfig,
-} from '@/lib/temporal/config'
+import { buildTemporalConnectionOptions, getTemporalRuntimeConfig } from '@/lib/temporal/config'
 
 export interface AgentAdmissionWorkerHarness {
   readonly taskQueue: string
@@ -20,21 +18,18 @@ export interface AgentAdmissionWorkerHarness {
 }
 
 function requireTemporalTestRuntime(): void {
-  if (
-    process.env.NODE_ENV !== 'test'
-    || process.env.TEMPORAL_TEST_BOOTSTRAP !== '1'
-  ) {
+  if (process.env.NODE_ENV !== 'test' || process.env.TEMPORAL_TEST_BOOTSTRAP !== '1') {
     throw new Error('AGENT_TEMPORAL_TEST_RUNTIME_REQUIRED')
   }
   const namespace = process.env.TEMPORAL_NAMESPACE?.trim()
   const address = process.env.TEMPORAL_ADDRESS?.trim()
   const databaseUrl = process.env.DATABASE_URL?.trim()
   if (
-    !namespace
-    || !namespace.includes('test')
-    || !address
-    || !databaseUrl
-    || new URL(databaseUrl).pathname.replace(/^\//, '') !== 'waoowaoo_test'
+    !namespace ||
+    !namespace.includes('test') ||
+    !address ||
+    !databaseUrl ||
+    new URL(databaseUrl).pathname.replace(/^\//, '') !== 'waoowaoo_test'
   ) {
     throw new Error('AGENT_TEMPORAL_TEST_RUNTIME_UNSAFE')
   }
@@ -48,9 +43,7 @@ export async function startAgentAdmissionWorker(): Promise<AgentAdmissionWorkerH
     'agent-admission',
     randomUUID().replaceAll('-', '').slice(0, 12),
   ].join('-')
-  const connection = await NativeConnection.connect(
-    buildTemporalConnectionOptions(config),
-  )
+  const connection = await NativeConnection.connect(buildTemporalConnectionOptions(config))
   let shouldDropPostCommitAcknowledgement = true
   let markFaultInjected: (() => void) | null = null
   const postCommitFault = new Promise<void>((resolveFault) => {
@@ -73,12 +66,10 @@ export async function startAgentAdmissionWorker(): Promise<AgentAdmissionWorkerH
     connection,
     namespace: config.namespace,
     taskQueue,
-    workflowsPath: resolve(
-      process.cwd(),
-      'src/lib/temporal/workflows/index.ts',
-    ),
+    workflowsPath: resolve(process.cwd(), 'src/lib/temporal/workflows/index.ts'),
     activities: {
       admitAgentTurn: admitWithOnePostCommitFault,
+      recoverAgentThread,
       resolveAgentTurnApproval,
       cancelAgentTurn,
     },

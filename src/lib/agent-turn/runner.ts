@@ -12,6 +12,7 @@ import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import { readUIMessageStream, type UIMessage } from 'ai'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import { ensureAgentsLocalTracing } from '@/lib/ai-exec/agents-tracing'
+import { projectAgentsSdkUsage, type LlmUsageFact } from '@/lib/billing/llm-usage'
 import { readAssistantBillingConfirmationRequired } from '@/lib/project-agent/billing-confirmation'
 import { measureProjectAgentToolSchemas } from '@/lib/project-agent/context-telemetry'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
@@ -29,6 +30,7 @@ import {
 import { resolveProjectAssistantModelInputMedia } from '@/lib/project-agent/media-attachments/model-input-runtime'
 import { readProjectAgentPlan } from '@/lib/project-agent/plan'
 import {
+  createDataChunk,
   createProjectAgentSideChannel,
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
@@ -47,10 +49,7 @@ import {
 import { resolveProjectAgentToolset } from '@/lib/project-agent/toolset'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
-import {
-  AGENT_TURN_SOURCE_KIND,
-  type AgentTurnExecutionInput,
-} from './contracts'
+import { AGENT_TURN_SOURCE_KIND, type AgentTurnExecutionInput } from './contracts'
 import { AgentTurnModelSession } from './model-session'
 import {
   buildAgentTurnPlanInputItem,
@@ -61,16 +60,12 @@ import { createAgentTurnOperationTools } from './tools'
 import { deriveAgentTurnUserEvidence } from './user-evidence'
 import {
   authorizeAgentTurnOperationAutomatically,
+  loadSupersededAgentTurnApprovalInput,
   type AgentTurnApprovalResume,
 } from './approval'
-import {
-  loadResolvedAgentTurnChoiceInput,
-  type PreparedAgentTurnChoiceOffer,
-} from './choice'
+import { loadResolvedAgentTurnChoiceInput, type PreparedAgentTurnChoiceOffer } from './choice'
 import { loadAgentTurnFollowUpInput } from './follow-up-batch'
-import {
-  loadInterruptedTurnEffectDigestInput,
-} from './interrupted-effect-digest'
+import { loadInterruptedTurnContinuationInputs } from './interrupted-effect-digest'
 import { buildAgentTurnAssistantMessageId } from './stream-publisher'
 
 ensureAgentsLocalTracing()
@@ -92,7 +87,9 @@ export interface AgentTurnApprovalRequest {
   inputHash: string
 }
 
-export type AgentTurnRunnerResult =
+export type AgentTurnRunnerResult = {
+  usageFacts: readonly LlmUsageFact[]
+} & (
   | {
       status: 'completed'
       assistantMessage: UIMessage
@@ -112,6 +109,7 @@ export type AgentTurnRunnerResult =
       modelHistoryItems: AgentInputItem[]
       offer: PreparedAgentTurnChoiceOffer
     }
+)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -122,10 +120,7 @@ function requireUserMessage(message: UIMessage | null): UIMessage {
   return message
 }
 
-function readApprovalString(
-  item: RunToolApprovalItem,
-  key: string,
-): string | null {
+function readApprovalString(item: RunToolApprovalItem, key: string): string | null {
   const rawItem: unknown = item.rawItem
   if (!isRecord(rawItem)) return null
   const value = rawItem[key]
@@ -152,8 +147,7 @@ function buildApprovalRequests(params: {
   operationIdByCallId: ReadonlyMap<string, string>
 }): AgentTurnApprovalRequest[] {
   const requests = params.items.map((item) => {
-    const callId =
-      readApprovalString(item, 'callId') ?? readApprovalString(item, 'id')
+    const callId = readApprovalString(item, 'callId') ?? readApprovalString(item, 'id')
     if (!callId) throw new Error('AGENT_TURN_APPROVAL_CALL_ID_MISSING')
     const approvalId = readApprovalString(item, 'id') ?? callId
     const operationId = params.operationIdByCallId.get(callId)
@@ -172,9 +166,7 @@ function buildApprovalRequests(params: {
   if (new Set(requests.map((item) => item.callId)).size !== requests.length) {
     throw new Error('AGENT_TURN_APPROVAL_CALL_ID_DUPLICATE')
   }
-  if (
-    new Set(requests.map((item) => item.approvalId)).size !== requests.length
-  ) {
+  if (new Set(requests.map((item) => item.approvalId)).size !== requests.length) {
     throw new Error('AGENT_TURN_APPROVAL_ID_DUPLICATE')
   }
   return requests
@@ -242,8 +234,13 @@ export async function runAgentTurn(params: {
   signal: AbortSignal
   publishUiChunk: (chunk: ProjectAgentUiChunk) => void
   approvalResume?: AgentTurnApprovalResume | null
+  onUsageObserved?: (usageFacts: readonly LlmUsageFact[]) => void
 }): Promise<AgentTurnRunnerResult> {
   const { input } = params
+  const usageFacts: LlmUsageFact[] = []
+  const publishUsageFacts = (): void => {
+    params.onUsageObserved?.([...usageFacts])
+  }
   const approvalResume = params.approvalResume ?? null
   if (input.turn.sourceKind === AGENT_TURN_SOURCE_KIND.USER) {
     if (!input.userMessage) {
@@ -257,9 +254,7 @@ export async function runAgentTurn(params: {
       throw new Error('AGENT_TURN_DERIVED_USER_MESSAGE_FORBIDDEN')
     }
   } else {
-    throw new Error(
-      `AGENT_TURN_SOURCE_RUNNER_NOT_INSTALLED:${input.turn.sourceKind}`,
-    )
+    throw new Error(`AGENT_TURN_SOURCE_RUNNER_NOT_INSTALLED:${input.turn.sourceKind}`)
   }
   params.signal.throwIfAborted()
   const locale = normalizeProjectAgentLocale(input.context.locale)
@@ -268,25 +263,25 @@ export async function runAgentTurn(params: {
     billingConfirmationRequired,
     projectState,
     plan,
-    interruptedEffectDigest,
+    interruptedTurnContinuation,
+    supersededApprovalInput,
   ] = await Promise.all([
-      resolveProjectAgentAssistantModelKey(input.turn.userId),
-      readAssistantBillingConfirmationRequired(input.turn.userId),
-      buildAgentTurnProjectStateInput({
-        projectId: input.turn.projectId,
-        userId: input.turn.userId,
-        episodeId: input.context.episodeId,
-      }),
-      readProjectAgentPlan({
-        projectId: input.turn.projectId,
-        userId: input.turn.userId,
-        episodeId: input.context.episodeId,
-        assistantId: 'workspace-command',
-      }),
-      approvalResume
-        ? Promise.resolve(null)
-        : loadInterruptedTurnEffectDigestInput(input.turn.id),
-    ])
+    resolveProjectAgentAssistantModelKey(input.turn.userId),
+    readAssistantBillingConfirmationRequired(input.turn.userId),
+    buildAgentTurnProjectStateInput({
+      projectId: input.turn.projectId,
+      userId: input.turn.userId,
+      episodeId: input.context.episodeId,
+    }),
+    readProjectAgentPlan({
+      projectId: input.turn.projectId,
+      userId: input.turn.userId,
+      episodeId: input.context.episodeId,
+      assistantId: 'workspace-command',
+    }),
+    approvalResume ? Promise.resolve([]) : loadInterruptedTurnContinuationInputs(input.turn.id),
+    approvalResume ? Promise.resolve(null) : loadSupersededAgentTurnApprovalInput(input.turn.id),
+  ])
   const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
     userId: input.turn.userId,
@@ -369,17 +364,12 @@ export async function runAgentTurn(params: {
     onToolCallIdentified: ({ callId, operationId }) => {
       const existing = operationIdByCallId.get(callId)
       if (existing && existing !== operationId) {
-        throw new Error(
-          `AGENT_TURN_TOOL_IDENTITY_DIVERGED:${callId}:${existing}:${operationId}`,
-        )
+        throw new Error(`AGENT_TURN_TOOL_IDENTITY_DIVERGED:${callId}:${existing}:${operationId}`)
       }
       operationIdByCallId.set(callId, operationId)
     },
     onChoiceOfferPrepared: (offer) => {
-      if (
-        preparedChoice.value &&
-        preparedChoice.value.offerId !== offer.offerId
-      ) {
+      if (preparedChoice.value && preparedChoice.value.offerId !== offer.offerId) {
         throw new Error(
           `AGENT_TURN_MULTIPLE_CHOICE_OFFERS:${preparedChoice.value.offerId}:${offer.offerId}`,
         )
@@ -399,22 +389,15 @@ export async function runAgentTurn(params: {
   })
   const inputFilterConfig = {
     modelKey: assistantModelKey,
-    toolSchemaTokens: estimateProjectAgentTokens(
-      measureProjectAgentToolSchemas(tools),
-    ),
+    toolSchemaTokens: estimateProjectAgentTokens(measureProjectAgentToolSchemas(tools)),
     locale,
     irreplaceableToolNames: new Set(
       Object.values(registry)
-        .filter(
-          (operation) => operation.modelResultRetention === 'irreplaceable',
-        )
+        .filter((operation) => operation.modelResultRetention === 'irreplaceable')
         .map((operation) => operation.id),
     ),
   }
-  const session = new AgentTurnModelSession(
-    input.turn.id,
-    input.modelHistory.items,
-  )
+  const session = new AgentTurnModelSession(input.turn.id, input.modelHistory.items)
   const sourceInput: AgentInputItem[] = approvalResume
     ? []
     : input.turn.sourceKind === AGENT_TURN_SOURCE_KIND.USER
@@ -435,11 +418,13 @@ export async function runAgentTurn(params: {
   const agentInput: AgentInputItem[] = approvalResume
     ? []
     : [
-        ...(interruptedEffectDigest ? [interruptedEffectDigest] : []),
+        ...interruptedTurnContinuation,
+        ...(supersededApprovalInput ? [supersededApprovalInput] : []),
         ...sourceInput,
         projectState,
         ...(plan ? [buildAgentTurnPlanInputItem(plan)] : []),
       ]
+  let contextCompaction: { readonly replacedItemCount: number } | null = null
   let history = await session.getItems()
   if (!approvalResume) {
     const initialDecision = decideProjectAgentModelInput(inputFilterConfig, {
@@ -457,6 +442,11 @@ export async function runAgentTurn(params: {
         userId: input.turn.userId,
         signal: params.signal,
       })
+      if (compaction.usage) {
+        usageFacts.push(compaction.usage)
+        publishUsageFacts()
+      }
+      contextCompaction = compaction.compacted
       history = [...compaction.historyItems]
       assertProjectAgentModelInputWithinBudget(
         decideProjectAgentModelInput(inputFilterConfig, {
@@ -475,9 +465,7 @@ export async function runAgentTurn(params: {
   const agent = new Agent<AgentTurnRunContext>({
     name: 'Project Workspace Agent',
     instructions: systemPrompt,
-    model: aisdk(
-      resolved.languageModel as unknown as Parameters<typeof aisdk>[0],
-    ),
+    model: aisdk(resolved.languageModel as unknown as Parameters<typeof aisdk>[0]),
     modelSettings: {
       parallelToolCalls: true,
     },
@@ -514,46 +502,33 @@ export async function runAgentTurn(params: {
         })
         const interruptions = state.getInterruptions()
         if (interruptions.length !== approvalResume.members.length) {
-          throw new Error(
-            'AGENT_TURN_APPROVAL_STATE_MEMBER_COUNT_DIVERGED',
-          )
+          throw new Error('AGENT_TURN_APPROVAL_STATE_MEMBER_COUNT_DIVERGED')
         }
         const matchedInterruptions = new Set<RunToolApprovalItem>()
         for (const member of approvalResume.members) {
           const operation = registry[member.operationId]
           if (
-            !operation?.channels.tool
-            || !operation.confirmation.required
-            || operation.toolContractRevision
-              !== member.toolContractRevision
+            !operation?.channels.tool ||
+            !operation.confirmation.required ||
+            operation.toolContractRevision !== member.toolContractRevision
           ) {
-            throw new Error(
-              `AGENT_TURN_APPROVAL_TOOL_CONTRACT_DIVERGED:${member.operationId}`,
-            )
+            throw new Error(`AGENT_TURN_APPROVAL_TOOL_CONTRACT_DIVERGED:${member.operationId}`)
           }
           const matches = interruptions.filter(
             (candidate) =>
-              readApprovalString(candidate, 'callId') === member.callId
-              && readApprovalString(candidate, 'id') === member.approvalId,
+              readApprovalString(candidate, 'callId') === member.callId &&
+              readApprovalString(candidate, 'id') === member.approvalId,
           )
           const interruption = matches[0]
-          if (
-            matches.length !== 1
-            || !interruption
-            || matchedInterruptions.has(interruption)
-          ) {
-            throw new Error(
-              `AGENT_TURN_APPROVAL_STATE_MEMBER_MISSING:${member.callId}`,
-            )
+          if (matches.length !== 1 || !interruption || matchedInterruptions.has(interruption)) {
+            throw new Error(`AGENT_TURN_APPROVAL_STATE_MEMBER_MISSING:${member.callId}`)
           }
           const currentInput = readApprovalInput(interruption)
           if (
-            hashCanonicalJson(currentInput) !== member.inputHash
-            || hashCanonicalJson(member.input) !== member.inputHash
+            hashCanonicalJson(currentInput) !== member.inputHash ||
+            hashCanonicalJson(member.input) !== member.inputHash
           ) {
-            throw new Error(
-              `AGENT_TURN_APPROVAL_STATE_INPUT_DIVERGED:${member.callId}`,
-            )
+            throw new Error(`AGENT_TURN_APPROVAL_STATE_INPUT_DIVERGED:${member.callId}`)
           }
           matchedInterruptions.add(interruption)
           operationIdByCallId.set(member.callId, member.operationId)
@@ -561,8 +536,7 @@ export async function runAgentTurn(params: {
             state.approve(interruption)
           } else {
             state.reject(interruption, {
-              message:
-                approvalResume.reason ?? 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
+              message: approvalResume.reason ?? 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
             })
           }
         }
@@ -576,15 +550,10 @@ export async function runAgentTurn(params: {
     session,
     toolNotFoundBehavior: 'return_error_to_model',
     toolErrorFormatter: ({ kind, toolName }) =>
-      kind === 'tool_not_found'
-        ? formatProjectAgentToolNotFound({ toolName, catalog })
-        : undefined,
+      kind === 'tool_not_found' ? formatProjectAgentToolNotFound({ toolName, catalog }) : undefined,
     toolExecution: { maxFunctionToolConcurrency: 1 },
     callModelInputFilter: async ({ modelData }) => {
-      const decision = decideProjectAgentModelInput(
-        inputFilterConfig,
-        modelData,
-      )
+      const decision = decideProjectAgentModelInput(inputFilterConfig, modelData)
       assertProjectAgentModelInputWithinBudget(decision)
       return {
         input: await resolveProjectAssistantModelInputMedia({
@@ -592,81 +561,105 @@ export async function runAgentTurn(params: {
           userId: input.turn.userId,
           projectId: input.turn.projectId,
         }),
-        ...(decision.instructions === undefined
-          ? {}
-          : { instructions: decision.instructions }),
+        ...(decision.instructions === undefined ? {} : { instructions: decision.instructions }),
       }
     },
     signal: params.signal,
   })
-  const observedSource = (async function* (): AsyncGenerator<RunStreamEvent> {
-    for await (const event of result) {
-      const identity = identifyOperationFromEvent({
-        event,
-        directOperationIds: toolset.directOperationIds,
-      })
-      if (identity) {
-        const existing = operationIdByCallId.get(identity.callId)
-        if (existing && existing !== identity.operationId) {
-          throw new Error(
-            `AGENT_TURN_TOOL_IDENTITY_DIVERGED:${identity.callId}:${existing}:${identity.operationId}`,
-          )
-        }
-        operationIdByCallId.set(identity.callId, identity.operationId)
-      }
-      yield event
-    }
-  })()
-  const sideChannel = createProjectAgentSideChannel()
-  const uiStream = createProjectAgentUiMessageStream({
-    source: observedSource,
-    initialChunks: [],
-    resolveToolName: (callId) => operationIdByCallId.get(callId) ?? null,
-    availableToolNames: tools.map((item) => item.name),
-    hiddenToolNames: [PROJECT_AGENT_TOOL_DISCOVERY_NAME],
-    aliasedToolNames: [PROJECT_AGENT_OPERATION_GATEWAY_NAME],
-    sideChannel,
-    beforeFinish: async () => [],
-    onChunk: params.publishUiChunk,
-    onSettled: async () => {},
-  })
-  const assistantMessage = await consumeUiMessage({
-    turnId: input.turn.id,
-    attempt: input.turn.attempt,
-    stream: uiStream,
-  })
-  await result.completed
-  const interruptions =
-    result.interruptions.length > 0
-      ? result.interruptions
-      : result.state.getInterruptions()
-  if (preparedChoice.value) {
-    if (interruptions.length > 0) {
-      throw new Error('AGENT_TURN_CHOICE_APPROVAL_AMBIGUOUS')
-    }
-    return {
-      status: 'waiting_choice',
-      assistantMessage,
-      modelHistoryItems: session.snapshot(),
-      offer: preparedChoice.value,
-    }
-  }
-  if (interruptions.length > 0) {
-    return {
-      status: 'waiting_approval',
-      assistantMessage,
-      modelHistoryItems: session.snapshot(),
-      runState: result.state.toString(),
-      approvals: buildApprovalRequests({
-        items: interruptions,
-        operationIdByCallId,
+  let mainUsageCaptured = false
+  const captureMainUsage = (): void => {
+    if (mainUsageCaptured) return
+    mainUsageCaptured = true
+    usageFacts.push(
+      projectAgentsSdkUsage({
+        phase: 'agent_model',
+        modelKey: assistantModelKey,
+        usage: result.state.usage,
       }),
-    }
+    )
+    publishUsageFacts()
   }
-  return {
-    status: 'completed',
-    assistantMessage,
-    modelHistoryItems: session.snapshot(),
-    stopReason: 'completed',
+  try {
+    const observedSource = (async function* (): AsyncGenerator<RunStreamEvent> {
+      for await (const event of result) {
+        const identity = identifyOperationFromEvent({
+          event,
+          directOperationIds: toolset.directOperationIds,
+        })
+        if (identity) {
+          const existing = operationIdByCallId.get(identity.callId)
+          if (existing && existing !== identity.operationId) {
+            throw new Error(
+              `AGENT_TURN_TOOL_IDENTITY_DIVERGED:${identity.callId}:${existing}:${identity.operationId}`,
+            )
+          }
+          operationIdByCallId.set(identity.callId, identity.operationId)
+        }
+        yield event
+      }
+    })()
+    const sideChannel = createProjectAgentSideChannel()
+    const uiStream = createProjectAgentUiMessageStream({
+      source: observedSource,
+      initialChunks: contextCompaction
+        ? [
+            createDataChunk('data-assistant-context-compacted', {
+              replacedItemCount: contextCompaction.replacedItemCount,
+            }),
+          ]
+        : [],
+      resolveToolName: (callId) => operationIdByCallId.get(callId) ?? null,
+      availableToolNames: tools.map((item) => item.name),
+      hiddenToolNames: [PROJECT_AGENT_TOOL_DISCOVERY_NAME],
+      aliasedToolNames: [PROJECT_AGENT_OPERATION_GATEWAY_NAME],
+      sideChannel,
+      beforeFinish: async () => [],
+      onChunk: params.publishUiChunk,
+      onSettled: async () => {},
+    })
+    const assistantMessage = await consumeUiMessage({
+      turnId: input.turn.id,
+      attempt: input.turn.attempt,
+      stream: uiStream,
+    })
+    await result.completed
+    captureMainUsage()
+    const interruptions =
+      result.interruptions.length > 0 ? result.interruptions : result.state.getInterruptions()
+    if (preparedChoice.value) {
+      if (interruptions.length > 0) {
+        throw new Error('AGENT_TURN_CHOICE_APPROVAL_AMBIGUOUS')
+      }
+      return {
+        status: 'waiting_choice',
+        usageFacts: [...usageFacts],
+        assistantMessage,
+        modelHistoryItems: session.snapshot(),
+        offer: preparedChoice.value,
+      }
+    }
+    if (interruptions.length > 0) {
+      return {
+        status: 'waiting_approval',
+        usageFacts: [...usageFacts],
+        assistantMessage,
+        modelHistoryItems: session.snapshot(),
+        runState: result.state.toString(),
+        approvals: buildApprovalRequests({
+          items: interruptions,
+          operationIdByCallId,
+        }),
+      }
+    }
+    return {
+      status: 'completed',
+      usageFacts: [...usageFacts],
+      assistantMessage,
+      modelHistoryItems: session.snapshot(),
+      stopReason: 'completed',
+    }
+  } catch (error) {
+    captureMainUsage()
+    throw error
   }
 }

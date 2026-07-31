@@ -1,6 +1,7 @@
 import { Prisma, type ProjectAgentTurn } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { AgentTurnExecutionResult } from './contracts'
+import { closeAgentTurnApprovalHistoryInTransaction } from './approval-history'
 
 export interface CancelAgentTurnCommand {
   protocol: 'agent_turn_cancel_v1'
@@ -16,6 +17,7 @@ export interface AgentTurnCancellationReceipt extends AgentTurnExecutionResult {
   protocol: 'agent_turn_cancellation_receipt_v1'
   threadId: string
   projectId: string
+  episodeId: string | null
   requestId: string
 }
 
@@ -54,16 +56,10 @@ function validateCancelCommand(command: CancelAgentTurnCommand): void {
   requireIdentity(command.turnId, 'AGENT_TURN_CANCEL_TURN_ID_INVALID')
   requireIdentity(command.projectId, 'AGENT_TURN_CANCEL_PROJECT_ID_INVALID')
   requireIdentity(command.userId, 'AGENT_TURN_CANCEL_USER_ID_INVALID')
-  requireIdentity(
-    command.requestId,
-    'AGENT_TURN_CANCEL_REQUEST_ID_INVALID',
-    128,
-  )
+  requireIdentity(command.requestId, 'AGENT_TURN_CANCEL_REQUEST_ID_INVALID', 128)
   if (
     command.reason !== null &&
-    (!command.reason ||
-      command.reason !== command.reason.trim() ||
-      command.reason.length > 2_000)
+    (!command.reason || command.reason !== command.reason.trim() || command.reason.length > 2_000)
   ) {
     throw new Error('AGENT_TURN_CANCEL_REASON_INVALID')
   }
@@ -76,11 +72,7 @@ function validateClearCommand(command: ClearAgentThreadCommand): void {
   requireIdentity(command.threadId, 'AGENT_THREAD_CLEAR_THREAD_ID_INVALID')
   requireIdentity(command.projectId, 'AGENT_THREAD_CLEAR_PROJECT_ID_INVALID')
   requireIdentity(command.userId, 'AGENT_THREAD_CLEAR_USER_ID_INVALID')
-  requireIdentity(
-    command.requestId,
-    'AGENT_THREAD_CLEAR_REQUEST_ID_INVALID',
-    128,
-  )
+  requireIdentity(command.requestId, 'AGENT_THREAD_CLEAR_REQUEST_ID_INVALID', 128)
   if (
     command.assistantId !== 'workspace-command' ||
     (command.episodeId !== null &&
@@ -90,9 +82,7 @@ function validateClearCommand(command: ClearAgentThreadCommand): void {
   }
 }
 
-function toCancellationReceipt(
-  row: ProjectAgentTurn,
-): AgentTurnCancellationReceipt {
+function toCancellationReceipt(row: ProjectAgentTurn): AgentTurnCancellationReceipt {
   if (row.status !== 'cancelled' || !row.cancelRequestId) {
     throw new Error(`AGENT_TURN_CANCEL_RECEIPT_INVALID:${row.id}`)
   }
@@ -100,12 +90,24 @@ function toCancellationReceipt(
     protocol: 'agent_turn_cancellation_receipt_v1',
     threadId: row.threadId,
     projectId: row.projectId,
+    episodeId: row.episodeId,
     turnId: row.id,
     requestId: row.cancelRequestId,
     status: 'cancelled',
     stopReason: row.stopReason,
     errorCode: row.errorCode,
   }
+}
+
+function parseArchivedCancelledTurnIds(value: Prisma.JsonValue | null): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((turnId) => typeof turnId !== 'string' || !turnId.trim() || turnId.length > 191) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error('AGENT_THREAD_CLEAR_ARCHIVE_RECEIPT_INVALID')
+  }
+  return value as string[]
 }
 
 export async function cancelAgentTurn(
@@ -131,17 +133,17 @@ export async function cancelAgentTurn(
       FOR UPDATE
     `)
       if (projects.length !== 1) {
-        throw new Error(
-          `AGENT_TURN_CANCEL_PROJECT_NOT_FOUND:${command.projectId}`,
-        )
+        throw new Error(`AGENT_TURN_CANCEL_PROJECT_NOT_FOUND:${command.projectId}`)
       }
       const threads = await tx.$queryRaw<
         Array<{
           id: string
           userId: string
+          modelHistoryVersion: number
+          modelHistoryJson: Prisma.JsonValue
         }>
       >(Prisma.sql`
-      SELECT id, userId
+      SELECT id, userId, modelHistoryVersion, modelHistoryJson
       FROM project_assistant_threads
       WHERE id = ${command.threadId}
       FOR UPDATE
@@ -166,10 +168,7 @@ export async function cancelAgentTurn(
         throw new Error(`AGENT_TURN_CANCEL_SCOPE_DIVERGED:${command.turnId}`)
       }
       if (turn.status === 'cancelled') {
-        if (
-          turn.cancelRequestId !== command.requestId ||
-          turn.cancelReason !== command.reason
-        ) {
+        if (turn.cancelRequestId !== command.requestId || turn.cancelReason !== command.reason) {
           throw new Error(`AGENT_TURN_CANCEL_REPLAY_DIVERGED:${turn.id}`)
         }
         return toCancellationReceipt(turn)
@@ -181,6 +180,13 @@ export async function cancelAgentTurn(
       ) {
         throw new Error(`AGENT_TURN_CANCEL_REJECTED:${turn.id}:${turn.status}`)
       }
+      await closeAgentTurnApprovalHistoryInTransaction({
+        tx,
+        thread,
+        turnId: turn.id,
+        terminalMessage:
+          'The user cancelled this Turn while its operation was awaiting or resuming approval. The operation must not be inferred as unperformed if durable effects say otherwise.',
+      })
       await tx.agentTurnInteraction.updateMany({
         where: {
           turnId: turn.id,
@@ -237,9 +243,7 @@ export async function clearAgentThread(
       FOR UPDATE
     `)
       if (projects.length !== 1) {
-        throw new Error(
-          `AGENT_THREAD_CLEAR_PROJECT_NOT_FOUND:${command.projectId}`,
-        )
+        throw new Error(`AGENT_THREAD_CLEAR_PROJECT_NOT_FOUND:${command.projectId}`)
       }
       const threads = await tx.$queryRaw<
         Array<{
@@ -273,18 +277,22 @@ export async function clearAgentThread(
           archived.episodeId !== command.episodeId ||
           archived.assistantId !== command.assistantId
         ) {
-          throw new Error(
-            `AGENT_THREAD_CLEAR_SCOPE_DIVERGED:${command.threadId}`,
-          )
+          throw new Error(`AGENT_THREAD_CLEAR_SCOPE_DIVERGED:${command.threadId}`)
+        }
+        if (archived.clearRequestId === null || archived.cancelledTurnIds === null) {
+          throw new Error(`AGENT_THREAD_CLEAR_REPLAY_UNAVAILABLE:${command.threadId}`)
+        }
+        if (archived.clearRequestId !== command.requestId) {
+          throw new Error(`AGENT_THREAD_CLEAR_REPLAY_DIVERGED:${command.threadId}`)
         }
         return {
           protocol: 'agent_thread_clear_receipt_v1',
           threadId: command.threadId,
           projectId: command.projectId,
           userId: command.userId,
-          requestId: command.requestId,
+          requestId: archived.clearRequestId,
           archivedAt: archived.archivedAt.toISOString(),
-          cancelledTurnIds: [],
+          cancelledTurnIds: parseArchivedCancelledTurnIds(archived.cancelledTurnIds),
         }
       }
       if (
@@ -346,6 +354,8 @@ export async function clearAgentThread(
           scopeRef: thread.scopeRef,
           messagesJson: thread.messagesJson as Prisma.InputJsonValue,
           modelHistoryJson: thread.modelHistoryJson as Prisma.InputJsonValue,
+          clearRequestId: command.requestId,
+          cancelledTurnIds,
           threadCreatedAt: thread.createdAt,
           threadUpdatedAt: thread.updatedAt,
         },

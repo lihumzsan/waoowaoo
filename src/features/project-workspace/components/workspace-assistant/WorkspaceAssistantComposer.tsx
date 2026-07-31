@@ -2,7 +2,10 @@
 
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/AttachmentChips'
+import {
+  MediaAttachmentChips,
+  TextAttachmentChips,
+} from '@/components/project-assistant/AttachmentChips'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 import type { ProjectAssistantMediaAttachment } from '@/lib/project-agent/media-attachments'
@@ -23,7 +26,7 @@ interface WorkspaceAssistantComposerProps {
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
   readonly mediaUploadPending?: boolean
-  readonly mediaUploadError?: string | null
+  readonly mediaUploadFailed?: boolean
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
   readonly onStopReply: () => Promise<void>
@@ -42,7 +45,7 @@ export function WorkspaceAssistantComposer({
   mediaAttachments = [],
   attachDisabled = false,
   mediaUploadPending = false,
-  mediaUploadError = null,
+  mediaUploadFailed = false,
   onChange,
   onSubmit,
   onStopReply,
@@ -63,11 +66,15 @@ export function WorkspaceAssistantComposer({
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('panel.composerPlaceholder')}
           onKeyDown={(event) => {
-            submitFromEnterKey(event, () => { void onSubmit() })
+            submitFromEnterKey(event, () => {
+              void onSubmit()
+            })
           }}
           onPaste={(event) => {
             if (!onPasteMediaFiles || pending) return
-            const files = Array.from(event.clipboardData?.files ?? []).filter(isProjectAssistantMediaFile)
+            const files = Array.from(event.clipboardData?.files ?? []).filter(
+              isProjectAssistantMediaFile,
+            )
             if (files.length === 0) return
             event.preventDefault()
             onPasteMediaFiles(files)
@@ -86,14 +93,20 @@ export function WorkspaceAssistantComposer({
         />
         {mediaUploadPending ? (
           <div className="mt-2 inline-flex items-center gap-2 self-start rounded-lg border border-[var(--glass-stroke-base)] bg-white/90 px-2.5 py-1.5 text-xs leading-none text-[var(--glass-text-secondary)] shadow-sm">
-            <AppIcon name="loader" className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]" aria-hidden="true" />
+            <AppIcon
+              name="loader"
+              className="h-3.5 w-3.5 animate-spin text-[var(--glass-tone-info-fg)]"
+              aria-hidden="true"
+            />
             {t('attachments.mediaUploading')}
           </div>
         ) : null}
-        {mediaUploadError ? (
-          <p role="alert" className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]">
+        {mediaUploadFailed ? (
+          <p
+            role="alert"
+            className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
+          >
             {t('attachments.mediaUploadFailed')}
-            <span className="ml-1 break-all opacity-75">{mediaUploadError}</span>
           </p>
         ) : null}
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
@@ -114,7 +127,9 @@ export function WorkspaceAssistantComposer({
               type="button"
               aria-label={t('panel.stopGenerating')}
               title={t('panel.stopGenerating')}
-              onClick={() => { void onStopReply() }}
+              onClick={() => {
+                void onStopReply()
+              }}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
             >
               <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
@@ -123,8 +138,13 @@ export function WorkspaceAssistantComposer({
             <button
               type="button"
               aria-label={t('panel.send')}
-              disabled={(!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) || pending}
-              onClick={() => { void onSubmit() }}
+              disabled={
+                (!value.trim() && attachments.length === 0 && mediaAttachments.length === 0) ||
+                pending
+              }
+              onClick={() => {
+                void onSubmit()
+              }}
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
@@ -135,9 +155,11 @@ export function WorkspaceAssistantComposer({
       {error ? (
         <div
           role={error.tone === 'info' ? 'status' : 'alert'}
-          className={error.tone === 'info'
-            ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
-            : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'}
+          className={
+            error.tone === 'info'
+              ? 'mt-1.5 rounded-lg bg-[var(--glass-tone-info-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-info-fg)]'
+              : 'mt-1.5 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]'
+          }
         >
           <p className="font-medium">{error.headline}</p>
           {/* "Already handled" is an informative outcome: the protocol detail

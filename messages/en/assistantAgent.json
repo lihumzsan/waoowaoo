@@ -238,6 +238,8 @@
     "choiceBack": "Back to previous choice",
     "choiceSubmitting": "Processing...",
     "choiceSubmitFailed": "Submit failed: {error}",
+    "choiceSubmitErrorFallback": "This choice could not be submitted. Refresh the conversation and try again.",
+    "choiceCancelledResponse": "Cancelled this choice",
     "choiceReplyLabel": "Other ideas",
     "choiceReplyPlaceholder": "Enter your notes...",
     "choiceReplySubmit": "Submit notes",

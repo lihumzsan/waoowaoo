@@ -4,9 +4,8 @@ import { Prisma, type ProjectAgentTurn } from '@prisma/client'
 import type { AgentInputItem } from '@openai/agents'
 import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
-import {
-  prepareProjectAgentOperationInput,
-} from '@/lib/operations/invocation'
+import type { LlmUsageFact } from '@/lib/billing/llm-usage'
+import { prepareProjectAgentOperationInput } from '@/lib/operations/invocation'
 import {
   persistOperationPlanView,
   planOperation,
@@ -19,13 +18,11 @@ import {
   type PlannedOperationInvocation,
 } from '@/lib/operations/planned-operation-invocation'
 import {
-  appendProjectAssistantThreadMessagesInTransaction,
   commitProjectAssistantTurnInTransaction,
+  lockProjectAssistantThreadScopeInTransaction,
 } from '@/lib/project-agent/persistence'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
-import type {
-  AgentTurnApprovalRequest,
-} from './runner'
+import type { AgentTurnApprovalRequest } from './runner'
 import type { AgentTurnExecutionInput } from './contracts'
 import { loadClaimedAgentTurnExecutionInput } from './service'
 import {
@@ -34,6 +31,7 @@ import {
   parseAgentTurnRuntimeContract,
   type AgentTurnRuntimeContract,
 } from './runtime-contract'
+import { recordAgentTurnUsageFactsInTransaction } from './usage'
 
 const MAX_RUN_STATE_BYTES = 16 * 1_024 * 1_024
 
@@ -71,6 +69,7 @@ export interface AgentTurnApprovalDecisionReceipt {
   turnId: string
   interactionId: string
   projectId: string
+  episodeId: string | null
   requestId: string
   decision: 'approve' | 'reject'
   payloadHash: string
@@ -85,9 +84,7 @@ export interface AgentTurnApprovalResume {
   reason: string | null
   runtime: AgentTurnRuntimeContract
   members: readonly AgentTurnApprovalMember[]
-  approvedInvocationByCallId: Readonly<
-    Record<string, PlannedOperationInvocation>
-  >
+  approvedInvocationByCallId: Readonly<Record<string, PlannedOperationInvocation>>
 }
 
 function digest(value: string): string {
@@ -109,34 +106,23 @@ function buildInteractionId(params: {
   const identities = params.approvals
     .map((item) => [item.approvalId, item.callId, item.operationId])
     .sort(([left], [right]) => left.localeCompare(right))
-  return `turn_interaction_${digest(JSON.stringify([
-    'agent-turn-approval-v1',
-    params.turnId,
-    identities,
-  ])).slice(0, 40)}`
+  return `turn_interaction_${digest(JSON.stringify(['agent-turn-approval-v1', params.turnId, identities])).slice(0, 40)}`
 }
 
-function requireIdentity(
-  value: string,
-  code: string,
-  maxLength = 191,
-): string {
+function requireIdentity(value: string, code: string, maxLength = 191): string {
   if (!value || value !== value.trim() || value.length > maxLength) {
     throw new Error(code)
   }
   return value
 }
 
-export function parseAgentTurnApprovalPayload(
-  value: unknown,
-): AgentTurnApprovalPayload {
+export function parseAgentTurnApprovalPayload(value: unknown): AgentTurnApprovalPayload {
   if (
-    !value
-    || typeof value !== 'object'
-    || Array.isArray(value)
-    || (value as { protocol?: unknown }).protocol
-      !== 'agent_turn_approval_v1'
-    || !Array.isArray((value as { members?: unknown }).members)
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (value as { protocol?: unknown }).protocol !== 'agent_turn_approval_v1' ||
+    !Array.isArray((value as { members?: unknown }).members)
   ) {
     throw new Error('AGENT_TURN_APPROVAL_PAYLOAD_INVALID')
   }
@@ -179,56 +165,39 @@ export function parseAgentTurnApprovalPayload(
       inputHash,
       toolContractRevision,
       operationPlan:
-        record.operationPlan === null
-          ? null
-          : record.operationPlan as OperationPlanView,
+        record.operationPlan === null ? null : (record.operationPlan as OperationPlanView),
     }
   })
   if (
-    members.length === 0
-    || new Set(members.map((item) => item.callId)).size !== members.length
-    || new Set(members.map((item) => item.approvalId)).size !== members.length
+    members.length === 0 ||
+    new Set(members.map((item) => item.callId)).size !== members.length ||
+    new Set(members.map((item) => item.approvalId)).size !== members.length
   ) {
     throw new Error('AGENT_TURN_APPROVAL_MEMBERS_INVALID')
   }
   return {
     protocol: 'agent_turn_approval_v1',
-    runtime: parseAgentTurnRuntimeContract(
-      (value as { runtime?: unknown }).runtime,
-    ),
+    runtime: parseAgentTurnRuntimeContract((value as { runtime?: unknown }).runtime),
     members,
   }
 }
 
-function validateDecisionCommand(
-  command: ResolveAgentTurnApprovalCommand,
-): void {
+function validateDecisionCommand(command: ResolveAgentTurnApprovalCommand): void {
   if (command.protocol !== 'agent_turn_approval_response_v1') {
     throw new Error('AGENT_TURN_APPROVAL_RESPONSE_PROTOCOL_INVALID')
   }
   requireIdentity(command.threadId, 'AGENT_TURN_APPROVAL_THREAD_ID_INVALID')
   requireIdentity(command.turnId, 'AGENT_TURN_APPROVAL_TURN_ID_INVALID')
-  requireIdentity(
-    command.interactionId,
-    'AGENT_TURN_APPROVAL_INTERACTION_ID_INVALID',
-  )
+  requireIdentity(command.interactionId, 'AGENT_TURN_APPROVAL_INTERACTION_ID_INVALID')
   requireIdentity(command.projectId, 'AGENT_TURN_APPROVAL_PROJECT_ID_INVALID')
   requireIdentity(command.userId, 'AGENT_TURN_APPROVAL_USER_ID_INVALID')
-  requireIdentity(
-    command.requestId,
-    'AGENT_TURN_APPROVAL_REQUEST_ID_INVALID',
-    128,
-  )
+  requireIdentity(command.requestId, 'AGENT_TURN_APPROVAL_REQUEST_ID_INVALID', 128)
   if (command.decision !== 'approve' && command.decision !== 'reject') {
     throw new Error('AGENT_TURN_APPROVAL_DECISION_INVALID')
   }
   if (
-    command.reason !== null
-    && (
-      !command.reason
-      || command.reason !== command.reason.trim()
-      || command.reason.length > 2_000
-    )
+    command.reason !== null &&
+    (!command.reason || command.reason !== command.reason.trim() || command.reason.length > 2_000)
   ) {
     throw new Error('AGENT_TURN_APPROVAL_REASON_INVALID')
   }
@@ -245,20 +214,72 @@ interface StoredApprovalResponse {
     approvalGrantId: string
     requestId: string
   }[]
+  via?: 'user_message'
+  successorTurnId?: string
 }
 
 function parseStoredResponse(value: unknown): StoredApprovalResponse {
   if (
-    !value
-    || typeof value !== 'object'
-    || Array.isArray(value)
-    || (value as { protocol?: unknown }).protocol
-      !== 'agent_turn_approval_response_v1'
-    || !Array.isArray((value as { grants?: unknown }).grants)
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (value as { protocol?: unknown }).protocol !== 'agent_turn_approval_response_v1' ||
+    !Array.isArray((value as { grants?: unknown }).grants)
   ) {
     throw new Error('AGENT_TURN_APPROVAL_RESPONSE_INVALID')
   }
   return value as unknown as StoredApprovalResponse
+}
+
+export async function loadSupersededAgentTurnApprovalInput(
+  currentTurnId: string,
+): Promise<AgentInputItem | null> {
+  const current = await prisma.projectAgentTurn.findUnique({
+    where: { id: currentTurnId },
+    select: { id: true, threadId: true, sourceKind: true },
+  })
+  if (!current || current.sourceKind !== 'user') return null
+  const rows = await prisma.$queryRaw<
+    Array<{
+      payloadJson: Prisma.JsonValue
+      responseJson: Prisma.JsonValue
+    }>
+  >(Prisma.sql`
+    SELECT interaction.payloadJson, interaction.responseJson
+    FROM agent_turn_interactions interaction
+    JOIN project_agent_turns prior_turn
+      ON prior_turn.id = interaction.turnId
+    WHERE prior_turn.threadId = ${current.threadId}
+      AND prior_turn.status = 'cancelled'
+      AND interaction.kind = 'approval'
+      AND interaction.status = 'rejected'
+      AND JSON_UNQUOTE(
+        JSON_EXTRACT(interaction.responseJson, '$.successorTurnId')
+      ) = ${current.id}
+    ORDER BY interaction.createdAt ASC, interaction.id ASC
+  `)
+  if (rows.length === 0) return null
+  const operations = rows.flatMap((row) => {
+    const response = parseStoredResponse(row.responseJson)
+    if (response.via !== 'user_message' || response.successorTurnId !== current.id) {
+      throw new Error(`AGENT_TURN_APPROVAL_SUPERSEDE_FACT_DIVERGED:${current.id}`)
+    }
+    return parseAgentTurnApprovalPayload(row.payloadJson).members.map((member) => ({
+      callId: member.callId,
+      operationId: member.operationId,
+    }))
+  })
+  return {
+    role: 'user',
+    content: [
+      '[approval_declined]',
+      ...operations.map(
+        (operation) => `call=${operation.callId} operation=${operation.operationId}`,
+      ),
+      'The user declined these pending operations by sending a new message. Treat them as rejected and do not retry or request them again unless the new message explicitly asks you to.',
+      '[/approval_declined]',
+    ].join('\n'),
+  } satisfies AgentInputItem
 }
 
 export async function prepareAgentTurnApprovalPayload(params: {
@@ -275,14 +296,10 @@ export async function prepareAgentTurnApprovalPayload(params: {
     params.signal.throwIfAborted()
     const operation = registry[approval.operationId]
     if (!operation?.channels.tool || !operation.confirmation.required) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_OPERATION_INVALID:${approval.operationId}`,
-      )
+      throw new Error(`AGENT_TURN_APPROVAL_OPERATION_INVALID:${approval.operationId}`)
     }
     if (!operation.toolContractRevision) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_TOOL_CONTRACT_REVISION_MISSING:${operation.id}`,
-      )
+      throw new Error(`AGENT_TURN_APPROVAL_TOOL_CONTRACT_REVISION_MISSING:${operation.id}`)
     }
     let operationPlan: OperationPlanView | null = null
     if (operation.plan) {
@@ -290,9 +307,7 @@ export async function prepareAgentTurnApprovalPayload(params: {
         channel: 'tool',
         operation,
         context: {
-          ...(params.input.context.locale
-            ? { locale: params.input.context.locale }
-            : {}),
+          ...(params.input.context.locale ? { locale: params.input.context.locale } : {}),
           episodeId: params.input.context.episodeId,
           turnId: params.input.turn.id,
           selectedScopeRef: params.input.context.selectedScopeRef,
@@ -301,9 +316,7 @@ export async function prepareAgentTurnApprovalPayload(params: {
         input: approval.input,
       })
       if (prepared.invocation) {
-        throw new Error(
-          `AGENT_TURN_APPROVAL_PROVENANCE_AMBIGUOUS:${operation.id}`,
-        )
+        throw new Error(`AGENT_TURN_APPROVAL_PROVENANCE_AMBIGUOUS:${operation.id}`)
       }
       const plan = await planOperation({
         operation,
@@ -314,9 +327,7 @@ export async function prepareAgentTurnApprovalPayload(params: {
           userId: params.input.turn.userId,
           projectId: params.input.turn.projectId,
           context: {
-            ...(params.input.context.locale
-              ? { locale: params.input.context.locale }
-              : {}),
+            ...(params.input.context.locale ? { locale: params.input.context.locale } : {}),
             episodeId: params.input.context.episodeId,
             turnId: params.input.turn.id,
             selectedScopeRef: params.input.context.selectedScopeRef,
@@ -337,9 +348,7 @@ export async function prepareAgentTurnApprovalPayload(params: {
         episodeId: params.input.context.episodeId,
       })
       if (!operationPlan.planSnapshotId) {
-        throw new Error(
-          `AGENT_TURN_APPROVAL_PLAN_ID_MISSING:${operation.id}`,
-        )
+        throw new Error(`AGENT_TURN_APPROVAL_PLAN_ID_MISSING:${operation.id}`)
       }
     }
     members.push({
@@ -367,27 +376,20 @@ export async function authorizeAgentTurnOperationAutomatically(params: {
   })
   const member = payload.members[0]
   const planSnapshotId = member?.operationPlan?.planSnapshotId ?? null
-  if (
-    !member
-    || member.callId !== params.approval.callId
-    || !planSnapshotId
-  ) {
-    throw new Error(
-      `AGENT_TURN_AUTOMATIC_APPROVAL_PLAN_MISSING:${params.approval.callId}`,
-    )
+  if (!member || member.callId !== params.approval.callId || !planSnapshotId) {
+    throw new Error(`AGENT_TURN_AUTOMATIC_APPROVAL_PLAN_MISSING:${params.approval.callId}`)
   }
   const [grant] = await issueApprovalGrantGroup({
     userId: params.input.turn.userId,
-    requests: [{
-      planSnapshotId,
-      requestId:
-        `agent-turn-auto:${params.input.turn.id}:${member.callId}`,
-    }],
+    requests: [
+      {
+        planSnapshotId,
+        requestId: `agent-turn-auto:${params.input.turn.id}:${member.callId}`,
+      },
+    ],
   })
   if (!grant || grant.operationId !== member.operationId) {
-    throw new Error(
-      `AGENT_TURN_AUTOMATIC_APPROVAL_GRANT_DIVERGED:${member.callId}`,
-    )
+    throw new Error(`AGENT_TURN_AUTOMATIC_APPROVAL_GRANT_DIVERGED:${member.callId}`)
   }
   return {
     approvalGrantId: grant.approvalGrantId,
@@ -402,6 +404,7 @@ export async function suspendAgentTurnForApproval(params: {
   modelHistoryItems: readonly AgentInputItem[]
   runState: string
   payload: AgentTurnApprovalPayload
+  usageFacts: readonly LlmUsageFact[]
 }): Promise<{
   turnId: string
   interactionId: string
@@ -411,16 +414,13 @@ export async function suspendAgentTurnForApproval(params: {
     throw new Error('AGENT_TURN_APPROVAL_MESSAGE_ROLE_INVALID')
   }
   if (
-    !params.assistantMessage.id
-    || params.assistantMessage.id !== params.assistantMessage.id.trim()
-    || params.assistantMessage.id.length > 191
+    !params.assistantMessage.id ||
+    params.assistantMessage.id !== params.assistantMessage.id.trim() ||
+    params.assistantMessage.id.length > 191
   ) {
     throw new Error('AGENT_TURN_APPROVAL_MESSAGE_ID_INVALID')
   }
-  if (
-    !params.runState
-    || Buffer.byteLength(params.runState, 'utf8') > MAX_RUN_STATE_BYTES
-  ) {
+  if (!params.runState || Buffer.byteLength(params.runState, 'utf8') > MAX_RUN_STATE_BYTES) {
     throw new Error('AGENT_TURN_APPROVAL_RUN_STATE_INVALID')
   }
   assertAgentTurnRunStateContract({
@@ -432,86 +432,101 @@ export async function suspendAgentTurnForApproval(params: {
     approvals: params.payload.members,
   })
   const payloadJson = toJson(params.payload)
-  await prisma.$transaction(async (tx) => {
-    await appendProjectAssistantThreadMessagesInTransaction(tx, {
-      projectId: params.input.turn.projectId,
-      userId: params.input.turn.userId,
-      episodeId: params.input.context.episodeId,
-      assistantId: 'workspace-command',
-      messages: [params.assistantMessage],
-    })
-    const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+  await prisma.$transaction(
+    async (tx) => {
+      await lockProjectAssistantThreadScopeInTransaction(tx, {
+        threadId: params.input.turn.threadId,
+        projectId: params.input.turn.projectId,
+        userId: params.input.turn.userId,
+        episodeId: params.input.turn.episodeId,
+        assistantId: 'workspace-command',
+      })
+      const rows = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
       SELECT *
       FROM project_agent_turns
       WHERE id = ${params.input.turn.id}
       FOR UPDATE
     `)
-    const turn = rows[0] ?? null
-    if (!turn) {
-      throw new Error(`AGENT_TURN_NOT_FOUND:${params.input.turn.id}`)
-    }
-    const existing = await tx.agentTurnInteraction.findUnique({
-      where: { id: interactionId },
-    })
-    if (existing) {
-      if (
-        existing.turnId !== turn.id
-        || existing.kind !== 'approval'
-        || existing.status !== 'pending'
-        || existing.runState !== params.runState
-        || !isDeepStrictEqual(existing.payloadJson, payloadJson)
-        || turn.status !== 'waiting_approval'
-        || turn.assistantMessageId !== params.assistantMessage.id
-      ) {
-        throw new Error(
-          `AGENT_TURN_APPROVAL_REPLAY_DIVERGED:${interactionId}`,
-        )
+      const turn = rows[0] ?? null
+      if (!turn) {
+        throw new Error(`AGENT_TURN_NOT_FOUND:${params.input.turn.id}`)
       }
-      return
-    }
-    if (
-      turn.status !== 'running'
-      || turn.executionOwnerId !== params.executionOwnerId
-      || turn.modelHistoryBaseVersion
-        !== params.input.modelHistory.version
-    ) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_FENCE_DIVERGED:${turn.id}:${turn.status}`,
-      )
-    }
-    await commitProjectAssistantTurnInTransaction(tx, {
-      threadId: turn.threadId,
-      projectId: turn.projectId,
-      userId: turn.userId,
-      episodeId: turn.episodeId,
-      assistantId: 'workspace-command',
-      expectedModelHistoryVersion: params.input.modelHistory.version,
-      messages: [params.assistantMessage],
-      modelHistoryItems: params.modelHistoryItems,
-    })
-    await tx.agentTurnInteraction.create({
-      data: {
-        id: interactionId,
+      const existing = await tx.agentTurnInteraction.findUnique({
+        where: { id: interactionId },
+      })
+      if (existing) {
+        if (
+          existing.turnId !== turn.id ||
+          existing.kind !== 'approval' ||
+          existing.status !== 'pending' ||
+          existing.runState !== params.runState ||
+          !isDeepStrictEqual(existing.payloadJson, payloadJson) ||
+          turn.status !== 'waiting_approval' ||
+          turn.assistantMessageId !== params.assistantMessage.id
+        ) {
+          throw new Error(`AGENT_TURN_APPROVAL_REPLAY_DIVERGED:${interactionId}`)
+        }
+        return
+      }
+      if (
+        turn.status !== 'running' ||
+        turn.executionOwnerId !== params.executionOwnerId ||
+        turn.modelHistoryBaseVersion !== params.input.modelHistory.version
+      ) {
+        throw new Error(`AGENT_TURN_APPROVAL_FENCE_DIVERGED:${turn.id}:${turn.status}`)
+      }
+      await recordAgentTurnUsageFactsInTransaction({
+        tx,
         turnId: turn.id,
-        kind: 'approval',
-        status: 'pending',
-        payloadJson,
-        runState: params.runState,
-      },
-    })
-    await tx.projectAgentTurn.update({
-      where: { id: turn.id },
-      data: {
-        status: 'waiting_approval',
-        assistantMessageId: params.assistantMessage.id,
-        stopReason: 'awaiting_approval',
-        modelHistoryBaseVersion: params.input.modelHistory.version + 1,
-      },
-    })
-  }, {
-    maxWait: 10_000,
-    timeout: 30_000,
-  })
+        attempt: turn.attempt,
+        projectId: turn.projectId,
+        userId: turn.userId,
+        usageFacts: params.usageFacts,
+      })
+      await commitProjectAssistantTurnInTransaction(tx, {
+        threadId: turn.threadId,
+        projectId: turn.projectId,
+        userId: turn.userId,
+        episodeId: turn.episodeId,
+        assistantId: 'workspace-command',
+        expectedModelHistoryVersion: params.input.modelHistory.version,
+        messages: [params.assistantMessage],
+        modelHistoryItems: params.modelHistoryItems,
+      })
+      await tx.agentTurnInteraction.create({
+        data: {
+          id: interactionId,
+          turnId: turn.id,
+          kind: 'approval',
+          status: 'pending',
+          payloadJson,
+          runState: params.runState,
+        },
+      })
+      await tx.agentTurnInteraction.updateMany({
+        where: {
+          turnId: turn.id,
+          kind: 'approval',
+          status: { in: ['approved', 'rejected'] },
+          runState: { not: null },
+        },
+        data: { runState: null },
+      })
+      await tx.projectAgentTurn.update({
+        where: { id: turn.id },
+        data: {
+          status: 'waiting_approval',
+          assistantMessageId: params.assistantMessage.id,
+          stopReason: 'awaiting_approval',
+          modelHistoryBaseVersion: params.input.modelHistory.version + 1,
+        },
+      })
+    },
+    {
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  )
   return {
     turnId: params.input.turn.id,
     interactionId,
@@ -538,163 +553,160 @@ export async function resolveAgentTurnApprovalDecision(
     },
   })
   if (!identity) {
-    throw new Error(
-      `AGENT_TURN_APPROVAL_NOT_FOUND:${command.interactionId}`,
-    )
+    throw new Error(`AGENT_TURN_APPROVAL_NOT_FOUND:${command.interactionId}`)
   }
   if (
-    identity.turnId !== command.turnId
-    || identity.turn.threadId !== command.threadId
-    || identity.turn.projectId !== command.projectId
-    || identity.turn.userId !== command.userId
+    identity.turnId !== command.turnId ||
+    identity.turn.threadId !== command.threadId ||
+    identity.turn.projectId !== command.projectId ||
+    identity.turn.userId !== command.userId
   ) {
-    throw new Error(
-      `AGENT_TURN_APPROVAL_SCOPE_DIVERGED:${command.interactionId}`,
-    )
+    throw new Error(`AGENT_TURN_APPROVAL_SCOPE_DIVERGED:${command.interactionId}`)
   }
-  const resolution = await prisma.$transaction(async (tx) => {
-    const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  const resolution = await prisma.$transaction(
+    async (tx) => {
+      const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id
       FROM projects
       WHERE id = ${command.projectId}
       FOR UPDATE
     `)
-    if (projects.length !== 1) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_PROJECT_NOT_FOUND:${command.projectId}`,
-      )
-    }
-    const threads = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      if (projects.length !== 1) {
+        throw new Error(`AGENT_TURN_APPROVAL_PROJECT_NOT_FOUND:${command.projectId}`)
+      }
+      const threads = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id
       FROM project_assistant_threads
       WHERE id = ${command.threadId}
       FOR UPDATE
     `)
-    if (threads.length !== 1) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_THREAD_NOT_FOUND:${command.threadId}`,
-      )
-    }
-    const turns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      if (threads.length !== 1) {
+        throw new Error(`AGENT_TURN_APPROVAL_THREAD_NOT_FOUND:${command.threadId}`)
+      }
+      const turns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
       SELECT *
       FROM project_agent_turns
       WHERE id = ${command.turnId}
       FOR UPDATE
     `)
-    const turn = turns[0] ?? null
-    const interactions = await tx.$queryRaw<Array<{
-      id: string
-      turnId: string
-      kind: string
-      status: string
-      payloadJson: Prisma.JsonValue
-      runState: string | null
-      responseJson: Prisma.JsonValue | null
-      version: number
-    }>>(Prisma.sql`
+      const turn = turns[0] ?? null
+      const interactions = await tx.$queryRaw<
+        Array<{
+          id: string
+          turnId: string
+          kind: string
+          status: string
+          payloadJson: Prisma.JsonValue
+          runState: string | null
+          responseJson: Prisma.JsonValue | null
+          version: number
+        }>
+      >(Prisma.sql`
       SELECT id, turnId, kind, status, payloadJson, runState,
              responseJson, version
       FROM agent_turn_interactions
       WHERE id = ${command.interactionId}
       FOR UPDATE
     `)
-    const interaction = interactions[0] ?? null
-    if (
-      !turn
-      || !interaction
-      || turn.threadId !== command.threadId
-      || turn.projectId !== command.projectId
-      || turn.userId !== command.userId
-      || interaction.turnId !== turn.id
-      || interaction.kind !== 'approval'
-      || !interaction.runState
-    ) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_SCOPE_DIVERGED:${command.interactionId}`,
-      )
-    }
-    if (interaction.status === 'approved' || interaction.status === 'rejected') {
-      const stored = parseStoredResponse(interaction.responseJson)
+      const interaction = interactions[0] ?? null
       if (
-        stored.requestId !== command.requestId
-        || stored.decision !== command.decision
-        || stored.reason !== command.reason
+        !turn ||
+        !interaction ||
+        turn.threadId !== command.threadId ||
+        turn.projectId !== command.projectId ||
+        turn.userId !== command.userId ||
+        interaction.turnId !== turn.id ||
+        interaction.kind !== 'approval'
+      ) {
+        throw new Error(`AGENT_TURN_APPROVAL_SCOPE_DIVERGED:${command.interactionId}`)
+      }
+      if (interaction.status === 'approved' || interaction.status === 'rejected') {
+        const stored = parseStoredResponse(interaction.responseJson)
+        if (
+          stored.requestId !== command.requestId ||
+          stored.decision !== command.decision ||
+          stored.reason !== command.reason
+        ) {
+          throw new Error(`AGENT_TURN_APPROVAL_RESPONSE_REPLAY_DIVERGED:${interaction.id}`)
+        }
+        return {
+          resumeRequired: turn.status === 'waiting_approval',
+          episodeId: turn.episodeId,
+        }
+      }
+      if (
+        interaction.status !== 'pending' ||
+        interaction.version !== 0 ||
+        turn.status !== 'waiting_approval' ||
+        !interaction.runState
       ) {
         throw new Error(
-          `AGENT_TURN_APPROVAL_RESPONSE_REPLAY_DIVERGED:${interaction.id}`,
+          `AGENT_TURN_APPROVAL_RESPONSE_REJECTED:${interaction.id}:${interaction.status}:${turn.status}`,
         )
       }
-      return { resumeRequired: turn.status === 'waiting_approval' }
-    }
-    if (
-      interaction.status !== 'pending'
-      || interaction.version !== 0
-      || turn.status !== 'waiting_approval'
-    ) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_RESPONSE_REJECTED:${interaction.id}:${interaction.status}:${turn.status}`,
-      )
-    }
-    const payload = parseAgentTurnApprovalPayload(interaction.payloadJson)
-    const grants = command.decision === 'approve'
-      ? await issueApprovalGrantGroupInTransaction(tx, {
-          userId: command.userId,
-          requests: payload.members.flatMap((member) => (
-            member.operationPlan?.planSnapshotId
-              ? [{
-                  planSnapshotId: member.operationPlan.planSnapshotId,
-                  requestId:
-                    `agent-turn-approval:${interaction.id}:${member.callId}`,
-                }]
-              : []
-          )),
-        })
-      : []
-    const grantByPlanId = new Map(
-      grants.map((grant) => [grant.planSnapshotId, grant]),
-    )
-    const response: StoredApprovalResponse = {
-      protocol: 'agent_turn_approval_response_v1',
-      requestId: command.requestId,
-      decision: command.decision,
-      reason: command.reason,
-      grants: payload.members.flatMap((member) => {
-        const planSnapshotId = member.operationPlan?.planSnapshotId ?? null
-        if (!planSnapshotId) return []
-        const grant = grantByPlanId.get(planSnapshotId)
-        if (!grant || grant.operationId !== member.operationId) {
-          throw new Error(
-            `AGENT_TURN_APPROVAL_GRANT_DIVERGED:${member.callId}`,
-          )
-        }
-        return [{
-          callId: member.callId,
-          operationId: member.operationId,
-          approvalGrantId: grant.approvalGrantId,
-          requestId: grant.requestId,
-        }]
-      }),
-    }
-    await tx.agentTurnInteraction.update({
-      where: { id: interaction.id },
-      data: {
-        status: command.decision === 'approve' ? 'approved' : 'rejected',
-        responseJson: toJson(response),
-        version: { increment: 1 },
-        resolvedAt: new Date(),
-      },
-    })
-    return { resumeRequired: true }
-  }, {
-    maxWait: 10_000,
-    timeout: 30_000,
-  })
+      const payload = parseAgentTurnApprovalPayload(interaction.payloadJson)
+      const grants =
+        command.decision === 'approve'
+          ? await issueApprovalGrantGroupInTransaction(tx, {
+              userId: command.userId,
+              requests: payload.members.flatMap((member) =>
+                member.operationPlan?.planSnapshotId
+                  ? [
+                      {
+                        planSnapshotId: member.operationPlan.planSnapshotId,
+                        requestId: `agent-turn-approval:${interaction.id}:${member.callId}`,
+                      },
+                    ]
+                  : [],
+              ),
+            })
+          : []
+      const grantByPlanId = new Map(grants.map((grant) => [grant.planSnapshotId, grant]))
+      const response: StoredApprovalResponse = {
+        protocol: 'agent_turn_approval_response_v1',
+        requestId: command.requestId,
+        decision: command.decision,
+        reason: command.reason,
+        grants: payload.members.flatMap((member) => {
+          const planSnapshotId = member.operationPlan?.planSnapshotId ?? null
+          if (!planSnapshotId) return []
+          const grant = grantByPlanId.get(planSnapshotId)
+          if (!grant || grant.operationId !== member.operationId) {
+            throw new Error(`AGENT_TURN_APPROVAL_GRANT_DIVERGED:${member.callId}`)
+          }
+          return [
+            {
+              callId: member.callId,
+              operationId: member.operationId,
+              approvalGrantId: grant.approvalGrantId,
+              requestId: grant.requestId,
+            },
+          ]
+        }),
+      }
+      await tx.agentTurnInteraction.update({
+        where: { id: interaction.id },
+        data: {
+          status: command.decision === 'approve' ? 'approved' : 'rejected',
+          responseJson: toJson(response),
+          version: { increment: 1 },
+          resolvedAt: new Date(),
+        },
+      })
+      return { resumeRequired: true, episodeId: turn.episodeId }
+    },
+    {
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  )
   return {
     protocol: 'agent_turn_approval_receipt_v1',
     threadId: command.threadId,
     turnId: command.turnId,
     interactionId: command.interactionId,
     projectId: command.projectId,
+    episodeId: resolution.episodeId,
     requestId: command.requestId,
     decision: command.decision,
     payloadHash: hashCanonicalJson(command),
@@ -729,112 +741,101 @@ export async function claimAgentTurnApprovalResume(params: {
   if (!identity) {
     throw new Error(`AGENT_TURN_APPROVAL_NOT_FOUND:${interactionId}`)
   }
-  const settled = await prisma.$transaction(async (tx) => {
-    const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  const settled = await prisma.$transaction(
+    async (tx) => {
+      const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id
       FROM projects
       WHERE id = ${identity.turn.projectId}
       FOR UPDATE
     `)
-    if (projects.length !== 1) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_PROJECT_NOT_FOUND:${identity.turn.projectId}`,
-      )
-    }
-    const threads = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      if (projects.length !== 1) {
+        throw new Error(`AGENT_TURN_APPROVAL_PROJECT_NOT_FOUND:${identity.turn.projectId}`)
+      }
+      const threads = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT id
       FROM project_assistant_threads
       WHERE id = ${identity.turn.threadId}
       FOR UPDATE
     `)
-    if (threads.length !== 1) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_THREAD_NOT_FOUND:${identity.turn.threadId}`,
-      )
-    }
-    const turns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
+      if (threads.length !== 1) {
+        throw new Error(`AGENT_TURN_APPROVAL_THREAD_NOT_FOUND:${identity.turn.threadId}`)
+      }
+      const turns = await tx.$queryRaw<ProjectAgentTurn[]>(Prisma.sql`
       SELECT *
       FROM project_agent_turns
       WHERE id = ${identity.turnId}
       FOR UPDATE
     `)
-    const turn = turns[0] ?? null
-    const interactions = await tx.$queryRaw<Array<{
-      id: string
-      turnId: string
-      kind: string
-      status: string
-      payloadJson: Prisma.JsonValue
-      runState: string | null
-      responseJson: Prisma.JsonValue | null
-      version: number
-    }>>(Prisma.sql`
+      const turn = turns[0] ?? null
+      const interactions = await tx.$queryRaw<
+        Array<{
+          id: string
+          turnId: string
+          kind: string
+          status: string
+          payloadJson: Prisma.JsonValue
+          runState: string | null
+          responseJson: Prisma.JsonValue | null
+          version: number
+        }>
+      >(Prisma.sql`
       SELECT id, turnId, kind, status, payloadJson, runState,
              responseJson, version
       FROM agent_turn_interactions
       WHERE id = ${interactionId}
       FOR UPDATE
     `)
-    const interaction = interactions[0] ?? null
-    const payload = interaction
-      ? parseAgentTurnApprovalPayload(interaction.payloadJson)
-      : null
-    if (
-      !turn
-      || !interaction
-      || !payload
-      || interaction.turnId !== turn.id
-      || interaction.kind !== 'approval'
-      || !interaction.runState
-      || (
-        interaction.status !== 'approved'
-        && interaction.status !== 'rejected'
-      )
-      || interaction.version !== 1
-    ) {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_RESUME_STATE_INVALID:${interactionId}`,
-      )
-    }
-    assertAgentTurnRunStateContract({
-      runState: interaction.runState,
-      runtime: payload.runtime,
-    })
-    if (
-      turn.status === 'running'
-      && turn.executionOwnerId === executionOwnerId
-    ) {
+      const interaction = interactions[0] ?? null
+      const payload = interaction ? parseAgentTurnApprovalPayload(interaction.payloadJson) : null
+      if (
+        !turn ||
+        !interaction ||
+        !payload ||
+        interaction.turnId !== turn.id ||
+        interaction.kind !== 'approval' ||
+        !interaction.runState ||
+        (interaction.status !== 'approved' && interaction.status !== 'rejected') ||
+        interaction.version !== 1
+      ) {
+        throw new Error(`AGENT_TURN_APPROVAL_RESUME_STATE_INVALID:${interactionId}`)
+      }
+      assertAgentTurnRunStateContract({
+        runState: interaction.runState,
+        runtime: payload.runtime,
+      })
+      if (turn.status === 'running' && turn.executionOwnerId === executionOwnerId) {
+        return {
+          turnId: turn.id,
+          runState: interaction.runState,
+          payload,
+          response: parseStoredResponse(interaction.responseJson),
+        }
+      }
+      if (turn.status !== 'waiting_approval') {
+        throw new Error(`AGENT_TURN_APPROVAL_RESUME_FENCE_DIVERGED:${turn.id}:${turn.status}`)
+      }
+      await tx.projectAgentTurn.update({
+        where: { id: turn.id },
+        data: {
+          status: 'running',
+          attempt: { increment: 1 },
+          executionOwnerId,
+          stopReason: null,
+        },
+      })
       return {
         turnId: turn.id,
         runState: interaction.runState,
         payload,
         response: parseStoredResponse(interaction.responseJson),
       }
-    }
-    if (turn.status !== 'waiting_approval') {
-      throw new Error(
-        `AGENT_TURN_APPROVAL_RESUME_FENCE_DIVERGED:${turn.id}:${turn.status}`,
-      )
-    }
-    await tx.projectAgentTurn.update({
-      where: { id: turn.id },
-      data: {
-        status: 'running',
-        attempt: { increment: 1 },
-        executionOwnerId,
-        stopReason: null,
-      },
-    })
-    return {
-      turnId: turn.id,
-      runState: interaction.runState,
-      payload,
-      response: parseStoredResponse(interaction.responseJson),
-    }
-  }, {
-    maxWait: 10_000,
-    timeout: 30_000,
-  })
+    },
+    {
+      maxWait: 10_000,
+      timeout: 30_000,
+    },
+  )
   const input = await loadClaimedAgentTurnExecutionInput({
     turnId: settled.turnId,
     executionOwnerId,

@@ -1,7 +1,4 @@
-import {
-  TASK_SSE_EVENT_TYPE,
-  type SSEEvent,
-} from '@/lib/sse/events'
+import { TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/sse/events'
 import { TASK_TYPE } from '@/lib/task/types'
 
 export type WorkspaceAssistantSubagentLiveStream = {
@@ -17,7 +14,7 @@ export type WorkspaceAssistantSubagentLiveStream = {
 
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {}
 }
 
@@ -26,25 +23,23 @@ function readString(value: unknown): string | null {
 }
 
 function readPositiveInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-    ? value
-    : null
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
 export type SubagentLiveStreamReduction =
   | { kind: 'unchanged'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream> }
   | { kind: 'updated'; streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream> }
   | {
-    kind: 'gap'
-    streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
-    taskId: string
-    streamIdentity: string
-  }
+      kind: 'gap'
+      streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
+      taskId: string
+      streamIdentity: string
+    }
   | {
-    kind: 'unknown_task'
-    streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
-    taskId: string
-  }
+      kind: 'unknown_task'
+      streams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
+      taskId: string
+    }
 
 export interface WorkspaceAssistantSubagentLiveStreamPolicy {
   readonly ownedTaskIds?: ReadonlySet<string>
@@ -60,13 +55,15 @@ export function isWorkspaceAssistantSessionSubagentTask(
 
 export function resolveWorkspaceAssistantSubagentTaskEventDisposition(params: {
   readonly ownedTaskIds: ReadonlySet<string>
-  readonly ownershipRequestedTaskIds: ReadonlySet<string>
+  readonly ownershipRequested: boolean
+  readonly ownershipConfirmedNonOwned: boolean
   readonly taskId: string
 }): 'accept' | 'confirm' | 'ignore' {
   if (isWorkspaceAssistantSessionSubagentTask(params.ownedTaskIds, params.taskId)) {
     return 'accept'
   }
-  return params.ownershipRequestedTaskIds.has(params.taskId) ? 'ignore' : 'confirm'
+  if (params.ownershipRequested) return 'confirm'
+  return params.ownershipConfirmedNonOwned ? 'ignore' : 'confirm'
 }
 
 export function reduceWorkspaceAssistantSubagentLiveStream(
@@ -74,13 +71,11 @@ export function reduceWorkspaceAssistantSubagentLiveStream(
   event: SSEEvent,
   policy: WorkspaceAssistantSubagentLiveStreamPolicy = {},
 ): SubagentLiveStreamReduction {
+  if (event.type !== TASK_SSE_EVENT_TYPE.STREAM || event.taskType !== TASK_TYPE.CREATIVE_WORK)
+    return { kind: 'unchanged', streams: current }
   if (
-    event.type !== TASK_SSE_EVENT_TYPE.STREAM
-    || event.taskType !== TASK_TYPE.CREATIVE_WORK
-  ) return { kind: 'unchanged', streams: current }
-  if (
-    policy.ownedTaskIds
-    && !isWorkspaceAssistantSessionSubagentTask(policy.ownedTaskIds, event.taskId)
+    policy.ownedTaskIds &&
+    !isWorkspaceAssistantSessionSubagentTask(policy.ownedTaskIds, event.taskId)
   ) {
     return { kind: 'unknown_task', streams: current, taskId: event.taskId }
   }
@@ -88,17 +83,16 @@ export function reduceWorkspaceAssistantSubagentLiveStream(
   const stream = readRecord(payload.stream)
   const streamKind = readString(stream.kind)
   const lane = readString(stream.lane)
-  const kind = streamKind === 'reasoning'
-    ? 'reasoning' as const
-    : streamKind === 'text' && lane === 'structured-output'
-      ? 'structured_output' as const
-      : null
+  const kind =
+    streamKind === 'reasoning'
+      ? ('reasoning' as const)
+      : streamKind === 'text' && lane === 'structured-output'
+        ? ('structured_output' as const)
+        : null
   if (!kind) {
     return { kind: 'unchanged', streams: current }
   }
-  const delta = typeof stream.delta === 'string' && stream.delta.length > 0
-    ? stream.delta
-    : null
+  const delta = typeof stream.delta === 'string' && stream.delta.length > 0 ? stream.delta : null
   const streamId = readString(payload.stepId)
   const streamRunId = readString(payload.streamRunId)
   // stepAttempt 只服务 structured-output 的跨 attempt 去重;发布端对它是条件展开,

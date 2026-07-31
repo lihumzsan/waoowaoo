@@ -34,33 +34,29 @@ import {
   type AgentThreadQueuedTurn,
 } from '../agent-thread/contracts'
 
-const submitTurn = defineUpdate<
-  AgentTurnAdmissionReceipt,
-  [AgentTurnCommandEnvelope]
->(AGENT_THREAD_UPDATE_NAME.SUBMIT_TURN)
+const submitTurn = defineUpdate<AgentTurnAdmissionReceipt, [AgentTurnCommandEnvelope]>(
+  AGENT_THREAD_UPDATE_NAME.SUBMIT_TURN,
+)
 
 const resolveApproval = defineUpdate<
   AgentTurnApprovalDecisionReceipt,
   [ResolveAgentTurnApprovalCommand]
 >(AGENT_THREAD_UPDATE_NAME.RESOLVE_APPROVAL)
 
-const resolveChoice = defineUpdate<
-  AgentTurnAdmissionReceipt,
-  [ResolveAgentTurnChoiceCommand]
->(AGENT_THREAD_UPDATE_NAME.RESOLVE_CHOICE)
+const resolveChoice = defineUpdate<AgentTurnAdmissionReceipt, [ResolveAgentTurnChoiceCommand]>(
+  AGENT_THREAD_UPDATE_NAME.RESOLVE_CHOICE,
+)
 
-const cancelTurn = defineUpdate<
-  AgentTurnCancellationReceipt,
-  [CancelAgentTurnCommand]
->(AGENT_THREAD_UPDATE_NAME.CANCEL_TURN)
+const cancelTurn = defineUpdate<AgentTurnCancellationReceipt, [CancelAgentTurnCommand]>(
+  AGENT_THREAD_UPDATE_NAME.CANCEL_TURN,
+)
 
-const clearThread = defineUpdate<
-  AgentThreadClearReceipt,
-  [ClearAgentThreadCommand]
->(AGENT_THREAD_UPDATE_NAME.CLEAR_THREAD)
+const clearThread = defineUpdate<AgentThreadClearReceipt, [ClearAgentThreadCommand]>(
+  AGENT_THREAD_UPDATE_NAME.CLEAR_THREAD,
+)
 
 const admissionActivities = proxyActivities<
-  Pick<AgentThreadCoordinatorActivities, 'admitAgentTurn'>
+  Pick<AgentThreadCoordinatorActivities, 'admitAgentTurn' | 'recoverAgentThread'>
 >({
   startToCloseTimeout: '1 minute',
   retry: {
@@ -71,10 +67,7 @@ const admissionActivities = proxyActivities<
 })
 
 const executionActivities = proxyActivities<
-  Pick<
-    AgentThreadCoordinatorActivities,
-    'executeAgentTurn' | 'resumeAgentTurnApproval'
-  >
+  Pick<AgentThreadCoordinatorActivities, 'executeAgentTurn' | 'resumeAgentTurnApproval'>
 >({
   startToCloseTimeout: '1 day',
   heartbeatTimeout: '45 seconds',
@@ -96,10 +89,7 @@ const settlementActivities = proxyActivities<
 })
 
 const interactionActivities = proxyActivities<
-  Pick<
-    AgentThreadCoordinatorActivities,
-    'resolveAgentTurnApproval' | 'resolveAgentTurnChoice'
-  >
+  Pick<AgentThreadCoordinatorActivities, 'resolveAgentTurnApproval' | 'resolveAgentTurnChoice'>
 >({
   startToCloseTimeout: '1 minute',
   retry: {
@@ -146,9 +136,7 @@ function validateEnvelope(envelope: AgentTurnCommandEnvelope): void {
   }
 }
 
-function validateApprovalCommand(
-  command: ResolveAgentTurnApprovalCommand,
-): void {
+function validateApprovalCommand(command: ResolveAgentTurnApprovalCommand): void {
   if (
     !command ||
     typeof command !== 'object' ||
@@ -166,8 +154,7 @@ function validateApprovalCommand(
     !command.requestId ||
     command.requestId !== command.requestId.trim() ||
     (command.decision !== 'approve' && command.decision !== 'reject') ||
-    (command.reason !== null &&
-      (!command.reason || command.reason !== command.reason.trim()))
+    (command.reason !== null && (!command.reason || command.reason !== command.reason.trim()))
   ) {
     fail('AGENT_TURN_APPROVAL_COMMAND_INVALID')
   }
@@ -208,8 +195,7 @@ function validateCancelCommand(command: CancelAgentTurnCommand): void {
     command.userId !== command.userId.trim() ||
     !command.requestId ||
     command.requestId !== command.requestId.trim() ||
-    (command.reason !== null &&
-      (!command.reason || command.reason !== command.reason.trim()))
+    (command.reason !== null && (!command.reason || command.reason !== command.reason.trim()))
   ) {
     fail('AGENT_TURN_CANCEL_COMMAND_INVALID')
   }
@@ -248,11 +234,7 @@ function validateInput(input: AgentThreadCoordinatorWorkflowInput): void {
     fail('AGENT_THREAD_WORKFLOW_INPUT_INVALID')
   }
   if (workflowInfo().workflowId !== input.workflowId) {
-    fail(
-      'AGENT_THREAD_WORKFLOW_ID_DIVERGED',
-      workflowInfo().workflowId,
-      input.workflowId,
-    )
+    fail('AGENT_THREAD_WORKFLOW_ID_DIVERGED', workflowInfo().workflowId, input.workflowId)
   }
 }
 
@@ -269,6 +251,7 @@ export async function agentThreadCoordinatorWorkflow(
   validateInput(input)
   const queued: AgentThreadQueuedTurn[] = []
   const receipts = new Map<string, AgentTurnAdmissionReceipt>()
+  let recoveryInFlight = true
   let admissionInFlight = false
   let activeTurnId: string | null = null
   let pendingChoiceTurnId: string | null = null
@@ -281,8 +264,12 @@ export async function agentThreadCoordinatorWorkflow(
   let clearInFlight = false
   let threadCleared = false
   let activeExecutionScope: CancellationScope | null = null
-  const readApprovalResolution = (): AgentTurnApprovalDecisionReceipt | null =>
-    approvalResolution
+  const readApprovalResolution = (): AgentTurnApprovalDecisionReceipt | null => approvalResolution
+  const waitForRecovery = async (): Promise<void> => {
+    while (recoveryInFlight) {
+      await condition(() => !recoveryInFlight)
+    }
+  }
 
   const recordAdmission = (
     envelope: AgentTurnCommandEnvelope,
@@ -313,6 +300,14 @@ export async function agentThreadCoordinatorWorkflow(
       return fail('AGENT_TURN_ACCEPTED_ADMISSION_DIVERGED')
     }
     if (receipt.turn.status === 'queued') {
+      const alreadyQueued = queued.find((entry) => entry.turn.id === receipt.turn.id)
+      if (alreadyQueued) {
+        if (alreadyQueued.payloadHash !== receipt.turn.payloadHash) {
+          return fail('AGENT_TURN_RECOVERED_REPLAY_DIVERGED', receipt.turn.id)
+        }
+        return receipt
+      }
+      if (activeTurnId === receipt.turn.id) return receipt
       const item = {
         commandId: envelope.commandId,
         payloadHash: envelope.payloadHash,
@@ -320,18 +315,21 @@ export async function agentThreadCoordinatorWorkflow(
       }
       if (priority) queued.unshift(item)
       else queued.push(item)
+    } else if (receipt.turn.status === 'running') {
+      if (activeTurnId !== receipt.turn.id) {
+        return fail('AGENT_TURN_RUNNING_REPLAY_DIVERGED', receipt.turn.id)
+      }
+    } else if (receipt.turn.status === 'waiting_approval') {
+      if (lastTurn?.status !== 'waiting_approval' || lastTurn.turnId !== receipt.turn.id) {
+        return fail('AGENT_TURN_APPROVAL_REPLAY_DIVERGED', receipt.turn.id)
+      }
     } else if (
       receipt.turn.status !== 'completed' &&
       receipt.turn.status !== 'failed' &&
       receipt.turn.status !== 'interrupted' &&
-      receipt.turn.status !== 'cancelled' &&
-      receipt.turn.status !== 'waiting_approval'
+      receipt.turn.status !== 'cancelled'
     ) {
-      return fail(
-        'AGENT_TURN_ADMISSION_STATE_INVALID',
-        receipt.turn.id,
-        receipt.turn.status,
-      )
+      return fail('AGENT_TURN_ADMISSION_STATE_INVALID', receipt.turn.id, receipt.turn.status)
     }
     return receipt
   }
@@ -340,9 +338,7 @@ export async function agentThreadCoordinatorWorkflow(
     while (lastTurn?.status === 'waiting_approval') {
       await condition(
         () =>
-          approvalResolution !== null
-          || lastTurn?.status !== 'waiting_approval'
-          || threadCleared,
+          approvalResolution !== null || lastTurn?.status !== 'waiting_approval' || threadCleared,
       )
       if (threadCleared || lastTurn?.status !== 'waiting_approval') {
         break
@@ -400,6 +396,7 @@ export async function agentThreadCoordinatorWorkflow(
     submitTurn,
     async (envelope) => {
       validateEnvelope(envelope)
+      await waitForRecovery()
       if (threadCleared || clearInFlight) {
         return fail('AGENT_THREAD_CLEARED')
       }
@@ -407,8 +404,10 @@ export async function agentThreadCoordinatorWorkflow(
         return fail('AGENT_THREAD_COMMAND_SCOPE_DIVERGED')
       }
       hasHandledCommand = true
-      while (admissionInFlight) {
-        await condition(() => !admissionInFlight)
+      while (admissionInFlight || approvalResolutionInFlight || lifecycleInFlight) {
+        await condition(
+          () => !admissionInFlight && !approvalResolutionInFlight && !lifecycleInFlight,
+        )
         if (threadCleared || clearInFlight) {
           return fail('AGENT_THREAD_CLEARED')
         }
@@ -427,14 +426,22 @@ export async function agentThreadCoordinatorWorkflow(
         }
         return replay
       }
-      const foreground =
-        envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP
+      const foreground = envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.TASK_FOLLOW_UP
+      const canSupersedeApproval =
+        lastTurn?.status === 'waiting_approval' &&
+        approvalResolution === null &&
+        envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
       if (
-        foreground
-        && (
-          activeTurnId !== null
-          || (queued.length > 0 && pendingChoiceTurnId === null)
-        )
+        foreground &&
+        lastTurn?.status === 'waiting_approval' &&
+        (envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.USER || approvalResolution !== null)
+      ) {
+        return fail('AGENT_THREAD_BUSY', lastTurn.turnId)
+      }
+      if (
+        foreground &&
+        (activeTurnId !== null ||
+          (queued.length > 0 && pendingChoiceTurnId === null && !canSupersedeApproval))
       ) {
         return fail('AGENT_THREAD_BUSY', activeTurnId ?? queued[0]?.turn.id)
       }
@@ -448,14 +455,20 @@ export async function agentThreadCoordinatorWorkflow(
           envelope,
         })
         const supersedesChoice =
-          pendingChoiceTurnId !== null
-          && envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
-        const recorded = recordAdmission(
-          envelope,
-          receipt,
-          supersedesChoice,
-        )
+          pendingChoiceTurnId !== null &&
+          envelope.command.sourceKind === AGENT_TURN_SOURCE_KIND.USER
+        const supersedesApproval = canSupersedeApproval
+        const supersededApprovalTurnId = supersedesApproval ? (lastTurn?.turnId ?? null) : null
+        const recorded = recordAdmission(envelope, receipt, supersedesChoice || supersedesApproval)
         if (supersedesChoice) pendingChoiceTurnId = null
+        if (supersededApprovalTurnId) {
+          lastTurn = {
+            turnId: supersededApprovalTurnId,
+            status: 'cancelled',
+            stopReason: 'superseded_by_user_turn',
+            errorCode: null,
+          }
+        }
         return recorded
       } finally {
         admissionInFlight = false
@@ -470,6 +483,7 @@ export async function agentThreadCoordinatorWorkflow(
     resolveChoice,
     async (command) => {
       validateChoiceCommand(command)
+      await waitForRecovery()
       if (threadCleared || clearInFlight) {
         return fail('AGENT_THREAD_CLEARED')
       }
@@ -483,10 +497,7 @@ export async function agentThreadCoordinatorWorkflow(
           return fail('AGENT_THREAD_CLEARED')
         }
       }
-      if (
-        activeTurnId !== null
-        || (queued.length > 0 && pendingChoiceTurnId === null)
-      ) {
+      if (activeTurnId !== null || (queued.length > 0 && pendingChoiceTurnId === null)) {
         return fail('AGENT_THREAD_BUSY', activeTurnId ?? queued[0]?.turn.id)
       }
       admissionInFlight = true
@@ -503,8 +514,7 @@ export async function agentThreadCoordinatorWorkflow(
           prepared.resolution.userId !== command.userId ||
           prepared.resolution.requestId !== command.requestId ||
           envelope.command.threadId !== input.threadId ||
-          envelope.command.sourceKind !==
-            AGENT_TURN_SOURCE_KIND.CHOICE_RESPONSE ||
+          envelope.command.sourceKind !== AGENT_TURN_SOURCE_KIND.CHOICE_RESPONSE ||
           envelope.command.sourceId !== command.offerId ||
           envelope.command.requestId !== command.requestId
         ) {
@@ -514,11 +524,7 @@ export async function agentThreadCoordinatorWorkflow(
           workflowId: input.workflowId,
           envelope,
         })
-        const recorded = recordAdmission(
-          envelope,
-          receipt,
-          pendingChoiceTurnId !== null,
-        )
+        const recorded = recordAdmission(envelope, receipt, pendingChoiceTurnId !== null)
         pendingChoiceTurnId = null
         return recorded
       } finally {
@@ -527,24 +533,22 @@ export async function agentThreadCoordinatorWorkflow(
     },
     {
       validator: validateChoiceCommand,
-      description:
-        'Persist one Choice answer and admit its canonical successor Turn.',
+      description: 'Persist one Choice answer and admit its canonical successor Turn.',
     },
   )
   setHandler(
     cancelTurn,
     async (command) => {
       validateCancelCommand(command)
-      if (
-        command.threadId !== input.threadId ||
-        threadCleared ||
-        clearInFlight
-      ) {
+      await waitForRecovery()
+      if (command.threadId !== input.threadId || threadCleared || clearInFlight) {
         return fail('AGENT_TURN_CANCEL_SCOPE_DIVERGED')
       }
       hasHandledCommand = true
-      while (lifecycleInFlight) {
-        await condition(() => !lifecycleInFlight)
+      while (lifecycleInFlight || admissionInFlight || approvalResolutionInFlight) {
+        await condition(
+          () => !lifecycleInFlight && !admissionInFlight && !approvalResolutionInFlight,
+        )
       }
       lifecycleInFlight = true
       try {
@@ -556,19 +560,17 @@ export async function agentThreadCoordinatorWorkflow(
           receipt.protocol !== 'agent_turn_cancellation_receipt_v1' ||
           receipt.threadId !== input.threadId ||
           receipt.turnId !== command.turnId ||
+          (receipt.episodeId !== null && !receipt.episodeId) ||
           receipt.requestId !== command.requestId ||
           receipt.status !== 'cancelled'
         ) {
           return fail('AGENT_TURN_CANCEL_RECEIPT_DIVERGED')
         }
         hasHandledCommand = true
-        const queuedIndex = queued.findIndex(
-          (entry) => entry.turn.id === command.turnId,
-        )
+        const queuedIndex = queued.findIndex((entry) => entry.turn.id === command.turnId)
         const isActive = activeTurnId === command.turnId
         const isWaitingApproval =
-          lastTurn?.turnId === command.turnId
-          && lastTurn.status === 'waiting_approval'
+          lastTurn?.turnId === command.turnId && lastTurn.status === 'waiting_approval'
         if (queuedIndex >= 0) {
           queued.splice(queuedIndex, 1)
         }
@@ -598,6 +600,7 @@ export async function agentThreadCoordinatorWorkflow(
     clearThread,
     async (command) => {
       validateClearCommand(command)
+      await waitForRecovery()
       if (command.threadId !== input.threadId || threadCleared) {
         return fail('AGENT_THREAD_CLEAR_SCOPE_DIVERGED')
       }
@@ -608,10 +611,7 @@ export async function agentThreadCoordinatorWorkflow(
       clearInFlight = true
       try {
         await condition(
-          () =>
-            !admissionInFlight &&
-            !approvalResolutionInFlight &&
-            !lifecycleInFlight,
+          () => !admissionInFlight && !approvalResolutionInFlight && !lifecycleInFlight,
         )
         lifecycleInFlight = true
         try {
@@ -651,14 +651,14 @@ export async function agentThreadCoordinatorWorkflow(
     },
     {
       validator: validateClearCommand,
-      description:
-        'Archive this exact Thread and invalidate every pending interaction.',
+      description: 'Archive this exact Thread and invalidate every pending interaction.',
     },
   )
   setHandler(
     resolveApproval,
     async (command) => {
       validateApprovalCommand(command)
+      await waitForRecovery()
       if (threadCleared || clearInFlight) {
         return fail('AGENT_THREAD_CLEARED')
       }
@@ -666,8 +666,10 @@ export async function agentThreadCoordinatorWorkflow(
         return fail('AGENT_TURN_APPROVAL_SCOPE_DIVERGED')
       }
       hasHandledCommand = true
-      while (approvalResolutionInFlight) {
-        await condition(() => !approvalResolutionInFlight)
+      while (approvalResolutionInFlight || admissionInFlight || lifecycleInFlight) {
+        await condition(
+          () => !approvalResolutionInFlight && !admissionInFlight && !lifecycleInFlight,
+        )
       }
       approvalResolutionInFlight = true
       try {
@@ -679,6 +681,7 @@ export async function agentThreadCoordinatorWorkflow(
           receipt.threadId !== input.threadId ||
           receipt.turnId !== command.turnId ||
           receipt.interactionId !== command.interactionId ||
+          (receipt.episodeId !== null && !receipt.episodeId) ||
           receipt.requestId !== command.requestId ||
           receipt.decision !== command.decision ||
           typeof receipt.payloadHash !== 'string' ||
@@ -689,29 +692,18 @@ export async function agentThreadCoordinatorWorkflow(
         }
         hasHandledCommand = true
         if (receipt.resumeRequired) {
-          if (
-            activeTurnId !== null
-            && activeTurnId !== command.turnId
-          ) {
-            return fail(
-              'AGENT_TURN_APPROVAL_ACTIVE_TURN_DIVERGED',
-              activeTurnId,
-              command.turnId,
-            )
+          if (activeTurnId !== null && activeTurnId !== command.turnId) {
+            return fail('AGENT_TURN_APPROVAL_ACTIVE_TURN_DIVERGED', activeTurnId, command.turnId)
           }
           if (
-            lastTurn !== null
-            && lastTurn.turnId !== command.turnId
-            && lastTurn.status !== 'completed'
-            && lastTurn.status !== 'failed'
-            && lastTurn.status !== 'interrupted'
-            && lastTurn.status !== 'cancelled'
+            lastTurn !== null &&
+            lastTurn.turnId !== command.turnId &&
+            lastTurn.status !== 'completed' &&
+            lastTurn.status !== 'failed' &&
+            lastTurn.status !== 'interrupted' &&
+            lastTurn.status !== 'cancelled'
           ) {
-            return fail(
-              'AGENT_TURN_APPROVAL_LAST_TURN_DIVERGED',
-              lastTurn.turnId,
-              command.turnId,
-            )
+            return fail('AGENT_TURN_APPROVAL_LAST_TURN_DIVERGED', lastTurn.turnId, command.turnId)
           }
           lastTurn = {
             turnId: command.turnId,
@@ -728,16 +720,74 @@ export async function agentThreadCoordinatorWorkflow(
     },
     {
       validator: validateApprovalCommand,
-      description:
-        'Resolve one persisted Agent Turn approval and resume that Turn.',
+      description: 'Resolve one persisted Agent Turn approval and resume that Turn.',
     },
   )
 
-  await condition(
-    () => hasAcceptedCommand || hasHandledCommand || threadCleared,
-  )
+  try {
+    const recovered = await admissionActivities.recoverAgentThread({
+      workflowId: input.workflowId,
+      threadId: input.threadId,
+    })
+    for (const entry of recovered.queued) {
+      if (
+        entry.turn.threadId !== input.threadId ||
+        entry.turn.status !== 'queued' ||
+        entry.payloadHash !== entry.turn.payloadHash ||
+        !entry.commandId
+      ) {
+        return fail('AGENT_THREAD_RECOVERY_QUEUE_DIVERGED')
+      }
+      queued.push(entry)
+    }
+    if (recovered.waitingApproval) {
+      if (
+        recovered.waitingApproval.status !== 'waiting_approval' ||
+        recovered.waitingApproval.turnId === recovered.pendingChoiceTurnId
+      ) {
+        return fail('AGENT_THREAD_RECOVERY_APPROVAL_DIVERGED')
+      }
+      lastTurn = recovered.waitingApproval
+    } else if (recovered.recoveredTurns.length > 0) {
+      const recoveredTurn = recovered.recoveredTurns[recovered.recoveredTurns.length - 1]
+      if (!recoveredTurn || recoveredTurn.status !== 'interrupted') {
+        return fail('AGENT_THREAD_RECOVERY_TURN_DIVERGED')
+      }
+      lastTurn = {
+        turnId: recoveredTurn.id,
+        status: 'interrupted',
+        stopReason: recoveredTurn.stopReason,
+        errorCode: recoveredTurn.errorCode,
+      }
+    }
+    if (recovered.resolvedApproval) {
+      if (
+        lastTurn?.status !== 'waiting_approval' ||
+        recovered.resolvedApproval.turnId !== lastTurn.turnId ||
+        recovered.resolvedApproval.threadId !== input.threadId ||
+        !recovered.resolvedApproval.resumeRequired
+      ) {
+        return fail('AGENT_THREAD_RECOVERY_APPROVAL_RECEIPT_DIVERGED')
+      }
+      approvalResolution = recovered.resolvedApproval
+    }
+    pendingChoiceTurnId = recovered.pendingChoiceTurnId
+    if (
+      queued.length > 0 ||
+      lastTurn !== null ||
+      pendingChoiceTurnId !== null ||
+      !recovered.threadExists
+    ) {
+      hasAcceptedCommand = true
+    }
+  } finally {
+    recoveryInFlight = false
+  }
+
+  await condition(() => hasAcceptedCommand || hasHandledCommand || threadCleared)
   while (true) {
     if (threadCleared) {
+      await condition(() => allHandlersFinished())
       return {
         workflowId: input.workflowId,
         threadId: input.threadId,
@@ -745,9 +795,7 @@ export async function agentThreadCoordinatorWorkflow(
       }
     }
     if (pendingChoiceTurnId !== null) {
-      await condition(
-        () => pendingChoiceTurnId === null || threadCleared,
-      )
+      await condition(() => pendingChoiceTurnId === null || threadCleared)
       continue
     }
     if (lastTurn?.status === 'waiting_approval') {
@@ -756,10 +804,7 @@ export async function agentThreadCoordinatorWorkflow(
     }
     if (queued.length === 0) {
       await condition(
-        () =>
-          queued.length > 0 ||
-          threadCleared ||
-          (!admissionInFlight && allHandlersFinished()),
+        () => queued.length > 0 || threadCleared || (!admissionInFlight && allHandlersFinished()),
       )
       if (threadCleared) continue
       if (queued.length === 0 && !admissionInFlight && allHandlersFinished()) {
@@ -773,11 +818,7 @@ export async function agentThreadCoordinatorWorkflow(
     const next = queued.shift()
     if (!next) continue
     activeTurnId = next.turn.id
-    const executionOwnerId = [
-      input.workflowId,
-      next.turn.id,
-      next.commandId,
-    ].join(':')
+    const executionOwnerId = [input.workflowId, next.turn.id, next.commandId].join(':')
     const executionScope = new CancellationScope()
     activeExecutionScope = executionScope
     try {
@@ -812,10 +853,7 @@ export async function agentThreadCoordinatorWorkflow(
       activeExecutionScope = null
       activeTurnId = null
     }
-    if (
-      lastTurn.status === 'completed'
-      && lastTurn.stopReason === 'awaiting_choice'
-    ) {
+    if (lastTurn.status === 'completed' && lastTurn.stopReason === 'awaiting_choice') {
       pendingChoiceTurnId = lastTurn.turnId
     }
     await resumePendingApproval()

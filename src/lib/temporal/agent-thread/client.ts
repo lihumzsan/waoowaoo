@@ -6,10 +6,7 @@ import {
   WorkflowUpdateFailedError,
   type WorkflowClient,
 } from '@temporalio/client'
-import {
-  buildAgentTurnEnvelope,
-  buildAgentTurnId,
-} from '@/lib/agent-turn/identity'
+import { buildAgentTurnEnvelope, buildAgentTurnId } from '@/lib/agent-turn/identity'
 import type {
   AgentTurnAdmissionReceipt,
   AgentTurnCommandEnvelope,
@@ -78,10 +75,7 @@ function isStatus(value: unknown): value is AgentTurnStatus {
   )
 }
 
-function parseTurn(
-  value: unknown,
-  envelope: AgentTurnCommandEnvelope,
-): AgentTurnRecord {
+function parseTurn(value: unknown, envelope: AgentTurnCommandEnvelope): AgentTurnRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('AGENT_TURN_RECEIPT_INVALID')
   }
@@ -148,9 +142,7 @@ function parseReceipt(
     throw new Error('AGENT_TURN_ADMISSION_RECEIPT_DIVERGED')
   }
   if (record.payloadHash !== expected.envelope.payloadHash) {
-    throw new TemporalAgentTurnCommandConflictError(
-      expected.envelope.commandId,
-    )
+    throw new TemporalAgentTurnCommandConflictError(expected.envelope.commandId)
   }
   if (record.outcome === 'ignored') {
     if (
@@ -272,15 +264,16 @@ function parseApprovalReceipt(
   const record = value as Record<string, unknown>
   const payloadHash = hashCanonicalJson(command)
   if (
-    record.protocol !== 'agent_turn_approval_receipt_v1'
-    || record.threadId !== command.threadId
-    || record.turnId !== command.turnId
-    || record.interactionId !== command.interactionId
-    || record.projectId !== command.projectId
-    || record.requestId !== command.requestId
-    || record.decision !== command.decision
-    || record.payloadHash !== payloadHash
-    || typeof record.resumeRequired !== 'boolean'
+    record.protocol !== 'agent_turn_approval_receipt_v1' ||
+    record.threadId !== command.threadId ||
+    record.turnId !== command.turnId ||
+    record.interactionId !== command.interactionId ||
+    record.projectId !== command.projectId ||
+    (record.episodeId !== null && typeof record.episodeId !== 'string') ||
+    record.requestId !== command.requestId ||
+    record.decision !== command.decision ||
+    record.payloadHash !== payloadHash ||
+    typeof record.resumeRequired !== 'boolean'
   ) {
     throw new Error('AGENT_TURN_APPROVAL_RECEIPT_DIVERGED')
   }
@@ -296,12 +289,13 @@ function parseCancellationReceipt(
   }
   const record = value as Record<string, unknown>
   if (
-    record.protocol !== 'agent_turn_cancellation_receipt_v1'
-    || record.threadId !== command.threadId
-    || record.projectId !== command.projectId
-    || record.turnId !== command.turnId
-    || record.requestId !== command.requestId
-    || record.status !== 'cancelled'
+    record.protocol !== 'agent_turn_cancellation_receipt_v1' ||
+    record.threadId !== command.threadId ||
+    record.projectId !== command.projectId ||
+    (record.episodeId !== null && typeof record.episodeId !== 'string') ||
+    record.turnId !== command.turnId ||
+    record.requestId !== command.requestId ||
+    record.status !== 'cancelled'
   ) {
     throw new Error('AGENT_TURN_CANCEL_RECEIPT_DIVERGED')
   }
@@ -318,29 +312,26 @@ export class TemporalAgentThreadClient {
     }
   }
 
-  async submit(
-    command: SubmitAgentTurnCommand,
-  ): Promise<AgentTurnAdmissionReceipt> {
+  async submit(command: SubmitAgentTurnCommand): Promise<AgentTurnAdmissionReceipt> {
     const envelope = buildAgentTurnEnvelope(command)
     const workflowId = buildAgentThreadWorkflowId(command.threadId)
     let lastError: unknown = null
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const startOperation =
-        new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
-          TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
-          {
-            workflowId,
-            workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-            workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
-            taskQueue: this.taskQueue,
-            args: [
-              {
-                workflowId,
-                threadId: command.threadId,
-              },
-            ],
-          },
-        )
+      const startOperation = new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
+        TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
+        {
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+          taskQueue: this.taskQueue,
+          args: [
+            {
+              workflowId,
+              threadId: command.threadId,
+            },
+          ],
+        },
+      )
       try {
         const value = await this.workflowClient.executeUpdateWithStart<
           AgentThreadCoordinatorWorkflow,
@@ -354,8 +345,8 @@ export class TemporalAgentThreadClient {
         return parseReceipt(value, { workflowId, envelope })
       } catch (error) {
         if (
-          error instanceof WorkflowUpdateFailedError
-          || error instanceof TemporalAgentTurnCommandConflictError
+          error instanceof WorkflowUpdateFailedError ||
+          error instanceof TemporalAgentTurnCommandConflictError
         ) {
           throw error
         }
@@ -376,8 +367,8 @@ export class TemporalAgentThreadClient {
           return parseReceipt(value, { workflowId, envelope })
         } catch (updateError) {
           if (
-            updateError instanceof WorkflowUpdateFailedError
-            || updateError instanceof TemporalAgentTurnCommandConflictError
+            updateError instanceof WorkflowUpdateFailedError ||
+            updateError instanceof TemporalAgentTurnCommandConflictError
           ) {
             throw updateError
           }
@@ -385,10 +376,7 @@ export class TemporalAgentThreadClient {
         }
       }
     }
-    throw new TemporalAgentTurnCommandUnconfirmedError(
-      envelope.commandId,
-      lastError,
-    )
+    throw new TemporalAgentTurnCommandUnconfirmedError(envelope.commandId, lastError)
   }
 
   async resolveApproval(
@@ -398,17 +386,16 @@ export class TemporalAgentThreadClient {
     const updateId = `agent-turn-approval:${hashCanonicalJson(command)}`
     let lastError: unknown = null
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const startOperation =
-        new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
-          TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
-          {
-            workflowId,
-            workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-            workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
-            taskQueue: this.taskQueue,
-            args: [{ workflowId, threadId: command.threadId }],
-          },
-        )
+      const startOperation = new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
+        TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
+        {
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+          taskQueue: this.taskQueue,
+          args: [{ workflowId, threadId: command.threadId }],
+        },
+      )
       try {
         const value = await this.workflowClient.executeUpdateWithStart<
           AgentThreadCoordinatorWorkflow,
@@ -448,24 +435,21 @@ export class TemporalAgentThreadClient {
     throw new TemporalAgentTurnCommandUnconfirmedError(updateId, lastError)
   }
 
-  async resolveChoice(
-    command: ResolveAgentTurnChoiceCommand,
-  ): Promise<AgentTurnAdmissionReceipt> {
+  async resolveChoice(command: ResolveAgentTurnChoiceCommand): Promise<AgentTurnAdmissionReceipt> {
     const workflowId = buildAgentThreadWorkflowId(command.threadId)
     const updateId = `agent-turn-choice:${hashCanonicalJson(command)}`
     let lastError: unknown = null
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const startOperation =
-        new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
-          TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
-          {
-            workflowId,
-            workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-            workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
-            taskQueue: this.taskQueue,
-            args: [{ workflowId, threadId: command.threadId }],
-          },
-        )
+      const startOperation = new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
+        TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
+        {
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+          taskQueue: this.taskQueue,
+          args: [{ workflowId, threadId: command.threadId }],
+        },
+      )
       try {
         const value = await this.workflowClient.executeUpdateWithStart<
           AgentThreadCoordinatorWorkflow,
@@ -505,24 +489,21 @@ export class TemporalAgentThreadClient {
     throw new TemporalAgentTurnCommandUnconfirmedError(updateId, lastError)
   }
 
-  async cancel(
-    command: CancelAgentTurnCommand,
-  ): Promise<AgentTurnCancellationReceipt> {
+  async cancel(command: CancelAgentTurnCommand): Promise<AgentTurnCancellationReceipt> {
     const workflowId = buildAgentThreadWorkflowId(command.threadId)
     const updateId = `agent-turn-cancel:${hashCanonicalJson(command)}`
     let lastError: unknown = null
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const startOperation =
-        new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
-          TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
-          {
-            workflowId,
-            workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-            workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
-            taskQueue: this.taskQueue,
-            args: [{ workflowId, threadId: command.threadId }],
-          },
-        )
+      const startOperation = new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
+        TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
+        {
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+          taskQueue: this.taskQueue,
+          args: [{ workflowId, threadId: command.threadId }],
+        },
+      )
       try {
         const value = await this.workflowClient.executeUpdateWithStart<
           AgentThreadCoordinatorWorkflow,
@@ -562,24 +543,21 @@ export class TemporalAgentThreadClient {
     throw new TemporalAgentTurnCommandUnconfirmedError(updateId, lastError)
   }
 
-  async clear(
-    command: ClearAgentThreadCommand,
-  ): Promise<AgentThreadClearReceipt> {
+  async clear(command: ClearAgentThreadCommand): Promise<AgentThreadClearReceipt> {
     const workflowId = buildAgentThreadWorkflowId(command.threadId)
     const updateId = `agent-thread-clear:${hashCanonicalJson(command)}`
     let lastError: unknown = null
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const startOperation =
-        new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
-          TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
-          {
-            workflowId,
-            workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
-            workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
-            taskQueue: this.taskQueue,
-            args: [{ workflowId, threadId: command.threadId }],
-          },
-        )
+      const startOperation = new WithStartWorkflowOperation<AgentThreadCoordinatorWorkflow>(
+        TEMPORAL_WORKFLOW_TYPE.AGENT_THREAD_COORDINATOR,
+        {
+          workflowId,
+          workflowIdConflictPolicy: WorkflowIdConflictPolicy.USE_EXISTING,
+          workflowIdReusePolicy: WorkflowIdReusePolicy.ALLOW_DUPLICATE,
+          taskQueue: this.taskQueue,
+          args: [{ workflowId, threadId: command.threadId }],
+        },
+      )
       try {
         const value = await this.workflowClient.executeUpdateWithStart<
           AgentThreadCoordinatorWorkflow,
@@ -600,13 +578,13 @@ export class TemporalAgentThreadClient {
         try {
           const value = await this.workflowClient
             .getHandle<AgentThreadCoordinatorWorkflow>(workflowId)
-            .executeUpdate<AgentThreadClearReceipt, [ClearAgentThreadCommand]>(
-              AGENT_THREAD_UPDATE_NAME.CLEAR_THREAD,
-              {
-                updateId,
-                args: [command],
-              },
-            )
+            .executeUpdate<
+              AgentThreadClearReceipt,
+              [ClearAgentThreadCommand]
+            >(AGENT_THREAD_UPDATE_NAME.CLEAR_THREAD, {
+              updateId,
+              args: [command],
+            })
           return validateClearReceipt(value, command)
         } catch (updateError) {
           if (updateError instanceof WorkflowUpdateFailedError) {
@@ -637,9 +615,7 @@ function validateClearReceipt(
     typeof record.archivedAt !== 'string' ||
     !record.archivedAt ||
     !Array.isArray(record.cancelledTurnIds) ||
-    record.cancelledTurnIds.some(
-      (turnId) => typeof turnId !== 'string' || !turnId,
-    )
+    record.cancelledTurnIds.some((turnId) => typeof turnId !== 'string' || !turnId)
   ) {
     throw new Error('AGENT_THREAD_CLEAR_RECEIPT_DIVERGED')
   }
@@ -663,14 +639,12 @@ async function withTemporalAgentThreadClient<T>(
       getTemporalClient(),
       Promise.resolve(getTemporalRuntimeConfig()),
     ])
-    return await invoke(
-      new TemporalAgentThreadClient(client.workflow, config.taskQueue),
-    )
+    return await invoke(new TemporalAgentThreadClient(client.workflow, config.taskQueue))
   } catch (error) {
     if (
-      error instanceof WorkflowUpdateFailedError
-      || error instanceof TemporalAgentTurnCommandConflictError
-      || error instanceof TemporalAgentTurnCommandUnconfirmedError
+      error instanceof WorkflowUpdateFailedError ||
+      error instanceof TemporalAgentTurnCommandConflictError ||
+      error instanceof TemporalAgentTurnCommandUnconfirmedError
     ) {
       throw error
     }

@@ -238,6 +238,8 @@
     "choiceBack": "返回上一步",
     "choiceSubmitting": "处理中...",
     "choiceSubmitFailed": "提交失败：{error}",
+    "choiceSubmitErrorFallback": "该选择暂时无法提交，请刷新对话后重试。",
+    "choiceCancelledResponse": "已取消本次选择",
     "choiceReplyLabel": "其他想法",
     "choiceReplyPlaceholder": "输入你的想法...",
     "choiceReplySubmit": "提交想法",

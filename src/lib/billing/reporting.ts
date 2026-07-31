@@ -1,5 +1,5 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ApiType, UsageUnit } from './cost'
 import { BillingOperationError } from './errors'
@@ -49,7 +49,7 @@ export function buildBillingMetaRecord(params: {
 }): Record<string, unknown> {
   // 尝试从 model composite ID 提取短名 "provider:xxx::model" → "model"
   const modelShort = params.model.includes('::')
-    ? params.model.split('::').pop() ?? params.model
+    ? (params.model.split('::').pop() ?? params.model)
     : params.model
 
   const meta: Record<string, unknown> = {
@@ -61,9 +61,10 @@ export function buildBillingMetaRecord(params: {
 
   // 从 pricingSelections 提取 capability 字段（图片分辨率、视频时长/分辨率等）
   const selections = params.metadata?.pricingSelections
-  const selectionRecord = selections && typeof selections === 'object' && !Array.isArray(selections)
-    ? selections as Record<string, unknown>
-    : {}
+  const selectionRecord =
+    selections && typeof selections === 'object' && !Array.isArray(selections)
+      ? (selections as Record<string, unknown>)
+      : {}
   const detailSource = {
     ...selectionRecord,
     ...(params.metadata || {}),
@@ -79,7 +80,8 @@ export function buildBillingMetaRecord(params: {
 
   const inputTokens = params.metadata?.actualInputTokens ?? params.metadata?.inputTokens
   const outputTokens = params.metadata?.actualOutputTokens ?? params.metadata?.outputTokens
-  const cachedInputTokens = params.metadata?.actualCachedInputTokens ?? params.metadata?.cachedInputTokens
+  const cachedInputTokens =
+    params.metadata?.actualCachedInputTokens ?? params.metadata?.cachedInputTokens
   if (inputTokens) meta.inputTokens = inputTokens
   if (outputTokens) meta.outputTokens = outputTokens
   if (cachedInputTokens) meta.cachedInputTokens = cachedInputTokens
@@ -90,7 +92,10 @@ export function buildBillingMetaRecord(params: {
   }
 
   // 实际使用的模型列表（复合模型场景）
-  if (Array.isArray(params.metadata?.actualModels) && (params.metadata.actualModels as unknown[]).length > 0) {
+  if (
+    Array.isArray(params.metadata?.actualModels) &&
+    (params.metadata.actualModels as unknown[]).length > 0
+  ) {
     meta.actualModels = params.metadata.actualModels
   }
 
@@ -108,7 +113,20 @@ export function buildBillingMeta(params: Parameters<typeof buildBillingMetaRecor
  */
 export async function recordUsageFact(
   txOrPrisma: Prisma.TransactionClient | typeof prisma,
-  params: Pick<PureRecordParams, 'projectId' | 'userId' | 'action' | 'apiType' | 'model' | 'quantity' | 'unit' | 'cost' | 'metadata'>,
+  params: Pick<
+    PureRecordParams,
+    | 'projectId'
+    | 'userId'
+    | 'action'
+    | 'apiType'
+    | 'model'
+    | 'quantity'
+    | 'unit'
+    | 'cost'
+    | 'metadata'
+  > & {
+    usageId?: string
+  },
 ): Promise<boolean> {
   if (!isProjectScoped(params.projectId)) {
     return false
@@ -118,26 +136,68 @@ export async function recordUsageFact(
     select: { id: true },
   })
   if (!project) {
-    throw new BillingOperationError('BILLING_INVALID_PROJECT', `project not found for billing: ${params.projectId}`, {
-      projectId: params.projectId,
-      action: params.action,
-      apiType: params.apiType,
-    })
+    throw new BillingOperationError(
+      'BILLING_INVALID_PROJECT',
+      `project not found for billing: ${params.projectId}`,
+      {
+        projectId: params.projectId,
+        action: params.action,
+        apiType: params.apiType,
+      },
+    )
   }
 
-  await txOrPrisma.usageCost.create({
-    data: {
-      projectId: params.projectId,
-      userId: params.userId,
-      apiType: params.apiType,
-      model: params.model,
-      action: params.action,
-      quantity: params.quantity,
-      unit: params.unit,
-      cost: params.cost,
-      metadata: params.metadata ? JSON.stringify(params.metadata) : null,
-    },
-  })
+  const usageId = params.usageId?.trim() || null
+  if (usageId && usageId.length > 191) {
+    throw new BillingOperationError('BILLING_INVALID_USAGE_IDENTITY', 'usage identity is invalid', {
+      usageId,
+    })
+  }
+  const metadata = params.metadata ? JSON.stringify(params.metadata) : null
+  const data = {
+    ...(usageId ? { id: usageId } : {}),
+    projectId: params.projectId,
+    userId: params.userId,
+    apiType: params.apiType,
+    model: params.model,
+    action: params.action,
+    quantity: params.quantity,
+    unit: params.unit,
+    cost: params.cost,
+    metadata,
+  }
+  try {
+    await txOrPrisma.usageCost.create({ data })
+  } catch (error) {
+    if (
+      !usageId ||
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== 'P2002'
+    ) {
+      throw error
+    }
+    const existing = await txOrPrisma.usageCost.findUnique({
+      where: { id: usageId },
+    })
+    if (
+      !existing ||
+      existing.projectId !== data.projectId ||
+      existing.userId !== data.userId ||
+      existing.apiType !== data.apiType ||
+      existing.model !== data.model ||
+      existing.action !== data.action ||
+      existing.quantity !== data.quantity ||
+      existing.unit !== data.unit ||
+      toMoneyNumber(existing.cost) !== toMoneyNumber(data.cost) ||
+      existing.metadata !== data.metadata
+    ) {
+      throw new BillingOperationError(
+        'BILLING_USAGE_REPLAY_DIVERGED',
+        'usage fact replay diverged from the persisted identity',
+        { usageId },
+      )
+    }
+  }
   return true
 }
 
@@ -166,7 +226,9 @@ export async function recordUsageCostOnly(
     },
   })
 
-  _ulogInfo(`[Billing] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits (recorded${hasProject ? '' : ', no project scope'})`)
+  _ulogInfo(
+    `[Billing] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits (recorded${hasProject ? '' : ', no project scope'})`,
+  )
 }
 
 export async function getProjectTotalCost(projectId: string): Promise<number> {

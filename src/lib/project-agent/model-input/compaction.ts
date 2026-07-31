@@ -1,5 +1,6 @@
 import type { AgentInputItem } from '@openai/agents'
 import { AppError } from '@/lib/errors/app-error'
+import type { LlmUsageFact } from '@/lib/billing/llm-usage'
 import { generateProjectAgentContextCheckpoint } from './checkpoint-generator'
 import {
   buildProjectAgentContextCheckpointItem,
@@ -12,6 +13,7 @@ export type ProjectAgentContextCompaction = {
   readonly compacted: {
     readonly replacedItemCount: number
   } | null
+  readonly usage: LlmUsageFact | null
 }
 
 export const PROJECT_AGENT_CONTEXT_COMPACTION_DEADLINE_MS = 60_000
@@ -63,10 +65,7 @@ export async function runProjectAgentContextCompactionWithinDeadline<T>(input: {
   timeout.unref()
 
   try {
-    return await Promise.race([
-      input.run(signal),
-      aborted,
-    ])
+    return await Promise.race([input.run(signal), aborted])
   } finally {
     if (timeout) clearTimeout(timeout)
     signal.removeEventListener('abort', onAbort)
@@ -90,18 +89,19 @@ export async function compressProjectAgentContext(input: {
   const historyItems = await input.session.getItems()
   const activeItems = projectProjectAgentActiveContext(input.inputItems)
   if (activeItems.length === 0) {
-    return { historyItems, activeItems, compacted: null }
+    return { historyItems, activeItems, compacted: null, usage: null }
   }
 
   const checkpoint = await runProjectAgentContextCompactionWithinDeadline({
     ...(input.signal ? { signal: input.signal } : {}),
-    run: async (signal) => await generateProjectAgentContextCheckpoint({
-      userId: input.userId,
-      items: activeItems,
-      signal,
-    }),
+    run: async (signal) =>
+      await generateProjectAgentContextCheckpoint({
+        userId: input.userId,
+        items: activeItems,
+        signal,
+      }),
   })
-  const checkpointItem = buildProjectAgentContextCheckpointItem(checkpoint)
+  const checkpointItem = buildProjectAgentContextCheckpointItem(checkpoint.checkpoint)
   const compactedHistory = [...historyItems, checkpointItem]
   await input.session.replaceItems(compactedHistory)
   return {
@@ -110,5 +110,6 @@ export async function compressProjectAgentContext(input: {
     compacted: {
       replacedItemCount: activeItems.length,
     },
+    usage: checkpoint.usage,
   }
 }

@@ -20,6 +20,7 @@ function sourceFilesUnder(path) {
 }
 
 const kernel = [
+  'src/lib/agent-turn/approval-history.ts',
   'src/lib/agent-turn/approval.ts',
   'src/lib/agent-turn/choice.ts',
   'src/lib/agent-turn/contracts.ts',
@@ -34,6 +35,7 @@ const kernel = [
 
 const safetyLedgers = [
   'src/lib/agent-turn/tool-effect.ts',
+  'src/lib/agent-turn/usage.ts',
   ...sourceFilesUnder('src/lib/task/terminal'),
   'src/lib/task/provider-invocation.ts',
   'src/lib/task/execution-checkpoint.ts',

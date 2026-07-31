@@ -1,6 +1,4 @@
-import {
-  type ProjectAgentSubagentView,
-} from '@/lib/project-agent/subagent-events'
+import { type ProjectAgentSubagentView } from '@/lib/project-agent/subagent-events'
 import type { WorkspaceAssistantSubagentLiveStream } from './workspace-assistant-subagent-stream'
 
 export function resolveWorkspaceAssistantSubagentStructuredOutputs(
@@ -11,30 +9,25 @@ export function resolveWorkspaceAssistantSubagentStructuredOutputs(
     if (stream.kind !== 'structured_output') continue
     const current = latestByTask.get(stream.taskId)
     if (
-      !current
-      || stream.stepAttempt > current.stepAttempt
-      || (
-        stream.stepAttempt === current.stepAttempt
-        && stream.occurredAt > current.occurredAt
-      )
+      !current ||
+      stream.stepAttempt > current.stepAttempt ||
+      (stream.stepAttempt === current.stepAttempt && stream.occurredAt > current.occurredAt)
     ) {
       latestByTask.set(stream.taskId, stream)
     }
   }
-  return new Map(
-    [...latestByTask].map(([taskId, stream]) => [taskId, stream.text]),
-  )
+  return new Map([...latestByTask].map(([taskId, stream]) => [taskId, stream.text]))
 }
 
 /**
- * SessionState projects the authoritative Task-backed Subagent view. Message
+ * AgentSessionView projects the authoritative Task-backed Subagent view. Message
  * parts are deliberately excluded so history cannot become a second status
  * source after the foreground Operation has submitted its Tasks.
  */
-export function resolveWorkspaceAssistantSubagents(params: {
-  sessionSubagents: readonly ProjectAgentSubagentView[]
+export function resolveWorkspaceAssistantSubagents<T extends ProjectAgentSubagentView>(params: {
+  sessionSubagents: readonly T[]
   liveStreams: ReadonlyMap<string, WorkspaceAssistantSubagentLiveStream>
-}): ProjectAgentSubagentView[] {
+}): T[] {
   return params.sessionSubagents.map((subagent) => {
     if (subagent.status !== 'running') return subagent
     const streams = [...params.liveStreams.values()]
@@ -43,10 +36,9 @@ export function resolveWorkspaceAssistantSubagents(params: {
     if (streams.length === 0) return subagent
     const events = [...subagent.events]
     for (const stream of streams) {
-      const index = events.findIndex((entry) => (
-        entry.event.kind === 'reasoning'
-        && entry.event.reasoningId === stream.streamId
-      ))
+      const index = events.findIndex(
+        (entry) => entry.event.kind === 'reasoning' && entry.event.reasoningId === stream.streamId,
+      )
       if (index < 0) {
         events.push({
           subagentId: subagent.subagentId,

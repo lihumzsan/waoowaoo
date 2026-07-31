@@ -1,17 +1,16 @@
 'use client'
 
 import React from 'react'
-import {
-  MessagePrimitive,
-  useMessage,
-  type DataMessagePartProps,
-} from '@assistant-ui/react'
+import { MessagePrimitive, useMessage, type DataMessagePartProps } from '@assistant-ui/react'
 import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import BillingActionButton from '@/components/billing/BillingActionButton'
-import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/AttachmentChips'
+import {
+  MediaAttachmentChips,
+  TextAttachmentChips,
+} from '@/components/project-assistant/AttachmentChips'
 import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
@@ -29,28 +28,33 @@ import {
   useWorkspaceAssistantHasRunningSurface,
 } from './WorkspaceAssistantReasoning'
 import { WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES } from './workspace-assistant-run-trace'
-import {
-  summarizeBillingActionItems,
-  type BillingActionItemSummary,
-} from './billing-action-items'
+import { summarizeBillingActionItems, type BillingActionItemSummary } from './billing-action-items'
 import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 import {
+  AssistantContextCompactedDataCard,
   HiddenRuntimeContextDataCard,
 } from './WorkspaceAssistantNotices'
 import { WebSearchDataCard } from './WorkspaceAssistantWebSearch'
 import { WorkspaceAssistantResourceLinks } from './WorkspaceAssistantResourceLinks'
 import { isWorkspaceAssistantHiddenThreadMessageMetadata } from './workspace-assistant-panel-state'
 
-type StandardMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
+type StandardMessagePartComponents = NonNullable<
+  ComponentProps<typeof MessagePrimitive.Parts>['components']
+>
 type WorkspaceAssistantMessagePartComponents = {
   readonly assistant: StandardMessagePartComponents
   readonly standard: StandardMessagePartComponents
 }
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
 
-export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'max-w-full w-fit break-words rounded-2xl bg-neutral-100 px-3 py-2.5 text-base leading-6 text-[var(--glass-text-primary)] [overflow-wrap:anywhere]'
-const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex min-w-0 max-w-full flex-col gap-3 px-1 py-1 text-base leading-6 text-[var(--glass-text-primary)]'
-export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {
+export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS =
+  'max-w-full w-fit break-words rounded-2xl bg-neutral-100 px-3 py-2.5 text-base leading-6 text-[var(--glass-text-primary)] [overflow-wrap:anywhere]'
+const WORKSPACE_ASSISTANT_MESSAGE_CLASS =
+  'flex min-w-0 max-w-full flex-col gap-3 px-1 py-1 text-base leading-6 text-[var(--glass-text-primary)]'
+export function resolveProgressStageLabel(
+  raw: string | null,
+  progressT: ReturnType<typeof useTranslations<'progress'>>,
+): string | null {
   if (!raw) return null
   if (!raw.startsWith('progress.')) return raw
   const key = raw.slice('progress.'.length)
@@ -85,9 +89,7 @@ function buildBillingActionSummaryLabel(
   const items = summarizeBillingActionItems(quote.items)
   if (items.length === 0) return null
   const separator = t('cards.billingActionListSeparator')
-  const label = items
-    .map((item) => translateBillingActionItemSummary(item, t))
-    .join(separator)
+  const label = items.map((item) => translateBillingActionItemSummary(item, t)).join(separator)
   return t('cards.billingActionSummary', { items: label })
 }
 
@@ -99,18 +101,18 @@ function buildAssistantBillingQuotePreview(params: {
   const { quote, actionLabel, t } = params
   return buildBillingActionQuotePreviewFromQuote({
     quote,
-    withCredits: (values) => actionLabel
-      ? t('cards.billingActionQuoteWithCredits', { action: actionLabel, cost: values.cost })
-      : t('cards.billingQuoteWithCredits', values),
-    withoutCredits: (values) => actionLabel
-      ? t('cards.billingActionQuoteWithoutCredits', { action: actionLabel })
-      : t('cards.billingQuoteWithoutCredits', values),
+    withCredits: (values) =>
+      actionLabel
+        ? t('cards.billingActionQuoteWithCredits', { action: actionLabel, cost: values.cost })
+        : t('cards.billingQuoteWithCredits', values),
+    withoutCredits: (values) =>
+      actionLabel
+        ? t('cards.billingActionQuoteWithoutCredits', { action: actionLabel })
+        : t('cards.billingQuoteWithoutCredits', values),
   })
 }
 
-function BillingQuoteBlock(props: {
-  preview: BillingActionQuotePreview | null
-}) {
+function BillingQuoteBlock(props: { preview: BillingActionQuotePreview | null }) {
   const preview = props.preview
   if (!preview) return null
   return (
@@ -142,9 +144,7 @@ export function ConfirmationActionCard(props: {
   const [decision, setDecision] = React.useState<ConfirmationActionDecision>('idle')
   const members = props.members.map((member) => {
     const quote = member.operationPlan?.quote ?? null
-    const quoteActionLabel = quote
-      ? buildBillingActionSummaryLabel(quote, t)
-      : null
+    const quoteActionLabel = quote ? buildBillingActionSummaryLabel(quote, t) : null
     return {
       ...member,
       quotePreview: quote
@@ -189,17 +189,23 @@ export function ConfirmationActionCard(props: {
         <BillingActionButton
           type="button"
           icon="arrowRight"
-          label={decision === 'confirming' ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
-          quote={members.length === 1 ? members[0]?.quotePreview ?? null : null}
+          label={
+            decision === 'confirming' ? t('cards.choiceSubmitting') : t('cards.confirmContinue')
+          }
+          quote={members.length === 1 ? (members[0]?.quotePreview ?? null) : null}
           className="flex-1 rounded-xl py-2 text-sm"
           disabled={locked}
-          onClick={() => { submitDecision('confirm') }}
+          onClick={() => {
+            submitDecision('confirm')
+          }}
         />
         <button
           type="button"
           disabled={locked}
           className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => { submitDecision('cancel') }}
+          onClick={() => {
+            submitDecision('cancel')
+          }}
         >
           {decision === 'cancelling' ? t('cards.choiceSubmitting') : t('cards.cancelAction')}
         </button>
@@ -219,8 +225,13 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
     <details className="group text-sm leading-5 text-[var(--glass-text-tertiary)]">
       <summary className="flex cursor-pointer list-none items-center gap-2">
         <AppIcon name="folder" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t('cards.projectContext')} · {data.context.projectName} · {data.context.episodeName}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
+        <span className="min-w-0 truncate">
+          {t('cards.projectContext')} · {data.context.projectName} · {data.context.episodeName}
+        </span>
+        <AppIcon
+          name="chevronDown"
+          className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180"
+        />
       </summary>
       <div className="ml-5 mt-1 text-xs">
         {t('cards.workspaceLabel')}: {t('panel.workspaceStatus')}
@@ -228,7 +239,6 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
     </details>
   )
 }
-
 
 export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistantMessagePartComponents {
   return useMemo<WorkspaceAssistantMessagePartComponents>(() => {
@@ -244,6 +254,7 @@ export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistant
     const data = {
       by_name: {
         'agent-subagent-event': HiddenRuntimeContextDataCard,
+        'assistant-context-compacted': AssistantContextCompactedDataCard,
         'assistant-resource-links': WorkspaceAssistantResourceLinks,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         'project-context': ProjectContextDataCard,
@@ -269,9 +280,9 @@ export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistant
 }
 
 function HiddenWorkspaceAssistantInternalMessage(props: { children: React.ReactNode }) {
-  const shouldHide = useMessage((state) => (
-    isWorkspaceAssistantHiddenThreadMessageMetadata(state.metadata)
-  ))
+  const shouldHide = useMessage((state) =>
+    isWorkspaceAssistantHiddenThreadMessageMetadata(state.metadata),
+  )
   if (shouldHide) return null
   return <>{props.children}</>
 }
@@ -282,8 +293,14 @@ function WorkspaceAssistantUserTextAttachments() {
   const mediaAttachments = readProjectAssistantMediaAttachmentsFromMetadata(metadata)
   return (
     <>
-      <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
-      <MediaAttachmentChips attachments={mediaAttachments} className={mediaAttachments.length > 0 ? 'mt-2' : undefined} />
+      <TextAttachmentChips
+        attachments={attachments}
+        className={attachments.length > 0 ? 'mt-2' : undefined}
+      />
+      <MediaAttachmentChips
+        attachments={mediaAttachments}
+        className={mediaAttachments.length > 0 ? 'mt-2' : undefined}
+      />
     </>
   )
 }
@@ -300,9 +317,10 @@ function WorkspaceAssistantUserUndeliveredMarker(props: {
   undeliveredUserMessageId: string | null
 }) {
   const t = useTranslations('assistantAgent')
-  const isUndelivered = useMessage((state) => (
-    props.undeliveredUserMessageId !== null && state.id === props.undeliveredUserMessageId
-  ))
+  const isUndelivered = useMessage(
+    (state) =>
+      props.undeliveredUserMessageId !== null && state.id === props.undeliveredUserMessageId,
+  )
   if (!isUndelivered) return null
   return (
     <div className="mt-1 flex items-center gap-1 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">
@@ -337,10 +355,11 @@ export function WorkspaceAssistantThreadMessage(props: {
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-            <MessagePrimitive.Parts
-              components={props.messagePartComponents.assistant}
+            <MessagePrimitive.Parts components={props.messagePartComponents.assistant} />
+            <WorkspaceAssistantSubagentRecordsForMessage
+              subagents={props.subagents}
+              onSelect={props.onSelectSubagent}
             />
-            <WorkspaceAssistantSubagentRecordsForMessage subagents={props.subagents} onSelect={props.onSelectSubagent} />
           </MessagePrimitive.Root>
         </div>
       </MessagePrimitive.If>
@@ -358,9 +377,7 @@ export function WorkspaceAssistantThreadMessage(props: {
   )
 }
 
-export function WorkspaceAssistantPendingTurnPlaceholder(props: {
-  readonly label?: string
-}) {
+export function WorkspaceAssistantPendingTurnPlaceholder(props: { readonly label?: string }) {
   const hasRunningSurface = useWorkspaceAssistantHasRunningSurface()
   if (hasRunningSurface) return null
 

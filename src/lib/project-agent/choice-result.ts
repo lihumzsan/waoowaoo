@@ -111,13 +111,16 @@ export function parseProjectAgentChoiceDecision(params: {
     }
     return {
       kind: 'select',
-      selections: parseSelections({ card: params.card, response: params.response }),
+      selections: parseSelections({
+        card: params.card,
+        response: params.response,
+      }),
     }
   }
   if (kind === 'text') {
     if (
-      (params.card.mode !== 'select_or_text' && params.card.mode !== 'confirm_or_text')
-      || params.card.replyMode !== 'whole_card'
+      (params.card.mode !== 'select_or_text' && params.card.mode !== 'confirm_or_text') ||
+      params.card.replyMode !== 'whole_card'
     ) {
       throw new Error(`PROJECT_AGENT_CHOICE_DECISION_MODE_INVALID:${params.card.mode}:text`)
     }
@@ -128,6 +131,51 @@ export function parseProjectAgentChoiceDecision(params: {
   throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
 }
 
+/**
+ * Derive the one user-visible transcript fact from the frozen card and the
+ * already validated decision. Callers may supply only the localized copy for
+ * the semantic `cancelled` decision; every option/text label comes from the
+ * authoritative frozen offer or parsed decision.
+ */
+export function buildProjectAgentChoiceVisibleUserText(params: {
+  card: ProjectAgentChoiceCardDefinition
+  decision: ProjectAgentChoiceDecision
+  cancelledText: string
+}): string {
+  let visibleUserText: string
+  if (params.decision.kind === 'confirm') {
+    visibleUserText = params.card.submitLabel
+  } else if (params.decision.kind === 'cancelled') {
+    visibleUserText = params.cancelledText
+  } else if (params.decision.kind === 'text') {
+    visibleUserText = params.decision.text
+  } else {
+    const selectionByGroup = new Map(
+      params.decision.selections.map((selection) => [selection.groupKey, selection]),
+    )
+    const lines = params.card.groups.flatMap((group) => {
+      const selection = selectionByGroup.get(group.key)
+      if (!selection) return []
+      if (selection.kind === 'text') {
+        return [`${group.label}: ${selection.text}`]
+      }
+      const option = group.options.find((candidate) => candidate.value === selection.value)
+      if (!option) {
+        throw new Error(
+          `PROJECT_AGENT_CHOICE_SELECTION_NOT_OFFERED:${group.key}:${selection.value}`,
+        )
+      }
+      return [`${group.label}: ${option.label}`]
+    })
+    visibleUserText = lines.length > 0 ? lines.join('\n') : params.card.submitLabel
+  }
+  const normalized = visibleUserText.trim()
+  if (!normalized || normalized.length > 4_000) {
+    throw new Error('PROJECT_AGENT_CHOICE_VISIBLE_USER_TEXT_INVALID')
+  }
+  return normalized
+}
+
 export function resolveProjectAgentChoiceCommitment(params: {
   offer: ProjectAgentChoiceOffer
   decision: ProjectAgentChoiceDecision
@@ -136,12 +184,15 @@ export function resolveProjectAgentChoiceCommitment(params: {
   const matching = params.offer.commitments.filter((commitment) => {
     if (commitment.when.kind === 'confirm') return params.decision.kind === 'confirm'
     const when = commitment.when
-    return params.decision.kind === 'select'
-      && params.decision.selections.some((selection) => (
-        selection.kind === 'option'
-        && selection.groupKey === when.groupKey
-        && selection.value === when.optionValue
-      ))
+    return (
+      params.decision.kind === 'select' &&
+      params.decision.selections.some(
+        (selection) =>
+          selection.kind === 'option' &&
+          selection.groupKey === when.groupKey &&
+          selection.value === when.optionValue,
+      )
+    )
   })
   if (matching.length > 1) throw new Error('PROJECT_AGENT_CHOICE_COMMITMENT_AMBIGUOUS')
   return matching[0] ?? null
@@ -156,11 +207,16 @@ export function buildProjectAgentChoiceResponseInputItem(params: {
   decision: ProjectAgentChoiceDecision
   toolCallId: string
   cardId: string
+  visibleUserText: string
 }): AgentInputItem {
   const toolCallId = params.toolCallId.trim()
   const cardId = params.cardId.trim()
   if (!toolCallId) throw new Error('PROJECT_AGENT_CHOICE_TOOL_CALL_ID_REQUIRED')
   if (!cardId) throw new Error('PROJECT_AGENT_CHOICE_CARD_ID_REQUIRED')
+  const visibleUserText = params.visibleUserText.trim()
+  if (!visibleUserText) {
+    throw new Error('PROJECT_AGENT_CHOICE_VISIBLE_USER_TEXT_REQUIRED')
+  }
   return {
     role: 'user',
     content: [
@@ -168,6 +224,7 @@ export function buildProjectAgentChoiceResponseInputItem(params: {
       `toolCallId=${toolCallId}`,
       `cardId=${cardId}`,
       `decision=${JSON.stringify(params.decision)}`,
+      `visibleUserText=${JSON.stringify(visibleUserText)}`,
       '[/choice_response]',
     ].join('\n'),
   } satisfies AgentInputItem

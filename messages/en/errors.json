@@ -42,6 +42,7 @@
     "PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED": "Configure an assistant model before using the project assistant.",
     "PROJECT_AGENT_ASSISTANT_MODEL_INVALID": "The configured assistant model is invalid. Select an available model and retry.",
     "PROJECT_ASSISTANT_EPISODE_SCOPE_INVALID": "The selected episode does not belong to this project or no longer exists.",
+    "PROJECT_DELETE_ACTIVE_EXECUTION": "This project still has active assistant work, pending confirmation, or generation tasks. Finish or cancel them before deleting the project.",
     "PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED": "The assistant stopped after completing work while another AI-guided step remained available. Send a new instruction to continue; the server will not perform that next action automatically.",
     "CREATIVE_CONTEXT_INPUT_INVALID": "The Chapter context input is invalid",
     "CREATIVE_CONTEXT_SOURCE_MISMATCH": "The Chapter does not belong to the selected script source",

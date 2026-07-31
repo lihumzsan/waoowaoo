@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
@@ -13,12 +13,23 @@ import type { WorkspaceAssistantSendMessageInput } from './useWorkspaceAssistant
 
 export function useWorkspaceAssistantComposer(
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>,
+  scopeKey: string,
 ) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [mediaAttachments, setMediaAttachments] = useState<ProjectAssistantMediaAttachment[]>([])
+  const scopeKeyRef = useRef(scopeKey)
+  scopeKeyRef.current = scopeKey
+
+  useEffect(() => {
+    scopeKeyRef.current = scopeKey
+    setText('')
+    setAttachments([])
+    setMediaAttachments([])
+  }, [scopeKey])
 
   const submit = useCallback(async () => {
+    const submitScopeKey = scopeKey
     const normalizedText = text.trim()
     if (!normalizedText && attachments.length === 0 && mediaAttachments.length === 0) return
     setText('')
@@ -27,12 +38,14 @@ export function useWorkspaceAssistantComposer(
     try {
       await sendMessage({ text: normalizedText, attachments, mediaAttachments })
     } catch (error) {
-      setText(normalizedText)
-      setAttachments([...attachments])
-      setMediaAttachments([...mediaAttachments])
+      if (scopeKeyRef.current === submitScopeKey) {
+        setText(normalizedText)
+        setAttachments([...attachments])
+        setMediaAttachments([...mediaAttachments])
+      }
       throw error
     }
-  }, [attachments, mediaAttachments, sendMessage, text])
+  }, [attachments, mediaAttachments, scopeKey, sendMessage, text])
 
   const addAttachment = useCallback((attachment: ProjectAssistantTextAttachment) => {
     setAttachments((current) => {
@@ -54,7 +67,9 @@ export function useWorkspaceAssistantComposer(
   }, [])
 
   const removeMediaAttachment = useCallback((resourceId: string) => {
-    setMediaAttachments((current) => current.filter((attachment) => attachment.resourceId !== resourceId))
+    setMediaAttachments((current) =>
+      current.filter((attachment) => attachment.resourceId !== resourceId),
+    )
   }, [])
 
   return {

@@ -4,7 +4,10 @@ import Image from 'next/image'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
-import type { ProjectAgentChoiceSelection } from '@/lib/project-agent/choice-result'
+import {
+  type ProjectAgentChoiceDecision,
+  type ProjectAgentChoiceSelection,
+} from '@/lib/project-agent/choice-result'
 import type { ProjectAgentChoiceCardDefinition } from '@/lib/project-agent/types'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import {
@@ -16,11 +19,9 @@ import {
   type ChoiceCardCustomOptions,
   type ChoiceCardSelections,
 } from './choice-card-actions'
+import { parseWorkspaceAssistantFailureText } from './workspace-assistant-panel-state'
 
-function RatioChoiceShape(props: {
-  ratio: string
-  selected: boolean
-}) {
+function RatioChoiceShape(props: { ratio: string; selected: boolean }) {
   const [rawWidth, rawHeight] = props.ratio.split(':').map(Number)
   const width = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : 1
   const height = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 1
@@ -42,19 +43,21 @@ export function buildWorkspaceAssistantChoiceSelectionOutput(params: {
   card: Pick<ProjectAgentChoiceCardDefinition, 'mode'>
   groups: ProjectAgentChoiceCardDefinition['groups']
   selections: ChoiceCardSelections
-}): Record<string, unknown> {
+}): ProjectAgentChoiceDecision {
   if (params.card.mode === 'confirm' || params.card.mode === 'confirm_or_text') {
     return { kind: 'confirm' }
   }
-  const selections: ProjectAgentChoiceSelection[] = params.groups.flatMap<ProjectAgentChoiceSelection>((group) => {
-    const selectedValue = params.selections[group.key]
-    if (!selectedValue) return []
-    const option = group.options.find((candidate) => candidate.value === selectedValue)
-    if (!option) throw new Error(`ASSISTANT_CHOICE_OPTION_NOT_FOUND:${group.key}:${selectedValue}`)
-    return selectedValue.startsWith(CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX)
-      ? [{ groupKey: group.key, kind: 'text', text: option.label }]
-      : [{ groupKey: group.key, kind: 'option', value: selectedValue }]
-  })
+  const selections: ProjectAgentChoiceSelection[] =
+    params.groups.flatMap<ProjectAgentChoiceSelection>((group) => {
+      const selectedValue = params.selections[group.key]
+      if (!selectedValue) return []
+      const option = group.options.find((candidate) => candidate.value === selectedValue)
+      if (!option)
+        throw new Error(`ASSISTANT_CHOICE_OPTION_NOT_FOUND:${group.key}:${selectedValue}`)
+      return selectedValue.startsWith(CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX)
+        ? [{ groupKey: group.key, kind: 'text', text: option.label }]
+        : [{ groupKey: group.key, kind: 'option', value: selectedValue }]
+    })
   return {
     kind: 'select',
     selections,
@@ -63,13 +66,11 @@ export function buildWorkspaceAssistantChoiceSelectionOutput(params: {
 
 export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardDefinition
-  onSubmitChoiceResponse: (params: {
-    response: Record<string, unknown>
-    visibleUserText?: string
-  }) => Promise<void>
+  onSubmitChoiceResponse: (params: { response: Record<string, unknown> }) => Promise<void>
   onSubmitted?: (cardId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
   const card = props.data
   const [selections, setSelections] = useState<ChoiceCardSelections>({})
   const [customOptions, setCustomOptions] = useState<ChoiceCardCustomOptions>({})
@@ -78,6 +79,11 @@ export function AssistantChoiceCardView(props: {
   const [replyFocused, setReplyFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const localizeSubmitError = (errorValue: unknown): string => {
+    const raw = errorValue instanceof Error ? errorValue.message : String(errorValue)
+    const code = parseWorkspaceAssistantFailureText(raw).code
+    return code && tErrors.has(code) ? tErrors(code) : t('cards.choiceSubmitErrorFallback')
+  }
   const isConfirmOnly = card.mode === 'confirm'
   const isConfirmOrReply = card.mode === 'confirm_or_text'
   const usesPerQuestionReply = card.replyMode === 'per_group'
@@ -89,9 +95,13 @@ export function AssistantChoiceCardView(props: {
   const ready = isChoiceCardSubmitReady(choiceGroups, selections)
   const activeGroup = choiceGroups[activeGroupIndex] ?? choiceGroups[0] ?? null
   // 这里是向导游标(当前第几组问题),不是完成度;文案必须显式区分,避免再被读成"已完成 N/M"。
-  const progressLabel = card.groups.length > 1
-    ? t('choiceCard.groupProgress', { current: activeGroupIndex + 1, total: card.groups.length })
-    : null
+  const progressLabel =
+    card.groups.length > 1
+      ? t('choiceCard.groupProgress', {
+          current: activeGroupIndex + 1,
+          total: card.groups.length,
+        })
+      : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup?.presentation === 'aspect_ratio'
 
@@ -101,13 +111,13 @@ export function AssistantChoiceCardView(props: {
     setSubmitting(true)
     setError(null)
     try {
+      const decision = { kind: 'text', text: trimmedReply } as const
       await props.onSubmitChoiceResponse({
-        response: { kind: 'text', text: trimmedReply },
-        visibleUserText: trimmedReply,
+        response: decision,
       })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : String(submitError))
+      setError(localizeSubmitError(submitError))
     } finally {
       setSubmitting(false)
     }
@@ -118,12 +128,13 @@ export function AssistantChoiceCardView(props: {
     setSubmitting(true)
     setError(null)
     try {
+      const decision = { kind: 'cancelled' } as const
       await props.onSubmitChoiceResponse({
-        response: { kind: 'cancelled' },
+        response: decision,
       })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : String(submitError))
+      setError(localizeSubmitError(submitError))
     } finally {
       setSubmitting(false)
     }
@@ -137,16 +148,17 @@ export function AssistantChoiceCardView(props: {
     setSubmitting(true)
     setError(null)
     try {
+      const decision = buildWorkspaceAssistantChoiceSelectionOutput({
+        card,
+        groups: submitGroups,
+        selections: submitSelections,
+      })
       await props.onSubmitChoiceResponse({
-        response: buildWorkspaceAssistantChoiceSelectionOutput({
-          card,
-          groups: submitGroups,
-          selections: submitSelections,
-        }),
+        response: decision,
       })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : String(submitError))
+      setError(localizeSubmitError(submitError))
     } finally {
       setSubmitting(false)
     }
@@ -182,7 +194,9 @@ export function AssistantChoiceCardView(props: {
     if (!activeGroup) return null
     return (
       <div className="mt-2 space-y-2">
-        <div className="text-xs font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
+        <div className="text-xs font-semibold text-[var(--glass-text-tertiary)]">
+          {activeGroup.label}
+        </div>
         <div className="grid grid-cols-1 gap-2">
           {activeGroup.options.map((option) => {
             const selected = selections[activeGroup.key] === option.value
@@ -215,18 +229,32 @@ export function AssistantChoiceCardView(props: {
                     className="h-24 w-28 shrink-0 object-cover sm:w-32"
                   />
                 ) : null}
-                <div className={`min-w-0 flex-1 p-3 ${isAspectRatioGroup ? 'flex items-center gap-3' : 'space-y-1'}`}>
-                  {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
+                <div
+                  className={`min-w-0 flex-1 p-3 ${isAspectRatioGroup ? 'flex items-center gap-3' : 'space-y-1'}`}
+                >
+                  {isAspectRatioGroup ? (
+                    <RatioChoiceShape ratio={option.value} selected={selected} />
+                  ) : null}
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
-                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
+                      <span
+                        className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}
+                      >
+                        {option.label}
+                      </span>
+                      {selected ? (
+                        <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" />
+                      ) : null}
                     </div>
                     {!isAspectRatioGroup && option.description ? (
-                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]">
+                        {option.description}
+                      </div>
                     ) : null}
                     {!isAspectRatioGroup && option.meta ? (
-                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                      <div className="whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-tertiary)]">
+                        {option.meta}
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -311,7 +339,9 @@ export function AssistantChoiceCardView(props: {
             <AppIcon name="chevronLeft" className="h-4 w-4" />
           </button>
         ) : null}
-        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold text-[var(--glass-text-primary)]">{card.title}</div>
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-semibold text-[var(--glass-text-primary)]">
+          {card.title}
+        </div>
         {progressLabel ? (
           <div className="rounded-full border border-[var(--glass-stroke-base)] bg-white/85 px-2 py-0.5 text-xs font-semibold text-[var(--glass-text-tertiary)]">
             {progressLabel}
@@ -322,20 +352,26 @@ export function AssistantChoiceCardView(props: {
           aria-label={t('cards.choiceCancel')}
           title={t('cards.choiceCancel')}
           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--glass-text-tertiary)] transition-colors hover:bg-neutral-100 hover:text-[var(--glass-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => { void handleCancel() }}
+          onClick={() => {
+            void handleCancel()
+          }}
           disabled={submitting}
         >
           <AppIcon name="close" className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
-      {card.description ? <div className="mt-1 whitespace-pre-wrap break-words leading-5">{card.description}</div> : null}
+      {card.description ? (
+        <div className="mt-1 whitespace-pre-wrap break-words leading-5">{card.description}</div>
+      ) : null}
       {isConfirmOnly || isConfirmOrReply ? renderActiveGroup() : null}
       {isConfirmOnly ? (
         <div className="mt-3">
           <button
             type="button"
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            onClick={() => { void handleSubmit() }}
+            onClick={() => {
+              void handleSubmit()
+            }}
             disabled={!ready || submitting}
           >
             {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
@@ -346,26 +382,40 @@ export function AssistantChoiceCardView(props: {
           <button
             type="button"
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            onClick={() => { void handleSubmit() }}
+            onClick={() => {
+              void handleSubmit()
+            }}
             disabled={!ready || submitting}
           >
             {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
           </button>
           {renderReplyInput()}
         </div>
-      ) : activeGroup ? renderActiveGroup() : null}
-      {error ? <div className="mt-3 text-xs leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
+      ) : activeGroup ? (
+        renderActiveGroup()
+      ) : null}
+      {error ? (
+        <div className="mt-3 text-xs leading-5 text-[var(--glass-tone-warn-fg)]">
+          {t('cards.choiceSubmitFailed', { error })}
+        </div>
+      ) : null}
       {showManualSubmit ? (
         <>
           <button
             type="button"
             className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            onClick={() => { void handleSubmit() }}
+            onClick={() => {
+              void handleSubmit()
+            }}
             disabled={!ready || submitting}
           >
             {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
           </button>
-          {!ready ? <div className="mt-1.5 text-xs text-[var(--glass-text-tertiary)]">{t('cards.choiceRequired')}</div> : null}
+          {!ready ? (
+            <div className="mt-1.5 text-xs text-[var(--glass-text-tertiary)]">
+              {t('cards.choiceRequired')}
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

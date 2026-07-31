@@ -5,9 +5,7 @@ import type {
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
 import type { ProjectAgentChoiceDecision } from './choice-result'
-import type {
-  ProjectAgentChoiceCardDefinition,
-} from './choice-offer'
+import type { ProjectAgentChoiceCardDefinition } from './choice-offer'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import type { ProjectAgentSubagentEventPartData } from './subagent-events'
@@ -60,9 +58,7 @@ export interface ProjectAgentWebSearchPartData {
   }[]
 }
 
-export type {
-  ProjectAgentChoiceCardDefinition,
-} from './choice-offer'
+export type { ProjectAgentChoiceCardDefinition } from './choice-offer'
 export type ProjectAgentChoiceCardGroup = ProjectAgentChoiceCardDefinition['groups'][number]
 export type ProjectAgentChoiceCardOption = ProjectAgentChoiceCardGroup['options'][number]
 
@@ -118,6 +114,10 @@ export interface ProjectAgentResourceLinksPartData {
   resources: readonly CreativeResourceLinkView[]
 }
 
+export interface ProjectAgentContextCompactedPartData {
+  replacedItemCount: number
+}
+
 export interface ProjectAssistantThreadSnapshot {
   id: string
   assistantId: ProjectAssistantId
@@ -131,6 +131,7 @@ export interface ProjectAssistantThreadSnapshot {
 
 export type WorkspaceAssistantPartType =
   | 'data-agent-subagent-event'
+  | 'data-assistant-context-compacted'
   | 'data-assistant-resource-links'
   | 'data-task-batch-submitted'
   | 'data-project-context'

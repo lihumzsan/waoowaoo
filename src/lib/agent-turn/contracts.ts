@@ -12,14 +12,41 @@ export const AGENT_TURN_SOURCE_KIND = {
 export type AgentTurnSourceKind =
   (typeof AGENT_TURN_SOURCE_KIND)[keyof typeof AGENT_TURN_SOURCE_KIND]
 
-export type AgentTurnStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting_approval'
-  | 'completed'
-  | 'failed'
-  | 'interrupted'
-  | 'cancelled'
+export const AGENT_TURN_STATUS = {
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  WAITING_APPROVAL: 'waiting_approval',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  INTERRUPTED: 'interrupted',
+  CANCELLED: 'cancelled',
+} as const
+
+export type AgentTurnStatus = (typeof AGENT_TURN_STATUS)[keyof typeof AGENT_TURN_STATUS]
+
+export const AGENT_TURN_ACTIVE_STATUSES = [
+  AGENT_TURN_STATUS.QUEUED,
+  AGENT_TURN_STATUS.RUNNING,
+  AGENT_TURN_STATUS.WAITING_APPROVAL,
+] as const satisfies readonly AgentTurnStatus[]
+
+export function isAgentTurnStatus(value: unknown): value is AgentTurnStatus {
+  return (
+    typeof value === 'string' &&
+    (Object.values(AGENT_TURN_STATUS) as readonly string[]).includes(value)
+  )
+}
+
+export const AGENT_TURN_INTERACTION_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  RESOLVED: 'resolved',
+  CANCELLED: 'cancelled',
+} as const
+
+export type AgentTurnInteractionStatus =
+  (typeof AGENT_TURN_INTERACTION_STATUS)[keyof typeof AGENT_TURN_INTERACTION_STATUS]
 
 export interface AgentTurnContextSnapshot {
   locale: string | null
@@ -102,4 +129,23 @@ export interface AgentTurnExecutionInput {
     version: number
     items: AgentInputItem[]
   }
+}
+
+export interface AgentThreadRecoveryState {
+  threadExists: boolean
+  queuedTurns: readonly AgentTurnRecord[]
+  recoveredTurns: readonly AgentTurnRecord[]
+  waitingApproval: AgentTurnExecutionResult | null
+  resolvedApproval: {
+    threadId: string
+    turnId: string
+    interactionId: string
+    projectId: string
+    userId: string
+    episodeId: string | null
+    requestId: string
+    decision: 'approve' | 'reject'
+    reason: string | null
+  } | null
+  pendingChoiceTurnId: string | null
 }

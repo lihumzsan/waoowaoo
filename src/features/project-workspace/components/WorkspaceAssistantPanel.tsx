@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
@@ -35,12 +35,8 @@ import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/Workspace
 import { WorkspaceAssistantPlanCard } from './workspace-assistant/WorkspaceAssistantPlanCard'
 import { WorkspaceAssistantSettings } from './workspace-assistant/WorkspaceAssistantSettings'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
-import {
-  WorkspaceAssistantRepeatedToolCallGroupProvider,
-} from './workspace-assistant/WorkspaceAssistantToolCall'
-import {
-  WorkspaceAssistantRunningSurfaceProvider,
-} from './workspace-assistant/WorkspaceAssistantReasoning'
+import { WorkspaceAssistantRepeatedToolCallGroupProvider } from './workspace-assistant/WorkspaceAssistantToolCall'
+import { WorkspaceAssistantRunningSurfaceProvider } from './workspace-assistant/WorkspaceAssistantReasoning'
 import {
   WorkspaceAssistantRunningSubagentDock,
   WorkspaceAssistantSubagentTabs,
@@ -104,7 +100,9 @@ function WorkspaceAssistantRunFailureNotice({
         <div className="font-semibold">{title ?? t('panel.runFailedTitle')}</div>
         <div className="break-words text-xs leading-4 opacity-80">{failure.headline}</div>
         {failure.technical ? (
-          <div className="mt-0.5 break-all text-[11px] leading-4 opacity-60">{failure.technical}</div>
+          <div className="mt-0.5 break-all text-[11px] leading-4 opacity-60">
+            {failure.technical}
+          </div>
         ) : null}
         {resend ? (
           <button
@@ -140,44 +138,74 @@ export default function WorkspaceAssistantPanel({
     selectedScopeRef: selection?.selectedScopeRef ?? null,
     selectedAssetId: selection?.selectedAssetId ?? null,
   })
+  const panelScopeKey = `${projectId}:${episodeId ?? ''}`
+  const panelScopeKeyRef = useRef(panelScopeKey)
+  panelScopeKeyRef.current = panelScopeKey
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
-  const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
+  const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage, panelScopeKey)
   const [mediaUploadPending, setMediaUploadPending] = useState(false)
-  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null)
+  const [mediaUploadFailed, setMediaUploadFailed] = useState(false)
   const uploadAttachmentFiles = async (files: readonly File[]): Promise<void> => {
     if (mediaUploadPending) return
-    setMediaUploadError(null)
+    const uploadScopeKey = panelScopeKey
+    setMediaUploadFailed(false)
     setMediaUploadPending(true)
     try {
       const mediaFiles = files.filter(isProjectAssistantMediaFile)
       const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
-      const mediaRoom = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
+      const mediaRoom =
+        PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
       for (const file of mediaFiles.slice(0, Math.max(mediaRoom, 0))) {
-        const attachment = await uploadProjectAssistantMediaAttachment({ projectId, file })
+        const attachment = await uploadProjectAssistantMediaAttachment({
+          projectId,
+          file,
+        })
+        if (panelScopeKeyRef.current !== uploadScopeKey) return
         composer.addMediaAttachment(attachment)
       }
       const textRoom = PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES - composer.attachments.length
       for (const file of textFiles.slice(0, Math.max(textRoom, 0))) {
         const attachment = await uploadProjectAssistantTextAttachment({ file })
+        if (panelScopeKeyRef.current !== uploadScopeKey) return
         composer.addAttachment(attachment)
       }
-    } catch (error) {
-      setMediaUploadError(error instanceof Error ? error.message : String(error))
+    } catch {
+      if (panelScopeKeyRef.current === uploadScopeKey) {
+        setMediaUploadFailed(true)
+      }
     } finally {
-      setMediaUploadPending(false)
+      if (panelScopeKeyRef.current === uploadScopeKey) {
+        setMediaUploadPending(false)
+      }
     }
   }
   const attachmentPicker = useAttachmentFilePicker({
     accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,
     disabled: assistantRuntime.pending || assistantRuntime.viewLoading,
-    onFiles: (files) => { void uploadAttachmentFiles(files) },
+    onFiles: (files) => {
+      void uploadAttachmentFiles(files)
+    },
   })
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
-  const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(() => new Set())
-  const visibleSubagents = useMemo(() => assistantRuntime.subagents.filter(
-    (subagent) => !dismissedSubagentIds.has(subagent.subagentId),
-  ), [assistantRuntime.subagents, dismissedSubagentIds])
+  const [dismissedSubagentIds, setDismissedSubagentIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
+  const visibleSubagents = useMemo(
+    () =>
+      assistantRuntime.subagents.filter(
+        (subagent) => !dismissedSubagentIds.has(subagent.subagentId),
+      ),
+    [assistantRuntime.subagents, dismissedSubagentIds],
+  )
+
+  useEffect(() => {
+    panelScopeKeyRef.current = panelScopeKey
+    setMediaUploadPending(false)
+    setMediaUploadFailed(false)
+    setSelectedSubagentId(null)
+    setDismissedSubagentIds(new Set())
+  }, [panelScopeKey])
 
   useEffect(() => {
     if (!selectedSubagentId) return
@@ -210,9 +238,10 @@ export default function WorkspaceAssistantPanel({
   )
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
-  const activeChoiceCard = pendingInteraction?.kind === 'choice'
-    ? { key: pendingInteraction.interactionId, data: pendingInteraction.card }
-    : null
+  const activeChoiceCard =
+    pendingInteraction?.kind === 'choice'
+      ? { key: pendingInteraction.interactionId, data: pendingInteraction.card }
+      : null
   const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
   const partComponents = useWorkspaceAssistantMessagePartComponents()
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
@@ -226,9 +255,9 @@ export default function WorkspaceAssistantPanel({
     currentTurnStatus: assistantRuntime.view?.currentTurn?.status ?? null,
   })
   const showInterruptedNotice =
-    !assistantRuntime.viewLoading
-    && !assistantRuntime.replyInFlight
-    && assistantRuntime.view?.currentTurn?.status === 'interrupted'
+    !assistantRuntime.viewLoading &&
+    !assistantRuntime.replyInFlight &&
+    assistantRuntime.view?.currentTurn?.status === 'interrupted'
   // Run, send, and Task failures all resolve through the same view resolver,
   // so every failure surface uses the canonical error catalogue instead of
   // panel-local sentences or model-written guesses.
@@ -247,30 +276,34 @@ export default function WorkspaceAssistantPanel({
     localizeCode: localizeErrorCode,
     unknownFallback: unknownFailureFallback,
   })
-  const composerFailureView = showRunFailureNotice || !assistantRuntime.error
-    ? null
-    : resolveWorkspaceAssistantFailureView({
-      facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
-      localizeCode: localizeErrorCode,
-      unknownFallback: unknownFailureFallback,
-    })
+  const composerFailureView =
+    showRunFailureNotice || !assistantRuntime.error
+      ? null
+      : resolveWorkspaceAssistantFailureView({
+          facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
+          localizeCode: localizeErrorCode,
+          unknownFallback: unknownFailureFallback,
+        })
   // Undelivered marker + resend draft are derived from persisted facts only
   // (failed `user_turn` current run + rendered message order); see the
   // resolver's doc comment for the attribution boundary. No second copy of
   // the message or its attachments is stored anywhere.
-  const undeliveredUserMessage = useMemo(() => resolveWorkspaceAssistantUndeliveredUserMessage({
-    messages: assistantRuntime.messages,
-    showDeliveryFailureNotice:
-      showRunFailureNotice || showInterruptedNotice,
-    currentTurnSourceKind: currentTurn?.sourceKind ?? null,
-    currentTurnSourceId: currentTurn?.sourceId ?? null,
-  }), [
-    assistantRuntime.messages,
-    currentTurn?.sourceId,
-    currentTurn?.sourceKind,
-    showInterruptedNotice,
-    showRunFailureNotice,
-  ])
+  const undeliveredUserMessage = useMemo(
+    () =>
+      resolveWorkspaceAssistantUndeliveredUserMessage({
+        messages: assistantRuntime.messages,
+        showDeliveryFailureNotice: showRunFailureNotice || showInterruptedNotice,
+        currentTurnSourceKind: currentTurn?.sourceKind ?? null,
+        currentTurnSourceId: currentTurn?.sourceId ?? null,
+      }),
+    [
+      assistantRuntime.messages,
+      currentTurn?.sourceId,
+      currentTurn?.sourceKind,
+      showInterruptedNotice,
+      showRunFailureNotice,
+    ],
+  )
   const resendDraft = useMemo(
     () => resolveWorkspaceAssistantResendDraft(undeliveredUserMessage),
     [undeliveredUserMessage],
@@ -287,25 +320,33 @@ export default function WorkspaceAssistantPanel({
       mediaAttachments: resendDraft.mediaAttachments,
     }).catch(() => undefined)
   }, [resendDraft, sendMessage])
-  const taskBatchViews = useMemo(() => taskBatches.map((batch) => {
-    const operationIds = Array.from(new Set(batch.tasks.flatMap(
-      (task) => task.operationId ? [task.operationId] : [],
-    ))).sort()
-    const failures = Array.from(new Map(batch.tasks.flatMap((task) => {
-      if (!task.errorCode && !task.errorMessage) return []
-      const failure = resolveWorkspaceAssistantFailureView({
-        facts: {
-          code: task.errorCode?.trim() || null,
-          message: task.errorMessage?.trim() || null,
-          requestId: null,
-        },
-        localizeCode: localizeErrorCode,
-        unknownFallback: unknownFailureFallback,
-      })
-      return [[`${failure.headline}\u0000${failure.technical ?? ''}`, failure] as const]
-    })).values())
-    return { batch, operationIds, failures }
-  }), [localizeErrorCode, taskBatches, unknownFailureFallback])
+  const taskBatchViews = useMemo(
+    () =>
+      taskBatches.map((batch) => {
+        const operationIds = Array.from(
+          new Set(batch.tasks.flatMap((task) => (task.operationId ? [task.operationId] : []))),
+        ).sort()
+        const failures = Array.from(
+          new Map(
+            batch.tasks.flatMap((task) => {
+              if (!task.errorCode && !task.errorMessage) return []
+              const failure = resolveWorkspaceAssistantFailureView({
+                facts: {
+                  code: task.errorCode?.trim() || null,
+                  message: task.errorMessage?.trim() || null,
+                  requestId: null,
+                },
+                localizeCode: localizeErrorCode,
+                unknownFallback: unknownFailureFallback,
+              })
+              return [[`${failure.headline}\u0000${failure.technical ?? ''}`, failure] as const]
+            }),
+          ).values(),
+        )
+        return { batch, operationIds, failures }
+      }),
+    [localizeErrorCode, taskBatches, unknownFailureFallback],
+  )
 
   return (
     <aside
@@ -332,163 +373,199 @@ export default function WorkspaceAssistantPanel({
         <div className="h-full opacity-100 transition-opacity duration-200">
           <WorkspaceAssistantRepeatedToolCallGroupProvider messages={assistantRuntime.messages}>
             <AssistantRuntimeProvider runtime={assistantRuntime.runtime}>
-              <ThreadPrimitive.Root key={`${projectId}:${episodeId ?? ''}`} className="relative flex h-full min-h-0 flex-col">
-              <WorkspaceAssistantSettings />
-              <WorkspaceAssistantSubagentTabs
-                subagents={visibleSubagents}
-                selectedSubagentId={selectedSubagentId}
-                onSelect={setSelectedSubagentId}
-                onDismiss={dismissSubagent}
-                primaryNeedsAttention={Boolean(displayedActiveChoiceCard || serverPendingApproval)}
-              />
-              <ThreadPrimitive.Viewport
-                autoScroll
-                className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
-                style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
+              <ThreadPrimitive.Root
+                key={`${projectId}:${episodeId ?? ''}`}
+                className="relative flex h-full min-h-0 flex-col"
               >
-                {selectedSubagentId ? (
-                  <WorkspaceAssistantSubagentView
-                    projectId={projectId}
-                    subagent={visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ?? null}
-                    structuredOutputText={assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null}
-                  />
-                ) : (
-                  <WorkspaceAssistantRunningSurfaceProvider activeTurn={assistantRuntime.replyInFlight}>
-                    <div className="min-w-0">
-                      <div className="space-y-3">
-                        <ThreadPrimitive.Messages>
-                          {() => (
-                            <WorkspaceAssistantThreadMessage
-                              messagePartComponents={partComponents}
-                              subagents={visibleSubagents}
-                              onSelectSubagent={setSelectedSubagentId}
-                              undeliveredUserMessageId={undeliveredUserMessage?.id ?? null}
-                            />
-                          )}
-                        </ThreadPrimitive.Messages>
-                        {showAssistantReplyLoading ? (
-                          <WorkspaceAssistantPendingTurnPlaceholder
-                            label={assistantRuntime.backgroundFollowUpActive
-                              ? t('panel.backgroundFollowUpRunning')
-                              : undefined}
-                          />
-                        ) : null}
-                        {assistantRuntime.viewError ? (
-                          <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]">
-                            {t('panel.sessionStateError')}
-                          </div>
-                        ) : null}
-                        {showRunFailureNotice ? (
-                          <WorkspaceAssistantRunFailureNotice
-                            failure={runFailureView}
-                            resend={resendDraft
-                              ? {
-                                pending: assistantRuntime.pending || assistantRuntime.viewLoading,
-                                onResend: resendUndeliveredMessage,
-                              }
-                              : null}
-                          />
-                        ) : null}
-                        {showInterruptedNotice ? (
-                          <WorkspaceAssistantRunFailureNotice
-                            title={t('panel.turnInterruptedTitle')}
-                            failure={{
-                              tone: 'info',
-                              headline: t('panel.turnInterruptedDescription'),
-                              technical:
-                                currentTurn?.errorCode?.trim()
-                                || currentTurn?.errorMessage?.trim()
-                                || null,
-                            }}
-                            resend={resendDraft
-                              ? {
-                                pending: assistantRuntime.pending || assistantRuntime.viewLoading,
-                                onResend: resendUndeliveredMessage,
-                              }
-                              : null}
-                          />
-                        ) : null}
-                        {!assistantRuntime.viewLoading ? taskBatchViews.map((view) => (
-                          <WorkspaceAssistantActiveRunCard
-                            key={view.batch.batchId}
-                            operationIds={view.operationIds}
-                            progress={view.batch.progress}
-                            failures={view.failures}
-                          />
-                        )) : null}
-                        {serverPendingApproval ? (
-                          <ConfirmationActionCard
-                            members={serverPendingApproval.members.map((member) => ({
-                              operationId: member.operationId,
-                              title: localizeProjectAgentOperationTitle(member.operationId, locale),
-                              operationPlan: member.operationPlan,
-                            }))}
-                            subtitle={t('cards.confirmationRequired')}
-                            onConfirm={() => assistantRuntime.resolveApproval({
-                              decision: 'approve',
-                            })}
-                            onCancel={() => assistantRuntime.resolveApproval({
-                              decision: 'reject',
-                            })}
-                          />
-                        ) : null}
-                      </div>
-                    </div>
-                  </WorkspaceAssistantRunningSurfaceProvider>
-                )}
-              </ThreadPrimitive.Viewport>
-
-              {selectedSubagentId === null ? (
-                <div className="mx-4 mb-2 shrink-0">
-                  <WorkspaceAssistantRunningSubagentDock
-                    subagents={visibleSubagents}
-                    onSelect={setSelectedSubagentId}
-                  />
-                  {displayedActiveChoiceCard ? (
-                    <div className="mb-2">
-                      <AssistantChoiceCardView
-                        data={displayedActiveChoiceCard.data}
-                        onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
-                      />
-                    </div>
-                  ) : null}
-                  <div className="relative">
-                    {assistantRuntime.view?.thread?.plan ? (
-                      <WorkspaceAssistantPlanCard
-                        plan={assistantRuntime.view.thread.plan}
-                        isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
-                      />
-                    ) : null}
-                    <WorkspaceAssistantComposer
-                      value={composer.text}
-                      error={composerFailureView}
-                      pending={assistantRuntime.pending || assistantRuntime.viewLoading}
-                      canStopReply={assistantRuntime.canStopReply}
-                      attachments={composer.attachments}
-                      mediaAttachments={composer.mediaAttachments}
-                      attachDisabled={
-                        composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
-                        && composer.mediaAttachments.length >= PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+                <WorkspaceAssistantSettings />
+                <WorkspaceAssistantSubagentTabs
+                  subagents={visibleSubagents}
+                  selectedSubagentId={selectedSubagentId}
+                  onSelect={setSelectedSubagentId}
+                  onDismiss={dismissSubagent}
+                  primaryNeedsAttention={Boolean(
+                    displayedActiveChoiceCard || serverPendingApproval,
+                  )}
+                />
+                <ThreadPrimitive.Viewport
+                  autoScroll
+                  className={`min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pb-4 ${visibleSubagents.length > 0 ? 'pt-4' : 'pt-12'}`}
+                  style={WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE}
+                >
+                  {selectedSubagentId ? (
+                    <WorkspaceAssistantSubagentView
+                      projectId={projectId}
+                      subagent={
+                        visibleSubagents.find((item) => item.subagentId === selectedSubagentId) ??
+                        null
                       }
-                      mediaUploadPending={mediaUploadPending}
-                      mediaUploadError={mediaUploadError}
-                      onChange={composer.setText}
-                      onSubmit={async () => {
-                        setMediaUploadError(null)
-                        // Send failures surface through chat.error/controlError
-                        // (rendered under the composer); never as an unhandled
-                        // rejection reaching the React overlay.
-                        await composer.submit().catch(() => undefined)
-                      }}
-                      onStopReply={assistantRuntime.stopReply}
-                      onAttachClick={attachmentPicker.open}
-                      onRemoveAttachment={composer.removeAttachment}
-                      onRemoveMediaAttachment={composer.removeMediaAttachment}
-                      onPasteMediaFiles={(files) => { void uploadAttachmentFiles(files) }}
+                      structuredOutputText={
+                        assistantRuntime.subagentStructuredOutputs.get(selectedSubagentId) ?? null
+                      }
                     />
+                  ) : (
+                    <WorkspaceAssistantRunningSurfaceProvider
+                      activeTurn={assistantRuntime.replyInFlight}
+                    >
+                      <div className="min-w-0">
+                        <div className="space-y-3">
+                          <ThreadPrimitive.Messages>
+                            {() => (
+                              <WorkspaceAssistantThreadMessage
+                                messagePartComponents={partComponents}
+                                subagents={visibleSubagents}
+                                onSelectSubagent={setSelectedSubagentId}
+                                undeliveredUserMessageId={undeliveredUserMessage?.id ?? null}
+                              />
+                            )}
+                          </ThreadPrimitive.Messages>
+                          {showAssistantReplyLoading ? (
+                            <WorkspaceAssistantPendingTurnPlaceholder
+                              label={
+                                assistantRuntime.backgroundFollowUpActive
+                                  ? t('panel.backgroundFollowUpRunning')
+                                  : undefined
+                              }
+                            />
+                          ) : null}
+                          {assistantRuntime.viewError ? (
+                            <div
+                              role="alert"
+                              className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]"
+                            >
+                              {t('panel.sessionStateError')}
+                            </div>
+                          ) : null}
+                          {showRunFailureNotice ? (
+                            <WorkspaceAssistantRunFailureNotice
+                              failure={runFailureView}
+                              resend={
+                                resendDraft
+                                  ? {
+                                      pending:
+                                        assistantRuntime.pending || assistantRuntime.viewLoading,
+                                      onResend: resendUndeliveredMessage,
+                                    }
+                                  : null
+                              }
+                            />
+                          ) : null}
+                          {showInterruptedNotice ? (
+                            <WorkspaceAssistantRunFailureNotice
+                              title={t('panel.turnInterruptedTitle')}
+                              failure={{
+                                tone: 'info',
+                                headline: t('panel.turnInterruptedDescription'),
+                                technical:
+                                  currentTurn?.errorCode?.trim() ||
+                                  currentTurn?.errorMessage?.trim() ||
+                                  null,
+                              }}
+                              resend={
+                                resendDraft
+                                  ? {
+                                      pending:
+                                        assistantRuntime.pending || assistantRuntime.viewLoading,
+                                      onResend: resendUndeliveredMessage,
+                                    }
+                                  : null
+                              }
+                            />
+                          ) : null}
+                          {!assistantRuntime.viewLoading
+                            ? taskBatchViews.map((view) => (
+                                <WorkspaceAssistantActiveRunCard
+                                  key={view.batch.batchId}
+                                  operationIds={view.operationIds}
+                                  progress={view.batch.progress}
+                                  failures={view.failures}
+                                />
+                              ))
+                            : null}
+                          {serverPendingApproval ? (
+                            <ConfirmationActionCard
+                              members={serverPendingApproval.members.map((member) => ({
+                                operationId: member.operationId,
+                                title: localizeProjectAgentOperationTitle(
+                                  member.operationId,
+                                  locale,
+                                ),
+                                operationPlan: member.operationPlan,
+                              }))}
+                              subtitle={t('cards.confirmationRequired')}
+                              onConfirm={() =>
+                                assistantRuntime.resolveApproval({
+                                  decision: 'approve',
+                                })
+                              }
+                              onCancel={() =>
+                                assistantRuntime.resolveApproval({
+                                  decision: 'reject',
+                                })
+                              }
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    </WorkspaceAssistantRunningSurfaceProvider>
+                  )}
+                </ThreadPrimitive.Viewport>
+
+                {selectedSubagentId === null ? (
+                  <div className="mx-4 mb-2 shrink-0">
+                    <WorkspaceAssistantRunningSubagentDock
+                      subagents={visibleSubagents}
+                      onSelect={setSelectedSubagentId}
+                    />
+                    {displayedActiveChoiceCard ? (
+                      <div className="mb-2">
+                        <AssistantChoiceCardView
+                          data={displayedActiveChoiceCard.data}
+                          onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="relative">
+                      {assistantRuntime.view?.thread?.plan ? (
+                        <WorkspaceAssistantPlanCard
+                          plan={assistantRuntime.view.thread.plan}
+                          isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
+                        />
+                      ) : null}
+                      <WorkspaceAssistantComposer
+                        value={composer.text}
+                        error={composerFailureView}
+                        pending={assistantRuntime.pending || assistantRuntime.viewLoading}
+                        canStopReply={assistantRuntime.canStopReply}
+                        attachments={composer.attachments}
+                        mediaAttachments={composer.mediaAttachments}
+                        attachDisabled={
+                          composer.attachments.length >=
+                            PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES &&
+                          composer.mediaAttachments.length >=
+                            PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
+                        }
+                        mediaUploadPending={mediaUploadPending}
+                        mediaUploadFailed={mediaUploadFailed}
+                        onChange={composer.setText}
+                        onSubmit={async () => {
+                          setMediaUploadFailed(false)
+                          // Send failures surface through chat.error/controlError
+                          // (rendered under the composer); never as an unhandled
+                          // rejection reaching the React overlay.
+                          await composer.submit().catch(() => undefined)
+                        }}
+                        onStopReply={assistantRuntime.stopReply}
+                        onAttachClick={attachmentPicker.open}
+                        onRemoveAttachment={composer.removeAttachment}
+                        onRemoveMediaAttachment={composer.removeMediaAttachment}
+                        onPasteMediaFiles={(files) => {
+                          void uploadAttachmentFiles(files)
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
               </ThreadPrimitive.Root>
             </AssistantRuntimeProvider>
           </WorkspaceAssistantRepeatedToolCallGroupProvider>

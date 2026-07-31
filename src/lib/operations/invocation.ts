@@ -19,10 +19,7 @@ import type {
   ProjectAgentOperationRegistry,
 } from './types'
 import { assertAssistantToolWriteAuthority } from './write-authority'
-import {
-  assertOperationChannelAllowed,
-  type OperationInvocationChannel,
-} from './channel-policy'
+import { assertOperationChannelAllowed, type OperationInvocationChannel } from './channel-policy'
 import { projectOperationMutationReceipt } from './mutation-receipt'
 
 export type { OperationInvocationChannel } from './channel-policy'
@@ -67,13 +64,14 @@ function normalizeInvocationInput(params: {
       message: 'operation approval provenance must have exactly one source',
     })
   }
-  const businessInput = params.channel === 'tool'
-    ? resolveOperationScopeInput({
-        input: split.businessInput,
-        context: params.context,
-        prerequisites: params.operation.prerequisites,
-      })
-    : split.businessInput
+  const businessInput =
+    params.channel === 'tool'
+      ? resolveOperationScopeInput({
+          input: split.businessInput,
+          context: params.context,
+          prerequisites: params.operation.prerequisites,
+        })
+      : split.businessInput
   return {
     businessInput,
     invocation: params.approvedInvocation ?? split.invocation,
@@ -127,14 +125,15 @@ export function prepareProjectAgentOperationInput(params: {
 } {
   assertOperationChannelAllowed(params.operation, params.channel)
   const normalized = normalizeInvocationInput(params)
-  const normalizedBusinessInput = params.channel === 'tool'
-    ? normalizeProjectAgentToolInput({
-        operationId: params.operation.id,
-        input: normalized.businessInput,
-        inputSchema: params.operation.inputSchema,
-        toolInputSchema: params.operation.toolInputSchema,
-      })
-    : normalized.businessInput
+  const normalizedBusinessInput =
+    params.channel === 'tool'
+      ? normalizeProjectAgentToolInput({
+          operationId: params.operation.id,
+          input: normalized.businessInput,
+          inputSchema: params.operation.inputSchema,
+          toolInputSchema: params.operation.toolInputSchema,
+        })
+      : normalized.businessInput
   const effectiveEpisodeId = assertPrerequisites({
     operation: params.operation,
     input: normalizedBusinessInput,
@@ -182,10 +181,7 @@ export async function invokeProjectAgentOperation(params: {
     | 'durable_operation_execution'
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
-  if (
-    params.context.invocationChannel
-    && params.context.invocationChannel !== params.channel
-  ) {
+  if (params.context.invocationChannel && params.context.invocationChannel !== params.channel) {
     throw new Error(
       `PROJECT_AGENT_OPERATION_CHANNEL_CONTEXT_MISMATCH:${params.operationId}:${params.channel}:${params.context.invocationChannel}`,
     )
@@ -194,79 +190,65 @@ export async function invokeProjectAgentOperation(params: {
   const invocationMode = params.invocationMode ?? 'default'
   const atomicChoiceCommit = invocationMode === 'atomic_choice_commit'
   const agentToolEffect = invocationMode === 'agent_tool_effect'
-  const durableOperationExecution =
-    invocationMode === 'durable_operation_execution'
+  const durableOperationExecution = invocationMode === 'durable_operation_execution'
   if (Boolean(params.transaction) !== (atomicChoiceCommit || agentToolEffect)) {
-    throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`)
+    throw new Error(
+      `PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`,
+    )
   }
   if (
-    params.channel === 'tool'
-    && !durableOperationExecution
-    && !agentToolEffect
-    && operation.effects.writes
+    params.channel === 'tool' &&
+    !durableOperationExecution &&
+    !agentToolEffect &&
+    !atomicChoiceCommit &&
+    operation.effects.writes
   ) {
-    throw new Error(
-      `PROJECT_AGENT_OPERATION_DURABLE_WRITE_OWNER_REQUIRED:${params.operationId}`,
-    )
+    throw new Error(`PROJECT_AGENT_OPERATION_DURABLE_WRITE_OWNER_REQUIRED:${params.operationId}`)
   }
 
   if (params.channel === 'tool') {
-    assertAssistantToolWriteAuthority(
-      operation.id,
-      operation as unknown as Record<string, unknown>,
-    )
+    assertAssistantToolWriteAuthority(operation.id, operation as unknown as Record<string, unknown>)
   }
   if (
-    durableOperationExecution
-    && (
-      operation.assistantWriteAuthority?.kind
-        !== 'temporal_operation_execution'
-      || !params.context.operationExecutionId?.trim()
-      || !params.context.requestId?.trim()
-      || params.transaction
-    )
+    durableOperationExecution &&
+    (operation.assistantWriteAuthority?.kind !== 'temporal_operation_execution' ||
+      !params.context.operationExecutionId?.trim() ||
+      !params.context.requestId?.trim() ||
+      params.transaction)
   ) {
-    throw new Error(
-      `PROJECT_AGENT_OPERATION_DURABLE_EXECUTION_CONTRACT_INVALID:${operation.id}`,
-    )
+    throw new Error(`PROJECT_AGENT_OPERATION_DURABLE_EXECUTION_CONTRACT_INVALID:${operation.id}`)
   }
   if (
-    agentToolEffect
-    && (
-      params.channel !== 'tool'
-      || operation.intent !== 'act'
-      || !operation.effects.writes
-      || operation.effects.billable
-      || operation.effects.externalSideEffects
-      || operation.effects.longRunning
-      || operation.confirmation.kind !== 'none'
-      || operation.agentFlow?.suspendsFor
-      || !operation.executeInTransaction
-      || operation.prepareTransaction
-      || operation.compensateTransactionFailure
-      || !params.transaction
-    )
+    agentToolEffect &&
+    (params.channel !== 'tool' ||
+      operation.intent !== 'act' ||
+      !operation.effects.writes ||
+      operation.effects.billable ||
+      operation.effects.externalSideEffects ||
+      operation.effects.longRunning ||
+      operation.confirmation.kind !== 'none' ||
+      operation.agentFlow?.suspendsFor ||
+      !operation.executeInTransaction ||
+      operation.prepareTransaction ||
+      operation.compensateTransactionFailure ||
+      !params.transaction)
   ) {
-    throw new Error(
-      `PROJECT_AGENT_OPERATION_TOOL_EFFECT_CONTRACT_INVALID:${operation.id}`,
-    )
+    throw new Error(`PROJECT_AGENT_OPERATION_TOOL_EFFECT_CONTRACT_INVALID:${operation.id}`)
   }
   if (
-    atomicChoiceCommit
-    && (
-      operation.choiceCommit?.enabled !== true
-      || operation.channels.tool !== true
-      || operation.intent !== 'act'
-      || !operation.effects.writes
-      || operation.effects.billable
-      || operation.effects.destructive
-      || operation.effects.bulk
-      || operation.effects.longRunning
-      || operation.effects.externalSideEffects
-      || operation.confirmation.kind !== 'none'
-      || operation.agentFlow?.suspendsFor
-      || !operation.executeInTransaction
-    )
+    atomicChoiceCommit &&
+    (operation.choiceCommit?.enabled !== true ||
+      operation.channels.tool !== true ||
+      operation.intent !== 'act' ||
+      !operation.effects.writes ||
+      operation.effects.billable ||
+      operation.effects.destructive ||
+      operation.effects.bulk ||
+      operation.effects.longRunning ||
+      operation.effects.externalSideEffects ||
+      operation.confirmation.kind !== 'none' ||
+      operation.agentFlow?.suspendsFor ||
+      !operation.executeInTransaction)
   ) {
     throw new Error(`PROJECT_AGENT_CHOICE_COMMIT_OPERATION_CONTRACT_INVALID:${operation.id}`)
   }
@@ -285,16 +267,10 @@ export async function invokeProjectAgentOperation(params: {
         episodeId: prepared.effectiveEpisodeId || null,
       })
     : []
-  if (
-    affectedResources.length > 0
-    && operation.confirmation.kind === 'billable_media'
-  ) {
+  if (affectedResources.length > 0 && operation.confirmation.kind === 'billable_media') {
     throw new Error(`OPERATION_RESOURCE_TASK_TERMINAL_REQUIRED:${operation.id}`)
   }
-  if (
-    affectedResources.length > 0
-    && !operation.executeInTransaction
-  ) {
+  if (affectedResources.length > 0 && !operation.executeInTransaction) {
     throw new Error(`OPERATION_RESOURCE_TRANSACTION_REQUIRED:${operation.id}`)
   }
   const parseOutput = (value: unknown): unknown => {
@@ -313,9 +289,7 @@ export async function invokeProjectAgentOperation(params: {
   let parsedOutputData: unknown
   let mutationReceipt: OperationMutationReceipt | null = null
   if (operation.confirmation.kind === 'billable_media') {
-    throw new Error(
-      `OPERATION_BILLABLE_DURABLE_EXECUTION_REQUIRED:${operation.id}`,
-    )
+    throw new Error(`OPERATION_BILLABLE_DURABLE_EXECUTION_REQUIRED:${operation.id}`)
   } else {
     if (prepared.invocation) {
       throw new ApiError('INVALID_PARAMS', {
@@ -335,7 +309,12 @@ export async function invokeProjectAgentOperation(params: {
       let transactionOutput: unknown
       let hasTransactionOutput = false
       const executeTransaction = async (tx: Prisma.TransactionClient): Promise<unknown> => {
-        const output = await executeInTransaction(params.context, parsedInput, tx, preparedTransaction)
+        const output = await executeInTransaction(
+          params.context,
+          parsedInput,
+          tx,
+          preparedTransaction,
+        )
         transactionOutput = output
         hasTransactionOutput = true
         const parsed = parseOutput(output)

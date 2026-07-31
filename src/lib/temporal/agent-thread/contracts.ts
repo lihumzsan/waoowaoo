@@ -37,6 +37,20 @@ export interface AdmitAgentTurnActivityInput {
   envelope: AgentTurnCommandEnvelope
 }
 
+export interface RecoverAgentThreadActivityInput {
+  workflowId: string
+  threadId: string
+}
+
+export interface AgentThreadRecoveryReceipt {
+  threadExists: boolean
+  queued: readonly AgentThreadQueuedTurn[]
+  recoveredTurns: readonly AgentTurnRecord[]
+  waitingApproval: AgentTurnExecutionResult | null
+  resolvedApproval: AgentTurnApprovalDecisionReceipt | null
+  pendingChoiceTurnId: string | null
+}
+
 export interface ExecuteAgentTurnActivityInput {
   workflowId: string
   threadId: string
@@ -87,27 +101,18 @@ export interface ResumeAgentTurnApprovalActivityInput {
 }
 
 export interface AgentThreadCoordinatorActivities {
-  admitAgentTurn(
-    input: AdmitAgentTurnActivityInput,
-  ): Promise<AgentTurnAdmissionReceipt>
-  executeAgentTurn(
-    input: ExecuteAgentTurnActivityInput,
-  ): Promise<AgentTurnExecutionResult>
-  settleLostAgentTurn(
-    input: SettleLostAgentTurnActivityInput,
-  ): Promise<AgentTurnExecutionResult>
+  recoverAgentThread(input: RecoverAgentThreadActivityInput): Promise<AgentThreadRecoveryReceipt>
+  admitAgentTurn(input: AdmitAgentTurnActivityInput): Promise<AgentTurnAdmissionReceipt>
+  executeAgentTurn(input: ExecuteAgentTurnActivityInput): Promise<AgentTurnExecutionResult>
+  settleLostAgentTurn(input: SettleLostAgentTurnActivityInput): Promise<AgentTurnExecutionResult>
   resolveAgentTurnApproval(
     input: ResolveAgentTurnApprovalActivityInput,
   ): Promise<AgentTurnApprovalDecisionReceipt>
   resolveAgentTurnChoice(
     input: ResolveAgentTurnChoiceActivityInput,
   ): Promise<AgentTurnChoiceResolutionReceipt>
-  cancelAgentTurn(
-    input: CancelAgentTurnActivityInput,
-  ): Promise<AgentTurnCancellationReceipt>
-  clearAgentThread(
-    input: ClearAgentThreadActivityInput,
-  ): Promise<AgentThreadClearReceipt>
+  cancelAgentTurn(input: CancelAgentTurnActivityInput): Promise<AgentTurnCancellationReceipt>
+  clearAgentThread(input: ClearAgentThreadActivityInput): Promise<AgentThreadClearReceipt>
   resumeAgentTurnApproval(
     input: ResumeAgentTurnApprovalActivityInput,
   ): Promise<AgentTurnExecutionResult>
