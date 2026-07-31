@@ -1,5 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import { TASK_EVENT_TYPE } from '@/lib/task/types'
+import {
+  TASK_SSE_EVENT_TYPE,
+  WORKSPACE_SSE_EVENT_TYPE,
+  isTaskSseEvent,
+  type SSEEvent,
+} from '@/lib/sse/events'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
 import { readTaskCoveredTargets, type TaskCoveredTarget } from '@/lib/task/covered-targets'
 import { queryKeys } from './keys'
@@ -37,7 +43,9 @@ export function applyWorkspaceSSEEvent(params: {
 }) {
   const { event, queryClient, projectId } = params
 
-  if (event.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
+  if (
+    event.type === WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED
+  ) {
     queryClient.invalidateQueries({
       queryKey: queryKeys.project.assistantThread(projectId, event.episodeId ?? ''),
       exact: true,
@@ -50,6 +58,8 @@ export function applyWorkspaceSSEEvent(params: {
     void syncWorkspaceResourceChanges({ queryClient, changes })
     return
   }
+
+  if (!isTaskSseEvent(event)) return
 
   const payloadRecord = isRecord(event.payload) ? event.payload : null
   const targetType = typeof event.targetType === 'string'

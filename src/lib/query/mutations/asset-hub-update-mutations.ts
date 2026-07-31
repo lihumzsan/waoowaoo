@@ -1,19 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  requestOperationMutationVoidWithError,
   requestJsonWithError,
 } from './mutation-shared'
-import {
-  invalidateGlobalCharacters,
-  invalidateGlobalLocations,
-} from './asset-hub-mutations-shared'
 
 export function useUpdateCharacterName() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({ characterId, name }: { characterId: string; name: string }) => {
-      return await requestJsonWithError(`/api/assets/${characterId}`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${characterId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -21,19 +17,17 @@ export function useUpdateCharacterName() {
           kind: 'character',
           name,
         }),
-      }, 'Failed to update character name')
+      }, 'Failed to update character name', queryClient)
     },
-    onSuccess: invalidateCharacters,
   })
 }
 
 export function useUpdateLocationName() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({ locationId, name }: { locationId: string; name: string }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -41,15 +35,13 @@ export function useUpdateLocationName() {
           kind: 'location',
           name,
         }),
-      }, 'Failed to update location name')
+      }, 'Failed to update location name', queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }
 
 export function useUpdateCharacterAppearanceDescription() {
   const queryClient = useQueryClient()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -75,7 +67,7 @@ export function useUpdateCharacterAppearanceDescription() {
       if (!variantId) {
         throw new Error('Failed to resolve appearance variant')
       }
-      return await requestJsonWithError(`/api/assets/${characterId}/variants/${variantId}`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${characterId}/variants/${variantId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,15 +75,13 @@ export function useUpdateCharacterAppearanceDescription() {
           kind: 'character',
           description,
         }),
-      }, 'Failed to update appearance description')
+      }, 'Failed to update appearance description', queryClient)
     },
-    onSuccess: invalidateCharacters,
   })
 }
 
 export function useUpdateLocationSummary() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -101,7 +91,7 @@ export function useUpdateLocationSummary() {
       locationId: string
       summary: string
     }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,8 +99,7 @@ export function useUpdateLocationSummary() {
           kind: 'location',
           summary,
         }),
-      }, 'Failed to update location summary')
+      }, 'Failed to update location summary', queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }

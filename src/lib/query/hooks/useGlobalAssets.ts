@@ -2,11 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
 import { useAssets } from './useAssets'
 import { groupAssetsByKind } from '@/lib/assets/grouping'
+import {
+    requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 // ============ 类型定义 ============
 export interface GlobalCharacterAppearance {
@@ -205,21 +207,12 @@ export function useCreateFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ name }: { name: string }) => {
-            const res = await apiFetch('/api/asset-hub/folders', {
+        mutationFn: async ({ name }: { name: string }) =>
+            await requestOperationMutationVoidWithError('/api/asset-hub/folders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to create folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-        },
+            }, 'Failed to create folder', queryClient),
     })
 }
 
@@ -230,21 +223,12 @@ export function useUpdateFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ folderId, name }: { folderId: string; name: string }) => {
-            const res = await apiFetch('/api/asset-hub/folders', {
-                method: 'PUT',
+        mutationFn: async ({ folderId, name }: { folderId: string; name: string }) =>
+            await requestOperationMutationVoidWithError(`/api/asset-hub/folders/${folderId}`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderId, name }),
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to update folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-        },
+                body: JSON.stringify({ name }),
+            }, 'Failed to update folder', queryClient),
     })
 }
 
@@ -255,20 +239,10 @@ export function useDeleteFolder() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: async ({ folderId }: { folderId: string }) => {
-            const res = await apiFetch(`/api/asset-hub/folders?folderId=${folderId}`, {
+        mutationFn: async ({ folderId }: { folderId: string }) =>
+            await requestOperationMutationVoidWithError(`/api/asset-hub/folders/${folderId}`, {
                 method: 'DELETE',
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to delete folder'))
-            }
-            return res.json()
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-            queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
-        },
+            }, 'Failed to delete folder', queryClient),
     })
 }
 

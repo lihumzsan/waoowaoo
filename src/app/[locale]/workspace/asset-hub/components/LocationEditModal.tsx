@@ -1,7 +1,6 @@
 'use client'
 
 import { LocationEditModal as SharedLocationEditModal } from '@/components/shared/assets/LocationEditModal'
-import { useRefreshGlobalAssets } from '@/lib/query/hooks'
 
 interface LocationEditModalProps {
     locationId: string
@@ -20,8 +19,6 @@ export function LocationEditModal({
     description,
     onClose,
 }: LocationEditModalProps) {
-    const onRefresh = useRefreshGlobalAssets()
-
     return (
         <SharedLocationEditModal
             mode="asset-hub"
@@ -31,7 +28,6 @@ export function LocationEditModal({
             summary={summary}
             imageIndex={imageIndex}
             onClose={onClose}
-            onRefresh={onRefresh}
         />
     )
 }

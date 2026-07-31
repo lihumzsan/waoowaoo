@@ -51,6 +51,7 @@ export const PATCH = apiHandler(async (
     userId: authResult.session.user.id,
     input: body,
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

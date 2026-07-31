@@ -86,9 +86,11 @@ export const WORKSPACE_ASSISTANT_VIEWPORT_FADE_STYLE = {
 
 function WorkspaceAssistantRunFailureNotice({
   failure,
+  title,
   resend,
 }: {
   failure: WorkspaceAssistantFailureView
+  title?: string
   resend: { readonly pending: boolean; readonly onResend: () => void } | null
 }) {
   const t = useTranslations('assistantAgent')
@@ -99,7 +101,7 @@ function WorkspaceAssistantRunFailureNotice({
     >
       <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0">
-        <div className="font-semibold">{t('panel.runFailedTitle')}</div>
+        <div className="font-semibold">{title ?? t('panel.runFailedTitle')}</div>
         <div className="break-words text-xs leading-4 opacity-80">{failure.headline}</div>
         {failure.technical ? (
           <div className="mt-0.5 break-all text-[11px] leading-4 opacity-60">{failure.technical}</div>
@@ -168,7 +170,7 @@ export default function WorkspaceAssistantPanel({
   }
   const attachmentPicker = useAttachmentFilePicker({
     accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,
-    disabled: assistantRuntime.pending || assistantRuntime.storageLoading,
+    disabled: assistantRuntime.pending || assistantRuntime.viewLoading,
     onFiles: (files) => { void uploadAttachmentFiles(files) },
   })
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null)
@@ -191,41 +193,42 @@ export default function WorkspaceAssistantPanel({
   useWorkspaceAssistantMessageDispatch({
     autoStartDraft,
     autoStartKey,
-    storageLoading: assistantRuntime.storageLoading,
+    storageLoading: assistantRuntime.viewLoading,
     pending: assistantRuntime.pending,
     onAutoStartConsumed,
     sendMessage: assistantRuntime.sendMessage,
     sendHiddenMessage: assistantRuntime.sendHiddenMessage,
   })
   useWorkspaceAssistantCanvasFocus({
-    sessionState: assistantRuntime.sessionState,
-    storageLoading: assistantRuntime.storageLoading,
+    view: assistantRuntime.view,
+    storageLoading: assistantRuntime.viewLoading,
     onActiveOperationChange,
   })
   const taskBatches = useMemo(
-    () => assistantRuntime.sessionState?.taskBatches ?? [],
-    [assistantRuntime.sessionState?.taskBatches],
+    () => assistantRuntime.view?.followUpBatches ?? [],
+    [assistantRuntime.view?.followUpBatches],
   )
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
-    ? { key: pendingInteraction.interruptionId, data: pendingInteraction.choiceCard }
+    ? { key: pendingInteraction.interactionId, data: pendingInteraction.card }
     : null
   const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
-  const partComponents = useWorkspaceAssistantMessagePartComponents({
-    hideChoiceCards: true,
-    onSubmitChoiceResponse: assistantRuntime.submitChoiceResponse,
-  })
+  const partComponents = useWorkspaceAssistantMessagePartComponents()
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
-    storageLoading: assistantRuntime.storageLoading,
+    storageLoading: assistantRuntime.viewLoading,
     replyInFlight: assistantRuntime.replyInFlight,
     hasPendingInteraction: Boolean(pendingInteraction),
   })
   const showRunFailureNotice = shouldShowWorkspaceAssistantRunFailureNotice({
-    storageLoading: assistantRuntime.storageLoading,
+    storageLoading: assistantRuntime.viewLoading,
     replyInFlight: assistantRuntime.replyInFlight,
-    currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
+    currentTurnStatus: assistantRuntime.view?.currentTurn?.status ?? null,
   })
+  const showInterruptedNotice =
+    !assistantRuntime.viewLoading
+    && !assistantRuntime.replyInFlight
+    && assistantRuntime.view?.currentTurn?.status === 'interrupted'
   // Run, send, and Task failures all resolve through the same view resolver,
   // so every failure surface uses the canonical error catalogue instead of
   // panel-local sentences or model-written guesses.
@@ -234,11 +237,11 @@ export default function WorkspaceAssistantPanel({
     [tErrors],
   )
   const unknownFailureFallback = tErrors('INTERNAL_ERROR')
-  const currentRun = assistantRuntime.sessionState?.currentRun ?? null
+  const currentTurn = assistantRuntime.view?.currentTurn ?? null
   const runFailureView = resolveWorkspaceAssistantFailureView({
     facts: {
-      code: currentRun?.errorCode?.trim() || null,
-      message: currentRun?.errorMessage?.trim() || null,
+      code: currentTurn?.errorCode?.trim() || null,
+      message: currentTurn?.errorMessage?.trim() || null,
       requestId: null,
     },
     localizeCode: localizeErrorCode,
@@ -257,9 +260,17 @@ export default function WorkspaceAssistantPanel({
   // the message or its attachments is stored anywhere.
   const undeliveredUserMessage = useMemo(() => resolveWorkspaceAssistantUndeliveredUserMessage({
     messages: assistantRuntime.messages,
+    showDeliveryFailureNotice:
+      showRunFailureNotice || showInterruptedNotice,
+    currentTurnSourceKind: currentTurn?.sourceKind ?? null,
+    currentTurnSourceId: currentTurn?.sourceId ?? null,
+  }), [
+    assistantRuntime.messages,
+    currentTurn?.sourceId,
+    currentTurn?.sourceKind,
+    showInterruptedNotice,
     showRunFailureNotice,
-    currentRunControlKind: currentRun?.controlKind ?? null,
-  }), [assistantRuntime.messages, currentRun?.controlKind, showRunFailureNotice])
+  ])
   const resendDraft = useMemo(
     () => resolveWorkspaceAssistantResendDraft(undeliveredUserMessage),
     [undeliveredUserMessage],
@@ -281,11 +292,11 @@ export default function WorkspaceAssistantPanel({
       (task) => task.operationId ? [task.operationId] : [],
     ))).sort()
     const failures = Array.from(new Map(batch.tasks.flatMap((task) => {
-      if (!task.failure) return []
+      if (!task.errorCode && !task.errorMessage) return []
       const failure = resolveWorkspaceAssistantFailureView({
         facts: {
-          code: task.failure.errorCode?.trim() || null,
-          message: task.failure.message?.trim() || null,
+          code: task.errorCode?.trim() || null,
+          message: task.errorMessage?.trim() || null,
           requestId: null,
         },
         localizeCode: localizeErrorCode,
@@ -362,7 +373,7 @@ export default function WorkspaceAssistantPanel({
                               : undefined}
                           />
                         ) : null}
-                        {assistantRuntime.sessionStateError ? (
+                        {assistantRuntime.viewError ? (
                           <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-sm leading-5 text-[var(--glass-tone-warn-fg)]">
                             {t('panel.sessionStateError')}
                           </div>
@@ -372,15 +383,34 @@ export default function WorkspaceAssistantPanel({
                             failure={runFailureView}
                             resend={resendDraft
                               ? {
-                                pending: assistantRuntime.pending || assistantRuntime.storageLoading,
+                                pending: assistantRuntime.pending || assistantRuntime.viewLoading,
                                 onResend: resendUndeliveredMessage,
                               }
                               : null}
                           />
                         ) : null}
-                        {!assistantRuntime.storageLoading ? taskBatchViews.map((view) => (
+                        {showInterruptedNotice ? (
+                          <WorkspaceAssistantRunFailureNotice
+                            title={t('panel.turnInterruptedTitle')}
+                            failure={{
+                              tone: 'info',
+                              headline: t('panel.turnInterruptedDescription'),
+                              technical:
+                                currentTurn?.errorCode?.trim()
+                                || currentTurn?.errorMessage?.trim()
+                                || null,
+                            }}
+                            resend={resendDraft
+                              ? {
+                                pending: assistantRuntime.pending || assistantRuntime.viewLoading,
+                                onResend: resendUndeliveredMessage,
+                              }
+                              : null}
+                          />
+                        ) : null}
+                        {!assistantRuntime.viewLoading ? taskBatchViews.map((view) => (
                           <WorkspaceAssistantActiveRunCard
-                            key={view.batch.waitId}
+                            key={view.batch.batchId}
                             operationIds={view.operationIds}
                             progress={view.batch.progress}
                             failures={view.failures}
@@ -388,17 +418,17 @@ export default function WorkspaceAssistantPanel({
                         )) : null}
                         {serverPendingApproval ? (
                           <ConfirmationActionCard
-                            operationId={serverPendingApproval.operationId}
-                            title={localizeProjectAgentOperationTitle(serverPendingApproval.operationId, locale)}
+                            members={serverPendingApproval.members.map((member) => ({
+                              operationId: member.operationId,
+                              title: localizeProjectAgentOperationTitle(member.operationId, locale),
+                              operationPlan: member.operationPlan,
+                            }))}
                             subtitle={t('cards.confirmationRequired')}
-                            operationPlan={serverPendingApproval.operationPlan}
-                            onConfirm={() => assistantRuntime.addRunApprovalResponse({
-                              ...serverPendingApproval,
-                              approved: true,
+                            onConfirm={() => assistantRuntime.resolveApproval({
+                              decision: 'approve',
                             })}
-                            onCancel={() => assistantRuntime.addRunApprovalResponse({
-                              ...serverPendingApproval,
-                              approved: false,
+                            onCancel={() => assistantRuntime.resolveApproval({
+                              decision: 'reject',
                             })}
                           />
                         ) : null}
@@ -423,16 +453,16 @@ export default function WorkspaceAssistantPanel({
                     </div>
                   ) : null}
                   <div className="relative">
-                    {assistantRuntime.sessionState?.plan ? (
+                    {assistantRuntime.view?.thread?.plan ? (
                       <WorkspaceAssistantPlanCard
-                        plan={assistantRuntime.sessionState.plan}
-                        isRunActive={assistantRuntime.sessionState.currentRun?.status === 'running'}
+                        plan={assistantRuntime.view.thread.plan}
+                        isRunActive={assistantRuntime.view.currentTurn?.status === 'running'}
                       />
                     ) : null}
                     <WorkspaceAssistantComposer
                       value={composer.text}
                       error={composerFailureView}
-                      pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                      pending={assistantRuntime.pending || assistantRuntime.viewLoading}
                       canStopReply={assistantRuntime.canStopReply}
                       attachments={composer.attachments}
                       mediaAttachments={composer.mediaAttachments}

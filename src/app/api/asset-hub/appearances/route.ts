@@ -26,6 +26,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     userId: authResult.session.user.id,
     input: body,
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
@@ -53,6 +54,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     userId: authResult.session.user.id,
     input: body,
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
@@ -85,6 +87,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     userId: authResult.session.user.id,
     input: { characterId, appearanceIndex },
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

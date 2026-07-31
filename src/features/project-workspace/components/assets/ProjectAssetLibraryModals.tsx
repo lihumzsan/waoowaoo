@@ -37,10 +37,7 @@ interface EditingPropState {
 
 interface ProjectAssetLibraryModalsProps {
   projectId: string
-  onRefresh: () => void
   onClosePreview: () => void
-  handleUpdateAppearanceDescription: (newDescription: string) => Promise<void>
-  handleUpdateLocationDescription: (newDescription: string) => Promise<void>
   handleCloseCopyPicker: () => void
   handleConfirmCopyFromGlobal: (globalAssetId: string) => Promise<void>
   closeEditingAppearance: () => void
@@ -62,10 +59,7 @@ interface ProjectAssetLibraryModalsProps {
 
 export default function ProjectAssetLibraryModals({
   projectId,
-  onRefresh,
   onClosePreview,
-  handleUpdateAppearanceDescription,
-  handleUpdateLocationDescription,
   handleCloseCopyPicker,
   handleConfirmCopyFromGlobal,
   closeEditingAppearance,
@@ -99,7 +93,6 @@ export default function ProjectAssetLibraryModals({
           introduction={editingAppearance.introduction}
           projectId={projectId}
           onClose={closeEditingAppearance}
-          onUpdate={handleUpdateAppearanceDescription}
         />
       )}
 
@@ -111,7 +104,6 @@ export default function ProjectAssetLibraryModals({
           description={editingLocation.description}
           projectId={projectId}
           onClose={closeEditingLocation}
-          onUpdate={handleUpdateLocationDescription}
         />
       )}
 
@@ -120,10 +112,7 @@ export default function ProjectAssetLibraryModals({
           mode="project"
           projectId={projectId}
           onClose={closeAddCharacter}
-          onSuccess={() => {
-            closeAddCharacter()
-            onRefresh()
-          }}
+          onSuccess={closeAddCharacter}
         />
       )}
 
@@ -132,10 +121,7 @@ export default function ProjectAssetLibraryModals({
           mode="project"
           projectId={projectId}
           onClose={closeAddLocation}
-          onSuccess={() => {
-            closeAddLocation()
-            onRefresh()
-          }}
+          onSuccess={closeAddLocation}
         />
       )}
 
@@ -144,10 +130,7 @@ export default function ProjectAssetLibraryModals({
           mode="project"
           projectId={projectId}
           onClose={closeAddProp}
-          onSuccess={() => {
-            closeAddProp()
-            onRefresh()
-          }}
+          onSuccess={closeAddProp}
         />
       )}
 
@@ -161,7 +144,6 @@ export default function ProjectAssetLibraryModals({
           variantId={editingProp.variantId}
           projectId={projectId}
           onClose={closeEditingProp}
-          onRefresh={onRefresh}
         />
       )}
 

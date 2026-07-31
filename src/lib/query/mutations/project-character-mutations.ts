@@ -1,16 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { queryKeys } from '../keys'
 import {
-  invalidateQueryTemplates,
+  requestOperationMutationVoidWithError,
   requestJsonWithError,
 } from './mutation-shared'
 
 export function useUpdateProjectCharacterIntroduction(projectId: string) {
-    const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
+  const queryClient = useQueryClient()
 
-    return useMutation({
+  return useMutation({
         mutationFn: async ({
             characterId,
             introduction,
@@ -18,14 +15,13 @@ export function useUpdateProjectCharacterIntroduction(projectId: string) {
             characterId: string
             introduction: string
         }) => {
-            return await requestJsonWithError(`/api/projects/${projectId}/character`, {
+            await requestOperationMutationVoidWithError(`/api/projects/${projectId}/character`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ characterId, introduction }),
-            }, 'Failed to update character introduction')
+            }, 'Failed to update character introduction', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
-    })
+  })
 }
 
 /**
@@ -53,22 +49,14 @@ export function useUploadProjectTempMedia() {
  */
 
 export function useCreateProjectCharacter(projectId: string) {
-    const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
+  const queryClient = useQueryClient()
 
-    return useMutation({
+  return useMutation({
         mutationFn: async (payload: {
             name: string
             description: string
         }) =>
-            await requestJsonWithError<{
-                success: boolean
-                character?: {
-                    id: string
-                    appearances?: Array<{ id: string; appearanceIndex: number }>
-                }
-            }>(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character`,
                 {
                     method: 'POST',
@@ -76,9 +64,9 @@ export function useCreateProjectCharacter(projectId: string) {
                     body: JSON.stringify(payload),
                 },
                 'Failed to create character',
+                queryClient,
             ),
-        onSuccess: invalidateProjectAssets,
-    })
+  })
 }
 
 /**
@@ -86,17 +74,15 @@ export function useCreateProjectCharacter(projectId: string) {
  */
 
 export function useCreateProjectCharacterAppearance(projectId: string) {
-    const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
+  const queryClient = useQueryClient()
 
-    return useMutation({
+  return useMutation({
         mutationFn: async (payload: {
             characterId: string
             changeReason: string
             description: string
         }) =>
-            await requestJsonWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character/appearance`,
                 {
                     method: 'POST',
@@ -104,18 +90,16 @@ export function useCreateProjectCharacterAppearance(projectId: string) {
                     body: JSON.stringify(payload),
                 },
                 'Failed to create character appearance',
+                queryClient,
             ),
-        onSuccess: invalidateProjectAssets,
-    })
+  })
 }
 
 export function useConfirmProjectCharacterSelection(projectId: string) {
-    const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-    return useMutation({
+  const queryClient = useQueryClient()
+  return useMutation({
         mutationFn: async ({ characterId, appearanceId }: { characterId: string; appearanceId: string }) =>
-            await requestJsonWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character/confirm-selection`,
                 {
                     method: 'POST',
@@ -123,7 +107,7 @@ export function useConfirmProjectCharacterSelection(projectId: string) {
                     body: JSON.stringify({ characterId, appearanceId }),
                 },
                 '确认选择失败',
+                queryClient,
             ),
-        onSettled: invalidateProjectAssets,
-    })
+  })
 }

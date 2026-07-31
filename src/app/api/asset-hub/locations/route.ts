@@ -49,6 +49,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     userId: session.user.id,
     input: body,
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

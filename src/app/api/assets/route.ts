@@ -89,6 +89,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       userId: authResult.session.user.id,
       input: body,
       source: 'project-ui',
+      responseContract: 'operation_mutation_response_v1',
     })
     return NextResponse.json(result)
   }
@@ -102,6 +103,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     userId: authResult.session.user.id,
     input: body,
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })

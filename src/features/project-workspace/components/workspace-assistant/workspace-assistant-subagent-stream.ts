@@ -1,8 +1,8 @@
 import {
   TASK_SSE_EVENT_TYPE,
-  TASK_TYPE,
   type SSEEvent,
-} from '@/lib/task/types'
+} from '@/lib/sse/events'
+import { TASK_TYPE } from '@/lib/task/types'
 
 export type WorkspaceAssistantSubagentLiveStream = {
   kind: 'reasoning' | 'structured_output'

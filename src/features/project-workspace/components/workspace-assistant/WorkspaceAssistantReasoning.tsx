@@ -18,12 +18,6 @@ import {
 } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { MarkdownTextPart } from './MarkdownTextPart'
-import {
-  resolveWorkspaceAssistantRunTraceView,
-  WORKSPACE_ASSISTANT_RUN_TRACE_GROUP_KEY,
-} from './workspace-assistant-run-trace'
-
-const WorkspaceAssistantRunTraceGroupContext = createContext(false)
 type SetWorkspaceAssistantRunningSurface = (key: string, active: boolean) => void
 const WorkspaceAssistantRunningSurfaceSetterContext = createContext<SetWorkspaceAssistantRunningSurface | null>(null)
 const WorkspaceAssistantRunningSurfaceCountContext = createContext(0)
@@ -88,55 +82,6 @@ export function useWorkspaceAssistantRunningSurface(key: string, active: boolean
 
 export function useWorkspaceAssistantHasRunningSurface(): boolean {
   return useContext(WorkspaceAssistantRunningSurfaceCountContext) > 0
-}
-
-function WorkspaceAssistantReasoningDisclosure({
-  running,
-  failed = false,
-  label,
-  children,
-}: {
-  readonly running: boolean
-  readonly failed?: boolean
-  readonly label: string
-  readonly children: ReactNode
-}) {
-  const [open, setOpen] = useState(running)
-  const wasRunning = useRef(running)
-
-  useEffect(() => {
-    if (running) setOpen(true)
-    else if (wasRunning.current) setOpen(false)
-    wasRunning.current = running
-  }, [running])
-
-  return (
-    <section className="text-sm text-[var(--glass-text-tertiary)]">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center gap-2 py-0.5 text-left"
-      >
-        {running ? (
-          <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
-        ) : failed ? (
-          <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-tone-danger-fg)]" aria-hidden="true" />
-        ) : (
-          <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white" aria-hidden="true">
-            <AppIcon name="check" className="h-2.5 w-2.5" />
-          </span>
-        )}
-        <span className={running ? 'assistant-shimmer-text font-medium' : undefined}>{label}</span>
-        <AppIcon
-          name="chevronDown"
-          className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
-      </button>
-      {open ? <div className="mt-2 space-y-3">{children}</div> : null}
-    </section>
-  )
 }
 
 export function WorkspaceAssistantWaitDots() {
@@ -204,7 +149,6 @@ export function WorkspaceAssistantReasoningPart({
   status,
 }: ReasoningMessagePartProps) {
   const t = useTranslations('assistantAgent')
-  const inRunTraceGroup = useContext(WorkspaceAssistantRunTraceGroupContext)
   const running = status.type === 'running'
   const runningSurfaceId = useId()
   useWorkspaceAssistantRunningSurface(`reasoning:${runningSurfaceId}`, running && text.trim().length > 0)
@@ -225,8 +169,6 @@ export function WorkspaceAssistantReasoningPart({
       <MarkdownTextPart text={text} status={status} />
     </div>
   )
-
-  if (inRunTraceGroup) return content
 
   return (
     <section className="text-sm text-[var(--glass-text-tertiary)]">
@@ -255,52 +197,5 @@ export function WorkspaceAssistantReasoningPart({
         <div className="mt-1">{content}</div>
       ) : null}
     </section>
-  )
-}
-
-export function WorkspaceAssistantRunTraceGroup({
-  groupKey,
-  children,
-}: {
-  readonly groupKey: string | undefined
-  readonly indices: number[]
-  readonly children?: ReactNode
-}) {
-  const t = useTranslations('assistantAgent')
-  const toolCallCount = useMessage((state) => (
-    resolveWorkspaceAssistantRunTraceView(state.content).visibleToolCallCount
-  ))
-  const runStatus = useMessage((state) => (
-    resolveWorkspaceAssistantRunTraceView(state.content).runStatus
-  ))
-
-  if (groupKey !== WORKSPACE_ASSISTANT_RUN_TRACE_GROUP_KEY) return <>{children}</>
-
-  const failed = runStatus === 'failed' || runStatus === 'cancelled'
-  const label = toolCallCount > 0
-    ? t(
-        runStatus === 'running'
-          ? 'reasoning.executionRunning'
-          : failed
-            ? 'reasoning.executionFailed'
-            : 'reasoning.executionCompleted',
-        { count: toolCallCount },
-      )
-    : failed
-      ? t('reasoning.failed')
-      : t('reasoning.completed')
-
-  return (
-    <WorkspaceAssistantReasoningDisclosure
-      running={runStatus === 'running'}
-      failed={failed}
-      label={label}
-    >
-      <WorkspaceAssistantRunTraceGroupContext.Provider value>
-        <div className="space-y-3">
-          {children}
-        </div>
-      </WorkspaceAssistantRunTraceGroupContext.Provider>
-    </WorkspaceAssistantReasoningDisclosure>
   )
 }

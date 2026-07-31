@@ -25,7 +25,6 @@ export interface LocationEditModalProps {
     onClose: () => void
     onUpdate?: (newDescription: string) => void
     onNameUpdate?: (newName: string) => void
-    onRefresh?: () => void
 }
 
 export function LocationEditModal({
@@ -40,7 +39,6 @@ export function LocationEditModal({
     onClose,
     onUpdate,
     onNameUpdate,
-    onRefresh,
 }: LocationEditModalProps) {
     const t = useTranslations('assets')
 
@@ -101,7 +99,6 @@ export function LocationEditModal({
     const handleSaveName = async () => {
         try {
             await persistNameIfNeeded()
-            onRefresh?.()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
                 alert(t('modal.saveName') + t('errors.failed'))
@@ -116,7 +113,6 @@ export function LocationEditModal({
             await persistDescription()
 
             onUpdate?.(editingDescription)
-            onRefresh?.()
             onClose()
         } catch (error: unknown) {
             if (shouldShowError(error)) {

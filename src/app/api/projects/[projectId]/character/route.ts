@@ -36,6 +36,7 @@ export const PATCH = apiHandler(async (
       ...(introduction !== undefined ? { introduction } : {}),
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
@@ -59,7 +60,7 @@ export const DELETE = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  await executeProjectAgentOperationFromApi({
+  const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'delete_asset',
     projectId,
@@ -68,9 +69,10 @@ export const DELETE = apiHandler(async (
       target: { kind: 'character', assetId: characterId },
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json(result)
 })
 
 // 新增角色
@@ -92,6 +94,7 @@ export const POST = apiHandler(async (
     userId: authResult.session.user.id,
     input: body,
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

@@ -4,12 +4,8 @@ import { queryKeys } from '../keys'
 import type { GlobalLocation } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
-  requestJsonWithError,
-  requestVoidWithError,
+  requestOperationMutationVoidWithError,
 } from './mutation-shared'
-import {
-  invalidateGlobalLocations,
-} from './asset-hub-mutations-shared'
 
 interface SelectLocationImageContext {
   previousQueries: Array<{
@@ -123,7 +119,6 @@ function restoreUnifiedQuerySnapshots(
 export function useSelectLocationImage() {
   const queryClient = useQueryClient()
   const latestRequestIdByTargetRef = useRef<Record<string, number>>({})
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -135,7 +130,7 @@ export function useSelectLocationImage() {
       imageIndex: number | null
       confirm?: boolean
     }) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/select-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}/select-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -144,7 +139,7 @@ export function useSelectLocationImage() {
           imageIndex,
           confirm,
         }),
-      }, 'Failed to select image')
+      }, 'Failed to select image', queryClient)
     },
     onMutate: async (variables): Promise<SelectLocationImageContext> => {
       const targetKey = variables.locationId
@@ -196,36 +191,28 @@ export function useSelectLocationImage() {
       restoreLocationQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: async (_data, _error, variables) => {
-      if (variables.confirm) {
-        await invalidateLocations()
-      }
-    },
   })
 }
 
 export function useUndoLocationImage() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async (locationId: string) => {
-      return await requestJsonWithError(`/api/assets/${locationId}/revert-render`, {
+      await requestOperationMutationVoidWithError(`/api/assets/${locationId}/revert-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'global',
           kind: 'location',
         }),
-      }, 'Failed to undo image')
+      }, 'Failed to undo image', queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }
 
 export function useUploadLocationImage() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async ({
@@ -248,25 +235,24 @@ export function useUploadLocationImage() {
         formData.append('imageIndex', imageIndex.toString())
       }
 
-      return await requestJsonWithError('/api/asset-hub/upload-image', {
+      await requestOperationMutationVoidWithError('/api/asset-hub/upload-image', {
         method: 'POST',
         body: formData,
-      }, 'Failed to upload image')
+      }, 'Failed to upload image', queryClient)
     },
-    onSuccess: invalidateLocations,
   })
 }
 
 export function useDeleteLocation() {
   const queryClient = useQueryClient()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
     mutationFn: async (locationId: string) => {
-      await requestVoidWithError(
+      await requestOperationMutationVoidWithError(
         `/api/asset-hub/locations/${locationId}`,
         { method: 'DELETE' },
         'Failed to delete location',
+        queryClient,
       )
     },
     onMutate: async (locationId): Promise<DeleteLocationContext> => {
@@ -304,6 +290,5 @@ export function useDeleteLocation() {
       restoreLocationQuerySnapshots(queryClient, context.previousQueries)
       restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
     },
-    onSettled: invalidateLocations,
   })
 }

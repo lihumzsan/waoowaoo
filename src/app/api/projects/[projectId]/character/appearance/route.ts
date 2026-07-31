@@ -35,6 +35,7 @@ export const POST = apiHandler(async (
       description,
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
@@ -61,7 +62,7 @@ export const PATCH = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  await executeProjectAgentOperationFromApi({
+  const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'update_character_appearance',
     projectId,
@@ -73,11 +74,10 @@ export const PATCH = apiHandler(async (
       ...(descriptionIndex !== undefined ? { descriptionIndex } : {}),
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
-  return NextResponse.json({
-    success: true
-  })
+  return NextResponse.json(result)
 })
 
 /**
@@ -112,6 +112,7 @@ export const DELETE = apiHandler(async (
       appearanceId,
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

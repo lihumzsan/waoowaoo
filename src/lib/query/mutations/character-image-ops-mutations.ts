@@ -1,14 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { queryKeys } from '../keys'
 import {
-    invalidateQueryTemplates,
-    requestJsonWithError,
+    requestOperationMutationVoidWithError,
 } from './mutation-shared'
 
 export function useUpdateProjectAppearanceDescription(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -22,7 +18,7 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
             description: string
             descriptionIndex?: number
         }) => {
-            return await requestJsonWithError(`/api/assets/${characterId}/variants/${appearanceId}`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${characterId}/variants/${appearanceId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -32,8 +28,7 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
                     description,
                     descriptionIndex: typeof descriptionIndex === 'number' ? descriptionIndex : 0,
                 }),
-            }, 'Failed to update appearance description')
+            }, 'Failed to update appearance description', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }

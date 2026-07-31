@@ -29,7 +29,6 @@ export interface CharacterEditModalProps {
     onUpdate?: (newDescription: string) => void
     onIntroductionUpdate?: (newIntroduction: string) => void
     onNameUpdate?: (newName: string) => void
-    onRefresh?: () => void
 }
 
 export function CharacterEditModal({
@@ -47,7 +46,6 @@ export function CharacterEditModal({
     onUpdate,
     onIntroductionUpdate,
     onNameUpdate,
-    onRefresh,
 }: CharacterEditModalProps) {
     const t = useTranslations('assets')
 
@@ -123,7 +121,6 @@ export function CharacterEditModal({
     const handleSaveName = async () => {
         try {
             await persistNameIfNeeded()
-            onRefresh?.()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
                 alert(t('modal.saveName') + t('errors.failed'))
@@ -139,7 +136,6 @@ export function CharacterEditModal({
             await persistIntroductionIfNeeded()
 
             onUpdate?.(editingDescription)
-            onRefresh?.()
             onClose()
         } catch (error: unknown) {
             if (shouldShowError(error)) {

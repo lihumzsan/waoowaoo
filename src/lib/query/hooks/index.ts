@@ -129,9 +129,8 @@ export {
 } from './useStoryCanon'
 
 export {
-    useProjectAssistantThread,
-    useProjectAssistantThreadSync,
-} from './useProjectAssistantThread'
+    useAgentSessionView,
+} from './useAgentSessionView'
 
 
 export {

@@ -3,9 +3,7 @@ import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
 import {
-    invalidateQueryTemplates,
-    requestJsonWithError,
-    requestVoidWithError,
+    requestOperationMutationVoidWithError,
 } from './mutation-shared'
 
 interface DeleteProjectLocationContext {
@@ -38,15 +36,14 @@ function removeLocationFromProject(
 
 export function useDeleteProjectLocation(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async (locationId: string) => {
-            await requestVoidWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/location?id=${encodeURIComponent(locationId)}`,
                 { method: 'DELETE' },
                 'Failed to delete location',
+                queryClient,
             )
         },
         onMutate: async (locationId): Promise<DeleteProjectLocationContext> => {
@@ -76,7 +73,6 @@ export function useDeleteProjectLocation(projectId: string) {
             queryClient.setQueryData(queryKeys.projectAssets.all(projectId), context.previousAssets)
             queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 
@@ -86,12 +82,10 @@ export function useDeleteProjectLocation(projectId: string) {
 
 export function useUpdateProjectLocationName(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ locationId, name }: { locationId: string; name: string }) => {
-            return await requestJsonWithError(`/api/assets/${locationId}`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${locationId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -100,9 +94,8 @@ export function useUpdateProjectLocationName(projectId: string) {
                     projectId,
                     name,
                 })
-            }, 'Failed to update location name')
+            }, 'Failed to update location name', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -112,8 +105,6 @@ export function useUpdateProjectLocationName(projectId: string) {
 
 export function useUpdateProjectLocationDescription(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -125,7 +116,7 @@ export function useUpdateProjectLocationDescription(projectId: string) {
             description: string
             imageIndex?: number
         }) => {
-            return await requestJsonWithError(`/api/projects/${projectId}/location`, {
+            await requestOperationMutationVoidWithError(`/api/projects/${projectId}/location`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -133,9 +124,8 @@ export function useUpdateProjectLocationDescription(projectId: string) {
                     imageIndex: typeof imageIndex === 'number' ? imageIndex : 0,
                     description,
                 }),
-            }, 'Failed to update location description')
+            }, 'Failed to update location description', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -145,15 +135,13 @@ export function useUpdateProjectLocationDescription(projectId: string) {
 
 export function useCreateProjectLocation(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async (payload: {
             name: string
             description: string
         }) =>
-            await requestJsonWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/location`,
                 {
                     method: 'POST',
@@ -161,8 +149,8 @@ export function useCreateProjectLocation(projectId: string) {
                     body: JSON.stringify(payload),
                 },
                 'Failed to create location',
+                queryClient,
             ),
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -171,11 +159,9 @@ export function useConfirmProjectLocationSelection(
     kind: 'location' | 'prop' = 'location',
 ) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
     return useMutation({
         mutationFn: async ({ locationId }: { locationId: string }) =>
-            await requestJsonWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/assets/${locationId}/select-render`,
                 {
                     method: 'POST',
@@ -188,7 +174,7 @@ export function useConfirmProjectLocationSelection(
                     }),
                 },
                 '确认选择失败',
+                queryClient,
             ),
-        onSettled: invalidateProjectAssets,
     })
 }

@@ -8,26 +8,13 @@ import { useMessage } from '@assistant-ui/react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
-import type { ProjectAgentSubagentView } from '@/lib/project-agent/subagent-events'
+import type { AgentSessionSubagentView } from '@/lib/agent-turn/view'
 import {
   localizeOutputKind,
   localizeStatus,
   StatusGlyph,
   type AssistantAgentTranslator,
 } from './WorkspaceAssistantSubagentShared'
-
-function readRunIdsFromMessageParts(parts: readonly unknown[]): ReadonlySet<string> {
-  const runIds = new Set<string>()
-  for (const part of parts) {
-    if (!part || typeof part !== 'object' || Array.isArray(part)) continue
-    const record = part as { type?: unknown; name?: unknown; data?: unknown }
-    if (record.type !== 'data' || record.name !== 'agent-run' || !record.data || typeof record.data !== 'object' || Array.isArray(record.data)) continue
-    const data = record.data as { runId?: unknown }
-    if (typeof data.runId !== 'string' || !data.runId.trim()) continue
-    runIds.add(data.runId.trim())
-  }
-  return runIds
-}
 
 function tabClassName(active: boolean): string {
   return `flex min-w-0 max-w-[220px] items-center rounded-t-xl border text-sm font-medium transition-colors ${active
@@ -36,7 +23,7 @@ function tabClassName(active: boolean): string {
 }
 
 export function WorkspaceAssistantSubagentTabs(props: {
-  subagents: readonly ProjectAgentSubagentView[]
+  subagents: readonly AgentSessionSubagentView[]
   selectedSubagentId: string | null
   onSelect: (subagentId: string | null) => void
   onDismiss: (subagentId: string) => void
@@ -100,7 +87,7 @@ export function WorkspaceAssistantSubagentTabs(props: {
 }
 
 function SubagentRecordButton(props: {
-  subagent: ProjectAgentSubagentView
+  subagent: AgentSessionSubagentView
   onSelect: (subagentId: string) => void
   t: AssistantAgentTranslator
 }) {
@@ -139,7 +126,7 @@ function SubagentRecordButton(props: {
 }
 
 export function WorkspaceAssistantSubagentRecords(props: {
-  subagents: readonly ProjectAgentSubagentView[]
+  subagents: readonly AgentSessionSubagentView[]
   onSelect: (subagentId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
@@ -197,9 +184,9 @@ export function WorkspaceAssistantSubagentRecords(props: {
 }
 
 // 运行中的 Subagent 常驻面板底部,折叠成一行;终态后由锚点接管,回到发起它的消息下面。
-// 归属仍然只由 runId 锚定决定,这里只是"正在跑什么"的临时状态窗口,不解释归属或生命周期。
+// 归属只由 canonical originTurnId 锚定；这里仅展示临时运行窗口，不解释生命周期。
 export function WorkspaceAssistantRunningSubagentDock(props: {
-  subagents: readonly ProjectAgentSubagentView[]
+  subagents: readonly AgentSessionSubagentView[]
   onSelect: (subagentId: string) => void
 }) {
   const t = useTranslations('assistantAgent')
@@ -251,14 +238,14 @@ export function WorkspaceAssistantRunningSubagentDock(props: {
 }
 
 export function WorkspaceAssistantSubagentRecordsForMessage(props: {
-  subagents: readonly ProjectAgentSubagentView[]
+  subagents: readonly AgentSessionSubagentView[]
   onSelect: (subagentId: string) => void
 }) {
-  const parts = useMessage((state) => state.content)
-  const messageRunIds = readRunIdsFromMessageParts(parts)
-  // 运行中的实例交给底部常驻坞展示,终态后才在这里归位;归属判定始终只用 runId。
+  const messageId = useMessage((state) => state.id)
+  // 运行中的实例交给底部常驻坞展示，终态后只按服务端持久消息锚点归位。
   const anchoredSubagents = props.subagents.filter((subagent) => (
-    subagent.status !== 'running' && messageRunIds.has(subagent.runId)
+    subagent.status !== 'running'
+    && subagent.anchorMessageId === messageId
   ))
   return (
     <WorkspaceAssistantSubagentRecords

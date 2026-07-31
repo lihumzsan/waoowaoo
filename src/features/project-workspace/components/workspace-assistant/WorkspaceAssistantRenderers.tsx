@@ -8,7 +8,7 @@ import {
 } from '@assistant-ui/react'
 import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import BillingActionButton from '@/components/billing/BillingActionButton'
 import { MediaAttachmentChips, TextAttachmentChips } from '@/components/project-assistant/AttachmentChips'
@@ -16,40 +16,25 @@ import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
-import type {
-  ProjectAgentChoiceCardPartData,
-  ProjectAgentOperationPlanPreviewPartData,
-  ProjectContextPartData,
-  TaskBatchSubmittedPartData,
-  TaskSubmittedPartData,
-} from '@/lib/project-agent/types'
+import type { ProjectContextPartData, TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { MarkdownTextPart } from './MarkdownTextPart'
-import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
-import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { readProjectAssistantMediaAttachmentsFromMetadata } from '@/lib/project-agent/media-attachments'
 import { WorkspaceAssistantSubagentRecordsForMessage } from './WorkspaceAssistantSubagents'
-import { AssistantChoiceCardView } from './WorkspaceAssistantChoiceCard'
 import {
   HiddenWorkspaceAssistantReasoning,
   WorkspaceAssistantReasoningPart,
-  WorkspaceAssistantRunTraceGroup,
   WorkspaceAssistantWaitDots,
   useWorkspaceAssistantHasRunningSurface,
 } from './WorkspaceAssistantReasoning'
-import {
-  groupWorkspaceAssistantMessageParts,
-  WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES,
-} from './workspace-assistant-run-trace'
+import { WORKSPACE_ASSISTANT_HIDDEN_TRACE_TOOL_NAMES } from './workspace-assistant-run-trace'
 import {
   summarizeBillingActionItems,
   type BillingActionItemSummary,
 } from './billing-action-items'
 import { WorkspaceAssistantToolCallCard } from './WorkspaceAssistantToolCall'
 import {
-  AgentStopDataCard,
-  AssistantContextCompactedDataCard,
   HiddenRuntimeContextDataCard,
 } from './WorkspaceAssistantNotices'
 import { WebSearchDataCard } from './WorkspaceAssistantWebSearch'
@@ -57,9 +42,8 @@ import { WorkspaceAssistantResourceLinks } from './WorkspaceAssistantResourceLin
 import { isWorkspaceAssistantHiddenThreadMessageMetadata } from './workspace-assistant-panel-state'
 
 type StandardMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
-type GroupedMessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Unstable_PartsGrouped>['components']>
 type WorkspaceAssistantMessagePartComponents = {
-  readonly assistant: GroupedMessagePartComponents
+  readonly assistant: StandardMessagePartComponents
   readonly standard: StandardMessagePartComponents
 }
 type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
@@ -142,10 +126,12 @@ function BillingQuoteBlock(props: {
 type ConfirmationActionDecision = 'idle' | 'confirming' | 'cancelling' | 'settled'
 
 export function ConfirmationActionCard(props: {
-  operationId: string
-  title: string
+  members: readonly {
+    operationId: string
+    title: string
+    operationPlan: OperationPlanView | null
+  }[]
   subtitle: string
-  operationPlan?: OperationPlanView | null
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
 }) {
@@ -154,11 +140,22 @@ export function ConfirmationActionCard(props: {
   // both actions, and any submission failure is consumed here (the panel-level
   // control error shows the localized notice) instead of escaping to React.
   const [decision, setDecision] = React.useState<ConfirmationActionDecision>('idle')
-  const quote = props.operationPlan?.quote ?? null
-  const quoteActionLabel = quote ? buildBillingActionSummaryLabel(quote, t) : null
-  const quotePreview = quote
-    ? buildAssistantBillingQuotePreview({ quote, actionLabel: quoteActionLabel, t })
-    : null
+  const members = props.members.map((member) => {
+    const quote = member.operationPlan?.quote ?? null
+    const quoteActionLabel = quote
+      ? buildBillingActionSummaryLabel(quote, t)
+      : null
+    return {
+      ...member,
+      quotePreview: quote
+        ? buildAssistantBillingQuotePreview({
+            quote,
+            actionLabel: quoteActionLabel,
+            t,
+          })
+        : null,
+    }
+  })
   const submitDecision = (kind: 'confirm' | 'cancel'): void => {
     setDecision((current) => {
       if (current !== 'idle') return current
@@ -177,15 +174,23 @@ export function ConfirmationActionCard(props: {
   const locked = decision !== 'idle'
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
-      <BillingQuoteBlock preview={quotePreview} />
+      <div className="mt-2 space-y-2">
+        {members.map((member) => (
+          <div key={`${member.operationId}:${member.operationPlan?.planSnapshotId ?? ''}`}>
+            <div className="text-sm font-semibold text-[var(--glass-text-primary)]">
+              {member.title}
+            </div>
+            <BillingQuoteBlock preview={member.quotePreview} />
+          </div>
+        ))}
+      </div>
       <div className="mt-3 flex gap-2">
         <BillingActionButton
           type="button"
           icon="arrowRight"
           label={decision === 'confirming' ? t('cards.choiceSubmitting') : t('cards.confirmContinue')}
-          quote={quotePreview}
+          quote={members.length === 1 ? members[0]?.quotePreview ?? null : null}
           className="flex-1 rounded-xl py-2 text-sm"
           disabled={locked}
           onClick={() => { submitDecision('confirm') }}
@@ -201,30 +206,6 @@ export function ConfirmationActionCard(props: {
       </div>
     </div>
   )
-}
-
-function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOperationPlanPreviewPartData>) {
-  const t = useTranslations('assistantAgent')
-  const locale = normalizeProjectAgentLocale(useLocale())
-  const title = localizeProjectAgentOperationTitle(props.data.operationId, locale)
-  const quoteActionLabel = buildBillingActionSummaryLabel(props.data.operationPlan.quote, t)
-  const quotePreview = buildAssistantBillingQuotePreview({
-    quote: props.data.operationPlan.quote,
-    actionLabel: quoteActionLabel,
-    t,
-  })
-  return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</div>
-      <div className="mt-1 leading-5">{t('cards.billingQuotePreview')}</div>
-      <BillingQuoteBlock preview={quotePreview} />
-    </div>
-  )
-}
-
-function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartData>) {
-  void data
-  return null
 }
 
 function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubmittedPartData>) {
@@ -249,22 +230,7 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
 }
 
 
-interface WorkspaceAssistantMessagePartComponentsOptions {
-  hideChoiceCards?: boolean
-  onSubmitChoiceResponse: (params: {
-    runId: string
-    interruptionId: string
-    cardId: string
-    toolCallId: string
-    output: Record<string, unknown>
-    visibleUserText?: string
-  }) => Promise<void>
-}
-
-export function useWorkspaceAssistantMessagePartComponents({
-  hideChoiceCards = false,
-  onSubmitChoiceResponse,
-}: WorkspaceAssistantMessagePartComponentsOptions): WorkspaceAssistantMessagePartComponents {
+export function useWorkspaceAssistantMessagePartComponents(): WorkspaceAssistantMessagePartComponents {
   return useMemo<WorkspaceAssistantMessagePartComponents>(() => {
     const tools = {
       Fallback: WorkspaceAssistantToolCallCard,
@@ -277,25 +243,8 @@ export function useWorkspaceAssistantMessagePartComponents({
     }
     const data = {
       by_name: {
-        'agent-run': HiddenRuntimeContextDataCard,
-        'agent-operation-start': HiddenRuntimeContextDataCard,
         'agent-subagent-event': HiddenRuntimeContextDataCard,
-        'agent-operation-plan-preview': OperationPlanPreviewDataCard,
-        'agent-stop': AgentStopDataCard,
-        'agent-runtime-context': HiddenRuntimeContextDataCard,
-        'assistant-choice-card': hideChoiceCards
-          ? HiddenRuntimeContextDataCard
-          : (props: DataMessagePartProps<ProjectAgentChoiceCardPartData>) => (
-              <AssistantChoiceCardView
-                data={props.data}
-                onSubmitChoiceResponse={onSubmitChoiceResponse}
-              />
-            ),
-        'agent-interruption-resolved': HiddenRuntimeContextDataCard,
-        'assistant-choice-resolved': HiddenRuntimeContextDataCard,
-        'assistant-context-compacted': AssistantContextCompactedDataCard,
         'assistant-resource-links': WorkspaceAssistantResourceLinks,
-        'task-submitted': TaskSubmittedDataCard,
         'task-batch-submitted': TaskBatchSubmittedDataCard,
         'project-context': ProjectContextDataCard,
         'web-search': WebSearchDataCard,
@@ -307,7 +256,6 @@ export function useWorkspaceAssistantMessagePartComponents({
         Reasoning: WorkspaceAssistantReasoningPart,
         tools,
         data,
-        Group: WorkspaceAssistantRunTraceGroup,
       },
       standard: {
         Text: MarkdownTextPart,
@@ -317,10 +265,7 @@ export function useWorkspaceAssistantMessagePartComponents({
         data,
       },
     }
-  }, [
-    hideChoiceCards,
-    onSubmitChoiceResponse,
-  ])
+  }, [])
 }
 
 function HiddenWorkspaceAssistantInternalMessage(props: { children: React.ReactNode }) {
@@ -392,8 +337,7 @@ export function WorkspaceAssistantThreadMessage(props: {
       <MessagePrimitive.If assistant>
         <div className="space-y-1">
           <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_MESSAGE_CLASS}>
-            <MessagePrimitive.Unstable_PartsGrouped
-              groupingFunction={groupWorkspaceAssistantMessageParts}
+            <MessagePrimitive.Parts
               components={props.messagePartComponents.assistant}
             />
             <WorkspaceAssistantSubagentRecordsForMessage subagents={props.subagents} onSelect={props.onSelectSubagent} />

@@ -3,7 +3,11 @@ import { logError as _ulogError, logWarn as _ulogWarn } from '@/lib/logging/core
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import {
+  TASK_SSE_EVENT_TYPE,
+  WORKSPACE_SSE_EVENT_TYPE,
+  type SSEEvent,
+} from '@/lib/sse/events'
 import {
   applyWorkspaceSSEEvent,
 } from '../workspace-sse-event-sync'
@@ -25,7 +29,7 @@ type UseSSEOptions = {
 }
 
 function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
-  return `workspace-sse-cursor:v4:${projectId}:${episodeId ?? 'all'}`
+  return `workspace-sse-cursor:v5:${projectId}:${episodeId ?? 'all'}`
 }
 
 function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
@@ -59,21 +63,13 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     const cursor = readStoredCursor(projectId, episodeId)
     const params = new URLSearchParams({ projectId })
     if (episodeId) params.set('episodeId', episodeId)
-    if (
-      cursor.taskEventId > 0
-      || cursor.agentEventId !== '0'
-      || cursor.resourceEventAtMs > 0
-    ) {
+    if (cursor.taskEventId > 0) {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
     }
     return { url: `/api/sse?${params}`, cursor, generation: snapshotResyncGeneration }
   }, [projectId, episodeId, snapshotResyncGeneration])
   const eventSequence = useMemo(
-    () => new WorkspaceSSEEventSequence(
-      connection?.cursor.taskEventId ?? 0,
-      {},
-      connection?.cursor.agentEventId ?? '0',
-    ),
+    () => new WorkspaceSSEEventSequence(connection?.cursor.taskEventId ?? 0),
     [connection],
   )
 
@@ -143,7 +139,8 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       TASK_SSE_EVENT_TYPE.LIFECYCLE,
       TASK_SSE_EVENT_TYPE.STREAM,
       WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
-      WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED,
+      WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED,
+      WORKSPACE_SSE_EVENT_TYPE.AGENT_TURN_STREAM,
     ] as const
     const listeners: Array<{ type: string; handler: EventListener }> = []
     for (const type of namedEvents) {

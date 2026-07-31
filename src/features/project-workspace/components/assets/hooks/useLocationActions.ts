@@ -1,5 +1,5 @@
 'use client'
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
 
 /**
@@ -14,11 +14,9 @@ import { isAbortError } from '@/lib/error-utils'
 import {
     useAssetActions,
     useProjectAssets,
-    useRefreshProjectAssets,
     useDeleteProjectLocation,
     useSelectProjectLocationImage,
     useConfirmProjectLocationSelection,
-    useUpdateProjectLocationDescription,
 } from '@/lib/query/hooks'
 
 interface UseLocationActionsProps {
@@ -51,13 +49,9 @@ export function useLocationActions({
     const propActions = useAssetActions({ scope: 'project', projectId, kind: 'prop' })
     const assetKey = assetType === 'prop' ? 'prop' : 'location'
 
-    // 🔥 使用刷新函数 - mutations 完成后刷新缓存
-    const refreshAssets = useRefreshProjectAssets(projectId)
-
     const deleteLocationMutation = useDeleteProjectLocation(projectId)
     const selectLocationImageMutation = useSelectProjectLocationImage(projectId)
     const confirmLocationSelectionMutation = useConfirmProjectLocationSelection(projectId, assetType)
-    const updateLocationDescriptionMutation = useUpdateProjectLocationDescription(projectId)
 
     // 删除场景
     const handleDeleteLocation = useCallback(async (locationId: string) => {
@@ -106,43 +100,11 @@ export function useLocationActions({
         }
     }, [confirmLocationSelectionMutation, showToast, t])
 
-    // 更新场景描述 - 🔥 保存到服务器
-    const handleUpdateLocationDescription = useCallback(async (
-        locationId: string,
-        newDescription: string
-    ) => {
-        try {
-            if (assetType === 'prop') {
-                const prop = locations.find((item) => item.id === locationId)
-                const firstImageId = prop?.images?.[0]?.id
-                await propActions.update(locationId, {
-                    summary: newDescription,
-                })
-                if (firstImageId) {
-                    await propActions.updateVariant(locationId, firstImageId, {
-                        description: newDescription,
-                    })
-                }
-            } else {
-                await updateLocationDescriptionMutation.mutateAsync({
-                    locationId,
-                    description: newDescription,
-                })
-            }
-            refreshAssets()
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                _ulogError('更新描述失败:', getErrorMessage(error, t('common.unknownError')))
-            }
-        }
-    }, [assetType, locations, propActions, refreshAssets, updateLocationDescriptionMutation, t])
-
     return {
         // 🔥 暴露 locations 供组件使用
         locations,
         handleDeleteLocation,
         handleSelectLocationImage,
         handleConfirmLocationSelection,
-        handleUpdateLocationDescription
     }
 }

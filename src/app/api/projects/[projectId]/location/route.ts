@@ -21,7 +21,7 @@ export const DELETE = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  await executeProjectAgentOperationFromApi({
+  const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'delete_asset',
     projectId,
@@ -30,9 +30,10 @@ export const DELETE = apiHandler(async (
       target: { kind: 'location', assetId: locationId },
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json(result)
 })
 
 // 新增场景
@@ -53,6 +54,7 @@ export const POST = apiHandler(async (
     userId: authResult.session.user.id,
     input: body,
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })
@@ -69,7 +71,7 @@ export const PATCH = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = await request.json()
-  const { locationId, imageIndex, description, name } = body
+  const { locationId } = body
 
   if (!locationId) {
     throw new ApiError('INVALID_PARAMS')
@@ -82,6 +84,7 @@ export const PATCH = apiHandler(async (
     userId: authResult.session.user.id,
     input: body,
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })

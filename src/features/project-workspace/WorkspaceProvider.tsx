@@ -11,7 +11,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
 import { useSSE } from '@/lib/query/hooks/useSSE'
-import type { SSEEvent } from '@/lib/task/types'
+import type { SSEEvent } from '@/lib/sse/events'
 
 type RefreshScope = 'all' | 'assets' | 'project'
 type RefreshOptions = { scope?: string; mode?: string }

@@ -16,7 +16,6 @@ export interface PropEditModalProps {
   variantId?: string
   projectId?: string
   onClose: () => void
-  onRefresh?: () => void
 }
 
 export function PropEditModal({
@@ -28,7 +27,6 @@ export function PropEditModal({
   variantId,
   projectId,
   onClose,
-  onRefresh,
 }: PropEditModalProps) {
   const t = useTranslations('assets')
   const actions = useAssetActions({
@@ -58,7 +56,6 @@ export function PropEditModal({
         description: editingDescription.trim(),
       })
     }
-    onRefresh?.()
   }
 
   const handleSaveOnly = async () => {

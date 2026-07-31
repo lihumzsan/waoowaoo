@@ -4,12 +4,16 @@ import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import type { ProjectAgentSessionTaskBatch } from '@/lib/project-agent/session-state'
 import type { WorkspaceAssistantFailureView } from './workspace-assistant-panel-state'
 
 export function WorkspaceAssistantActiveRunCard(props: {
   operationIds: readonly string[]
-  progress: ProjectAgentSessionTaskBatch['progress']
+  progress: {
+    total: number
+    terminal: number
+    failed: number
+    cancelled: number
+  }
   failures: readonly WorkspaceAssistantFailureView[]
 }) {
   const t = useTranslations('assistantAgent')
@@ -17,10 +21,10 @@ export function WorkspaceAssistantActiveRunCard(props: {
   const operationTitles = props.operationIds.map((operationId) => localizeProjectAgentOperationTitle(operationId, locale))
   const active = props.progress.terminal < props.progress.total
   const failed = props.progress.failed > 0
-  const canceled = props.progress.canceled > 0
+  const canceled = props.progress.cancelled > 0
   const succeeded = Math.max(
     0,
-    props.progress.terminal - props.progress.failed - props.progress.canceled,
+    props.progress.terminal - props.progress.failed - props.progress.cancelled,
   )
   const running = Math.max(0, props.progress.total - props.progress.terminal)
   const partial = succeeded > 0 && (failed || canceled)
@@ -50,7 +54,7 @@ export function WorkspaceAssistantActiveRunCard(props: {
             {summary} · {t('toolCall.progressSummary', {
               succeeded,
               failed: props.progress.failed,
-              canceled: props.progress.canceled,
+              canceled: props.progress.cancelled,
               running,
             })}
           </div>

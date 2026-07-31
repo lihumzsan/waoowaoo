@@ -14,6 +14,8 @@
     "errorTitle": "发生错误",
     "errorHint": "请附上 requestId 以便排查；你也可以直接重试一次相同指令。",
     "runFailedTitle": "AI 运行失败",
+    "turnInterruptedTitle": "本轮 AI 对话已中断",
+    "turnInterruptedDescription": "服务器在本轮执行期间停止。已完成的操作和长期任务都已保留；发送一条新消息即可继续。",
     "resend": "重新发送",
     "undelivered": "未送达",
     "sessionStateError": "无法刷新助手状态，请重试或刷新页面后再继续。",

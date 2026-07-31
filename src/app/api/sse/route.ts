@@ -4,7 +4,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
-import { WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import {
+  WORKSPACE_SSE_EVENT_TYPE,
+  isAgentScopedSseEvent,
+  type SSEEvent,
+} from '@/lib/sse/events'
 import { getProjectChannel } from '@/lib/task/publisher'
 import {
   advanceWorkspaceSseCursor,
@@ -190,10 +194,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
             if (payload.projectId !== projectId) {
               throw new Error(`SSE_MESSAGE_PROJECT_MISMATCH:${payload.projectId}:${projectId}`)
             }
-            if (payload.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
+            if (isAgentScopedSseEvent(payload)) {
               if (payload.userId !== session.user.id) return
               if (payload.assistantId !== 'workspace-command') return
-              if ((payload.episodeId ?? null) !== (episodeId ?? null)) return
+              if (
+                payload.type
+                  !== WORKSPACE_SSE_EVENT_TYPE.AGENT_SESSION_VIEW_CHANGED
+                || payload.episodeId !== null
+              ) {
+                if ((payload.episodeId ?? null) !== (episodeId ?? null)) return
+              }
             }
             if (projectId === GLOBAL_ASSET_PROJECT_ID && payload.userId !== session.user.id) {
               logger.error({
@@ -229,7 +239,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
           userId: session.user.id,
           input: {
             episodeId: episodeId || null,
-            assistantId: 'workspace-command',
             lastEventId: requestCursor,
             includeRecoverableSnapshot: true,
           },

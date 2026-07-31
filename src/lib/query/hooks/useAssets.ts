@@ -2,6 +2,9 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
+import {
+  requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 import { queryKeys } from '@/lib/query/keys'
 import { syncWorkspaceResourceChanges } from '@/lib/query/resource-change-sync'
 import {
@@ -53,19 +56,6 @@ type AssetActionScopeInput = {
   kind: AssetKind
 }
 
-function invalidateScopeQueries(queryClient: ReturnType<typeof useQueryClient>, input: AssetActionScopeInput) {
-  return syncWorkspaceResourceChanges({
-    queryClient,
-    changes: resolveWorkspaceResourceRefs({
-      impact: input.scope === 'global'
-        ? WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS
-        : WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS,
-      projectId: input.scope === 'global' ? GLOBAL_ASSET_PROJECT_ID : input.projectId ?? '',
-      episodeId: null,
-    }),
-  })
-}
-
 export function useRefreshAssets(input: { scope: 'global' | 'project'; projectId?: string | null }) {
   const queryClient = useQueryClient()
   return () => {
@@ -86,7 +76,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
   const queryClient = useQueryClient()
 
   const create = async (payload: Record<string, unknown>) => {
-    const response = await apiFetch('/api/assets', {
+    await requestOperationMutationVoidWithError('/api/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -95,16 +85,11 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to create asset')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to create asset', queryClient)
   }
 
   const remove = async (assetId: string) => {
-    const response = await apiFetch(`/api/assets/${assetId}`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${assetId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -112,16 +97,11 @@ export function useAssetActions(input: AssetActionScopeInput) {
         kind: input.kind,
         projectId: input.projectId,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to delete asset')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to delete asset', queryClient)
   }
 
   const update = async (assetId: string, payload: Record<string, unknown>) => {
-    const response = await apiFetch(`/api/assets/${assetId}`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${assetId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,12 +110,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to update asset')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to update asset', queryClient)
   }
 
   const uploadRender = async (assetId: string, file: File, imageIndex?: number) => {
@@ -145,19 +120,14 @@ export function useAssetActions(input: AssetActionScopeInput) {
     formData.append('kind', input.kind)
     if (input.projectId) formData.append('projectId', input.projectId)
     if (imageIndex !== undefined) formData.append('imageIndex', String(imageIndex))
-    const response = await apiFetch(`/api/assets/${assetId}/upload-render`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${assetId}/upload-render`, {
       method: 'POST',
       body: formData,
-    })
-    if (!response.ok) {
-      throw new Error('Failed to upload asset render')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to upload asset render', queryClient)
   }
 
   const selectRender = async (payload: Record<string, unknown>) => {
-    const response = await apiFetch(`/api/assets/${String(payload.id ?? payload.characterId ?? payload.locationId)}/select-render`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${String(payload.id ?? payload.characterId ?? payload.locationId)}/select-render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -166,16 +136,11 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to select asset render')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to select asset render', queryClient)
   }
 
   const revertRender = async (payload: Record<string, unknown>) => {
-    const response = await apiFetch(`/api/assets/${String(payload.id ?? payload.characterId ?? payload.locationId)}/revert-render`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${String(payload.id ?? payload.characterId ?? payload.locationId)}/revert-render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -184,19 +149,14 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to revert asset render')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to revert asset render', queryClient)
   }
 
   const copyFromGlobal = async (payload: { targetId: string; globalAssetId: string }) => {
     if (input.scope !== 'project' || !input.projectId) {
       throw new Error('copyFromGlobal is only available for project asset scope')
     }
-    const response = await apiFetch(`/api/assets/${payload.targetId}/copy`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${payload.targetId}/copy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -204,16 +164,11 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         globalAssetId: payload.globalAssetId,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to copy asset from global library')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to copy asset from global library', queryClient)
   }
 
   const updateVariant = async (assetId: string, variantId: string, payload: Record<string, unknown>) => {
-    const response = await apiFetch(`/api/assets/${assetId}/variants/${variantId}`, {
+    await requestOperationMutationVoidWithError(`/api/assets/${assetId}/variants/${variantId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -222,12 +177,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to update asset variant')
-    }
-    await invalidateScopeQueries(queryClient, input)
-    return response.json()
+    }, 'Failed to update asset variant', queryClient)
   }
 
   return {

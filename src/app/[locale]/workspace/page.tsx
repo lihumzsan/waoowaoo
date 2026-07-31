@@ -1,6 +1,7 @@
 'use client'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
@@ -15,10 +16,11 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/validation'
 import {
-  mergeWorkspaceProjectListItemUpdate,
   type WorkspaceProjectListItem,
-  type WorkspaceProjectUpdatePayload,
 } from '@/lib/projects/workspace-list-item'
+import {
+  requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 type Project = WorkspaceProjectListItem
 
@@ -59,6 +61,7 @@ function toProjectValidationMessage(
 export default function WorkspacePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -263,27 +266,22 @@ export default function WorkspacePage() {
           description: editFormData.description,
         },
       } satisfies ProjectUpdateInput
-      const response = await apiFetch(`/api/projects/${editingProject.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
+      await requestOperationMutationVoidWithError(
+        `/api/projects/${editingProject.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(input),
         },
-        body: JSON.stringify(input)
-      })
-
-      if (response.ok) {
-        const data = await response.json() as { project: WorkspaceProjectUpdatePayload }
-        setProjects((currentProjects) => currentProjects.map((project) => (
-          project.id === editingProject.id
-            ? mergeWorkspaceProjectListItemUpdate(project, data.project)
-            : project
-        )))
-        setShowEditModal(false)
-        setEditingProject(null)
-        setEditFormData({ name: '', description: '' })
-      } else {
-        setEditError(await readApiErrorMessage(response, t('updateFailed')))
-      }
+        t('updateFailed'),
+        queryClient,
+      )
+      await fetchProjects(pagination.page, searchQuery)
+      setShowEditModal(false)
+      setEditingProject(null)
+      setEditFormData({ name: '', description: '' })
     } catch (error) {
       setEditError(error instanceof Error ? error.message : t('updateFailed'))
     } finally {
@@ -299,15 +297,10 @@ export default function WorkspacePage() {
 
     try {
       const response = await apiFetch(`/api/projects/${projectToDelete.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       })
-
-      if (response.ok) {
-        // 删除成功后重新获取当前页
-        await fetchProjects(pagination.page, searchQuery)
-      } else {
-        alert(t('deleteFailed'))
-      }
+      if (!response.ok) throw new Error(t('deleteFailed'))
+      await fetchProjects(pagination.page, searchQuery)
     } catch {
       alert(t('deleteFailed'))
     } finally {

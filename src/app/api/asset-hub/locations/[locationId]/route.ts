@@ -59,6 +59,7 @@ export const PATCH = apiHandler(async (
         locationId,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)
@@ -85,6 +86,7 @@ export const DELETE = apiHandler(async (
         scope: 'global',
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)

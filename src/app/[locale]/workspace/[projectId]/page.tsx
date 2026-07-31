@@ -1,5 +1,4 @@
 'use client'
-import { apiFetch } from '@/lib/api-fetch'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
@@ -8,11 +7,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import Navbar from '@/components/Navbar'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { useProjectData, useEpisodeData } from '@/lib/query/hooks'
-import { queryKeys } from '@/lib/query/keys'
 import ProjectWorkspace from '@/features/project-workspace/ProjectWorkspace'
 import { resolveSelectedEpisodeId } from './episode-selection'
 import { useRouter } from '@/i18n/navigation'
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import type { ProjectUpdateInput } from '@/lib/projects/validation'
 import { resolveWorkspacePageState } from './workspace-page-state'
 import {
@@ -21,6 +18,10 @@ import {
   readHomeAssistantAutoStartDraft,
   removeHomeAssistantAutoStartDraft,
 } from '@/lib/home/create-project-launch'
+import {
+  requestOperationMutationVoidWithError,
+  requestOperationMutationWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 interface Episode {
   id: string
@@ -31,6 +32,21 @@ interface Episode {
   audioUrl?: string | null
   srtContent?: string | null
   createdAt: string
+}
+
+function requireCreatedEpisodeId(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('CREATE_EPISODE_RESPONSE_INVALID')
+  }
+  const episode = (value as Record<string, unknown>).episode
+  if (!episode || typeof episode !== 'object' || Array.isArray(episode)) {
+    throw new Error('CREATE_EPISODE_RESPONSE_INVALID')
+  }
+  const id = (episode as Record<string, unknown>).id
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('CREATE_EPISODE_RESPONSE_INVALID')
+  }
+  return id
 }
 
 /**
@@ -154,43 +170,34 @@ export default function ProjectDetailPage() {
 
   // 创建剧集
   const handleCreateEpisode = async (name: string, description?: string) => {
-    const res = await apiFetch(`/api/projects/${projectId}/episodes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description })
-    })
-
-    if (!res.ok) {
-      throw new Error(await readApiErrorMessage(res, t('createFailed')))
-    }
-
-    const data = await res.json()
-    // 🔥 刷新项目数据获取新的剧集列表
-    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+    const data = await requestOperationMutationWithError(
+      `/api/projects/${projectId}/episodes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      },
+      t('createFailed'),
+      queryClient,
+    )
     // 自动切换到新创建的剧集
     setIsGlobalAssetsView(false)
     // 同步到URL
-    updateUrlParams({ episode: data.episode.id })
+    updateUrlParams({ episode: requireCreatedEpisodeId(data) })
   }
 
   // 重命名剧集
   const handleRenameEpisode = async (episodeId: string, newName: string) => {
-    const res = await apiFetch(`/api/projects/${projectId}/episodes/${episodeId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName })
-    })
-
-    if (!res.ok) {
-      throw new Error(t('renameFailed'))
-    }
-
-    // 🔥 刷新项目数据
-    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
-    // 剧集详情也刷新
-    if (selectedEpisodeId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, selectedEpisodeId) })
-    }
+    await requestOperationMutationVoidWithError(
+      `/api/projects/${projectId}/episodes/${episodeId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      },
+      t('renameFailed'),
+      queryClient,
+    )
   }
 
   // 重命名项目
@@ -205,29 +212,26 @@ export default function ProjectDetailPage() {
         name: newName,
       },
     } satisfies ProjectUpdateInput
-    const res = await apiFetch(`/api/projects/${projectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    })
-
-    if (!res.ok) {
-      throw new Error(await readApiErrorMessage(res, t('renameFailed')))
-    }
-
-    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+    await requestOperationMutationVoidWithError(
+      `/api/projects/${projectId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+      t('renameFailed'),
+      queryClient,
+    )
   }
 
   // 删除剧集
   const handleDeleteEpisode = async (episodeId: string) => {
-    const res = await apiFetch(`/api/projects/${projectId}/episodes/${episodeId}`, {
-      method: 'DELETE',
-    })
-    if (!res.ok) {
-      throw new Error(t('deleteFailed'))
-    }
-    // 刷新项目数据
-    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
+    await requestOperationMutationVoidWithError(
+      `/api/projects/${projectId}/episodes/${episodeId}`,
+      { method: 'DELETE' },
+      t('deleteFailed'),
+      queryClient,
+    )
     // 如果删除的是当前正在查看的剧集，切换到其他剧集
     if (episodeId === selectedEpisodeId) {
       const remaining = episodes.filter(ep => ep.id !== episodeId)

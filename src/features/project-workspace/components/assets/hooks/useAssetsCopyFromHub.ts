@@ -16,7 +16,6 @@ export type GlobalCopyTarget = {
 
 interface UseAssetsCopyFromHubParams {
   projectId: string
-  onRefresh: () => void | Promise<void>
   showToast: ShowToast
 }
 
@@ -31,7 +30,7 @@ function resolveCopySuccessMessage(
   return t('assetLibrary.copySuccessProp')
 }
 
-export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAssetsCopyFromHubParams) {
+export function useAssetsCopyFromHub({ projectId, showToast }: UseAssetsCopyFromHubParams) {
   const t = useTranslations('assets')
   const copyFromGlobalAsset = useCopyProjectAssetFromGlobal(projectId)
   const [copyFromGlobalTarget, setCopyFromGlobalTarget] = useState<GlobalCopyTarget | null>(null)
@@ -66,7 +65,6 @@ export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAss
 
       showToast(resolveCopySuccessMessage(t, copyFromGlobalTarget.type), 'success')
       setCopyFromGlobalTarget(null)
-      await Promise.resolve(onRefresh())
     } catch (error: unknown) {
       if (!isAbortError(error)) {
         showToast(t('assetLibrary.copyFailed', { error: getErrorMessage(error) }), 'error')
@@ -74,7 +72,7 @@ export function useAssetsCopyFromHub({ projectId, onRefresh, showToast }: UseAss
     } finally {
       setIsGlobalCopyInFlight(false)
     }
-  }, [copyFromGlobalAsset, copyFromGlobalTarget, onRefresh, showToast, t])
+  }, [copyFromGlobalAsset, copyFromGlobalTarget, showToast, t])
 
   return {
     copyFromGlobalTarget,

@@ -126,7 +126,6 @@ export default function ProjectAssetLibrary({
     handleCloseCopyPicker,
   } = useAssetsCopyFromHub({
     projectId,
-    onRefresh,
     showToast,
   })
 
@@ -186,17 +185,11 @@ export default function ProjectAssetLibrary({
   const {
     handleUndoCharacter,
     handleUndoLocation,
-    handleUpdateAppearanceDescription,
-    handleUpdateLocationDescription,
   } = useAssetImageMaintenance({
     projectId,
     t,
     showToast,
     onRefresh,
-    editingAppearance,
-    editingLocation,
-    closeEditingAppearance,
-    closeEditingLocation,
   })
 
   return (
@@ -282,10 +275,7 @@ export default function ProjectAssetLibrary({
 
       <ProjectAssetLibraryModals
         projectId={projectId}
-        onRefresh={onRefresh}
         onClosePreview={() => setPreviewImage(null)}
-        handleUpdateAppearanceDescription={handleUpdateAppearanceDescription}
-        handleUpdateLocationDescription={handleUpdateLocationDescription}
         handleCloseCopyPicker={handleCloseCopyPicker}
         handleConfirmCopyFromGlobal={handleConfirmCopyFromGlobal}
         closeEditingAppearance={closeEditingAppearance}

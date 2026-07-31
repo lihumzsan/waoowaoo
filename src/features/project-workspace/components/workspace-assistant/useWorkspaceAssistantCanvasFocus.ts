@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import type { ProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import type { AgentSessionView } from '@/lib/agent-turn/view-contract'
 import type {
   WorkspaceAssistantActiveFocusRequest,
   WorkspaceAssistantActiveTaskTarget,
 } from '../../workspace-assistant-focus'
-import { resolveWorkspaceAssistantExternalTaskOperationId } from './workspace-assistant-panel-state'
 
 function buildWorkspaceAssistantActiveTaskTarget(input: {
   readonly taskId: string | null | undefined
@@ -50,21 +49,21 @@ function dedupeWorkspaceAssistantActiveTaskTargets(
 }
 
 interface UseWorkspaceAssistantCanvasFocusParams {
-  readonly sessionState: ProjectAgentSessionState | null
+  readonly view: AgentSessionView | null
   readonly storageLoading: boolean
   readonly onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
 }
 
 export function useWorkspaceAssistantCanvasFocus({
-  sessionState,
+  view,
   storageLoading,
   onActiveOperationChange,
 }: UseWorkspaceAssistantCanvasFocusParams): void {
-  const currentActivity = sessionState?.currentActivity ?? null
-  const focusBatch = sessionState?.taskBatches[0] ?? null
+  const focusBatch = view?.followUpBatches.find(
+    (batch) => batch.status === 'pending' || batch.status === 'ready',
+  ) ?? null
   const batchTasks = useMemo(() => focusBatch?.tasks ?? [], [focusBatch])
   const activeExternalTaskOperationId = batchTasks.find((task) => Boolean(task.operationId))?.operationId
-    ?? resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
     ?? null
   const activeTaskTargets = useMemo(() => {
     const targets = batchTasks.flatMap((task) => {
@@ -85,7 +84,7 @@ export function useWorkspaceAssistantCanvasFocus({
     activeExternalTaskOperationId && focusBatch
       ? {
           operationId: activeExternalTaskOperationId,
-          requestKey: `task-batch:${focusBatch.waitId}`,
+          requestKey: `follow-up-batch:${focusBatch.batchId}`,
           taskTargets: activeTaskTargets,
         }
       : null

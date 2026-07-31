@@ -37,6 +37,7 @@ export const PATCH = apiHandler(async (
         appearanceIndex,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)
@@ -74,6 +75,7 @@ export const POST = apiHandler(async (
         characterId,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)
@@ -100,6 +102,7 @@ export const DELETE = apiHandler(async (
         appearanceIndex,
       },
       source: 'asset-hub',
+      responseContract: 'operation_mutation_response_v1',
     })
 
     return NextResponse.json(result)

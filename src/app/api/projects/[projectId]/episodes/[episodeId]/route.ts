@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
-import { apiHandler, ApiError } from '@/lib/api-errors'
+import { apiHandler } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 
 /**
@@ -44,7 +44,7 @@ export const PATCH = apiHandler(async (
   const body = await request.json()
   const { name, description, novelText, audioUrl, srtContent } = body
 
-  const episode = await executeProjectAgentOperationFromApi({
+  const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'update_episode',
     projectId,
@@ -58,9 +58,10 @@ export const PATCH = apiHandler(async (
       ...(srtContent !== undefined ? { srtContent } : {}),
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
-  return NextResponse.json({ episode })
+  return NextResponse.json(result)
 })
 
 /**
@@ -76,7 +77,7 @@ export const DELETE = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  await executeProjectAgentOperationFromApi({
+  const result = await executeProjectAgentOperationFromApi({
     request,
     operationId: 'delete_episode',
     projectId,
@@ -85,7 +86,8 @@ export const DELETE = apiHandler(async (
       episodeId,
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json(result)
 })

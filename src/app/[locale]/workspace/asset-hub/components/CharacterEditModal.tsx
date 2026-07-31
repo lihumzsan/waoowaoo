@@ -1,7 +1,6 @@
 'use client'
 
 import { CharacterEditModal as SharedCharacterEditModal } from '@/components/shared/assets/CharacterEditModal'
-import { useRefreshGlobalAssets } from '@/lib/query/hooks'
 
 interface CharacterEditModalProps {
     characterId: string
@@ -20,8 +19,6 @@ export function CharacterEditModal({
     description,
     onClose,
 }: CharacterEditModalProps) {
-    const onRefresh = useRefreshGlobalAssets()
-
     return (
         <SharedCharacterEditModal
             mode="asset-hub"
@@ -31,7 +28,6 @@ export function CharacterEditModal({
             appearanceIndex={appearanceIndex}
             changeReason={changeReason}
             onClose={onClose}
-            onRefresh={onRefresh}
         />
     )
 }

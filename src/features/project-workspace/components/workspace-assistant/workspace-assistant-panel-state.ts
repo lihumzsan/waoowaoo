@@ -1,9 +1,6 @@
 import type { UIMessage } from 'ai'
 import { parseApiErrorPayload } from '@/lib/api-error-payload'
-import { isWorkspaceAssistantStaleControlErrorText } from './workspace-assistant-runtime-state'
-import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
-import type { ProjectAgentRunControlKind } from '@/lib/project-agent/runs'
-import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
+import type { AgentTurnSourceKind } from '@/lib/agent-turn/contracts'
 import {
   readProjectAssistantTextAttachmentsFromMessage,
   type ProjectAssistantTextAttachment,
@@ -33,14 +30,6 @@ export function resolveWorkspaceAssistantActiveOperationPresentation(
   ] ?? 'genericRun'
 }
 
-export function resolveWorkspaceAssistantExternalTaskOperationId(
-  currentActivity: ProjectAgentSessionActivity | null,
-): string | null {
-  if (currentActivity?.type !== 'waiting_task') return null
-  if (currentActivity.status !== 'running' && currentActivity.status !== 'waiting') return null
-  return currentActivity.operationId ?? currentActivity.sourceOperationId
-}
-
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
   replyInFlight: boolean
@@ -54,11 +43,11 @@ export function shouldShowWorkspaceAssistantReplyLoading(params: {
 export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
   storageLoading: boolean
   replyInFlight: boolean
-  currentRunStatus?: ProjectAgentRunPartData['status'] | null
+  currentTurnStatus?: string | null
 }): boolean {
   return !params.storageLoading
     && !params.replyInFlight
-    && params.currentRunStatus === 'failed'
+    && params.currentTurnStatus === 'failed'
 }
 
 function isMetadataRecord(value: unknown): value is Record<string, unknown> {
@@ -79,33 +68,26 @@ export function isWorkspaceAssistantHiddenThreadMessageMetadata(metadata: unknow
 }
 
 /**
- * Derives the user message whose failed run rolled it back from the model
- * history, purely from persisted facts (AR-07): the session projection's
- * current run plus thread message order. No second client-side send state is
- * introduced.
- *
- * Boundary: the persisted run projection does not link a run to the message
- * that started it, so this can only mark the LAST visible user message, and
- * only while the failed run is a `user_turn` — approval/choice/task-follow-up
- * runs consumed no new user message, so marking anything there would be a
- * false positive. Once any newer send starts (replyInFlight clears the
- * failure notice) or the run record changes, the marker disappears; older
- * turns are never marked retroactively.
+ * Resolve the exact user message that sourced a failed/interrupted Turn.
+ * `sourceId` is the persisted UIMessage id, so message order is never used as
+ * an ownership heuristic.
  */
 export function resolveWorkspaceAssistantUndeliveredUserMessage(params: {
   readonly messages: readonly UIMessage[]
-  readonly showRunFailureNotice: boolean
-  readonly currentRunControlKind: ProjectAgentRunControlKind | null
+  readonly showDeliveryFailureNotice: boolean
+  readonly currentTurnSourceKind: AgentTurnSourceKind | null
+  readonly currentTurnSourceId: string | null
 }): UIMessage | null {
-  if (!params.showRunFailureNotice) return null
-  if (params.currentRunControlKind !== 'user_turn') return null
-  for (let index = params.messages.length - 1; index >= 0; index -= 1) {
-    const message = params.messages[index]
-    if (message.role !== 'user') continue
-    if (isWorkspaceAssistantHiddenThreadMessageMetadata(message.metadata)) continue
-    return message
-  }
-  return null
+  if (!params.showDeliveryFailureNotice) return null
+  if (params.currentTurnSourceKind !== 'user') return null
+  if (!params.currentTurnSourceId) return null
+  const message = params.messages.find(
+    (candidate) => candidate.id === params.currentTurnSourceId,
+  )
+  return message?.role === 'user'
+    && !isWorkspaceAssistantHiddenThreadMessageMetadata(message.metadata)
+    ? message
+    : null
 }
 
 /** Send input rebuilt from an undelivered user message for a one-click resend. */
@@ -233,7 +215,7 @@ export function resolveWorkspaceAssistantFailureView(params: {
   ].filter((part): part is string => Boolean(part))
 
   return {
-    tone: facts.code && isWorkspaceAssistantStaleControlErrorText(facts.code) ? 'info' : 'danger',
+    tone: 'danger',
     headline,
     technical: technicalParts.length > 0 ? technicalParts.join(' · ') : null,
   }

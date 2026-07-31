@@ -1,5 +1,5 @@
 'use client'
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import { useTranslations } from 'next-intl'
 
 /**
@@ -14,12 +14,10 @@ import { CharacterAppearance } from '@/types/project'
 import { isAbortError } from '@/lib/error-utils'
 import {
     useProjectAssets,
-    useRefreshProjectAssets,
     useDeleteProjectCharacter,
     useDeleteProjectAppearance,
     useSelectProjectCharacterImage,
     useConfirmProjectCharacterSelection,
-    useUpdateProjectAppearanceDescription,
     type Character
 } from '@/lib/query/hooks'
 
@@ -46,14 +44,10 @@ export function useCharacterActions({
     const { data: assets } = useProjectAssets(projectId)
     const characters = assets?.characters ?? []
 
-    // 🔥 使用刷新函数 - mutations 完成后刷新缓存
-    const refreshAssets = useRefreshProjectAssets(projectId)
-
     const deleteCharacterMutation = useDeleteProjectCharacter(projectId)
     const deleteAppearanceMutation = useDeleteProjectAppearance(projectId)
     const selectCharacterImageMutation = useSelectProjectCharacterImage(projectId)
     const confirmCharacterSelectionMutation = useConfirmProjectCharacterSelection(projectId)
-    const updateAppearanceDescriptionMutation = useUpdateProjectAppearanceDescription(projectId)
 
     // 获取形象列表
     const getAppearances = useCallback((character: Character): CharacterAppearance[] => {
@@ -77,14 +71,12 @@ export function useCharacterActions({
         if (!confirm(t('character.deleteAppearanceConfirm'))) return
         try {
             await deleteAppearanceMutation.mutateAsync({ characterId, appearanceId })
-            // 🔥 刷新缓存
-            refreshAssets()
         } catch (error: unknown) {
             if (!isAbortError(error)) {
                 alert(t('character.deleteFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
             }
         }
-    }, [deleteAppearanceMutation, refreshAssets, t])
+    }, [deleteAppearanceMutation, t])
 
     // 处理角色图片选择
     const handleSelectCharacterImage = useCallback(async (
@@ -121,28 +113,6 @@ export function useCharacterActions({
         }
     }, [confirmCharacterSelectionMutation, showToast, t])
 
-    // 更新形象描述 - 🔥 仍需保存到服务器
-    const handleUpdateAppearanceDescription = useCallback(async (
-        characterId: string,
-        appearanceId: string,
-        newDescription: string,
-        descriptionIndex?: number
-    ) => {
-        try {
-            await updateAppearanceDescriptionMutation.mutateAsync({
-                characterId,
-                appearanceId,
-                description: newDescription,
-                descriptionIndex,
-            })
-            refreshAssets()
-        } catch (error: unknown) {
-            if (!isAbortError(error)) {
-                _ulogError('更新描述失败:', getErrorMessage(error, t('common.unknownError')))
-            }
-        }
-    }, [refreshAssets, updateAppearanceDescriptionMutation, t])
-
     return {
         // 🔥 暴露 characters 供组件使用（可选，组件也可以自己订阅）
         characters,
@@ -151,6 +121,5 @@ export function useCharacterActions({
         handleDeleteAppearance,
         handleSelectCharacterImage,
         handleConfirmSelection,
-        handleUpdateAppearanceDescription
     }
 }

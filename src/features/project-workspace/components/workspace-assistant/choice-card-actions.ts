@@ -1,7 +1,7 @@
 import type {
   ProjectAgentChoiceCardGroup,
   ProjectAgentChoiceCardOption,
-  ProjectAgentChoiceCardPartData,
+  ProjectAgentChoiceCardDefinition,
 } from '@/lib/project-agent/types'
 
 export type ChoiceCardSelections = Record<string, string>
@@ -42,7 +42,7 @@ export function isChoiceCardSubmitReady(
 }
 
 export function buildSingleOptionChoiceCardSelections(
-  card: Pick<ProjectAgentChoiceCardPartData, 'groups'>,
+  card: Pick<ProjectAgentChoiceCardDefinition, 'groups'>,
   optionValue: string,
 ): ChoiceCardSelections {
   const matchingGroups = card.groups.filter((group) => (
@@ -59,7 +59,7 @@ export function buildSingleOptionChoiceCardSelections(
 }
 
 export function shouldShowChoiceCardManualSubmit(
-  card: Pick<ProjectAgentChoiceCardPartData, 'mode'>,
+  card: Pick<ProjectAgentChoiceCardDefinition, 'mode'>,
 ): boolean {
   return card.mode !== 'confirm' && card.mode !== 'confirm_or_text'
 }

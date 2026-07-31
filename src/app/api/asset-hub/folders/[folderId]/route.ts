@@ -35,6 +35,7 @@ export const PATCH = apiHandler(async (
       folderId,
     },
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
@@ -57,6 +58,7 @@ export const DELETE = apiHandler(async (
     userId: session.user.id,
     input: { folderId },
     source: 'asset-hub',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

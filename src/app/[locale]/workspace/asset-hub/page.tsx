@@ -1,6 +1,5 @@
 'use client'
 import { logError as _ulogError } from '@/lib/logging/core'
-import { apiFetch } from '@/lib/api-fetch'
 import JSZip from 'jszip'
 
 import { useState } from 'react'
@@ -14,14 +13,15 @@ import { FolderModal } from './components/FolderModal'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import {
     useAssets,
-    useRefreshAssets,
     useGlobalFolders,
     useSSE,
 } from '@/lib/query/hooks'
-import { queryKeys } from '@/lib/query/keys'
 import { AppIcon } from '@/components/ui/icons'
 import { Link } from '@/i18n/navigation'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import {
+    requestOperationMutationVoidWithError,
+} from '@/lib/query/mutations/mutation-shared'
 
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
@@ -36,8 +36,6 @@ export default function AssetHubPage() {
         scope: 'global',
         folderId: selectedFolderId,
     })
-    const refreshAssets = useRefreshAssets({ scope: 'global' })
-
     const loading = foldersLoading || assetsLoading
     useSSE({ projectId: GLOBAL_ASSET_PROJECT_ID, enabled: true })
 
@@ -81,15 +79,17 @@ export default function AssetHubPage() {
     // 创建文件夹
     const handleCreateFolder = async (name: string) => {
         try {
-            const res = await apiFetch('/api/asset-hub/folders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            })
-            if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-                setShowFolderModal(false)
-            }
+            await requestOperationMutationVoidWithError(
+                '/api/asset-hub/folders',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                },
+                'CREATE_ASSET_FOLDER_FAILED',
+                queryClient,
+            )
+            setShowFolderModal(false)
         } catch (error) {
             _ulogError('创建文件夹失败:', error)
         }
@@ -98,16 +98,18 @@ export default function AssetHubPage() {
     // 更新文件夹
     const handleUpdateFolder = async (folderId: string, name: string) => {
         try {
-            const res = await apiFetch(`/api/asset-hub/folders/${folderId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            })
-            if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.folders() })
-                setEditingFolder(null)
-                setShowFolderModal(false)
-            }
+            await requestOperationMutationVoidWithError(
+                `/api/asset-hub/folders/${folderId}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                },
+                'UPDATE_ASSET_FOLDER_FAILED',
+                queryClient,
+            )
+            setEditingFolder(null)
+            setShowFolderModal(false)
         } catch (error) {
             _ulogError('更新文件夹失败:', error)
         }
@@ -118,15 +120,14 @@ export default function AssetHubPage() {
         if (!confirm(t('confirmDeleteFolder'))) return
 
         try {
-            const res = await apiFetch(`/api/asset-hub/folders/${folderId}`, {
-                method: 'DELETE'
-            })
-            if (res.ok) {
-                if (selectedFolderId === folderId) {
-                    setSelectedFolderId(null)
-                }
-                queryClient.invalidateQueries({ queryKey: queryKeys.globalAssets.all() })
-                refreshAssets()
+            await requestOperationMutationVoidWithError(
+                `/api/asset-hub/folders/${folderId}`,
+                { method: 'DELETE' },
+                'DELETE_ASSET_FOLDER_FAILED',
+                queryClient,
+            )
+            if (selectedFolderId === folderId) {
+                setSelectedFolderId(null)
             }
         } catch (error) {
             _ulogError('删除文件夹失败:', error)
@@ -339,10 +340,7 @@ export default function AssetHubPage() {
                     mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddCharacter(false)}
-                    onSuccess={() => {
-                        setShowAddCharacter(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddCharacter(false)}
                 />
             )}
 
@@ -352,10 +350,7 @@ export default function AssetHubPage() {
                     mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddLocation(false)}
-                    onSuccess={() => {
-                        setShowAddLocation(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddLocation(false)}
                 />
             )}
 
@@ -364,10 +359,7 @@ export default function AssetHubPage() {
                     mode="asset-hub"
                     folderId={selectedFolderId}
                     onClose={() => setShowAddProp(false)}
-                    onSuccess={() => {
-                        setShowAddProp(false)
-                        refreshAssets()
-                    }}
+                    onSuccess={() => setShowAddProp(false)}
                 />
             )}
 
@@ -433,7 +425,6 @@ export default function AssetHubPage() {
                     description={propEditModal.description}
                     variantId={propEditModal.variantId}
                     onClose={() => setPropEditModal(null)}
-                    onRefresh={refreshAssets}
                 />
             )}
 

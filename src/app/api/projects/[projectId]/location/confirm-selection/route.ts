@@ -38,6 +38,7 @@ export const POST = apiHandler(async (
       locationId,
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)

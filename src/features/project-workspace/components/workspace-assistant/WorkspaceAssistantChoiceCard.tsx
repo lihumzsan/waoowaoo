@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import type { ProjectAgentChoiceSelection } from '@/lib/project-agent/choice-result'
-import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import type { ProjectAgentChoiceCardDefinition } from '@/lib/project-agent/types'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 import {
   buildChoiceCardCustomOptionValue,
@@ -39,8 +39,8 @@ function RatioChoiceShape(props: {
 }
 
 export function buildWorkspaceAssistantChoiceSelectionOutput(params: {
-  card: Pick<ProjectAgentChoiceCardPartData, 'mode'>
-  groups: ProjectAgentChoiceCardPartData['groups']
+  card: Pick<ProjectAgentChoiceCardDefinition, 'mode'>
+  groups: ProjectAgentChoiceCardDefinition['groups']
   selections: ChoiceCardSelections
 }): Record<string, unknown> {
   if (params.card.mode === 'confirm' || params.card.mode === 'confirm_or_text') {
@@ -62,13 +62,9 @@ export function buildWorkspaceAssistantChoiceSelectionOutput(params: {
 }
 
 export function AssistantChoiceCardView(props: {
-  data: ProjectAgentChoiceCardPartData
+  data: ProjectAgentChoiceCardDefinition
   onSubmitChoiceResponse: (params: {
-    runId: string
-    interruptionId: string
-    cardId: string
-    toolCallId: string
-    output: Record<string, unknown>
+    response: Record<string, unknown>
     visibleUserText?: string
   }) => Promise<void>
   onSubmitted?: (cardId: string) => void
@@ -99,12 +95,6 @@ export function AssistantChoiceCardView(props: {
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup?.presentation === 'aspect_ratio'
 
-  const readChoiceRunId = (): string => {
-    const runId = card.runId?.trim()
-    if (!runId) throw new Error('ASSISTANT_CHOICE_CARD_RUN_ID_MISSING')
-    return runId
-  }
-
   const handleReplySubmit = async () => {
     const trimmedReply = replyText.trim()
     if (!trimmedReply || submitting) return
@@ -112,11 +102,7 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       await props.onSubmitChoiceResponse({
-        runId: readChoiceRunId(),
-        interruptionId: card.interruptionId,
-        cardId: card.cardId,
-        toolCallId: card.toolCallId,
-        output: { kind: 'text', text: trimmedReply },
+        response: { kind: 'text', text: trimmedReply },
         visibleUserText: trimmedReply,
       })
       props.onSubmitted?.(card.cardId)
@@ -133,11 +119,7 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       await props.onSubmitChoiceResponse({
-        runId: readChoiceRunId(),
-        interruptionId: card.interruptionId,
-        cardId: card.cardId,
-        toolCallId: card.toolCallId,
-        output: { kind: 'cancelled' },
+        response: { kind: 'cancelled' },
       })
       props.onSubmitted?.(card.cardId)
     } catch (submitError) {
@@ -156,11 +138,7 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       await props.onSubmitChoiceResponse({
-        runId: readChoiceRunId(),
-        interruptionId: card.interruptionId,
-        cardId: card.cardId,
-        toolCallId: card.toolCallId,
-        output: buildWorkspaceAssistantChoiceSelectionOutput({
+        response: buildWorkspaceAssistantChoiceSelectionOutput({
           card,
           groups: submitGroups,
           selections: submitSelections,

@@ -1,11 +1,11 @@
 import {
   TASK_SSE_EVENT_TYPE,
-  WORKSPACE_SSE_EVENT_TYPE,
-  isTaskTerminalEventType,
-  type AssistantSessionChangedSSEEvent,
+  isAgentTurnStreamSseEvent,
+  isTaskSseEvent,
   type SSEEvent,
   type TaskSSEEvent,
-} from '@/lib/task/types'
+} from '@/lib/sse/events'
+import { isTaskTerminalEventType } from '@/lib/task/types'
 import {
   getWorkspaceSseEventIdentity,
   isWorkspaceSseEvent,
@@ -31,11 +31,6 @@ export class WorkspaceSSESnapshotResyncRequiredError extends Error {
   }
 }
 
-function isTaskSSEEvent(event: SSEEvent): event is TaskSSEEvent {
-  return event.type === TASK_SSE_EVENT_TYPE.LIFECYCLE
-    || event.type === TASK_SSE_EVENT_TYPE.STREAM
-}
-
 function isTerminalTaskEvent(event: TaskSSEEvent): boolean {
   if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return false
   return isTaskTerminalEventType(event.payload?.lifecycleType)
@@ -54,7 +49,6 @@ export class WorkspaceSSEEventSequence {
   private readonly taskWatermarks = new Map<string, { eventId: number; terminal: boolean }>()
   private readonly initialTaskEventId: number
   private lastNumericEventId: number
-  private lastAgentEventId: bigint
 
   constructor(
     initialTaskEventId = 0,
@@ -62,21 +56,12 @@ export class WorkspaceSSEEventSequence {
       eventIdentities?: number
       taskWatermarks?: number
     } = {},
-    initialAgentEventId = '0',
   ) {
     if (!Number.isSafeInteger(initialTaskEventId) || initialTaskEventId < 0) {
       throw new Error('WORKSPACE_SSE_INITIAL_CURSOR_INVALID')
     }
-    if (!/^(0|[1-9]\d*)$/.test(initialAgentEventId)) {
-      throw new Error('WORKSPACE_SSE_INITIAL_AGENT_CURSOR_INVALID')
-    }
     this.initialTaskEventId = initialTaskEventId
     this.lastNumericEventId = initialTaskEventId
-    this.lastAgentEventId = BigInt(initialAgentEventId)
-  }
-
-  getLastAgentEventId(): string {
-    return this.lastAgentEventId.toString()
   }
 
   getLastNumericEventId(): number {
@@ -100,7 +85,7 @@ export class WorkspaceSSEEventSequence {
     if (!this.processedEventFingerprints.has(eventIdentity) && this.processedEventFingerprints.size >= identityLimit) {
       throw new WorkspaceSSESnapshotResyncRequiredError('event_identity_window_overflow')
     }
-    if (isTaskSSEEvent(event) && !this.taskWatermarks.has(event.taskId)) {
+    if (isTaskSseEvent(event) && !this.taskWatermarks.has(event.taskId)) {
       const taskLimit = this.limits.taskWatermarks ?? MAX_TRACKED_SSE_TASK_WATERMARKS
       if (this.taskWatermarks.size >= taskLimit) {
         throw new WorkspaceSSESnapshotResyncRequiredError('task_watermark_window_overflow')
@@ -134,12 +119,12 @@ export class WorkspaceSSEEventSequence {
     })
   }
 
-  private assistantDecision(event: AssistantSessionChangedSSEEvent): WorkspaceSSEEventDecision | null {
-    return BigInt(event.agentEventId) <= this.lastAgentEventId ? 'rejected_stale' : null
-  }
-
   process(value: unknown, apply: (event: SSEEvent) => void): WorkspaceSSEEventDecision {
     if (!isWorkspaceSseEvent(value)) return 'invalid'
+    if (isAgentTurnStreamSseEvent(value)) {
+      apply(value)
+      return 'accepted'
+    }
     const identity = getWorkspaceSseEventIdentity(value)
     const existingFingerprint = this.processedEventFingerprints.get(identity.key)
     if (existingFingerprint === identity.fingerprint) return 'duplicate'
@@ -148,11 +133,8 @@ export class WorkspaceSSEEventSequence {
     }
     this.assertCapacity(identity.key, value)
 
-    const taskDecision = isTaskSSEEvent(value) ? this.taskDecision(value) : null
-    const assistantDecision = value.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED
-      ? this.assistantDecision(value)
-      : null
-    const rejection = taskDecision ?? assistantDecision
+    const taskDecision = isTaskSseEvent(value) ? this.taskDecision(value) : null
+    const rejection = taskDecision
     if (rejection) {
       this.recordEventIdentity(identity.key, identity.fingerprint, value.id)
       return rejection
@@ -160,10 +142,7 @@ export class WorkspaceSSEEventSequence {
 
     apply(value)
     this.recordEventIdentity(identity.key, identity.fingerprint, value.id)
-    if (isTaskSSEEvent(value)) this.recordTaskWatermark(value)
-    if (value.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
-      this.lastAgentEventId = BigInt(value.agentEventId)
-    }
+    if (isTaskSseEvent(value)) this.recordTaskWatermark(value)
     return 'accepted'
   }
 }

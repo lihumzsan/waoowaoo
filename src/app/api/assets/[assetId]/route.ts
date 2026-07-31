@@ -40,6 +40,7 @@ export const PATCH = apiHandler(async (
       userId: authResult.session.user.id,
       input: { assetId, ...body },
       source: 'project-ui',
+      responseContract: 'operation_mutation_response_v1',
     })
     return NextResponse.json(result)
   }
@@ -53,6 +54,7 @@ export const PATCH = apiHandler(async (
     userId: authResult.session.user.id,
     input: { assetId, ...body },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })
@@ -92,6 +94,7 @@ export const DELETE = apiHandler(async (
         projectId: body.projectId,
       },
       source: 'project-ui',
+      responseContract: 'operation_mutation_response_v1',
     })
     return NextResponse.json(result)
   }
@@ -108,6 +111,7 @@ export const DELETE = apiHandler(async (
       scope: body.scope,
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
   return NextResponse.json(result)
 })

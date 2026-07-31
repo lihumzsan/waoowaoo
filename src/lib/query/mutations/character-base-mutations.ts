@@ -4,9 +4,7 @@ import type { Character, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
 import {
-    invalidateQueryTemplates,
-    requestJsonWithError,
-    requestVoidWithError,
+    requestOperationMutationVoidWithError,
 } from './mutation-shared'
 
 interface SelectProjectCharacterImageContext {
@@ -103,8 +101,6 @@ function removeCharacterFromProject(
 
 export function useUploadProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -123,12 +119,11 @@ export function useUploadProjectCharacterImage(projectId: string) {
             formData.append('appearanceId', appearanceId)
             if (imageIndex !== undefined) formData.append('imageIndex', imageIndex.toString())
 
-            return await requestJsonWithError(`/api/assets/${characterId}/upload-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${characterId}/upload-render`, {
                 method: 'POST',
                 body: formData
-            }, 'Failed to upload image')
+            }, 'Failed to upload image', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -139,8 +134,6 @@ export function useUploadProjectCharacterImage(projectId: string) {
 export function useSelectProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
     const latestRequestIdByTargetRef = useRef<Record<string, number>>({})
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -151,7 +144,7 @@ export function useSelectProjectCharacterImage(projectId: string) {
             imageIndex: number | null
             confirm?: boolean
         }) => {
-            return await requestJsonWithError(`/api/assets/${characterId}/select-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${characterId}/select-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -161,7 +154,7 @@ export function useSelectProjectCharacterImage(projectId: string) {
                     appearanceId,
                     imageIndex,
                 })
-            }, 'Failed to select image')
+            }, 'Failed to select image', queryClient)
         },
         onMutate: async (variables): Promise<SelectProjectCharacterImageContext> => {
             const targetKey = `${variables.characterId}:${variables.appearanceId}`
@@ -198,11 +191,6 @@ export function useSelectProjectCharacterImage(projectId: string) {
             queryClient.setQueryData(queryKeys.projectAssets.all(projectId), context.previousAssets)
             queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
         },
-        onSettled: (_data, _error, variables) => {
-            if (variables.confirm) {
-                void invalidateProjectAssets()
-            }
-        },
     })
 }
 
@@ -212,12 +200,10 @@ export function useSelectProjectCharacterImage(projectId: string) {
 
 export function useUndoProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ characterId, appearanceId }: { characterId: string; appearanceId: string }) => {
-            return await requestJsonWithError(`/api/assets/${characterId}/revert-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${characterId}/revert-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -226,9 +212,8 @@ export function useUndoProjectCharacterImage(projectId: string) {
                     projectId,
                     appearanceId
                 })
-            }, 'Failed to undo image')
+            }, 'Failed to undo image', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -238,15 +223,14 @@ export function useUndoProjectCharacterImage(projectId: string) {
 
 export function useDeleteProjectCharacter(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async (characterId: string) => {
-            await requestVoidWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character?id=${encodeURIComponent(characterId)}`,
                 { method: 'DELETE' },
                 'Failed to delete character',
+                queryClient,
             )
         },
         onMutate: async (characterId): Promise<DeleteProjectCharacterContext> => {
@@ -276,7 +260,6 @@ export function useDeleteProjectCharacter(projectId: string) {
             queryClient.setQueryData(queryKeys.projectAssets.all(projectId), context.previousAssets)
             queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
         },
-        onSettled: invalidateProjectAssets,
     })
 }
 
@@ -286,18 +269,16 @@ export function useDeleteProjectCharacter(projectId: string) {
 
 export function useDeleteProjectAppearance(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ characterId, appearanceId }: { characterId: string; appearanceId: string }) => {
-            await requestVoidWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character/appearance?characterId=${encodeURIComponent(characterId)}&appearanceId=${encodeURIComponent(appearanceId)}`,
                 { method: 'DELETE' },
                 'Failed to delete appearance',
+                queryClient,
             )
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -307,12 +288,10 @@ export function useDeleteProjectAppearance(projectId: string) {
 
 export function useUpdateProjectCharacterName(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({ characterId, name }: { characterId: string; name: string }) => {
-            return await requestJsonWithError(`/api/assets/${characterId}`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${characterId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -321,8 +300,7 @@ export function useUpdateProjectCharacterName(projectId: string) {
                     projectId,
                     name,
                 })
-            }, 'Failed to update character name')
+            }, 'Failed to update character name', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }

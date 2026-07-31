@@ -22,7 +22,7 @@ interface UseWorkspaceAssistantMessageDispatchParams {
   readonly pending: boolean
   readonly onAutoStartConsumed?: () => void
   readonly sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
-  readonly sendHiddenMessage: (text: string) => Promise<void>
+  readonly sendHiddenMessage: (text: string, sourceKey?: string) => Promise<void>
 }
 
 export function useWorkspaceAssistantMessageDispatch({
@@ -47,8 +47,15 @@ export function useWorkspaceAssistantMessageDispatch({
     const reservedKey = reserveWorkspaceAssistantMessageKey(key, consumedMessageKeysRef.current)
     if (!reservedKey) return
     try {
-      if (hidden) await sendHiddenMessage(normalizedMessage)
-      else await sendMessage({ text: normalizedMessage, attachments, mediaAttachments })
+      if (hidden) await sendHiddenMessage(normalizedMessage, reservedKey)
+      else {
+        await sendMessage({
+          text: normalizedMessage,
+          attachments,
+          mediaAttachments,
+          sourceKey: reservedKey,
+        })
+      }
     } catch (error) {
       releaseWorkspaceAssistantMessageKey(reservedKey, consumedMessageKeysRef.current)
       throw error

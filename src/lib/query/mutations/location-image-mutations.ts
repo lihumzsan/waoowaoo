@@ -4,8 +4,7 @@ import type { Location, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
 import {
-    invalidateQueryTemplates,
-    requestJsonWithError,
+    requestOperationMutationVoidWithError,
 } from './mutation-shared'
 
 interface SelectProjectLocationImageContext {
@@ -68,8 +67,6 @@ function applyLocationSelectionToProject(
 
 export function useUploadProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -86,12 +83,11 @@ export function useUploadProjectLocationImage(projectId: string) {
             formData.append('projectId', projectId)
             if (imageIndex !== undefined) formData.append('imageIndex', imageIndex.toString())
 
-            return await requestJsonWithError(`/api/assets/${locationId}/upload-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${locationId}/upload-render`, {
                 method: 'POST',
                 body: formData
-            }, 'Failed to upload image')
+            }, 'Failed to upload image', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -102,8 +98,6 @@ export function useUploadProjectLocationImage(projectId: string) {
 export function useSelectProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
     const latestRequestIdByTargetRef = useRef<Record<string, number>>({})
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -113,7 +107,7 @@ export function useSelectProjectLocationImage(projectId: string) {
             imageIndex: number | null
             confirm?: boolean
         }) => {
-            return await requestJsonWithError(`/api/assets/${locationId}/select-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${locationId}/select-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -122,7 +116,7 @@ export function useSelectProjectLocationImage(projectId: string) {
                     projectId,
                     imageIndex,
                 })
-            }, 'Failed to select image')
+            }, 'Failed to select image', queryClient)
         },
         onMutate: async (variables): Promise<SelectProjectLocationImageContext> => {
             const targetKey = variables.locationId
@@ -159,11 +153,6 @@ export function useSelectProjectLocationImage(projectId: string) {
             queryClient.setQueryData(queryKeys.projectAssets.all(projectId), context.previousAssets)
             queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
         },
-        onSettled: (_data, _error, variables) => {
-            if (variables.confirm) {
-                void invalidateProjectAssets()
-            }
-        },
     })
 }
 
@@ -173,12 +162,10 @@ export function useSelectProjectLocationImage(projectId: string) {
 
 export function useUndoProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async (locationId: string) => {
-            return await requestJsonWithError(`/api/assets/${locationId}/revert-render`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${locationId}/revert-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -186,8 +173,7 @@ export function useUndoProjectLocationImage(projectId: string) {
                     kind: 'location',
                     projectId,
                 })
-            }, 'Failed to undo image')
+            }, 'Failed to undo image', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }

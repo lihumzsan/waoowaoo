@@ -14,6 +14,8 @@
     "errorTitle": "Error",
     "errorHint": "Include the requestId for debugging, or retry the same instruction.",
     "runFailedTitle": "Assistant run failed",
+    "turnInterruptedTitle": "Assistant turn was interrupted",
+    "turnInterruptedDescription": "The server stopped during this turn. Completed actions and long-running tasks were kept; send a new message to continue.",
     "resend": "Resend",
     "undelivered": "Not delivered",
     "sessionStateError": "Assistant status could not be refreshed. Retry or reload before continuing.",

@@ -2,6 +2,8 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import { isTaskType, type TaskType } from '@/lib/task/types'
+import { requireOperationMutationResponse } from '@/lib/operations/mutation-receipt'
+import { syncWorkspaceResourceChanges } from '@/lib/query/resource-change-sync'
 
 export { getPageLocale } from '@/lib/api-fetch'
 
@@ -58,6 +60,56 @@ export async function requestJsonWithError<T>(
     throw createRequestError(response.status, data, fallbackMessage)
   }
   return data as T
+}
+
+export async function readOperationMutationResponseWithError(
+  response: Response,
+  fallbackMessage: string,
+  queryClient: QueryClient,
+): Promise<unknown> {
+  const payload = await parseJsonSafe(response)
+  if (!response.ok) {
+    throw createRequestError(response.status, payload, fallbackMessage)
+  }
+  const result = requireOperationMutationResponse(payload)
+  await syncWorkspaceResourceChanges({
+    queryClient,
+    changes: result.mutationReceipt.changedRefs,
+  })
+  return result.data
+}
+
+/**
+ * Sole browser adapter for a synchronous Operation mutation response.
+ * It validates the formal receipt, performs the registry-derived Query handoff,
+ * and only then exposes domain data to the caller.
+ */
+export async function requestOperationMutationWithError(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  fallbackMessage: string,
+  queryClient: QueryClient,
+): Promise<unknown> {
+  const response = await apiFetch(input, init)
+  return await readOperationMutationResponseWithError(
+    response,
+    fallbackMessage,
+    queryClient,
+  )
+}
+
+export async function requestOperationMutationVoidWithError(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  fallbackMessage: string,
+  queryClient: QueryClient,
+): Promise<void> {
+  await requestOperationMutationWithError(
+    input,
+    init,
+    fallbackMessage,
+    queryClient,
+  )
 }
 
 export async function requestVoidWithError(

@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import {
-  invalidateQueryTemplates,
-  requestJsonWithError,
+  requestOperationMutationVoidWithError,
 } from './mutation-shared'
 import { capabilitySelectionsToCommand } from '@/lib/ai-registry/capability-selection-command'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
@@ -14,8 +13,6 @@ import type { CapabilitySelections } from '@/lib/ai-registry/types'
 
 export function useCopyProjectAssetFromGlobal(projectId: string) {
     const queryClient = useQueryClient()
-    const invalidateProjectAssets = () =>
-        invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
     return useMutation({
         mutationFn: async ({
@@ -27,7 +24,7 @@ export function useCopyProjectAssetFromGlobal(projectId: string) {
             targetId: string
             globalAssetId: string
         }) => {
-            return await requestJsonWithError(`/api/assets/${targetId}/copy`, {
+            await requestOperationMutationVoidWithError(`/api/assets/${targetId}/copy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -35,9 +32,8 @@ export function useCopyProjectAssetFromGlobal(projectId: string) {
                     projectId,
                     globalAssetId,
                 }),
-            }, 'Failed to copy from global')
+            }, 'Failed to copy from global', queryClient)
         },
-        onSuccess: invalidateProjectAssets,
     })
 }
 
@@ -69,7 +65,7 @@ export function useUpdateProjectConfig(projectId: string) {
 
     return useMutation({
         mutationFn: async (input: ProjectConfigMutationInput) =>
-            await requestJsonWithError(
+            await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/config`,
                 {
                     method: 'PATCH',
@@ -77,6 +73,7 @@ export function useUpdateProjectConfig(projectId: string) {
                     body: JSON.stringify(serializeProjectConfigPatch(resolveProjectConfigPatch(input))),
                 },
                 'Failed to update config',
+                queryClient,
             ),
         onMutate: async (input) => {
             const projectQueryKey = queryKeys.projectData(projectId)
@@ -98,9 +95,6 @@ export function useUpdateProjectConfig(projectId: string) {
             if (context?.previousProject) {
                 queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)
             }
-        },
-        onSettled: () => {
-            invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
         },
     })
 }

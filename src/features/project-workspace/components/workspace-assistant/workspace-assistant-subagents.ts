@@ -51,8 +51,8 @@ export function resolveWorkspaceAssistantSubagents(params: {
         events.push({
           subagentId: subagent.subagentId,
           taskId: subagent.taskId,
-          runId: subagent.runId,
-          toolCallId: subagent.toolCallId,
+          originTurnId: subagent.originTurnId,
+          callId: subagent.callId,
           sequence: Math.max(0, ...events.map((entry) => entry.sequence)) + 1,
           occurredAt: stream.occurredAt,
           event: {

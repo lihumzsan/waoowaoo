@@ -43,6 +43,7 @@ export const POST = apiHandler(async (
       ...(selectedIndex !== undefined ? { selectedIndex } : {}),
     },
     source: 'project-ui',
+    responseContract: 'operation_mutation_response_v1',
   })
 
   return NextResponse.json(result)
