@@ -15,10 +15,7 @@ import {
 } from './operation-plan-revalidation'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
 import { schedulePersistedTask } from '@/lib/temporal/task-client'
-import type {
-  PersistedTaskReference,
-  ScheduledTaskReceipt,
-} from '@/lib/temporal/task/contracts'
+import type { PersistedTaskReference, ScheduledTaskReceipt } from '@/lib/temporal/task/contracts'
 import { isTaskType } from '@/lib/task/types'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
@@ -61,6 +58,20 @@ export interface ApprovedOperationExecutionReceipt {
 export interface ApprovedOperationPlanInvocationResult<Output> {
   output: Output
   receipt: ApprovedOperationExecutionReceipt
+}
+
+export class ApprovedOperationExecutionReceiptError extends Error {
+  constructor(
+    readonly code: string,
+    ...details: unknown[]
+  ) {
+    super([code, ...details.map((detail) => String(detail))].join(':'))
+    this.name = 'ApprovedOperationExecutionReceiptError'
+  }
+}
+
+function receiptError(code: string, ...details: unknown[]): never {
+  throw new ApprovedOperationExecutionReceiptError(code, ...details)
 }
 
 export function requireOperationExecutionTransaction(
@@ -123,8 +134,7 @@ export function splitPlannedOperationInvocation(input: unknown): {
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   const serialized = JSON.stringify(value)
-  if (serialized === undefined)
-    throw new Error('OPERATION_EXECUTION_OUTPUT_NOT_JSON')
+  if (serialized === undefined) throw new Error('OPERATION_EXECUTION_OUTPUT_NOT_JSON')
   return JSON.parse(serialized) as Prisma.InputJsonValue
 }
 
@@ -136,9 +146,7 @@ export async function issueApprovalGrantGroupInTransaction(
   },
 ): Promise<IssuedApprovalGrant[]> {
   if (params.requests.length === 0) return []
-  const planSnapshotIds = params.requests.map((request) =>
-    request.planSnapshotId.trim(),
-  )
+  const planSnapshotIds = params.requests.map((request) => request.planSnapshotId.trim())
   if (
     planSnapshotIds.some((id) => !id) ||
     new Set(planSnapshotIds).size !== planSnapshotIds.length
@@ -255,22 +263,18 @@ function assertSnapshotScope(params: {
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
 }): void {
   const expectedScopeKind =
-    params.projectId === GLOBAL_ASSET_PROJECT_ID
-      ? 'global_asset_hub'
-      : 'project'
+    params.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
   const requestedEpisodeId = params.episodeId ?? null
   if (
     params.snapshot.userId !== params.userId ||
     params.snapshot.scopeKind !== expectedScopeKind ||
     params.snapshot.scopeId !== params.projectId ||
     params.snapshot.operationId !== params.operationId ||
-    (requestedEpisodeId !== null &&
-      params.snapshot.episodeId !== requestedEpisodeId)
+    (requestedEpisodeId !== null && params.snapshot.episodeId !== requestedEpisodeId)
   ) {
     throw new ApiError('FORBIDDEN', {
       code: 'OPERATION_PLAN_SCOPE_MISMATCH',
-      message:
-        'the approved plan does not belong to this user, scope, episode, or operation',
+      message: 'the approved plan does not belong to this user, scope, episode, or operation',
     })
   }
   if (hashCanonicalJson(params.normalizedInput) !== params.snapshot.inputHash) {
@@ -376,12 +380,8 @@ export async function loadApprovedOperationExecutionInput(params: {
   const grant = await prisma.approvalGrant.findUnique({
     where: { id: params.invocation.approvalGrantId },
   })
-  if (!grant)
-    throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
-  if (
-    grant.userId !== params.userId ||
-    grant.operationId !== params.operationId
-  ) {
+  if (!grant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  if (grant.userId !== params.userId || grant.operationId !== params.operationId) {
     throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
   }
   const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId)
@@ -421,11 +421,8 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   const previewGrant = await prisma.approvalGrant.findUnique({
     where: { id: params.invocation.approvalGrantId },
   })
-  if (!previewGrant)
-    throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
-  const previewSnapshot = await loadOperationPlanSnapshot(
-    previewGrant.planSnapshotId,
-  )
+  if (!previewGrant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  const previewSnapshot = await loadOperationPlanSnapshot(previewGrant.planSnapshotId)
   if (!previewSnapshot)
     throw new ApiError('NOT_FOUND', {
       code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
@@ -448,8 +445,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
     select: { id: true },
   })
   const executionContractChanged =
-    !existingExecution &&
-    previewSnapshot.executionContractRevision !== planContractRevision
+    !existingExecution && previewSnapshot.executionContractRevision !== planContractRevision
   const currentArtifacts =
     existingExecution || executionContractChanged
       ? null
@@ -467,16 +463,13 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         FOR UPDATE
       `)
       if (projects.length !== 1) {
-        throw new Error(
-          `OPERATION_EXECUTION_PROJECT_NOT_FOUND:${params.ctx.projectId}`,
-        )
+        throw new Error(`OPERATION_EXECUTION_PROJECT_NOT_FOUND:${params.ctx.projectId}`)
       }
       await lockApprovalGrant(tx, params.invocation.approvalGrantId)
       const grant = await tx.approvalGrant.findUnique({
         where: { id: params.invocation.approvalGrantId },
       })
-      if (!grant)
-        throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+      if (!grant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
       const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId, tx)
       if (!snapshot)
         throw new ApiError('NOT_FOUND', {
@@ -523,10 +516,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       if (!currentArtifacts) {
         throw new Error(`OPERATION_PLAN_REVALIDATION_MISSING:${grant.id}`)
       }
-      const changedArtifacts = changedOperationPlanArtifacts(
-        snapshot,
-        currentArtifacts,
-      )
+      const changedArtifacts = changedOperationPlanArtifacts(snapshot, currentArtifacts)
       if (changedArtifacts.length > 0) {
         await settleApprovalGrant(tx, {
           kind: 'revoke',
@@ -573,8 +563,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         snapshot.plan,
       )
 
-      const parsedOutput =
-        params.operation.outputSchema.safeParse(committedOutput)
+      const parsedOutput = params.operation.outputSchema.safeParse(committedOutput)
       if (!parsedOutput.success) {
         throw new ApiError('EXTERNAL_ERROR', {
           code: 'OPERATION_OUTPUT_INVALID',
@@ -595,16 +584,12 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         consumedGrant.consumedExecutionId !== execution.id ||
         tasks.length !== snapshot.plan.tasks.length
       ) {
-        throw new Error(
-          `OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE:${execution.id}`,
-        )
+        throw new Error(`OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE:${execution.id}`)
       }
       const followUpTaskIds = Array.from(
         new Set([
           ...tasks.map((task) => task.id),
-          ...(snapshot.plan.taskDependencies ?? []).map(
-            (dependency) => dependency.taskId,
-          ),
+          ...(snapshot.plan.taskDependencies ?? []).map((dependency) => dependency.taskId),
         ]),
       ).sort()
       if (followUpTaskIds.length > 0) {
@@ -614,15 +599,10 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         })
       }
       if (
-        followUpTaskIds.length > 0
-        && (
-          !params.ctx.followUpBatchBinding
-          || !params.ctx.followUpBatchBinding.isBound()
-        )
+        followUpTaskIds.length > 0 &&
+        (!params.ctx.followUpBatchBinding || !params.ctx.followUpBatchBinding.isBound())
       ) {
-        throw new Error(
-          `OPERATION_EXECUTION_FOLLOW_UP_BATCH_MISSING:${params.operation.id}`,
-        )
+        throw new Error(`OPERATION_EXECUTION_FOLLOW_UP_BATCH_MISSING:${params.operation.id}`)
       }
       await tx.operationExecution.update({
         where: { id: execution.id },
@@ -674,9 +654,7 @@ async function loadApprovedOperationExecutionReceipt(params: {
     execution.requestId !== params.operationRequestId ||
     execution.tasks.length > APPROVED_OPERATION_MAX_TASKS
   ) {
-    throw new Error(
-      `OPERATION_EXECUTION_RECEIPT_DIVERGED:${params.approvalGrantId}`,
-    )
+    receiptError('OPERATION_EXECUTION_RECEIPT_DIVERGED', params.approvalGrantId)
   }
   const snapshot = await loadOperationPlanSnapshot(execution.planSnapshotId)
   if (
@@ -686,27 +664,21 @@ async function loadApprovedOperationExecutionReceipt(params: {
     snapshot.operationId !== params.operationId ||
     snapshot.plan.tasks.length !== execution.tasks.length
   ) {
-    throw new Error(`OPERATION_EXECUTION_TASK_BATCH_DIVERGED:${execution.id}`)
+    receiptError('OPERATION_EXECUTION_TASK_BATCH_DIVERGED', execution.id)
   }
 
-  const byPlanTaskId = new Map(
-    execution.tasks.map((task) => [task.operationPlanTaskId, task]),
-  )
+  const byPlanTaskId = new Map(execution.tasks.map((task) => [task.operationPlanTaskId, task]))
   if (byPlanTaskId.has(null) || byPlanTaskId.size !== execution.tasks.length) {
-    throw new Error(
-      `OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED:${execution.id}`,
-    )
+    receiptError('OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED', execution.id)
   }
   const orderedTasks = snapshot.plan.tasks.map((planTask) => {
     const task = byPlanTaskId.get(planTask.id)
     if (!task) {
-      throw new Error(
-        `OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED:${execution.id}`,
-      )
+      receiptError('OPERATION_EXECUTION_TASK_IDENTITY_DIVERGED', execution.id)
     }
     return task
   })
-  const tasks: ApprovedOperationExecutionTaskReceipt[] = []
+  const references: PersistedTaskReference[] = []
   for (const task of orderedTasks) {
     if (
       task.userId !== params.userId ||
@@ -717,19 +689,18 @@ async function loadApprovedOperationExecutionReceipt(params: {
       task.operationRequestId !== params.operationRequestId ||
       !isTaskType(task.type)
     ) {
-      throw new Error(
-        `OPERATION_EXECUTION_TASK_RECEIPT_DIVERGED:${execution.id}:${task.id}`,
-      )
+      receiptError('OPERATION_EXECUTION_TASK_RECEIPT_DIVERGED', execution.id, task.id)
     }
     const reference: PersistedTaskReference = {
       taskId: task.id,
       userId: task.userId,
       taskType: task.type,
     }
-    tasks.push({
-      reference,
-      schedule: await schedulePersistedTask(reference),
-    })
+    references.push(reference)
+  }
+  const tasks: ApprovedOperationExecutionTaskReceipt[] = []
+  for (const reference of references) {
+    tasks.push({ reference, schedule: await schedulePersistedTask(reference) })
   }
   return {
     operationExecutionId: execution.id,
@@ -740,10 +711,7 @@ async function loadApprovedOperationExecutionReceipt(params: {
   }
 }
 
-export async function invokeApprovedOperationPlanWithReceipt<
-  Input,
-  Output,
->(params: {
+export async function invokeApprovedOperationPlanWithReceipt<Input, Output>(params: {
   operation: ProjectAgentOperationDefinition<Input, Output>
   ctx: ProjectAgentOperationContext
   normalizedInput: Input

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
+  listTaskAcceptedProviderExternalIds,
   markTaskProviderInvocationRetryable,
   markTaskProviderInvocationRetryableByExternalId,
+  readTaskProviderInvocationExternalId,
   readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
 import { withLogContext } from '@/lib/logging/context'
@@ -14,11 +16,7 @@ import { parseStoredAiLlmExecutionResult } from '@/lib/ai-exec/llm/result-projec
 import type { AiLlmExecutionResult } from '@/lib/ai-registry/types'
 import { ProviderPreAcceptRejectedError } from '@/lib/ai-exec/submission-error'
 import { resetBillingState } from '../../helpers/db-reset'
-import {
-  createQueuedTask,
-  createTestProject,
-  createTestUser,
-} from '../../helpers/billing-fixtures'
+import { createQueuedTask, createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { prisma } from '../../helpers/prisma'
 
 async function seedTask(taskId: string) {
@@ -37,23 +35,34 @@ async function seedTask(taskId: string) {
 
 function invoke(
   taskId: string,
-  execute: () => Promise<{ success: boolean; audioUrl?: string; async?: boolean; externalId?: string }>,
+  execute: () => Promise<{
+    success: boolean
+    audioUrl?: string
+    async?: boolean
+    externalId?: string
+  }>,
   taskAttempt = 1,
   invocationKey = 'media:music:primary',
 ) {
-  return withLogContext({ taskId, taskAttempt }, async () => await executeTaskProviderInvocation({
-    taskId,
-    invocation: { key: invocationKey },
-    modality: 'music',
-    logicalCapabilityId: 'music:google::lyria-3-pro-preview',
-    primaryModelKey: 'google::lyria-3-pro-preview',
-    routes: [{
-      provider: 'google',
-      modelKey: 'google::lyria-3-pro-preview',
-      request: { prompt: 'durable provider invocation' },
-      execute,
-    }],
-  }))
+  return withLogContext(
+    { taskId, taskAttempt },
+    async () =>
+      await executeTaskProviderInvocation({
+        taskId,
+        invocation: { key: invocationKey },
+        modality: 'music',
+        logicalCapabilityId: 'music:google::lyria-3-pro-preview',
+        primaryModelKey: 'google::lyria-3-pro-preview',
+        routes: [
+          {
+            provider: 'google',
+            modelKey: 'google::lyria-3-pro-preview',
+            request: { prompt: 'durable provider invocation' },
+            execute,
+          },
+        ],
+      }),
+  )
 }
 
 describe('provider invocation at-most-once DB integration', () => {
@@ -69,19 +78,28 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(invoke('provider-replay-task', execute)).resolves.toMatchObject({ success: true })
 
     expect(execute).toHaveBeenCalledTimes(1)
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-replay-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'submitted' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-replay-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'submitted' })
   })
 
   it('re-submits only the explicitly failed invocation on a higher Task attempt', async () => {
     await seedTask('provider-selective-retry-task')
     const firstCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-1.mp3' }))
-    const secondCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-2-invalid.mp3' }))
+    const secondCue = vi.fn(async () => ({
+      success: true,
+      audioUrl: 'https://provider/cue-2-invalid.mp3',
+    }))
 
-    await expect(invoke('provider-selective-retry-task', firstCue, 1, 'media:music:cue:1')).resolves.toMatchObject({ success: true })
-    await expect(invoke('provider-selective-retry-task', secondCue, 1, 'media:music:cue:2')).resolves.toMatchObject({ success: true })
+    await expect(
+      invoke('provider-selective-retry-task', firstCue, 1, 'media:music:cue:1'),
+    ).resolves.toMatchObject({ success: true })
+    await expect(
+      invoke('provider-selective-retry-task', secondCue, 1, 'media:music:cue:2'),
+    ).resolves.toMatchObject({ success: true })
     await withLogContext({ taskId: 'provider-selective-retry-task', taskAttempt: 1 }, async () => {
       await markTaskProviderInvocationRetryable({
         taskId: 'provider-selective-retry-task',
@@ -91,16 +109,25 @@ describe('provider invocation at-most-once DB integration', () => {
     })
 
     const sameAttemptRetry = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
-    await expect(invoke('provider-selective-retry-task', sameAttemptRetry, 1, 'media:music:cue:2')).rejects.toMatchObject({
+    await expect(
+      invoke('provider-selective-retry-task', sameAttemptRetry, 1, 'media:music:cue:2'),
+    ).rejects.toMatchObject({
       code: 'PROVIDER_SUBMIT_FAILED',
     })
 
     const replayFirstCue = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
-    const regenerateSecondCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-2-recovered.mp3' }))
-    await expect(invoke('provider-selective-retry-task', replayFirstCue, 2, 'media:music:cue:1')).resolves.toMatchObject({
+    const regenerateSecondCue = vi.fn(async () => ({
+      success: true,
+      audioUrl: 'https://provider/cue-2-recovered.mp3',
+    }))
+    await expect(
+      invoke('provider-selective-retry-task', replayFirstCue, 2, 'media:music:cue:1'),
+    ).resolves.toMatchObject({
       audioUrl: 'https://provider/cue-1.mp3',
     })
-    await expect(invoke('provider-selective-retry-task', regenerateSecondCue, 2, 'media:music:cue:2')).resolves.toMatchObject({
+    await expect(
+      invoke('provider-selective-retry-task', regenerateSecondCue, 2, 'media:music:cue:2'),
+    ).resolves.toMatchObject({
       audioUrl: 'https://provider/cue-2-recovered.mp3',
     })
 
@@ -118,23 +145,30 @@ describe('provider invocation at-most-once DB integration', () => {
       async: true,
       externalId: 'FAL:IMAGE:model:first-request',
     }))
-    await expect(invoke('provider-external-terminal-retry-task', firstSubmission, 1)).resolves.toMatchObject({
+    await expect(
+      invoke('provider-external-terminal-retry-task', firstSubmission, 1),
+    ).resolves.toMatchObject({
       externalId: 'FAL:IMAGE:model:first-request',
     })
-    await withLogContext({ taskId: 'provider-external-terminal-retry-task', taskAttempt: 1 }, async () => {
-      await markTaskProviderInvocationRetryableByExternalId({
-        taskId: 'provider-external-terminal-retry-task',
-        externalId: 'FAL:IMAGE:model:first-request',
-        error: new Error('external job failed'),
-      })
-    })
+    await withLogContext(
+      { taskId: 'provider-external-terminal-retry-task', taskAttempt: 1 },
+      async () => {
+        await markTaskProviderInvocationRetryableByExternalId({
+          taskId: 'provider-external-terminal-retry-task',
+          externalId: 'FAL:IMAGE:model:first-request',
+          error: new Error('external job failed'),
+        })
+      },
+    )
 
     const secondSubmission = vi.fn(async () => ({
       success: true,
       async: true,
       externalId: 'FAL:IMAGE:model:second-request',
     }))
-    await expect(invoke('provider-external-terminal-retry-task', secondSubmission, 2)).resolves.toMatchObject({
+    await expect(
+      invoke('provider-external-terminal-retry-task', secondSubmission, 2),
+    ).resolves.toMatchObject({
       externalId: 'FAL:IMAGE:model:second-request',
     })
     expect(firstSubmission).toHaveBeenCalledTimes(1)
@@ -143,38 +177,59 @@ describe('provider invocation at-most-once DB integration', () => {
 
   it('keeps independently requested image candidates in one Task behind distinct durable fences', async () => {
     await seedTask('provider-candidate-task')
-    const execute = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/candidate.mp3' }))
-    const invokeCandidate = async (key: string) => await withLogContext({
-      taskId: 'provider-candidate-task',
-      taskAttempt: 1,
-    }, async () => await executeTaskProviderInvocation({
-      taskId: 'provider-candidate-task',
-      invocation: { key },
-      modality: 'image',
-      logicalCapabilityId: 'image:fal::image-model',
-      primaryModelKey: 'fal::image-model',
-      routes: [{
-        provider: 'fal',
-        modelKey: 'fal::image-model',
-        request: { prompt: 'same candidate prompt' },
-        execute,
-      }],
+    const execute = vi.fn(async () => ({
+      success: true,
+      audioUrl: 'https://provider/candidate.mp3',
     }))
+    const invokeCandidate = async (key: string) =>
+      await withLogContext(
+        {
+          taskId: 'provider-candidate-task',
+          taskAttempt: 1,
+        },
+        async () =>
+          await executeTaskProviderInvocation({
+            taskId: 'provider-candidate-task',
+            invocation: { key },
+            modality: 'image',
+            logicalCapabilityId: 'image:fal::image-model',
+            primaryModelKey: 'fal::image-model',
+            routes: [
+              {
+                provider: 'fal',
+                modelKey: 'fal::image-model',
+                request: { prompt: 'same candidate prompt' },
+                execute,
+              },
+            ],
+          }),
+      )
 
-    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
-    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
-    await expect(invokeCandidate('media:image:candidate:1')).resolves.toMatchObject({ success: true })
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({
+      success: true,
+    })
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({
+      success: true,
+    })
+    await expect(invokeCandidate('media:image:candidate:1')).resolves.toMatchObject({
+      success: true,
+    })
 
     expect(execute).toHaveBeenCalledTimes(2)
-    await expect(prisma.taskExecutionCheckpoint.count({
-      where: { taskId: 'provider-candidate-task' },
-    })).resolves.toBe(2)
+    await expect(
+      prisma.taskExecutionCheckpoint.count({
+        where: { taskId: 'provider-candidate-task' },
+      }),
+    ).resolves.toBe(2)
   })
 
   it('advances one logical invocation to the next declared route only after typed pre-accept rejection', async () => {
     await seedTask('provider-route-failover-task')
     const primary = vi.fn(async () => {
-      throw new ProviderPreAcceptRejectedError('provider_account_limit', 'primary account hard limit')
+      throw new ProviderPreAcceptRejectedError(
+        'provider_account_limit',
+        'primary account hard limit',
+      )
     })
     const secondary = vi.fn(async () => ({
       success: true,
@@ -182,29 +237,31 @@ describe('provider invocation at-most-once DB integration', () => {
       externalId: 'FAL:IMAGE:openai/gpt-image-2:secondary-request',
     }))
 
-    const result = await withLogContext({ taskId: 'provider-route-failover-task', taskAttempt: 1 }, async () => (
-      await executeTaskProviderInvocation({
-        taskId: 'provider-route-failover-task',
-        invocation: { key: 'media:image:primary' },
-        modality: 'image',
-        logicalCapabilityId: 'image.gpt-image-2',
-        primaryModelKey: 'openrouter::openai/gpt-image-2',
-        routes: [
-          {
-            provider: 'openrouter',
-            modelKey: 'openrouter::openai/gpt-image-2',
-            request: { prompt: 'same prompt', aspectRatio: '1:1' },
-            execute: primary,
-          },
-          {
-            provider: 'fal',
-            modelKey: 'fal::gpt-image-2',
-            request: { prompt: 'same prompt', aspectRatio: '1:1' },
-            execute: secondary,
-          },
-        ],
-      })
-    ))
+    const result = await withLogContext(
+      { taskId: 'provider-route-failover-task', taskAttempt: 1 },
+      async () =>
+        await executeTaskProviderInvocation({
+          taskId: 'provider-route-failover-task',
+          invocation: { key: 'media:image:primary' },
+          modality: 'image',
+          logicalCapabilityId: 'image.gpt-image-2',
+          primaryModelKey: 'openrouter::openai/gpt-image-2',
+          routes: [
+            {
+              provider: 'openrouter',
+              modelKey: 'openrouter::openai/gpt-image-2',
+              request: { prompt: 'same prompt', aspectRatio: '1:1' },
+              execute: primary,
+            },
+            {
+              provider: 'fal',
+              modelKey: 'fal::gpt-image-2',
+              request: { prompt: 'same prompt', aspectRatio: '1:1' },
+              execute: secondary,
+            },
+          ],
+        }),
+    )
 
     expect(primary).toHaveBeenCalledTimes(1)
     expect(secondary).toHaveBeenCalledTimes(1)
@@ -238,14 +295,25 @@ describe('provider invocation at-most-once DB integration', () => {
         },
       ],
     })
-    await expect(readTaskProviderInvocationRouteSelection({
-      taskId: 'provider-route-failover-task',
-      invocation: { key: 'media:image:primary' },
-    })).resolves.toEqual({
+    await expect(
+      readTaskProviderInvocationRouteSelection({
+        taskId: 'provider-route-failover-task',
+        invocation: { key: 'media:image:primary' },
+      }),
+    ).resolves.toEqual({
       provider: 'fal',
       modelKey: 'fal::gpt-image-2',
       logicalCapabilityId: 'image.gpt-image-2',
     })
+    await expect(
+      readTaskProviderInvocationExternalId({
+        taskId: 'provider-route-failover-task',
+        invocation: { key: 'media:image:primary' },
+      }),
+    ).resolves.toBe('FAL:IMAGE:openai/gpt-image-2:secondary-request')
+    await expect(
+      listTaskAcceptedProviderExternalIds('provider-route-failover-task'),
+    ).resolves.toEqual(['FAL:IMAGE:openai/gpt-image-2:secondary-request'])
   })
 
   it('does not advance a route set when the primary submission outcome is ambiguous', async () => {
@@ -255,39 +323,47 @@ describe('provider invocation at-most-once DB integration', () => {
     })
     const secondary = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
 
-    await expect(withLogContext({ taskId: 'provider-route-ambiguous-task', taskAttempt: 1 }, async () => (
-      await executeTaskProviderInvocation({
-        taskId: 'provider-route-ambiguous-task',
-        invocation: { key: 'media:image:primary' },
-        modality: 'image',
-        logicalCapabilityId: 'image.gpt-image-2',
-        primaryModelKey: 'openrouter::openai/gpt-image-2',
-        routes: [
-          {
-            provider: 'openrouter',
-            modelKey: 'openrouter::openai/gpt-image-2',
-            request: { prompt: 'same prompt' },
-            execute: primary,
-          },
-          {
-            provider: 'fal',
-            modelKey: 'fal::gpt-image-2',
-            request: { prompt: 'same prompt' },
-            execute: secondary,
-          },
-        ],
-      })
-    ))).rejects.toMatchObject({ code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN' })
+    await expect(
+      withLogContext(
+        { taskId: 'provider-route-ambiguous-task', taskAttempt: 1 },
+        async () =>
+          await executeTaskProviderInvocation({
+            taskId: 'provider-route-ambiguous-task',
+            invocation: { key: 'media:image:primary' },
+            modality: 'image',
+            logicalCapabilityId: 'image.gpt-image-2',
+            primaryModelKey: 'openrouter::openai/gpt-image-2',
+            routes: [
+              {
+                provider: 'openrouter',
+                modelKey: 'openrouter::openai/gpt-image-2',
+                request: { prompt: 'same prompt' },
+                execute: primary,
+              },
+              {
+                provider: 'fal',
+                modelKey: 'fal::gpt-image-2',
+                request: { prompt: 'same prompt' },
+                execute: secondary,
+              },
+            ],
+          }),
+      ),
+    ).rejects.toMatchObject({ code: 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN' })
     expect(primary).toHaveBeenCalledTimes(1)
     expect(secondary).not.toHaveBeenCalled()
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-route-ambiguous-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'outcome_unknown' })
-    await expect(readTaskProviderInvocationRouteSelection({
-      taskId: 'provider-route-ambiguous-task',
-      invocation: { key: 'media:image:primary' },
-    })).resolves.toBeNull()
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-route-ambiguous-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'outcome_unknown' })
+    await expect(
+      readTaskProviderInvocationRouteSelection({
+        taskId: 'provider-route-ambiguous-task',
+        invocation: { key: 'media:image:primary' },
+      }),
+    ).resolves.toBeNull()
   })
 
   it('serializes a concurrent first claim so only one caller can invoke the provider', async () => {
@@ -310,9 +386,11 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(owner).resolves.toMatchObject({ success: true })
 
     expect(execute).toHaveBeenCalledTimes(1)
-    await expect(prisma.taskExecutionCheckpoint.count({
-      where: { taskId: 'provider-concurrent-task' },
-    })).resolves.toBe(1)
+    await expect(
+      prisma.taskExecutionCheckpoint.count({
+        where: { taskId: 'provider-concurrent-task' },
+      }),
+    ).resolves.toBe(1)
   })
 
   it('persists an unknown outcome and refuses every later resubmission', async () => {
@@ -331,10 +409,12 @@ describe('provider invocation at-most-once DB integration', () => {
 
     expect(failedExecute).toHaveBeenCalledTimes(1)
     expect(replayExecute).not.toHaveBeenCalled()
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-unknown-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'outcome_unknown' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-unknown-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'outcome_unknown' })
   })
 
   it('lets only a newer Task attempt reclaim an explicit transient provider non-acceptance', async () => {
@@ -356,12 +436,16 @@ describe('provider invocation at-most-once DB integration', () => {
       code: 'PROVIDER_SUBMIT_FAILED',
       retryable: true,
     })
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-transient-retry-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'retryable_rejected' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-transient-retry-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'retryable_rejected' })
 
-    await expect(invoke('provider-transient-retry-task', sameAttemptReplay, 1)).rejects.toMatchObject({
+    await expect(
+      invoke('provider-transient-retry-task', sameAttemptReplay, 1),
+    ).rejects.toMatchObject({
       code: 'PROVIDER_SUBMIT_FAILED',
       retryable: true,
     })
@@ -382,10 +466,12 @@ describe('provider invocation at-most-once DB integration', () => {
     expect(firstAttempt).toHaveBeenCalledTimes(1)
     expect(sameAttemptReplay).not.toHaveBeenCalled()
     expect(secondAttempt).toHaveBeenCalledTimes(1)
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-transient-retry-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'submitted' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-transient-retry-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'submitted' })
   })
 
   it('treats AI SDK statusCode as an explicit retryable non-acceptance', async () => {
@@ -398,14 +484,18 @@ describe('provider invocation at-most-once DB integration', () => {
       audioUrl: 'https://provider/recovered-from-ai-sdk-status.mp3',
     }))
 
-    await expect(invoke('provider-ai-sdk-status-retry-task', firstAttempt, 1)).rejects.toMatchObject({
+    await expect(
+      invoke('provider-ai-sdk-status-retry-task', firstAttempt, 1),
+    ).rejects.toMatchObject({
       code: 'PROVIDER_SUBMIT_FAILED',
       retryable: true,
     })
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-ai-sdk-status-retry-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'retryable_rejected' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-ai-sdk-status-retry-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'retryable_rejected' })
 
     await expect(invoke('provider-ai-sdk-status-retry-task', recovered, 2)).resolves.toMatchObject({
       success: true,
@@ -421,34 +511,46 @@ describe('provider invocation at-most-once DB integration', () => {
     })
     const laterAttempt = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
 
-    await expect(invoke('provider-permanent-rejection-task', rejectedExecute, 1)).rejects.toMatchObject({
+    await expect(
+      invoke('provider-permanent-rejection-task', rejectedExecute, 1),
+    ).rejects.toMatchObject({
       code: 'PROVIDER_SUBMISSION_REJECTED',
       retryable: false,
     })
-    await expect(invoke('provider-permanent-rejection-task', laterAttempt, 2)).rejects.toMatchObject({
+    await expect(
+      invoke('provider-permanent-rejection-task', laterAttempt, 2),
+    ).rejects.toMatchObject({
       code: 'PROVIDER_SUBMISSION_REJECTED',
       retryable: false,
     })
 
     expect(rejectedExecute).toHaveBeenCalledTimes(1)
     expect(laterAttempt).not.toHaveBeenCalled()
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-permanent-rejection-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'rejected' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-permanent-rejection-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'rejected' })
   })
 
   it('surfaces a typed pre-submission validation error instead of an unknown outcome', async () => {
     await seedTask('provider-typed-validation-task')
     const validationExecute = vi.fn(async () => {
-      throw new AppError('MUSIC_PROMPT_TOO_LONG', 'Music prompt is 1035 characters; the model accepts at most 1024', {
-        provider: 'mureka',
-        details: { requested: 1035, allowed: 1024 },
-      })
+      throw new AppError(
+        'MUSIC_PROMPT_TOO_LONG',
+        'Music prompt is 1035 characters; the model accepts at most 1024',
+        {
+          provider: 'mureka',
+          details: { requested: 1035, allowed: 1024 },
+        },
+      )
     })
     const laterAttempt = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
 
-    await expect(invoke('provider-typed-validation-task', validationExecute, 1)).rejects.toMatchObject({
+    await expect(
+      invoke('provider-typed-validation-task', validationExecute, 1),
+    ).rejects.toMatchObject({
       code: 'MUSIC_PROMPT_TOO_LONG',
       retryable: false,
       details: { requested: 1035, allowed: 1024 },
@@ -459,10 +561,12 @@ describe('provider invocation at-most-once DB integration', () => {
 
     expect(validationExecute).toHaveBeenCalledTimes(1)
     expect(laterAttempt).not.toHaveBeenCalled()
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'provider-typed-validation-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'rejected' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'provider-typed-validation-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'rejected' })
   })
 
   it('persists and replays an LLM completion before handler checkpoint settlement', async () => {
@@ -478,21 +582,26 @@ describe('provider invocation at-most-once DB integration', () => {
       response: { id: 'response-1' },
     }
     const execute = vi.fn(async (): Promise<AiLlmExecutionResult> => storedResult)
-    const invokeLlm = async () => await withLogContext({
-      taskId: 'llm-replay-task',
-      taskAttempt: 1,
-    }, async () => await executeTaskDurableInvocation({
-      taskId: 'llm-replay-task',
-      invocation: { key: 'ai:llm:generate:generate:1:1' },
-      modality: 'llm',
-      provider: 'llm-runtime',
-      modelKey: 'provider::analysis-model',
-      request: { messages: [{ role: 'user', content: 'immutable prompt' }] },
-      execute,
-      resultPolicy: {
-        parse: parseStoredAiLlmExecutionResult,
-      },
-    }))
+    const invokeLlm = async () =>
+      await withLogContext(
+        {
+          taskId: 'llm-replay-task',
+          taskAttempt: 1,
+        },
+        async () =>
+          await executeTaskDurableInvocation({
+            taskId: 'llm-replay-task',
+            invocation: { key: 'ai:llm:generate:generate:1:1' },
+            modality: 'llm',
+            provider: 'llm-runtime',
+            modelKey: 'provider::analysis-model',
+            request: { messages: [{ role: 'user', content: 'immutable prompt' }] },
+            execute,
+            resultPolicy: {
+              parse: parseStoredAiLlmExecutionResult,
+            },
+          }),
+      )
 
     await expect(invokeLlm()).resolves.toMatchObject({
       schemaVersion: 1,
@@ -504,9 +613,11 @@ describe('provider invocation at-most-once DB integration', () => {
     })
 
     expect(execute).toHaveBeenCalledTimes(1)
-    await expect(prisma.taskExecutionCheckpoint.findFirstOrThrow({
-      where: { taskId: 'llm-replay-task' },
-      select: { state: true },
-    })).resolves.toEqual({ state: 'submitted' })
+    await expect(
+      prisma.taskExecutionCheckpoint.findFirstOrThrow({
+        where: { taskId: 'llm-replay-task' },
+        select: { state: true },
+      }),
+    ).resolves.toEqual({ state: 'submitted' })
   })
 })

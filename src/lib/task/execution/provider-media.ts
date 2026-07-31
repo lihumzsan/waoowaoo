@@ -7,13 +7,16 @@ import {
   ProviderQueueTimeoutError,
   waitForAsyncProviderResult,
 } from '@/lib/ai-exec/async-wait'
-import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
-import { processMediaResult } from '@/lib/media-process'
+import { cancelAsyncTask } from '@/lib/ai-exec/async-poll'
 import {
-  resolveProjectModelCapabilityGenerationOptions,
-} from '@/lib/config-service'
+  ProviderPermanentFailureError,
+  ProviderTerminalFailureError,
+} from '@/lib/ai-exec/provider-errors'
+import { processMediaResult } from '@/lib/media-process'
+import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import {
+  listTaskAcceptedProviderExternalIds,
   markTaskProviderInvocationRetryableByExternalId,
   readTaskProviderInvocationRouteSelection,
 } from '@/lib/task/provider-invocation'
@@ -35,23 +38,38 @@ export async function requireTaskProviderRouteSelection(
     invocation: { key: invocationKey },
   })
   if (!route) {
-    throw new Error(
-      `TASK_PROVIDER_ROUTE_SELECTION_MISSING:${context.data.taskId}:${invocationKey}`,
-    )
+    throw new Error(`TASK_PROVIDER_ROUTE_SELECTION_MISSING:${context.data.taskId}:${invocationKey}`)
   }
   return route
 }
 
-function summarizeImageGenerationOptions(options: Record<string, unknown> | undefined): Record<string, unknown> {
+function summarizeImageGenerationOptions(
+  options: Record<string, unknown> | undefined,
+): Record<string, unknown> {
   const value = options || {}
   const referenceImagesValue = (value as { referenceImages?: unknown }).referenceImages
   const referenceImageCount = Array.isArray(referenceImagesValue) ? referenceImagesValue.length : 0
   return {
-    provider: typeof (value as { provider?: unknown }).provider === 'string' ? (value as { provider: string }).provider : undefined,
-    aspectRatio: typeof (value as { aspectRatio?: unknown }).aspectRatio === 'string' ? (value as { aspectRatio: string }).aspectRatio : undefined,
-    resolution: typeof (value as { resolution?: unknown }).resolution === 'string' ? (value as { resolution: string }).resolution : undefined,
-    quality: typeof (value as { quality?: unknown }).quality === 'string' ? (value as { quality: string }).quality : undefined,
-    size: typeof (value as { size?: unknown }).size === 'string' ? (value as { size: string }).size : undefined,
+    provider:
+      typeof (value as { provider?: unknown }).provider === 'string'
+        ? (value as { provider: string }).provider
+        : undefined,
+    aspectRatio:
+      typeof (value as { aspectRatio?: unknown }).aspectRatio === 'string'
+        ? (value as { aspectRatio: string }).aspectRatio
+        : undefined,
+    resolution:
+      typeof (value as { resolution?: unknown }).resolution === 'string'
+        ? (value as { resolution: string }).resolution
+        : undefined,
+    quality:
+      typeof (value as { quality?: unknown }).quality === 'string'
+        ? (value as { quality: string }).quality
+        : undefined,
+    size:
+      typeof (value as { size?: unknown }).size === 'string'
+        ? (value as { size: string }).size
+        : undefined,
     referenceImageCount,
     optionKeys: Object.keys(value),
   }
@@ -76,29 +94,77 @@ function scopedTaskExecutionLogger(job: TaskExecutionContext, action: string) {
   })
 }
 
+/**
+ * Best-effort compensation for external jobs owned by an already committed
+ * canceled Task. This function has no authority over Task status: lookup or
+ * provider failures are logged and swallowed, while exact terminal replay may
+ * safely invoke it again because provider cancellation is idempotent.
+ */
+export async function cancelAcceptedTaskProviderJobsAfterTerminal(input: {
+  readonly taskId: string
+  readonly userId: string
+}): Promise<void> {
+  const logger = createScopedLogger({
+    module: 'task.execution',
+    action: 'task.execution.external.cancel_after_terminal',
+    taskId: input.taskId,
+    userId: input.userId,
+  })
+  // Ledger access is infrastructure, so lookup failure must escape and let
+  // Temporal retry this post-terminal Activity. Only the provider-side
+  // best-effort calls below are intentionally swallowed.
+  const externalIds = await listTaskAcceptedProviderExternalIds(input.taskId)
+  await Promise.all(
+    externalIds.map(async (externalId) => {
+      try {
+        const outcome = await cancelAsyncTask(externalId, input.userId)
+        logger.info({
+          message:
+            outcome === 'canceled'
+              ? 'accepted external task cancel accepted by provider'
+              : 'provider does not declare cancel; accepted external task left to expire',
+          details: { externalId, outcome },
+        })
+      } catch (error) {
+        logger.warn({
+          message:
+            'best-effort cancel of accepted external task failed after local cancellation committed',
+          details: { externalId },
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message }
+              : { message: describeUnknownError(error) },
+        })
+      }
+    }),
+  )
+}
+
 export async function assertTaskActive(job: TaskExecutionContext, stage: string) {
   job.heartbeat()
   if (job.signal.aborted) {
-    throw new TaskTerminatedError(
-      job.data.taskId,
-      `Task execution cancelled during ${stage}`,
-    )
+    throw new TaskTerminatedError(job.data.taskId, `Task execution cancelled during ${stage}`)
   }
   const active = await isTaskActive(job.data.taskId)
   if (active) return
   throw new TaskTerminatedError(job.data.taskId, `Task terminated during ${stage}`)
 }
 
-function normalizeExternalId(result: {
-  async?: boolean
-  externalId?: string
-  requestId?: string
-  endpoint?: string
-}, mediaType: 'IMAGE' | 'VIDEO') {
+function normalizeExternalId(
+  result: {
+    async?: boolean
+    externalId?: string
+    requestId?: string
+    endpoint?: string
+  },
+  mediaType: 'IMAGE' | 'VIDEO',
+) {
   if (!result.async) return null
   const externalId = typeof result.externalId === 'string' ? result.externalId.trim() : ''
   if (externalId) return externalId
-  throw new Error(`ASYNC_EXTERNAL_ID_MISSING: async ${mediaType} task returned without standard externalId`)
+  throw new Error(
+    `ASYNC_EXTERNAL_ID_MISSING: async ${mediaType} task returned without standard externalId`,
+  )
 }
 
 export async function waitExternalResult(
@@ -130,7 +196,11 @@ export async function waitExternalResult(
       beforePoll: async () => await assertTaskActive(job, 'polling_external'),
       onPending: async ({ elapsedRatio, phase }) => {
         const progress = progressStart + Math.floor((progressEnd - progressStart) * elapsedRatio)
-        await reportTaskProgress(job, progress, { stage: 'polling_external', externalId, externalPhase: phase })
+        await reportTaskProgress(job, progress, {
+          stage: 'polling_external',
+          externalId,
+          externalPhase: phase,
+        })
         await assertTaskActive(job, 'polling_external_wait')
       },
     })
@@ -143,7 +213,12 @@ export async function waitExternalResult(
   } catch (error) {
     if (error instanceof ProviderQueueTimeoutError) {
       const queueError = new AppError('GENERATION_QUEUE_TIMEOUT', error.message, {
-        details: { externalId, externalStatus: 'queue_timeout', queuedMs: error.queuedMs, queueTimeoutMs: error.queueTimeoutMs },
+        details: {
+          externalId,
+          externalStatus: 'queue_timeout',
+          queuedMs: error.queuedMs,
+          queueTimeoutMs: error.queueTimeoutMs,
+        },
         cause: error,
       })
       logger.error({
@@ -222,9 +297,8 @@ export async function resolveImageSourceFromGeneration(
 ): Promise<string> {
   const logger = scopedTaskExecutionLogger(job, 'task.execution.image.generate_source')
   const startedAt = Date.now()
-  const invocationKey = params.invocationKey === undefined
-    ? 'media:image:primary'
-    : params.invocationKey.trim()
+  const invocationKey =
+    params.invocationKey === undefined ? 'media:image:primary' : params.invocationKey.trim()
   if (!invocationKey) throw new Error('IMAGE_PROVIDER_INVOCATION_KEY_REQUIRED')
   logger.info({
     message: 'image source generation started',
@@ -269,18 +343,20 @@ export async function resolveImageSourceFromGeneration(
   try {
     result = await withLogContext(
       { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
-      () => generateImage(params.userId, params.modelId, params.prompt, finalOptions, {
-        key: invocationKey,
-      }),
+      () =>
+        generateImage(params.userId, params.modelId, params.prompt, finalOptions, {
+          key: invocationKey,
+        }),
     )
   } catch (error) {
     // The Provider Gateway is the sole classifier for durable submission
     // outcomes. Preserve its typed error so an ambiguous POST remains
     // non-retryable instead of being flattened into GENERATION_FAILED.
     if (error instanceof AppError) throw error
-    const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
-      ? (finalOptions as { provider: string }).provider
-      : (params.options?.provider || '')
+    const providerKey =
+      typeof (finalOptions as { provider?: unknown }).provider === 'string'
+        ? (finalOptions as { provider: string }).provider
+        : params.options?.provider || ''
     throw new Error(
       [
         'IMAGE_GENERATION_THROWN',
@@ -294,9 +370,10 @@ export async function resolveImageSourceFromGeneration(
     )
   }
   if (!result.success) {
-    const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
-      ? (finalOptions as { provider: string }).provider
-      : (params.options?.provider || '')
+    const providerKey =
+      typeof (finalOptions as { provider?: unknown }).provider === 'string'
+        ? (finalOptions as { provider: string }).provider
+        : params.options?.provider || ''
     throw new Error(
       [
         'IMAGE_GENERATION_FAILED',
@@ -387,8 +464,8 @@ export async function resolveVideoSourceFromGeneration(
     runtimeSelections.resolution = params.options.resolution
   }
   if (
-    params.options?.generationMode === 'normal'
-    || params.options?.generationMode === 'firstlastframe'
+    params.options?.generationMode === 'normal' ||
+    params.options?.generationMode === 'firstlastframe'
   ) {
     runtimeSelections.generationMode = params.options.generationMode
   }
@@ -404,7 +481,9 @@ export async function resolveVideoSourceFromGeneration(
     runtimeSelections,
   })
 
-  const providerCapabilityOptions: Record<string, string | number | boolean> = { ...capabilityOptions }
+  const providerCapabilityOptions: Record<string, string | number | boolean> = {
+    ...capabilityOptions,
+  }
   delete providerCapabilityOptions.generationMode
   const providerReferencePayload = resolveProviderVideoReferencePayload({
     referenceImages: params.referenceImages,
@@ -416,16 +495,17 @@ export async function resolveVideoSourceFromGeneration(
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
     if (
-      key === 'generationMode'
-      || key === 'referenceImages'
-      || key === 'lastFrameImageUrl'
-      || value === undefined
-    ) continue
+      key === 'generationMode' ||
+      key === 'referenceImages' ||
+      key === 'lastFrameImageUrl' ||
+      value === undefined
+    )
+      continue
     if (
-      typeof value === 'string'
-      || typeof value === 'number'
-      || typeof value === 'boolean'
-      || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      (Array.isArray(value) && value.every((item) => typeof item === 'string'))
     ) {
       providerRequestOptions[key] = value
     }
@@ -433,20 +513,21 @@ export async function resolveVideoSourceFromGeneration(
 
   const result = await withLogContext(
     { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
-    () => generateVideo(
-      params.userId,
-      params.modelId,
-      providerReferencePayload.imageUrl,
-      {
-        ...providerRequestOptions,
-        ...providerReferencePayload.options,
-        ...(params.referenceAudios && params.referenceAudios.length > 0
-          ? { referenceAudios: [...params.referenceAudios] }
-          : {}),
-        ...providerCapabilityOptions,
-      },
-      { key: 'media:video:primary' },
-    ),
+    () =>
+      generateVideo(
+        params.userId,
+        params.modelId,
+        providerReferencePayload.imageUrl,
+        {
+          ...providerRequestOptions,
+          ...providerReferencePayload.options,
+          ...(params.referenceAudios && params.referenceAudios.length > 0
+            ? { referenceAudios: [...params.referenceAudios] }
+            : {}),
+          ...providerCapabilityOptions,
+        },
+        { key: 'media:video:primary' },
+      ),
   )
   if (!result.success) {
     throw new Error(result.error || 'Video generation failed')
@@ -478,7 +559,9 @@ export async function resolveVideoSourceFromGeneration(
   })
   return {
     url: polled.url,
-    ...(typeof polled.actualVideoTokens === 'number' ? { actualVideoTokens: polled.actualVideoTokens } : {}),
+    ...(typeof polled.actualVideoTokens === 'number'
+      ? { actualVideoTokens: polled.actualVideoTokens }
+      : {}),
     ...(polled.downloadHeaders ? { downloadHeaders: polled.downloadHeaders } : {}),
   }
 }

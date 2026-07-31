@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isBillableTaskType } from '@/lib/billing/task-policy'
-import {
-  CREATIVE_WORK_EXECUTION_DEADLINE_MS,
-  TASK_DEFINITIONS,
-} from '@/lib/task/definition'
+import { CREATIVE_WORK_EXECUTION_DEADLINE_MS, TASK_DEFINITIONS } from '@/lib/task/definition'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
 
@@ -32,12 +29,16 @@ describe('TaskDefinition conformance', () => {
 
   it('materializes Creative Work results and provider media through the Resource spine', () => {
     expect(TASK_DEFINITIONS[TASK_TYPE.CREATIVE_WORK]).toMatchObject({
+      billingPolicy: 'none',
       terminalOutputMaterializer: 'domain_creative_resource',
       continuationResultProjection: 'reference',
       lifecyclePayloadProjection: 'reference',
       executionDeadlineMs: CREATIVE_WORK_EXECUTION_DEADLINE_MS,
     })
     expect(CREATIVE_WORK_EXECUTION_DEADLINE_MS).toBe(20 * 60_000)
+    for (const taskType of [TASK_TYPE.CREATIVE_RESOURCE_AUDIO, TASK_TYPE.CREATIVE_RESOURCE_VOICE]) {
+      expect(TASK_DEFINITIONS[taskType].schedulerClass).toBe('image')
+    }
     expect(
       Object.entries(TASK_DEFINITIONS)
         .filter(([taskType]) => taskType !== TASK_TYPE.CREATIVE_WORK)

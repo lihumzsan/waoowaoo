@@ -33,10 +33,13 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
 - **TL-04 — 所有 Task 只经 Scheduler。** Task创建事务提交后，唯一Temporal client以
   `taskId` 向 `UserTaskSchedulerWorkflow(userId)` 提交。Scheduler按registry class与服务端
   用户并发配置排队；caller不能传并发上限，Activity不能绕过Scheduler直接启动顶层
-  TaskWorkflow。
+  TaskWorkflow。每个有外部成本的Task必须映射到一个有界scheduler class；当前music与
+  voice显式共享image媒体槽，不允许以`null`逃逸为无限并发。
 - **TL-05 — TaskWorkflow 是 attempt唯一owner。** Workflow创建稳定 attemptId，短
   Activity把该business attempt原子投影到Task，再运行长Activity。Worker进程、DB status、
-  Redis lease、heartbeat freshness或队列job均无权另行claim attempt。
+  Redis lease、heartbeat freshness或队列job均无权另行claim attempt。Scheduler启动child
+  使用`ABANDON`，并在Continue-As-New输入中携带active identity/capacity；长Task不阻止
+  Scheduler换代，TaskWorkflow自己拥有异常terminal、容量释放与follow-up。
 - **TL-06 — Activity retry 不消耗business attempt。** infrastructure retry始终复用同一
   attemptId。只有handler返回确定且已规范化的failure，并经registry retry policy裁决，
   Workflow才推进下一business attempt。仍可重试时不得写Task/Resource/Billing最终失败。
@@ -57,11 +60,19 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
   即使Activity completion尚未被Temporal确认、cancellation随后到达或Workflow进入失败
   settlement，terminal owner也必须从该checkpoint完成Task；不得改写为cancel/failed/
   refund。Workflow接受cancel后提交canceled terminal前必须重读canonical checkpoint，
-  commit返回completed时以业务结果为准。cancel只中止尚未发生的执行，Task terminal不可
-  重开。
+  commit返回completed时以业务结果为准，且不得再向Provider发送cancel。cancel只中止尚未
+  发生的执行，Task terminal不可重开；Provider补偿只能由已提交canceled receipt触发。
+- **TL-10A — queued取消由Scheduler直接终结。** Task尚在Scheduler队列、attempt=0且
+  TaskWorkflow从未创建时，Scheduler使用同一terminal Activity原子提交唯一canceled事实并
+  从队列删除；不得先启动child再取消，也不得只改内存。running取消转发给既有TaskWorkflow。
+  两条路径以stable request identity exact replay。queued路径从未产生provider invocation，
+  terminal后不得尝试Provider取消。
 - **TL-11 — Scheduler容量与通知分离。** terminal事务提交后，TaskWorkflow发送幂等
   `capacityReleased(taskId, terminalIdentity)`；Scheduler立即从`capacityActive`删除。
-  Agent follow-up通知失败可持续重试，但不能占槽。Scheduler不得保存第二份Task业务状态。
+  Agent follow-up在release后优先可靠通知；canceled Task的Provider补偿只能在全部required
+  follow-up ACK后由独立Activity执行，不能反向阻塞产品接力。ledger查询失败可重试、Provider
+  cancel失败只记日志；两者都不能占槽。
+  Scheduler不得保存第二份Task业务状态。
 - **TL-12 — FollowUpBatch成员创建时冻结。** 一个Tool call创建多个Task必须同事务全建
   或全滚，并在该事务中冻结完整member set。Batch不存在collecting/seal阶段；早到、重复、
   乱序terminal都由member identity幂等收口。最后一个member使Batch ready。
@@ -79,7 +90,9 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
 - **TL-15a — Operation execution是一条一次性链路。**
   `OperationExecutionWorkflow`直接以stable immutable envelope作为input，执行Activity后
   完成；不使用Update-With-Start、Query、Trigger或等待命令状态。Workflow start ACK丢失
-  只能读取同一Workflow result，不能重复执行domain写入。
+  只能读取同一Workflow result，不能重复执行domain写入。Persistence返回多Task receipt时，
+  Activity必须先穷尽验证全部taskId/userId/type，再逐个幂等schedule；确定性receipt/update
+  分歧non-retryable，无法确认的Temporal transport才重试，禁止验证一半后永久遗漏余下Task。
 - **TL-16 — Resource是媒体目标。** 通用媒体Task target为CreativeResource，提交前校验
   canonical Resource ID、owner、scope与真实输入；成功时唯一materializer写内容与Lineage。
   Task result是交接输入，不是第二领域数据库。
@@ -158,6 +171,7 @@ Task/Billing/Resource/Batch terminal事务
 → capacityReleased
 → Scheduler释放slot
 → 若Batch ready则可靠通知Thread Coordinator
+→ canceled时独立Activity校验terminal receipt并尽力cancel Provider
 → TaskWorkflow完成
 ```
 
@@ -236,6 +250,13 @@ migration、回填、删除或清理。
   “已提交业务结果优先于晚到控制”不变量换transport复发，而非新的重试策略。当前cancel、
   Workflow failure与terminal replay都先读取同一handler checkpoint；存在结果时只允许
   completed，容量、Billing与Resource随后按该唯一终态结算。
+- B+首版取消排队Task时只向尚不存在的TaskWorkflow发送cancel，任务仍会稍后启动；Scheduler
+  又等待child完成才Continue-As-New，异常child可永久占槽。当前queued取消由Scheduler通过
+  真实terminal owner直接收口且不创建child；active child以ABANDON跨CAN，TaskWorkflow自行
+  fail-closed结算、释放容量并通知Batch。真实Temporal+MySQL验证TaskWorkflow从未创建。
+- OperationExecution首版在循环中边校验receipt边schedule，前一Task已投递后遇到后续确定性
+  分歧会留下部分调度；当前先验证完整集合，再逐个使用稳定Task identity投递，transport ACK
+  不明由同Activity重试，已调度成员exact replay。
 
 ## 修改检查表
 

@@ -12,10 +12,7 @@ import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from '../artifacts/audio'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
-import {
-  assertTaskActive,
-  requireTaskProviderRouteSelection,
-} from '../provider-media'
+import { assertTaskActive, requireTaskProviderRouteSelection } from '../provider-media'
 
 type MusicVideoReference = {
   readonly url: string
@@ -32,9 +29,7 @@ async function loadMusicVideoReference(
   const videoInputs = payload.resource.videoInputPositions.map((position) => {
     const reference = inputByPosition.get(position)
     if (!reference) {
-      throw new Error(
-        `CREATIVE_RESOURCE_MUSIC_VIDEO_INPUT_POSITION_INVALID:${String(position)}`,
-      )
+      throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_INPUT_POSITION_INVALID:${String(position)}`)
     }
     return reference
   })
@@ -62,38 +57,28 @@ async function loadMusicVideoReference(
   if (!resource) {
     throw new Error(`CREATIVE_RESOURCE_INPUT_NOT_FOUND:${reference.resourceId}`)
   }
-  if (
-    resource.userId !== context.data.userId
-    || resource.status !== 'ready'
-  ) {
+  if (resource.userId !== context.data.userId || resource.status !== 'ready') {
     throw new Error(`CREATIVE_RESOURCE_INPUT_CHANGED:${reference.resourceId}`)
   }
   if (resource.mediaType !== 'video' || !resource.media?.storageKey) {
-    throw new Error(
-      `CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.resourceId}`,
-    )
+    throw new Error(`CREATIVE_RESOURCE_MUSIC_VIDEO_REFERENCE_REQUIRED:${reference.resourceId}`)
   }
   return {
-    url: await resolveOwnedVideoHttpsForGeneration(
-      resource.media.storageKey,
-      context.data.userId,
-    ),
+    url: await resolveOwnedVideoHttpsForGeneration(resource.media.storageKey, context.data.userId),
     durationMs: resource.media.durationMs ?? null,
   }
 }
 
-export async function handleCreativeResourceAudioTask(
-  context: TaskExecutionContext,
-) {
+export async function handleCreativeResourceAudioTask(context: TaskExecutionContext) {
   const { data } = context
   if (data.targetType !== 'CreativeResource') {
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_INVALID:${data.targetType}`)
   }
   const payload = parseCreativeResourceGenerationTaskPayload(data.payload ?? {})
   if (
-    payload.resource.resourceId !== data.targetId
-    || payload.resource.mediaType !== 'audio'
-    || payload.musicModel !== payload.resource.modelKey
+    payload.resource.resourceId !== data.targetId ||
+    payload.resource.mediaType !== 'audio' ||
+    payload.musicModel !== payload.resource.modelKey
   ) {
     throw new Error(`CREATIVE_RESOURCE_MUSIC_TASK_CONTRACT_INVALID:${data.taskId}`)
   }
@@ -107,6 +92,7 @@ export async function handleCreativeResourceAudioTask(
   const videoReference = await loadMusicVideoReference(context, payload)
   await reportTaskProgress(context, 20, { stage: 'generate_music_submit' })
 
+  const invocationKey = 'media:music:primary'
   const generated = await generateMusic(
     data.userId,
     musicModel,
@@ -132,7 +118,7 @@ export async function handleCreativeResourceAudioTask(
           }
         : {}),
     },
-    { key: 'media:music:primary' },
+    { key: invocationKey },
     {
       beforePoll: async () => await assertTaskActive(context, 'polling_external'),
       onPending: async ({ elapsedRatio, phase }) => {
@@ -148,10 +134,7 @@ export async function handleCreativeResourceAudioTask(
   if (!generated.success) {
     throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
   }
-  const providerRoute = await requireTaskProviderRouteSelection(
-    context,
-    'media:music:primary',
-  )
+  const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
   await reportTaskProgress(context, 85, { stage: 'persist_music' })
   const audio = await loadGeneratedAudio({

@@ -8,19 +8,18 @@ import {
   buildUserTaskSchedulerWorkflowId,
 } from '@/lib/temporal/identity'
 import { TemporalTaskClient } from '@/lib/temporal/task-client'
-import type {
-  TaskWorkflowInput,
-  TaskWorkflowResult,
-} from '@/lib/temporal/task/contracts'
+import type { TaskWorkflowInput, TaskWorkflowResult } from '@/lib/temporal/task/contracts'
 import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import {
   activityAttempts,
   startTaskLateCancelWorker,
   startTaskProductionWorker,
+  startTaskQueuedCancelWorker,
   startTaskDurabilityWorker,
   type TaskLateCancelWorkerHarness,
   type TaskProductionWorkerHarness,
+  type TaskQueuedCancelWorkerHarness,
   type TaskDurabilityWorkerHarness,
 } from './helpers/task-durability-harness'
 import {
@@ -56,10 +55,7 @@ function requireWorker(): TaskDurabilityWorkerHarness {
   return worker
 }
 
-async function waitForTaskTerminal(
-  taskId: string,
-  timeoutMs = 30_000,
-): Promise<void> {
+async function waitForTaskTerminal(taskId: string, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const task = await prisma.task.findUnique({
@@ -67,9 +63,9 @@ async function waitForTaskTerminal(
       select: { status: true },
     })
     if (
-      task?.status === TASK_STATUS.COMPLETED
-      || task?.status === TASK_STATUS.FAILED
-      || task?.status === TASK_STATUS.CANCELED
+      task?.status === TASK_STATUS.COMPLETED ||
+      task?.status === TASK_STATUS.FAILED ||
+      task?.status === TASK_STATUS.CANCELED
     ) {
       return
     }
@@ -78,10 +74,7 @@ async function waitForTaskTerminal(
   throw new Error(`TASK_DURABILITY_TERMINAL_TIMEOUT:${taskId}`)
 }
 
-async function terminateQuietly(
-  handle: WorkflowHandle | null,
-  reason: string,
-): Promise<void> {
+async function terminateQuietly(handle: WorkflowHandle | null, reason: string): Promise<void> {
   if (!handle) return
   try {
     await handle.terminate(reason)
@@ -90,11 +83,7 @@ async function terminateQuietly(
   }
 }
 
-async function within<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  code: string,
-): Promise<T> {
+async function within<T>(promise: Promise<T>, timeoutMs: number, code: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
   try {
     return await Promise.race([
@@ -126,8 +115,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
     const connected = await connectTemporalClient()
     const firstWorkflowId = buildTaskWorkflowId(fixture.firstTaskId)
     const secondWorkflowId = buildTaskWorkflowId(fixture.secondTaskId)
-    const schedulerWorkflowId =
-      buildUserTaskSchedulerWorkflowId(fixture.userId)
+    const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
     const agentWorkflowId = buildAgentThreadWorkflowId(fixture.threadId)
     let schedulerHandle: WorkflowHandle | null = null
     let agentHandle: WorkflowHandle | null = null
@@ -148,16 +136,14 @@ describe('Temporal Task terminal and follow-up durability', () => {
         connected.client.workflow.getHandle<
           (input: TaskWorkflowInput) => Promise<TaskWorkflowResult>
         >(secondWorkflowId)
-      schedulerHandle =
-        connected.client.workflow.getHandle(schedulerWorkflowId)
+      schedulerHandle = connected.client.workflow.getHandle(schedulerWorkflowId)
 
       await taskClient.schedule({
         taskId: fixture.firstTaskId,
         userId: fixture.userId,
         taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
       })
-      const firstTerminalReceipt =
-        await requireWorker().waitForTerminalPostCommitFault()
+      const firstTerminalReceipt = await requireWorker().waitForTerminalPostCommitFault()
       const firstCommittedTask = await prisma.task.findUniqueOrThrow({
         where: { id: fixture.firstTaskId },
         select: {
@@ -190,11 +176,10 @@ describe('Temporal Task terminal and follow-up durability', () => {
         taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
       })
       await waitForTaskTerminal(fixture.secondTaskId)
-      const secondWhileNotificationBlocked =
-        await prisma.task.findUniqueOrThrow({
-          where: { id: fixture.secondTaskId },
-          select: { status: true, attempt: true },
-        })
+      const secondWhileNotificationBlocked = await prisma.task.findUniqueOrThrow({
+        where: { id: fixture.secondTaskId },
+        select: { status: true, attempt: true },
+      })
       expect(secondWhileNotificationBlocked).toEqual({
         status: TASK_STATUS.FAILED,
         attempt: 1,
@@ -263,9 +248,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
       ])
 
       expect(firstFinalTask).toEqual(firstCommittedTask)
-      expect(firstTerminalEvents).toEqual([
-        { id: firstTerminalReceipt.terminalEventId },
-      ])
+      expect(firstTerminalEvents).toEqual([{ id: firstTerminalReceipt.terminalEventId }])
       expect(followUpTurns).toHaveLength(1)
       expect(batchAfterNotification).toEqual({
         status: 'notified',
@@ -273,26 +256,16 @@ describe('Temporal Task terminal and follow-up durability', () => {
         readyByTerminalEventId: firstTerminalReceipt.terminalEventId,
       })
       expect(
-        Math.max(
-          0,
-          ...activityAttempts(firstHistory, 'commitTaskTerminal'),
-        ),
+        Math.max(0, ...activityAttempts(firstHistory, 'commitTaskTerminal')),
       ).toBeGreaterThanOrEqual(2)
       expect(
-        Math.max(
-          0,
-          ...activityAttempts(firstHistory, 'notifyTaskFollowUp'),
-        ),
+        Math.max(0, ...activityAttempts(firstHistory, 'notifyTaskFollowUp')),
       ).toBeGreaterThanOrEqual(2)
     } finally {
       requireWorker().releaseFollowUpNotification()
+      await terminateQuietly(schedulerHandle, 'TASK_DURABILITY_SCHEDULER_TEST_COMPLETE')
       await terminateQuietly(
-        schedulerHandle,
-        'TASK_DURABILITY_SCHEDULER_TEST_COMPLETE',
-      )
-      await terminateQuietly(
-        agentHandle
-          ?? connected.client.workflow.getHandle(agentWorkflowId),
+        agentHandle ?? connected.client.workflow.getHandle(agentWorkflowId),
         'TASK_DURABILITY_AGENT_TEST_COMPLETE',
       )
       await worker?.close()
@@ -302,12 +275,99 @@ describe('Temporal Task terminal and follow-up durability', () => {
     }
   }, 60_000)
 
+  it('cancels a queued Task durably without ever starting its TaskWorkflow', async () => {
+    const fixture = await createTaskDurabilityFixture()
+    const connected = await connectTemporalClient()
+    const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
+    const firstWorkflowId = buildTaskWorkflowId(fixture.firstTaskId)
+    const secondWorkflowId = buildTaskWorkflowId(fixture.secondTaskId)
+    let queuedCancelWorker: TaskQueuedCancelWorkerHarness | null = null
+    let schedulerHandle: WorkflowHandle | null = null
+    let firstHandle: WorkflowHandle | null = null
+    try {
+      queuedCancelWorker = await startTaskQueuedCancelWorker({
+        capacityHolderTaskId: fixture.firstTaskId,
+      })
+      const taskClient = new TemporalTaskClient(
+        connected.client.workflow,
+        queuedCancelWorker.taskQueue,
+      )
+      schedulerHandle = connected.client.workflow.getHandle(schedulerWorkflowId)
+      firstHandle = connected.client.workflow.getHandle(firstWorkflowId)
+
+      await taskClient.schedule({
+        taskId: fixture.firstTaskId,
+        userId: fixture.userId,
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+      })
+      await queuedCancelWorker.waitForCapacityHeld()
+      await taskClient.schedule({
+        taskId: fixture.secondTaskId,
+        userId: fixture.userId,
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+      })
+
+      const queuedTask = await prisma.task.findUniqueOrThrow({
+        where: { id: fixture.secondTaskId },
+        select: { status: true, attempt: true, startedAt: true },
+      })
+      expect(queuedTask).toEqual({
+        status: TASK_STATUS.QUEUED,
+        attempt: 0,
+        startedAt: null,
+      })
+
+      const receipt = await taskClient.cancel({
+        reference: {
+          taskId: fixture.secondTaskId,
+          userId: fixture.userId,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        },
+        reason: 'TEST_CANCEL_WHILE_QUEUED',
+      })
+      expect(receipt).toEqual({
+        taskId: fixture.secondTaskId,
+        status: TASK_STATUS.CANCELED,
+        cancelRequested: true,
+      })
+
+      const [canceledTask, canceledEvents] = await Promise.all([
+        prisma.task.findUniqueOrThrow({
+          where: { id: fixture.secondTaskId },
+          select: { status: true, attempt: true, startedAt: true },
+        }),
+        prisma.taskEvent.findMany({
+          where: {
+            taskId: fixture.secondTaskId,
+            eventType: TASK_EVENT_TYPE.CANCELED,
+          },
+          select: { id: true },
+        }),
+      ])
+      expect(canceledTask).toEqual({
+        status: TASK_STATUS.CANCELED,
+        attempt: 0,
+        startedAt: null,
+      })
+      expect(canceledEvents).toHaveLength(1)
+      await expect(
+        connected.client.workflow.getHandle(secondWorkflowId).describe(),
+      ).rejects.toThrow()
+    } finally {
+      queuedCancelWorker?.releaseCapacityHolder()
+      await terminateQuietly(firstHandle, 'TASK_QUEUED_CANCEL_CAPACITY_HOLDER_TEST_COMPLETE')
+      await terminateQuietly(schedulerHandle, 'TASK_QUEUED_CANCEL_SCHEDULER_TEST_COMPLETE')
+      await queuedCancelWorker?.close()
+      await connected.close()
+      await removeTaskDurabilityFixture(fixture)
+    }
+  }, 60_000)
+
   it('commits a durable handler result as completed when cancellation arrives before the Activity acknowledgement', async () => {
     const fixture = await createTaskLateCancelFixture()
     const connected = await connectTemporalClient()
     const workflowId = buildTaskWorkflowId(fixture.taskId)
-    const schedulerWorkflowId =
-      buildUserTaskSchedulerWorkflowId(fixture.userId)
+    const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
     let lateCancelWorker: TaskLateCancelWorkerHarness | null = null
     let schedulerHandle: WorkflowHandle | null = null
     try {
@@ -322,8 +382,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         connected.client.workflow.getHandle<
           (input: TaskWorkflowInput) => Promise<TaskWorkflowResult>
         >(workflowId)
-      schedulerHandle =
-        connected.client.workflow.getHandle(schedulerWorkflowId)
+      schedulerHandle = connected.client.workflow.getHandle(schedulerWorkflowId)
 
       await taskClient.schedule({
         taskId: fixture.taskId,
@@ -332,22 +391,21 @@ describe('Temporal Task terminal and follow-up durability', () => {
       })
       await lateCancelWorker.waitForHandlerCheckpointCommit()
       const cancelView = await taskClient.cancel({
-        taskId: fixture.taskId,
+        reference: {
+          taskId: fixture.taskId,
+          userId: fixture.userId,
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
+        },
         reason: 'TEST_CANCEL_AFTER_HANDLER_CHECKPOINT_COMMIT',
       })
       expect(cancelView).toMatchObject({
-        workflowId,
         taskId: fixture.taskId,
         status: 'cancelling',
         cancelRequested: true,
       })
       await lateCancelWorker.waitForCancellationAcknowledged()
 
-      const result = await within(
-        handle.result(),
-        30_000,
-        'TASK_LATE_CANCEL_COMPLETION_TIMEOUT',
-      )
+      const result = await within(handle.result(), 30_000, 'TASK_LATE_CANCEL_COMPLETION_TIMEOUT')
       expect(result).toMatchObject({
         taskId: fixture.taskId,
         status: 'completed',
@@ -362,6 +420,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         refundTransactions,
         consumeTransactions,
         resource,
+        history,
       ] = await Promise.all([
         prisma.task.findUniqueOrThrow({
           where: { id: fixture.taskId },
@@ -378,11 +437,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
           where: {
             taskId: fixture.taskId,
             eventType: {
-              in: [
-                TASK_EVENT_TYPE.COMPLETED,
-                TASK_EVENT_TYPE.CANCELED,
-                TASK_EVENT_TYPE.FAILED,
-              ],
+              in: [TASK_EVENT_TYPE.COMPLETED, TASK_EVENT_TYPE.CANCELED, TASK_EVENT_TYPE.FAILED],
             },
           },
           select: { id: true, eventType: true },
@@ -420,6 +475,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
             errorMessage: true,
           },
         }),
+        handle.fetchHistory(),
       ])
       expect(task).toMatchObject({
         status: TASK_STATUS.COMPLETED,
@@ -448,11 +504,9 @@ describe('Temporal Task terminal and follow-up durability', () => {
         errorCode: null,
         errorMessage: null,
       })
+      expect(activityAttempts(history, 'cancelTaskProviderJobs')).toHaveLength(0)
     } finally {
-      await terminateQuietly(
-        schedulerHandle,
-        'TASK_LATE_CANCEL_SCHEDULER_TEST_COMPLETE',
-      )
+      await terminateQuietly(schedulerHandle, 'TASK_LATE_CANCEL_SCHEDULER_TEST_COMPLETE')
       await lateCancelWorker?.close()
       await connected.close()
       await removeTaskLateCancelFixture(fixture)
@@ -463,36 +517,29 @@ describe('Temporal Task terminal and follow-up durability', () => {
     const fixture = await createTaskWorkerKillFixture()
     const connected = await connectTemporalClient()
     const workflowId = buildTaskWorkflowId(fixture.taskId)
-    const schedulerWorkflowId =
-      buildUserTaskSchedulerWorkflowId(fixture.userId)
-    const child: TaskDurabilityChildWorker =
-      startTaskDurabilityChildWorker()
+    const schedulerWorkflowId = buildUserTaskSchedulerWorkflowId(fixture.userId)
+    const child: TaskDurabilityChildWorker = startTaskDurabilityChildWorker()
     let replacement: TaskProductionWorkerHarness | null = null
     let schedulerHandle: WorkflowHandle | null = null
     try {
       await child.waitUntilReady()
-      const taskClient = new TemporalTaskClient(
-        connected.client.workflow,
-        child.taskQueue,
-      )
+      const taskClient = new TemporalTaskClient(connected.client.workflow, child.taskQueue)
       const handle =
         connected.client.workflow.getHandle<
           (input: TaskWorkflowInput) => Promise<TaskWorkflowResult>
         >(workflowId)
-      schedulerHandle =
-        connected.client.workflow.getHandle(schedulerWorkflowId)
-      const checkpointBeforeKill =
-        await prisma.taskExecutionCheckpoint.findUniqueOrThrow({
-          where: { id: fixture.checkpointId },
-          select: {
-            id: true,
-            taskId: true,
-            stepKey: true,
-            inputFingerprint: true,
-            output: true,
-            updatedAt: true,
-          },
-        })
+      schedulerHandle = connected.client.workflow.getHandle(schedulerWorkflowId)
+      const checkpointBeforeKill = await prisma.taskExecutionCheckpoint.findUniqueOrThrow({
+        where: { id: fixture.checkpointId },
+        select: {
+          id: true,
+          taskId: true,
+          stepKey: true,
+          inputFingerprint: true,
+          output: true,
+          updatedAt: true,
+        },
+      })
 
       await taskClient.schedule({
         taskId: fixture.taskId,
@@ -527,12 +574,7 @@ describe('Temporal Task terminal and follow-up durability', () => {
         attempts: 1,
       })
 
-      const [
-        finalTask,
-        finalCheckpoint,
-        terminalEvents,
-        history,
-      ] = await Promise.all([
+      const [finalTask, finalCheckpoint, terminalEvents, history] = await Promise.all([
         prisma.task.findUniqueOrThrow({
           where: { id: fixture.taskId },
           select: {
@@ -566,15 +608,10 @@ describe('Temporal Task terminal and follow-up durability', () => {
       })
       expect(finalCheckpoint).toEqual(checkpointBeforeKill)
       expect(terminalEvents).toHaveLength(1)
-      expect(
-        Math.max(0, ...activityAttempts(history, 'runTaskAttempt')),
-      ).toBeGreaterThanOrEqual(2)
+      expect(Math.max(0, ...activityAttempts(history, 'runTaskAttempt'))).toBeGreaterThanOrEqual(2)
     } finally {
       await child.close()
-      await terminateQuietly(
-        schedulerHandle,
-        'TASK_DURABILITY_WORKER_KILL_SCHEDULER_TEST_COMPLETE',
-      )
+      await terminateQuietly(schedulerHandle, 'TASK_DURABILITY_WORKER_KILL_SCHEDULER_TEST_COMPLETE')
       await replacement?.close()
       await connected.close()
       await removeTaskWorkerKillFixture(fixture)

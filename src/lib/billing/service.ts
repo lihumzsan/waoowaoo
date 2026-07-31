@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { logError as _ulogError, createScopedLogger } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
@@ -22,7 +21,6 @@ import {
   getBalance,
   getFreezeByIdempotencyKey,
   increasePendingFreezeAmount,
-  increasePendingFreezeAmountInTransaction,
   recordShadowUsage,
   recordShadowUsageInTransaction,
   rollbackFreeze,
@@ -34,10 +32,7 @@ import { getBillingMode } from './mode'
 import { BillingOperationError, InsufficientBalanceError } from './errors'
 import { roundMoney } from './money'
 import { withTextUsageCollection, type TextUsageEntry } from './runtime-usage'
-import type {
-  BillingRecordParams,
-  TaskBillingInfo,
-} from './types'
+import type { BillingRecordParams, TaskBillingInfo } from './types'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { assertPositiveChargeForBillingMode } from './billing-policy'
 
@@ -71,15 +66,18 @@ type ResolvedActual = {
   metadata?: Record<string, unknown>
 }
 
-type UsageByModel = Record<string, {
-  inputTokens: number
-  outputTokens: number
-  cachedInputTokens: number
-  cacheWriteTokens: number
-  cacheHitRate: number
-  providerCostCredits: number
-  cost: number
-}>
+type UsageByModel = Record<
+  string,
+  {
+    inputTokens: number
+    outputTokens: number
+    cachedInputTokens: number
+    cacheWriteTokens: number
+    cacheHitRate: number
+    providerCostCredits: number
+    cost: number
+  }
+>
 
 const MONEY_SCALE = 6
 const MONEY_EPSILON = 1e-9
@@ -143,20 +141,23 @@ function resolveCost(input: CostInput) {
   switch (input.apiType) {
     case 'text': {
       const inputTokens = Number(input.metadata?.inputTokens ?? Math.floor(input.quantity * 0.7))
-      const outputTokens = Number(input.metadata?.outputTokens ?? Math.max(input.quantity - inputTokens, 0))
-      const cachedInputTokens = Number(
-        input.metadata?.cachedInputTokens
-        ?? input.metadata?.actualCachedInputTokens
-        ?? 0,
+      const outputTokens = Number(
+        input.metadata?.outputTokens ?? Math.max(input.quantity - inputTokens, 0),
       )
-      return asMoney(calcTextWithCache(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0), {
-        cachedInputTokens: Math.max(cachedInputTokens, 0),
-      }))
+      const cachedInputTokens = Number(
+        input.metadata?.cachedInputTokens ?? input.metadata?.actualCachedInputTokens ?? 0,
+      )
+      return asMoney(
+        calcTextWithCache(input.model, Math.max(inputTokens, 0), Math.max(outputTokens, 0), {
+          cachedInputTokens: Math.max(cachedInputTokens, 0),
+        }),
+      )
     }
     case 'image':
       return asMoney(calcImage(input.model, input.quantity, input.metadata))
     case 'video': {
-      const resolution = typeof input.metadata?.resolution === 'string' ? input.metadata.resolution : '720p'
+      const resolution =
+        typeof input.metadata?.resolution === 'string' ? input.metadata.resolution : '720p'
       return asMoney(calcVideo(input.model, resolution, input.quantity, input.metadata))
     }
     case 'music':
@@ -164,16 +165,18 @@ function resolveCost(input: CostInput) {
     case 'voice':
       return asMoney(calcVoice(input.model, input.quantity))
     default:
-      throw new BillingOperationError('BILLING_INVALID_API_TYPE', `Unsupported billing apiType: ${String(input.apiType)}`, {
-        apiType: input.apiType,
-        model: input.model,
-      })
+      throw new BillingOperationError(
+        'BILLING_INVALID_API_TYPE',
+        `Unsupported billing apiType: ${String(input.apiType)}`,
+        {
+          apiType: input.apiType,
+          model: input.model,
+        },
+      )
   }
 }
 
-function resolveTextCostFromUsage(
-  usage: TextUsageEntry[],
-): ResolvedActual | null {
+function resolveTextCostFromUsage(usage: TextUsageEntry[]): ResolvedActual | null {
   if (!Array.isArray(usage) || usage.length === 0) return null
 
   let inputTokens = 0
@@ -192,11 +195,14 @@ function resolveTextCostFromUsage(
     const itemProviderCostCredits = Number(item.providerCostCredits)
     const model = item.model || 'unknown'
     const hasBillableTokens = inTokens > 0 || outTokens > 0
-    const itemCost = Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0
-      ? normalizeMoney(itemProviderCostCredits)
-      : hasBillableTokens
-        ? normalizeMoney(calcTextWithCache(model, inTokens, outTokens, { cachedInputTokens: cachedTokens }))
-        : 0
+    const itemCost =
+      Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0
+        ? normalizeMoney(itemProviderCostCredits)
+        : hasBillableTokens
+          ? normalizeMoney(
+              calcTextWithCache(model, inTokens, outTokens, { cachedInputTokens: cachedTokens }),
+            )
+          : 0
 
     inputTokens += inTokens
     outputTokens += outTokens
@@ -225,9 +231,10 @@ function resolveTextCostFromUsage(
     if (Number.isFinite(itemProviderCostCredits) && itemProviderCostCredits >= 0) {
       byModel[model].providerCostCredits += normalizeMoney(itemProviderCostCredits)
     }
-    byModel[model].cacheHitRate = byModel[model].inputTokens > 0
-      ? byModel[model].cachedInputTokens / byModel[model].inputTokens
-      : 0
+    byModel[model].cacheHitRate =
+      byModel[model].inputTokens > 0
+        ? byModel[model].cachedInputTokens / byModel[model].inputTokens
+        : 0
     byModel[model].cost += itemCost
   }
 
@@ -249,13 +256,19 @@ function resolveTextCostFromUsage(
 
 function resolveRecordModel(defaultModel: string, metadata?: Record<string, unknown>) {
   const usageByModelValue = metadata?.usageByModel
-  if (!usageByModelValue || typeof usageByModelValue !== 'object' || Array.isArray(usageByModelValue)) {
+  if (
+    !usageByModelValue ||
+    typeof usageByModelValue !== 'object' ||
+    Array.isArray(usageByModelValue)
+  ) {
     return {
       model: defaultModel,
       actualModels: [] as string[],
     }
   }
-  const actualModels = Object.keys(usageByModelValue as UsageByModel).filter((item) => typeof item === 'string' && item.trim())
+  const actualModels = Object.keys(usageByModelValue as UsageByModel).filter(
+    (item) => typeof item === 'string' && item.trim(),
+  )
   if (actualModels.length === 0) {
     return {
       model: defaultModel,
@@ -332,29 +345,6 @@ async function ensureFreezeCoverage(params: {
   }
   const balance = await getBalance(params.userId)
   throw new InsufficientBalanceError(chargedCost, balance.balance)
-}
-
-async function ensureFreezeCoverageInTransaction(
-  tx: Prisma.TransactionClient,
-  params: {
-    freezeId: string
-    userId: string
-    actualCost: number
-    quotedCost: number
-  },
-): Promise<number> {
-  const normalizedQuoted = normalizeMoney(params.quotedCost)
-  const chargedCost = clampChargedCost(params.actualCost, normalizedQuoted)
-  if (chargedCost <= normalizedQuoted + MONEY_EPSILON) return chargedCost
-  const overage = normalizeMoney(chargedCost - normalizedQuoted)
-  if (overage <= MONEY_EPSILON) return chargedCost
-  const expanded = await increasePendingFreezeAmountInTransaction(tx, params.freezeId, overage)
-  if (expanded) return chargedCost
-  const balance = await tx.userBalance.findUnique({
-    where: { userId: params.userId },
-    select: { balance: true },
-  })
-  throw new InsufficientBalanceError(chargedCost, balance ? Number(balance.balance) : 0)
 }
 
 function resolveActualForSync<T>(
@@ -449,7 +439,10 @@ function resolveTaskActual(
     }
   }
 
-  const actualDurationSeconds = readPayloadNumber(payload, ['actualSeconds', 'actualDurationSeconds'])
+  const actualDurationSeconds = readPayloadNumber(payload, [
+    'actualSeconds',
+    'actualDurationSeconds',
+  ])
   if (actualDurationSeconds !== null && actualDurationSeconds >= 0) {
     if (info.apiType === 'video') {
       const metadata = {
@@ -506,13 +499,17 @@ function buildSyncBillingKey<T>(params: SyncBillingParams<T>, recordParams: Bill
     ...(params.metadata || {}),
   })
   const requestId =
-    recordParams.requestId
-    || (typeof recordParams.metadata?.requestId === 'string' ? recordParams.metadata.requestId : null)
-    || getLogContext().requestId
+    recordParams.requestId ||
+    (typeof recordParams.metadata?.requestId === 'string'
+      ? recordParams.metadata.requestId
+      : null) ||
+    getLogContext().requestId
 
   if (requestId) {
     const digest = createHash('sha1')
-      .update(`${params.userId}:${params.projectId}:${params.action}:${params.apiType}:${params.model}:${params.quantity}:${metadataFingerprint}:${requestId}`)
+      .update(
+        `${params.userId}:${params.projectId}:${params.action}:${params.apiType}:${params.model}:${params.quantity}:${metadataFingerprint}:${requestId}`,
+      )
       .digest('hex')
       .slice(0, 16)
     return `sync_${requestId}_${digest}`
@@ -673,7 +670,9 @@ async function withSyncBillingCore<T>(
           pricingSelections,
           billingKey,
           requestId,
-          ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),
+          ...(recordModel.actualModels.length > 0
+            ? { actualModels: recordModel.actualModels }
+            : {}),
         },
       },
       { chargedAmount: chargedCost },
@@ -689,11 +688,16 @@ async function withSyncBillingCore<T>(
       })
     }
     if (error instanceof BillingOperationError) {
-      throw new BillingOperationError(error.code, error.message, {
-        ...(error.details || {}),
-        billingKey,
-        pricingVersion,
-      }, error)
+      throw new BillingOperationError(
+        error.code,
+        error.message,
+        {
+          ...(error.details || {}),
+          billingKey,
+          pricingVersion,
+        },
+        error,
+      )
     }
     throw error
   }
@@ -871,13 +875,17 @@ async function prepareTaskBillingSnapshot(
     },
   })
   if (freezeResult.status === 'conflict') {
-    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'task billing freeze is not pending', {
-      taskId: task.id,
-      freezeId: freezeResult.freezeId,
-      status: freezeResult.freezeStatus,
-      frozenAmount: freezeResult.frozenAmount,
-      requestedAmount: quotedCost,
-    })
+    throw new BillingOperationError(
+      'BILLING_FREEZE_NOT_PENDING',
+      'task billing freeze is not pending',
+      {
+        taskId: task.id,
+        freezeId: freezeResult.freezeId,
+        status: freezeResult.freezeStatus,
+        frozenAmount: freezeResult.frozenAmount,
+        requestedAmount: quotedCost,
+      },
+    )
   }
   if (freezeResult.status === 'insufficient_balance') {
     throw new InsufficientBalanceError(freezeResult.required, freezeResult.available)
@@ -895,27 +903,38 @@ export async function prepareTaskBillingInTransaction(
   task: TaskBillingPreparation,
   mode: Awaited<ReturnType<typeof getBillingMode>>,
 ): Promise<TaskBillingInfo | { billable: false } | null> {
-  return await prepareTaskBillingSnapshot(task, mode, async (userId, amount, options) => (
-    await freezeBalanceInTransaction(tx, userId, amount, options)
-  ))
+  return await prepareTaskBillingSnapshot(
+    task,
+    mode,
+    async (userId, amount, options) =>
+      await freezeBalanceInTransaction(tx, userId, amount, options),
+  )
 }
 
-export async function settleTaskBillingInTransaction(tx: Prisma.TransactionClient, task: {
-  id: string
-  projectId: string
-  episodeId?: string | null
-  userId: string
-  billingInfo: TaskBillingInfo | { billable: false } | null
-}, options?: {
-  result?: Record<string, unknown> | void
-  textUsage?: TextUsageEntry[]
-}): Promise<TaskBillingInfo | { billable: false } | null> {
+export async function settleTaskBillingInTransaction(
+  tx: Prisma.TransactionClient,
+  task: {
+    id: string
+    projectId: string
+    episodeId?: string | null
+    userId: string
+    billingInfo: TaskBillingInfo | { billable: false } | null
+  },
+  options?: {
+    result?: Record<string, unknown> | void
+    textUsage?: TextUsageEntry[]
+  },
+): Promise<TaskBillingInfo | { billable: false } | null> {
   const info = task.billingInfo
   if (!info || !info.billable) return info
   if (!info.modeSnapshot) {
-    throw new BillingOperationError('BILLING_CONFIRM_FAILED', 'task billing mode snapshot is missing', {
-      taskId: task.id,
-    })
+    throw new BillingOperationError(
+      'BILLING_CONFIRM_FAILED',
+      'task billing mode snapshot is missing',
+      {
+        taskId: task.id,
+      },
+    )
   }
   const mode = info.modeSnapshot
   const noChargeStatus = info.status === 'skipped' ? 'skipped' : 'settled'
@@ -966,44 +985,55 @@ export async function settleTaskBillingInTransaction(tx: Prisma.TransactionClien
       taskId: task.id,
     })
   }
-  const chargedCost = await ensureFreezeCoverageInTransaction(tx, {
-    freezeId: info.freezeId,
-    userId: task.userId,
-    actualCost: actual.actualCost,
-    quotedCost,
-  })
+  // A Task is authorized against one immutable quoted ceiling. Provider usage
+  // may report more after execution, but terminal settlement must never expand
+  // that authorization or depend on the user's later balance. The platform
+  // absorbs and records the overage; the user is charged at most the approved
+  // amount, allowing Task/Billing/Resource terminal facts to commit together.
+  const chargedCost = normalizeMoney(
+    Math.min(normalizeMoney(actual.actualCost), normalizeMoney(quotedCost)),
+  )
+  const unbilledOverage = normalizeMoney(
+    Math.max(0, normalizeMoney(actual.actualCost) - chargedCost),
+  )
   const recordModel = resolveRecordModel(info.model, actual.metadata)
-  await confirmChargeWithRecordInTransaction(tx, info.freezeId, {
-    projectId: task.projectId,
-    episodeId: task.episodeId ?? null,
-    action: info.action,
-    apiType: info.apiType,
-    model: recordModel.model,
-    quantity: actual.actualQuantity,
-    unit: info.unit,
-    metadata: {
-      ...(info.metadata || {}),
-      ...(actual.metadata || {}),
-      billingKey: info.billingKey || task.id,
-      source: 'task',
-      taskType: info.taskType,
-      taskId: task.id,
-      mode: 'ENFORCE',
-      quotedCost,
-      actualCost: actual.actualCost,
-      chargedCost,
-      pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
-      pricingSelections: info.metadata || {},
-      ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),
+  await confirmChargeWithRecordInTransaction(
+    tx,
+    info.freezeId,
+    {
+      projectId: task.projectId,
+      episodeId: task.episodeId ?? null,
+      action: info.action,
+      apiType: info.apiType,
+      model: recordModel.model,
+      quantity: actual.actualQuantity,
+      unit: info.unit,
+      metadata: {
+        ...(info.metadata || {}),
+        ...(actual.metadata || {}),
+        billingKey: info.billingKey || task.id,
+        source: 'task',
+        taskType: info.taskType,
+        taskId: task.id,
+        mode: 'ENFORCE',
+        quotedCost,
+        actualCost: actual.actualCost,
+        chargedCost,
+        ...(unbilledOverage > MONEY_EPSILON ? { unbilledOverage } : {}),
+        pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
+        pricingSelections: info.metadata || {},
+        ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),
+      },
     },
-  }, {
-    chargedAmount: chargedCost,
-    expected: {
-      userId: task.userId,
-      taskId: task.id,
-      amount: Math.max(quotedCost, chargedCost),
+    {
+      chargedAmount: chargedCost,
+      expected: {
+        userId: task.userId,
+        taskId: task.id,
+        amount: quotedCost,
+      },
     },
-  })
+  )
   return { ...info, status: 'settled', chargedCost }
 }
 

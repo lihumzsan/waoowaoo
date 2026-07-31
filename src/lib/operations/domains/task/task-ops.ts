@@ -4,7 +4,13 @@ import { normalizeTaskError } from '@/lib/errors/normalize'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
 import { cancelTemporalTask } from '@/lib/temporal/task-client'
-import { TASK_STATUS, TASK_TYPE, type TaskStatus, type TaskType } from '@/lib/task/types'
+import {
+  isTaskType,
+  TASK_STATUS,
+  TASK_TYPE,
+  type TaskStatus,
+  type TaskType,
+} from '@/lib/task/types'
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationRegistryDraft,
@@ -14,32 +20,68 @@ import { defineOperation } from '@/lib/operations/define-operation'
 const taskStatusSchema = z.enum(Object.values(TASK_STATUS) as [TaskStatus, ...TaskStatus[]])
 const taskTypeSchema = z.enum(Object.values(TASK_TYPE) as [TaskType, ...TaskType[]])
 
-const listTasksInputSchema = z.object({
-  projectId: z.string().trim().min(1).optional()
-    .describe('Filter by the exact project ID. Omit to query tasks across the current user.'),
-  targetType: z.string().trim().min(1).optional()
-    .describe('Filter by the exact persisted task target type.'),
-  targetId: z.string().trim().min(1).optional()
-    .describe('Filter by the exact persisted task target ID.'),
-  status: z.array(taskStatusSchema).min(1).optional()
-    .describe('Filter by one or more exact task lifecycle statuses.'),
-  type: z.array(taskTypeSchema).min(1).optional()
-    .describe('Filter by one or more exact task types.'),
-  limit: z.number().int().min(1).max(200).optional()
-    .describe('Maximum tasks to return. Defaults to 50.'),
-}).strict()
+const listTasksInputSchema = z
+  .object({
+    projectId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact project ID. Omit to query tasks across the current user.'),
+    targetType: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact persisted task target type.'),
+    targetId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Filter by the exact persisted task target ID.'),
+    status: z
+      .array(taskStatusSchema)
+      .min(1)
+      .optional()
+      .describe('Filter by one or more exact task lifecycle statuses.'),
+    type: z
+      .array(taskTypeSchema)
+      .min(1)
+      .optional()
+      .describe('Filter by one or more exact task types.'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe('Maximum tasks to return. Defaults to 50.'),
+  })
+  .strict()
 
-const getTaskInputSchema = z.object({
-  taskId: z.string().trim().min(1).describe('Exact task ID.'),
-  events: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('none') }).strict(),
-    z.object({
-      kind: z.literal('include'),
-      limit: z.number().int().min(1).max(5000).optional()
-        .describe('Maximum lifecycle events to return. Defaults to 500.'),
-    }).strict(),
-  ]).describe('Choose whether persisted lifecycle events are returned.'),
-}).strict()
+const getTaskInputSchema = z
+  .object({
+    taskId: z.string().trim().min(1).describe('Exact task ID.'),
+    events: z
+      .discriminatedUnion('kind', [
+        z.object({ kind: z.literal('none') }).strict(),
+        z
+          .object({
+            kind: z.literal('include'),
+            limit: z
+              .number()
+              .int()
+              .min(1)
+              .max(5000)
+              .optional()
+              .describe('Maximum lifecycle events to return. Defaults to 500.'),
+          })
+          .strict(),
+      ])
+      .describe('Choose whether persisted lifecycle events are returned.'),
+  })
+  .strict()
 
 export type GetTaskInput = z.infer<typeof getTaskInputSchema>
 
@@ -81,11 +123,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const restrictedToAssistantScope = ctx.invocationChannel !== 'api'
-        if (
-          restrictedToAssistantScope
-          && input.projectId
-          && input.projectId !== ctx.projectId
-        ) {
+        if (restrictedToAssistantScope && input.projectId && input.projectId !== ctx.projectId) {
           throw new ApiError('INVALID_PARAMS', {
             code: 'TASK_PROJECT_SCOPE_INVALID',
             field: 'projectId',
@@ -130,9 +168,10 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND')
         }
 
-        const events = input.events.kind === 'include'
-          ? await listTaskLifecycleEvents(input.taskId, input.events.limit ?? 500)
-          : null
+        const events =
+          input.events.kind === 'include'
+            ? await listTaskLifecycleEvents(input.taskId, input.events.limit ?? 500)
+            : null
 
         return {
           task: {
@@ -173,12 +212,17 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('NOT_FOUND')
         }
 
-        const active =
-          task.status === TASK_STATUS.QUEUED
-          || task.status === TASK_STATUS.PROCESSING
+        const active = task.status === TASK_STATUS.QUEUED || task.status === TASK_STATUS.PROCESSING
+        if (!isTaskType(task.type)) {
+          throw new ApiError('CONFLICT', { code: 'TASK_TYPE_INVALID' })
+        }
         const workflow = active
           ? await cancelTemporalTask({
-              taskId: task.id,
+              reference: {
+                taskId: task.id,
+                userId: task.userId,
+                taskType: task.type,
+              },
               reason: 'Task cancelled by user',
             })
           : null
@@ -189,9 +233,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
 
         return {
           success: true,
-          cancelAccepted:
-            workflow?.cancelRequested === true
-            || workflow?.status === 'canceled',
+          cancelAccepted: workflow?.cancelRequested === true || workflow?.status === 'canceled',
           task: {
             ...updatedTask,
             error: normalizeTaskError(updatedTask.errorCode, updatedTask.errorMessage),

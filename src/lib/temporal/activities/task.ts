@@ -7,19 +7,13 @@ import {
   heartbeat,
 } from '@temporalio/activity'
 import { Prisma } from '@prisma/client'
-import {
-  withTextUsageCollection,
-  type TextUsageEntry,
-} from '@/lib/billing/runtime-usage'
+import { withTextUsageCollection, type TextUsageEntry } from '@/lib/billing/runtime-usage'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
-import {
-  buildTaskWorkflowId,
-  buildUserTaskSchedulerWorkflowId,
-} from '@/lib/temporal/identity'
+import { buildTaskWorkflowId, buildUserTaskSchedulerWorkflowId } from '@/lib/temporal/identity'
 import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
 import {
@@ -29,10 +23,7 @@ import {
 } from '@/lib/task/execution-checkpoint'
 import { buildTaskExecutionData } from '@/lib/task/execution-input'
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
-import {
-  shouldRetryTaskFailure,
-  TASK_RETRY_BACKOFF_BASE_MS,
-} from '@/lib/task/retry-policy'
+import { shouldRetryTaskFailure, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import {
   commitTaskTerminal as commitBusinessTaskTerminal,
   type TaskTerminalCommitResult,
@@ -43,18 +34,13 @@ import {
 } from '@/lib/agent-turn/follow-up-batch'
 import { AGENT_TURN_PROTOCOL } from '@/lib/agent-turn/contracts'
 import { submitAgentTurnViaTemporal } from '@/lib/temporal/agent-thread/client'
-import {
-  TASK_EVENT_TYPE,
-  TASK_STATUS,
-  type TaskExecutionData,
-} from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
-import type {
-  TaskExecutionContext,
-  TaskExecutionResult,
-} from '@/lib/task/execution/context'
+import type { TaskExecutionContext, TaskExecutionResult } from '@/lib/task/execution/context'
 import { TaskTerminatedError } from '@/lib/task/errors'
+import { cancelAcceptedTaskProviderJobsAfterTerminal } from '@/lib/task/execution/provider-media'
 import type {
+  CancelTaskProviderJobsInput,
   CommitTaskTerminalInput,
   CommitTaskWorkflowFailureInput,
   BeginTaskAttemptInput,
@@ -118,10 +104,7 @@ interface TaskActivityHeartbeat {
   readonly businessAttempt: number
 }
 
-type TaskIdentity = Pick<
-  TaskWorkflowInput,
-  'workflowId' | 'taskId' | 'userId' | 'taskType'
->
+type TaskIdentity = Pick<TaskWorkflowInput, 'workflowId' | 'taskId' | 'userId' | 'taskType'>
 
 function failNonRetryable(code: string, ...details: unknown[]): never {
   throw ApplicationFailure.nonRetryable(code, code, ...details)
@@ -148,11 +131,7 @@ function requireTaskWorkflowIdentity(input: TaskIdentity): void {
   requireNonEmpty(input.userId, 'TASK_USER_ID_INVALID')
   const expectedWorkflowId = buildTaskWorkflowId(input.taskId)
   if (input.workflowId !== expectedWorkflowId) {
-    failNonRetryable(
-      'TASK_WORKFLOW_ID_MISMATCH',
-      input.workflowId,
-      expectedWorkflowId,
-    )
+    failNonRetryable('TASK_WORKFLOW_ID_MISMATCH', input.workflowId, expectedWorkflowId)
   }
 }
 
@@ -168,23 +147,13 @@ function requireTaskActivity(input: TaskIdentity): void {
   requireCurrentWorkflow(input.workflowId, 'TASK_ACTIVITY_WORKFLOW_ID_MISMATCH')
 }
 
-function requireSchedulerActivity(
-  schedulerWorkflowId: string,
-  userId: string,
-): void {
+function requireSchedulerActivity(schedulerWorkflowId: string, userId: string): void {
   requireNonEmpty(schedulerWorkflowId, 'TASK_SCHEDULER_WORKFLOW_ID_INVALID')
   const expectedWorkflowId = buildUserTaskSchedulerWorkflowId(userId)
   if (schedulerWorkflowId !== expectedWorkflowId) {
-    failNonRetryable(
-      'TASK_SCHEDULER_WORKFLOW_ID_MISMATCH',
-      schedulerWorkflowId,
-      expectedWorkflowId,
-    )
+    failNonRetryable('TASK_SCHEDULER_WORKFLOW_ID_MISMATCH', schedulerWorkflowId, expectedWorkflowId)
   }
-  requireCurrentWorkflow(
-    schedulerWorkflowId,
-    'TASK_SCHEDULER_ACTIVITY_WORKFLOW_ID_MISMATCH',
-  )
+  requireCurrentWorkflow(schedulerWorkflowId, 'TASK_SCHEDULER_ACTIVITY_WORKFLOW_ID_MISMATCH')
 }
 
 function terminalStatus(status: string): TaskWorkflowResult['status'] | null {
@@ -196,9 +165,7 @@ function terminalStatus(status: string): TaskWorkflowResult['status'] | null {
   return null
 }
 
-function expectedTerminalEventType(
-  status: TaskWorkflowResult['status'],
-): string {
+function expectedTerminalEventType(status: TaskWorkflowResult['status']): string {
   if (status === 'completed') return TASK_EVENT_TYPE.COMPLETED
   if (status === 'canceled') return TASK_EVENT_TYPE.CANCELED
   return TASK_EVENT_TYPE.FAILED
@@ -233,15 +200,8 @@ async function loadTaskRow(taskId: string): Promise<WorkflowTaskRow> {
   return task
 }
 
-function requireTaskRowIdentity(
-  row: WorkflowTaskRow,
-  input: TaskIdentity,
-): TaskExecutionData {
-  if (
-    row.id !== input.taskId ||
-    row.userId !== input.userId ||
-    row.type !== input.taskType
-  ) {
+function requireTaskRowIdentity(row: WorkflowTaskRow, input: TaskIdentity): TaskExecutionData {
+  if (row.id !== input.taskId || row.userId !== input.userId || row.type !== input.taskType) {
     return failNonRetryable(
       'TASK_WORKFLOW_IDENTITY_MISMATCH',
       input.taskId,
@@ -263,9 +223,7 @@ function requireTaskRowIdentity(
   return data
 }
 
-async function terminalResultFromRow(
-  row: WorkflowTaskRow,
-): Promise<TaskWorkflowResult> {
+async function terminalResultFromRow(row: WorkflowTaskRow): Promise<TaskWorkflowResult> {
   const status = terminalStatus(row.status)
   if (!status) {
     return failNonRetryable('TASK_TERMINAL_STATUS_INVALID', row.id, row.status)
@@ -343,8 +301,7 @@ function parseAttemptFailureCheckpoint(
     !parsed.errorCode.trim() ||
     typeof parsed.errorMessage !== 'string' ||
     !parsed.errorMessage.trim() ||
-    (parsed.retryDisposition !== 'retryable' &&
-      parsed.retryDisposition !== 'final') ||
+    (parsed.retryDisposition !== 'retryable' && parsed.retryDisposition !== 'final') ||
     (parsed.failureClass !== 'TRANSIENT_PROVIDER' &&
       parsed.failureClass !== 'PERMANENT_PROVIDER' &&
       parsed.failureClass !== 'OUTPUT_VALIDATION') ||
@@ -395,15 +352,8 @@ async function loadAttemptFailureCheckpoint(input: {
     },
   })
   if (!row) return null
-  if (
-    row.inputFingerprint !== input.inputFingerprint ||
-    row.state !== 'ready'
-  ) {
-    return failNonRetryable(
-      'TASK_ATTEMPT_FAILURE_CHECKPOINT_CONFLICT',
-      input.taskId,
-      input.attempt,
-    )
+  if (row.inputFingerprint !== input.inputFingerprint || row.state !== 'ready') {
+    return failNonRetryable('TASK_ATTEMPT_FAILURE_CHECKPOINT_CONFLICT', input.taskId, input.attempt)
   }
   return parseAttemptFailureCheckpoint(row.output, input)
 }
@@ -413,9 +363,7 @@ async function saveAttemptFailureCheckpoint(input: {
   inputFingerprint: string
   checkpoint: AttemptFailureCheckpoint
 }): Promise<AttemptFailureCheckpoint> {
-  const serialized = JSON.parse(
-    canonicalJson(input.checkpoint),
-  ) as Prisma.InputJsonValue
+  const serialized = JSON.parse(canonicalJson(input.checkpoint)) as Prisma.InputJsonValue
   try {
     const row = await prisma.taskExecutionCheckpoint.create({
       data: {
@@ -431,10 +379,7 @@ async function saveAttemptFailureCheckpoint(input: {
     })
     return parseAttemptFailureCheckpoint(row.output, input.checkpoint)
   } catch (error) {
-    if (
-      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-      error.code !== 'P2002'
-    ) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
       throw error
     }
     const existing = await loadAttemptFailureCheckpoint({
@@ -444,10 +389,7 @@ async function saveAttemptFailureCheckpoint(input: {
       attemptId: input.checkpoint.attemptId,
       attempt: input.checkpoint.attempt,
     })
-    if (
-      !existing ||
-      canonicalJson(existing) !== canonicalJson(input.checkpoint)
-    ) {
+    if (!existing || canonicalJson(existing) !== canonicalJson(input.checkpoint)) {
       return failNonRetryable(
         'TASK_ATTEMPT_FAILURE_CHECKPOINT_COLLISION',
         input.taskId,
@@ -458,28 +400,19 @@ async function saveAttemptFailureCheckpoint(input: {
   }
 }
 
-async function claimBusinessAttempt(
-  input: BeginTaskAttemptInput,
-): Promise<void> {
+async function claimBusinessAttempt(input: BeginTaskAttemptInput): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const current = await tx.task.findUnique({
       where: { id: input.taskId },
       select: { status: true, attempt: true },
     })
     if (!current) return failNonRetryable('TASK_NOT_FOUND', input.taskId)
-    if (
-      current.status === TASK_STATUS.PROCESSING &&
-      current.attempt === input.attempt
-    ) {
+    if (current.status === TASK_STATUS.PROCESSING && current.attempt === input.attempt) {
       return
     }
     const previousAttempt = input.attempt - 1
-    const allowedStatus =
-      input.attempt === 1 ? TASK_STATUS.QUEUED : TASK_STATUS.PROCESSING
-    if (
-      current.status !== allowedStatus ||
-      current.attempt !== previousAttempt
-    ) {
+    const allowedStatus = input.attempt === 1 ? TASK_STATUS.QUEUED : TASK_STATUS.PROCESSING
+    if (current.status !== allowedStatus || current.attempt !== previousAttempt) {
       return failNonRetryable(
         'TASK_ATTEMPT_CLAIM_DIVERGED',
         input.taskId,
@@ -501,11 +434,7 @@ async function claimBusinessAttempt(
       },
     })
     if (updated.count !== 1) {
-      return failNonRetryable(
-        'TASK_ATTEMPT_CLAIM_CONFLICT',
-        input.taskId,
-        input.attempt,
-      )
+      return failNonRetryable('TASK_ATTEMPT_CLAIM_CONFLICT', input.taskId, input.attempt)
     }
   })
 }
@@ -520,10 +449,7 @@ function heartbeatPayload(input: RunTaskAttemptInput): TaskActivityHeartbeat {
   }
 }
 
-function assertHeartbeatIdentity(
-  value: unknown,
-  input: RunTaskAttemptInput,
-): void {
+function assertHeartbeatIdentity(value: unknown, input: RunTaskAttemptInput): void {
   if (value === undefined || value === null) return
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     failNonRetryable('TASK_ACTIVITY_HEARTBEAT_INVALID')
@@ -621,11 +547,7 @@ export async function initializeTaskWorkflow(
     return failNonRetryable('TASK_INITIAL_STATUS_INVALID', row.id, row.status)
   }
   if (row.attempt !== 0) {
-    return failNonRetryable(
-      'TASK_INITIAL_ATTEMPT_NOT_DRAINED',
-      row.id,
-      row.attempt,
-    )
+    return failNonRetryable('TASK_INITIAL_ATTEMPT_NOT_DRAINED', row.id, row.attempt)
   }
   const definition = getTaskDefinition(input.taskType)
   return {
@@ -642,10 +564,7 @@ export async function resolveTaskSchedulerAdmission(
   input: TaskWorkflowInput,
 ): Promise<TaskSchedulerAdmission> {
   requireTaskWorkflowIdentity(input)
-  requireSchedulerActivity(
-    activityInfo().workflowExecution?.workflowId ?? '',
-    input.userId,
-  )
+  requireSchedulerActivity(activityInfo().workflowExecution?.workflowId ?? '', input.userId)
   const [row, slotLimits] = await Promise.all([
     loadTaskRow(input.taskId),
     getUserWorkflowConcurrencyConfig(input.userId),
@@ -677,43 +596,27 @@ export async function resolveTaskSchedulerAdmission(
  * Task row, and a worker outage before handler start cannot leave Workflow
  * state one attempt ahead of the business projection.
  */
-export async function beginTaskAttempt(
-  input: BeginTaskAttemptInput,
-): Promise<void> {
+export async function beginTaskAttempt(input: BeginTaskAttemptInput): Promise<void> {
   requireTaskActivity(input)
   const attempt = requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
   const expectedAttemptId = `${input.workflowId}:attempt:${String(attempt)}`
   if (input.attemptId !== expectedAttemptId) {
-    return failNonRetryable(
-      'TASK_ATTEMPT_ID_MISMATCH',
-      input.attemptId,
-      expectedAttemptId,
-    )
+    return failNonRetryable('TASK_ATTEMPT_ID_MISMATCH', input.attemptId, expectedAttemptId)
   }
   const row = await loadTaskRow(input.taskId)
   requireTaskRowIdentity(row, input)
   if (terminalStatus(row.status)) {
-    return failNonRetryable(
-      'TASK_ATTEMPT_CLAIMED_AFTER_TERMINAL',
-      row.id,
-      row.status,
-    )
+    return failNonRetryable('TASK_ATTEMPT_CLAIMED_AFTER_TERMINAL', row.id, row.status)
   }
   await claimBusinessAttempt(input)
 }
 
-export async function runTaskAttempt(
-  input: RunTaskAttemptInput,
-): Promise<RunTaskAttemptResult> {
+export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTaskAttemptResult> {
   requireTaskActivity(input)
   const attempt = requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
   const expectedAttemptId = `${input.workflowId}:attempt:${String(attempt)}`
   if (input.attemptId !== expectedAttemptId) {
-    return failNonRetryable(
-      'TASK_ATTEMPT_ID_MISMATCH',
-      input.attemptId,
-      expectedAttemptId,
-    )
+    return failNonRetryable('TASK_ATTEMPT_ID_MISMATCH', input.attemptId, expectedAttemptId)
   }
   const definition = getTaskDefinition(input.taskType)
   if (input.executionDeadlineMs !== definition.executionDeadlineMs) {
@@ -734,11 +637,7 @@ export async function runTaskAttempt(
     if (row.status === TASK_STATUS.CANCELED) {
       return { kind: 'canceled', reason: 'TASK_CANCELLED' }
     }
-    return failNonRetryable(
-      'TASK_ATTEMPT_STARTED_AFTER_TERMINAL',
-      row.id,
-      row.status,
-    )
+    return failNonRetryable('TASK_ATTEMPT_STARTED_AFTER_TERMINAL', row.id, row.status)
   }
   if (row.status !== TASK_STATUS.PROCESSING || row.attempt !== attempt) {
     return failNonRetryable(
@@ -819,9 +718,7 @@ export async function runTaskAttempt(
           userId: data.userId,
         },
         async () =>
-          await withTextUsageCollection(
-            async () => await executeTaskHandler(executionContext),
-          ),
+          await withTextUsageCollection(async () => await executeTaskHandler(executionContext)),
       )
     } catch (error) {
       if (activityContext.cancellationSignal.aborted) {
@@ -896,15 +793,28 @@ export async function commitTaskTerminal(
     userId: row.userId,
     taskType: canonicalData.type,
   }
-  requireTaskActivity(canonicalIdentity)
+  const currentWorkflowId = activityInfo().workflowExecution?.workflowId
+  if (currentWorkflowId === input.workflowId) {
+    requireTaskActivity(canonicalIdentity)
+  } else if (
+    input.kind === 'canceled' &&
+    currentWorkflowId === buildUserTaskSchedulerWorkflowId(row.userId) &&
+    ((row.status === TASK_STATUS.QUEUED && row.attempt === 0) ||
+      terminalStatus(row.status) !== null)
+  ) {
+    requireSchedulerActivity(currentWorkflowId, row.userId)
+  } else {
+    return failNonRetryable(
+      'TASK_TERMINAL_ACTIVITY_OWNER_MISMATCH',
+      currentWorkflowId ?? null,
+      input.workflowId,
+    )
+  }
   requireTaskRowIdentity(row, canonicalIdentity)
 
   if (input.kind === 'completed') {
     requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
-    requireNonEmpty(
-      input.executionCheckpointId,
-      'TASK_EXECUTION_CHECKPOINT_ID_INVALID',
-    )
+    requireNonEmpty(input.executionCheckpointId, 'TASK_EXECUTION_CHECKPOINT_ID_INVALID')
     const result = await commitBusinessTaskTerminal({
       kind: 'completed',
       taskId: input.taskId,
@@ -958,7 +868,8 @@ export async function commitTaskTerminal(
     reason: input.reason,
     eventPayload: { stage: 'canceled', runtime: 'temporal' },
   })
-  return await terminalReceiptFromCommit(input.taskId, 'canceled', result)
+  const receipt = await terminalReceiptFromCommit(input.taskId, 'canceled', result)
+  return receipt
 }
 
 export async function commitTaskWorkflowFailure(
@@ -966,7 +877,13 @@ export async function commitTaskWorkflowFailure(
 ): Promise<TaskWorkflowResult> {
   requireNonEmpty(input.enqueueId, 'TASK_SCHEDULER_ENQUEUE_ID_INVALID')
   requireTaskWorkflowIdentity(input.task)
-  requireSchedulerActivity(input.schedulerWorkflowId, input.task.userId)
+  if (input.owner === 'scheduler') {
+    requireSchedulerActivity(input.schedulerWorkflowId, input.task.userId)
+  } else if (input.owner === 'task_workflow') {
+    requireCurrentWorkflow(input.task.workflowId, 'TASK_WORKFLOW_FAILURE_ACTIVITY_OWNER_MISMATCH')
+  } else {
+    return failNonRetryable('TASK_WORKFLOW_FAILURE_OWNER_INVALID')
+  }
   const row = await loadTaskRow(input.task.taskId)
   requireTaskRowIdentity(row, input.task)
   if (terminalStatus(row.status)) return await terminalResultFromRow(row)
@@ -1013,10 +930,7 @@ export async function commitTaskWorkflowFailure(
     )
   }
   try {
-    await publishPersistedTaskEventById(
-      commit.terminalEventId,
-      input.task.taskId,
-    )
+    await publishPersistedTaskEventById(commit.terminalEventId, input.task.taskId)
   } catch (error) {
     Context.current().log.warn(
       'task workflow-failure terminal event live publication failed; durable replay remains authoritative',
@@ -1035,19 +949,11 @@ export async function commitTaskWorkflowFailure(
  * continuation notification is attempted. The stable Update ID makes an
  * Activity ACK loss an exact replay of the same release.
  */
-export async function releaseTaskCapacity(
-  input: ReleaseTaskCapacityInput,
-): Promise<void> {
-  requireNonEmpty(
-    input.schedulerWorkflowId,
-    'TASK_SCHEDULER_WORKFLOW_ID_INVALID',
-  )
+export async function releaseTaskCapacity(input: ReleaseTaskCapacityInput): Promise<void> {
+  requireNonEmpty(input.schedulerWorkflowId, 'TASK_SCHEDULER_WORKFLOW_ID_INVALID')
   requireNonEmpty(input.taskWorkflowId, 'TASK_WORKFLOW_ID_INVALID')
   requireNonEmpty(input.taskId, 'TASK_ID_INVALID')
-  requirePositiveInt(
-    input.terminalEventId,
-    'TASK_CAPACITY_RELEASE_EVENT_ID_INVALID',
-  )
+  requirePositiveInt(input.terminalEventId, 'TASK_CAPACITY_RELEASE_EVENT_ID_INVALID')
   requireCurrentWorkflow(
     input.taskWorkflowId,
     'TASK_CAPACITY_RELEASE_ACTIVITY_WORKFLOW_ID_MISMATCH',
@@ -1063,9 +969,7 @@ export async function releaseTaskCapacity(
   }
   requireTaskWorkflowIdentity(canonicalIdentity)
   requireTaskRowIdentity(row, canonicalIdentity)
-  const expectedSchedulerWorkflowId = buildUserTaskSchedulerWorkflowId(
-    row.userId,
-  )
+  const expectedSchedulerWorkflowId = buildUserTaskSchedulerWorkflowId(row.userId)
   if (input.schedulerWorkflowId !== expectedSchedulerWorkflowId) {
     return failNonRetryable(
       'TASK_SCHEDULER_WORKFLOW_ID_MISMATCH',
@@ -1075,10 +979,23 @@ export async function releaseTaskCapacity(
   }
   const status = terminalStatus(row.status)
   if (!status) {
+    return failNonRetryable('TASK_CAPACITY_RELEASE_BEFORE_TERMINAL', input.taskId, row.status)
+  }
+  if (status !== input.status) {
     return failNonRetryable(
-      'TASK_CAPACITY_RELEASE_BEFORE_TERMINAL',
+      'TASK_CAPACITY_RELEASE_STATUS_DIVERGED',
       input.taskId,
-      row.status,
+      input.status,
+      status,
+    )
+  }
+  const terminalResult = await terminalResultFromRow(row)
+  if (terminalResult.terminal.terminalEventId !== input.terminalEventId) {
+    return failNonRetryable(
+      'TASK_CAPACITY_RELEASE_EVENT_DIVERGED',
+      input.taskId,
+      input.terminalEventId,
+      terminalResult.terminal.terminalEventId,
     )
   }
 
@@ -1086,20 +1003,19 @@ export async function releaseTaskCapacity(
     taskWorkflowId: input.taskWorkflowId,
     taskId: input.taskId,
     terminalEventId: input.terminalEventId,
+    status: input.status,
   }
   const client = await getTemporalClient()
   const scheduler = client.workflow.getHandle(input.schedulerWorkflowId)
-  const view = await scheduler.executeUpdate<
-    UserTaskSchedulerView,
-    [SchedulerCapacityRelease]
-  >(USER_TASK_SCHEDULER_UPDATE_NAME.RELEASE_CAPACITY, {
-    args: [release],
-    updateId: [
-      'task-capacity-release',
-      input.taskWorkflowId,
-      String(input.terminalEventId),
-    ].join(':'),
-  })
+  const view = await scheduler.executeUpdate<UserTaskSchedulerView, [SchedulerCapacityRelease]>(
+    USER_TASK_SCHEDULER_UPDATE_NAME.RELEASE_CAPACITY,
+    {
+      args: [release],
+      updateId: ['task-capacity-release', input.taskWorkflowId, String(input.terminalEventId)].join(
+        ':',
+      ),
+    },
+  )
   if (
     !view ||
     typeof view !== 'object' ||
@@ -1115,21 +1031,65 @@ export async function releaseTaskCapacity(
 }
 
 /**
+ * Compensate provider jobs only after the Workflow has released Scheduler
+ * capacity and completed every required FollowUpBatch handoff. The Task
+ * terminal event is revalidated before reading the ledger, so this Activity
+ * cannot cancel a completed winner or an unrelated replay.
+ */
+export async function cancelTaskProviderJobs(input: CancelTaskProviderJobsInput): Promise<void> {
+  requireNonEmpty(input.workflowId, 'TASK_WORKFLOW_ID_INVALID')
+  requireNonEmpty(input.taskId, 'TASK_ID_INVALID')
+  requireNonEmpty(input.userId, 'TASK_USER_ID_INVALID')
+  requirePositiveInt(input.terminalEventId, 'TASK_PROVIDER_CANCEL_TERMINAL_EVENT_ID_INVALID')
+  requireCurrentWorkflow(input.workflowId, 'TASK_PROVIDER_CANCEL_ACTIVITY_WORKFLOW_ID_MISMATCH')
+
+  const row = await loadTaskRow(input.taskId)
+  const canonicalData = buildTaskExecutionData(row)
+  const canonicalIdentity: TaskIdentity = {
+    workflowId: input.workflowId,
+    taskId: input.taskId,
+    userId: input.userId,
+    taskType: canonicalData.type,
+  }
+  requireTaskWorkflowIdentity(canonicalIdentity)
+  requireTaskRowIdentity(row, canonicalIdentity)
+  if (row.status !== TASK_STATUS.CANCELED) {
+    return failNonRetryable('TASK_PROVIDER_CANCEL_STATUS_DIVERGED', input.taskId, row.status)
+  }
+  const terminalResult = await terminalResultFromRow(row)
+  if (
+    terminalResult.status !== 'canceled' ||
+    terminalResult.terminal.terminalEventId !== input.terminalEventId
+  ) {
+    return failNonRetryable(
+      'TASK_PROVIDER_CANCEL_TERMINAL_DIVERGED',
+      input.taskId,
+      input.terminalEventId,
+      terminalResult.status,
+      terminalResult.terminal.terminalEventId,
+    )
+  }
+  // queued cancellation is owned directly by Scheduler and never creates this
+  // TaskWorkflow. Keep a defensive no-op for exact terminal replays.
+  if (row.attempt === 0) return
+
+  await cancelAcceptedTaskProviderJobsAfterTerminal({
+    taskId: input.taskId,
+    userId: input.userId,
+  })
+}
+
+/**
  * Notify exactly one ready Batch after provider capacity has been released.
  * The Batch remains the durable retry authority; AgentTurn source identity
  * makes an accepted-but-unacknowledged Update an exact replay.
  */
-export async function notifyTaskFollowUp(
-  input: NotifyTaskFollowUpInput,
-): Promise<void> {
+export async function notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promise<void> {
   requireNonEmpty(input.workflowId, 'TASK_WORKFLOW_ID_INVALID')
   requireNonEmpty(input.taskId, 'TASK_ID_INVALID')
   requireNonEmpty(input.batchId, 'TASK_FOLLOW_UP_BATCH_ID_MISSING')
   if (!input.terminal.readyFollowUpBatchIds.includes(input.batchId)) {
-    return failNonRetryable(
-      'TASK_FOLLOW_UP_BATCH_RECEIPT_DIVERGED',
-      input.batchId,
-    )
+    return failNonRetryable('TASK_FOLLOW_UP_BATCH_RECEIPT_DIVERGED', input.batchId)
   }
   const state = await loadFollowUpBatchNotification(input.batchId)
   if (state.kind === 'cancelled' || state.kind === 'notified') return
@@ -1146,13 +1106,7 @@ export async function notifyTaskFollowUp(
     userMessage: null,
     context: notification.context,
   })
-  if (
-    receipt.outcome === 'ignored' &&
-    receipt.ignoredReason !== 'source_cancelled'
-  ) {
-    return failNonRetryable(
-      'TASK_FOLLOW_UP_IGNORED_REASON_DIVERGED',
-      notification.batchId,
-    )
+  if (receipt.outcome === 'ignored' && receipt.ignoredReason !== 'source_cancelled') {
+    return failNonRetryable('TASK_FOLLOW_UP_IGNORED_REASON_DIVERGED', notification.batchId)
   }
 }

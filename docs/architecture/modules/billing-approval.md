@@ -39,6 +39,22 @@
 - **BA-24 — 外部支付终态必须进入同一账本。** Stripe Checkout 充值以 `payment_intent` 作为 canonical external identity，并把 credits、最小货币单位金额与币种冻结在充值流水；refund 以及 `charge.dispute.funds_withdrawn` 只能由已验签 webhook 通过 ledger 的唯一 adjustment writer 按精确比例扣回。退款失败或 `charge.dispute.funds_reinstated` 只恢复此前同一 Stripe object 的实际 debit；`dispute.created/closed` 不解释资金事实。事件乱序、重复、跨币种、超额或找不到原充值必须 fail closed，禁止按用户最近充值猜测。
 - **BA-25 — Stripe SDK 只拥有外部协议，不拥有账本事实。** Checkout Session HTTP、参数编码、响应类型、Webhook HMAC 与 Event union 必须由官方 `stripe` SDK 处理；Checkout client 必须关闭 SDK 网络重试并固定 `apiVersion`，Webhook 必须从 route 提供的受限 raw body 一次性 `constructEvent`，禁止 SDK 验签后再手写 JSON parser。项目继续唯一拥有 recharge quote、metadata policy、`payment_intent` identity、refund/dispute 解释、幂等键和 ledger transaction；SDK Event 不得直接写余额或建立第二 writer。Webhook route 必须以显式 code→status 映射回应 Stripe 重投递契约：验签失败与不可变事实违规返回 4xx 终止重投，本地事实缺失与基础设施失败返回 5xx 保持重投，禁止由通用错误归一化的消息子串猜测状态码；响应体不携带账本细节。
 - **BA-26 — Voice Design 按冻结字符数计费。** `CREATIVE_RESOURCE_VOICE` 只能使用 `apiType=voice + unit=character`；`generate_voice.request.kind=characters` 的一个 Plan 可以包含多个独立 Voice Task，quote 必须逐 Task 从各自冻结的 `previewText` 以 Unicode code point 数计算 quantity，再由通用计划报价汇总为一次批准金额。FAL Qwen Voice Design 1.7B 的 production pricing catalog 以每字符 credits 声明 `$0.09 / 1000 characters` 的换算价。每个 Task 终态只可用同一 payload 返回的 `actualCharacters` 独立结算，不能按音频时长、字节数、Agent 估算或 provider 文案重算；部分失败只回滚失败成员的冻结，成功成员正常结算。
+- **BA-27 — Task最终扣费不扩大批准上限。** Task terminal的真实usage可以高于不可变quote，
+  但用户`chargedCost`最多等于批准并冻结的quoted amount；超额以`unbilledOverage`记录并由平台
+  承担，terminal事务不得临时扩大freeze、依赖用户稍后的余额或因余额不足拆裂
+  Task/Billing/Resource终态。pending freeze清理只能调用账本`rollbackFreeze` owner，并在
+  任何age判断后继续跳过仍为queued/processing的Task；脚本不得直接改余额或冻结行。
+- **BA-28 — 免费 LLM 仍写唯一用量事实。** Assistant Turn 与 `creative_work`
+  当前不产生余额流水，但供应商返回的 token usage 必须写入同一个 `UsageCost` owner，不能
+  因 `billingPolicy=none` 丢失项目 token 与模型统计。每个 Turn attempt 的主模型/上下文压缩分别使用
+  `turnId + attempt + usagePhase`，Creative Worker 使用 `taskId + durable invocation key`
+  派生稳定 `UsageCost.id`；同 identity 同 payload exact replay，不同 token/model 必须
+  fail closed。UsageCost 记录观察到的实际 token，用量行的 `cost=0`，不签发 Grant、不冻结
+  或扣减余额，也不形成第二套计费生命周期。Creative Worker的模型run返回usage后，即使
+  后续strict output、Skill或lifecycle校验失败，也必须先用同一invocation identity记录已观察
+  usage；成功run也必须在provider invocation checkpoint transition前写入，外层重放只返回
+  同一事实。不得把“Task失败”误解成“供应商没有产生token”。未来若要展示供应商成本，必须
+  另行定义产品契约。
 
 ## 权威入口
 
@@ -85,6 +101,12 @@
 
 ## 历史回归
 
+- B+ 首版保留了 Agents SDK `Usage`、上下文 usage telemetry 和唯一 `recordUsageFact`
+  writer，却没有任何生产调用把 Assistant/Creative Worker 的结果交给该 writer；免费模型
+  调用因此没有项目 token 与模型统计。旧日志只能观测，Task 的 `billingPolicy=none`
+  又被误解为“不记录事实”，既有媒体结算测试无法反证。当前在 Turn settlement 事务按
+  attempt/phase 写入，在 Creative Worker durable invocation checkpoint 后按 Task invocation
+  写入；ACK 丢失或 Activity 重放只能 exact replay同一 UsageCost，不增加余额流水。
 - BGM 与环境音首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 Grant issuer；这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”。当前 Approval payload 穷尽保存每个 `approvalId + toolCallId + planSnapshotId`，聚合 plan 只服务 UI 报价；即使旧固定声音链已经删除，同一步自由组合多个收费 Operation 仍逐成员获得精确授权。
 - 聚合 Approval 改为按 `toolCallId` 精确映射 Grant 后，runtime 虽只在 `approved=true` 时签发 Grant，却对批准与拒绝无条件构建同一 approved invocation map；即使绕过该错误，SDK 为被拒绝调用生成的明确 rejection output 也会被误判为“执行 outcome 丢失”。真实计费卡取消因此先原子消费 `approved=false` 决定，再抛出 `PROJECT_AGENT_APPROVAL_GRANT_MEMBER_MISMATCH` 或 `PROJECT_AGENT_TOOL_OUTCOME_MISSING`，被 control route 泛化为 `EXTERNAL_ERROR` 并错误结算 Run。旧 Golden 只穿过批准分支，Interruption 单测只证明拒绝决定可消费，没有组合 route、RunState 恢复、Grant 映射与 tool outcome 投影。当前只有批准分支构建并穷尽校验 Grant map；拒绝分支直接对原 SDK Tool call 执行 `state.reject`，outcome collector 只依据 SDK 的权威 `isToolApproved(...) === false` 识别非执行结果，其他 outcome 缺失仍 fail-closed，且不创建 Grant、Execution 或 Task。真实卡片拒绝/重新报价属于人工产品复验，账本零副作用由保留的 MySQL Critical 验证。
 - 计费卡取消随后以换形式第三次复发：`3f4f624b9` 修复了消费后的 Grant 映射与 outcome 判定（第二道关），`344d6d697` 让新用户消息把 pending 审批原子消费为拒绝（决定语义），但两者都没有覆盖第一道关——HTTP control 准入。旧 `executeProjectAgentCommand` 先做 scope 级 Run slot 检查、再解析 control 目标：被新消息消费掉的旧审批卡仍可点击，点击撞上新 run 的 `PROJECT_AGENT_RUN_ACTIVE` 409；对活跃 run 自身发 control 也因 slot 检查不带 `excludeRunId`、Redis scope lock 无同 runId 重入而被自我否决。前端又叠加三处失效：control 响应原文被 rethrow 且审批卡 `void onCancel()` 无 catch（unhandled rejection 直达 Next overlay）、Panel 把原始错误替换为通用文案导致 Composer 的错误分流永不命中、审批卡无 in-flight 禁用允许双击。当前准入顺序反转为"先解析目标、已解决即返回 typed `PROJECT_AGENT_CONTROL_ALREADY_RESOLVED` 平静响应、仍可行动才做带 `excludeRunId` 的 slot 检查与同 runId lock 接管"（AR-01B），前端卡片持单次决策态并把 stale 冲突消费为刷新加本地化提示；旧"先 slot 后解析"路径已删除。真实旧卡竞态与双击组合仍属人工产品复验盲区。
@@ -93,6 +115,10 @@
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。
 - 制作规划确认曾在专用 Choice 副作用中直接提交视觉风格任务。当前专用 Choice 与固定链均已删除；通用 Choice 的 commitment 明确拒绝收费/长任务，任何媒体调用都必须在下一次独立 Operation 中形成精确报价边沿。
 - 视觉风格媒体 plan 曾为了得到精确图片 Prompt 而在 approval preflight 同步调用 LLM 并创建候选记录；虽然图片报价准确，却让 plan 成为第二个长任务执行器和领域 writer。现由普通文本 Task 先持久化方案，图片 plan 只读该 Task 的成功结果。
+- Task terminal曾在实际usage高于quote时尝试扩大pending freeze；用户余额在审批后变化会让
+  已完成Provider工作无法与Resource一起结算。清理脚本又按age直接手写余额回滚，可能释放
+  仍在queued/processing的Task冻结。当前quote是用户授权硬上限，超额由平台承担并记录；
+  清理只走正式ledger owner并排除active Task。
 - Canvas 曾为按钮价格预取 plan A，点击 mutation 又创建 plan B 并自动签发 Grant；分镜图片和单镜头视频的专用 route 还遗漏 episode context，导致合法 Grant 被 scope mismatch 拒绝，视频详情普通按钮则完全不展示价格。旧 unit/conformance 只覆盖 plan、Grant 或节点结构，没有走通直接 UI 的“可见 quote → 同 snapshot Grant → commit”。现删除媒体专用提交 route 和各自 mutation，Canvas 只持有一个 plan handle，snapshot 从真实 Task target 取得 canonical episode，通用 execute 不再重新解释 scope。
 - 多章节 Canvas 在“全部”范围恢复逐章视频节点后，每个节点会立即预取自己的付费计划；旧 action 只携带 episodeId 与 shotIds，chapterId 在 projection → renderer → plan request 三层被丢失，planner 因而进入默认章节解析并对多章节 episode 显式拒绝。旧 Logic 只验证节点存在，旧 Golden 也没有在最终全部范围保持 browser-observation clean，因此统一计费入口本身仍可制造 403。当前视频计划 View 把所属 chapterId 作为必填 scope，两个单段生成 action 与 request builder 原样传递，四个只处理单章的连续/资产参考视频 input schema 在 planner 前拒绝缺失 chapterId；Canvas/播放器的完整组合改为人工产品复验。
 - Operation plan 与 Grant 曾统一写入 15 分钟 `expiresAt`。真实创作流程中用户在报价卡停留超过 15 分钟后，Assistant control 先消费 interruption，再由 `issueApprovalGrant` 抛出 `OPERATION_PLAN_EXPIRED`，导致一张仍可点击的卡片变成原始 Runtime Error；旧 Critical 场景只证明“过期 Grant 无副作用”和“已消费 Grant 可重放”，没有覆盖真实 Assistant 控制顺序，也把 timer 固化成正确性来源。当前协议删除两个 `expiresAt` 与所有时间判断；所有收费 Operation 由同一 registry planner 和三个 Hash 进行内容重验证，变化时撤销旧 Grant，未变化时无论停留多久都可执行。

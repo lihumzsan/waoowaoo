@@ -101,11 +101,17 @@ function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== 'object') return value
   const record = value as Record<string, unknown>
-  return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalize(record[key])]))
+  return Object.fromEntries(
+    Object.keys(record)
+      .sort()
+      .map((key) => [key, canonicalize(record[key])]),
+  )
 }
 
 function hashJson(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(canonicalize(value))).digest('hex')
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)))
+    .digest('hex')
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -122,13 +128,14 @@ function parseOutput(value: unknown): ProviderInvocationOutput {
   }
   const output = value as Record<string, unknown>
   if (
-    typeof output.taskId !== 'string'
-    || typeof output.invocationKey !== 'string'
-    || typeof output.invocationHash !== 'string'
-    || typeof output.modality !== 'string'
-    || typeof output.provider !== 'string'
-    || typeof output.modelKey !== 'string'
-  ) throw new Error('PROVIDER_INVOCATION_CHECKPOINT_OUTPUT_INVALID')
+    typeof output.taskId !== 'string' ||
+    typeof output.invocationKey !== 'string' ||
+    typeof output.invocationHash !== 'string' ||
+    typeof output.modality !== 'string' ||
+    typeof output.provider !== 'string' ||
+    typeof output.modelKey !== 'string'
+  )
+    throw new Error('PROVIDER_INVOCATION_CHECKPOINT_OUTPUT_INVALID')
   return output as ProviderInvocationOutput
 }
 
@@ -136,16 +143,17 @@ function parseRouteOutput(value: unknown): MediaProviderRouteInvocationOutput {
   const output = parseOutput(value)
   const record = output as ProviderInvocationOutput & Record<string, unknown>
   if (
-    record.protocol !== 'media_routes_v1'
-    || typeof record.logicalCapabilityId !== 'string'
-    || typeof record.primaryModelKey !== 'string'
-    || record.failoverPolicy !== 'pre_accept_only'
-    || !Array.isArray(record.routes)
-    || !Array.isArray(record.routeAttempts)
-    || typeof record.nextRouteIndex !== 'number'
-    || !Number.isSafeInteger(record.nextRouteIndex)
-    || record.nextRouteIndex < 0
-  ) throw new Error('PROVIDER_ROUTE_CHECKPOINT_OUTPUT_INVALID')
+    record.protocol !== 'media_routes_v1' ||
+    typeof record.logicalCapabilityId !== 'string' ||
+    typeof record.primaryModelKey !== 'string' ||
+    record.failoverPolicy !== 'pre_accept_only' ||
+    !Array.isArray(record.routes) ||
+    !Array.isArray(record.routeAttempts) ||
+    typeof record.nextRouteIndex !== 'number' ||
+    !Number.isSafeInteger(record.nextRouteIndex) ||
+    record.nextRouteIndex < 0
+  )
+    throw new Error('PROVIDER_ROUTE_CHECKPOINT_OUTPUT_INVALID')
 
   for (const route of record.routes) {
     if (!route || typeof route !== 'object' || Array.isArray(route)) {
@@ -153,10 +161,11 @@ function parseRouteOutput(value: unknown): MediaProviderRouteInvocationOutput {
     }
     const candidate = route as Record<string, unknown>
     if (
-      typeof candidate.provider !== 'string'
-      || typeof candidate.modelKey !== 'string'
-      || typeof candidate.requestHash !== 'string'
-    ) throw new Error('PROVIDER_ROUTE_CHECKPOINT_OUTPUT_INVALID')
+      typeof candidate.provider !== 'string' ||
+      typeof candidate.modelKey !== 'string' ||
+      typeof candidate.requestHash !== 'string'
+    )
+      throw new Error('PROVIDER_ROUTE_CHECKPOINT_OUTPUT_INVALID')
   }
   for (const attempt of record.routeAttempts) {
     if (!attempt || typeof attempt !== 'object' || Array.isArray(attempt)) {
@@ -164,15 +173,15 @@ function parseRouteOutput(value: unknown): MediaProviderRouteInvocationOutput {
     }
     const candidate = attempt as Record<string, unknown>
     if (
-      typeof candidate.routeIndex !== 'number'
-      || !Number.isSafeInteger(candidate.routeIndex)
-      || candidate.routeIndex < 0
-      || typeof candidate.taskAttempt !== 'number'
-      || !Number.isSafeInteger(candidate.taskAttempt)
-      || candidate.taskAttempt < 1
-      || typeof candidate.provider !== 'string'
-      || typeof candidate.modelKey !== 'string'
-      || ![
+      typeof candidate.routeIndex !== 'number' ||
+      !Number.isSafeInteger(candidate.routeIndex) ||
+      candidate.routeIndex < 0 ||
+      typeof candidate.taskAttempt !== 'number' ||
+      !Number.isSafeInteger(candidate.taskAttempt) ||
+      candidate.taskAttempt < 1 ||
+      typeof candidate.provider !== 'string' ||
+      typeof candidate.modelKey !== 'string' ||
+      ![
         'submitting',
         'pre_accept_rejected',
         'submitted',
@@ -180,24 +189,33 @@ function parseRouteOutput(value: unknown): MediaProviderRouteInvocationOutput {
         'rejected',
         'outcome_unknown',
       ].includes(String(candidate.state))
-    ) throw new Error('PROVIDER_ROUTE_ATTEMPT_OUTPUT_INVALID')
+    )
+      throw new Error('PROVIDER_ROUTE_ATTEMPT_OUTPUT_INVALID')
   }
   return record as unknown as MediaProviderRouteInvocationOutput
 }
 
-function isRouteOutput(value: ProviderInvocationOutput): value is MediaProviderRouteInvocationOutput {
+function isRouteOutput(
+  value: ProviderInvocationOutput,
+): value is MediaProviderRouteInvocationOutput {
   return (value as ProviderInvocationOutput & { protocol?: unknown }).protocol === 'media_routes_v1'
 }
 
-function assertDescriptor(output: ProviderInvocationOutput, descriptor: ProviderInvocationDescriptor): void {
+function assertDescriptor(
+  output: ProviderInvocationOutput,
+  descriptor: ProviderInvocationDescriptor,
+): void {
   if (
-    output.taskId !== descriptor.taskId
-    || output.invocationKey !== descriptor.invocationKey
-    || output.invocationHash !== descriptor.invocationHash
-    || output.modality !== descriptor.modality
-    || output.provider !== descriptor.provider
-    || output.modelKey !== descriptor.modelKey
-  ) throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_CONFLICT:${descriptor.taskId}:${descriptor.invocationKey}`)
+    output.taskId !== descriptor.taskId ||
+    output.invocationKey !== descriptor.invocationKey ||
+    output.invocationHash !== descriptor.invocationHash ||
+    output.modality !== descriptor.modality ||
+    output.provider !== descriptor.provider ||
+    output.modelKey !== descriptor.modelKey
+  )
+    throw new Error(
+      `PROVIDER_INVOCATION_CHECKPOINT_CONFLICT:${descriptor.taskId}:${descriptor.invocationKey}`,
+    )
 }
 
 function assertRouteDescriptor(
@@ -211,15 +229,19 @@ function assertRouteDescriptor(
 ): void {
   assertDescriptor(output, input.descriptor)
   if (
-    output.logicalCapabilityId !== input.logicalCapabilityId
-    || output.primaryModelKey !== input.primaryModelKey
-    || hashJson(output.routes) !== hashJson(input.routes)
+    output.logicalCapabilityId !== input.logicalCapabilityId ||
+    output.primaryModelKey !== input.primaryModelKey ||
+    hashJson(output.routes) !== hashJson(input.routes)
   ) {
-    throw new Error(`PROVIDER_ROUTE_CHECKPOINT_CONFLICT:${input.descriptor.taskId}:${input.descriptor.invocationKey}`)
+    throw new Error(
+      `PROVIDER_ROUTE_CHECKPOINT_CONFLICT:${input.descriptor.taskId}:${input.descriptor.invocationKey}`,
+    )
   }
 }
 
-function parseMediaProviderResult<TResult extends MediaProviderInvocationResult>(value: unknown): TResult {
+function parseMediaProviderResult<TResult extends MediaProviderInvocationResult>(
+  value: unknown,
+): TResult {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('PROVIDER_INVOCATION_RESULT_INVALID')
   }
@@ -242,11 +264,12 @@ function outcomeUnknown(descriptor: ProviderInvocationDescriptor, cause?: unknow
       modality: descriptor.modality,
       modelKey: descriptor.modelKey,
     },
-    error: cause === undefined
-      ? undefined
-      : cause instanceof Error
-        ? { name: cause.name, message: cause.message, stack: cause.stack }
-        : { message: describeUnknownError(cause) },
+    error:
+      cause === undefined
+        ? undefined
+        : cause instanceof Error
+          ? { name: cause.name, message: cause.message, stack: cause.stack }
+          : { message: describeUnknownError(cause) },
   })
   return new AppError(
     'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
@@ -311,13 +334,15 @@ function retryableSubmissionFailure(
 }
 
 function isRetryableSubmissionStatus(status: number): boolean {
-  return status === 408
-    || status === 425
-    || status === 429
-    || status === 500
-    || status === 502
-    || status === 503
-    || status === 504
+  return (
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  )
 }
 
 function readExplicitHttpStatus(error: unknown): number | null {
@@ -329,11 +354,12 @@ function readExplicitHttpStatus(error: unknown): number | null {
     readonly code?: unknown
   }
   for (const candidate of [record.status, record.statusCode, record.code]) {
-    const status = typeof candidate === 'number'
-      ? candidate
-      : typeof candidate === 'string' && /^\d{3}$/.test(candidate.trim())
-        ? Number.parseInt(candidate.trim(), 10)
-        : NaN
+    const status =
+      typeof candidate === 'number'
+        ? candidate
+        : typeof candidate === 'string' && /^\d{3}$/.test(candidate.trim())
+          ? Number.parseInt(candidate.trim(), 10)
+          : NaN
     if (Number.isInteger(status) && status >= 100 && status <= 599) return status
   }
   return null
@@ -342,7 +368,9 @@ function readExplicitHttpStatus(error: unknown): number | null {
 function requireTaskAttempt(taskId: string): number {
   const context = getLogContext()
   if (context.taskId !== taskId) {
-    throw new Error(`TASK_PROVIDER_INVOCATION_CONTEXT_CONFLICT:${taskId}:${context.taskId || 'missing'}`)
+    throw new Error(
+      `TASK_PROVIDER_INVOCATION_CONTEXT_CONFLICT:${taskId}:${context.taskId || 'missing'}`,
+    )
   }
   if (!Number.isInteger(context.taskAttempt) || (context.taskAttempt ?? 0) < 1) {
     throw new Error(`TASK_PROVIDER_INVOCATION_ATTEMPT_REQUIRED:${taskId}`)
@@ -389,9 +417,9 @@ export async function readTaskProviderInvocationRouteSelection(params: {
   }
   const declared = routeOutput.routes[accepted.routeIndex]
   if (
-    !declared
-    || declared.provider !== accepted.provider
-    || declared.modelKey !== accepted.modelKey
+    !declared ||
+    declared.provider !== accepted.provider ||
+    declared.modelKey !== accepted.modelKey
   ) {
     throw new Error(`PROVIDER_ROUTE_ACCEPTED_ATTEMPT_CONFLICT:${params.taskId}:${invocationKey}`)
   }
@@ -400,6 +428,26 @@ export async function readTaskProviderInvocationRouteSelection(params: {
     modelKey: accepted.modelKey,
     logicalCapabilityId: routeOutput.logicalCapabilityId,
   }
+}
+
+/**
+ * Returns the external job identity durably accepted for one logical Task
+ * invocation. Cancellation compensation uses this ledger fact instead of
+ * guessing from Task projections or provider-specific response shapes.
+ */
+export async function readTaskProviderInvocationExternalId(params: {
+  readonly taskId: string
+  readonly invocation: TaskProviderInvocation
+}): Promise<string | null> {
+  const invocationKey = params.invocation.key.trim()
+  if (!invocationKey) throw new Error('PROVIDER_INVOCATION_KEY_REQUIRED')
+  const checkpoint = await loadCheckpoint(params.taskId, buildStepKey(invocationKey))
+  if (!checkpoint || checkpoint.state !== 'submitted') return null
+  return readAcceptedExternalIdFromCheckpoint({
+    taskId: params.taskId,
+    invocationKey,
+    checkpoint,
+  })
 }
 
 async function claimCheckpoint(params: {
@@ -426,7 +474,8 @@ async function claimCheckpoint(params: {
     })
     return { checkpoint, claimed: true }
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+      throw error
     const existing = await loadCheckpoint(params.descriptor.taskId, params.stepKey)
     if (!existing) throw error
     return { checkpoint: existing, claimed: false }
@@ -467,7 +516,8 @@ async function claimRouteCheckpoint(params: {
     })
     return { checkpoint, claimed: true }
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+      throw error
     const existing = await loadCheckpoint(params.descriptor.taskId, params.stepKey)
     if (!existing) throw error
     return { checkpoint: existing, claimed: false }
@@ -482,7 +532,9 @@ async function reclaimRetryableCheckpoint(params: {
   const output = parseOutput(params.checkpoint.output)
   const previousAttempt = output.taskAttempt
   if (!Number.isInteger(previousAttempt) || (previousAttempt ?? 0) < 1) {
-    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${params.descriptor.taskId}:${params.descriptor.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${params.descriptor.taskId}:${params.descriptor.invocationKey}`,
+    )
   }
   if (params.taskAttempt <= previousAttempt!) {
     throw retryableSubmissionFailure(params.descriptor, readStoredError(output))
@@ -500,9 +552,14 @@ async function reclaimRetryableCheckpoint(params: {
       completedAt: null,
     },
   })
-  const checkpoint = await loadCheckpoint(params.descriptor.taskId, buildStepKey(params.descriptor.invocationKey))
+  const checkpoint = await loadCheckpoint(
+    params.descriptor.taskId,
+    buildStepKey(params.descriptor.invocationKey),
+  )
   if (!checkpoint) {
-    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${params.descriptor.taskId}:${params.descriptor.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_CHECKPOINT_MISSING:${params.descriptor.taskId}:${params.descriptor.invocationKey}`,
+    )
   }
   return { checkpoint, claimed: updated.count === 1 }
 }
@@ -515,11 +572,12 @@ async function transitionCheckpoint(params: {
   readonly result?: unknown
   readonly error?: unknown
 }): Promise<void> {
-  const error = params.error instanceof Error
-    ? { name: params.error.name || 'Error', message: params.error.message.slice(0, 2_000) }
-    : params.error === undefined
-      ? undefined
-      : { name: typeof params.error, message: String(params.error).slice(0, 2_000) }
+  const error =
+    params.error instanceof Error
+      ? { name: params.error.name || 'Error', message: params.error.message.slice(0, 2_000) }
+      : params.error === undefined
+        ? undefined
+        : { name: typeof params.error, message: String(params.error).slice(0, 2_000) }
   const output: ProviderInvocationOutput = {
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
@@ -535,14 +593,22 @@ async function transitionCheckpoint(params: {
     },
   })
   if (updated.count !== 1) {
-    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_TRANSITION_FAILED:${params.descriptor.taskId}:${params.descriptor.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_CHECKPOINT_TRANSITION_FAILED:${params.descriptor.taskId}:${params.descriptor.invocationKey}`,
+    )
   }
 }
 
 async function transitionRouteCheckpoint(params: {
   readonly checkpointId: string
   readonly expectedState: string
-  readonly state: 'route_ready' | 'submitting' | 'submitted' | 'rejected' | 'retryable_rejected' | 'outcome_unknown'
+  readonly state:
+    | 'route_ready'
+    | 'submitting'
+    | 'submitted'
+    | 'rejected'
+    | 'retryable_rejected'
+    | 'outcome_unknown'
   readonly output: MediaProviderRouteInvocationOutput
 }): Promise<boolean> {
   const updated = await prisma.taskExecutionCheckpoint.updateMany({
@@ -550,7 +616,9 @@ async function transitionRouteCheckpoint(params: {
     data: {
       state: params.state,
       output: toJson(params.output),
-      completedAt: ['submitted', 'rejected', 'retryable_rejected', 'outcome_unknown'].includes(params.state)
+      completedAt: ['submitted', 'rejected', 'retryable_rejected', 'outcome_unknown'].includes(
+        params.state,
+      )
         ? new Date()
         : null,
     },
@@ -565,13 +633,14 @@ function replaceLastRouteAttempt(
   const attempts = [...output.routeAttempts]
   const current = attempts[attempts.length - 1]
   if (
-    !current
-    || current.state !== 'submitting'
-    || current.routeIndex !== next.routeIndex
-    || current.taskAttempt !== next.taskAttempt
-    || current.provider !== next.provider
-    || current.modelKey !== next.modelKey
-  ) throw new Error(`PROVIDER_ROUTE_ATTEMPT_CONFLICT:${output.taskId}:${output.invocationKey}`)
+    !current ||
+    current.state !== 'submitting' ||
+    current.routeIndex !== next.routeIndex ||
+    current.taskAttempt !== next.taskAttempt ||
+    current.provider !== next.provider ||
+    current.modelKey !== next.modelKey
+  )
+    throw new Error(`PROVIDER_ROUTE_ATTEMPT_CONFLICT:${output.taskId}:${output.invocationKey}`)
   attempts[attempts.length - 1] = next
   return attempts
 }
@@ -583,7 +652,9 @@ async function claimNextProviderRoute(params: {
 }): Promise<MediaProviderRouteInvocationOutput | null> {
   const storedAttempt = params.output.taskAttempt
   if (Number.isInteger(storedAttempt) && params.taskAttempt < storedAttempt!) {
-    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${params.output.taskId}:${params.output.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${params.output.taskId}:${params.output.invocationKey}`,
+    )
   }
   const route = params.output.routes[params.output.nextRouteIndex]
   if (!route) throw new Error(`PROVIDER_ROUTE_EXHAUSTED:${params.output.logicalCapabilityId}`)
@@ -632,21 +703,30 @@ async function markCheckpointRetryable(params: {
   const output = parseOutput(params.checkpoint.output)
   const storedAttempt = output.taskAttempt
   if (!Number.isInteger(storedAttempt) || (storedAttempt ?? 0) < 1) {
-    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`,
+    )
   }
   if (params.taskAttempt < storedAttempt!) {
-    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${output.taskId}:${output.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${output.taskId}:${output.invocationKey}`,
+    )
   }
-  if (params.checkpoint.state === 'retryable_rejected' && storedAttempt === params.taskAttempt) return
+  if (params.checkpoint.state === 'retryable_rejected' && storedAttempt === params.taskAttempt)
+    return
   if (params.checkpoint.state !== 'submitted') {
-    throw new Error(`PROVIDER_INVOCATION_RETRY_STATE_INVALID:${output.taskId}:${output.invocationKey}:${params.checkpoint.state}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_STATE_INVALID:${output.taskId}:${output.invocationKey}:${params.checkpoint.state}`,
+    )
   }
 
   if (isRouteOutput(output)) {
     const attempts = [...output.routeAttempts]
     const last = attempts[attempts.length - 1]
     if (!last || last.state !== 'submitted') {
-      throw new Error(`PROVIDER_ROUTE_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`)
+      throw new Error(
+        `PROVIDER_ROUTE_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`,
+      )
     }
     attempts[attempts.length - 1] = {
       ...last,
@@ -673,11 +753,16 @@ async function markCheckpointRetryable(params: {
 
     const current = await loadCheckpoint(output.taskId, params.checkpoint.stepKey)
     if (!current) {
-      throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${output.taskId}:${output.invocationKey}`)
+      throw new Error(
+        `PROVIDER_INVOCATION_CHECKPOINT_MISSING:${output.taskId}:${output.invocationKey}`,
+      )
     }
     const currentOutput = parseRouteOutput(current.output)
-    if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt) return
-    throw new Error(`PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`)
+    if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt)
+      return
+    throw new Error(
+      `PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`,
+    )
   }
 
   const nextOutput: ProviderInvocationOutput = {
@@ -700,11 +785,16 @@ async function markCheckpointRetryable(params: {
 
   const current = await loadCheckpoint(output.taskId, params.checkpoint.stepKey)
   if (!current) {
-    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${output.taskId}:${output.invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_CHECKPOINT_MISSING:${output.taskId}:${output.invocationKey}`,
+    )
   }
   const currentOutput = parseOutput(current.output)
-  if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt) return
-  throw new Error(`PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`)
+  if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt)
+    return
+  throw new Error(
+    `PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`,
+  )
 }
 
 export async function markTaskProviderInvocationRetryable(params: {
@@ -732,6 +822,81 @@ function readExternalId(result: unknown): string | null {
   return typeof externalId === 'string' && externalId.trim() ? externalId.trim() : null
 }
 
+function readAcceptedExternalIdFromCheckpoint(params: {
+  readonly taskId: string
+  readonly invocationKey: string
+  readonly checkpoint: ProviderCheckpoint
+}): string | null {
+  const output = parseOutput(params.checkpoint.output)
+  if (
+    output.taskId !== params.taskId ||
+    output.invocationKey !== params.invocationKey ||
+    params.checkpoint.stepKey !== buildStepKey(params.invocationKey)
+  ) {
+    throw new Error(
+      `PROVIDER_INVOCATION_CHECKPOINT_CONFLICT:${params.taskId}:${params.invocationKey}`,
+    )
+  }
+  const resultExternalId = readExternalId(output.result)
+  if (!isRouteOutput(output)) return resultExternalId
+
+  const routeOutput = parseRouteOutput(params.checkpoint.output)
+  const accepted = routeOutput.routeAttempts[routeOutput.routeAttempts.length - 1]
+  if (!accepted || accepted.state !== 'submitted') {
+    throw new Error(
+      `PROVIDER_ROUTE_ACCEPTED_ATTEMPT_MISSING:${params.taskId}:${params.invocationKey}`,
+    )
+  }
+  const acceptedExternalId = accepted.externalId?.trim() || null
+  if (
+    acceptedExternalId !== null &&
+    resultExternalId !== null &&
+    acceptedExternalId !== resultExternalId
+  ) {
+    throw new Error(`PROVIDER_ROUTE_EXTERNAL_ID_CONFLICT:${params.taskId}:${params.invocationKey}`)
+  }
+  return acceptedExternalId ?? resultExternalId
+}
+
+/**
+ * Enumerates every durably accepted asynchronous provider job for a Task.
+ * Post-terminal cancellation compensation uses the ledger itself, so adding a
+ * new media invocation does not require another Task-type or invocation-key
+ * switch. Synchronous and non-provider checkpoints are naturally excluded.
+ */
+export async function listTaskAcceptedProviderExternalIds(
+  taskId: string,
+): Promise<readonly string[]> {
+  const normalizedTaskId = taskId.trim()
+  if (!normalizedTaskId) throw new Error('TASK_ID_REQUIRED')
+  const checkpoints = await prisma.taskExecutionCheckpoint.findMany({
+    where: {
+      taskId: normalizedTaskId,
+      state: 'submitted',
+      stepKey: { startsWith: STEP_PREFIX },
+    },
+    orderBy: { stepKey: 'asc' },
+    select: {
+      id: true,
+      stepKey: true,
+      inputFingerprint: true,
+      state: true,
+      output: true,
+    },
+  })
+  const externalIds = new Set<string>()
+  for (const checkpoint of checkpoints) {
+    const output = parseOutput(checkpoint.output)
+    const externalId = readAcceptedExternalIdFromCheckpoint({
+      taskId: normalizedTaskId,
+      invocationKey: output.invocationKey,
+      checkpoint,
+    })
+    if (externalId) externalIds.add(externalId)
+  }
+  return [...externalIds]
+}
+
 export async function markTaskProviderInvocationRetryableByExternalId(params: {
   readonly taskId: string
   readonly externalId: string
@@ -753,7 +918,9 @@ export async function markTaskProviderInvocationRetryableByExternalId(params: {
     return readExternalId(output.result) === externalId
   })
   if (matches.length !== 1) {
-    throw new Error(`PROVIDER_EXTERNAL_ID_CHECKPOINT_${matches.length === 0 ? 'MISSING' : 'CONFLICT'}:${params.taskId}:${externalId}`)
+    throw new Error(
+      `PROVIDER_EXTERNAL_ID_CHECKPOINT_${matches.length === 0 ? 'MISSING' : 'CONFLICT'}:${params.taskId}:${externalId}`,
+    )
   }
   await markCheckpointRetryable({ checkpoint: matches[0]!, taskAttempt, error: params.error })
 }
@@ -791,7 +958,9 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   let output = parseOutput(checkpoint.output)
   assertDescriptor(output, descriptor)
   if (checkpoint.inputFingerprint !== inputFingerprint) {
-    throw new Error(`PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`,
+    )
   }
 
   if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
@@ -802,7 +971,9 @@ export async function executeTaskDurableInvocation<TResult>(params: {
     output = parseOutput(checkpoint.output)
     assertDescriptor(output, descriptor)
     if (checkpoint.inputFingerprint !== inputFingerprint) {
-      throw new Error(`PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`)
+      throw new Error(
+        `PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`,
+      )
     }
     if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
     if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
@@ -819,8 +990,8 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   } catch (error) {
     const explicitHttpStatus = readExplicitHttpStatus(error)
     if (
-      (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus))
-      || params.resultPolicy.isKnownRetryableFailureError?.(error) === true
+      (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)) ||
+      params.resultPolicy.isKnownRetryableFailureError?.(error) === true
     ) {
       try {
         await transitionCheckpoint({
@@ -836,8 +1007,8 @@ export async function executeTaskDurableInvocation<TResult>(params: {
       throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
     }
     if (
-      explicitHttpStatus !== null
-      || params.resultPolicy.isKnownRejectionError?.(error) === true
+      explicitHttpStatus !== null ||
+      params.resultPolicy.isKnownRejectionError?.(error) === true
     ) {
       try {
         await transitionCheckpoint({
@@ -870,7 +1041,13 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   if (unknownOutcomeMessage) {
     const error = new Error(unknownOutcomeMessage)
     try {
-      await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'outcome_unknown', taskAttempt, result })
+      await transitionCheckpoint({
+        checkpointId: checkpoint.id,
+        descriptor,
+        state: 'outcome_unknown',
+        taskAttempt,
+        result,
+      })
     } catch (transitionError) {
       throw outcomeUnknown(descriptor, transitionError)
     }
@@ -880,7 +1057,13 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   const rejectionMessage = params.resultPolicy.rejectionMessage?.(result) ?? null
   if (rejectionMessage) {
     try {
-      await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'rejected', taskAttempt, result })
+      await transitionCheckpoint({
+        checkpointId: checkpoint.id,
+        descriptor,
+        state: 'rejected',
+        taskAttempt,
+        result,
+      })
     } catch (error) {
       throw outcomeUnknown(descriptor, error)
     }
@@ -888,7 +1071,13 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   }
 
   try {
-    await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'submitted', taskAttempt, result })
+    await transitionCheckpoint({
+      checkpointId: checkpoint.id,
+      descriptor,
+      state: 'submitted',
+      taskAttempt,
+      result,
+    })
   } catch (error) {
     throw outcomeUnknown(descriptor, error)
   }
@@ -910,9 +1099,10 @@ function withProviderRouteMetadata<TResult extends MediaProviderInvocationResult
   readonly modelKey: string
 }): TResult {
   const record = params.result as TResult & { metadata?: unknown }
-  const metadata = record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
-    ? record.metadata as Record<string, unknown>
-    : {}
+  const metadata =
+    record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+      ? (record.metadata as Record<string, unknown>)
+      : {}
   return {
     ...params.result,
     metadata: {
@@ -927,7 +1117,9 @@ function withProviderRouteMetadata<TResult extends MediaProviderInvocationResult
   } as TResult
 }
 
-export async function executeTaskProviderInvocation<TResult extends MediaProviderInvocationResult>(params: {
+export async function executeTaskProviderInvocation<
+  TResult extends MediaProviderInvocationResult,
+>(params: {
   readonly taskId: string
   readonly invocation: TaskProviderInvocation
   readonly modality: string
@@ -940,7 +1132,9 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
   if (!params.logicalCapabilityId.trim()) throw new Error('PROVIDER_LOGICAL_CAPABILITY_ID_REQUIRED')
   if (params.routes.length === 0) throw new Error('PROVIDER_ROUTE_REQUIRED')
   if (params.routes[0]?.modelKey !== params.primaryModelKey) {
-    throw new Error(`PROVIDER_ROUTE_PRIMARY_CONFLICT:${params.logicalCapabilityId}:${params.primaryModelKey}`)
+    throw new Error(
+      `PROVIDER_ROUTE_PRIMARY_CONFLICT:${params.logicalCapabilityId}:${params.primaryModelKey}`,
+    )
   }
   const onlyRoute = params.routes.length === 1 ? params.routes[0] : undefined
   if (onlyRoute) {
@@ -954,9 +1148,10 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
       execute: onlyRoute.execute,
       resultPolicy: {
         parse: parseMediaProviderResult<TResult>,
-        outcomeUnknownMessage: (result) => result.success
-          ? null
-          : result.error || 'Provider returned success:false without a typed acceptance outcome',
+        outcomeUnknownMessage: (result) =>
+          result.success
+            ? null
+            : result.error || 'Provider returned success:false without a typed acceptance outcome',
         isKnownRejectionError: (error) => error instanceof AppError && !error.retryable,
       },
     })
@@ -1007,7 +1202,9 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
     routes,
   })
   if (checkpoint.inputFingerprint !== inputFingerprint) {
-    throw new Error(`PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`)
+    throw new Error(
+      `PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`,
+    )
   }
 
   if (checkpoint.state === 'submitted') return parseMediaProviderResult<TResult>(output.result)
@@ -1041,7 +1238,8 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
     const routeIndex = output.nextRouteIndex
     const route = params.routes[routeIndex]
     const routeDescriptor = routes[routeIndex]
-    if (!route || !routeDescriptor) throw new Error(`PROVIDER_ROUTE_MISSING:${params.logicalCapabilityId}:${routeIndex}`)
+    if (!route || !routeDescriptor)
+      throw new Error(`PROVIDER_ROUTE_MISSING:${params.logicalCapabilityId}:${routeIndex}`)
     const claimedOutput = await claimNextProviderRoute({ checkpoint, output, taskAttempt })
     if (!claimedOutput) throw outcomeUnknown(descriptor)
     output = claimedOutput
@@ -1110,8 +1308,10 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
       }
 
       const explicitHttpStatus = readExplicitHttpStatus(error)
-      const retryableFailure = explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)
-      const permanentRejection = explicitHttpStatus !== null || (error instanceof AppError && !error.retryable)
+      const retryableFailure =
+        explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)
+      const permanentRejection =
+        explicitHttpStatus !== null || (error instanceof AppError && !error.retryable)
       const nextOutput: MediaProviderRouteInvocationOutput = {
         ...output,
         routeAttempts: replaceLastRouteAttempt(output, {
@@ -1141,7 +1341,8 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
         output: nextOutput,
       })
       if (!transitioned) throw outcomeUnknown(descriptor)
-      if (retryableFailure) throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
+      if (retryableFailure)
+        throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
       if (permanentRejection) throw rejected(descriptor, readErrorMessage(error), error)
       throw outcomeUnknown(descriptor, error)
     }
@@ -1157,12 +1358,14 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
           state: 'outcome_unknown',
           error: {
             name: 'ProviderResultRejected',
-            message: result.error || 'Provider returned success:false without a typed acceptance outcome',
+            message:
+              result.error || 'Provider returned success:false without a typed acceptance outcome',
           },
         }),
         error: {
           name: 'ProviderResultRejected',
-          message: result.error || 'Provider returned success:false without a typed acceptance outcome',
+          message:
+            result.error || 'Provider returned success:false without a typed acceptance outcome',
         },
       }
       const transitioned = await transitionRouteCheckpoint({

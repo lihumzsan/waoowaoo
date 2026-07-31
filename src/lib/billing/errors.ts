@@ -3,7 +3,9 @@ export class InsufficientBalanceError extends Error {
   public required: number
 
   constructor(required: number, available: number) {
-    super(`INSUFFICIENT_CREDITS: required=${required.toFixed(4)}, available=${available.toFixed(4)}`)
+    super(
+      `INSUFFICIENT_CREDITS: required=${required.toFixed(4)}, available=${available.toFixed(4)}`,
+    )
     this.name = 'InsufficientBalanceError'
     this.required = required
     this.available = available
@@ -32,6 +34,8 @@ export type BillingOperationErrorCode =
   | 'BILLING_IDEMPOTENT_ROLLED_BACK'
   | 'BILLING_INVALID_PROJECT'
   | 'BILLING_FREEZE_OWNERSHIP_MISMATCH'
+  | 'BILLING_INVALID_USAGE_IDENTITY'
+  | 'BILLING_USAGE_REPLAY_DIVERGED'
 
 export class BillingOperationError extends Error {
   public readonly code: BillingOperationErrorCode

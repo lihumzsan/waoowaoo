@@ -18,6 +18,7 @@ export const TASK_WORKFLOW_UPDATE_NAME = {
 
 export const USER_TASK_SCHEDULER_UPDATE_NAME = {
   ENQUEUE: 'user-task-scheduler.enqueue',
+  CANCEL_QUEUED: 'user-task-scheduler.cancel-queued',
   RELEASE_CAPACITY: 'user-task-scheduler.release-capacity',
 } as const
 
@@ -85,10 +86,7 @@ export interface RunTaskAttemptInput {
   executionDeadlineMs: number | null
 }
 
-export type BeginTaskAttemptInput = Omit<
-  RunTaskAttemptInput,
-  'executionDeadlineMs'
->
+export type BeginTaskAttemptInput = Omit<RunTaskAttemptInput, 'executionDeadlineMs'>
 
 export interface TaskAttemptFailure {
   errorCode: string
@@ -149,18 +147,24 @@ export interface ReleaseTaskCapacityInput {
   taskWorkflowId: string
   taskId: string
   terminalEventId: number
+  status: TaskWorkflowTerminalStatus
+}
+
+export interface CancelTaskProviderJobsInput {
+  workflowId: string
+  taskId: string
+  userId: string
+  terminalEventId: number
 }
 
 export interface TaskWorkflowActivities {
-  initializeTaskWorkflow(
-    input: InitializeTaskWorkflowInput,
-  ): Promise<InitializeTaskWorkflowResult>
+  initializeTaskWorkflow(input: InitializeTaskWorkflowInput): Promise<InitializeTaskWorkflowResult>
   beginTaskAttempt(input: BeginTaskAttemptInput): Promise<void>
   runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTaskAttemptResult>
-  commitTaskTerminal(
-    input: CommitTaskTerminalInput,
-  ): Promise<TaskTerminalReceipt>
+  commitTaskTerminal(input: CommitTaskTerminalInput): Promise<TaskTerminalReceipt>
+  commitTaskWorkflowFailure(input: CommitTaskWorkflowFailureInput): Promise<TaskWorkflowResult>
   releaseTaskCapacity(input: ReleaseTaskCapacityInput): Promise<void>
+  cancelTaskProviderJobs(input: CancelTaskProviderJobsInput): Promise<void>
   notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promise<void>
 }
 
@@ -194,7 +198,10 @@ export interface ScheduledTaskRequest {
 }
 
 export type ScheduledTaskState =
-  'queued' | 'running' | 'notification_pending' | TaskWorkflowTerminalStatus
+  | 'queued'
+  | 'running'
+  | 'notification_pending'
+  | TaskWorkflowTerminalStatus
 
 export interface ScheduledTaskReceipt {
   enqueueId: string
@@ -220,16 +227,40 @@ export interface SchedulerEnqueueDedupeEntry {
 export interface SchedulerCompletionSummary {
   taskWorkflowId: string
   status: TaskWorkflowTerminalStatus
+  terminalEventId: number
+  cancellation?: TaskCancelRequest
 }
 
 export interface SchedulerCapacityRelease {
   taskWorkflowId: string
   taskId: string
   terminalEventId: number
+  status: TaskWorkflowTerminalStatus
+}
+
+export interface SchedulerTaskCancelRequest {
+  scheduledTask: ScheduledTaskRequest
+  cancellation: TaskCancelRequest
+}
+
+export type SchedulerTaskCancelDecision =
+  | {
+      kind: 'terminal'
+      status: TaskWorkflowTerminalStatus
+    }
+  | {
+      kind: 'forward_to_task_workflow'
+    }
+
+export interface SchedulerActiveTask {
+  request: ScheduledTaskRequest
+  schedulerClass: TaskSchedulerClass | null
+  sequence: number
 }
 
 export interface UserTaskSchedulerContinuationState {
   queued: readonly SchedulerQueuedTask[]
+  active: readonly SchedulerActiveTask[]
   recentEnqueues: readonly SchedulerEnqueueDedupeEntry[]
   recentCompletions: readonly SchedulerCompletionSummary[]
   nextSequence: number
@@ -257,18 +288,16 @@ export type TaskSchedulerAdmission =
     }
 
 export interface CommitTaskWorkflowFailureInput {
+  owner: 'scheduler' | 'task_workflow'
   schedulerWorkflowId: string
   enqueueId: string
   task: TaskWorkflowInput
 }
 
 export interface UserTaskSchedulerActivities {
-  resolveTaskSchedulerAdmission(
-    input: TaskWorkflowInput,
-  ): Promise<TaskSchedulerAdmission>
-  commitTaskWorkflowFailure(
-    input: CommitTaskWorkflowFailureInput,
-  ): Promise<TaskWorkflowResult>
+  resolveTaskSchedulerAdmission(input: TaskWorkflowInput): Promise<TaskSchedulerAdmission>
+  commitTaskWorkflowFailure(input: CommitTaskWorkflowFailureInput): Promise<TaskWorkflowResult>
+  commitTaskTerminal(input: CommitTaskTerminalInput): Promise<TaskTerminalReceipt>
   notifyTaskFollowUp(input: NotifyTaskFollowUpInput): Promise<void>
 }
 

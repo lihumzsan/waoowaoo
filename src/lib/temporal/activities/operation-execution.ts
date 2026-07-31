@@ -1,4 +1,5 @@
 import { ApplicationFailure, Context, heartbeat } from '@temporalio/activity'
+import { WorkflowUpdateFailedError } from '@temporalio/client'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
@@ -7,6 +8,7 @@ import { assertOperationChannelAllowed } from '@/lib/operations/channel-policy'
 import { executeDirectOperationTransaction } from '@/lib/operations/durable-execution'
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import {
+  ApprovedOperationExecutionReceiptError,
   invokeApprovedOperationPlanWithReceipt,
   loadApprovedOperationExecutionInput,
 } from '@/lib/operations/planned-operation-invocation'
@@ -20,10 +22,7 @@ import { prisma } from '@/lib/prisma'
 import { getTaskDefinition } from '@/lib/task/definition'
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
 import { isTaskType } from '@/lib/task/types'
-import {
-  buildOperationExecutionWorkflowId,
-  buildTaskWorkflowId,
-} from '@/lib/temporal/identity'
+import { buildOperationExecutionWorkflowId, buildTaskWorkflowId } from '@/lib/temporal/identity'
 import {
   OPERATION_EXECUTION_MAX_TASKS,
   type DirectTaskOperationExecutionCommand,
@@ -32,16 +31,33 @@ import {
   type OperationExecutionWorkflowReceipt,
 } from '../operation-execution/contracts'
 import { assertOperationExecutionEnvelope } from '../operation-execution/identity'
-import { schedulePersistedTask } from '../task-client'
+import { schedulePersistedTask, TemporalTaskCommandUnconfirmedError } from '../task-client'
 
 function failNonRetryable(code: string, ...details: unknown[]): never {
   throw ApplicationFailure.nonRetryable(code, code, ...details)
 }
 
+function deterministicScheduleFailure(error: unknown): string | null {
+  if (error instanceof ApprovedOperationExecutionReceiptError) {
+    return error.code
+  }
+  if (error instanceof WorkflowUpdateFailedError) {
+    return 'OPERATION_EXECUTION_TASK_SCHEDULE_REJECTED'
+  }
+  if (
+    error instanceof Error &&
+    (error.message.startsWith('TASK_SCHEDULE_RECEIPT_') ||
+      error.message.startsWith('TASK_TYPE_INVALID:') ||
+      error.message === 'TASK_ID_INVALID' ||
+      error.message === 'TASK_USER_ID_INVALID')
+  ) {
+    return error.message
+  }
+  return null
+}
+
 function requireActivityIdentity(input: ExecuteOperationActivityInput): void {
-  const expectedWorkflowId = buildOperationExecutionWorkflowId(
-    input.envelope.command.executionId,
-  )
+  const expectedWorkflowId = buildOperationExecutionWorkflowId(input.envelope.command.executionId)
   if (input.workflowId !== expectedWorkflowId) {
     failNonRetryable(
       'OPERATION_EXECUTION_WORKFLOW_ID_DIVERGED',
@@ -49,8 +65,7 @@ function requireActivityIdentity(input: ExecuteOperationActivityInput): void {
       expectedWorkflowId,
     )
   }
-  const activityWorkflowId =
-    Context.current().info.workflowExecution?.workflowId
+  const activityWorkflowId = Context.current().info.workflowExecution?.workflowId
   if (!activityWorkflowId || activityWorkflowId !== input.workflowId) {
     failNonRetryable(
       'OPERATION_EXECUTION_ACTIVITY_WORKFLOW_DIVERGED',
@@ -86,12 +101,10 @@ function validateReceipt(
       !task.reference.taskId ||
       !isTaskType(taskType) ||
       taskIds.has(task.reference.taskId) ||
-      task.schedule.taskWorkflowId !==
-        buildTaskWorkflowId(task.reference.taskId) ||
+      task.schedule.taskWorkflowId !== buildTaskWorkflowId(task.reference.taskId) ||
       !task.schedule.enqueueId ||
       enqueueIds.has(task.schedule.enqueueId) ||
-      task.schedule.schedulerClass !==
-        getTaskDefinition(taskType).schedulerClass ||
+      task.schedule.schedulerClass !== getTaskDefinition(taskType).schedulerClass ||
       !Number.isSafeInteger(task.schedule.sequence) ||
       task.schedule.sequence <= 0 ||
       (task.schedule.state !== 'queued' &&
@@ -101,10 +114,7 @@ function validateReceipt(
         task.schedule.state !== 'failed' &&
         task.schedule.state !== 'canceled')
     ) {
-      return failNonRetryable(
-        'OPERATION_EXECUTION_TASK_SCHEDULE_DIVERGED',
-        task.reference.taskId,
-      )
+      return failNonRetryable('OPERATION_EXECUTION_TASK_SCHEDULE_DIVERGED', task.reference.taskId)
     }
     taskIds.add(task.reference.taskId)
     enqueueIds.add(task.schedule.enqueueId)
@@ -125,29 +135,20 @@ async function executeApprovedPlanOperation(
     return failNonRetryable('OPERATION_EXECUTION_KIND_INVALID')
   }
   const command = input.envelope.command
-  const operation =
-    createProjectAgentOperationRegistryForApi()[command.operationId]
+  const operation = createProjectAgentOperationRegistryForApi()[command.operationId]
   if (!operation) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_OPERATION_NOT_REGISTERED',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_OPERATION_NOT_REGISTERED', command.operationId)
   }
   try {
     assertOperationChannelAllowed(operation, 'api')
   } catch (error) {
     return failNonRetryable(
-      error instanceof Error
-        ? error.message
-        : 'OPERATION_EXECUTION_API_CHANNEL_FORBIDDEN',
+      error instanceof Error ? error.message : 'OPERATION_EXECUTION_API_CHANNEL_FORBIDDEN',
       command.operationId,
     )
   }
   if (!isBillablePlannedOperation(operation)) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_BILLABLE_PLAN_REQUIRED',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_BILLABLE_PLAN_REQUIRED', command.operationId)
   }
 
   const invocation = {
@@ -162,6 +163,9 @@ async function executeApprovedPlanOperation(
       invocation,
     })
   } catch (error) {
+    const deterministicCode = deterministicScheduleFailure(error)
+    if (deterministicCode) return failNonRetryable(deterministicCode)
+    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
     if (error instanceof ApiError) {
       return failNonRetryable(error.message)
     }
@@ -169,10 +173,7 @@ async function executeApprovedPlanOperation(
   }
   const parsedInput = operation.inputSchema.safeParse(normalizedInput)
   if (!parsedInput.success) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_FROZEN_INPUT_INVALID',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_FROZEN_INPUT_INVALID', command.operationId)
   }
   const grant = await prisma.approvalGrant.findUnique({
     where: { id: command.approvalGrantId },
@@ -192,31 +193,19 @@ async function executeApprovedPlanOperation(
     grant.projectId !== command.projectId ||
     grant.planSnapshot.projectId !== command.projectId
   ) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED',
-      command.approvalGrantId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_PROJECT_SCOPE_DIVERGED', command.approvalGrantId)
   }
   const snapshot = await loadOperationPlanSnapshot(grant.planSnapshotId)
   if (!snapshot) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_PLAN_SNAPSHOT_MISSING',
-      grant.planSnapshotId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_PLAN_SNAPSHOT_MISSING', grant.planSnapshotId)
   }
   const locales = new Set(snapshot.plan.tasks.map((task) => task.locale))
   if (locales.size > 1) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_PLAN_LOCALE_DIVERGED',
-      grant.planSnapshotId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_PLAN_LOCALE_DIVERGED', grant.planSnapshotId)
   }
   const locale = [...locales][0]
   if (command.context.episodeId !== grant.planSnapshot.episodeId) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_CONTEXT_SCOPE_DIVERGED',
-      command.executionId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_CONTEXT_SCOPE_DIVERGED', command.executionId)
   }
   const followUpBatchBinding =
     command.context.origin.kind === 'agent_turn'
@@ -245,10 +234,7 @@ async function executeApprovedPlanOperation(
     invocationChannel: 'api',
     source: command.source,
     writer: null,
-    toolCallId:
-      command.context.origin.kind === 'agent_turn'
-        ? command.context.origin.callId
-        : null,
+    toolCallId: command.context.origin.kind === 'agent_turn' ? command.context.origin.callId : null,
     activityId: Context.current().info.activityId,
     followUpBatchBinding,
   }
@@ -267,6 +253,9 @@ async function executeApprovedPlanOperation(
       ...result.receipt,
     })
   } catch (error) {
+    const deterministicCode = deterministicScheduleFailure(error)
+    if (deterministicCode) return failNonRetryable(deterministicCode)
+    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
     if (error instanceof ApiError) {
       return failNonRetryable(error.message)
     }
@@ -291,7 +280,7 @@ async function directTaskReceipt(params: {
       tasks.length,
     )
   }
-  const scheduled = []
+  const references = []
   for (const task of tasks) {
     if (
       task.userId !== params.command.userId ||
@@ -308,11 +297,14 @@ async function directTaskReceipt(params: {
         task.id,
       )
     }
-    const reference = {
+    references.push({
       taskId: task.id,
       userId: task.userId,
       taskType: task.type,
-    }
+    })
+  }
+  const scheduled = []
+  for (const reference of references) {
     scheduled.push({
       reference,
       schedule: await schedulePersistedTask(reference),
@@ -343,18 +335,13 @@ async function executeDirectTaskOperation(
   const registry = createProjectAgentOperationRegistryForApi()
   const operation = registry[command.operationId]
   if (!operation) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_OPERATION_NOT_REGISTERED',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_OPERATION_NOT_REGISTERED', command.operationId)
   }
   try {
     assertOperationChannelAllowed(operation, command.channel)
   } catch (error) {
     return failNonRetryable(
-      error instanceof Error
-        ? error.message
-        : 'OPERATION_EXECUTION_CHANNEL_FORBIDDEN',
+      error instanceof Error ? error.message : 'OPERATION_EXECUTION_CHANNEL_FORBIDDEN',
       command.operationId,
     )
   }
@@ -364,21 +351,14 @@ async function executeDirectTaskOperation(
     authority.contractRevision !== command.executionContractRevision ||
     authority.followUpPolicy !== 'after_all_terminal'
   ) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_REGISTRY_CONTRACT_DIVERGED',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_REGISTRY_CONTRACT_DIVERGED', command.operationId)
   }
   const parsedInput = operation.inputSchema.safeParse(command.normalizedInput)
   if (
     !parsedInput.success ||
-    hashCanonicalJson(parsedInput.data) !==
-      hashCanonicalJson(command.normalizedInput)
+    hashCanonicalJson(parsedInput.data) !== hashCanonicalJson(command.normalizedInput)
   ) {
-    return failNonRetryable(
-      'OPERATION_EXECUTION_FROZEN_INPUT_INVALID',
-      command.operationId,
-    )
+    return failNonRetryable('OPERATION_EXECUTION_FROZEN_INPUT_INVALID', command.operationId)
   }
 
   try {
@@ -401,9 +381,7 @@ async function executeDirectTaskOperation(
           userId: command.userId,
           projectId: command.projectId,
           context: {
-            ...(command.context.locale
-              ? { locale: command.context.locale }
-              : {}),
+            ...(command.context.locale ? { locale: command.context.locale } : {}),
             episodeId: command.context.episodeId,
             selectedScopeRef: command.context.selectedScopeRef,
             selectedAssetId: command.context.selectedAssetId,
@@ -415,9 +393,7 @@ async function executeDirectTaskOperation(
           source: command.source,
           writer: null,
           toolCallId:
-            command.context.origin.kind === 'agent_turn'
-              ? command.context.origin.callId
-              : null,
+            command.context.origin.kind === 'agent_turn' ? command.context.origin.callId : null,
           activityId: Context.current().info.activityId,
           operationExecutionId,
           operationExecutionTransaction: transaction,
@@ -432,15 +408,9 @@ async function executeDirectTaskOperation(
           invocationMode: 'durable_operation_execution',
         })
         if (result.kind !== 'executed') {
-          return failNonRetryable(
-            'OPERATION_EXECUTION_DIRECT_RESULT_INVALID',
-            command.operationId,
-          )
+          return failNonRetryable('OPERATION_EXECUTION_DIRECT_RESULT_INVALID', command.operationId)
         }
-        if (
-          command.context.origin.kind === 'agent_turn' &&
-          !followUpBatchBinding?.isBound()
-        ) {
+        if (command.context.origin.kind === 'agent_turn' && !followUpBatchBinding?.isBound()) {
           return failNonRetryable(
             'OPERATION_EXECUTION_FOLLOW_UP_BATCH_MISSING',
             command.operationId,
@@ -450,10 +420,7 @@ async function executeDirectTaskOperation(
       },
     })
     if (state.output === null || state.output === undefined) {
-      return failNonRetryable(
-        'OPERATION_EXECUTION_OUTPUT_MISSING',
-        command.operationId,
-      )
+      return failNonRetryable('OPERATION_EXECUTION_OUTPUT_MISSING', command.operationId)
     }
     return await directTaskReceipt({
       input,
@@ -462,13 +429,12 @@ async function executeDirectTaskOperation(
       output: state.output,
     })
   } catch (error) {
+    const deterministicCode = deterministicScheduleFailure(error)
+    if (deterministicCode) return failNonRetryable(deterministicCode)
+    if (error instanceof TemporalTaskCommandUnconfirmedError) throw error
     const normalized = normalizeAnyError(error, { context: 'worker' })
     if (normalized.retryable) throw error
-    return failNonRetryable(
-      normalized.code,
-      normalized.message,
-      normalized.details,
-    )
+    return failNonRetryable(normalized.code, normalized.message, normalized.details)
   }
 }
 
@@ -480,9 +446,7 @@ export async function executeOperation(
     requireActivityIdentity(input)
   } catch (error) {
     return failNonRetryable(
-      error instanceof Error
-        ? error.message
-        : 'OPERATION_EXECUTION_COMMAND_INVALID',
+      error instanceof Error ? error.message : 'OPERATION_EXECUTION_COMMAND_INVALID',
     )
   }
   heartbeat({ phase: 'operation-execution', version: 1 })
@@ -491,9 +455,10 @@ export async function executeOperation(
   }, 5_000)
   heartbeatTimer.unref()
   try {
-    const receipt = input.envelope.command.kind === 'approved_plan'
-      ? await executeApprovedPlanOperation(input)
-      : await executeDirectTaskOperation(input)
+    const receipt =
+      input.envelope.command.kind === 'approved_plan'
+        ? await executeApprovedPlanOperation(input)
+        : await executeDirectTaskOperation(input)
     for (const task of receipt.tasks) {
       const event = await prisma.taskEvent.findUnique({
         where: { idempotencyKey: `task-created:${task.reference.taskId}` },
@@ -506,10 +471,7 @@ export async function executeOperation(
         )
       }
       try {
-        await publishPersistedTaskEventById(
-          event.id,
-          task.reference.taskId,
-        )
+        await publishPersistedTaskEventById(event.id, task.reference.taskId)
       } catch (error) {
         // TaskEvent is durable and replayed by SSE bootstrap. Live delivery is
         // only a latency optimization and must never change execution facts.
@@ -518,8 +480,7 @@ export async function executeOperation(
           {
             taskId: task.reference.taskId,
             eventId: event.id,
-            error:
-              error instanceof Error ? error.message : String(error),
+            error: error instanceof Error ? error.message : String(error),
           },
         )
       }

@@ -21,6 +21,15 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-05A — 路由进度是 durable invocation 事实。** route set identity、当前 route index、每次 typed rejection 与最终实际 modelKey 必须写入同一 provider invocation checkpoint；Task retry/replay 从该 checkpoint 恢复，不能重新从第一路由开始。成功 Resource 只从 checkpoint 读取实际 modelKey。route set 不创建第二 Task、第二报价、第二 Resource 或第二 invocation，且 route 成员价格不等价时 registry 必须拒绝声明。
 - **PG-06 — 提交与查询重试分离。** 媒体、LLM 与 vision POST 每个逻辑 invocation 在同一 DB Task attempt 只能发送一次。descriptor 解析、option canonical normalize、媒体引用 scheme 检查等不可能触达 Provider 的本地 preflight 必须在 durable provider fence 之外完成；成功后调用才先 claim fence，再且仅再执行一次可能发出请求的 adapter。明确未受理、结构化结果不可用或 external job 明确终态失败时，fence 才允许更高 attempt 原子重取该 invocation 的一次新提交权；成功的兄弟 invocation 继续重放。断连、超时、无类型 `success:false` 或无法证明是否受理的响应必须进入 `outcome_unknown`，禁止自动重提；纯本地校验失败不得写 `submitting/outcome_unknown` 或伪装成 Provider 拒绝。获得 external id 后的 poll、结果下载和存储读取可以按各自策略重试，但 pending job 只能恢复；只有明确终态失败才能重建 provider job。本地持久化失败重放 provider 结果与稳定 artifact key，不重新生成。Gateway 已分类的 typed `AppError` 必须原样穿过 Task handler；调用层不得再包装成通用可重试错误或据此重写 durable disposition。
 - **PG-06A — 排队与生成分开计时，排队超限走显式取消补偿。** pending 由 provider poll 协议归一为 `queued | running` 两个子阶段（无法区分的 provider 视为 `running`）：`queued` 只消耗独立排队预算（`PROVIDER_QUEUE_TIMEOUT_MS`，默认 30 分钟），`running` 才消耗生成预算（`PROVIDER_GENERATION_TIMEOUT_MS`），两者互不透支。排队超预算是 PG-06「pending job 只能恢复」的唯一受控例外，必须按固定顺序执行：① 先持久化“旧 external id 作废”（invocation checkpoint `submitted → retryable_rejected` 并记录被取代的 external id）；② 再尽力取消 provider 侧任务（registry 声明的 `cancel` 能力，幂等、容忍 4xx，失败只记日志）；③ 抛 retryable `GENERATION_QUEUE_TIMEOUT`，新提交只能由下一 Task attempt 经 durable fence 原子重取。崩溃恢复语义：任何一步之间崩溃，最坏结果都是一个已被持久作废、无人消费的孤儿 provider job（等价于 cancel 失败，可容忍）；绝不允许先取消或先重提再作废——旧 id 未作废前不存在第二个可提交身份，防止双活。上报 `queued` 阶段的 provider 必须同时在 async-task registry 声明 `cancel`。
+- **PG-06B — 用户取消先服从本地终态，再尽力补偿Provider。** Task已获得durable external id
+  时，用户cancel仍先由Task terminal owner决定本地canceled/completed事实；只有本地确认为
+  canceled且terminal事务commit、Scheduler capacity已经释放、全部required FollowUpBatch
+  已可靠通知后，独立可重试Activity才从provider invocation ledger穷尽读取真实
+  external id并调用registry声明的cancel。poll/wait catch与handler不得提前cancel；queued
+  `attempt=0`取消没有Provider补偿，handler checkpoint已提交而由completed赢得竞态时也绝不
+  cancel。补偿失败只记录安全日志，不能复活Task、改写计费、重新提交或阻止本地cancellation
+  receipt；Worker恰在补偿前丢失时可能留下Provider孤儿任务，这是显式运维盲区而非第二
+  正确性owner。
 - **PG-07 — LLM stream 与最终结果同源。** 唯一 AI SDK runner 必须把同一次 `streamText` 的 delta 与 SDK final promise 归一为同一个项目结果。若 final text/reasoning 是已发内容的严格前缀扩展，runner 必须在 `onComplete` 前补发确定 suffix；若此前没有对应 delta，则补发完整 final 内容。final 与已发内容分叉时必须原地失败，禁止拼接、猜测、重发整份内容、改走 `generateText`、跨 provider fallback 或发起第二次模型调用。
 - **PG-08 — LLM 推理强度精确归一。** 推理强度 identity 由 `ai-registry/reasoning-effort.ts` 唯一定义，具体模型支持集合由生产 capability registry 穷尽声明，运行时只经 `ai-exec/reasoning-effort.ts` 合并显式调用参数、用户/项目 capability 配置或平台角色环境变量。Primary Agent 使用 `assistant` 角色，Creative Worker 与其他后台专业文本 Task 使用 `analysis` 角色；调用方必须显式传递角色，禁止从模型名、Task 名或默认值猜测。最终值必须在持久化 invocation 前冻结，并由 provider adapter 原样写入外部请求；未知值、不受模型支持的值或 SDK 无法精确表达的值必须原地失败，禁止就近映射、静默默认或由不同调用链自行解释。
 - **PG-08A — 可公开推理能力由 registry 声明。** 每个支持推理的 LLM 只能由生产 capability registry 声明 `none | native | summary_auto`；共享调用方不得从 model id、provider 名称或输出文本猜测。OpenRouter OpenAI 推理模型由 adapter 在同一请求中发送 `summary:auto`，Claude/Gemini 使用原生公开 reasoning；加密 CoT、signature 与 provider metadata 永不进入公开事件。`agents-public-reasoning` 是 Agents 主运行与 Creative Worker 共用的唯一可读 delta normalizer；只有它产出的文本可进入产品流，它同时唯一解释 reasoning 转入 text/tool input 的瞬时 output boundary。该 boundary 只服务传输 flush/snapshot，不伪造 reasoning end、Tool 完成或模型响应终态。
@@ -102,6 +111,15 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
   `requireTaskProviderRouteSelection`读取submitted checkpoint，terminal result和Resource
   provenance只写实际accepted route；缺失route原地失败。现有跨Provider route set仅用于
   image，因此真实video/music/voice failover仍是未来新增route声明时的发布复验边界。
+- 用户取消补偿第一次接入时，image/video在poll catch、music/voice在handler catch直接调用
+  Provider cancel；此时Task terminal事务尚未裁决并发的completed checkpoint，可能取消已经
+  赢得本地终态的外部工作。当前所有早期cancel入口删除，只有terminal Activity取得正式
+  canceled receipt后才从ledger穷尽补偿。第二版虽修正终态顺序，却把Provider网络等待留在
+  `commitTaskTerminal` Activity内，使已经终态的Task继续占Scheduler容量。第二次拆成独立
+  Activity后又把补偿串行放在required follow-up之前，ledger长期故障会让Batch永远无法通知。
+  当前Workflow先release capacity、再可靠通知全部ready Batch，最后才调独立可重试补偿
+  Activity；ledger查询失败由Temporal重试，单个Provider cancel失败只记日志。queued取消和
+  completed winner都是明确no-op。
 - 同步图片 Gateway 已在 durable fence 中把 POST 断连判为 `outcome_unknown`，但旧图片结果 helper 曾捕获所有异常后统一包装成 `IMAGE_GENERATION_THROWN/GENERATION_FAILED`；Task policy 因此把同一逻辑 invocation 调度到三次 attempt，虽由 fence 阻止了第二次真实 POST，用户仍看到错误的可重试表象和被吞掉的 canonical code。旧提交围栏只保证“不会重复请求”，没有保证 typed disposition 穿过 handler。当前图片 helper 原样抛出 Gateway `AppError`，仅包装尚未分类的本地异常；Task 直接持久化 `PROVIDER_SUBMISSION_OUTCOME_UNKNOWN` 的非重试终态。真实外部断连是否已被 Provider 受理仍不可从客户端证明，因此显式新任务是唯一允许的再次生成入口。
 - Mureka cue score 新增 `scoreWindowStartMs/scoreWindowEndMs` 时，Worker、adapter runtime type 与 wire mapping 已接入，production option schema 和 engine execution type 却漏接；共享 `normalizeAiOptions` 又被包在 durable route `execute()` 内。真实 Task 在任何 HTTP 前抛出 plain `AI_OPTION_UNSUPPORTED`，fence 因已写 `submitting` 且无法证明错误来源，只能按 PG-06 记为 `outcome_unknown`。旧 provider conformance 分别验证了 adapter capability 与 fence 的 typed `AppError`，没有从真实 Worker payload 穷尽 option schema，也没有反证本地规范化发生在 claim 后。当前 Mureka schema 正式声明并交叉校验两个窗口字段；`executeMediaGeneration` 为所有媒体 route 在构造 route 时完成 descriptor/normalize，保留原 request hash 与 invocation identity，durable fence 内只剩可能触达 Provider 的 adapter execution。adapter 内其他 provider 配置与 wire 前置条件仍由 typed `AppError` 最后防守；真实收费 Mureka submit 未执行。
 

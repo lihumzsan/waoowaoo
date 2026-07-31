@@ -6,10 +6,7 @@ import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { extensionFromAudioMimeType, loadGeneratedAudio } from '../artifacts/audio'
 import { reportTaskProgress } from '../progress'
 import type { TaskExecutionContext } from '../context'
-import {
-  assertTaskActive,
-  requireTaskProviderRouteSelection,
-} from '../provider-media'
+import { assertTaskActive, requireTaskProviderRouteSelection } from '../provider-media'
 
 function readRequiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) {
@@ -18,9 +15,7 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-export async function handleCreativeResourceVoiceTask(
-  context: TaskExecutionContext,
-) {
+export async function handleCreativeResourceVoiceTask(context: TaskExecutionContext) {
   const { data } = context
   const payload = parseCreativeResourceGenerationTaskPayload(data.payload)
   const voiceModel = readRequiredString(payload.voiceModel, 'voiceModel')
@@ -29,13 +24,14 @@ export async function handleCreativeResourceVoiceTask(
   const language = readRequiredString(payload.language, 'language')
 
   await reportTaskProgress(context, 20, { stage: 'generate_voice_submit' })
+  const invocationKey = 'media:voice:primary'
   const generated = await generateVoice(
     data.userId,
     voiceModel,
     description,
     previewText,
     { language },
-    { key: 'media:voice:primary' },
+    { key: invocationKey },
     {
       beforePoll: async () => await assertTaskActive(context, 'polling_external'),
       onPending: async ({ elapsedRatio, phase }) => {
@@ -51,10 +47,7 @@ export async function handleCreativeResourceVoiceTask(
   if (!generated.success) {
     throw new Error(generated.error || 'VOICE_GENERATE_PROVIDER_FAILED')
   }
-  const providerRoute = await requireTaskProviderRouteSelection(
-    context,
-    'media:voice:primary',
-  )
+  const providerRoute = await requireTaskProviderRouteSelection(context, invocationKey)
 
   await reportTaskProgress(context, 85, { stage: 'persist_voice' })
   const audio = await loadGeneratedAudio({

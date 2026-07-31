@@ -31,7 +31,10 @@ const cancelTask = defineUpdate<TaskWorkflowView, [TaskCancelRequest]>(
 const lifecycleActivities = proxyActivities<
   Pick<
     TaskWorkflowActivities,
-    'initializeTaskWorkflow' | 'beginTaskAttempt' | 'commitTaskTerminal'
+    | 'initializeTaskWorkflow'
+    | 'beginTaskAttempt'
+    | 'commitTaskTerminal'
+    | 'commitTaskWorkflowFailure'
   >
 >({
   startToCloseTimeout: '1 minute',
@@ -53,9 +56,18 @@ const handoffActivities = proxyActivities<
   },
 })
 
-const attemptActivities = proxyActivities<
-  Pick<TaskWorkflowActivities, 'runTaskAttempt'>
+const compensationActivities = proxyActivities<
+  Pick<TaskWorkflowActivities, 'cancelTaskProviderJobs'>
 >({
+  startToCloseTimeout: '5 minutes',
+  retry: {
+    initialInterval: '1 second',
+    backoffCoefficient: 2,
+    maximumInterval: '1 minute',
+  },
+})
+
+const attemptActivities = proxyActivities<Pick<TaskWorkflowActivities, 'runTaskAttempt'>>({
   startToCloseTimeout: '30 days',
   heartbeatTimeout: '45 seconds',
   cancellationType: ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
@@ -112,9 +124,7 @@ function findFailureCause<T extends Error>(
   return null
 }
 
-function infrastructureAttemptFailure(
-  error: ActivityFailure,
-): TaskAttemptFailure {
+function infrastructureAttemptFailure(error: ActivityFailure): TaskAttemptFailure {
   if (findFailureCause(error, TimeoutFailure)) {
     return {
       errorCode: 'GENERATION_TIMEOUT',
@@ -156,13 +166,10 @@ function assertTerminalReceipt(
     receipt.terminalEventId <= 0 ||
     !Array.isArray(receipt.readyFollowUpBatchIds) ||
     receipt.readyFollowUpBatchIds.length > 64 ||
-    new Set(receipt.readyFollowUpBatchIds).size !==
-      receipt.readyFollowUpBatchIds.length ||
+    new Set(receipt.readyFollowUpBatchIds).size !== receipt.readyFollowUpBatchIds.length ||
     receipt.readyFollowUpBatchIds.some(
       (batchId) =>
-        typeof batchId !== 'string' ||
-        batchId.trim() !== batchId ||
-        batchId.length === 0,
+        typeof batchId !== 'string' || batchId.trim() !== batchId || batchId.length === 0,
     )
   ) {
     fail('TASK_TERMINAL_RECEIPT_DIVERGED')
@@ -176,23 +183,14 @@ function assertTerminalReceipt(
  * attempt is created only after the handler returns a classified retryable
  * failure and the frozen Task policy allows another attempt.
  */
-export async function taskWorkflow(
-  input: TaskWorkflowInput,
-): Promise<TaskWorkflowResult> {
+async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowResult> {
   if (!input || typeof input !== 'object') fail('TASK_WORKFLOW_INPUT_INVALID')
   requireNonEmpty(input.workflowId, 'TASK_WORKFLOW_ID_INVALID')
-  requireNonEmpty(
-    input.schedulerWorkflowId,
-    'TASK_SCHEDULER_WORKFLOW_ID_INVALID',
-  )
+  requireNonEmpty(input.schedulerWorkflowId, 'TASK_SCHEDULER_WORKFLOW_ID_INVALID')
   requireNonEmpty(input.taskId, 'TASK_ID_INVALID')
   requireNonEmpty(input.userId, 'TASK_USER_ID_INVALID')
   if (workflowInfo().workflowId !== input.workflowId) {
-    fail(
-      'TASK_WORKFLOW_ID_MISMATCH',
-      workflowInfo().workflowId,
-      input.workflowId,
-    )
+    fail('TASK_WORKFLOW_ID_MISMATCH', workflowInfo().workflowId, input.workflowId)
   }
 
   const rootScope = CancellationScope.current()
@@ -221,11 +219,7 @@ export async function taskWorkflow(
         return copyView(view)
       }
       cancelRequests.set(request.requestId, request.reason)
-      if (
-        view.status === 'completed' ||
-        view.status === 'failed' ||
-        view.status === 'canceled'
-      ) {
+      if (view.status === 'completed' || view.status === 'failed' || view.status === 'canceled') {
         return copyView(view)
       }
       cancelReason = request.reason
@@ -240,9 +234,7 @@ export async function taskWorkflow(
     },
   )
 
-  const completeWorkflow = async (
-    result: TaskWorkflowResult,
-  ): Promise<TaskWorkflowResult> => {
+  const completeWorkflow = async (result: TaskWorkflowResult): Promise<TaskWorkflowResult> => {
     if (
       result.taskId !== input.taskId ||
       result.terminal.taskId !== input.taskId ||
@@ -263,6 +255,7 @@ export async function taskWorkflow(
         taskWorkflowId: input.workflowId,
         taskId: input.taskId,
         terminalEventId: result.terminal.terminalEventId,
+        status: result.status,
       })
     })
     view.capacityReleased = true
@@ -280,6 +273,18 @@ export async function taskWorkflow(
         })
       }
       view.status = result.status
+    }
+    // Follow-up is required product handoff. Provider cancellation is only
+    // resource compensation and must never get priority over that handoff.
+    if (result.status === 'canceled') {
+      await CancellationScope.nonCancellable(async () => {
+        await compensationActivities.cancelTaskProviderJobs({
+          workflowId: input.workflowId,
+          taskId: input.taskId,
+          userId: input.userId,
+          terminalEventId: result.terminal.terminalEventId,
+        })
+      })
     }
     return result
   }
@@ -302,11 +307,7 @@ export async function taskWorkflow(
     fail('TASK_INITIAL_STATE_INVALID')
   }
   if (initialized.kind === 'already_terminal') {
-    assertTerminalReceipt(
-      input,
-      initialized.result.status,
-      initialized.result.terminal,
-    )
+    assertTerminalReceipt(input, initialized.result.status, initialized.result.terminal)
     return await completeWorkflow(initialized.result)
   }
 
@@ -319,8 +320,7 @@ export async function taskWorkflow(
     !Number.isSafeInteger(policy.retryBackoffBaseMs) ||
     policy.retryBackoffBaseMs <= 0 ||
     (policy.executionDeadlineMs !== null &&
-      (!Number.isSafeInteger(policy.executionDeadlineMs) ||
-        policy.executionDeadlineMs <= 0))
+      (!Number.isSafeInteger(policy.executionDeadlineMs) || policy.executionDeadlineMs <= 0))
   ) {
     fail('TASK_WORKFLOW_POLICY_INVALID')
   }
@@ -336,15 +336,8 @@ export async function taskWorkflow(
     const committedStatus = terminal.status
     const committedResultWonLateCancellation =
       requestedStatus === 'canceled' && committedStatus === 'completed'
-    if (
-      committedStatus !== requestedStatus &&
-      !committedResultWonLateCancellation
-    ) {
-      fail(
-        'TASK_TERMINAL_STATUS_DIVERGED',
-        requestedStatus,
-        committedStatus,
-      )
+    if (committedStatus !== requestedStatus && !committedResultWonLateCancellation) {
+      fail('TASK_TERMINAL_STATUS_DIVERGED', requestedStatus, committedStatus)
     }
     assertTerminalReceipt(input, committedStatus, terminal)
     return await completeWorkflow({
@@ -448,9 +441,7 @@ export async function taskWorkflow(
         attemptResult = {
           kind: 'failed',
           failure: {
-            errorCode: deadlineExpired
-              ? 'GENERATION_TIMEOUT'
-              : 'TASK_ACTIVITY_CANCELLED',
+            errorCode: deadlineExpired ? 'GENERATION_TIMEOUT' : 'TASK_ACTIVITY_CANCELLED',
             errorMessage: deadlineExpired
               ? 'Task execution deadline exceeded'
               : 'Task Activity was canceled by the execution system',
@@ -473,10 +464,7 @@ export async function taskWorkflow(
       fail('TASK_ATTEMPT_RESULT_INVALID')
     }
     if (attemptResult.kind === 'completed') {
-      requireNonEmpty(
-        attemptResult.executionCheckpointId,
-        'TASK_EXECUTION_CHECKPOINT_ID_INVALID',
-      )
+      requireNonEmpty(attemptResult.executionCheckpointId, 'TASK_EXECUTION_CHECKPOINT_ID_INVALID')
       return await commitTerminal(
         {
           kind: 'completed',
@@ -490,10 +478,7 @@ export async function taskWorkflow(
     }
     if (view.cancelRequested) continue
     if (attemptResult.kind === 'canceled') {
-      requireNonEmpty(
-        attemptResult.reason,
-        'TASK_ATTEMPT_CANCEL_REASON_INVALID',
-      )
+      requireNonEmpty(attemptResult.reason, 'TASK_ATTEMPT_CANCEL_REASON_INVALID')
       return await commitTerminal(
         {
           kind: 'canceled',
@@ -514,16 +499,11 @@ export async function taskWorkflow(
     }
     requireNonEmpty(failure.errorCode, 'TASK_ATTEMPT_ERROR_CODE_INVALID')
     requireNonEmpty(failure.errorMessage, 'TASK_ATTEMPT_ERROR_MESSAGE_INVALID')
-    if (
-      failure.retryDisposition !== 'retryable' &&
-      failure.retryDisposition !== 'final'
-    ) {
+    if (failure.retryDisposition !== 'retryable' && failure.retryDisposition !== 'final') {
       fail('TASK_ATTEMPT_RETRY_DISPOSITION_INVALID')
     }
 
-    const canRetry =
-      failure.retryDisposition === 'retryable' &&
-      view.attempt < policy.maxAttempts
+    const canRetry = failure.retryDisposition === 'retryable' && view.attempt < policy.maxAttempts
     if (canRetry) {
       view.status = 'retry_wait'
       try {
@@ -547,12 +527,66 @@ export async function taskWorkflow(
         errorCode: failure.errorCode,
         errorMessage: failure.errorMessage,
         errorDetails: failure.errorDetails,
-        source:
-          failure.errorCode === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
+        source: failure.errorCode === 'GENERATION_TIMEOUT' ? 'timeout' : 'worker',
       },
       'failed',
     )
   }
 
   fail('TASK_WORKFLOW_ATTEMPT_LOOP_EXHAUSTED')
+}
+
+/**
+ * A Scheduler run can Continue-As-New while this child remains active, so the
+ * child itself must own fail-closed settlement. Expected handler failures are
+ * handled inside runTaskWorkflow; this boundary only catches Workflow-level
+ * invariant/activity failures that would otherwise strand user capacity.
+ */
+export async function taskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowResult> {
+  try {
+    return await runTaskWorkflow(input)
+  } catch {
+    const result = await CancellationScope.nonCancellable(
+      async () =>
+        await lifecycleActivities.commitTaskWorkflowFailure({
+          owner: 'task_workflow',
+          schedulerWorkflowId: input.schedulerWorkflowId,
+          enqueueId: `task-workflow-self-failure:${input.workflowId}`,
+          task: input,
+        }),
+    )
+    assertTerminalReceipt(input, result.status, result.terminal)
+    await CancellationScope.nonCancellable(async () => {
+      await handoffActivities.releaseTaskCapacity({
+        schedulerWorkflowId: input.schedulerWorkflowId,
+        taskWorkflowId: input.workflowId,
+        taskId: input.taskId,
+        terminalEventId: result.terminal.terminalEventId,
+        status: result.status,
+      })
+    })
+    for (const batchId of result.terminal.readyFollowUpBatchIds) {
+      await CancellationScope.nonCancellable(async () => {
+        await handoffActivities.notifyTaskFollowUp({
+          workflowId: input.workflowId,
+          taskId: input.taskId,
+          batchId,
+          terminal: result.terminal,
+        })
+      })
+    }
+    // Preserve the same required-handoff-before-compensation order when the
+    // Workflow-level fail-closed boundary settles an already canceled Task.
+    if (result.status === 'canceled') {
+      await CancellationScope.nonCancellable(async () => {
+        await compensationActivities.cancelTaskProviderJobs({
+          workflowId: input.workflowId,
+          taskId: input.taskId,
+          userId: input.userId,
+          terminalEventId: result.terminal.terminalEventId,
+        })
+      })
+    }
+    return result
+  }
 }

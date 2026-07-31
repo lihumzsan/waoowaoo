@@ -1,5 +1,6 @@
 export {
   beginTaskAttempt,
+  cancelTaskProviderJobs,
   commitTaskTerminal,
   commitTaskWorkflowFailure,
   initializeTaskWorkflow,
@@ -14,6 +15,7 @@ export {
   cancelAgentTurn,
   clearAgentThread,
   executeAgentTurn,
+  recoverAgentThread,
   resolveAgentTurnApproval,
   resolveAgentTurnChoice,
   resumeAgentTurnApproval,
