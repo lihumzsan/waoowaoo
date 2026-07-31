@@ -26,20 +26,19 @@ const COMMON_REQUIRED_KEYS = [
   'PAYMENT_PUBLIC_BASE_URL',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
-  'TEMPORAL_ADDRESS',
-  'TEMPORAL_NAMESPACE',
-  'TEMPORAL_TASK_QUEUE',
-  'TEMPORAL_TLS_ENABLED',
-  'TEMPORAL_API_KEY',
-  'TEMPORAL_WORKER_DEPLOYMENT_NAME',
-  'TEMPORAL_WORKER_BUILD_ID',
-  'TEMPORAL_WORKER_VERSIONING_ENABLED',
 ]
 
 const PRODUCTION_REQUIRED_KEYS = [
   'ADMIN_USER_IDS',
   'ADMIN_CREDIT_TOKEN',
   'TRUSTED_PROXY_HOPS',
+  'TEMPORAL_ADDRESS',
+  'TEMPORAL_NAMESPACE',
+  'TEMPORAL_TASK_QUEUE',
+  'TEMPORAL_TLS_ENABLED',
+  'TEMPORAL_WORKER_DEPLOYMENT_NAME',
+  'TEMPORAL_WORKER_BUILD_ID',
+  'TEMPORAL_WORKER_VERSIONING_ENABLED',
 ]
 
 const VALIDATION_MODES = new Set(['development', 'production'])
@@ -193,8 +192,15 @@ if (validationMode === 'production') {
   missing.push('TRUSTED_PROXY_HOPS=non-negative-integer')
 }
 
-if (env.TEMPORAL_TLS_ENABLED !== 'true') {
-  missing.push('TEMPORAL_TLS_ENABLED=true')
+if (
+  !isMissing(env.TEMPORAL_TLS_ENABLED)
+  && env.TEMPORAL_TLS_ENABLED !== 'true'
+  && env.TEMPORAL_TLS_ENABLED !== 'false'
+) {
+  missing.push('TEMPORAL_TLS_ENABLED=true-or-false')
+}
+if (!isMissing(env.TEMPORAL_API_KEY) && env.TEMPORAL_TLS_ENABLED !== 'true') {
+  missing.push('TEMPORAL_API_KEY_REQUIRES_TLS')
 }
 if (
   validationMode === 'production'
@@ -207,7 +213,8 @@ if (validationMode === 'production') {
     missing.push('TEMPORAL_WORKER_VERSIONING_ENABLED=true')
   }
 } else if (
-  env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'true'
+  !isMissing(env.TEMPORAL_WORKER_VERSIONING_ENABLED)
+  && env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'true'
   && env.TEMPORAL_WORKER_VERSIONING_ENABLED !== 'false'
 ) {
   missing.push('TEMPORAL_WORKER_VERSIONING_ENABLED=true-or-false')

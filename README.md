@@ -144,17 +144,17 @@ cp .env.example .env
 
 npm install
 
-# 启动本地数据库、Redis 和完整 Temporal Server/namespace；媒体始终写入
-# .env 配置的开发对象存储桶。这个命令不会启动生产版 blue/green Worker。
-npm run dev:infra
-
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
 npm run db:push
 
-# 启动开发服务器
-# dev:temporal-worker 会显式使用 local/unversioned，只用于本地开发。
+# 启动本地数据库、Redis、完整 Temporal Server/namespace、Next.js 和开发 Worker。
+# 开发 Worker 会显式使用 local/unversioned，不会启动生产版 blue/green Worker。
 npm run dev
 ```
+
+本地调试官方 Cloud 产品能力时，另复制 `.env.cloud.example` 为 `.env.cloud.local` 并运行
+`npm run dev:cloud`。它仍使用同一套本机开源 Temporal，不需要 Temporal Cloud 账户、TLS
+或 API key。
 
 > [!WARNING]
 > 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。

@@ -17,6 +17,10 @@
 - **PS-07 — 权威父资源成功后才可初始化子资源。** 空数组、缺失 View 或 loading 结束不能证明用户拥有父资源。自动创建默认剧集等 setup 写入必须先取得成功且已鉴权的 Project；父资源 401/403/404 或读取错误后必须停止全部派生写入。
 - **PS-08 — 浏览器会话是用户 API 的唯一身份来源。** 受保护 HTTP route 只接受 NextAuth session 中的持久 user id；固定内部 token、调用方提供的 user id、用户名或邮箱不得成为并行身份入口。日志下载和其他运维数据还必须经过显式管理员授权，不能由 deployment feature visibility 代替鉴权。
 - **PS-09 — 认证防线与部署配置失败关闭。** 注册、初次设置和修改密码必须共同复用唯一密码策略；不得由页面、route或运维写入绕过。登录/注册限流只在 `TRUSTED_PROXY_HOPS` 明确声明后解析可信代理链。cloud preflight必须显式区分本地开发与正式部署；正式部署必须拒绝缺失、弱密钥、非 HTTPS公网地址、可变或`local` Temporal Worker build identity、关闭Worker Versioning、非PINNED默认行为和未知代理拓扑。Compose不得提供可用默认密码或把基础设施默认绑定到公网；预构建安装必须只依赖已下载的Compose与env，不得bind mount隐含仓库文件；Worker升级必须保留旧PINNED版本到drained，禁止单实例原地替换。
+- **PS-09a — 产品版本不拥有基础设施托管选择。** `DEPLOYMENT_EDITION=cloud`只决定官方产品
+  能力，不得被Temporal、存储或其他基础设施解释为必须购买对应厂商的托管服务。Temporal
+  连接安全由自己的显式配置裁决；本地官方Cloud产品调试与self-hosted开发可共用同一Compose
+  Temporal，正式Worker发布约束不因此降级。
 - **PS-10 — 首页初始化是一个原子构造。** 首页已展示并保存的画面比例不再触发模型 Choice；“开始创作”只能通过 `create_project` 的一个事务创建 Project、写入该显式比例并创建首 Episode。任一步失败必须全部回滚，浏览器不得用 create → config PATCH → episode POST 拼出半初始化项目。其他没有比例的合法入口仍保留 `videoRatio=null`，真正需要媒体执行时由 Primary 发起通用 Choice，并且只提交当前比例决定。
 - **PS-11 — 认证入口与账号初始化唯一。** 产品只有一个登录/注册页面；受信身份已存在时登录，不存在时在同一次认证动作中创建 `User` 与 `UserBalance`。所有认证方式必须复用 `src/lib/auth/account-onboarding.ts` 这一账号初始化 writer。Cloud 只注册手机号与 Google provider，密码 provider、独立注册 route、密码设置 API 必须同时关闭；self-hosted 只注册用户名密码 provider。个人资料可见性不能等同于密码能力：Cloud 仍须允许已登录用户修改非身份显示名称并主动绑定 Google，密码写入则必须继续由 `enablePasswordAuth` 独立失败关闭。手机号 canonical identity 是归一化 E.164，并由 `Account(provider="phone", providerAccountId)` 唯一键持久化；修改 `User.name` 不得改写这一登录 identity。`sms-destinations.ts` 是已启用短信目的地 identity、国内/国际通道与 Sender ID policy 的穷尽 registry；国家/地区选择只帮助构造并验证 canonical E.164，不得成为第二持久 identity。registry 只能声明现有审核能力可直接发送、且不需要额外目的地 Sender/品牌注册的地区；需要新增审核的目的地不得作为潜在实例、隐藏配置或运行时开关预埋。登录页直接穷尽消费该 registry，绕过 UI 的未启用目的地必须在发送前原地失败。腾讯云国内短信必须使用国内模板与签名，国际/港澳台短信必须使用国际模板且不得携带国内签名或 Sender ID。短信验证码只在 Redis 中保存带 TTL 的 HMAC，发送、失败补偿、尝试计数与一次性消费由 `phone-verification.ts` 唯一裁决；发送短信前的图形挑战由 `image-captcha.ts` 生成、绑定可信客户端来源并一次性消费，Redis 或挑战状态不可判定时失败关闭。页面倒计时不承担安全或终态正确性。
 - **PS-12 — 对象存储是必需外部基础设施。** Cloud、self-hosted 与本地开发共用一个预建 S3-compatible bucket；`S3_ENDPOINT` 必须是公网 HTTPS，启动必须在应用/worker 前严格解析配置并完成 HeadBucket。Compose 只编排 MySQL、Redis 与应用，不捆绑 MinIO；启动不得创建桶、回退本地目录、启用 tunnel 或按 deployment edition 选择第二存储协议。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
@@ -77,6 +81,10 @@
   Versioning与PINNED；Compose bootstrap自包含，Web和blue/green Worker分容器，rollout
   只允许先promote候选、drained后retire旧slot。目标Temporal集群的实际排空时长仍是外部
   盲区。
+- `dev:cloud`在Temporal接入后再次把产品edition当成基础设施托管模式，要求本地调试提供
+  Temporal Cloud的TLS/API key和正式Worker身份，导致已有本地Temporal仍无法启动。当前
+  development preflight不再要求外部Temporal账户，runtime只消费显式连接字段；正式发布的
+  immutable build与Versioning仍由production profile独立强制。
 
 ## 修改检查表
 

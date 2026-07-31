@@ -14,6 +14,7 @@
         "src/lib/task/execution-checkpoint.ts",
         "src/lib/task/terminal",
         "scripts/check-durable-kernel-budget.mjs",
+        "scripts/check-cloud-env.mjs",
         "scripts/bplus-cutover-preflight.ts",
         "scripts/bplus-cutover-apply.ts",
         "scripts/temporal",

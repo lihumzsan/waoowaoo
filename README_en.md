@@ -143,16 +143,17 @@ cp .env.example .env
 
 npm install
 
-# Start MySQL, Redis, the Temporal Server, schemas, and namespace. This does not
-# start a production blue/green Worker.
-npm run dev:infra
-
 # Push the Prisma schema
 npm run db:push
 
-# Start Web and a local, explicitly unversioned Temporal Worker.
+# Start MySQL, Redis, the Temporal Server/namespace, Web, and a local explicitly
+# unversioned Worker. This does not start the production blue/green Workers.
 npm run dev
 ```
+
+To debug the official Cloud product surface locally, copy `.env.cloud.example` to
+`.env.cloud.local` and run `npm run dev:cloud`. It uses the same local open-source
+Temporal service and does not require a Temporal Cloud account, TLS, or an API key.
 
 ---
 

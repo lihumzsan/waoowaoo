@@ -1,5 +1,3 @@
-import { getDeploymentConfig, type DeploymentConfig } from '@/lib/deployment/config'
-
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 
 export interface TemporalRuntimeConfig {
@@ -59,56 +57,43 @@ function readWorkerVersioningEnabled(env: RuntimeEnvironment): boolean {
   return enabled
 }
 
-function readSelfHostedConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
+function readTemporalConnectionConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
   const apiKey = readOptionalString(env, 'TEMPORAL_API_KEY')
-  if (apiKey) throw new Error('TEMPORAL_API_KEY_FORBIDDEN_SELF_HOSTED')
   const tlsEnabled = readBoolean(env, 'TEMPORAL_TLS_ENABLED', false)
   const tlsServerName = readOptionalString(env, 'TEMPORAL_TLS_SERVER_NAME')
+  if (apiKey && !tlsEnabled) {
+    throw new Error('TEMPORAL_API_KEY_REQUIRES_TLS')
+  }
   if (tlsServerName && !tlsEnabled) {
     throw new Error('TEMPORAL_TLS_SERVER_NAME_REQUIRES_TLS')
   }
   return {
-    address: readOptionalString(env, 'TEMPORAL_ADDRESS') ?? '127.0.0.1:7233',
+    address: readOptionalString(env, 'TEMPORAL_ADDRESS') ?? '127.0.0.1:17233',
     namespace: readOptionalString(env, 'TEMPORAL_NAMESPACE') ?? 'waoowaoo',
     taskQueue: readOptionalString(env, 'TEMPORAL_TASK_QUEUE') ?? 'waoowaoo-runtime',
-    apiKey: null,
+    apiKey,
     tlsEnabled,
     tlsServerName,
   }
 }
 
-function readCloudConfig(env: RuntimeEnvironment): TemporalRuntimeConfig {
-  if (!readBoolean(env, 'TEMPORAL_TLS_ENABLED', true)) {
-    throw new Error('TEMPORAL_TLS_REQUIRED_CLOUD')
-  }
-  return {
-    address: readRequiredString(env, 'TEMPORAL_ADDRESS'),
-    namespace: readRequiredString(env, 'TEMPORAL_NAMESPACE'),
-    taskQueue: readRequiredString(env, 'TEMPORAL_TASK_QUEUE'),
-    apiKey: readRequiredString(env, 'TEMPORAL_API_KEY'),
-    tlsEnabled: true,
-    tlsServerName: readOptionalString(env, 'TEMPORAL_TLS_SERVER_NAME'),
-  }
-}
-
 export function getTemporalRuntimeConfig(
   env: RuntimeEnvironment = process.env,
-  deployment: DeploymentConfig = getDeploymentConfig(),
 ): TemporalRuntimeConfig {
-  return deployment.edition === 'cloud' ? readCloudConfig(env) : readSelfHostedConfig(env)
+  return readTemporalConnectionConfig(env)
 }
 
 export function getTemporalWorkerRuntimeConfig(
   env: RuntimeEnvironment = process.env,
-  deployment: DeploymentConfig = getDeploymentConfig(),
 ): TemporalWorkerRuntimeConfig {
-  const runtime = getTemporalRuntimeConfig(env, deployment)
+  const runtime = getTemporalRuntimeConfig(env)
   return {
     ...runtime,
     workerDeploymentName:
-      deployment.edition === 'cloud'
+      readOptionalString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME') ??
+      (isProductionRuntime(env)
         ? readRequiredString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME')
-        : (readOptionalString(env, 'TEMPORAL_WORKER_DEPLOYMENT_NAME') ?? 'waoowaoo'),
+        : 'waoowaoo'),
     workerBuildId: readWorkerBuildId(env, isProductionRuntime(env) ? null : 'local'),
     workerVersioningEnabled: readWorkerVersioningEnabled(env),
   }

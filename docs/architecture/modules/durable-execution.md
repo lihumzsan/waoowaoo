@@ -155,8 +155,10 @@ SQLite 影子 schema 已删除，不允许再维护第二套模型或把它当�
   格式”。
 - **DE-21a — Web配置不冒充Worker发布配置。** Temporal client只读取address、namespace、
   task queue与连接安全；build identity、Deployment Versioning与PINNED只由真实Worker
-  入口解析。开发脚本显式注入`local/unversioned`，正式Worker slot显式注入不可变build和
-  versioned，不能靠同一份`.env`默认值在运行时猜profile。Compose中的Temporal数据库、
+  入口解析。产品`DEPLOYMENT_EDITION`只决定产品能力，不得推断Temporal由官方托管还是
+  自托管；连接方式只由显式address/TLS/API字段决定。开发脚本显式使用本机自托管
+  `local/unversioned`，正式Worker slot显式注入不可变build和versioned，不能靠同一份
+  `.env`默认值在运行时猜profile。API key只允许配合TLS连接。Compose中的Temporal数据库、
   schema和namespace初始化必须自包含，预构建安装不得依赖未下载的仓库脚本。
 - **DE-21b — Cutover migration只前进不改写。** 已发布migration必须保持byte-for-byte
   不变；后续schema变化只能进入新的additive migration。`db:bplus-cutover-apply`是唯一
@@ -318,6 +320,11 @@ cloud/self-hosted Temporal 运维仍属于发布环境盲区；未实际验证�
   接。当前client/Worker配置分权，本地脚本显式local/unversioned，Compose bootstrap内联
   自包含，并以blue/green slot、只在Current为空时首次激活、显式promote和drained-gated
   retire收敛发布路径。真实目标集群的长Workflow排空耗时仍需发布复验。
+- `dev:cloud`曾把产品`DEPLOYMENT_EDITION=cloud`直接解释为必须连接付费Temporal Cloud，
+  开发preflight和runtime因此同时强制远程address、TLS、API key与正式Worker发布字段；而仓库
+  Compose本来就在本机提供同一开源Temporal服务。当前产品edition与Temporal托管位置彻底
+  分权：开发使用Compose自托管地址和local/unversioned Worker，正式发布约束仍由Worker入口
+  独立失败关闭；不再为本地官方Cloud产品调试要求外部Temporal账户。
 - 首版部署整改仍在已提交的cutover migration上追加archive字段和废表删除，导致已执行该
   migration的数据库永远不会得到新结构；blue/green脚本又先`compose up`所选slot、再判断
   它是否承载Current，且Worker镜像仍默认`latest`。这是同一“发布identity与状态变更必须先
