@@ -39,12 +39,9 @@ x-app-environment: &app-environment
   TEMPORAL_TASK_QUEUE: "${TEMPORAL_TASK_QUEUE:-waoowaoo-runtime}"
   TEMPORAL_API_KEY: ""
   TEMPORAL_TLS_ENABLED: "false"
-  TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
-  TEMPORAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_BUILD_ID:?Set an immutable Temporal Worker release build ID}"
-  TEMPORAL_WORKER_VERSIONING_ENABLED: "${TEMPORAL_WORKER_VERSIONING_ENABLED:?Set TEMPORAL_WORKER_VERSIONING_ENABLED=true}"
 
 x-app-service: &app-service
-  image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo:latest}"
+  image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
   restart: unless-stopped
   logging: *default-logging
   environment: *app-environment
@@ -60,6 +57,50 @@ x-app-service: &app-service
       condition: service_healthy
     temporal-create-namespace:
       condition: service_completed_successfully
+
+x-temporal-worker-service: &temporal-worker-service
+  restart: unless-stopped
+  logging: *default-logging
+  volumes:
+    - ./data:/app/data
+    - ./docker-logs:/app/logs
+  depends_on:
+    mysql:
+      condition: service_healthy
+    app-schema:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    temporal-create-namespace:
+      condition: service_completed_successfully
+  command:
+    - /bin/sh
+    - -ec
+    - |
+      case "$$TEMPORAL_WORKER_IMAGE" in
+        *@sha256:*) ;;
+        *)
+          echo "TEMPORAL_WORKER_IMAGE must be an immutable repository@sha256 digest" >&2
+          exit 1
+          ;;
+      esac
+      worker_digest=$${TEMPORAL_WORKER_IMAGE#*@sha256:}
+      if [ "$${#worker_digest}" -ne 64 ]; then
+        echo "TEMPORAL_WORKER_IMAGE sha256 digest must contain exactly 64 hexadecimal characters" >&2
+        exit 1
+      fi
+      if [ "$$worker_digest" = "0000000000000000000000000000000000000000000000000000000000000000" ]; then
+        echo "TEMPORAL_WORKER_IMAGE still contains the local-development placeholder digest" >&2
+        exit 1
+      fi
+      case "$$worker_digest" in
+        *[!0-9a-fA-F]*)
+          echo "TEMPORAL_WORKER_IMAGE sha256 digest contains non-hexadecimal characters" >&2
+          exit 1
+          ;;
+      esac
+      npm run storage:init
+      exec npm run start:temporal-worker
 
 services:
   mysql:
@@ -107,7 +148,7 @@ services:
   # This is retained for the current self-hosted release contract; production
   # deployments should run the reviewed migration before replacing the image.
   app-schema:
-    image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo:latest}"
+    image: "${APP_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
     restart: "no"
     logging: *default-logging
     environment: *app-environment
@@ -130,9 +171,51 @@ services:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}"
       TEMPORAL_MYSQL_USER: "${TEMPORAL_MYSQL_USER:-temporal}"
       TEMPORAL_MYSQL_PASSWORD: "${TEMPORAL_MYSQL_PASSWORD:?Set TEMPORAL_MYSQL_PASSWORD in .env}"
-    volumes:
-      - ./scripts/temporal/bootstrap-mysql.sh:/scripts/bootstrap-mysql.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/bootstrap-mysql.sh"]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        case "$$TEMPORAL_MYSQL_USER" in
+          ''|*[!A-Za-z0-9_]*)
+            echo "TEMPORAL_MYSQL_USER must contain only letters, digits, and underscores" >&2
+            exit 1
+            ;;
+        esac
+        if [ "$${#TEMPORAL_MYSQL_USER}" -gt 32 ]; then
+          echo "TEMPORAL_MYSQL_USER must not exceed 32 characters" >&2
+          exit 1
+        fi
+        temporal_password_base64=$$(
+          printf '%s' "$$TEMPORAL_MYSQL_PASSWORD" | base64 | tr -d '\n'
+        )
+        MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql \
+          --protocol=TCP \
+          --host="$$MYSQL_HOST" \
+          --port="$$MYSQL_PORT" \
+          --user=root <<SQL
+        CREATE DATABASE IF NOT EXISTS \`temporal\`
+          CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+        CREATE DATABASE IF NOT EXISTS \`temporal_visibility\`
+          CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+        SET @temporal_password =
+          CONVERT(FROM_BASE64('$${temporal_password_base64}') USING utf8mb4);
+        SET @create_user_statement = CONCAT(
+          'CREATE USER IF NOT EXISTS ''$${TEMPORAL_MYSQL_USER}''@''%'' IDENTIFIED BY ',
+          QUOTE(@temporal_password)
+        );
+        PREPARE create_temporal_user FROM @create_user_statement;
+        EXECUTE create_temporal_user;
+        DEALLOCATE PREPARE create_temporal_user;
+        SET @alter_user_statement = CONCAT(
+          'ALTER USER ''$${TEMPORAL_MYSQL_USER}''@''%'' IDENTIFIED BY ',
+          QUOTE(@temporal_password)
+        );
+        PREPARE alter_temporal_user FROM @alter_user_statement;
+        EXECUTE alter_temporal_user;
+        DEALLOCATE PREPARE alter_temporal_user;
+        GRANT ALL PRIVILEGES ON \`temporal\`.* TO '$${TEMPORAL_MYSQL_USER}'@'%';
+        GRANT ALL PRIVILEGES ON \`temporal_visibility\`.* TO '$${TEMPORAL_MYSQL_USER}'@'%';
+        SQL
+        echo "Temporal MySQL schemas and dedicated user are ready."
 
   temporal-schema:
     image: temporalio/admin-tools:1.31.2
@@ -146,9 +229,47 @@ services:
       MYSQL_USER: "${TEMPORAL_MYSQL_USER:-temporal}"
       SQL_PASSWORD: "${TEMPORAL_MYSQL_PASSWORD:?Set TEMPORAL_MYSQL_PASSWORD in .env}"
       DB_PORT: "3306"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        setup_database() {
+          database_name=$$1
+          schema_directory=$$2
+          temporal-sql-tool \
+            --plugin mysql8 \
+            --ep "$$MYSQL_SEEDS" \
+            -u "$$MYSQL_USER" \
+            -p "$$DB_PORT" \
+            --db "$$database_name" \
+            setup-schema -v 0.0 || true
+          temporal-sql-tool \
+            --plugin mysql8 \
+            --ep "$$MYSQL_SEEDS" \
+            -u "$$MYSQL_USER" \
+            -p "$$DB_PORT" \
+            --db "$$database_name" \
+            update-schema -d "$$schema_directory"
+        }
+        setup_database temporal /etc/temporal/schema/mysql/v8/temporal/versioned
+        setup_database temporal_visibility /etc/temporal/schema/mysql/v8/visibility/versioned
+        echo "Temporal MySQL schemas are ready."
+
+  temporal-config:
+    image: busybox:1.37
+    restart: "no"
+    logging: *default-logging
     volumes:
-      - ./scripts/temporal/setup-schema.sh:/scripts/setup-schema.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/setup-schema.sh"]
+      - temporal_config:/config
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        umask 022
+        printf '%s\n' \
+          'limit.maxIDLength:' \
+          '  - value: 255' \
+          '    constraints: {}' \
+          > /config/docker.yaml
+        test -s /config/docker.yaml
 
   temporal:
     image: temporalio/server:1.31.2
@@ -157,6 +278,8 @@ services:
     depends_on:
       temporal-schema:
         condition: service_completed_successfully
+      temporal-config:
+        condition: service_completed_successfully
     environment:
       DB: mysql8
       DB_PORT: "3306"
@@ -164,11 +287,10 @@ services:
       MYSQL_USER: "${TEMPORAL_MYSQL_USER:-temporal}"
       MYSQL_PWD: "${TEMPORAL_MYSQL_PASSWORD:?Set TEMPORAL_MYSQL_PASSWORD in .env}"
       BIND_ON_IP: 0.0.0.0
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/waoowaoo.yaml
     ports:
       - "${INFRA_BIND_ADDRESS:-127.0.0.1}:${TEMPORAL_HOST_PORT:-17233}:7233"
     volumes:
-      - ./scripts/temporal/dynamicconfig.yaml:/etc/temporal/config/dynamicconfig/waoowaoo.yaml:ro
+      - temporal_config:/etc/temporal/config/dynamicconfig:ro
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "7233"]
       interval: 5s
@@ -187,9 +309,36 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE:-waoowaoo}"
       TEMPORAL_NAMESPACE_RETENTION: "${TEMPORAL_NAMESPACE_RETENTION:-30d}"
-    volumes:
-      - ./scripts/temporal/create-namespace.sh:/scripts/create-namespace.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/create-namespace.sh"]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        max_attempts=$${TEMPORAL_HEALTH_CHECK_MAX_ATTEMPTS:-30}
+        sleep_seconds=$${TEMPORAL_HEALTH_CHECK_SLEEP_SECONDS:-5}
+        case "$$max_attempts" in
+          ''|*[!0-9]*|0) echo "TEMPORAL_HEALTH_CHECK_MAX_ATTEMPTS must be a positive integer" >&2; exit 1 ;;
+        esac
+        case "$$sleep_seconds" in
+          ''|*[!0-9]*) echo "TEMPORAL_HEALTH_CHECK_SLEEP_SECONDS must be a non-negative integer" >&2; exit 1 ;;
+        esac
+        attempt=1
+        until temporal operator cluster health --address "$$TEMPORAL_ADDRESS" >/dev/null 2>&1; do
+          if [ "$$attempt" -ge "$$max_attempts" ]; then
+            echo "Temporal server did not become healthy" >&2
+            exit 1
+          fi
+          attempt=$$((attempt + 1))
+          sleep "$$sleep_seconds"
+        done
+        if temporal operator namespace describe \
+          --namespace "$$TEMPORAL_NAMESPACE" \
+          --address "$$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+          echo "Temporal namespace '$$TEMPORAL_NAMESPACE' already exists."
+          exit 0
+        fi
+        temporal operator namespace create \
+          --namespace "$$TEMPORAL_NAMESPACE" \
+          --retention "$$TEMPORAL_NAMESPACE_RETENTION" \
+          --address "$$TEMPORAL_ADDRESS"
 
   temporal-ui:
     image: temporalio/ui:2.49.1
@@ -205,16 +354,105 @@ services:
     ports:
       - "127.0.0.1:${TEMPORAL_UI_HOST_PORT:-18080}:8080"
 
+  # The first deployment is activated only when the Worker Deployment has no
+  # Current Version. Later releases must use the explicit blue/green rollout
+  # command; restarting Compose can never silently promote a candidate.
+  temporal-initialize-worker-version:
+    image: temporalio/admin-tools:1.31.2
+    restart: "no"
+    logging: *default-logging
+    depends_on:
+      temporal-create-namespace:
+        condition: service_completed_successfully
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE:-waoowaoo}"
+      TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
+      TEMPORAL_INITIAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_BLUE_BUILD_ID:-}"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        : "$${TEMPORAL_INITIAL_WORKER_BUILD_ID:?Set TEMPORAL_WORKER_BLUE_BUILD_ID in .env}"
+        case "$$TEMPORAL_INITIAL_WORKER_BUILD_ID" in
+          local|LOCAL) echo "Production Worker build ID cannot be local" >&2; exit 1 ;;
+        esac
+        attempt=1
+        while [ "$$attempt" -le 60 ]; do
+          deployment_json=$$(
+            temporal worker deployment describe \
+              --name "$$TEMPORAL_WORKER_DEPLOYMENT_NAME" \
+              --namespace "$$TEMPORAL_NAMESPACE" \
+              --address "$$TEMPORAL_ADDRESS" \
+              --output json 2>/dev/null || true
+          )
+          if printf '%s\n' "$$deployment_json" \
+            | grep -Eq '"currentVersionBuildID"[[:space:]]*:[[:space:]]*"[^"]+"'; then
+            echo "Temporal Worker Deployment already has a Current Version; bootstrap made no routing change."
+            exit 0
+          fi
+          if temporal worker deployment set-current-version \
+            --deployment-name "$$TEMPORAL_WORKER_DEPLOYMENT_NAME" \
+            --build-id "$$TEMPORAL_INITIAL_WORKER_BUILD_ID" \
+            --namespace "$$TEMPORAL_NAMESPACE" \
+            --address "$$TEMPORAL_ADDRESS" \
+            --yes >/dev/null 2>&1; then
+            echo "Activated initial Temporal Worker build '$$TEMPORAL_INITIAL_WORKER_BUILD_ID'."
+            exit 0
+          fi
+          attempt=$$((attempt + 1))
+          sleep 2
+        done
+        echo "Initial Temporal Worker did not register all required task queues" >&2
+        exit 1
+
+  temporal-admin:
+    image: temporalio/admin-tools:1.31.2
+    profiles: ["temporal-ops"]
+    network_mode: "service:temporal"
+    entrypoint: ["temporal"]
+
   app:
     <<: *app-service
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-13000}:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      app-schema:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      temporal-initialize-worker-version:
+        condition: service_completed_successfully
     command: ["sh", "-c", "npm run storage:init && exec npm run start:next"]
 
-  temporal-worker:
-    <<: *app-service
-    command: ["sh", "-c", "npm run storage:init && exec npm run start:temporal-worker"]
+  temporal-worker-blue:
+    <<: *temporal-worker-service
+    image: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    environment:
+      <<: *app-environment
+      TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
+      TEMPORAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_BLUE_BUILD_ID:-}"
+      TEMPORAL_WORKER_VERSIONING_ENABLED: "true"
+      TEMPORAL_WORKER_SLOT: blue
+      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_BLUE_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    deploy:
+      replicas: ${TEMPORAL_WORKER_BLUE_REPLICAS:-1}
+
+  temporal-worker-green:
+    <<: *temporal-worker-service
+    image: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    environment:
+      <<: *app-environment
+      TEMPORAL_WORKER_DEPLOYMENT_NAME: "${TEMPORAL_WORKER_DEPLOYMENT_NAME:-waoowaoo}"
+      TEMPORAL_WORKER_BUILD_ID: "${TEMPORAL_WORKER_GREEN_BUILD_ID:-}"
+      TEMPORAL_WORKER_VERSIONING_ENABLED: "true"
+      TEMPORAL_WORKER_SLOT: green
+      TEMPORAL_WORKER_IMAGE: "${TEMPORAL_WORKER_GREEN_IMAGE:-ghcr.io/saturndec/waoowaoo@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+    deploy:
+      replicas: ${TEMPORAL_WORKER_GREEN_REPLICAS:-0}
 
 volumes:
   mysql_data:
   redis_data:
+  temporal_config:

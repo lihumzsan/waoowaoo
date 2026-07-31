@@ -38,7 +38,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
 - 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
 - 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
-- 资源通知契约：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-events.ts`。
+- 资源通知契约：`src/lib/workspace-resource/resource-impact.ts`、`resource-change-publisher.ts`。
 
 ## 验证
 

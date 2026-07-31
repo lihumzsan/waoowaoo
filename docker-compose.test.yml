@@ -52,9 +52,20 @@ services:
       MYSQL_ROOT_PASSWORD: root
       TEMPORAL_MYSQL_USER: temporal
       TEMPORAL_MYSQL_PASSWORD: temporal-test-only
-    volumes:
-      - ./scripts/temporal/bootstrap-mysql.sh:/scripts/bootstrap-mysql.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/bootstrap-mysql.sh"]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysql \
+          --protocol=TCP --host="$$MYSQL_HOST" --port="$$MYSQL_PORT" --user=root <<SQL
+        CREATE DATABASE IF NOT EXISTS \`temporal\`
+          CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+        CREATE DATABASE IF NOT EXISTS \`temporal_visibility\`
+          CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+        CREATE USER IF NOT EXISTS 'temporal'@'%' IDENTIFIED BY 'temporal-test-only';
+        ALTER USER 'temporal'@'%' IDENTIFIED BY 'temporal-test-only';
+        GRANT ALL PRIVILEGES ON \`temporal\`.* TO 'temporal'@'%';
+        GRANT ALL PRIVILEGES ON \`temporal_visibility\`.* TO 'temporal'@'%';
+        SQL
 
   temporal-schema:
     image: temporalio/admin-tools:1.31.2
@@ -69,9 +80,36 @@ services:
       MYSQL_USER: temporal
       SQL_PASSWORD: temporal-test-only
       DB_PORT: "3306"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        setup_database() {
+          temporal-sql-tool \
+            --plugin mysql8 --ep "$$MYSQL_SEEDS" -u "$$MYSQL_USER" \
+            -p "$$DB_PORT" --db "$$1" setup-schema -v 0.0 || true
+          temporal-sql-tool \
+            --plugin mysql8 --ep "$$MYSQL_SEEDS" -u "$$MYSQL_USER" \
+            -p "$$DB_PORT" --db "$$1" update-schema -d "$$2"
+        }
+        setup_database temporal /etc/temporal/schema/mysql/v8/temporal/versioned
+        setup_database temporal_visibility /etc/temporal/schema/mysql/v8/visibility/versioned
+
+  temporal-config:
+    image: busybox:1.37
+    profiles: ["temporal"]
+    restart: "no"
+    logging: *default-logging
     volumes:
-      - ./scripts/temporal/setup-schema.sh:/scripts/setup-schema.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/setup-schema.sh"]
+      - temporal_test_config:/config
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        printf '%s\n' \
+          'limit.maxIDLength:' \
+          '  - value: 255' \
+          '    constraints: {}' \
+          > /config/docker.yaml
+        test -s /config/docker.yaml
 
   temporal:
     image: temporalio/server:1.31.2
@@ -81,6 +119,8 @@ services:
     depends_on:
       temporal-schema:
         condition: service_completed_successfully
+      temporal-config:
+        condition: service_completed_successfully
     environment:
       DB: mysql8
       DB_PORT: "3306"
@@ -88,11 +128,10 @@ services:
       MYSQL_USER: temporal
       MYSQL_PWD: temporal-test-only
       BIND_ON_IP: 0.0.0.0
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/waoowaoo.yaml
     ports:
       - "127.0.0.1:${TEST_TEMPORAL_PORT:-0}:7233"
     volumes:
-      - ./scripts/temporal/dynamicconfig.yaml:/etc/temporal/config/dynamicconfig/waoowaoo.yaml:ro
+      - temporal_test_config:/etc/temporal/config/dynamicconfig:ro
     healthcheck:
       test: ["CMD", "nc", "-z", "127.0.0.1", "7233"]
       interval: 5s
@@ -114,6 +153,28 @@ services:
       TEMPORAL_NAMESPACE_RETENTION: 1d
       TEMPORAL_HEALTH_CHECK_MAX_ATTEMPTS: "60"
       TEMPORAL_HEALTH_CHECK_SLEEP_SECONDS: "1"
-    volumes:
-      - ./scripts/temporal/create-namespace.sh:/scripts/create-namespace.sh:ro
-    entrypoint: ["/bin/sh", "/scripts/create-namespace.sh"]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        attempt=1
+        until temporal operator cluster health \
+          --address "$$TEMPORAL_ADDRESS" >/dev/null 2>&1; do
+          if [ "$$attempt" -ge "$$TEMPORAL_HEALTH_CHECK_MAX_ATTEMPTS" ]; then
+            echo "Temporal test server did not become healthy" >&2
+            exit 1
+          fi
+          attempt=$$((attempt + 1))
+          sleep "$$TEMPORAL_HEALTH_CHECK_SLEEP_SECONDS"
+        done
+        if temporal operator namespace describe \
+          --namespace "$$TEMPORAL_NAMESPACE" \
+          --address "$$TEMPORAL_ADDRESS" >/dev/null 2>&1; then
+          exit 0
+        fi
+        temporal operator namespace create \
+          --namespace "$$TEMPORAL_NAMESPACE" \
+          --retention "$$TEMPORAL_NAMESPACE_RETENTION" \
+          --address "$$TEMPORAL_ADDRESS"
+
+volumes:
+  temporal_test_config:

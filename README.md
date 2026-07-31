@@ -40,7 +40,8 @@
 
 ### 方式一：拉取预构建镜像（最简单）
 
-无需克隆仓库，下载即用：
+无需克隆仓库。Compose 已内置 Temporal 数据库、schema 和 namespace 初始化逻辑，
+启动时不依赖宿主机上的仓库脚本：
 
 ```bash
 # 下载 docker-compose.yml
@@ -51,36 +52,83 @@ cp .env.example .env
 # 编辑 .env：为所有空白密钥生成独立随机值，并让 MYSQL_PASSWORD、
 # DATABASE_URL 与 COMPOSE_DATABASE_URL 中的密码保持一致（URL 中需编码特殊字符）。
 # 另外填写一个预先创建、可通过公网 HTTPS 访问的 S3-compatible 存储桶。
+# TEMPORAL_WORKER_BLUE_IMAGE 和 TEMPORAL_WORKER_GREEN_IMAGE 都必须填写完整的
+# repository@sha256:<64位digest>；首次安装可以先让两个 slot 指向同一镜像。
+# APP_IMAGE 必须指向同一个digest，不能保留 .env.example 中的全零占位值。
+# TEMPORAL_WORKER_BLUE_BUILD_ID 必须是该发布唯一、非 local 的 identity。
 
 # 启动所有服务
 docker compose up -d
 ```
 
-> ⚠️ 当前为测试版，版本间数据库不兼容。升级请先清除旧数据：
+Web 与 Temporal Worker 使用同一个不可变应用镜像，但运行在独立容器中。正式 Worker
+slot只拉取上述digest，不从本地`build: context`构建。Web 进程不会托管 Workflow；Worker
+进程也不接受 HTTP 流量。
+
+> [!WARNING]
+> 下面的 `down/up` 或直接替换唯一 Worker 会让仍然 PINNED 到旧版本的 Workflow 停止。
+> 升级必须使用下一节的蓝绿流程；不得先停止旧 Worker，也不得使用 `down -v` 删除数据。
+
+### Temporal Worker 蓝绿升级
+
+首次安装默认使用 blue slot。下一次发布在 `.env` 中配置未运行的 green slot：
 
 ```bash
-docker compose down -v
-docker rmi ghcr.io/saturndec/waoowaoo:latest
-curl -O https://raw.githubusercontent.com/saturndec/waoowaoo/main/docker-compose.yml
-docker compose up -d
+TEMPORAL_WORKER_GREEN_IMAGE=<repository@sha256:64-hex-digest>
+TEMPORAL_WORKER_GREEN_BUILD_ID=<new-unique-build-id>
+TEMPORAL_WORKER_GREEN_REPLICAS=1
 ```
 
-> 启动后请**清空浏览器缓存**并重新登录，避免旧版本缓存导致异常。
+下载同版本的 rollout 守卫并提升候选版本。命令会先在启动任何候选容器之前拒绝选中
+Current slot 或可变镜像，再等待新 Worker 注册全部 task queue，调用 Temporal
+`set-current-version`，并确认旧 Current Worker 仍在运行：
 
-### 方式二：克隆仓库 + Docker 构建（完全控制）
+```bash
+curl -o temporal-worker-rollout.sh \
+  https://raw.githubusercontent.com/saturndec/waoowaoo/<same-release-tag>/scripts/temporal/worker-rollout.sh
+chmod 0755 temporal-worker-rollout.sh
+sh ./temporal-worker-rollout.sh promote green
+```
+
+随后才把 `APP_IMAGE` 改为新不可变镜像并更新 Web。旧 blue Worker 必须继续运行，直到：
+
+```bash
+sh ./temporal-worker-rollout.sh status
+```
+
+显示旧 build 的 `drainageStatus` 为 `drained`。这可能持续到最长 Workflow 自然完成；
+不得按固定时间猜测。确认 drained 后，先在 `.env` 设置
+`TEMPORAL_WORKER_BLUE_REPLICAS=0`，再执行：
+
+```bash
+sh ./temporal-worker-rollout.sh retire blue
+```
+
+下一次发布交换 blue/green。`retire` 会拒绝 Current Version、未 drained 的版本以及未在
+`.env` 持久设为 0 的 slot，因此旧 pinned Worker 不会被普通更新误删。
+
+### 方式二：克隆仓库 + 构建并发布不可变镜像
 
 ```bash
 git clone https://github.com/saturndec/waoowaoo.git
 cd waoowaoo
 cp .env.example .env
-# 按上面的说明填写 .env；Compose 会在必需密钥缺失时拒绝启动
+# 本地构建后推送到你控制的 registry，再从 registry 查询实际 sha256 digest。
+docker build -t <registry>/<repository>:<release-tag> .
+docker push <registry>/<repository>:<release-tag>
+
+# 不要把可变 tag 交给 Compose。把 APP_IMAGE、TEMPORAL_WORKER_BLUE_IMAGE、
+# TEMPORAL_WORKER_GREEN_IMAGE 全部设为
+# 同一个 <registry>/<repository>@sha256:<64位digest>；inactive slot 首次也必须填写。
+# 按上面的说明补齐其他 .env 密钥后启动。正式 Compose 只 pull，不从 context 构建。
 docker compose up -d
 ```
 
 更新版本：
 ```bash
 git pull
-docker compose down && docker compose up -d --build
+# 按“Temporal Worker 蓝绿升级”先 promote 未运行的 slot，旧 slot drained 后再 retire。
+# 不要执行 docker compose down 来替换 Worker。
 ```
 
 ### 方式三：本地开发模式（开发者）
@@ -96,14 +144,15 @@ cp .env.example .env
 
 npm install
 
-# 只启动本地数据库和 Redis 即时传输；媒体始终写入 .env 配置的开发对象存储桶
-# 注意：docker-compose.yml 将服务映射到非标准端口，.env.example 已按此预设
-docker compose up mysql redis -d
+# 启动本地数据库、Redis 和完整 Temporal Server/namespace；媒体始终写入
+# .env 配置的开发对象存储桶。这个命令不会启动生产版 blue/green Worker。
+npm run dev:infra
 
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
 npm run db:push
 
 # 启动开发服务器
+# dev:temporal-worker 会显式使用 local/unversioned，只用于本地开发。
 npm run dev
 ```
 
@@ -121,10 +170,11 @@ npm run dev
 > `npm run db:bplus-cutover-preflight`。该命令只读：任何 active Task、旧 Run/Wait/
 > Activity/Interruption/Handoff、待交付 Outbox、未完成 OperationExecution、
 > 未消费 ApprovalGrant、旧模型 checkpoint 或重复 Thread archive 都会明确阻断。
-> 全部为 0 后，人工审核输出并执行 `npm run db:bplus-cutover-apply`；不要用
-> `db:push --accept-data-loss` 代替这次 migration。migration 完成后再启动新 Web 与
-> Temporal worker。B+ migration 的 MySQL DDL 非事务化，中途失败必须停止并检查实际
-> schema，禁止盲目重跑。
+> 全部为 0 后，人工审核输出并执行 `npm run db:bplus-cutover-apply`。这是唯一切换入口：
+> 完整旧库依次执行 immutable base 与 additive migration；已经完成 base 的库只执行
+> additive，绝不重跑旧 DDL。不要用 `db:push --accept-data-loss` 代替。MySQL DDL 非事务化；
+> 部分 base 会 fail closed 并要求从备份恢复，只有已验证完整的 base 才允许恢复性重放
+> 幂等 additive。
 
 ### B+ 一次性切换：备份、演练与失败恢复
 
@@ -132,6 +182,10 @@ npm run dev
 演练是发布门槛；云数据库快照或时间点恢复可以作为额外保护，但不能代替这次演练。
 所有旧 Web、Bull worker 和 Outbox dispatcher 必须从备份开始前一直保持停止，防止备份
 之后再产生无法进入新库的写入。
+
+如果数据库在此前版本已经完整执行过 base cutover，不要运行只接受完整旧库的 preflight；
+直接运行 `npm run db:bplus-cutover-apply`。入口会验证 base schema，只执行 additive 并完成
+同一套最终验收。任何部分 base 或未知结构都会停止，不会猜测或盲目补表。
 
 先把以下变量替换成目标 MySQL 的真实值。备份目录必须位于受限的持久磁盘，不能放进
 Git 仓库；数据库名只允许字母、数字和下划线。
@@ -242,8 +296,14 @@ test "$(
               'project_agent_execution_handoffs',
               'project_agent_continuation_checkpoints',
               'project_agent_events',
-              'outbox_commands'
+              'outbox_commands',
+              'project_assistant_tool_selections'
             )) = 0
+        AND
+        (SELECT COUNT(*) FROM information_schema.columns
+          WHERE table_schema = DATABASE()
+            AND table_name = 'project_assistant_thread_archives'
+            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
         AND
         (SELECT COUNT(*) FROM information_schema.table_constraints
           WHERE constraint_schema = DATABASE()
@@ -257,8 +317,8 @@ test "$(
 )" = 'BPLUS_SCHEMA_READY'
 ```
 
-演练成功后，回到仍然冻结写入的真实数据库，重新运行只读 preflight，再且仅再执行一次
-migration，并用同一条 schema 查询确认结果。不要对真实数据库执行
+演练成功后，回到仍然冻结写入的真实数据库，重新运行只读 preflight，再执行唯一apply
+入口，并用同一条 schema 查询确认结果。不要对真实数据库执行
 `db:push --accept-data-loss`。
 
 ```bash
@@ -297,8 +357,14 @@ test "$(
               'project_agent_execution_handoffs',
               'project_agent_continuation_checkpoints',
               'project_agent_events',
-              'outbox_commands'
+              'outbox_commands',
+              'project_assistant_tool_selections'
             )) = 0
+        AND
+        (SELECT COUNT(*) FROM information_schema.columns
+          WHERE table_schema = DATABASE()
+            AND table_name = 'project_assistant_thread_archives'
+            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
         AND
         (SELECT COUNT(*) FROM information_schema.table_constraints
           WHERE constraint_schema = DATABASE()
@@ -312,9 +378,11 @@ test "$(
 )" = 'BPLUS_SCHEMA_READY'
 ```
 
-如果真实 migration 在任意 DDL 处失败，立即停止，不得在这个部分切换的库上重新运行
-migration，也不得人工逐条补表。保留失败库作为诊断证据，创建一个新的空恢复库，从已
-验证的备份恢复，然后在恢复库上从 preflight 开始完成一次全新切换：
+如果immutable base在任意 DDL 处失败，立即停止，不得在这个部分切换的库上重跑base，
+也不得人工逐条补表。若日志已明确显示base完整、失败发生在additive阶段，可重新执行同一
+apply入口；它会验证base并只重放幂等additive。其他未知或部分base一律保留失败库作为诊断
+证据，创建一个新的空恢复库，从已验证的备份恢复，然后在恢复库上从preflight开始完成
+一次全新切换：
 
 ```bash
 set -euo pipefail
@@ -381,8 +449,14 @@ test "$(
               'project_agent_execution_handoffs',
               'project_agent_continuation_checkpoints',
               'project_agent_events',
-              'outbox_commands'
+              'outbox_commands',
+              'project_assistant_tool_selections'
             )) = 0
+        AND
+        (SELECT COUNT(*) FROM information_schema.columns
+          WHERE table_schema = DATABASE()
+            AND table_name = 'project_assistant_thread_archives'
+            AND column_name IN ('clearRequestId', 'cancelledTurnIds')) = 2
         AND
         (SELECT COUNT(*) FROM information_schema.table_constraints
           WHERE constraint_schema = DATABASE()

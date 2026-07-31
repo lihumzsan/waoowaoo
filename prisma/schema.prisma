@@ -354,6 +354,8 @@ model ProjectAssistantThreadArchive {
   scopeRef         String
   messagesJson     Json
   modelHistoryJson Json
+  clearRequestId   String?  @db.VarChar(128)
+  cancelledTurnIds Json?
   threadCreatedAt  DateTime
   threadUpdatedAt  DateTime
   archivedAt       DateTime @default(now())
@@ -363,25 +365,6 @@ model ProjectAssistantThreadArchive {
   @@index([projectId, userId, archivedAt])
   @@index([userId, archivedAt])
   @@map("project_assistant_thread_archives")
-}
-
-model ProjectAssistantToolSelection {
-  id            String   @id @default(uuid())
-  userId        String
-  projectId     String?
-  episodeId     String?
-  assistantId   String
-  scopeRef      String
-  selectionJson Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, assistantId, scopeRef])
-  @@index([projectId, episodeId, updatedAt])
-  @@index([userId, updatedAt])
-  @@map("project_assistant_tool_selections")
 }
 
 model Project {
@@ -408,7 +391,6 @@ model Project {
   user                    User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
   usageCosts              UsageCost[]
   assistantThreads        ProjectAssistantThread[]
-  assistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches         MutationBatch[]
   episodes                ProjectEpisode[]
   characters              ProjectCharacter[]
@@ -521,7 +503,6 @@ model User {
   taskEvents                     TaskEvent[]
   projectAssistantThreads        ProjectAssistantThread[]
   projectAssistantThreadArchives ProjectAssistantThreadArchive[]
-  projectAssistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches                MutationBatch[]
   inviteRedemptions              InviteRedemption[]
   creativeResources              CreativeResource[]

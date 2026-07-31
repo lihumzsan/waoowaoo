@@ -33,7 +33,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Temporal Worker is currently executed from TypeScript through tsx.
+# One immutable image contains both entrypoints, but Compose runs Web and each
+# Temporal Worker slot as separate containers. They never share a process or
+# failure domain. The Worker is currently executed from TypeScript through tsx.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
