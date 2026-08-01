@@ -29,13 +29,22 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
-import { uploadProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments/client'
+import {
+  uploadProjectAssistantTextAttachment,
+  validateProjectAssistantTextAttachmentFile,
+} from '@/lib/project-agent/text-attachments/client'
 import {
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
 } from '@/lib/project-agent/media-attachments'
-import { isProjectAssistantMediaFile } from '@/lib/project-agent/media-attachments/client'
+import {
+  isProjectAssistantMediaFile,
+  validateProjectAssistantMediaAttachmentFile,
+} from '@/lib/project-agent/media-attachments/client'
 import type { ProjectVideoRatio } from '@/lib/projects/video-ratio'
+import { readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
 
 interface PendingHomeMediaFile extends PendingMediaFileChip {
   readonly file: File
@@ -65,6 +74,8 @@ export default function HomePage() {
   const t = useTranslations('home')
   const tc = useTranslations('common')
   const ta = useTranslations('assistantAgent')
+  const resolveClientError = useClientErrorMessage()
+  const { showError } = useToast()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,16 +114,15 @@ export default function HomePage() {
         pageSize: RECENT_COUNT.toString(),
       })
       const response = await apiFetch(`/api/projects?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.projects)
-      }
-    } catch {
-      // 静默处理
+      if (!response.ok) throw await readClientApiError(response)
+      const data = await response.json()
+      setProjects(data.projects)
+    } catch (error) {
+      showError(error, t('projectsLoadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showError, t])
 
   useEffect(() => {
     if (session) {
@@ -138,7 +148,7 @@ export default function HomePage() {
       navigate: (target) => {
         router.push(target)
       },
-      resolveErrorMessage: (error) => error instanceof Error ? error.message : t('createFailed'),
+      resolveErrorMessage: (error) => resolveClientError(error, t('createFailed')),
     })
   }
 
@@ -157,6 +167,17 @@ export default function HomePage() {
   }, [])
 
   const addPendingMediaFiles = useCallback((files: readonly File[]) => {
+    const validationCode = files
+      .map(validateProjectAssistantMediaAttachmentFile)
+      .find((code) => code !== null)
+    if (validationCode) {
+      setAttachError(resolveClientError(new Error(validationCode), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    if (files.length + pendingMediaFiles.length > PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES) {
+      setAttachError(resolveClientError(new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY'), ta('attachments.mediaUploadFailed')))
+      return
+    }
     setPendingMediaFiles((current) => {
       const room = PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - current.length
       if (room <= 0) return current
@@ -176,7 +197,7 @@ export default function HomePage() {
     if (createError) {
       setCreateError(null)
     }
-  }, [createError])
+  }, [createError, pendingMediaFiles.length, resolveClientError, ta])
 
   const handleRemovePendingMediaFile = useCallback((id: string) => {
     setPendingMediaFiles((current) => {
@@ -202,6 +223,17 @@ export default function HomePage() {
     if (mediaFiles.length > 0) addPendingMediaFiles(mediaFiles)
     const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
     if (textFiles.length === 0) return
+    const validationCode = textFiles
+      .map(validateProjectAssistantTextAttachmentFile)
+      .find((code) => code !== null)
+    if (validationCode) {
+      setAttachError(resolveClientError(new Error(validationCode), ta('attachments.mediaUploadFailed')))
+      return
+    }
+    if (textFiles.length + attachments.length > PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) {
+      setAttachError(resolveClientError(new Error('PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY'), ta('attachments.mediaUploadFailed')))
+      return
+    }
     setAttachUploading(true)
     try {
       for (const file of textFiles) {
@@ -209,11 +241,11 @@ export default function HomePage() {
         handleAttachmentUploaded(attachment)
       }
     } catch (error) {
-      setAttachError(error instanceof Error ? error.message : String(error))
+      setAttachError(resolveClientError(error, ta('attachments.mediaUploadFailed')))
     } finally {
       setAttachUploading(false)
     }
-  }, [addPendingMediaFiles, handleAttachmentUploaded])
+  }, [addPendingMediaFiles, attachments.length, handleAttachmentUploaded, resolveClientError, ta])
 
   const attachmentPicker = useAttachmentFilePicker({
     accept: `${PROJECT_ASSISTANT_TEXT_ATTACHMENT_ACCEPT},${PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT}`,

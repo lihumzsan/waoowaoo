@@ -12,6 +12,7 @@ import {
     useUpdateProjectLocationDescription,
     useUpdateProjectLocationName,
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
 export interface LocationEditModalProps {
     mode: 'asset-hub' | 'project'
@@ -41,6 +42,7 @@ export function LocationEditModal({
     onNameUpdate,
 }: LocationEditModalProps) {
     const t = useTranslations('assets')
+    const { showError } = useToast()
 
     const resolvedImageIndex = mode === 'asset-hub'
         ? (imageIndex ?? 0)
@@ -62,11 +64,6 @@ export function LocationEditModal({
     const updateProjectName = useUpdateProjectLocationName(projectId ?? '')
     const updateAssetHubSummary = useUpdateLocationSummary()
     const updateProjectDescription = useUpdateProjectLocationDescription(projectId ?? '')
-
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
 
     const persistNameIfNeeded = async () => {
         const nextName = editingName.trim()
@@ -101,7 +98,7 @@ export function LocationEditModal({
             await persistNameIfNeeded()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(t('modal.saveName') + t('errors.failed'))
+                showError(error, t('modal.saveName') + t('errors.failed'))
             }
         }
     }
@@ -116,7 +113,7 @@ export function LocationEditModal({
             onClose()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(getErrorMessage(error, t('errors.saveFailed')))
+                showError(error, t('errors.saveFailed'))
             }
         } finally {
             setIsSaving(false)

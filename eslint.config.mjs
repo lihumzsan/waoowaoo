@@ -32,6 +32,15 @@ const eslintConfig = [
     files: ["src/**/*.{ts,tsx}"],
     rules: {
       "no-console": "error",
+      "no-restricted-globals": [
+        "error",
+        { name: "alert", message: "Use the global localized toast or an inline error view." },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "window", property: "alert", message: "Use the global localized toast or an inline error view." },
+        { object: "globalThis", property: "alert", message: "Use the global localized toast or an inline error view." },
+      ],
     },
   },
   {

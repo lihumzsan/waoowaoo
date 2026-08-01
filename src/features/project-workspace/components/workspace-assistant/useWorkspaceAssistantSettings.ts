@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { apiFetch } from '@/lib/api-fetch'
+import { readClientApiError } from '@/lib/errors/client'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -20,16 +22,16 @@ function readBillingConfirmationRequired(value: unknown): boolean {
 export function useWorkspaceAssistantSettings() {
   const [billingConfirmationRequired, setBillingConfirmationRequired] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(false)
 
   const load = useCallback(async () => {
-    setError(null)
+    setError(false)
     try {
-      const response = await fetch('/api/user-preference', { cache: 'no-store' })
-      if (!response.ok) throw new Error(`ASSISTANT_SETTINGS_LOAD_FAILED:${response.status}`)
+      const response = await apiFetch('/api/user-preference', { cache: 'no-store' })
+      if (!response.ok) throw await readClientApiError(response)
       setBillingConfirmationRequired(readBillingConfirmationRequired(await response.json()))
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError))
+    } catch {
+      setError(true)
     }
   }, [])
 
@@ -40,17 +42,17 @@ export function useWorkspaceAssistantSettings() {
   const updateBillingConfirmationRequired = useCallback(async (required: boolean) => {
     if (saving) return
     setSaving(true)
-    setError(null)
+    setError(false)
     try {
-      const response = await fetch('/api/user-preference', {
+      const response = await apiFetch('/api/user-preference', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ assistantBillingConfirmationRequired: required }),
       })
-      if (!response.ok) throw new Error(`ASSISTANT_SETTINGS_SAVE_FAILED:${response.status}`)
+      if (!response.ok) throw await readClientApiError(response)
       setBillingConfirmationRequired(readBillingConfirmationRequired(await response.json()))
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError))
+    } catch {
+      setError(true)
     } finally {
       setSaving(false)
     }

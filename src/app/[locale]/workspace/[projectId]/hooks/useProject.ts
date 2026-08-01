@@ -2,6 +2,9 @@ import { logError as _ulogError } from '@/lib/logging/core'
 import { useState, useCallback } from 'react'
 import { Project } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
+import { readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useTranslations } from 'next-intl'
 
 /**
  * 刷新范围
@@ -35,6 +38,8 @@ export interface RefreshOptions {
  * - 消除刷新行为不一致问题
  */
 export function useProject(projectId: string) {
+  const resolveClientError = useClientErrorMessage()
+  const t = useTranslations('workspace')
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -72,8 +77,7 @@ export function useProject(projectId: string) {
       if (scope === 'all' || scope === 'project') {
         const res = await apiFetch(`/api/projects/${projectId}/data`)
         if (!res.ok) {
-          const errorData = await res.json()
-          throw new Error(errorData.error || 'Failed to load project')
+          throw await readClientApiError(res)
         }
         const data = await res.json()
         setProject(data.project)
@@ -87,24 +91,23 @@ export function useProject(projectId: string) {
       // 刷新资产数据
       if (scope === 'all' || scope === 'assets') {
         const res = await apiFetch(`/api/projects/${projectId}/assets`)
-        if (res.ok) {
-          const assets = await res.json()
-          setProject(prev => {
-            if (!prev) return prev
-            return {
-              ...prev,
-              characters: assets.characters || [],
-              locations: assets.locations || [],
-              props: assets.props || [],
-            }
-          })
-          setAssetsLoaded(true)
-        }
+        if (!res.ok) throw await readClientApiError(res)
+        const assets = await res.json()
+        setProject(prev => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            characters: assets.characters || [],
+            locations: assets.locations || [],
+            props: assets.props || [],
+          }
+        })
+        setAssetsLoaded(true)
       }
     } catch (err: unknown) {
       _ulogError('Refresh error:', err)
       if (mode === 'full') {
-        setError(getErrorMessage(err))
+        setError(resolveClientError(err, t('loadFailed')))
       }
       // 静默刷新不设置错误状态，避免干扰用户
     } finally {
@@ -115,7 +118,7 @@ export function useProject(projectId: string) {
         setAssetsLoading(false)
       }
     }
-  }, [projectId])
+  }, [projectId, resolveClientError, t])
 
   /**
    * 更新项目数据（乐观更新）
@@ -139,7 +142,3 @@ export function useProject(projectId: string) {
     updateProject
   }
 }
-  const getErrorMessage = (err: unknown): string => {
-    if (err instanceof Error) return err.message
-    return String(err)
-  }

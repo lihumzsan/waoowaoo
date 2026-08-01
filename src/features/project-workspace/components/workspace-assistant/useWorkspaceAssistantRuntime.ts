@@ -38,6 +38,7 @@ import {
   resolveWorkspaceAssistantUserMessageId,
 } from './workspace-assistant-command-receipt'
 import { useWorkspaceAssistantSubagentStream } from './useWorkspaceAssistantSubagentStream'
+import { createClientApiError, parseClientError } from '@/lib/errors/client'
 
 export interface WorkspaceAssistantSendMessageInput {
   readonly text: string
@@ -161,8 +162,8 @@ function convertUiMessage(message: UIMessage): ThreadMessageLike {
 class WorkspaceAssistantCommandError extends Error {
   readonly outcome: 'rejected' | 'unconfirmed'
 
-  constructor(message: string, outcome: 'rejected' | 'unconfirmed') {
-    super(message)
+  constructor(code: string, requestId: string | null, outcome: 'rejected' | 'unconfirmed') {
+    super(JSON.stringify({ error: { code, details: requestId ? { requestId } : {} } }))
     this.name = 'WorkspaceAssistantCommandError'
     this.outcome = outcome
   }
@@ -174,18 +175,8 @@ async function readCommandError(
 ): Promise<WorkspaceAssistantCommandError> {
   const payload: unknown = await response.json().catch(() => null)
   const outcome = response.status >= 500 ? 'unconfirmed' : 'rejected'
-  if (isRecord(payload)) {
-    const code = typeof payload.code === 'string' ? payload.code : null
-    const message = typeof payload.message === 'string' ? payload.message : null
-    const requestId = typeof payload.requestId === 'string' ? payload.requestId : null
-    if (code || message) {
-      return new WorkspaceAssistantCommandError(
-        [code, message, requestId].filter(Boolean).join(':'),
-        outcome,
-      )
-    }
-  }
-  return new WorkspaceAssistantCommandError(`${fallback}:${String(response.status)}`, outcome)
+  const parsed = createClientApiError(payload, response.status, response.headers.get('x-request-id'))
+  return new WorkspaceAssistantCommandError(parsed.code ?? fallback, parsed.requestId, outcome)
 }
 
 function normalizeWorkspaceAssistantCommandError(error: unknown): {
@@ -196,7 +187,7 @@ function normalizeWorkspaceAssistantCommandError(error: unknown): {
     return { error, outcome: error.outcome }
   }
   return {
-    error: new WorkspaceAssistantCommandError('AGENT_TEMPORAL_UNAVAILABLE', 'unconfirmed'),
+    error: new WorkspaceAssistantCommandError('AGENT_TEMPORAL_UNAVAILABLE', null, 'unconfirmed'),
     outcome: 'unconfirmed',
   }
 }
@@ -728,12 +719,7 @@ export function useWorkspaceAssistantRuntime({
     view,
     pendingInteraction: view?.pendingInteraction ?? null,
     error: commandError ?? undefined,
-    viewError:
-      viewQuery.error instanceof Error
-        ? viewQuery.error.message
-        : viewQuery.error
-          ? String(viewQuery.error)
-          : null,
+    viewError: viewQuery.error ? parseClientError(viewQuery.error).code ?? 'INTERNAL_ERROR' : null,
     viewLoading: viewQuery.isLoading,
     subagents: subagentStream.subagents,
     subagentStructuredOutputs: subagentStream.structuredOutputs,

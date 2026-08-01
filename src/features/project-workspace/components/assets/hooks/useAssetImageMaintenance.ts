@@ -6,27 +6,23 @@ import {
   useUndoProjectCharacterImage,
   useUndoProjectLocationImage,
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
-type ToastType = 'success' | 'warning' | 'error'
-type ShowToast = (message: string, type?: ToastType, duration?: number) => void
 type TranslateValues = Record<string, string | number | Date>
 type Translate = (key: string, values?: TranslateValues) => string
 
 interface UseAssetImageMaintenanceParams {
   projectId: string
   t: Translate
-  showToast: ShowToast
   onRefresh: () => void | Promise<void>
 }
-
-const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
 export function useAssetImageMaintenance({
   projectId,
   t,
-  showToast,
   onRefresh,
 }: UseAssetImageMaintenanceParams) {
+  const { showError, showToast } = useToast()
   const undoCharacterImage = useUndoProjectCharacterImage(projectId)
   const undoLocationImage = useUndoProjectLocationImage(projectId)
 
@@ -40,9 +36,9 @@ export function useAssetImageMaintenance({
         await Promise.resolve(onRefresh())
         return
       }
-      showToast(`${t('image.undoFailed')}: ${getErrorMessage(error)}`, 'error')
+      showError(error, t('image.undoFailed'))
     }
-  }, [onRefresh, showToast, t, undoCharacterImage])
+  }, [onRefresh, showError, showToast, t, undoCharacterImage])
 
   const handleUndoLocation = useCallback(async (locationId: string) => {
     if (!confirm(t('image.undoConfirm'))) return
@@ -54,9 +50,9 @@ export function useAssetImageMaintenance({
         await Promise.resolve(onRefresh())
         return
       }
-      showToast(`${t('image.undoFailed')}: ${getErrorMessage(error)}`, 'error')
+      showError(error, t('image.undoFailed'))
     }
-  }, [onRefresh, showToast, t, undoLocationImage])
+  }, [onRefresh, showError, showToast, t, undoLocationImage])
 
   return {
     handleUndoCharacter,

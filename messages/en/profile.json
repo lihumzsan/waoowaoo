@@ -7,6 +7,8 @@
   "manageCredits": "Top up & Redeem",
   "topUpOrRedeem": "Top up / Redeem",
   "availableBalance": "Available Credits",
+  "balanceLoadFailed": "Failed to load balance. Please retry.",
+  "transactionsLoadFailed": "Failed to load transactions. Please retry.",
   "openSourceNoBilling": "Open-source edition, no billing required",
   "frozen": "Frozen",
   "totalSpent": "Total Spent",

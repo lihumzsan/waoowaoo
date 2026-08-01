@@ -13,7 +13,9 @@ import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
 import { useRouter } from '@/i18n/navigation'
 import { readProfileSectionParam, type ProfileSection } from '@/lib/profile/sections'
 import { apiFetch } from '@/lib/api-fetch'
-import { parseApiErrorPayload } from '@/lib/api-error-payload'
+import { createClientApiError, readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
 import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
@@ -50,11 +52,6 @@ type RechargeConfigPayload = {
 
 type CheckoutPayload = {
   url?: string
-}
-
-function readApiFailureReason(payload: unknown, fallback: string): string {
-  const parsed = parseApiErrorPayload(payload)
-  return parsed.code || parsed.message || fallback
 }
 
 function formatAmount(value: number | undefined, currency: string | undefined): string {
@@ -109,6 +106,8 @@ export default function ProfilePage() {
   const searchParams = useSearchParams()
   const t = useTranslations('profile')
   const tc = useTranslations('common')
+  const resolveClientError = useClientErrorMessage()
+  const { showError } = useToast()
   if (!searchParams) {
     throw new Error('ProfilePage requires searchParams')
   }
@@ -188,20 +187,30 @@ export default function ProfilePage() {
   }, [deploymentFeatures, router, urlSection])
 
   const loadBalance = useCallback(async () => {
-    const response = await apiFetch('/api/user/balance')
-    if (!response.ok) return
-    const payload: unknown = await response.json()
-    if (isBalancePayload(payload)) setBalance(payload)
-  }, [])
+    try {
+      const response = await apiFetch('/api/user/balance')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isBalancePayload(payload)) throw new Error('BALANCE_RESPONSE_INVALID')
+      setBalance(payload)
+    } catch (error) {
+      showError(error, t('balanceLoadFailed'))
+    }
+  }, [showError, t])
 
   const loadTransactions = useCallback(async () => {
-    const response = await apiFetch('/api/user/transactions?pageSize=20')
-    if (!response.ok) return
-    const payload: unknown = await response.json()
-    if (isTransactionsPayload(payload) && Array.isArray(payload.transactions)) {
+    try {
+      const response = await apiFetch('/api/user/transactions?pageSize=20')
+      if (!response.ok) throw await readClientApiError(response)
+      const payload: unknown = await response.json()
+      if (!isTransactionsPayload(payload) || !Array.isArray(payload.transactions)) {
+        throw new Error('TRANSACTIONS_RESPONSE_INVALID')
+      }
       setTransactions(payload.transactions)
+    } catch (error) {
+      showError(error, t('transactionsLoadFailed'))
     }
-  }, [])
+  }, [showError, t])
 
   const loadRechargeConfig = useCallback(async () => {
     const response = await apiFetch('/api/payments/recharge/config')
@@ -209,7 +218,7 @@ export default function ProfilePage() {
     if (!response.ok) {
       setRechargeConfig(null)
       setRechargeConfigError(t('recharge.configLoadFailed', {
-        reason: readApiFailureReason(payload, `HTTP_${response.status}`),
+        reason: resolveClientError(createClientApiError(payload, response.status), t('recharge.checkoutFailed')),
       }))
       return
     }
@@ -222,7 +231,7 @@ export default function ProfilePage() {
     setRechargeConfigError(t('recharge.configLoadFailed', {
       reason: 'PAYMENT_RECHARGE_CONFIG_INVALID',
     }))
-  }, [t])
+  }, [resolveClientError, t])
 
   useEffect(() => {
     if (!session || deploymentFeatures?.showBilling !== true) return
@@ -476,15 +485,12 @@ export default function ProfilePage() {
                     })
                       .then(async (response) => {
                         const payload: unknown = await response.json()
-                        if (!response.ok || !isCheckoutPayload(payload) || !payload.url) {
-                          throw new Error(t('recharge.checkoutFailedWithReason', {
-                            reason: readApiFailureReason(payload, `HTTP_${response.status}`),
-                          }))
-                        }
+                        if (!response.ok) throw createClientApiError(payload, response.status)
+                        if (!isCheckoutPayload(payload) || !payload.url) throw new Error('CHECKOUT_RESPONSE_INVALID')
                         window.location.assign(payload.url)
                       })
                       .catch((error: unknown) => {
-                        setRechargeStatus(error instanceof Error ? error.message : t('recharge.checkoutFailed'))
+                        setRechargeStatus(resolveClientError(error, t('recharge.checkoutFailed')))
                       })
                       .finally(() => setRecharging(false))
                   }}
@@ -568,7 +574,7 @@ export default function ProfilePage() {
                   })
                     .then(async (response) => {
                       if (!response.ok) {
-                        throw new Error(t('inviteCode.redeemFailed'))
+                        throw await readClientApiError(response)
                       }
                       setInviteCode('')
                       setRedeemStatus(t('inviteCode.redeemSuccess'))
@@ -576,7 +582,7 @@ export default function ProfilePage() {
                       await loadTransactions()
                     })
                     .catch((error: unknown) => {
-                      setRedeemStatus(error instanceof Error ? error.message : t('inviteCode.redeemFailed'))
+                      setRedeemStatus(resolveClientError(error, t('inviteCode.redeemFailed')))
                     })
                     .finally(() => setRedeeming(false))
                 }}

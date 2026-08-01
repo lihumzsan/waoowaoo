@@ -123,6 +123,18 @@
     "credits": "余额检查",
     "skipped": "已跳过"
   },
+  "connectionTest": {
+    "authInvalid": "鉴权失败，请检查 API Key 及其权限。",
+    "emptyResponse": "供应商返回了空响应。",
+    "modelsOk": "供应商已接受当前凭据。",
+    "networkError": "无法连接供应商，请检查网络和 Base URL 后重试。",
+    "providerError": "供应商拒绝或未能完成测试，请检查服务状态和账户。",
+    "rateLimited": "供应商正在限制当前账户的请求，请稍后重试。",
+    "skippedModelsFailure": "凭据检查未通过，已跳过此项。",
+    "skippedSpend": "为避免产生费用，已跳过实际生成。",
+    "textGenerationOk": "文本生成测试成功。",
+    "timeout": "供应商响应超时，请稍后重试。"
+  },
   "tabs": {
     "llm": "文本模型",
     "image": "图片模型",

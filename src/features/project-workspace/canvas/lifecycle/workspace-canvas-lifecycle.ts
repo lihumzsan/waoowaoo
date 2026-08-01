@@ -10,7 +10,6 @@ export type WorkspaceCanvasLifecyclePhase =
 
 export interface WorkspaceCanvasLifecycleError {
   readonly code: string
-  readonly message: string
 }
 
 export interface WorkspaceCanvasLifecycle {
@@ -51,11 +50,9 @@ function readTaskProgress(task: TaskRuntimeStateLike | null): number | null {
 }
 
 function readTaskError(task: TaskRuntimeStateLike | null): WorkspaceCanvasLifecycleError {
-  const message = task?.lastError?.message
   const code = task?.lastError?.code
   return {
     code: typeof code === 'string' && code.trim() ? code.trim() : 'TASK_FAILED',
-    message: typeof message === 'string' && message.trim() ? message.trim() : 'Task failed',
   }
 }
 

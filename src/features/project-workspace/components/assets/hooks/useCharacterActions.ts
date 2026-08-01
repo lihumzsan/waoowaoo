@@ -20,26 +20,17 @@ import {
     useConfirmProjectCharacterSelection,
     type Character
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
 interface UseCharacterActionsProps {
     projectId: string
-    showToast?: (message: string, type: 'success' | 'warning' | 'error') => void
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-    if (error instanceof Error) return error.message
-    if (typeof error === 'object' && error !== null) {
-        const message = (error as { message?: unknown }).message
-        if (typeof message === 'string') return message
-    }
-    return fallback
 }
 
 export function useCharacterActions({
     projectId,
-    showToast
 }: UseCharacterActionsProps) {
     const t = useTranslations('assets')
+    const { showError, showToast } = useToast()
     // 🔥 直接订阅缓存 - 消除 props drilling
     const { data: assets } = useProjectAssets(projectId)
     const characters = assets?.characters ?? []
@@ -61,10 +52,10 @@ export function useCharacterActions({
             await deleteCharacterMutation.mutateAsync(characterId)
         } catch (error: unknown) {
             if (!isAbortError(error)) {
-                alert(t('character.deleteFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
+                showError(error, t('character.deleteFailed', { error: t('common.unknownError') }))
             }
         }
-    }, [deleteCharacterMutation, t])
+    }, [deleteCharacterMutation, showError, t])
 
     // 删除单个形象
     const handleDeleteAppearance = useCallback(async (characterId: string, appearanceId: string) => {
@@ -73,10 +64,10 @@ export function useCharacterActions({
             await deleteAppearanceMutation.mutateAsync({ characterId, appearanceId })
         } catch (error: unknown) {
             if (!isAbortError(error)) {
-                alert(t('character.deleteFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
+                showError(error, t('character.deleteFailed', { error: t('common.unknownError') }))
             }
         }
-    }, [deleteAppearanceMutation, t])
+    }, [deleteAppearanceMutation, showError, t])
 
     // 处理角色图片选择
     const handleSelectCharacterImage = useCallback(async (
@@ -95,23 +86,23 @@ export function useCharacterActions({
                 _ulogInfo('请求被中断（可能是页面刷新），后端仍在执行')
                 return
             }
-            alert(t('image.selectFailed', { error: getErrorMessage(error, t('common.unknownError')) }))
+            showError(error, t('image.selectFailed', { error: t('common.unknownError') }))
         }
-    }, [selectCharacterImageMutation, t])
+    }, [selectCharacterImageMutation, showError, t])
 
     // 确认选择并删除其他候选图片
     const handleConfirmSelection = useCallback(async (characterId: string, appearanceId: string) => {
         try {
             await confirmCharacterSelectionMutation.mutateAsync({ characterId, appearanceId })
-            showToast?.(`✓ ${t('image.confirmSuccess')}`, 'success')
+            showToast(t('image.confirmSuccess'), 'success')
         } catch (error: unknown) {
             if (isAbortError(error)) {
                 _ulogInfo('请求被中断（可能是页面刷新），后端仍在执行')
                 return
             }
-            showToast?.(t('image.confirmFailed', { error: getErrorMessage(error, t('common.unknownError')) }), 'error')
+            showError(error, t('image.confirmFailed', { error: t('common.unknownError') }))
         }
-    }, [confirmCharacterSelectionMutation, showToast, t])
+    }, [confirmCharacterSelectionMutation, showError, showToast, t])
 
     return {
         // 🔥 暴露 characters 供组件使用（可选，组件也可以自己订阅）

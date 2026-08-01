@@ -17,14 +17,14 @@ import type {
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
 import { apiFetch } from '@/lib/api-fetch'
+import { useToast } from '@/contexts/ToastContext'
 
 type KeyTestStepStatus = 'pass' | 'fail' | 'skip'
 interface KeyTestStep {
   name: string
   status: KeyTestStepStatus
-  message: string
+  messageKey: `connectionTest.${string}`
   model?: string
-  detail?: string
 }
 type KeyTestStatus = 'idle' | 'testing' | 'passed' | 'failed'
 interface UseProviderCardStateParams {
@@ -160,6 +160,7 @@ export function useProviderCardState({
   onAddModel,
   t,
 }: UseProviderCardStateParams): UseProviderCardStateResult {
+  const { showToast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isEditingUrl, setIsEditingUrl] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -268,7 +269,7 @@ export function useProviderCardState({
         setKeyTestStatus('failed')
       }
     } catch {
-      setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
+      setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
   }, [defaultModels.analysisModel, defaultModels.assistantModel, doSaveKey, models, provider.baseUrl, provider.id, providerKey, tempKey])
@@ -302,7 +303,7 @@ export function useProviderCardState({
       setKeyTestSteps(data.steps || [])
       setKeyTestStatus(data.success ? 'passed' : 'failed')
     } catch {
-      setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
+      setKeyTestSteps([{ name: 'models', status: 'fail', messageKey: 'connectionTest.networkError' }])
       setKeyTestStatus('failed')
     }
   }, [defaultModels.analysisModel, defaultModels.assistantModel, models, provider.baseUrl, provider.id, providerKey])
@@ -345,7 +346,7 @@ export function useProviderCardState({
   const handleSaveModel = async (originalModelKey: string): Promise<void> => {
     if (isModelSavePending) return
     if (!editModel.name || !editModel.modelId) {
-      alert(t('fillComplete'))
+      showToast(t('fillComplete'), 'warning')
       return
     }
 
@@ -358,7 +359,7 @@ export function useProviderCardState({
     )
 
     if (duplicate) {
-      alert(t('modelIdExists'))
+      showToast(t('modelIdExists'), 'warning')
       return
     }
 
@@ -378,7 +379,7 @@ export function useProviderCardState({
   const handleAddModel = async (type: ProviderCardModelType): Promise<void> => {
     if (isModelSavePending) return
     if (!newModel.name || !newModel.modelId) {
-      alert(t('fillComplete'))
+      showToast(t('fillComplete'), 'warning')
       return
     }
 
@@ -390,7 +391,7 @@ export function useProviderCardState({
 
     const all = allModels || models
     if (all.some((model) => model.modelKey === finalModelKey)) {
-      alert(t('modelIdExists'))
+      showToast(t('modelIdExists'), 'warning')
       return
     }
 

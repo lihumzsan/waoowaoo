@@ -13,6 +13,7 @@ import {
     useUpdateProjectCharacterIntroduction,
     useUpdateProjectCharacterName,
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
 export interface CharacterEditModalProps {
     mode: 'asset-hub' | 'project'
@@ -48,6 +49,7 @@ export function CharacterEditModal({
     onNameUpdate,
 }: CharacterEditModalProps) {
     const t = useTranslations('assets')
+    const { showError } = useToast()
 
     const [editingName, setEditingName] = useState(characterName)
     const [editingDescription, setEditingDescription] = useState(description)
@@ -67,11 +69,6 @@ export function CharacterEditModal({
     const updateAssetHubAppearanceDesc = useUpdateCharacterAppearanceDescription()
     const updateProjectAppearanceDesc = useUpdateProjectAppearanceDescription(projectId ?? '')
     const updateProjectIntroduction = useUpdateProjectCharacterIntroduction(projectId ?? '')
-
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) return error.message
-        return fallback
-    }
 
     const persistNameIfNeeded = async () => {
         const nextName = editingName.trim()
@@ -123,7 +120,7 @@ export function CharacterEditModal({
             await persistNameIfNeeded()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(t('modal.saveName') + t('errors.failed'))
+                showError(error, t('modal.saveName') + t('errors.failed'))
             }
         }
     }
@@ -139,7 +136,7 @@ export function CharacterEditModal({
             onClose()
         } catch (error: unknown) {
             if (shouldShowError(error)) {
-                alert(getErrorMessage(error, t('errors.saveFailed')))
+                showError(error, t('errors.saveFailed'))
             }
         } finally {
             setIsSaving(false)

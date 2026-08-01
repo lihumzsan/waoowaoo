@@ -6,28 +6,12 @@ import { useCreateProjectLocation } from '@/lib/query/hooks'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import { AppIcon } from '@/components/ui/icons'
+import { useToast } from '@/contexts/ToastContext'
 
 interface AddLocationModalProps {
   projectId: string
   onClose: () => void
   onSuccess: () => void
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'object' && error !== null) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string') return message
-  }
-  return fallback
-}
-
-function getErrorStatus(error: unknown): number | null {
-  if (typeof error === 'object' && error !== null) {
-    const status = (error as { status?: unknown }).status
-    if (typeof status === 'number') return status
-  }
-  return null
 }
 
 // 内联 SVG 图标
@@ -41,7 +25,7 @@ export default function AddLocationModal({
   onSuccess
 }: AddLocationModalProps) {
   const t = useTranslations('assets')
-  const tc = useTranslations('common')
+  const { showError } = useToast()
   const createLocationMutation = useCreateProjectLocation(projectId)
 
   const [name, setName] = useState('')
@@ -69,11 +53,7 @@ export default function AddLocationModal({
       onSuccess()
       onClose()
     } catch (error: unknown) {
-      if (getErrorStatus(error) === 402) {
-        alert(getErrorMessage(error, tc('insufficientBalanceDetail')))
-      } else if (shouldShowError(error)) {
-        alert(getErrorMessage(error, t('errors.createFailed')))
-      }
+      if (shouldShowError(error)) showError(error, t('errors.createFailed'))
     } finally {
       setIsSubmitting(false)
     }

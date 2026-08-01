@@ -11,6 +11,7 @@ import { AppIcon } from '@/components/ui/icons'
 import CharacterCardHeader from './character-card/CharacterCardHeader'
 import CharacterCardGallery from './character-card/CharacterCardGallery'
 import CharacterCardActions from './character-card/CharacterCardActions'
+import { useToast } from '@/contexts/ToastContext'
 
 interface CharacterCardProps {
   character: Character
@@ -45,6 +46,7 @@ export default function CharacterCard({
 }: CharacterCardProps) {
   const uploadImage = useUploadProjectCharacterImage(projectId)
   const t = useTranslations('assets')
+  const { showError, showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingUploadIndex, setPendingUploadIndex] = useState<number | undefined>()
   const [showDeleteMenu, setShowDeleteMenu] = useState(false)
@@ -77,9 +79,9 @@ export default function CharacterCard({
       appearanceId: appearance.id,
       imageIndex: pendingUploadIndex,
     }, {
-      onSuccess: () => alert(t('image.uploadSuccess')),
+      onSuccess: () => showToast(t('image.uploadSuccess'), 'success'),
       onError: (error) => {
-        if (shouldShowError(error)) alert(`${t('image.uploadFailed')}: ${error.message}`)
+        if (shouldShowError(error)) showError(error, t('image.uploadFailed'))
       },
       onSettled: () => {
         setPendingUploadIndex(undefined)

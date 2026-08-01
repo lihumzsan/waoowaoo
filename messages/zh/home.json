@@ -6,6 +6,7 @@
   "aspectRatioCurrent": "画面比例：{ratio}",
   "defaultProjectName": "新项目 {timestamp}",
   "createFailed": "项目创建失败，请稍后重试",
+  "projectsLoadFailed": "最近项目加载失败，请重试",
   "startCreation": "开始创作",
   "recentProjects": "最近项目",
   "viewAll": "查看全部项目",

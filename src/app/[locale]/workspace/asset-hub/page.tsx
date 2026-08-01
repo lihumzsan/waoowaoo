@@ -22,10 +22,12 @@ import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impac
 import {
     requestOperationMutationVoidWithError,
 } from '@/lib/query/mutations/mutation-shared'
+import { useToast } from '@/contexts/ToastContext'
 
 export default function AssetHubPage() {
     const t = useTranslations('assetHub')
     const queryClient = useQueryClient()
+    const { showError, showToast } = useToast()
 
     // 文件夹选择状态
     const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -86,12 +88,12 @@ export default function AssetHubPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name }),
                 },
-                'CREATE_ASSET_FOLDER_FAILED',
                 queryClient,
             )
             setShowFolderModal(false)
         } catch (error) {
             _ulogError('创建文件夹失败:', error)
+            showError(error, t('folderCreateFailed'))
         }
     }
 
@@ -105,13 +107,13 @@ export default function AssetHubPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name }),
                 },
-                'UPDATE_ASSET_FOLDER_FAILED',
                 queryClient,
             )
             setEditingFolder(null)
             setShowFolderModal(false)
         } catch (error) {
             _ulogError('更新文件夹失败:', error)
+            showError(error, t('folderUpdateFailed'))
         }
     }
 
@@ -123,7 +125,6 @@ export default function AssetHubPage() {
             await requestOperationMutationVoidWithError(
                 `/api/asset-hub/folders/${folderId}`,
                 { method: 'DELETE' },
-                'DELETE_ASSET_FOLDER_FAILED',
                 queryClient,
             )
             if (selectedFolderId === folderId) {
@@ -131,6 +132,7 @@ export default function AssetHubPage() {
             }
         } catch (error) {
             _ulogError('删除文件夹失败:', error)
+            showError(error, t('folderDeleteFailed'))
         }
     }
 
@@ -247,7 +249,7 @@ export default function AssetHubPage() {
         }
 
         if (imageEntries.length === 0) {
-            alert(t('downloadEmpty'))
+            showToast(t('downloadEmpty'), 'warning')
             return
         }
 
@@ -277,7 +279,7 @@ export default function AssetHubPage() {
             URL.revokeObjectURL(link.href)
         } catch (error) {
             _ulogError('打包下载失败:', error)
-            alert(t('downloadFailed'))
+            showError(error, t('downloadFailed'))
         } finally {
             setIsDownloading(false)
         }

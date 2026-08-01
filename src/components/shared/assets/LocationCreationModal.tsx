@@ -10,6 +10,7 @@ import {
     useCreateAssetHubLocation,
     useCreateProjectLocation,
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
 export interface LocationCreationModalProps {
     mode: 'asset-hub' | 'project'
@@ -34,6 +35,7 @@ export function LocationCreationModal({
     onSuccess
 }: LocationCreationModalProps) {
     const t = useTranslations('assetModal')
+    const { showError } = useToast()
     const createAssetHubLocation = useCreateAssetHubLocation()
     const createProjectLocation = useCreateProjectLocation(projectId || '')
 
@@ -50,21 +52,6 @@ export function LocationCreationModal({
             hasOutput: false,
         })
         : null
-
-    const getErrorMessage = (error: unknown, fallback: string) => {
-        if (error instanceof Error && error.message) {
-            return error.message
-        }
-        return fallback
-    }
-
-    const getErrorStatus = (error: unknown): number | null => {
-        if (typeof error === 'object' && error !== null) {
-            const status = (error as { status?: unknown }).status
-            if (typeof status === 'number') return status
-        }
-        return null
-    }
 
     // ESC 键关闭
     useEffect(() => {
@@ -113,11 +100,7 @@ export function LocationCreationModal({
             onSuccess()
             onClose()
         } catch (error: unknown) {
-            if (getErrorStatus(error) === 402) {
-                alert(getErrorMessage(error, t('errors.insufficientBalance')))
-            } else if (shouldShowError(error)) {
-                alert(getErrorMessage(error, t('errors.createFailed')))
-            }
+            if (shouldShowError(error)) showError(error, t('errors.createFailed'))
         } finally {
             setIsSubmitting(false)
         }

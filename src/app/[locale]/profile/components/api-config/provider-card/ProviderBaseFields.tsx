@@ -168,13 +168,8 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
                     )}
                   </div>
                   <p className={`pl-6 text-[11px] ${step.status === 'fail' ? 'text-red-400' : 'text-[var(--glass-text-secondary)]'}`}>
-                    {step.message}
+                    {t(step.messageKey)}
                   </p>
-                  {step.detail && (
-                    <p className="pl-6 text-[10px] text-[var(--glass-text-tertiary)] break-all line-clamp-3">
-                      {step.detail}
-                    </p>
-                  )}
                 </div>
               )
             })}

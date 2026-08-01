@@ -60,8 +60,6 @@
     "fullResultError": "无法读取完整结果。",
     "failure": {
       "title": "Subagent 未能完成",
-      "codeLabel": "错误代码",
-      "codeUnavailable": "未提供",
       "reasonLabel": "原因",
       "reasonFallback": "任务没有提供可展示的具体失败原因。",
       "nextStep": "请根据原因修正委派输入、上下文或配置后再重新委派；不要原样静默重试。"
@@ -106,6 +104,7 @@
       "submissionRejected": "结构化校验未通过，正在修正：{issues} 项",
       "submissionAccepted": "结构化结果已通过校验 · {chars} 字符",
       "submissionInputDiagnostic": "实际提交：{type} · {chars} 字符 · 顶层字段：{keys}",
+      "submissionIssueHelp": "生成结果暂时不符合所需结构，助手正在自动修正。",
       "submissionInputNoKeys": "无",
       "submissionInputTypes": {
         "undefined": "未定义",

@@ -8,6 +8,7 @@ import {
   useCreateProjectCharacter,
   useCreateProjectCharacterAppearance,
 } from '@/lib/query/hooks'
+import { useToast } from '@/contexts/ToastContext'
 
 type Mode = 'asset-hub' | 'project'
 
@@ -24,11 +25,6 @@ interface UseCharacterCreationSubmitParams {
   onClose: () => void
 }
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) return error.message
-  return fallback
-}
-
 export function useCharacterCreationSubmit({
   mode,
   folderId,
@@ -42,6 +38,7 @@ export function useCharacterCreationSubmit({
   onClose,
 }: UseCharacterCreationSubmitParams) {
   const t = useTranslations('assetModal')
+  const { showError } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const createAssetHubCharacter = useCreateAssetHubCharacter()
@@ -62,7 +59,7 @@ export function useCharacterCreationSubmit({
         onClose()
       } catch (error: unknown) {
         if (shouldShowError(error)) {
-          alert(getErrorMessage(error, t('errors.addSubAppearanceFailed')))
+          showError(error, t('errors.addSubAppearanceFailed'))
         }
       } finally {
         setIsSubmitting(false)
@@ -89,7 +86,7 @@ export function useCharacterCreationSubmit({
       onClose()
     } catch (error: unknown) {
       if (shouldShowError(error)) {
-        alert(getErrorMessage(error, t('errors.createFailed')))
+        showError(error, t('errors.createFailed'))
       }
     } finally {
       setIsSubmitting(false)
@@ -107,6 +104,7 @@ export function useCharacterCreationSubmit({
     onClose,
     onSuccess,
     selectedCharacterId,
+    showError,
     t,
   ])
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 /**
  * EpisodeSelector - 剧集选择器
@@ -64,6 +65,7 @@ interface ProjectNameEditorProps {
 }
 
 export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEditorProps) {
+    const resolveClientError = useClientErrorMessage()
     const displayName = projectName?.trim() || t('project')
     const [isEditing, setIsEditing] = useState(false)
     const [draftName, setDraftName] = useState(displayName)
@@ -96,7 +98,7 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
             await onRename(nextName)
             setIsEditing(false)
         } catch (error: unknown) {
-            setErrorMessage(error instanceof Error && error.message ? error.message : t('projectRenameFailed'))
+            setErrorMessage(resolveClientError(error, t('projectRenameFailed')))
         } finally {
             setIsSaving(false)
         }

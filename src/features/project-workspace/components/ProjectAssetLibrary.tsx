@@ -31,7 +31,6 @@ import CharacterSection from './assets/CharacterSection'
 import LocationSection from './assets/LocationSection'
 import AssetToolbar from './assets/AssetToolbar'
 import AssetFilterBar, { type AssetKindFilter } from './assets/AssetFilterBar'
-import ProjectAssetLibraryStatusOverlays from './assets/ProjectAssetLibraryStatusOverlays'
 import ProjectAssetLibraryModals from './assets/ProjectAssetLibraryModals'
 
 interface ProjectAssetLibraryProps {
@@ -79,7 +78,6 @@ export default function ProjectAssetLibrary({
 
   // 本地 UI 状态
   const [previewImage, setPreviewImage] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null)
   const [kindFilter, setKindFilter] = useState<AssetKindFilter>('all')
   // 最终展示的资产列表（按类型筛选）
   const filteredCharacters = useMemo(
@@ -106,12 +104,6 @@ export default function ProjectAssetLibrary({
     return character.appearances || []
   }
 
-  // 显示提示
-  const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success', duration = 3000) => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), duration)
-  }, [])
-
   // === 使用提取的 Hooks ===
 
   // 🔥 V6.5 重构：hooks 现在内部订阅 useProjectAssets，不再需要传 characters/locations
@@ -126,7 +118,6 @@ export default function ProjectAssetLibrary({
     handleCloseCopyPicker,
   } = useAssetsCopyFromHub({
     projectId,
-    showToast,
   })
 
   // 角色操作
@@ -137,7 +128,6 @@ export default function ProjectAssetLibrary({
     handleConfirmSelection,
   } = useCharacterActions({
     projectId,
-    showToast
   })
 
   // 场景操作
@@ -147,7 +137,6 @@ export default function ProjectAssetLibrary({
     handleConfirmLocationSelection,
   } = useLocationActions({
     projectId,
-    showToast
   })
   const {
     handleDeleteLocation: handleDeleteProp,
@@ -156,7 +145,6 @@ export default function ProjectAssetLibrary({
   } = useLocationActions({
     projectId,
     assetType: 'prop',
-    showToast,
   })
 
   // 弹窗状态
@@ -188,17 +176,11 @@ export default function ProjectAssetLibrary({
   } = useAssetImageMaintenance({
     projectId,
     t,
-    showToast,
     onRefresh,
   })
 
   return (
     <div className="space-y-4">
-      <ProjectAssetLibraryStatusOverlays
-        toast={toast}
-        onCloseToast={() => setToast(null)}
-      />
-
       {/* 资产工具栏 */}
       <AssetToolbar
         projectId={projectId}

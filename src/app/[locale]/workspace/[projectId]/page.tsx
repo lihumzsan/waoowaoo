@@ -22,6 +22,7 @@ import {
   requestOperationMutationVoidWithError,
   requestOperationMutationWithError,
 } from '@/lib/query/mutations/mutation-shared'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 interface Episode {
   id: string
@@ -64,6 +65,7 @@ export default function ProjectDetailPage() {
   }
   const projectId = params.projectId
   const t = useTranslations('workspaceDetail')
+  const resolveClientError = useClientErrorMessage()
 
   // 从URL读取参数
   const urlEpisodeId = searchParams.get('episode') ?? null
@@ -72,7 +74,9 @@ export default function ProjectDetailPage() {
   // 🔥 React Query 数据获取
   const queryClient = useQueryClient()
   const { data: project, isLoading: loading, error: projectError } = useProjectData(projectId)
-  const error = projectError?.message || null
+  const error = projectError
+    ? resolveClientError(projectError, t('projectLoadFailed'))
+    : null
 
   // 视图状态（仅 UI）
   const [isGlobalAssetsView, setIsGlobalAssetsView] = useState(false)
@@ -177,7 +181,6 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description }),
       },
-      t('createFailed'),
       queryClient,
     )
     // 自动切换到新创建的剧集
@@ -195,7 +198,6 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName }),
       },
-      t('renameFailed'),
       queryClient,
     )
   }
@@ -219,7 +221,6 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       },
-      t('renameFailed'),
       queryClient,
     )
   }
@@ -229,7 +230,6 @@ export default function ProjectDetailPage() {
     await requestOperationMutationVoidWithError(
       `/api/projects/${projectId}/episodes/${episodeId}`,
       { method: 'DELETE' },
-      t('deleteFailed'),
       queryClient,
     )
     // 如果删除的是当前正在查看的剧集，切换到其他剧集
@@ -259,7 +259,9 @@ export default function ProjectDetailPage() {
     selectedEpisodeId,
     hasCurrentEpisode: Boolean(currentEpisode),
     episodeLoading,
-    episodeError: episodeError?.message || null,
+    episodeError: episodeError
+      ? resolveClientError(episodeError, t('episodeLoadFailed'))
+      : null,
     projectMissingMessage: t('projectNotFound'),
     episodeMissingMessage: t('episodeNotFound'),
   })

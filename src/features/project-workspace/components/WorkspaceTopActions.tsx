@@ -25,7 +25,7 @@ export default function WorkspaceTopActions({
   refreshTitle,
 }: WorkspaceTopActionsProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { showToast } = useToast()
+  const { showError, showToast } = useToast()
 
   const handleRefreshClick = useCallback(async () => {
     if (isRefreshing) {
@@ -45,10 +45,11 @@ export default function WorkspaceTopActions({
           : '[WorkspaceTopActions] refresh failed',
         stack: error instanceof Error ? error.stack : undefined,
       })
+      showError(error, refreshTitle)
     } finally {
       setIsRefreshing(false)
     }
-  }, [isRefreshing, onRefresh, refreshTitle, showToast])
+  }, [isRefreshing, onRefresh, refreshTitle, showError, showToast])
 
   return (
     <div className="fixed top-24 right-6 z-40 flex gap-3">

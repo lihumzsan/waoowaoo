@@ -21,6 +21,7 @@
   "creating": "Creating...",
   "saving": "Saving...",
   "createFailed": "Failed to create project",
+  "loadFailed": "Failed to load projects. Please retry.",
   "analysisModelRequiredAfterCreate": "Project created. Please configure default models in Profile first (at minimum an analysis model), or the project cannot be used.",
   "modelSetupCheckFailedBeforeCreate": "The account model setup status cannot be confirmed right now. You can still create the project, but self-hosted deployments must have a default analysis model configured.",
   "modelSetupCheckFailedAfterCreate": "Project created, but the account model setup status cannot be confirmed right now. Refresh and try again; self-hosted deployments must have a default analysis model configured.",

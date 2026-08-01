@@ -60,8 +60,6 @@
     "fullResultError": "The complete result could not be loaded.",
     "failure": {
       "title": "Subagent did not complete",
-      "codeLabel": "Error code",
-      "codeUnavailable": "Not provided",
       "reasonLabel": "Reason",
       "reasonFallback": "The task did not provide a displayable failure reason.",
       "nextStep": "Correct the delegated input, context, or configuration based on this reason before delegating again; do not silently retry the same request."
@@ -106,6 +104,7 @@
       "submissionRejected": "Structured validation failed; correcting {issues} issues",
       "submissionAccepted": "Structured result accepted · {chars} characters",
       "submissionInputDiagnostic": "Actual submission: {type} · {chars} characters · top-level fields: {keys}",
+      "submissionIssueHelp": "The generated result did not match the required structure. The assistant is correcting it automatically.",
       "submissionInputNoKeys": "none",
       "submissionInputTypes": {
         "undefined": "undefined",

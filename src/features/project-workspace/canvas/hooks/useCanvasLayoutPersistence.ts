@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import { checkApiResponse } from '@/lib/error-handler'
+import { readClientApiError } from '@/lib/errors/client'
 import { queryKeys } from '@/lib/query/keys'
 import type {
   ProjectCanvasLayoutSnapshot,
@@ -28,6 +28,10 @@ interface CanvasLayoutMutationContext {
   readonly previous: CanvasLayoutPersistenceResult | undefined
 }
 
+async function requireSuccessfulResponse(response: Response): Promise<void> {
+  if (!response.ok) throw await readClientApiError(response)
+}
+
 export function buildOptimisticCanvasLayoutSnapshot(params: {
   readonly projectId: string
   readonly input: UpsertCanvasLayoutInput
@@ -44,7 +48,7 @@ export function buildOptimisticCanvasLayoutSnapshot(params: {
 async function readCanvasLayout(projectId: string, episodeId: string): Promise<CanvasLayoutPersistenceResult> {
   const search = new URLSearchParams({ episodeId })
   const response = await apiFetch(`/api/projects/${projectId}/canvas-layout?${search.toString()}`)
-  await checkApiResponse(response)
+  await requireSuccessfulResponse(response)
   const payload = await response.json() as unknown
   return parseCanvasLayoutReadResponse(payload)
 }
@@ -58,7 +62,7 @@ async function writeCanvasLayout(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   })
-  await checkApiResponse(response)
+  await requireSuccessfulResponse(response)
   const payload = await response.json() as CanvasLayoutWriteResponse
   if (!payload.layout) {
     throw new Error('canvas layout save returned empty layout')
@@ -71,7 +75,7 @@ async function resetCanvasLayout(projectId: string, episodeId: string): Promise<
   const response = await apiFetch(`/api/projects/${projectId}/canvas-layout?${search.toString()}`, {
     method: 'DELETE',
   })
-  await checkApiResponse(response)
+  await requireSuccessfulResponse(response)
 }
 
 export function useCanvasLayoutPersistence(params: {

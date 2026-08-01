@@ -103,17 +103,9 @@ function SubagentEventBody(props: {
             keys: topLevelKeys,
           })}
         </div>
-        <ol className="mt-1 space-y-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
-          {event.issues.map((issue, index) => (
-            <li key={`${event.submissionId}:${String(index)}`} className="break-words">
-              <span className="font-mono">{issue.path}</span>
-              {' · '}
-              <span className="font-mono">{issue.code}</span>
-              {' · '}
-              <span>{issue.message}</span>
-            </li>
-          ))}
-        </ol>
+        <p className="mt-1 text-xs leading-5 text-[var(--glass-text-tertiary)]">
+          {props.t('subagents.events.submissionIssueHelp')}
+        </p>
       </details>
     )
   }
@@ -189,6 +181,7 @@ function SubagentExecutionDisclosure(props: {
 }
 
 function SubagentFailureNotice(props: {
+  taskId: string
   errorCode: string | null
   t: AssistantAgentTranslator
   tErrors: ErrorTranslator
@@ -208,14 +201,13 @@ function SubagentFailureNotice(props: {
         <div className="min-w-0 flex-1">
           <div className="font-medium">{props.t('subagents.failure.title')}</div>
           <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs leading-5">
-            <dt className="opacity-70">{props.t('subagents.failure.codeLabel')}</dt>
-            <dd className="min-w-0 break-all font-mono">
-              {errorCode || props.t('subagents.failure.codeUnavailable')}
-            </dd>
             <dt className="opacity-70">{props.t('subagents.failure.reasonLabel')}</dt>
             <dd className="min-w-0 break-words">{reason}</dd>
           </dl>
           <p className="mt-2 text-xs leading-5">{props.t('subagents.failure.nextStep')}</p>
+          <p className="mt-1 break-all text-xs opacity-70">
+            {props.tErrors('referenceId', { id: props.taskId })}
+          </p>
         </div>
       </div>
     </section>
@@ -306,6 +298,7 @@ export function WorkspaceAssistantSubagentView(props: {
 
       {subagent.status === 'failed' ? (
         <SubagentFailureNotice
+          taskId={subagent.taskId}
           errorCode={subagent.errorCode}
           t={t}
           tErrors={tErrors}

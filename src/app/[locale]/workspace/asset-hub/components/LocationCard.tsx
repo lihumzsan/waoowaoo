@@ -8,6 +8,7 @@ import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { AppIcon } from '@/components/ui/icons'
+import { useToast } from '@/contexts/ToastContext'
 
 interface LocationImage {
   id: string
@@ -41,6 +42,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
   const t = useTranslations('assetHub')
   const tAssets = useTranslations('assets')
+  const { showError } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestSelectRequestRef = useRef(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -64,7 +66,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
     latestSelectRequestRef.current = requestId
     selectImage.mutate({ locationId: location.id, imageIndex, confirm }, {
       onError: (error) => {
-        if (latestSelectRequestRef.current === requestId) alert(error.message || t('selectFailed'))
+        if (latestSelectRequestRef.current === requestId) showError(error, t('selectFailed'))
       },
     })
   }
@@ -74,12 +76,12 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
     if (!file) return
     if (assetType === 'prop') {
       void propActions.uploadRender(location.id, file, currentImageIndex)
-        .catch((error: unknown) => alert(error instanceof Error ? error.message : t('uploadFailed')))
+        .catch((error: unknown) => showError(error, t('uploadFailed')))
         .finally(() => { if (fileInputRef.current) fileInputRef.current.value = '' })
       return
     }
     uploadImage.mutate({ file, locationId: location.id, labelText: location.name, imageIndex: currentImageIndex }, {
-      onError: (error) => alert(error.message || t('uploadFailed')),
+      onError: (error) => showError(error, t('uploadFailed')),
       onSettled: () => { if (fileInputRef.current) fileInputRef.current.value = '' },
     })
   }

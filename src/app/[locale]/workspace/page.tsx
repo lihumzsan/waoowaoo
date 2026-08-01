@@ -13,7 +13,9 @@ import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import { shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { readClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
+import { useToast } from '@/contexts/ToastContext'
 import { validateProjectDraft, type ProjectUpdateInput } from '@/lib/projects/validation'
 import {
   type WorkspaceProjectListItem,
@@ -91,6 +93,8 @@ export default function WorkspacePage() {
 
   const t = useTranslations('workspace')
   const tc = useTranslations('common')
+  const resolveClientError = useClientErrorMessage()
+  const { showError, showToast } = useToast()
 
   // 检查用户是否已登录
   useEffect(() => {
@@ -114,17 +118,17 @@ export default function WorkspacePage() {
       }
 
       const response = await apiFetch(`/api/projects?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.projects)
-        setPagination(data.pagination)
-      }
+      if (!response.ok) throw await readClientApiError(response)
+      const data = await response.json()
+      setProjects(data.projects)
+      setPagination(data.pagination)
     } catch (error) {
       _ulogError('获取项目失败:', error)
+      showError(error, t('loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showError, t])
 
   // 初始加载和搜索/分页变化时重新获取
   useEffect(() => {
@@ -216,17 +220,17 @@ export default function WorkspacePage() {
         setFormData({ name: '', description: '' })
 
         if (modelSetupCheckFailedAfterCreate) {
-          alert(t('modelSetupCheckFailedAfterCreate'))
+          showToast(t('modelSetupCheckFailedAfterCreate'), 'warning')
         } else if (shouldOpenModelSetup) {
-          alert(t('analysisModelRequiredAfterCreate'))
+          showToast(t('analysisModelRequiredAfterCreate'), 'warning')
           router.push({ pathname: '/profile' })
         }
       } else {
-        setCreateError(await readApiErrorMessage(response, t('createFailed')))
+        throw await readClientApiError(response)
       }
     } catch (error) {
       _ulogError('创建项目失败:', error)
-      setCreateError(error instanceof Error ? error.message : t('createFailed'))
+      setCreateError(resolveClientError(error, t('createFailed')))
     } finally {
       setCreateLoading(false)
     }
@@ -275,7 +279,6 @@ export default function WorkspacePage() {
           },
           body: JSON.stringify(input),
         },
-        t('updateFailed'),
         queryClient,
       )
       await fetchProjects(pagination.page, searchQuery)
@@ -283,7 +286,7 @@ export default function WorkspacePage() {
       setEditingProject(null)
       setEditFormData({ name: '', description: '' })
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : t('updateFailed'))
+      setEditError(resolveClientError(error, t('updateFailed')))
     } finally {
       setCreateLoading(false)
     }
@@ -299,10 +302,10 @@ export default function WorkspacePage() {
       const response = await apiFetch(`/api/projects/${projectToDelete.id}`, {
         method: 'DELETE',
       })
-      if (!response.ok) throw new Error(t('deleteFailed'))
+      if (!response.ok) throw await readClientApiError(response)
       await fetchProjects(pagination.page, searchQuery)
-    } catch {
-      alert(t('deleteFailed'))
+    } catch (error) {
+      showError(error, t('deleteFailed'))
     } finally {
       setDeletingProjectId(null)
       setProjectToDelete(null)

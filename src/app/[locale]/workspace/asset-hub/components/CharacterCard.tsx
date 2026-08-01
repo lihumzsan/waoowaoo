@@ -14,6 +14,7 @@ import { resolveTaskPresentationState } from '@/lib/task/presentation'
 import TaskStatusInline from '@/components/task/TaskStatusInline'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { AppIcon } from '@/components/ui/icons'
+import { useToast } from '@/contexts/ToastContext'
 
 interface Appearance {
   id: string
@@ -54,6 +55,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
   const deleteAppearance = useDeleteCharacterAppearance()
   const t = useTranslations('assetHub')
   const tAssets = useTranslations('assets')
+  const { showError } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const latestSelectRequestRef = useRef(0)
   const [activeAppearance, setActiveAppearance] = useState(0)
@@ -85,7 +87,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
       confirm,
     }, {
       onError: (error) => {
-        if (latestSelectRequestRef.current === requestId) alert(error.message || t('selectFailed'))
+        if (latestSelectRequestRef.current === requestId) showError(error, t('selectFailed'))
       },
     })
   }
@@ -100,7 +102,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
       labelText: `${character.name} - ${appearance.changeReason}`,
       imageIndex: selectedIndex ?? undefined,
     }, {
-      onError: (error) => alert(error.message || t('uploadFailed')),
+      onError: (error) => showError(error, t('uploadFailed')),
       onSettled: () => { if (fileInputRef.current) fileInputRef.current.value = '' },
     })
   }

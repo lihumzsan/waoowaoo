@@ -5,7 +5,8 @@ import { signIn, useSession } from 'next-auth/react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
-import { parseApiErrorPayload } from '@/lib/api-error-payload'
+import { createClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import { getPathname } from '@/i18n/navigation'
 import { AUTH_PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy'
 
@@ -55,16 +56,12 @@ function isAccountSecurityPayload(value: unknown): value is AccountSecurityPaylo
   )
 }
 
-function readApiFailureReason(payload: unknown, fallback: string): string {
-  const parsed = parseApiErrorPayload(payload)
-  return parsed.code || parsed.message || fallback
-}
-
 export default function AccountSecurityTab({
   enablePasswordAuth,
   showGoogleOAuth,
 }: AccountSecurityTabProps) {
   const t = useTranslations('profile.accountSecurity')
+  const resolveClientError = useClientErrorMessage()
   const locale = useLocale()
   const { update: updateSession } = useSession()
   const [security, setSecurity] = useState<AccountSecuritySnapshot | null>(null)
@@ -88,16 +85,16 @@ export default function AccountSecurityTab({
       const response = await apiFetch('/api/user/security')
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok || !isAccountSecurityPayload(payload) || !payload.security) {
-        throw new Error(readApiFailureReason(payload, `HTTP_${response.status}`))
+        throw createClientApiError(payload, response.status)
       }
       setSecurity(payload.security)
       setDisplayName(payload.security.displayName)
     } catch (error: unknown) {
-      setLoadError(error instanceof Error ? error.message : t('loadFailed'))
+      setLoadError(resolveClientError(error, t('loadFailed')))
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [resolveClientError, t])
 
   useEffect(() => {
     void loadSecurity()
@@ -122,7 +119,7 @@ export default function AccountSecurityTab({
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok || !isAccountSecurityPayload(payload) || !payload.security) {
-        const reason = readApiFailureReason(payload, `HTTP_${response.status}`)
+        const reason = createClientApiError(payload, response.status).code
         if (reason === 'ACCOUNT_SECURITY_DISPLAY_NAME_TAKEN') {
           throw new Error(t('displayNameTaken'))
         }
@@ -132,7 +129,7 @@ export default function AccountSecurityTab({
         ) {
           throw new Error(t('displayNameInvalid'))
         }
-        throw new Error(reason)
+        throw createClientApiError(payload, response.status)
       }
 
       setSecurity(payload.security)
@@ -140,7 +137,7 @@ export default function AccountSecurityTab({
       await updateSession()
       setDisplayNameStatus(t('displayNameSaved'))
     } catch (error: unknown) {
-      setDisplayNameStatus(error instanceof Error ? error.message : t('displayNameSaveFailed'))
+      setDisplayNameStatus(resolveClientError(error, t('displayNameSaveFailed')))
     } finally {
       setSavingDisplayName(false)
     }
@@ -182,14 +179,14 @@ export default function AccountSecurityTab({
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok || !isAccountSecurityPayload(payload) || !payload.security) {
-        throw new Error(readApiFailureReason(payload, `HTTP_${response.status}`))
+        throw createClientApiError(payload, response.status)
       }
       setSecurity(payload.security)
       resetPasswordForm()
       setPasswordFormOpen(false)
       setPasswordStatus(security?.hasPassword ? t('passwordChanged') : t('passwordSet'))
     } catch (error: unknown) {
-      setPasswordStatus(error instanceof Error ? error.message : t('passwordSetFailed'))
+      setPasswordStatus(resolveClientError(error, t('passwordSetFailed')))
     } finally {
       setSavingPassword(false)
     }

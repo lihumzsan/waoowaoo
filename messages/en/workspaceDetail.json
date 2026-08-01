@@ -6,6 +6,8 @@
   "refreshFailed": "Refresh failed",
   "projectNotFound": "Project not found",
   "episodeNotFound": "Episode not found or failed to load",
+  "projectLoadFailed": "We couldn't load this project. Please try again.",
+  "episodeLoadFailed": "We couldn't load this episode. Please try again.",
   "backToWorkspace": "Back to Workspace",
   "episode": "Episode",
   "modelSetup": {

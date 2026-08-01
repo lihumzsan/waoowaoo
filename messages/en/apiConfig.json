@@ -123,6 +123,18 @@
     "credits": "Credits Check",
     "skipped": "Skipped"
   },
+  "connectionTest": {
+    "authInvalid": "Authentication failed. Check the API key and its permissions.",
+    "emptyResponse": "The provider returned an empty response.",
+    "modelsOk": "The provider accepted the credentials.",
+    "networkError": "The provider could not be reached. Check the network and Base URL, then retry.",
+    "providerError": "The provider rejected or could not complete the test. Check its service status and account.",
+    "rateLimited": "The provider is rate limiting this account. Wait and retry.",
+    "skippedModelsFailure": "Skipped because the credential check failed.",
+    "skippedSpend": "Skipped to avoid a billable generation.",
+    "textGenerationOk": "Text generation succeeded.",
+    "timeout": "The provider did not respond in time. Retry later."
+  },
   "tabs": {
     "llm": "Text Models",
     "image": "Image Models",

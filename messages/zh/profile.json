@@ -7,6 +7,8 @@
   "manageCredits": "充值与兑换",
   "topUpOrRedeem": "充值 / 兑换",
   "availableBalance": "可用额度",
+  "balanceLoadFailed": "余额加载失败，请重试",
+  "transactionsLoadFailed": "账户流水加载失败，请重试",
   "openSourceNoBilling": "开源版本，无需计费",
   "frozen": "冻结",
   "totalSpent": "已消费",

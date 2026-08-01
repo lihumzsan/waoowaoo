@@ -6,6 +6,7 @@
   "aspectRatioCurrent": "Aspect ratio: {ratio}",
   "defaultProjectName": "New Project {timestamp}",
   "createFailed": "Failed to create project. Please try again.",
+  "projectsLoadFailed": "Failed to load recent projects. Please retry.",
   "startCreation": "Start Creating",
   "recentProjects": "Recent Projects",
   "viewAll": "View All Projects",

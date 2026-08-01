@@ -5,6 +5,7 @@ import { useProjectAssets, useProjectData } from '@/lib/query/hooks'
 import { AppIcon } from '@/components/ui/icons'
 import JSZip from 'jszip'
 import { logError as _logError } from '@/lib/logging/core'
+import { useToast } from '@/contexts/ToastContext'
 
 /**
  * AssetToolbar - 资产管理工具栏组件
@@ -27,6 +28,7 @@ export default function AssetToolbar({
     totalProps,
 }: AssetToolbarProps) {
     const t = useTranslations('assets')
+    const { showError, showToast } = useToast()
     const { data: assets } = useProjectAssets(projectId)
     const { data: projectData } = useProjectData(projectId)
     const projectName = projectData?.name
@@ -70,7 +72,7 @@ export default function AssetToolbar({
         }
 
         if (imageEntries.length === 0) {
-            alert(t('assetLibrary.downloadEmpty'))
+            showToast(t('assetLibrary.downloadEmpty'), 'warning')
             return
         }
 
@@ -100,7 +102,7 @@ export default function AssetToolbar({
             URL.revokeObjectURL(link.href)
         } catch (error) {
             _logError('打包下载失败:', error)
-            alert(t('assetLibrary.downloadFailed'))
+            showError(error, t('assetLibrary.downloadFailed'))
         } finally {
             setIsDownloading(false)
         }

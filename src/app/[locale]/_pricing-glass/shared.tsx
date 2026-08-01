@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { apiFetch } from '@/lib/api-fetch'
-import { parseApiErrorPayload } from '@/lib/api-error-payload'
+import { createClientApiError } from '@/lib/errors/client'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import type { GlassPolicy, GlassPricingContent } from './content'
 
 /* ----------------------------------------------------------------- */
@@ -32,11 +33,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object'
 }
 
-function readApiFailureReason(payload: unknown, fallback: string): string {
-  const parsed = parseApiErrorPayload(payload)
-  return parsed.code || parsed.message || fallback
-}
-
 function formatCurrencyAmount(value: number, currency: string): string {
   if (currency === 'CNY') return `¥${value.toFixed(2)}`
   return `${currency} ${value.toFixed(2)}`
@@ -44,6 +40,7 @@ function formatCurrencyAmount(value: number, currency: string): string {
 
 export function useRecharge(): RechargeState {
   const t = useTranslations('pricing.glass')
+  const resolveClientError = useClientErrorMessage()
   const [config, setConfig] = useState<RechargeConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -55,9 +52,7 @@ export function useRecharge(): RechargeState {
       .then(async (r) => {
         const payload: unknown = await r.json().catch(() => null)
         if (!r.ok) {
-          throw new Error(t('configLoadErrorWithReason', {
-            reason: readApiFailureReason(payload, `HTTP_${r.status}`),
-          }))
+          throw createClientApiError(payload, r.status)
         }
         return payload
       })
@@ -67,16 +62,16 @@ export function useRecharge(): RechargeState {
           setConfig(payload.recharge as unknown as RechargeConfig)
           return
         }
-        setStatus({ kind: 'error', text: t('configLoadErrorWithReason', { reason: 'PAYMENT_RECHARGE_CONFIG_INVALID' }) })
+        setStatus({ kind: 'error', text: t('configLoadError') })
       })
       .catch((error: unknown) => {
-        if (alive) setStatus({ kind: 'error', text: error instanceof Error ? error.message : t('configLoadError') })
+        if (alive) setStatus({ kind: 'error', text: resolveClientError(error, t('configLoadError')) })
       })
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
-  }, [t])
+  }, [resolveClientError, t])
 
   const checkout = useCallback(
     (credits: number) => {
@@ -103,19 +98,16 @@ export function useRecharge(): RechargeState {
       })
         .then(async (r) => {
           const payload: unknown = await r.json().catch(() => null)
-          if (!r.ok || !isRecord(payload) || typeof payload.url !== 'string') {
-            throw new Error(t('checkoutCreateFailedWithReason', {
-              reason: readApiFailureReason(payload, `HTTP_${r.status}`),
-            }))
-          }
+          if (!r.ok) throw createClientApiError(payload, r.status)
+          if (!isRecord(payload) || typeof payload.url !== 'string') throw new Error('CHECKOUT_RESPONSE_INVALID')
           window.location.assign(payload.url)
         })
         .catch((e: unknown) => {
-          setStatus({ kind: 'error', text: e instanceof Error ? e.message : t('checkoutCreateFailedFallback') })
+          setStatus({ kind: 'error', text: resolveClientError(e, t('checkoutCreateFailedFallback')) })
           setBusy(false)
         })
     },
-    [config, t],
+    [config, resolveClientError, t],
   )
 
   const estimate = useCallback(

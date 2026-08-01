@@ -12,7 +12,10 @@ import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
-import { uploadProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments/client'
+import {
+  uploadProjectAssistantTextAttachment,
+  validateProjectAssistantTextAttachmentFile,
+} from '@/lib/project-agent/text-attachments/client'
 import {
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_ACCEPT,
   PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES,
@@ -21,6 +24,7 @@ import {
 import {
   isProjectAssistantMediaFile,
   uploadProjectAssistantMediaAttachment,
+  validateProjectAssistantMediaAttachmentFile,
 } from '@/lib/project-agent/media-attachments/client'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
@@ -60,6 +64,7 @@ import {
   shouldShowWorkspaceAssistantRunFailureNotice,
   type WorkspaceAssistantFailureView,
 } from './workspace-assistant/workspace-assistant-panel-state'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 
 interface WorkspaceAssistantPanelProps {
   projectId: string
@@ -131,6 +136,7 @@ export default function WorkspaceAssistantPanel({
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const tErrors = useTranslations('errors')
+  const resolveClientError = useClientErrorMessage()
   const locale = normalizeProjectAgentLocale(useLocale())
   const assistantRuntime = useWorkspaceAssistantRuntime({
     projectId,
@@ -145,15 +151,31 @@ export default function WorkspaceAssistantPanel({
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage, panelScopeKey)
   const [mediaUploadPending, setMediaUploadPending] = useState(false)
-  const [mediaUploadFailed, setMediaUploadFailed] = useState(false)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const uploadAttachmentFiles = async (files: readonly File[]): Promise<void> => {
     if (mediaUploadPending) return
     const uploadScopeKey = panelScopeKey
-    setMediaUploadFailed(false)
+    setAttachmentError(null)
+    const mediaFiles = files.filter(isProjectAssistantMediaFile)
+    const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
+    const validationCode = mediaFiles
+      .map(validateProjectAssistantMediaAttachmentFile)
+      .find((code) => code !== null)
+      ?? textFiles.map(validateProjectAssistantTextAttachmentFile).find((code) => code !== null)
+    if (validationCode) {
+      setAttachmentError(resolveClientError(new Error(validationCode), t('attachments.mediaUploadFailed')))
+      return
+    }
+    if (mediaFiles.length + composer.mediaAttachments.length > PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES) {
+      setAttachmentError(resolveClientError(new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY'), t('attachments.mediaUploadFailed')))
+      return
+    }
+    if (textFiles.length + composer.attachments.length > PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) {
+      setAttachmentError(resolveClientError(new Error('PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY'), t('attachments.mediaUploadFailed')))
+      return
+    }
     setMediaUploadPending(true)
     try {
-      const mediaFiles = files.filter(isProjectAssistantMediaFile)
-      const textFiles = files.filter((file) => !isProjectAssistantMediaFile(file))
       const mediaRoom =
         PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES - composer.mediaAttachments.length
       for (const file of mediaFiles.slice(0, Math.max(mediaRoom, 0))) {
@@ -170,9 +192,9 @@ export default function WorkspaceAssistantPanel({
         if (panelScopeKeyRef.current !== uploadScopeKey) return
         composer.addAttachment(attachment)
       }
-    } catch {
+    } catch (error) {
       if (panelScopeKeyRef.current === uploadScopeKey) {
-        setMediaUploadFailed(true)
+        setAttachmentError(resolveClientError(error, t('attachments.mediaUploadFailed')))
       }
     } finally {
       if (panelScopeKeyRef.current === uploadScopeKey) {
@@ -202,7 +224,7 @@ export default function WorkspaceAssistantPanel({
   useEffect(() => {
     panelScopeKeyRef.current = panelScopeKey
     setMediaUploadPending(false)
-    setMediaUploadFailed(false)
+    setAttachmentError(null)
     setSelectedSubagentId(null)
     setDismissedSubagentIds(new Set())
   }, [panelScopeKey])
@@ -266,14 +288,18 @@ export default function WorkspaceAssistantPanel({
     [tErrors],
   )
   const unknownFailureFallback = tErrors('INTERNAL_ERROR')
+  const formatFailureReference = useCallback(
+    (id: string) => tErrors('referenceId', { id }),
+    [tErrors],
+  )
   const currentTurn = assistantRuntime.view?.currentTurn ?? null
   const runFailureView = resolveWorkspaceAssistantFailureView({
     facts: {
       code: currentTurn?.errorCode?.trim() || null,
-      message: currentTurn?.errorMessage?.trim() || null,
-      requestId: null,
+      requestId: currentTurn?.requestId?.trim() || null,
     },
     localizeCode: localizeErrorCode,
+    formatReference: formatFailureReference,
     unknownFallback: unknownFailureFallback,
   })
   const composerFailureView =
@@ -282,6 +308,7 @@ export default function WorkspaceAssistantPanel({
       : resolveWorkspaceAssistantFailureView({
           facts: parseWorkspaceAssistantFailureText(assistantRuntime.error.message),
           localizeCode: localizeErrorCode,
+          formatReference: formatFailureReference,
           unknownFallback: unknownFailureFallback,
         })
   // Undelivered marker + resend draft are derived from persisted facts only
@@ -329,14 +356,14 @@ export default function WorkspaceAssistantPanel({
         const failures = Array.from(
           new Map(
             batch.tasks.flatMap((task) => {
-              if (!task.errorCode && !task.errorMessage) return []
+              if (!task.errorCode) return []
               const failure = resolveWorkspaceAssistantFailureView({
                 facts: {
                   code: task.errorCode?.trim() || null,
-                  message: task.errorMessage?.trim() || null,
-                  requestId: null,
+                  requestId: task.taskId,
                 },
                 localizeCode: localizeErrorCode,
+                formatReference: formatFailureReference,
                 unknownFallback: unknownFailureFallback,
               })
               return [[`${failure.headline}\u0000${failure.technical ?? ''}`, failure] as const]
@@ -345,7 +372,7 @@ export default function WorkspaceAssistantPanel({
         )
         return { batch, operationIds, failures }
       }),
-    [localizeErrorCode, taskBatches, unknownFailureFallback],
+    [formatFailureReference, localizeErrorCode, taskBatches, unknownFailureFallback],
   )
 
   return (
@@ -456,10 +483,9 @@ export default function WorkspaceAssistantPanel({
                               failure={{
                                 tone: 'info',
                                 headline: t('panel.turnInterruptedDescription'),
-                                technical:
-                                  currentTurn?.errorCode?.trim() ||
-                                  currentTurn?.errorMessage?.trim() ||
-                                  null,
+                                technical: currentTurn?.requestId
+                                  ? formatFailureReference(currentTurn.requestId)
+                                  : null,
                               }}
                               resend={
                                 resendDraft
@@ -546,10 +572,10 @@ export default function WorkspaceAssistantPanel({
                             PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES
                         }
                         mediaUploadPending={mediaUploadPending}
-                        mediaUploadFailed={mediaUploadFailed}
+                        attachmentError={attachmentError}
                         onChange={composer.setText}
                         onSubmit={async () => {
-                          setMediaUploadFailed(false)
+                          setAttachmentError(null)
                           // Send failures surface through chat.error/controlError
                           // (rendered under the composer); never as an unhandled
                           // rejection reaching the React overlay.

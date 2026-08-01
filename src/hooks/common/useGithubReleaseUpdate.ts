@@ -24,7 +24,6 @@ export interface UseGithubReleaseUpdateResult {
   shouldPulse: boolean
   showModal: boolean
   isChecking: boolean
-  checkError: string | null
   openModal: () => void
   dismissCurrentUpdate: () => void
   checkNow: () => Promise<void>
@@ -50,14 +49,12 @@ export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = 
 
   const [update, setUpdate] = useState<ReleaseUpdateInfo | null>(null)
   const [shouldPulse, setShouldPulse] = useState(false)
-  const [checkError, setCheckError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
   const latestRequestRef = useRef(0)
 
   const checkNow = useCallback(async () => {
     if (!enabled) {
-      setCheckError(null)
       setUpdate(null)
       setShouldPulse(false)
       setShowModal(false)
@@ -76,15 +73,12 @@ export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = 
     if (requestId !== latestRequestRef.current) return
 
     if (result.kind === 'error') {
-      setCheckError(result.message)
       setUpdate(null)
       setShouldPulse(false)
       setShowModal(false)
       setIsChecking(false)
       return
     }
-
-    setCheckError(null)
 
     if (result.kind === 'no-release') {
       setUpdate(null)
@@ -117,7 +111,6 @@ export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = 
 
   useEffect(() => {
     if (!enabled) {
-      setCheckError(null)
       setUpdate(null)
       setShouldPulse(false)
       setShowModal(false)
@@ -162,7 +155,6 @@ export function useGithubReleaseUpdate(options: UseGithubReleaseUpdateOptions = 
     shouldPulse,
     showModal,
     isChecking,
-    checkError,
     openModal,
     dismissCurrentUpdate,
     checkNow,

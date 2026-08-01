@@ -26,7 +26,7 @@ interface WorkspaceAssistantComposerProps {
   readonly mediaAttachments?: readonly ProjectAssistantMediaAttachment[]
   readonly attachDisabled?: boolean
   readonly mediaUploadPending?: boolean
-  readonly mediaUploadFailed?: boolean
+  readonly attachmentError?: string | null
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
   readonly onStopReply: () => Promise<void>
@@ -45,7 +45,7 @@ export function WorkspaceAssistantComposer({
   mediaAttachments = [],
   attachDisabled = false,
   mediaUploadPending = false,
-  mediaUploadFailed = false,
+  attachmentError = null,
   onChange,
   onSubmit,
   onStopReply,
@@ -101,12 +101,12 @@ export function WorkspaceAssistantComposer({
             {t('attachments.mediaUploading')}
           </div>
         ) : null}
-        {mediaUploadFailed ? (
+        {attachmentError ? (
           <p
             role="alert"
             className="mt-2 rounded-lg bg-[var(--glass-tone-danger-bg)] px-2.5 py-1.5 text-xs leading-4 text-[var(--glass-tone-danger-fg)]"
           >
-            {t('attachments.mediaUploadFailed')}
+            {attachmentError}
           </p>
         ) : null}
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">

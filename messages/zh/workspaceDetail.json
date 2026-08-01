@@ -6,6 +6,8 @@
   "refreshFailed": "刷新失败",
   "projectNotFound": "项目不存在",
   "episodeNotFound": "剧集不存在或加载失败",
+  "projectLoadFailed": "暂时无法加载这个项目，请重试。",
+  "episodeLoadFailed": "暂时无法加载这个剧集，请重试。",
   "backToWorkspace": "返回工作区",
   "episode": "剧集",
   "modelSetup": {

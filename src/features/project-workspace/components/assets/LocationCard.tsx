@@ -12,6 +12,7 @@ import { AppIcon } from '@/components/ui/icons'
 import LocationCardHeader from './location-card/LocationCardHeader'
 import LocationImageList from './location-card/LocationImageList'
 import LocationCardActions from './location-card/LocationCardActions'
+import { useToast } from '@/contexts/ToastContext'
 
 interface LocationCardProps {
   location: Location
@@ -41,6 +42,7 @@ export default function LocationCard({
   const uploadImage = useUploadProjectLocationImage(projectId)
   const propActions = useAssetActions({ scope: 'project', projectId, kind: 'prop' })
   const t = useTranslations('assets')
+  const { showError, showToast } = useToast()
   const assetKey = assetType === 'prop' ? 'prop' : 'location'
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingUploadIndex, setPendingUploadIndex] = useState<number | undefined>()
@@ -71,20 +73,19 @@ export default function LocationCard({
     }
     if (assetType === 'prop') {
       void propActions.uploadRender(location.id, file, pendingUploadIndex)
-        .then(() => alert(t('image.uploadSuccess')))
+        .then(() => showToast(t('image.uploadSuccess'), 'success'))
         .catch((error: unknown) => {
           if (shouldShowError(error)) {
-            const message = error instanceof Error ? error.message : t('common.unknownError')
-            alert(t('image.uploadFailedError', { error: message }))
+            showError(error, t('image.uploadFailed'))
           }
         })
         .finally(resetInput)
       return
     }
     uploadImage.mutate({ file, locationId: location.id, imageIndex: pendingUploadIndex }, {
-      onSuccess: () => alert(t('image.uploadSuccess')),
+      onSuccess: () => showToast(t('image.uploadSuccess'), 'success'),
       onError: (error) => {
-        if (shouldShowError(error)) alert(t('image.uploadFailedError', { error: error.message }))
+        if (shouldShowError(error)) showError(error, t('image.uploadFailed'))
       },
       onSettled: resetInput,
     })

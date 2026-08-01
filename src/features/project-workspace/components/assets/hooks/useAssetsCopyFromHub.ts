@@ -4,10 +4,7 @@ import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { isAbortError } from '@/lib/error-utils'
 import { useCopyProjectAssetFromGlobal } from '@/lib/query/hooks'
-
-type ToastType = 'success' | 'warning' | 'error'
-
-type ShowToast = (message: string, type?: ToastType, duration?: number) => void
+import { useToast } from '@/contexts/ToastContext'
 
 export type GlobalCopyTarget = {
   type: 'character' | 'location' | 'prop'
@@ -16,10 +13,7 @@ export type GlobalCopyTarget = {
 
 interface UseAssetsCopyFromHubParams {
   projectId: string
-  showToast: ShowToast
 }
-
-const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
 
 function resolveCopySuccessMessage(
   t: ReturnType<typeof useTranslations>,
@@ -30,8 +24,9 @@ function resolveCopySuccessMessage(
   return t('assetLibrary.copySuccessProp')
 }
 
-export function useAssetsCopyFromHub({ projectId, showToast }: UseAssetsCopyFromHubParams) {
+export function useAssetsCopyFromHub({ projectId }: UseAssetsCopyFromHubParams) {
   const t = useTranslations('assets')
+  const { showError, showToast } = useToast()
   const copyFromGlobalAsset = useCopyProjectAssetFromGlobal(projectId)
   const [copyFromGlobalTarget, setCopyFromGlobalTarget] = useState<GlobalCopyTarget | null>(null)
   const [isGlobalCopyInFlight, setIsGlobalCopyInFlight] = useState(false)
@@ -67,12 +62,12 @@ export function useAssetsCopyFromHub({ projectId, showToast }: UseAssetsCopyFrom
       setCopyFromGlobalTarget(null)
     } catch (error: unknown) {
       if (!isAbortError(error)) {
-        showToast(t('assetLibrary.copyFailed', { error: getErrorMessage(error) }), 'error')
+        showError(error, t('assetLibrary.copyFailed', { error: t('common.unknownError') }))
       }
     } finally {
       setIsGlobalCopyInFlight(false)
     }
-  }, [copyFromGlobalAsset, copyFromGlobalTarget, showToast, t])
+  }, [copyFromGlobalAsset, copyFromGlobalTarget, showError, showToast, t])
 
   return {
     copyFromGlobalTarget,

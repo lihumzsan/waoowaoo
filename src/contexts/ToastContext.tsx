@@ -16,14 +16,18 @@
  * showToast('操作成功', 'success')
  * 
  * // 显示错误（自动翻译错误码）
- * showError('RATE_LIMIT', { retryAfter: 55 })
- * // 显示为: "请求过于频繁，请 55 秒后重试"
+ * showError({ code: 'RATE_LIMIT' })
  * ```
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { useRouter } from '@/i18n/navigation'
+import { API_AUTH_REQUIRED_EVENT } from '@/lib/api-fetch'
+import { isKnownErrorCode } from '@/lib/errors/codes'
+import { resolveClientErrorMessage } from '@/lib/errors/client'
+import { projectErrorForUser, type UserErrorAction } from '@/lib/errors/projection'
 
 // ============================================================
 // 类型定义
@@ -34,12 +38,19 @@ export interface Toast {
     message: string
     type: 'success' | 'error' | 'warning' | 'info'
     duration: number
+    actionLabel?: string
+    onAction?: () => void
 }
 
 interface ToastContextValue {
     toasts: Toast[]
-    showToast: (message: string, type?: Toast['type'], duration?: number) => void
-    showError: (code: string, details?: Record<string, unknown>) => void
+    showToast: (
+        message: string,
+        type?: Toast['type'],
+        duration?: number,
+        action?: Pick<Toast, 'actionLabel' | 'onAction'>,
+    ) => string
+    showError: (error: unknown, fallback?: string, onRetry?: () => void) => void
     dismissToast: (id: string) => void
 }
 
@@ -56,6 +67,8 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 export function ToastProvider({ children }: { children: ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([])
     const t = useTranslations('errors')
+    const router = useRouter()
+    const offlineToastRef = useRef<string | null>(null)
 
     /**
      * 显示 Toast 消息
@@ -63,11 +76,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const showToast = useCallback((
         message: string,
         type: Toast['type'] = 'info',
-        duration = 5000
+        duration = 5000,
+        action?: Pick<Toast, 'actionLabel' | 'onAction'>,
     ) => {
-        const id = Math.random().toString(36).slice(2, 9)
+        const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 9)
 
-        setToasts(prev => [...prev, { id, message, type, duration }])
+        setToasts(prev => [...prev, { id, message, type, duration, ...action }])
 
         // 自动消失
         if (duration > 0) {
@@ -75,41 +89,67 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 setToasts(prev => prev.filter(toast => toast.id !== id))
             }, duration)
         }
+        return id
     }, [])
 
     /**
      * 显示错误消息（自动翻译错误码）
      */
-    const showError = useCallback((code: string, details?: Record<string, unknown>) => {
-        let message: string
-
-        // 尝试翻译错误码
-        try {
-            const translationValues = Object.fromEntries(
-                Object.entries(details || {}).map(([key, value]) => {
-                    if (typeof value === 'string' || typeof value === 'number') {
-                        return [key, value]
-                    }
-                    if (value instanceof Date) {
-                        return [key, value]
-                    }
-                    return [key, String(value)]
-                })
-            )
-            message = t(code, translationValues)
-        } catch {
-            message = code
+    const showError = useCallback((error: unknown, fallback?: string, onRetry?: () => void) => {
+        const resolved = resolveClientErrorMessage(
+            error,
+            (code) => t.has(code) ? t(code) : null,
+            fallback?.trim() || t('INTERNAL_ERROR'),
+        )
+        const projection = resolved.facts.code && isKnownErrorCode(resolved.facts.code)
+            ? projectErrorForUser(resolved.facts.code, resolved.facts.requestId)
+            : null
+        const reference = resolved.facts.requestId
+            ? ` ${t('referenceId', { id: resolved.facts.requestId })}`
+            : ''
+        const actionHandlers: Partial<Record<Exclude<UserErrorAction, null>, () => void>> = {
+            open_provider_settings: () => router.push('/profile?section=apiConfig'),
+            recharge: () => router.push('/profile?section=overview&recharge=open'),
+            relogin: () => router.push('/auth/signin'),
+            retry: onRetry,
         }
+        const action = projection?.action
+        const onAction = action ? actionHandlers[action] : undefined
+        showToast(
+            `${resolved.message}${reference}`,
+            'error',
+            8000,
+            action && onAction ? { actionLabel: t(`actions.${action}`), onAction } : undefined,
+        )
+    }, [router, showToast, t])
 
-        showToast(message, 'error', 8000)
-    }, [t, showToast])
-
-    /**
-     * 关闭 Toast
-     */
     const dismissToast = useCallback((id: string) => {
         setToasts(prev => prev.filter(toast => toast.id !== id))
     }, [])
+
+    useEffect(() => {
+        const handleOffline = () => {
+            if (!offlineToastRef.current) {
+                offlineToastRef.current = showToast(t('networkOffline'), 'warning', 0)
+            }
+        }
+        const handleOnline = () => {
+            if (offlineToastRef.current) {
+                dismissToast(offlineToastRef.current)
+                offlineToastRef.current = null
+            }
+            showToast(t('networkRestored'), 'success', 3000)
+        }
+        const handleAuthRequired = () => showError({ code: 'UNAUTHORIZED' })
+        window.addEventListener('offline', handleOffline)
+        window.addEventListener('online', handleOnline)
+        window.addEventListener(API_AUTH_REQUIRED_EVENT, handleAuthRequired)
+        return () => {
+            window.removeEventListener('offline', handleOffline)
+            window.removeEventListener('online', handleOnline)
+            window.removeEventListener(API_AUTH_REQUIRED_EVENT, handleAuthRequired)
+        }
+    }, [dismissToast, showError, showToast, t])
 
     return (
         <ToastContext.Provider value={{ toasts, showToast, showError, dismissToast }}>
@@ -171,6 +211,19 @@ function ToastContainer({
 
                     {/* 消息 */}
                     <span className="text-sm font-medium flex-1">{toast.message}</span>
+
+                    {toast.actionLabel && toast.onAction ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                toast.onAction?.()
+                                onDismiss(toast.id)
+                            }}
+                            className="shrink-0 text-sm font-semibold underline underline-offset-2"
+                        >
+                            {toast.actionLabel}
+                        </button>
+                    ) : null}
 
                     {/* 关闭按钮 */}
                     <button

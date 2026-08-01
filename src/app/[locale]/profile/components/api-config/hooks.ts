@@ -15,6 +15,7 @@ import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
 import type { ApiConfigSaveError } from './editor'
 import { useUserApiConfigQuery } from './query'
+import { useToast } from '@/contexts/ToastContext'
 import {
     clearMissingDefaultModels,
     applyMissingCapabilityDefaults,
@@ -63,12 +64,13 @@ interface UseProvidersReturn {
 export function useProviders(): UseProvidersReturn {
     const locale = useLocale()
     const t = useTranslations('apiConfig')
+    const { showToast } = useToast()
     const [providers, setProviders] = useState<Provider[]>(createInitialProviders([]))
     const [models, setModels] = useState<CustomModel[]>(createInitialModels([]))
     const [defaultModels, setDefaultModels] = useState<DefaultModels>({})
     const [workflowConcurrency, setWorkflowConcurrency] = useState<WorkflowConcurrency>(DEFAULT_WORKFLOW_CONCURRENCY)
     const [capabilityDefaults, setCapabilityDefaults] = useState<CapabilitySelections>({})
-    const { data, loading: queryLoading, error: queryError, reload } = useUserApiConfigQuery()
+    const { data, loading: queryLoading, error: queryError } = useUserApiConfigQuery()
     const catalogProviderIdsRef = useRef<Set<string>>(new Set())
     const catalogModelKeysRef = useRef<Set<string>>(new Set())
 
@@ -260,7 +262,7 @@ export function useProviders(): UseProvidersReturn {
 
     const deleteProvider = useCallback((providerId: string) => {
         if (catalogProviderIdsRef.current.has(providerId)) {
-            alert(t('presetProviderCannotDelete'))
+            showToast(t('presetProviderCannotDelete'), 'warning')
             return
         }
         if (confirm(t('confirmDeleteProvider'))) {
@@ -282,7 +284,7 @@ export function useProviders(): UseProvidersReturn {
                 return nextModels
             })
         }
-    }, [t, performSave])
+    }, [t, performSave, showToast])
 
     const updateProviderInfo = useCallback((providerId: string, name: string, baseUrl?: string) => {
         setProviders(prev => {
@@ -374,7 +376,7 @@ export function useProviders(): UseProvidersReturn {
 
     const deleteModel = useCallback((modelKey: string, providerId?: string) => {
         if (catalogModelKeysRef.current.has(modelKey)) {
-            alert(t('presetModelCannotDelete'))
+            showToast(t('presetModelCannotDelete'), 'warning')
             return
         }
         if (confirm(t('confirmDeleteModel'))) {
@@ -393,7 +395,7 @@ export function useProviders(): UseProvidersReturn {
                 return nextModels
             })
         }
-    }, [t, performSave])
+    }, [t, performSave, showToast])
 
     // 过滤器
     const getModelsByType = useCallback((type: CustomModel['type']) => {
