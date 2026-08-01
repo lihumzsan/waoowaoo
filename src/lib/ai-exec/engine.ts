@@ -30,6 +30,7 @@ import {
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
+  createMediaProviderRequestIdentity,
   assertImageMediaReferencesUseHttps,
   assertMusicMediaReferencesUseHttps,
   assertVideoMediaReferencesUseHttps,
@@ -196,7 +197,7 @@ export async function executeMediaGeneration(
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
-        request: { ...input, modelKey: routeSelection.modelKey },
+        request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
         execute: async () => await modalityAdapter.execute({
           userId: input.userId,
           selection: routeSelection,
@@ -219,7 +220,7 @@ export async function executeMediaGeneration(
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
-        request: { ...input, modelKey: routeSelection.modelKey },
+        request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
         execute: async () => await modalityAdapter.execute({
           userId: input.userId,
           selection: routeSelection,
@@ -242,7 +243,7 @@ export async function executeMediaGeneration(
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
-        request: { ...input, modelKey: routeSelection.modelKey },
+        request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
         execute: async () => await modalityAdapter.execute({
           userId: input.userId,
           selection: routeSelection,
@@ -265,7 +266,7 @@ export async function executeMediaGeneration(
       return {
         provider: routeSelection.provider,
         modelKey: routeSelection.modelKey,
-        request: { ...input, modelKey: routeSelection.modelKey },
+        request: createMediaProviderRequestIdentity({ ...input, modelKey: routeSelection.modelKey }),
         execute: async () => await modalityAdapter.execute({
           userId: input.userId,
           selection: routeSelection,
