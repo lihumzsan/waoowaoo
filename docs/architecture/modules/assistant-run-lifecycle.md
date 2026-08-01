@@ -59,7 +59,9 @@ Operation。
   history的Turn只投影effects，不重复source。该continuation是输入投影，不是第二状态机。
 - **AR-08 — Agent Plan 只是 Thread 便签。** `update_plan` 完整替换 `planJson`；
   空列表或全部 completed 清空便签。它不驱动 Operation、Task、Approval、Choice、
-  Resource、Canvas 或 Turn 生命周期。
+  Resource、Canvas 或 Turn 生命周期。它是 `intent=plan` 的非收费事务内 ToolEffect，和
+  同条件的 `intent=act` 一样由 `turnId + callId` exact replay；ToolEffect admission 不得
+  把 intent 名称误当成执行 authority。
 - **AR-09 — 不存在执行模式或业务主链。** Assistant 没有 Ask/Auto 模式、WorkflowView、
   stage、fixed next step、operation group 或 UI gating。破坏性 Operation 仍要求 Approval；
   收费确认设置只决定当前精确 plan 是否要求人工批准，不扩展授权。
@@ -67,7 +69,8 @@ Operation。
   canonical strict runtime schema 生成模型 schema。`execute_operation` 只接收
   `operationId + argumentsJson`；scope、user、project、episode、turnId 与 callId 由可信
   runtime context 传入，模型不得重复声明。配置与 Provider capability 由 planner 解析并
-  冻结，不形成第二 schema。
+  冻结，不形成第二 schema。Resource 当前选择只暴露具体领域 Operation 与无版本 View；
+  Binding role、slot、ID 和 expectedVersion 都是服务端实现细节，不得进入模型 schema。
 - **AR-11 — Tool 暴露来自 registry。** `toolExposure=direct|on_demand` 只改变传输；
   `load_tools` 不创建资格、ticket 或持久状态。未加载不能变成执行权限，调用仍由同一个
   Operation owner按registry校验。
@@ -263,6 +266,8 @@ RunState 排空是环境盲区；未验证不得宣称架构完成。
 
 ## 历史回归
 
+- B+ ToolEffect admission 初版只允许 `intent=act`，但生产 registry 的 `update_plan` 按正确语义声明为 `intent=plan` 且仍是事务内持久写；真实模型第一次维护计划便在执行前被 `PROJECT_AGENT_TOOL_EFFECT_OPERATION_INVALID` 拒绝。旧 conformance分别验证 Operation 声明与 effect owner，没有穷尽证明所有合法 intent 可到达同一 owner，属于新实例漏接。当前 admission 接受 `act|plan`，仍同时要求写入、非收费、无外部副作用、非长任务、无需 Approval 且拥有 transaction，未放宽其他 Tool。
+- 模型曾能调用 generic `adopt_resource` 并提交任意 Binding role/slot/expectedVersion；真实模型把普通文本当 screenplay 当前版本并猜测 CAS，工具失败后仍可能自然语言宣称完成。当前 generic Tool 与旧 Operation copy 已删除，Project Context 只投影 typed current selections；Direction、Manifest 与 Voice 各由具体领域 Operation 写入，版本只由服务端读取或冻结。
 - B+ 首版把运行中普通user消息直接拒绝为`AGENT_THREAD_BUSY`，并让stop/clear在MySQL已经
   写cancelled、但旧Activity及Tool仍可能运行时就返回成功；旧防线只覆盖waiting Approval
   supersede与持久终态，没有到达“真实运行Activity + 快速连续消息”的产品路径。这是从旧

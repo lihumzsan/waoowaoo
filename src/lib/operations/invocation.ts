@@ -221,7 +221,7 @@ export async function invokeProjectAgentOperation(params: {
   if (
     agentToolEffect &&
     (params.channel !== 'tool' ||
-      operation.intent !== 'act' ||
+      (operation.intent !== 'act' && operation.intent !== 'plan') ||
       !operation.effects.writes ||
       operation.effects.billable ||
       operation.effects.externalSideEffects ||
