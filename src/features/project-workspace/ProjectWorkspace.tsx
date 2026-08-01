@@ -11,7 +11,10 @@ import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
 import WorkspaceHeaderShell from './components/WorkspaceHeaderShell'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
-import type { WorkspaceAssistantSelectionContext } from './canvas/ProjectWorkspaceCanvas'
+import type {
+  WorkspaceAssistantDraftRequest,
+  WorkspaceCanvasSelection,
+} from './canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
@@ -38,7 +41,8 @@ function isDeploymentPayload(value: unknown): value is DeploymentPayload {
 
 function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const vm = useProjectWorkspaceController(props)
-  const [assistantSelection, setAssistantSelection] = useState<WorkspaceAssistantSelectionContext>({})
+  const [canvasSelection, setCanvasSelection] = useState<WorkspaceCanvasSelection | null>(null)
+  const [assistantDraftRequest, setAssistantDraftRequest] = useState<WorkspaceAssistantDraftRequest | null>(null)
   const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
   const [workspaceScopeSelection, setWorkspaceScopeSelection] = useState<WorkspaceScopeSelection>(() => ({
@@ -65,6 +69,10 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     [storyCanonResponse?.chapters],
   )
   const workspaceEpisodeId = episodeId ?? null
+  useEffect(() => {
+    setCanvasSelection(null)
+    setAssistantDraftRequest(null)
+  }, [episodeId, projectId])
   const selectedWorkspaceScope = readWorkspaceScopeId(workspaceScopeSelection.scopeId)
   const workspaceScopeId = workspaceScopeSelection.episodeId === workspaceEpisodeId
     && (
@@ -139,7 +147,12 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
           <WorkspaceAssistantPanel
             projectId={projectId}
             episodeId={episodeId}
-            selection={assistantSelection}
+            selection={canvasSelection}
+            draftRequest={assistantDraftRequest}
+            onDraftRequestConsumed={(requestId) => {
+              setAssistantDraftRequest((current) => current?.requestId === requestId ? null : current)
+            }}
+            onClearSelection={() => setCanvasSelection(null)}
             autoStartDraft={props.assistantAutoStartDraft ?? null}
             autoStartKey={props.assistantAutoStartKey ?? null}
             onAutoStartConsumed={props.onAssistantAutoStartConsumed}
@@ -147,7 +160,9 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
           />
           <div className={isEpisodeWorkspace ? 'h-full min-w-0 overflow-hidden' : 'min-w-0'}>
             <ProjectWorkspaceCanvas
-              onAssistantSelectionChange={setAssistantSelection}
+              selection={canvasSelection}
+              onSelectionChange={setCanvasSelection}
+              onAssistantDraftRequest={setAssistantDraftRequest}
               activeAssistantFocusRequest={activeAssistantFocusRequest}
             />
           </div>

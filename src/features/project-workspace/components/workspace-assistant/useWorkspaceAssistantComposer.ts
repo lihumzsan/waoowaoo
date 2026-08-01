@@ -18,6 +18,7 @@ export function useWorkspaceAssistantComposer(
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
   const [mediaAttachments, setMediaAttachments] = useState<ProjectAssistantMediaAttachment[]>([])
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const scopeKeyRef = useRef(scopeKey)
   scopeKeyRef.current = scopeKey
 
@@ -72,9 +73,32 @@ export function useWorkspaceAssistantComposer(
     )
   }, [])
 
+  const applyDraftRequest = useCallback((input: {
+    readonly text: string | null
+    readonly focus: boolean
+  }) => {
+    const nextText = input.text?.trim() ?? ''
+    if (nextText) {
+      setText((current) => {
+        const normalized = current.trimEnd()
+        return normalized ? `${normalized}\n${nextText}` : nextText
+      })
+    }
+    if (input.focus) {
+      globalThis.requestAnimationFrame?.(() => {
+        const textarea = textareaRef.current
+        if (!textarea) return
+        textarea.focus()
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+      })
+    }
+  }, [])
+
   return {
     text,
     setText,
+    textareaRef,
+    applyDraftRequest,
     attachments,
     mediaAttachments,
     submit,

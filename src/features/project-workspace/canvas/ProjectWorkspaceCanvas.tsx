@@ -1,7 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { WheelEvent } from 'react'
+import type {
+  MouseEvent as ReactMouseEvent,
+  WheelEvent,
+} from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -15,7 +18,6 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
-import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useCreativeResources, useEpisodeData, useProjectData } from '@/lib/query/hooks'
@@ -52,33 +54,44 @@ import {
   collectWorkspaceNodeRuntimeTargets,
   resolveWorkspaceCanvasNodeData,
 } from './workspace-node-runtime'
+import type { WorkspaceCanvasSelection } from './contracts/workspace-canvas-interactions'
+import type {
+  WorkspaceAssistantDraftRequest,
+  WorkspaceCreativeResourceCardMemberView,
+  WorkspaceCanvasResourceOperationView,
+} from './contracts/workspace-canvas-interactions'
+import { useCanvasOperationAction } from './actions/useCanvasOperationAction'
+import { CanvasOperationConfirmationModal } from './actions/CanvasOperationConfirmationModal'
+import { WorkspaceResourcePreviewModal } from './preview/WorkspaceResourcePreviewModal'
+import { useCanvasResourceArchive } from './actions/useCanvasResourceArchive'
+import { useCanvasActions } from '@/lib/query/hooks/useCanvasActions'
+import {
+  WorkspaceCanvasCreateMenu,
+  WorkspaceCanvasCreateModal,
+  type WorkspaceCanvasCreateAnchor,
+} from './create/WorkspaceCanvasCreate'
+import type {
+  WorkspaceCanvasCreateCapabilityView,
+  WorkspaceCanvasCreateRequest,
+} from './contracts/workspace-canvas-interactions'
+import { workspaceNodeId } from './workspace-canvas-node-ids'
+import { CanvasEditRegenerateModal } from './actions/CanvasEditRegenerateModal'
+import { useCanvasUploadQueue, type CanvasUploadQueueItem } from './upload/useCanvasUploadQueue'
+import { CanvasUploadQueue } from './upload/CanvasUploadQueue'
+import { CanvasViewportControls } from './controls/CanvasViewportControls'
+import { buildWorkspaceCanvasCreateOperationInput } from './create/canvas-create-input'
+import { useCanvasUploadBridge } from './upload/useCanvasUploadBridge'
+import { useToast } from '@/contexts/ToastContext'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
 const WORKSPACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true } as const
 
-export interface WorkspaceAssistantSelectionContext {
-  selectedScopeRef?: string | null
-  selectedAssetId?: string | null
-}
-
 interface ProjectWorkspaceCanvasContentProps {
-  onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
+  selection: WorkspaceCanvasSelection | null
+  onSelectionChange: (selection: WorkspaceCanvasSelection | null) => void
+  onAssistantDraftRequest: (request: WorkspaceAssistantDraftRequest) => void
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
-}
-
-interface CanvasViewportControlsProps {
-  readonly resetLabel: string
-  readonly fitViewLabel: string
-  readonly zoomInLabel: string
-  readonly zoomOutLabel: string
-  readonly autoFollowLabel: string
-  readonly autoFollowEnabled: boolean
-  readonly onResetLayout: () => void
-  readonly onFitView: () => void
-  readonly onZoomIn: () => void
-  readonly onZoomOut: () => void
-  readonly onToggleAutoFollow: () => void
 }
 
 interface WorkspaceCanvasUserPosition {
@@ -104,94 +117,51 @@ function applyWorkspaceCanvasUserPositions(params: {
   })
 }
 
-function CanvasViewportControls({
-  resetLabel,
-  fitViewLabel,
-  zoomInLabel,
-  zoomOutLabel,
-  autoFollowLabel,
-  autoFollowEnabled,
-  onResetLayout,
-  onFitView,
-  onZoomIn,
-  onZoomOut,
-  onToggleAutoFollow,
-}: CanvasViewportControlsProps) {
-  const buttonClassName = 'inline-flex h-10 w-10 items-center justify-center border-r border-[var(--glass-stroke-soft)] text-[var(--glass-text-primary)] transition last:border-r-0 hover:bg-[var(--glass-bg-hover)]'
-  const autoFollowClassName = autoFollowEnabled
-    ? `${buttonClassName} bg-[var(--glass-bg-hover)] text-[var(--glass-tone-info-fg)]`
-    : `${buttonClassName} text-[var(--glass-text-tertiary)]`
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/95 shadow-lg backdrop-blur-md">
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={zoomInLabel}
-        title={zoomInLabel}
-        onClick={onZoomIn}
-      >
-        <AppIcon name="plus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={zoomOutLabel}
-        title={zoomOutLabel}
-        onClick={onZoomOut}
-      >
-        <AppIcon name="minus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={fitViewLabel}
-        title={fitViewLabel}
-        onClick={onFitView}
-      >
-        <AppIcon name="searchPlus" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={autoFollowClassName}
-        aria-label={autoFollowLabel}
-        aria-pressed={autoFollowEnabled}
-        title={autoFollowLabel}
-        onClick={onToggleAutoFollow}
-      >
-        <AppIcon name="crosshair" className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        className={buttonClassName}
-        aria-label={resetLabel}
-        title={resetLabel}
-        onClick={onResetLayout}
-      >
-        <AppIcon name="refresh" className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
 function ProjectWorkspaceCanvasContent({
-  onAssistantSelectionChange,
+  selection,
+  onSelectionChange,
+  onAssistantDraftRequest,
   activeAssistantFocusRequest = null,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
+  const { showError } = useToast()
   const { projectId, episodeId } = useWorkspaceProvider()
   const { data: episodeData } = useEpisodeData(projectId, episodeId ?? null)
   const episodeName = typeof episodeData?.name === 'string' ? episodeData.name : undefined
   const { data: projectData } = useProjectData(projectId)
   const projectAspectRatio = projectData?.videoRatio ?? null
-  const { data: creativeResourcesResponse } = useCreativeResources(projectId, episodeId ?? null)
+  const [showArchivedResources, setShowArchivedResources] = useState(false)
+  const {
+    data: canvasActions,
+    isLoading: canvasActionsLoading,
+    isError: canvasActionsFailed,
+    refetch: retryCanvasActions,
+  } = useCanvasActions(projectId)
+  const [createAnchor, setCreateAnchor] = useState<WorkspaceCanvasCreateAnchor | null>(null)
+  const [createCapability, setCreateCapability] = useState<{
+    readonly capability: WorkspaceCanvasCreateCapabilityView
+    readonly position: WorkspaceCanvasCreateRequest['position']
+  } | null>(null)
+  const [editOperation, setEditOperation] = useState<{
+    readonly operation: WorkspaceCanvasResourceOperationView
+    readonly countRange: { readonly min: number; readonly max: number }
+  } | null>(null)
+  const { data: creativeResourcesResponse } = useCreativeResources(
+    projectId,
+    episodeId ?? null,
+    { includeArchived: true },
+  )
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
+  const [hiddenNodeKeys, setHiddenNodeKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [showHiddenNodes, setShowHiddenNodes] = useState(false)
+  const [preview, setPreview] = useState<{
+    readonly members: readonly WorkspaceCreativeResourceCardMemberView[]
+    readonly initialResourceId: string
+  } | null>(null)
   const [reactFlowReady, setReactFlowReady] = useState(false)
-  const assistantSelectionSignatureRef = useRef<string | null>(null)
   const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
   const projectedFlowNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
   const projectedFlowEdgesRef = useRef<readonly WorkspaceCanvasFlowEdge[]>([])
@@ -202,7 +172,29 @@ function ProjectWorkspaceCanvasContent({
   const reactFlowRef = useRef(reactFlow)
   reactFlowRef.current = reactFlow
   const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
-
+  const hiddenNodeKeysRef = useRef<ReadonlySet<string>>(new Set())
+  const layoutWriteChainRef = useRef<Promise<void>>(Promise.resolve())
+  hiddenNodeKeysRef.current = hiddenNodeKeys
+  const pendingPlacementNodeIdsRef = useRef<Set<string>>(new Set())
+  const operationAction = useCanvasOperationAction({
+    projectId,
+    episodeId: episodeId ?? null,
+  })
+  const archiveAction = useCanvasResourceArchive({ projectId })
+  const placeUploadedResource = useCallback((item: CanvasUploadQueueItem, resourceId: string, reused: boolean) => {
+    if (reused) return
+    const nodeId = workspaceNodeId.resourceCard(resourceId)
+    pendingPlacementNodeIdsRef.current.add(nodeId)
+    setUserNodePositions((current) => {
+      const next = new Map(current)
+      next.set(nodeId, item.position)
+      return next
+    })
+  }, [])
+  const uploadQueue = useCanvasUploadQueue({
+    projectId,
+    onMaterialized: placeUploadedResource,
+  })
   const {
     layout,
     saveLayout,
@@ -237,7 +229,7 @@ function ProjectWorkspaceCanvasContent({
         node,
         statesByQueryKey: workspaceTaskStateMap.byQueryKey,
       })
-      const zIndex = node.id === selectedNodeId ? 30 : undefined
+      const zIndex = node.id === selection?.nodeId ? 30 : undefined
       return {
         ...node,
         zIndex,
@@ -245,7 +237,7 @@ function ProjectWorkspaceCanvasContent({
       }
     })
   }, [
-    selectedNodeId,
+    selection?.nodeId,
     workspaceTaskStateMap.byQueryKey,
   ])
   const resolvedProjectedNodes = useMemo(
@@ -254,10 +246,17 @@ function ProjectWorkspaceCanvasContent({
   )
   resolvedProjectedNodesRef.current = resolvedProjectedNodes
   userNodePositionsRef.current = userNodePositions
+  const visibleResolvedProjectedNodes = useMemo(
+    () => resolvedProjectedNodes.filter((node) => (
+      (showHiddenNodes || !hiddenNodeKeys.has(node.id))
+      && (showArchivedResources || !node.data.resourceDetails.resource.archivedAt)
+    )),
+    [hiddenNodeKeys, resolvedProjectedNodes, showArchivedResources, showHiddenNodes],
+  )
   const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
-    nodes: resolvedProjectedNodes,
+    nodes: visibleResolvedProjectedNodes,
     positions: userNodePositions,
-  }), [resolvedProjectedNodes, userNodePositions])
+  }), [userNodePositions, visibleResolvedProjectedNodes])
   const flowNodeSignature = useMemo(
     () => buildWorkspaceCanvasNodeSignature(candidateFlowNodes),
     [candidateFlowNodes],
@@ -270,12 +269,17 @@ function ProjectWorkspaceCanvasContent({
     () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
     [resolvedProjectedNodes],
   )
-  const projectionEdgeSignature = useMemo(
-    () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
-    [projectionEdges],
+  const visibleNodeIds = useMemo(() => new Set(flowNodes.map((node) => node.id)), [flowNodes])
+  const visibleProjectionEdges = useMemo(
+    () => projectionEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)),
+    [projectionEdges, visibleNodeIds],
   )
-  projectedFlowEdgesRef.current = projectionEdges
-  if (initialReactFlowEdgesRef.current === null) initialReactFlowEdgesRef.current = [...projectionEdges]
+  const projectionEdgeSignature = useMemo(
+    () => buildWorkspaceCanvasEdgeSignature(visibleProjectionEdges),
+    [visibleProjectionEdges],
+  )
+  projectedFlowEdgesRef.current = visibleProjectionEdges
+  if (initialReactFlowEdgesRef.current === null) initialReactFlowEdgesRef.current = [...visibleProjectionEdges]
   projectionSignatureRef.current = `${flowNodeSignature}\n--edges--\n${projectionEdgeSignature}`
   const syncProjectionToReactFlow = useCallback((flow = reactFlowRef.current) => {
     const signature = projectionSignatureRef.current
@@ -316,6 +320,20 @@ function ProjectWorkspaceCanvasContent({
     focusNodeIds,
     focusRequestKey: activeAssistantFocusRequest?.requestKey ?? null,
   })
+  const {
+    accept: uploadAccept,
+    uploadInputRef,
+    openPicker: openUploadPicker,
+    handleInputChange: handleUploadInputChange,
+    handleDrop: handleCanvasDrop,
+    handlePaste: handleCanvasPaste,
+    handleDragOver: handleCanvasDragOver,
+  } = useCanvasUploadBridge({
+    canvasRef,
+    screenToFlowPosition: reactFlow.screenToFlowPosition,
+    addFiles: uploadQueue.addFiles,
+    onUserInteraction: notifyCanvasUserInteraction,
+  })
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
@@ -333,16 +351,48 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [projectedNodes, projectionNodeSignature])
 
-  const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
+  useEffect(() => {
+    setHiddenNodeKeys(new Set(
+      savedNodeLayouts
+        .filter((nodeLayout) => nodeLayout.hidden)
+        .map((nodeLayout) => nodeLayout.nodeKey),
+    ))
+  }, [savedNodeLayouts])
+
+  const persistCurrentLayout = useCallback(async (
+    nextNodes: readonly WorkspaceCanvasFlowNode[],
+    nextHiddenNodeKeys: ReadonlySet<string> = hiddenNodeKeysRef.current,
+  ) => {
     if (!episodeId) return
 
     const input = buildWorkspaceCanvasLayoutInput({
       episodeId,
       nodes: nextNodes,
+      hiddenNodeKeys: nextHiddenNodeKeys,
     })
 
-    await saveLayout(input)
+    const write = layoutWriteChainRef.current
+      .catch(() => undefined)
+      .then(async () => { await saveLayout(input) })
+    layoutWriteChainRef.current = write.catch(() => undefined)
+    await write
   }, [episodeId, saveLayout])
+
+  useEffect(() => {
+    if (pendingPlacementNodeIdsRef.current.size === 0) return
+    const projectedNodeIds = new Set(resolvedProjectedNodes.map((node) => node.id))
+    const matched = [...pendingPlacementNodeIdsRef.current]
+      .filter((nodeId) => projectedNodeIds.has(nodeId))
+    if (matched.length === 0) return
+    matched.forEach((nodeId) => pendingPlacementNodeIdsRef.current.delete(nodeId))
+    const positionedNodes = applyWorkspaceCanvasUserPositions({
+      nodes: resolvedProjectedNodes,
+      positions: userNodePositionsRef.current,
+    })
+    void persistCurrentLayout(positionedNodes).catch((error: unknown) => {
+      _ulogWarn('[ProjectWorkspaceCanvas] generated Resource placement save failed', error)
+    })
+  }, [persistCurrentLayout, resolvedProjectedNodes, userNodePositions])
 
   const persistCurrentLayoutSafely = useCallback((nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     void persistCurrentLayout(nextNodes).catch((error: unknown) => {
@@ -384,11 +434,32 @@ function ProjectWorkspaceCanvasContent({
   }, [applyUserNodePositions, notifyCanvasUserInteraction, persistCurrentLayoutSafely])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
-    setSelectedNodeId(node.id)
-  }, [])
-  const handlePaneClick = useCallback(() => {
-    setSelectedNodeId(null)
-  }, [])
+    canvasRef.current?.focus()
+    const summary = node.data.resourceDetails.presentation.summary
+    onSelectionChange({
+      nodeId: node.id,
+      targetType: 'creativeResource',
+      targetId: node.data.targetId,
+      selectedScopeRef: `${node.data.targetType}:${node.data.targetId}`,
+      selectedAssetId: null,
+      name: node.data.title,
+      mediaType: node.data.resourceDetails.resource.mediaType,
+      previewUrl: summary.kind === 'media' ? summary.url ?? null : null,
+    })
+  }, [onSelectionChange])
+  const handlePaneClick = useCallback((event: ReactMouseEvent<Element, globalThis.MouseEvent>) => {
+    canvasRef.current?.focus()
+    onSelectionChange(null)
+    if (event.detail !== 2) {
+      setCreateAnchor(null)
+      return
+    }
+    notifyCanvasUserInteraction()
+    setCreateAnchor({
+      client: { x: event.clientX, y: event.clientY },
+      flow: reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+    })
+  }, [notifyCanvasUserInteraction, onSelectionChange, reactFlow])
   const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
     if (event) notifyCanvasUserInteraction()
   }, [notifyCanvasUserInteraction])
@@ -446,32 +517,137 @@ function ProjectWorkspaceCanvasContent({
     notifyCanvasUserInteraction()
     setAutoFollowEnabled((current) => !current)
   }, [notifyCanvasUserInteraction])
+  const toggleHiddenNodes = useCallback(() => {
+    notifyCanvasUserInteraction()
+    setShowHiddenNodes((current) => !current)
+  }, [notifyCanvasUserInteraction])
+  const toggleArchivedResources = useCallback(() => {
+    notifyCanvasUserInteraction()
+    setShowArchivedResources((current) => !current)
+  }, [notifyCanvasUserInteraction])
   const selectedNode = useMemo(
-    () => flowNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [flowNodes, selectedNodeId],
+    () => flowNodes.find((node) => node.id === selection?.nodeId) ?? null,
+    [flowNodes, selection?.nodeId],
   )
-  const assistantSelection = useMemo<WorkspaceAssistantSelectionContext>(() => {
-    if (!selectedNode) return {}
-    const targetType = selectedNode.data.targetType
-    const targetId = selectedNode.data.targetId
-    return {
-      selectedScopeRef: `${targetType}:${targetId}`,
-      selectedAssetId: null,
-    }
-  }, [selectedNode])
 
   useEffect(() => {
-    const signature = JSON.stringify(assistantSelection)
-    if (assistantSelectionSignatureRef.current === signature) return
-    assistantSelectionSignatureRef.current = signature
-    onAssistantSelectionChange?.(assistantSelection)
-  }, [assistantSelection, onAssistantSelectionChange])
+    if (!selection || !creativeResourcesResponse) return
+    if (selectedNode) return
+    onSelectionChange(null)
+  }, [creativeResourcesResponse, onSelectionChange, selectedNode, selection])
+
+  const requestAssistantDraft = useCallback((text: string | null) => {
+    onAssistantDraftRequest({
+      requestId: crypto.randomUUID(),
+      text,
+      focus: true,
+    })
+  }, [onAssistantDraftRequest])
+
+  const changeNodeVisibility = useCallback((nodeId: string, hidden: boolean) => {
+    const previous = hiddenNodeKeysRef.current
+    const next = new Set(previous)
+    if (hidden) next.add(nodeId)
+    else next.delete(nodeId)
+    setHiddenNodeKeys(next)
+    if (hidden && !showHiddenNodes && selection?.nodeId === nodeId) onSelectionChange(null)
+    const positionedNodes = applyWorkspaceCanvasUserPositions({
+      nodes: resolvedProjectedNodesRef.current,
+      positions: userNodePositionsRef.current,
+    })
+    void persistCurrentLayout(positionedNodes, next).catch((error: unknown) => {
+      _ulogWarn('[ProjectWorkspaceCanvas] canvas visibility save failed', error)
+      setHiddenNodeKeys((current) => current === next ? previous : current)
+      showError(error, t('layoutSaveFailed'))
+    })
+  }, [onSelectionChange, persistCurrentLayout, selection?.nodeId, showError, showHiddenNodes, t])
+
+  const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
+    if (operation.kind === 'edit_regenerate') {
+      const capability = canvasActions?.creation.find((candidate) => (
+        candidate.operationId === operation.operationId
+      ))
+      if (!capability || !operation.editableInputPath) {
+        showError(new Error('CANVAS_EDIT_REGENERATE_CAPABILITY_UNAVAILABLE'), t('actions.unavailable'))
+        return
+      }
+      setEditOperation({ operation, countRange: capability.alternatives })
+      return
+    }
+    void operationAction.begin({
+      operationId: operation.operationId,
+      input: operation.input,
+      confirmation: operation.confirmation,
+    })
+  }, [canvasActions?.creation, operationAction, showError, t])
+
+  const placePlannedResources = useCallback((
+    request: WorkspaceCanvasCreateRequest,
+    targetIds: readonly string[],
+  ) => {
+    const uniqueTargetIds = [...new Set(targetIds)]
+    setUserNodePositions((current) => {
+      const next = new Map(current)
+      uniqueTargetIds.forEach((targetId, index) => {
+        const nodeId = workspaceNodeId.resourceCard(targetId)
+        pendingPlacementNodeIdsRef.current.add(nodeId)
+        next.set(nodeId, {
+          x: request.position.x + (index % 3) * 36,
+          y: request.position.y + Math.floor(index / 3) * 36,
+        })
+      })
+      return next
+    })
+  }, [])
+
+  const submitCanvasCreation = useCallback((request: WorkspaceCanvasCreateRequest) => {
+    setCreateCapability(null)
+    const input = buildWorkspaceCanvasCreateOperationInput(request, episodeId ?? '')
+    void operationAction.begin({
+      operationId: request.capability.operationId,
+      input,
+      confirmation: 'billable_media',
+      onAccepted: (plan) => {
+        if (!plan) return
+        placePlannedResources(request, plan.tasks.map((task) => task.targetId))
+      },
+    })
+  }, [episodeId, operationAction, placePlannedResources])
+
+  const selectionForCard = useCallback((card: WorkspaceCreativeResourceCardMemberView): WorkspaceCanvasSelection | null => {
+    const node = flowNodes.find((candidate) => candidate.data.targetId === card.resource.resourceId)
+    if (!node) return null
+    const summary = card.presentation.summary
+    return {
+      nodeId: node.id,
+      targetType: 'creativeResource',
+      targetId: card.resource.resourceId,
+      selectedScopeRef: `creativeResource:${card.resource.resourceId}`,
+      selectedAssetId: null,
+      name: card.resource.name,
+      mediaType: card.resource.mediaType,
+      previewUrl: summary.kind === 'media' ? summary.url ?? null : null,
+    }
+  }, [flowNodes])
 
   if (!episodeId) return null
 
   return (
-    <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
-      <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
+    <div
+      className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]"
+      onDragOver={handleCanvasDragOver}
+      onDrop={handleCanvasDrop}
+      onPaste={handleCanvasPaste}
+    >
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        accept={uploadAccept}
+        className="hidden"
+        onChange={handleUploadInputChange}
+      />
+      <div ref={canvasRef} className="h-full outline-none" tabIndex={0} onWheelCapture={applyWheelZoom}>
         <ReactFlow
           defaultNodes={initialReactFlowNodesRef.current}
           defaultEdges={initialReactFlowEdgesRef.current}
@@ -490,11 +666,44 @@ function ProjectWorkspaceCanvasContent({
           minZoom={WORKSPACE_CANVAS_MIN_ZOOM}
           maxZoom={WORKSPACE_CANVAS_MAX_ZOOM}
           zoomOnScroll={false}
+          zoomOnDoubleClick={false}
           defaultViewport={DEFAULT_WORKSPACE_CANVAS_VIEWPORT}
           proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
-          {selectedNode ? <WorkspaceNodeDetailsCard node={selectedNode} /> : null}
+          {selectedNode ? (
+            <WorkspaceNodeDetailsCard
+              node={selectedNode}
+              actions={{
+                busy: operationAction.busy || archiveAction.busy,
+                hidden: hiddenNodeKeys.has(selectedNode.id),
+                onAssistantPrefill: requestAssistantDraft,
+                onPreview: () => {
+                  const card = selectedNode.data.resourceDetails
+                  const members = (card.alternativeGroup?.members ?? [card])
+                    .filter((member) => (
+                      (showArchivedResources || !member.resource.archivedAt)
+                      && (
+                        showHiddenNodes
+                        || !hiddenNodeKeys.has(workspaceNodeId.resourceCard(member.resource.resourceId))
+                      )
+                    ))
+                  setPreview({
+                    members,
+                    initialResourceId: card.resource.resourceId,
+                  })
+                },
+                onOperation: beginResourceOperation,
+                onSetArchived: (archived) => {
+                  void archiveAction.request(
+                    selectedNode.data.resourceDetails.resource.resourceId,
+                    archived,
+                  )
+                },
+                onVisibilityChange: (hidden) => changeNodeVisibility(selectedNode.id, hidden),
+              }}
+            />
+          ) : null}
           <MiniMap
             pannable
             zoomable
@@ -529,32 +738,122 @@ function ProjectWorkspaceCanvasContent({
               zoomOutLabel={t('toolbar.zoomOut')}
               autoFollowLabel={t('toolbar.autoFollow')}
               autoFollowEnabled={autoFollowEnabled}
+              showHiddenLabel={t('toolbar.showHidden')}
+              showArchivedLabel={t('toolbar.showArchived')}
+              showHiddenNodes={showHiddenNodes}
+              showArchivedResources={showArchivedResources}
               onResetLayout={resetLayout}
               onFitView={fitView}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
               onToggleAutoFollow={toggleAutoFollow}
+              onToggleHiddenNodes={toggleHiddenNodes}
+              onToggleArchivedResources={toggleArchivedResources}
             />
           </Panel>
         </ReactFlow>
       </div>
+      {preview ? (
+        <WorkspaceResourcePreviewModal
+          members={preview.members}
+          initialResourceId={preview.initialResourceId}
+          onClose={() => setPreview(null)}
+          onDiscuss={(card) => {
+            const nextSelection = selectionForCard(card)
+            if (nextSelection) onSelectionChange(nextSelection)
+            setPreview(null)
+            requestAssistantDraft(null)
+          }}
+        />
+      ) : null}
+      {createAnchor ? (
+        <WorkspaceCanvasCreateMenu
+          anchor={createAnchor}
+          capabilities={canvasActions?.creation ?? []}
+          loading={canvasActionsLoading}
+          loadFailed={canvasActionsFailed}
+          onRetry={() => { void retryCanvasActions() }}
+          onSelect={(capability) => {
+            setCreateCapability({ capability, position: createAnchor.flow })
+            setCreateAnchor(null)
+          }}
+          onUpload={() => {
+            openUploadPicker(createAnchor.flow)
+            setCreateAnchor(null)
+          }}
+          onClose={() => setCreateAnchor(null)}
+        />
+      ) : null}
+      {createCapability ? (
+        <WorkspaceCanvasCreateModal
+          capability={createCapability.capability}
+          position={createCapability.position}
+          projectAspectRatio={projectAspectRatio}
+          onSubmit={submitCanvasCreation}
+          onClose={() => setCreateCapability(null)}
+        />
+      ) : null}
+      {editOperation ? (
+        <CanvasEditRegenerateModal
+          operation={editOperation.operation}
+          countRange={editOperation.countRange}
+          onSubmit={(operation) => {
+            setEditOperation(null)
+            void operationAction.begin({
+              operationId: operation.operationId,
+              input: operation.input,
+              confirmation: operation.confirmation,
+            })
+          }}
+          onClose={() => setEditOperation(null)}
+        />
+      ) : null}
+      {operationAction.pending ? (
+        <CanvasOperationConfirmationModal
+          plan={operationAction.pending.plan}
+          destructive={false}
+          executing={operationAction.phase === 'executing'}
+          onConfirm={() => { void operationAction.confirm() }}
+          onCancel={operationAction.cancel}
+        />
+      ) : null}
+      {archiveAction.pending ? (
+        <CanvasOperationConfirmationModal
+          plan={null}
+          destructive
+          executing={archiveAction.executing}
+          onConfirm={() => { void archiveAction.confirm() }}
+          onCancel={archiveAction.cancel}
+        />
+      ) : null}
+      <CanvasUploadQueue
+        items={uploadQueue.items}
+        onRetry={uploadQueue.retry}
+        onDismiss={uploadQueue.dismiss}
+      />
     </div>
   )
 }
 
 interface ProjectWorkspaceCanvasProps {
-  onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
+  selection: WorkspaceCanvasSelection | null
+  onSelectionChange: (selection: WorkspaceCanvasSelection | null) => void
+  onAssistantDraftRequest: (request: WorkspaceAssistantDraftRequest) => void
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
 }
 
 export default function ProjectWorkspaceCanvas({
-  onAssistantSelectionChange,
+  selection,
+  onSelectionChange,
+  onAssistantDraftRequest,
   activeAssistantFocusRequest = null,
 }: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
       <ProjectWorkspaceCanvasContent
-        onAssistantSelectionChange={onAssistantSelectionChange}
+        selection={selection}
+        onSelectionChange={onSelectionChange}
+        onAssistantDraftRequest={onAssistantDraftRequest}
         activeAssistantFocusRequest={activeAssistantFocusRequest}
       />
     </ReactFlowProvider>

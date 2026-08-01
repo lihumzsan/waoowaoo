@@ -1,8 +1,8 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
-import type { CreativeResourceCardView } from '@/lib/creative-resource/contracts'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
+import type { WorkspaceCreativeResourceCardView } from './contracts/workspace-canvas-interactions'
 
 /**
  * Canvas projects durable Creative Resources. Resource schema and lineage,
@@ -46,7 +46,7 @@ export interface WorkspaceCanvasNodeData {
     readonly y: number
   }
   readonly readOnly?: boolean
-  readonly resourceDetails: CreativeResourceCardView
+  readonly resourceDetails: WorkspaceCreativeResourceCardView
 }
 
 export type WorkspaceCanvasNodeRecord = WorkspaceCanvasNodeData & Record<string, unknown>

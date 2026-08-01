@@ -33,7 +33,118 @@
         "fitView": "Fit view",
         "zoomIn": "Zoom in",
         "zoomOut": "Zoom out",
-        "autoFollow": "Fit when new content appears"
+        "autoFollow": "Fit when new content appears",
+        "showHidden": "Show hidden",
+        "showArchived": "Show archived"
+      },
+      "actions": {
+        "discuss": "Discuss with AI",
+        "modifyImage": "Modify image",
+        "imageToVideo": "Turn into video",
+        "useReference": "Use as reference",
+        "modifyVideo": "Modify video",
+        "modifyText": "Modify text",
+        "preview": "Preview",
+        "copyPrompt": "Copy prompt",
+        "copyPromptSuccess": "Prompt copied",
+        "copyPromptFailed": "Could not copy the prompt",
+        "download": "Download",
+        "retry": "Retry",
+        "variant": "Create variant",
+        "edit_regenerate": "Edit and regenerate",
+        "archive": "Archive",
+        "restore": "Restore",
+        "show": "Show",
+        "hide": "Hide",
+        "unavailable": "This action is unavailable",
+        "prompts": {
+          "modifyImage": "Modify this image while keeping the useful parts of the current result.",
+          "useReference": "Use this Resource as a reference for my next creation.",
+          "imageToVideo": "Create a video from this image.",
+          "modifyVideo": "Modify this video while keeping the useful parts of the current result.",
+          "modifyText": "Help me revise this text."
+        },
+        "editModal": {
+          "title": "Edit and regenerate",
+          "description": "Adjust the generation instruction and choose how many results to create.",
+          "cancel": "Cancel",
+          "continue": "Continue",
+          "instruction": "Generation instruction",
+          "count": "Results"
+        }
+      },
+      "errors": {
+        "unknown": "This Resource could not be generated. You can retry it."
+      },
+      "layoutSaveFailed": "The Canvas layout could not be saved. Your last visibility change was reverted.",
+      "preview": {
+        "position": "{current} / {total}",
+        "discuss": "Discuss this result",
+        "groupDescription": "Browse {count} independently generated results.",
+        "singleDescription": "Preview this Resource.",
+        "previous": "Previous result",
+        "next": "Next result",
+        "structuredUnknown": "Structured content",
+        "structuredEntries": "Structured content · {count} entries"
+      },
+      "operationConfirm": {
+        "failed": "The operation could not be completed",
+        "destructiveTitle": "Confirm action",
+        "title": "Confirm generation",
+        "destructiveDescription": "Review this action before continuing.",
+        "description": "Review the number of generation tasks and the maximum quoted cost.",
+        "cancel": "Cancel",
+        "executing": "Submitting…",
+        "confirm": "Confirm and create",
+        "taskCount": "{count} generation tasks",
+        "priceHidden": "Price hidden",
+        "priceCredits": "Up to {cost} credits",
+        "destructiveBody": "This action changes the selected Resource."
+      },
+      "create": {
+        "menuTitle": "Create or upload",
+        "loading": "Loading capabilities…",
+        "loadFailed": "Generation options could not be loaded.",
+        "retry": "Retry",
+        "title": "Create {kind}",
+        "description": "Enter the basic generation details. You can confirm the quote before submitting.",
+        "cancel": "Cancel",
+        "continue": "Continue",
+        "name": "Name",
+        "namePlaceholder": "Optional Resource name",
+        "voiceDescription": "Voice description",
+        "prompt": "Prompt",
+        "voiceDescriptionPlaceholder": "Describe the voice, delivery, accent, and tone",
+        "promptPlaceholder": "Describe what you want to create",
+        "voicePreviewText": "Preview text",
+        "voicePreviewPlaceholder": "Enter a short line for the generated voice",
+        "count": "Results",
+        "countRange": "{min}–{max}",
+        "duration": "Duration (seconds)",
+        "durationPlaceholder": "Seconds",
+        "durationHelp": "Use a whole number of seconds.",
+        "durationRange": "{min}–{max} whole seconds.",
+        "projectRatio": "Project aspect ratio",
+        "projectRatioUnset": "Not set",
+        "kind": {
+          "image": "Image",
+          "video": "Video",
+          "music": "Music",
+          "voice": "Voice",
+          "upload": "Upload image or audio"
+        }
+      },
+      "upload": {
+        "title": "Uploads",
+        "failed": "Upload failed",
+        "retryUpload": "Retry upload",
+        "retryMaterialize": "Retry adding",
+        "dismiss": "Dismiss",
+        "stage": {
+          "uploading": "Uploading…",
+          "materializing": "Adding to Canvas…",
+          "ready": "Added to Canvas"
+        }
       },
       "status": {
         "pending": "Pending",

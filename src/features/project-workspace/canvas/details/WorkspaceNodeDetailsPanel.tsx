@@ -3,12 +3,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import { useToast } from '@/contexts/ToastContext'
+import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 import type {
   CreativeResourceInputSummaryView,
   CreativeResourceMediaType,
 } from '@/lib/creative-resource/contracts'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { PreviewableImage, SELECTABLE_TEXT_CLASS } from '../nodes/renderers/renderer-shared'
+import type { WorkspaceNodeDetailsActions } from './WorkspaceNodeDetailsCard'
+import type { WorkspaceCreativeResourceCardView } from '../contracts/workspace-canvas-interactions'
+import { WorkspaceNodeActionBar } from './WorkspaceNodeActionBar'
 
 /** Media-family icon for tiles that have no visual thumbnail of their own. */
 const INPUT_MEDIA_ICONS: Record<CreativeResourceMediaType, AppIconName> = {
@@ -286,23 +291,63 @@ function VideoPlayerSlot({
  * rendering of this View — the Canvas card and the layout lab both use it.
  */
 export function WorkspaceNodeDetailsPanel({
+  card,
   prompt,
   modelKey,
   inputs,
+  actions,
 }: {
+  readonly card: WorkspaceCreativeResourceCardView
   readonly prompt: string | null
   readonly modelKey: string | null
   readonly inputs: readonly CreativeResourceInputSummaryView[]
+  readonly actions: WorkspaceNodeDetailsActions
 }) {
   const t = useTranslations('projectWorkflow.canvas.workspace.details')
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const mediaTypeLabels = useTranslations('projectWorkflow.canvas.workspace.nodes.resourceCard.mediaType')
   const common = useTranslations('common')
+  const actionLabels = useTranslations('projectWorkflow.canvas.workspace.actions')
+  const errorLabels = useTranslations('projectWorkflow.canvas.workspace.errors')
+  const resolveClientError = useClientErrorMessage()
+  const { showError, showToast } = useToast()
   // One active playback across the whole card: starting a video stops the
   // playing audio tile and vice versa.
   const [activeInputKey, setActiveInputKey] = useState<string | null>(null)
   const activeInput = inputs.find((input) => inputKey(input) === activeInputKey) ?? null
   const activeVideoUrl = activeInput?.mediaType === 'video' ? activeInput.media?.url ?? null : null
+  const failedErrorMessage = card.resource.error?.code
+    ? resolveClientError(new Error(card.resource.error.code), errorLabels('unknown'))
+    : card.resource.status === 'failed'
+      ? errorLabels('unknown')
+      : null
+
+  const prefill = (key: 'modifyImage' | 'useReference' | 'imageToVideo' | 'modifyVideo' | 'modifyText') => {
+    actions.onAssistantPrefill(actionLabels(`prompts.${key}`))
+  }
+
+  const copyPrompt = async () => {
+    if (!prompt) return
+    try {
+      await navigator.clipboard.writeText(prompt)
+      showToast(actionLabels('copyPromptSuccess'), 'success')
+    } catch (error) {
+      showError(error, actionLabels('copyPromptFailed'))
+    }
+  }
+
+  const downloadView = card.download
+  const download = downloadView
+    ? () => {
+        const anchor = document.createElement('a')
+        anchor.href = downloadView.href
+        anchor.download = downloadView.fileName
+        anchor.rel = 'noopener'
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+      }
+    : null
 
   return (
     <section className="space-y-2.5 rounded-[20px] border border-slate-200 bg-white/96 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
@@ -413,6 +458,30 @@ export function WorkspaceNodeDetailsPanel({
           {t('empty')}
         </p>
       ) : null}
+
+      {failedErrorMessage ? (
+        <div className="rounded-xl bg-[var(--glass-tone-danger-bg)] px-3 py-2 text-xs leading-5 text-[var(--glass-tone-danger-fg)]">
+          {failedErrorMessage}
+        </div>
+      ) : null}
+
+      <WorkspaceNodeActionBar
+        card={card}
+        busy={actions.busy}
+        hidden={actions.hidden}
+        onDiscuss={() => actions.onAssistantPrefill(null)}
+        onModifyImage={() => prefill('modifyImage')}
+        onUseReference={() => prefill('useReference')}
+        onImageToVideo={() => prefill('imageToVideo')}
+        onModifyVideo={() => prefill('modifyVideo')}
+        onModifyText={() => prefill('modifyText')}
+        onCopyPrompt={() => { void copyPrompt() }}
+        onDownload={download}
+        onPreview={actions.onPreview}
+        onOperation={actions.onOperation}
+        onSetArchived={actions.onSetArchived}
+        onVisibilityChange={actions.onVisibilityChange}
+      />
     </section>
   )
 }

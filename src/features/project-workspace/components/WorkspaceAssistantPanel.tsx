@@ -26,7 +26,10 @@ import {
   uploadProjectAssistantMediaAttachment,
   validateProjectAssistantMediaAttachmentFile,
 } from '@/lib/project-agent/media-attachments/client'
-import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
+import type {
+  WorkspaceAssistantDraftRequest,
+  WorkspaceCanvasSelection,
+} from '../canvas/contracts/workspace-canvas-interactions'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
   ConfirmationActionCard,
@@ -69,7 +72,10 @@ import { useClientErrorMessage } from '@/hooks/useClientErrorMessage'
 interface WorkspaceAssistantPanelProps {
   projectId: string
   episodeId?: string
-  selection?: WorkspaceAssistantSelectionContext
+  selection: WorkspaceCanvasSelection | null
+  draftRequest: WorkspaceAssistantDraftRequest | null
+  onDraftRequestConsumed: (requestId: string) => void
+  onClearSelection: () => void
   autoStartDraft?: {
     readonly message: string
     readonly attachments: readonly ProjectAssistantTextAttachment[]
@@ -129,6 +135,9 @@ export default function WorkspaceAssistantPanel({
   projectId,
   episodeId,
   selection,
+  draftRequest,
+  onDraftRequestConsumed,
+  onClearSelection,
   autoStartDraft,
   autoStartKey,
   onAutoStartConsumed,
@@ -150,6 +159,12 @@ export default function WorkspaceAssistantPanel({
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage, panelScopeKey)
+  const { applyDraftRequest } = composer
+  useEffect(() => {
+    if (!draftRequest) return
+    applyDraftRequest(draftRequest)
+    onDraftRequestConsumed(draftRequest.requestId)
+  }, [applyDraftRequest, draftRequest, onDraftRequestConsumed])
   const [mediaUploadPending, setMediaUploadPending] = useState(false)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const uploadAttachmentFiles = async (files: readonly File[]): Promise<void> => {
@@ -560,6 +575,8 @@ export default function WorkspaceAssistantPanel({
                       ) : null}
                       <WorkspaceAssistantComposer
                         value={composer.text}
+                        textareaRef={composer.textareaRef}
+                        selection={selection}
                         error={composerFailureView}
                         pending={assistantRuntime.pending || assistantRuntime.viewLoading}
                         canStopReply={assistantRuntime.canStopReply}
@@ -588,6 +605,7 @@ export default function WorkspaceAssistantPanel({
                         onPasteMediaFiles={(files) => {
                           void uploadAttachmentFiles(files)
                         }}
+                        onClearSelection={onClearSelection}
                       />
                     </div>
                   </div>

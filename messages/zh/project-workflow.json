@@ -33,7 +33,118 @@
         "fitView": "适应画布",
         "zoomIn": "放大",
         "zoomOut": "缩小",
-        "autoFollow": "新增内容时适应画布"
+        "autoFollow": "新增内容时适应画布",
+        "showHidden": "显示已隐藏",
+        "showArchived": "显示已归档"
+      },
+      "actions": {
+        "discuss": "和 AI 讨论",
+        "modifyImage": "修改图片",
+        "imageToVideo": "生成视频",
+        "useReference": "用作参考",
+        "modifyVideo": "修改视频",
+        "modifyText": "修改文本",
+        "preview": "预览",
+        "copyPrompt": "复制提示词",
+        "copyPromptSuccess": "提示词已复制",
+        "copyPromptFailed": "提示词复制失败",
+        "download": "下载",
+        "retry": "重试",
+        "variant": "生成变体",
+        "edit_regenerate": "编辑后重新生成",
+        "archive": "归档",
+        "restore": "恢复",
+        "show": "显示",
+        "hide": "隐藏",
+        "unavailable": "当前无法执行此操作",
+        "prompts": {
+          "modifyImage": "请修改这张图片，同时保留当前结果中有用的部分。",
+          "useReference": "请把这个资源作为下一次创作的参考。",
+          "imageToVideo": "请基于这张图片生成视频。",
+          "modifyVideo": "请修改这个视频，同时保留当前结果中有用的部分。",
+          "modifyText": "请帮我修改这段文本。"
+        },
+        "editModal": {
+          "title": "编辑后重新生成",
+          "description": "调整生成要求，并选择要生成的结果数量。",
+          "cancel": "取消",
+          "continue": "继续",
+          "instruction": "生成要求",
+          "count": "结果数量"
+        }
+      },
+      "errors": {
+        "unknown": "这个资源生成失败，你可以重新尝试。"
+      },
+      "layoutSaveFailed": "画布布局保存失败，刚才的显示或隐藏操作已撤销。",
+      "preview": {
+        "position": "{current} / {total}",
+        "discuss": "讨论这个结果",
+        "groupDescription": "浏览 {count} 个独立生成的结果。",
+        "singleDescription": "预览这个资源。",
+        "previous": "上一个结果",
+        "next": "下一个结果",
+        "structuredUnknown": "结构化内容",
+        "structuredEntries": "结构化内容 · {count} 项"
+      },
+      "operationConfirm": {
+        "failed": "操作未能完成",
+        "destructiveTitle": "确认操作",
+        "title": "确认生成",
+        "destructiveDescription": "继续前请确认本次操作。",
+        "description": "确认生成任务数量与最高报价后再提交。",
+        "cancel": "取消",
+        "executing": "提交中…",
+        "confirm": "确认并生成",
+        "taskCount": "{count} 个生成任务",
+        "priceHidden": "价格不可见",
+        "priceCredits": "最高 {cost} 积分",
+        "destructiveBody": "此操作会修改当前选中的资源。"
+      },
+      "create": {
+        "menuTitle": "新建或上传",
+        "loading": "正在读取能力…",
+        "loadFailed": "生成能力读取失败。",
+        "retry": "重试",
+        "title": "新建{kind}",
+        "description": "填写基础生成信息，提交前可以确认报价。",
+        "cancel": "取消",
+        "continue": "继续",
+        "name": "名称",
+        "namePlaceholder": "可选的资源名称",
+        "voiceDescription": "声音描述",
+        "prompt": "提示词",
+        "voiceDescriptionPlaceholder": "描述音色、语气、口音和表达方式",
+        "promptPlaceholder": "描述你想生成的内容",
+        "voicePreviewText": "试听文本",
+        "voicePreviewPlaceholder": "输入一小段用于生成声音的文本",
+        "count": "结果数量",
+        "countRange": "{min}–{max}",
+        "duration": "时长（秒）",
+        "durationPlaceholder": "秒数",
+        "durationHelp": "请输入整数秒。",
+        "durationRange": "请输入 {min}–{max} 秒的整数。",
+        "projectRatio": "项目画幅",
+        "projectRatioUnset": "未设置",
+        "kind": {
+          "image": "图片",
+          "video": "视频",
+          "music": "配乐",
+          "voice": "语音",
+          "upload": "上传图片或音频"
+        }
+      },
+      "upload": {
+        "title": "上传任务",
+        "failed": "上传失败",
+        "retryUpload": "重试上传",
+        "retryMaterialize": "重试添加",
+        "dismiss": "关闭",
+        "stage": {
+          "uploading": "上传中…",
+          "materializing": "正在添加到画布…",
+          "ready": "已添加到画布"
+        }
       },
       "status": {
         "pending": "待处理",

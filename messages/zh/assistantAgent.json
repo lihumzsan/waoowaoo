@@ -35,6 +35,16 @@
     "pendingApprovalTitle": "待处理审批",
     "pendingApprovalCount": "{count} 个待处理动作"
   },
+  "canvasContext": {
+    "active": "已在画布中选中",
+    "clear": "清除画布选中项",
+    "mediaType": {
+      "text": "文本",
+      "image": "图片",
+      "audio": "音频",
+      "video": "视频"
+    }
+  },
   "plan": {
     "title": "执行计划",
     "completedProgress": "已完成 {completed} / {total}"

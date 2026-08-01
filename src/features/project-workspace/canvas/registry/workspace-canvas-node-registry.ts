@@ -1,6 +1,8 @@
 import type { AppIconName } from '@/components/ui/icons'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 import type { WorkspaceCanvasNodeKind } from '../node-canvas-types'
+import type { WorkspaceCanvasNodeActionKey } from '../contracts/workspace-canvas-interactions'
+import type { CreativeResourceMediaType } from '@/lib/creative-resource/contracts'
 
 interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind = WorkspaceCanvasNodeKind> {
   readonly kind: K
@@ -8,6 +10,10 @@ interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind = Work
   readonly taskTargetType: 'CreativeResource'
   readonly taskTypes: readonly TaskType[]
   readonly rendererKey: K
+  readonly actionKeysByMediaType: Readonly<Record<
+    CreativeResourceMediaType,
+    readonly WorkspaceCanvasNodeActionKey[]
+  >>
   /**
    * Card chrome declaration. Domain identifiers (schemaId, resource IDs)
    * never appear as card copy (CN-05); category naming, when needed, must be
@@ -34,6 +40,26 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
       TASK_TYPE.CREATIVE_RESOURCE_WEB_REFERENCE,
     ],
     rendererKey: 'resourceCard',
+    actionKeysByMediaType: {
+      text: [
+        'discuss', 'modify_text', 'copy_prompt', 'preview_alternatives',
+        'retry', 'variant', 'edit_regenerate', 'archive', 'restore', 'hide', 'show',
+      ],
+      image: [
+        'discuss', 'modify_image', 'image_to_video', 'use_reference', 'preview_alternatives',
+        'copy_prompt', 'download', 'retry', 'variant', 'edit_regenerate',
+        'archive', 'restore', 'hide', 'show',
+      ],
+      audio: [
+        'discuss', 'use_reference', 'preview_alternatives', 'copy_prompt', 'download',
+        'retry', 'variant', 'edit_regenerate', 'archive', 'restore', 'hide', 'show',
+      ],
+      video: [
+        'discuss', 'modify_video', 'use_reference', 'preview_alternatives',
+        'copy_prompt', 'download', 'retry', 'variant', 'edit_regenerate',
+        'archive', 'restore', 'hide', 'show',
+      ],
+    },
     presentation: {
       iconName: 'package',
       hasSourceHandle: true,

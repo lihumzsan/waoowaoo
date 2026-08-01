@@ -6,6 +6,7 @@ import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { WorkspaceNodeImagePreviewContext } from '../nodes/renderers/renderer-shared'
 import { WorkspaceNodeDetailsPanel } from './WorkspaceNodeDetailsPanel'
+import type { WorkspaceCanvasResourceOperationView } from '../contracts/workspace-canvas-interactions'
 
 const DETAILS_CARD_GAP = 16
 /**
@@ -21,7 +22,23 @@ const DETAILS_CARD_MIN_WIDTH = 720
  * It only consumes the card View (prompt provenance + resolved input
  * summaries); it never fetches by raw resource ID.
  */
-export function WorkspaceNodeDetailsCard({ node }: { readonly node: WorkspaceCanvasFlowNode }) {
+export interface WorkspaceNodeDetailsActions {
+  readonly busy: boolean
+  readonly hidden: boolean
+  readonly onAssistantPrefill: (text: string | null) => void
+  readonly onPreview: () => void
+  readonly onOperation: (operation: WorkspaceCanvasResourceOperationView) => void
+  readonly onSetArchived: (archived: boolean) => void
+  readonly onVisibilityChange: (hidden: boolean) => void
+}
+
+export function WorkspaceNodeDetailsCard({
+  node,
+  actions,
+}: {
+  readonly node: WorkspaceCanvasFlowNode
+  readonly actions: WorkspaceNodeDetailsActions
+}) {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const resource = node.data.resourceDetails.resource
   const prompt = resource.materialization?.provenance.prompt
@@ -47,7 +64,13 @@ export function WorkspaceNodeDetailsCard({ node }: { readonly node: WorkspaceCan
           onClick={(event) => event.stopPropagation()}
           onMouseDownCapture={(event) => event.stopPropagation()}
         >
-          <WorkspaceNodeDetailsPanel prompt={prompt} modelKey={modelKey} inputs={inputs} />
+          <WorkspaceNodeDetailsPanel
+            card={node.data.resourceDetails}
+            prompt={prompt}
+            modelKey={modelKey}
+            inputs={inputs}
+            actions={actions}
+          />
         </div>
       </ViewportPortal>
       {previewImageUrl ? (

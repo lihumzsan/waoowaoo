@@ -35,6 +35,16 @@
     "pendingApprovalTitle": "Pending approval",
     "pendingApprovalCount": "{count} pending actions"
   },
+  "canvasContext": {
+    "active": "Selected on Canvas",
+    "clear": "Clear Canvas selection",
+    "mediaType": {
+      "text": "Text",
+      "image": "Image",
+      "audio": "Audio",
+      "video": "Video"
+    }
+  },
   "plan": {
     "title": "Plan",
     "completedProgress": "Completed {completed} / {total}"
