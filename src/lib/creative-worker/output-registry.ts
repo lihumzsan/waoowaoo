@@ -75,6 +75,7 @@ export interface CreativeWorkOutputDefinition {
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
   injectCreativeDirection: boolean
+  requiresHumanVisualSafety: boolean
   workerTools: readonly ('web_search')[]
   requiredSourceSchemaIds: readonly string[]
 }
@@ -86,6 +87,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
     injectCreativeDirection: true,
+    requiresHumanVisualSafety: false,
     workerTools: [],
     requiredSourceSchemaIds: [],
   },
@@ -95,6 +97,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.chapter_continuity_plan,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    requiresHumanVisualSafety: false,
     workerTools: [],
     requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
@@ -104,6 +107,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
     injectCreativeDirection: false,
+    requiresHumanVisualSafety: true,
     workerTools: ['web_search'],
     requiredSourceSchemaIds: [],
   },
@@ -113,6 +117,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
     injectCreativeDirection: true,
+    requiresHumanVisualSafety: true,
     workerTools: [],
     requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
@@ -122,6 +127,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    requiresHumanVisualSafety: true,
     workerTools: [],
     requiredSourceSchemaIds: [],
   },
@@ -131,6 +137,7 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
     injectCreativeDirection: true,
+    requiresHumanVisualSafety: false,
     workerTools: [],
     requiredSourceSchemaIds: [],
   },

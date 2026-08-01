@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
+import { HUMAN_VISUAL_SAFETY_POLICY } from '@/lib/ai-prompts'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS } from '@/lib/creative-resource/generation-contract'
 import {
@@ -369,6 +370,26 @@ type CreativeWorkTaskItem = CreativeWorkTaskRequest & {
   readonly requestKey: string
 }
 
+function applyHumanVisualSafetyPolicy(
+  request: CreativeWorkHydratedItem,
+): CreativeWorkHydratedItem {
+  if (!readCreativeWorkOutputDefinition(request.outputKind).requiresHumanVisualSafety) {
+    return request
+  }
+  return {
+    ...request,
+    context: {
+      ...request.context,
+      constraints: [
+        HUMAN_VISUAL_SAFETY_POLICY,
+        ...request.context.constraints.filter(
+          (constraint) => constraint !== HUMAN_VISUAL_SAFETY_POLICY,
+        ),
+      ],
+    },
+  }
+}
+
 function canComposeDuration(
   target: number,
   options: readonly number[],
@@ -421,7 +442,7 @@ async function resolveTaskRequests(input: {
   readonly userId: string
   readonly adoptedCreativeDirection: AdoptedCreativeDirectionSnapshot | null
 }): Promise<CreativeWorkTaskItem[]> {
-  const requests = input.requests
+  const requests = input.requests.map(applyHumanVisualSafetyPolicy)
   const musicContext = requests.some(
     (request) => request.outputKind === 'music_direction',
   )

@@ -4,7 +4,7 @@ import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
 import {
-  CREATIVE_WORK_CONSTRAINT_LIMIT,
+  CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT,
   CREATIVE_WORK_OUTPUT_KINDS,
 } from './constants'
 import {
@@ -112,7 +112,7 @@ const creativeWorkChapterBatchBaseShape = {
   userRequest: z.string().max(30_000)
     .describe('Relevant original user request preserved for every Chapter Worker.'),
   constraints: z.array(z.string().trim().min(1).max(4_000))
-    .max(CREATIVE_WORK_CONSTRAINT_LIMIT)
+    .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
     .describe('Shared delivery, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
     resourceId: z.string().trim().min(1),

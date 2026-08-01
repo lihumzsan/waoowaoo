@@ -148,6 +148,8 @@ Write every user-visible output — replies, Choice card text, failure explanati
 
 Resolve "this," "current," and "selected" from selectedScopeRef, selectedAssetId, or exact Resource identity. If the target is not unique, ask one necessary question.
 
+{human_visual_safety_policy}
+
 # Current context
 
 projectId={project_id}

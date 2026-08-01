@@ -2,7 +2,8 @@ import type { Model } from '@openai/agents'
 import { z } from 'zod'
 import { injectedCreativeDirectionSchema } from '@/lib/creative-direction/contracts'
 import {
-  CREATIVE_WORK_CONSTRAINT_LIMIT,
+  CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT,
+  CREATIVE_WORK_HYDRATED_CONSTRAINT_LIMIT,
   CREATIVE_WORK_OUTPUT_KINDS,
   DEFAULT_CREATIVE_WORKER_BUDGETS,
 } from './constants'
@@ -190,7 +191,7 @@ export const creativeWorkDelegationRequestSchema = z
           ),
         constraints: z
           .array(z.string().trim().min(1).max(4_000))
-          .max(CREATIVE_WORK_CONSTRAINT_LIMIT)
+          .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
           .describe(
             'Explicit creative, duration, format, continuity, or delivery constraints that the result must satisfy.',
           ),
@@ -212,7 +213,7 @@ export const creativeWorkHydratedRequestSchema = z
         sourceMaterials: z.array(creativeWorkHydratedSourceMaterialSchema).max(64),
         constraints: z
           .array(z.string().trim().min(1).max(4_000))
-          .max(CREATIVE_WORK_CONSTRAINT_LIMIT),
+          .max(CREATIVE_WORK_HYDRATED_CONSTRAINT_LIMIT),
       })
       .strict(),
   })

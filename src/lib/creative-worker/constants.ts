@@ -7,7 +7,8 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
   'music_direction',
 ] as const
 
-export const CREATIVE_WORK_CONSTRAINT_LIMIT = 64
+export const CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT = 64
+export const CREATIVE_WORK_HYDRATED_CONSTRAINT_LIMIT = 65
 
 // Skill resources are authored in this repository and reviewed with the code
 // that reads them, so their size is an authoring concern rather than a runtime

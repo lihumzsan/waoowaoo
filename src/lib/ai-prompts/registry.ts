@@ -4,7 +4,7 @@ import type { AiPromptCatalogEntry } from './types'
 export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   [AI_PROMPT_IDS.PROJECT_AGENT_SYSTEM]: {
     pathStem: 'project-agent/system',
-    variableKeys: ['project_id', 'episode_id'],
+    variableKeys: ['project_id', 'episode_id', 'human_visual_safety_policy'],
   },
   [AI_PROMPT_IDS.PROJECT_AGENT_CONTEXT_CHECKPOINT]: {
     pathStem: 'project-agent/context-checkpoint',

@@ -1,4 +1,8 @@
-import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
+import {
+  AI_PROMPT_IDS,
+  buildAiPrompt,
+  HUMAN_VISUAL_SAFETY_POLICY,
+} from '@/lib/ai-prompts'
 
 export function buildProjectAgentSystemPrompt(params: {
   projectId: string
@@ -9,6 +13,7 @@ export function buildProjectAgentSystemPrompt(params: {
     variables: {
       project_id: params.projectId,
       episode_id: params.episodeId,
+      human_visual_safety_policy: HUMAN_VISUAL_SAFETY_POLICY,
     },
   })
 }
