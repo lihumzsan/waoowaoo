@@ -53,7 +53,8 @@
         "src/lib/operations/planning.ts",
         "src/lib/operations/types.ts",
         "src/lib/operations/registry.ts",
-        "src/lib/operations/operation-plan-snapshot.ts",
+      "src/lib/operations/operation-plan-snapshot.ts",
+      "src/lib/operations/api-request-identity.ts",
         "src/lib/operations/operation-plan-revalidation.ts",
         "src/lib/operations/planned-operation-invocation.ts",
         "src/lib/operations/channel-policy.ts",
@@ -79,7 +80,8 @@
         "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
         "prisma/migrations/20260713110000_remove_operation_plan_expiry/migration.sql",
         "prisma/migrations/20260719143000_add_assistant_billing_confirmation/migration.sql",
-        "prisma/migrations/20260729170000_add_operation_plan_execution_contract_revision/migration.sql"
+        "prisma/migrations/20260729170000_add_operation_plan_execution_contract_revision/migration.sql",
+        "prisma/migrations/20260801120000_add_canvas_resource_controls/migration.sql"
       ]
     },
     {
@@ -93,7 +95,10 @@
         "src/features/project-workspace/hooks/useWorkspaceExecution.ts",
         "src/features/project-workspace/hooks/workspace-controller-view-model.ts",
         "src/features/project-workspace/canvas",
-        "src/lib/project-canvas/layout/canvas-layout-contract.ts",
+        "src/lib/project-canvas/layout",
+        "src/lib/operations/canvas-action-catalog.ts",
+        "src/lib/query/hooks/useCanvasActions.ts",
+        "src/app/api/projects/[projectId]/canvas-actions",
         "src/features/project-workspace/components/WorkspaceHeaderShell.tsx",
         "src/features/project-workspace/episode-planning-overview.ts",
         "src/features/project-workspace/components/ProjectAssetLibrary.tsx",
@@ -123,7 +128,8 @@
         "src/app/api/projects/[projectId]/story-canon/route.ts",
         "src/lib/story-canon/service.ts",
         "src/types/project.ts",
-        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql",
+        "prisma/migrations/20260801120000_add_canvas_resource_controls/migration.sql"
       ]
     },
     {
@@ -144,7 +150,9 @@
         "src/lib/task/execution/handlers/creative-resource-video-merge.ts",
         "src/app/api/projects/[projectId]/resources",
         "src/app/api/projects/[projectId]/upload-media",
+        "src/app/api/projects/[projectId]/uploaded-media",
         "src/lib/query/hooks/useCreativeResources.ts",
+        "src/lib/project-projection/lite.ts",
         "src/lib/query/keys.ts",
         "src/lib/video-generation/reference-images.ts",
         "src/features/project-workspace/canvas/nodes/renderers/resource-card.tsx",
@@ -160,7 +168,8 @@
         "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql",
         "prisma/migrations/20260724223000_creative_direction_cutover/migration.sql",
         "prisma/migrations/20260729090000_collapse_creative_resource_identity/migration.sql",
-        "prisma/migrations/20260801090000_remove_resource_candidate_sets/migration.sql"
+        "prisma/migrations/20260801090000_remove_resource_candidate_sets/migration.sql",
+        "prisma/migrations/20260801120000_add_canvas_resource_controls/migration.sql"
       ]
     },
     {

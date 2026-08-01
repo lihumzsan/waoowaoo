@@ -10,7 +10,7 @@ function requireIdentity(value: string, code: string): string {
   return normalized
 }
 
-function buildShortIdentity(prefix: 'r_' | 'rs_', namespace: string, parts: readonly string[]): string {
+function buildShortIdentity(prefix: 'r_' | 'rag_', namespace: string, parts: readonly string[]): string {
   const digest = createHash('sha256')
   for (const part of [namespace, ...parts]) {
     const normalized = requireIdentity(part, 'CREATIVE_RESOURCE_IDENTITY_PART_REQUIRED')
@@ -19,6 +19,21 @@ function buildShortIdentity(prefix: 'r_' | 'rs_', namespace: string, parts: read
     digest.update(normalized)
   }
   return `${prefix}${digest.digest().subarray(0, 16).toString('base64url')}`
+}
+
+/**
+ * Public, opaque identity for the alternatives relation owned by one initial
+ * OperationExecution. The execution id stays server-internal and retry
+ * executions cannot change this identity.
+ */
+export function buildCreativeResourceAlternativeGroupId(input: {
+  readonly operationExecutionId: string
+}): string {
+  const operationExecutionId = requireIdentity(
+    input.operationExecutionId,
+    'CREATIVE_RESOURCE_ALTERNATIVE_GROUP_EXECUTION_ID_REQUIRED',
+  )
+  return buildShortIdentity('rag_', 'alternative-group', [operationExecutionId])
 }
 
 export function buildCreativeResourceScopeRef(input: {

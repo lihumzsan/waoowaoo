@@ -14,7 +14,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-02B — 节点物化单调。** canonical identity 一旦由持久 Resource 或 Task target 建立，不得因 Task 先于 Query 消失而撤销节点。交接只能由相同 owner Task identity 的正式 Resource materialization 完成。
 - **CN-02C — 节点与动作不受流程解释。** 任一持久 CreativeResource 或 active Resource Task 都可按自身 canonical identity 物化；不得恢复 Workflow step、stage rank、`allowedOperationIds`、时长分支或推荐位置。卡片能力只来自节点 registry、Operation channel 与显式 scope/input。
 - **CN-02D — ResourceCard 优先复用专业节点。** `CreativeResource.origin(sourceType, sourceId)` 能与已有专业节点 identity 对齐时，Resource provenance、Lineage、Prompt 和模型信息必须附加到该专业节点，不得再生成一个重复通用节点；无法匹配专业 renderer 时才创建通用 text/image/audio/video ResourceCard。`schemaId` 表达专业语义，`mediaType` 只选择 fallback。
-- **CN-02E — 批次与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；Prompt Set、多角色音色和 Manifest 多资产等领域批次只用 `memberIndex` 保持稳定展示顺序，不合并成候选节点。当前项来自服务端 typed current selection，renderer 不得通过数组位置、当前 head 或本地选中态覆盖它。
+- **CN-02E — 批次、alternatives 与当前选择不改变节点事实。** 每个 Resource 始终按自己的 identity 形成节点；Prompt Set、多角色音色和 Manifest 多资产等领域批次只用 `memberIndex` 保持稳定展示顺序，不合并成候选节点。只有一次 generation request 实际创建两个以上结果时，Resource View 才下发 opaque alternatives group identity 与完整有序成员；单结果不伪造组。组也不合并节点、不产生同组 edge、不保存 selected/current/adopt；预览左右浏览的 index 只是 modal UI 状态。当前项仍只来自服务端 typed current selection，renderer 不得通过数组位置、当前 head 或本地选中态覆盖它。
 - **CN-03 — 运行展示无裁决权。** Creative reasoning 与 Task progress 只在 Assistant/Task 运行视图展示，不能创建 Canvas 领域节点或写业务状态；正式物化 Resource 才能接手结果。
 - **CN-04 — 生命周期只有一个 resolver。** 持久 Resource、Task runtime 与纯 UI disclosure 是独立输入；projector/renderer 不得自行根据文案、有无字段、timer 或 refetch 推断 succeeded/failed。
 - **CN-05 — UI 不展示领域 ID。** raw preview 展示名称/短引用，正式 View 展示服务端按 canonical identity 投影的当前名称。缺少 View 必须显式失败，不得 `name ?? id`。
@@ -26,6 +26,10 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - **CN-11 — 媒体 presentation 只来自 profile 契约。** 卡片形态与尺寸由 `node-presentation-profiles.ts` 按媒体族穷尽声明：image/video 为 `frame`，其画幅只按“生成时冻结的 aspectRatio → 已完成媒体 width/height → Asset Format Policy → 项目 videoRatio”解析；audio 为 `bar` 矮条、text 为固定 `card`。pending 生成外壳与就绪媒体共用同一 shell，完成时不跳变；资产图由同一 shell 声明 `contain`，不得裁切人物、场景或道具。projector 与 renderer 只消费解析后的 shell，禁止各自按媒体类型分支尺寸。折叠卡只显示标题、状态与媒体本体（或生成外壳），不显示提示词、引用列表、进度条或任何领域 ID；生成中呈现为阶段文案（submitted/queued/generating，`saving` 为预留映射位）加模拟百分比，超时后只显示已等待时长，永不钉在 99%。
 - **CN-12 — 详情卡是唯一展开机制。** 选中节点在其正下方渲染唯一详情卡（ReactFlow viewport 层，跟随画布坐标），内容只消费该卡 View 的 prompt provenance 与服务端一次性下发的 `inputSummaries`；UI 不得按 resourceId 零散请求或推断引用。取消选中或点击空白关闭。不存在第二种展开/收起或 disclosure 状态。
 - **CN-13 — 新批次只调整一次整体视口。** Assistant Session 投影的持久 Task batch identity 是自动定位的唯一请求身份；批次至少一个 durable target 物化成 Canvas 节点后，只对当前整个 Canvas 执行一次 `fitView`。同批成员的 queued/running/terminal 变化、查询刷新和节点顺序变化都不得再次移动视口；用户拖拽、平移或缩放立即终止本次动画并把该批次标记为已处理。禁止按第一个 running 节点轮换、单节点放大、timer 恢复跟随或从 Operation 名称推断焦点。
+- **CN-14 — Canvas 直接动作只复用正式 Operation。** 卡片 retry、variant、edit、创建与上传必须从最终 Card/Action View 构造 exact Resource scope，经同一个 plan/snapshot/grant/execute 或 direct Operation adapter 写入；UI 不插入假 Resource、不改本地生命周期，只把成功 execute ACK、mutation receipt 或 SSE 作为正式 Query 失效信号。付费动作一次用户意图持有稳定 `Idempotency-Key/operationRequestId`，并只批准当前展示的完整计划。
+- **CN-14A — Canvas 表单只消费服务端能力边界。** 新建菜单与基础表单只消费生产 Operation registry 投影的 capability catalog，包括候选数量、时长与 Voice 文本上限；catalog 失败必须显式提供重试，不得静默表现为只剩上传。表单校验只改善即时反馈，最终业务输入仍由同一个 Operation schema 与 planner 裁决。
+- **CN-15 — 选择与 Assistant 草稿各有唯一 UI owner。** `ProjectWorkspace` 持有唯一 Canvas selection，Canvas、Context Chip 与 send context 都消费同一值；清除 Chip 必须清除 Canvas 选中。快捷语义动作只发送一次性受控 draft-prefill/focus 命令，不创建全局事件总线或第二份 selection。
+- **CN-16 — 隐藏只属于 layout，归档只属于 Resource。** 节点 `hidden` 与位置共用 canvas-layout row、snapshot 和唯一 PATCH writer；全部节点在持久化输入中保留，渲染层才过滤 hidden，显示隐藏只是 UI override。Resource `archivedAt` 是可恢复的组织事实，默认不投影但可显式查询用于恢复；二者不得互相写入或改变 Resource status、Lineage、Binding、Task 与内容。归档 active Resource 必须拒绝，不能隐式取消 Task。
 
 ## 权威入口
 
@@ -35,6 +39,8 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - 投影编排：`src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts`。
 - Resource 投影与通用 fallback renderer：`workspace-node-resource-projection.ts`、`nodes/renderers/resource-card.tsx`、`nodes/renderers/resource-media-shell.tsx`；Resource View 来自 `src/lib/creative-resource/view-service.ts`。
 - 选中详情卡：`src/features/project-workspace/canvas/details/WorkspaceNodeDetailsCard.tsx` 负责 viewport 定位与宽度，唯一展示实现在同目录 `WorkspaceNodeDetailsPanel.tsx`；数据只来自 card View（prompt provenance + `inputSummaries`）。
+- Canvas 直接动作、创建、上传和 Assistant 预填：`src/features/project-workspace/canvas/actions/**`、`canvas/upload/**` 与 `ProjectWorkspace` 的受控 selection/draft bridge；服务端写入仍只走 Operation adapter。
+- 节点位置与隐藏：`src/lib/project-canvas/layout/**` 与 `/api/projects/[projectId]/canvas-layout`；不存在第二隐藏集合或 route。
 - 可选领域事实投影必须先对齐 Resource origin/lineage；不存在 planning/asset-execution/video-stage projector。
 - 音频与成片同样使用普通 Resource 投影，不得恢复声音或最终阶段节点。
 - 唯一 lifecycle resolver：`src/features/project-workspace/canvas/lifecycle/**`。
@@ -44,6 +50,7 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 registry 穷尽校验 kind/capability/renderer/fixture，并校验媒体 presentation 契约对全部 media type 穷尽、frame shell 按画幅比解析。
 - Canvas 的布局、卡片、刷新、媒体展示和真实 Resource/Task/Lineage 组合没有稳定独立 oracle，使用 authenticated 产品人工复验；不再维护 projection snapshot 或脚本创作 Journey。
+- alternatives 的独立 Resource、左右浏览、多媒体 renderer、付费确认、上传两段恢复、归档/隐藏恢复同样属于 authenticated 产品人工复验；静态验证只能证明 registry、类型和唯一协议接线。
 
 ## 历史回归
 
@@ -60,6 +67,8 @@ Canvas 是正式领域 View 与持久 Resource View 的可视化投影，不是�
 - Resource 提交曾只显示 Assistant 回执，Canvas 要等媒体终态才看见节点和 prompt；专业源剧本 origin 匹配错误又生成 raw JSON 重复卡，规划 projector 还会凭来源种类创建空制作规划和主链假连线。当前 pending Resource 提交事务立即触发正式 Query，renderer 从冻结 Task payload 展示 prompt；专业 origin 只匹配真实专业 identity，所有非 Lineage 连线已删除。
 - Workflow action gating 删除后，旧 Video Segment 卡仍按资产审核/镜头计划状态预取付费 plan，说明删除 gate 没有删除固定链。当前该专用 action policy 和 projector 一并删除；新的生成或重试只由显式 Resource 输入调用通用 Operation。
 - Canvas 自动跟随最初为串行阶段设计：它持续选择“第一个 running 节点”，同批并发成员逐个终态时选择结果随之变化，并由 3 秒 timer 在用户操作后重新抢回视口。媒体卡同时把所有图片强塞进项目 `videoRatio` 外壳并使用 `object-cover`，4:3 资产图因此上下裁切。当前批次 identity 只触发一次全画布 `fitView`，用户操作立即终止；媒体 shell 由冻结执行事实、真实媒体尺寸和 Asset Format Policy 依次解析，资产完整显示。
+- 通用 candidate/adoption 协议曾把 candidate set、selected binding 与整个组节点混在一起，但没有真实产品消费者；`494dacbc7` 因此删除全部死协议。当前 Canvas 的真实需求只恢复“同一次显式 generation request 的 alternatives”这一事实：组 owner 是初始 OperationExecution，成员仍是独立 Resource，View 只提供有序浏览；generic adopt、selected/current、组级 lifecycle 与组节点保持删除。
+- Canvas 选中曾由 Canvas 本地 `selectedNodeId` 拥有、父级再保存一份派生 `assistantSelection`；Chip 即使清空父级也会被子级回写。当前父级是唯一 selection owner，Canvas 与 Assistant 都受控消费同一值。
 
 ## 修改检查表
 

@@ -12,6 +12,9 @@ import {
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { isTaskType } from '@/lib/task/types'
 import { GLOBAL_ASSET_PROJECT_ID } from '@/lib/workspace-resource/resource-impact'
+import { ApiError } from '@/lib/api-errors'
+
+type OperationPlanSnapshotRow = Prisma.OperationPlanSnapshotGetPayload<Record<string, never>>
 
 function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(canonicalJson(value)) as Prisma.InputJsonValue
@@ -177,6 +180,8 @@ export interface PersistedOperationPlanSnapshot {
   projectId: string | null
   episodeId: string | null
   operationId: string
+  apiRequestId: string | null
+  apiRequestContextHash: string | null
   executionContractRevision: string
   normalizedInput: unknown
   inputHash: string
@@ -204,12 +209,118 @@ export function hashOperationPlanArtifacts(params: {
   }
 }
 
+function parsePersistedOperationPlanSnapshot(
+  record: OperationPlanSnapshotRow,
+): PersistedOperationPlanSnapshot {
+  const plan = parseOperationPlan(record.planSnapshot)
+  const quote = readRecord(record.quoteSnapshot, 'quoteSnapshot') as unknown as BillingQuoteView
+  if (hashCanonicalJson(record.normalizedInput) !== record.inputHash) {
+    throw new Error(`OPERATION_PLAN_INPUT_HASH_MISMATCH:${record.id}`)
+  }
+  if (hashCanonicalJson(record.planSnapshot) !== record.planHash) {
+    throw new Error(`OPERATION_PLAN_HASH_MISMATCH:${record.id}`)
+  }
+  if (hashCanonicalJson(record.quoteSnapshot) !== record.quoteHash) {
+    throw new Error(`OPERATION_QUOTE_HASH_MISMATCH:${record.id}`)
+  }
+  if (
+    (record.apiRequestId === null) !== (record.apiRequestContextHash === null)
+  ) {
+    throw new Error(`OPERATION_PLAN_API_REQUEST_CONTEXT_INVALID:${record.id}`)
+  }
+  return {
+    id: record.id,
+    userId: record.userId,
+    scopeKind: record.scopeKind,
+    scopeId: record.scopeId,
+    projectId: record.projectId,
+    episodeId: record.episodeId,
+    operationId: record.operationId,
+    apiRequestId: record.apiRequestId,
+    apiRequestContextHash: record.apiRequestContextHash,
+    executionContractRevision: readString(record, 'executionContractRevision'),
+    normalizedInput: record.normalizedInput,
+    inputHash: record.inputHash,
+    plan,
+    planHash: record.planHash,
+    quote,
+    quoteHash: record.quoteHash,
+  }
+}
+
+function assertApiRequestReplayMatches(params: {
+  readonly snapshot: PersistedOperationPlanSnapshot
+  readonly executionContractRevision: string
+  readonly episodeId?: string | null
+  readonly inputHash: string
+  readonly apiRequestContextHash?: string
+  readonly planHash?: string
+  readonly quoteHash?: string
+}): void {
+  const snapshot = params.snapshot
+  if (
+    snapshot.executionContractRevision !== params.executionContractRevision
+    || (params.episodeId !== undefined && snapshot.episodeId !== params.episodeId)
+    || snapshot.inputHash !== params.inputHash
+    || (
+      params.apiRequestContextHash !== undefined
+      && snapshot.apiRequestContextHash !== params.apiRequestContextHash
+    )
+    || (params.planHash !== undefined && snapshot.planHash !== params.planHash)
+    || (params.quoteHash !== undefined && snapshot.quoteHash !== params.quoteHash)
+  ) {
+    throw new ApiError('CONFLICT', {
+      code: 'OPERATION_PLAN_REQUEST_REPLAY_DIVERGED',
+      operationId: snapshot.operationId,
+    })
+  }
+}
+
+export async function loadOperationPlanSnapshotByApiRequest(params: {
+  readonly userId: string
+  readonly projectId: string
+  readonly operationId: string
+  readonly apiRequestId: string
+  readonly executionContractRevision: string
+  readonly normalizedInput: unknown
+  readonly apiRequestContext: unknown
+}): Promise<PersistedOperationPlanSnapshot | null> {
+  const apiRequestId = params.apiRequestId.trim()
+  if (!apiRequestId || apiRequestId.length > 128) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_IDEMPOTENCY_KEY_INVALID',
+      header: 'Idempotency-Key',
+    })
+  }
+  const record = await prisma.operationPlanSnapshot.findFirst({
+    where: {
+      userId: params.userId,
+      scopeKind: 'project',
+      scopeId: params.projectId,
+      projectId: params.projectId,
+      operationId: params.operationId,
+      apiRequestId,
+    },
+  })
+  if (!record) return null
+  const snapshot = parsePersistedOperationPlanSnapshot(record)
+  assertApiRequestReplayMatches({
+    snapshot,
+    executionContractRevision: params.executionContractRevision,
+    inputHash: hashCanonicalJson(params.normalizedInput),
+    apiRequestContextHash: hashCanonicalJson(params.apiRequestContext),
+  })
+  return snapshot
+}
+
 export async function persistOperationPlanSnapshot(params: {
   plan: OperationPlan
   executionContractRevision: string
   normalizedInput: unknown
   quote: BillingQuoteView
   episodeId?: string | null
+  apiRequestId?: string | null
+  apiRequestContext?: unknown
 }): Promise<PersistedOperationPlanSnapshot> {
   const executionContractRevision = params.executionContractRevision.trim()
   if (!executionContractRevision) {
@@ -219,7 +330,17 @@ export async function persistOperationPlanSnapshot(params: {
   await assertOperationPlanTaskDependencies(params.plan)
   const scopeKind = params.plan.projectId === GLOBAL_ASSET_PROJECT_ID ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId
+  const apiRequestId = params.apiRequestId?.trim() || null
+  if (apiRequestId && apiRequestId.length > 128) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_IDEMPOTENCY_KEY_INVALID',
+      header: 'Idempotency-Key',
+    })
+  }
   const normalizedInput = toInputJson(params.normalizedInput)
+  const apiRequestContextHash = apiRequestId
+    ? hashCanonicalJson(params.apiRequestContext ?? {})
+    : null
   const planSnapshot = toInputJson(params.plan)
   const quoteSnapshot = toInputJson(params.quote)
   const { inputHash, planHash, quoteHash } = hashOperationPlanArtifacts({
@@ -227,39 +348,56 @@ export async function persistOperationPlanSnapshot(params: {
     plan: params.plan,
     quote: params.quote,
   })
-  const created = await prisma.operationPlanSnapshot.create({
-    data: {
-      id: randomUUID(),
-      userId: params.plan.userId,
-      scopeKind,
-      scopeId,
-      projectId: scopeKind === 'project' ? params.plan.projectId : null,
-      episodeId: params.episodeId ?? null,
-      operationId: params.plan.operationId,
-      executionContractRevision,
-      normalizedInput,
-      inputHash,
-      planSnapshot,
-      planHash,
-      quoteSnapshot,
-      quoteHash,
-    },
-  })
-  return {
-    id: created.id,
-    userId: created.userId,
-    scopeKind: created.scopeKind,
-    scopeId: created.scopeId,
-    projectId: created.projectId,
-    episodeId: created.episodeId,
-    operationId: created.operationId,
-    executionContractRevision: created.executionContractRevision,
+  const snapshotData = {
+    id: randomUUID(),
+    userId: params.plan.userId,
+    scopeKind,
+    scopeId,
+    projectId: scopeKind === 'project' ? params.plan.projectId : null,
+    episodeId: params.episodeId ?? null,
+    operationId: params.plan.operationId,
+    apiRequestId,
+    apiRequestContextHash,
+    executionContractRevision,
     normalizedInput,
     inputHash,
-    plan: params.plan,
+    planSnapshot,
     planHash,
-    quote: params.quote,
+    quoteSnapshot,
     quoteHash,
+  }
+  try {
+    const created = await prisma.operationPlanSnapshot.create({ data: snapshotData })
+    return parsePersistedOperationPlanSnapshot(created)
+  } catch (error) {
+    if (
+      !apiRequestId
+      || !(error instanceof Prisma.PrismaClientKnownRequestError)
+      || error.code !== 'P2002'
+    ) {
+      throw error
+    }
+    const record = await prisma.operationPlanSnapshot.findFirst({
+      where: {
+        userId: params.plan.userId,
+        scopeKind,
+        scopeId,
+        operationId: params.plan.operationId,
+        apiRequestId,
+      },
+    })
+    if (!record) throw error
+    const snapshot = parsePersistedOperationPlanSnapshot(record)
+    assertApiRequestReplayMatches({
+      snapshot,
+      executionContractRevision,
+      episodeId: params.episodeId ?? null,
+      inputHash,
+      ...(apiRequestContextHash ? { apiRequestContextHash } : {}),
+      planHash,
+      quoteHash,
+    })
+    return snapshot
   }
 }
 
@@ -273,33 +411,7 @@ export async function loadOperationPlanSnapshot(
     where: { id },
   })
   if (!record) return null
-  const plan = parseOperationPlan(record.planSnapshot)
-  const quote = readRecord(record.quoteSnapshot, 'quoteSnapshot') as unknown as BillingQuoteView
-  if (hashCanonicalJson(record.normalizedInput) !== record.inputHash) {
-    throw new Error(`OPERATION_PLAN_INPUT_HASH_MISMATCH:${record.id}`)
-  }
-  if (hashCanonicalJson(record.planSnapshot) !== record.planHash) {
-    throw new Error(`OPERATION_PLAN_HASH_MISMATCH:${record.id}`)
-  }
-  if (hashCanonicalJson(record.quoteSnapshot) !== record.quoteHash) {
-    throw new Error(`OPERATION_QUOTE_HASH_MISMATCH:${record.id}`)
-  }
-  return {
-    id: record.id,
-    userId: record.userId,
-    scopeKind: record.scopeKind,
-    scopeId: record.scopeId,
-    projectId: record.projectId,
-    episodeId: record.episodeId,
-    operationId: record.operationId,
-    executionContractRevision: readString(record, 'executionContractRevision'),
-    normalizedInput: record.normalizedInput,
-    inputHash: record.inputHash,
-    plan,
-    planHash: record.planHash,
-    quote,
-    quoteHash: record.quoteHash,
-  }
+  return parsePersistedOperationPlanSnapshot(record)
 }
 
 export function attachPersistedPlanIdentity(view: OperationPlanView, snapshot: PersistedOperationPlanSnapshot): OperationPlanView {

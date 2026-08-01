@@ -102,6 +102,7 @@ const audioVideoReferencesSchema = z.array(creativeResourceInputRefSchema)
  * absence before freezing generation options.
  */
 const CAPABILITY_AUTO = 'auto'
+const NEW_AUDIO_DURATION_SECONDS = { min: 1, max: 600 } as const
 
 const commonNewMediaGenerationShape = {
   kind: z.literal('new'),
@@ -110,6 +111,8 @@ const commonNewMediaGenerationShape = {
     .describe('Optional display name for the generated Resource.'),
   prompt: z.string().trim().min(1)
     .describe('Complete generation instruction for the configured media model.'),
+  count: z.number().int().min(1).max(6).default(1)
+    .describe('Number of independent alternatives to generate from this exact input. Every alternative is a separate Resource and Task.'),
   contextReferences: contextReferenceSchema,
 } as const
 
@@ -221,7 +224,9 @@ const createImageInputSchema = z.object({
 const createAudioNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
   videoReferences: audioVideoReferencesSchema,
-  durationSeconds: z.number().int().min(1).max(600)
+  durationSeconds: z.number().int()
+    .min(NEW_AUDIO_DURATION_SECONDS.min)
+    .max(NEW_AUDIO_DURATION_SECONDS.max)
     .describe('Requested audio duration in seconds.'),
   vocalMode: z.enum(['instrumental', 'vocal', CAPABILITY_AUTO]).optional()
     .describe('Whether the configured music generation capability should produce instrumental or vocal audio. Use auto to let the system decide.'),
@@ -333,6 +338,7 @@ const generationPlanMetadataBaseShape = {
   schemaId: z.string().min(1),
   episodeId: z.string().nullable(),
   requestId: z.string().min(1),
+  alternatives: z.boolean(),
   projectVideoRatio: z.object({
     value: z.string().min(1),
     fingerprint: z.string().length(64),
@@ -1225,18 +1231,23 @@ async function planNewMediaGeneration(
     ctx.projectId,
     episodeId ?? 'project',
     ctx.context.turnId?.trim() || 'no-turn',
-    ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
+    ctx.toolCallId?.trim()
+      || ctx.requestId?.trim()
+      || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
-  const resources = [{
+  const alternatives = input.kind === 'new' && !extras?.scoreCue && input.count > 1
+  const count = input.kind === 'new' && !extras?.scoreCue ? input.count : 1
+  const baseName = input.name ?? `${config.mediaType[0]?.toUpperCase() ?? ''}${config.mediaType.slice(1)}`
+  const resources = Array.from({ length: count }, (_, memberIndex) => ({
     resourceId: buildCreativeResourceId({
       operationId: config.operationId,
       requestId,
-      memberIndex: 0,
+      memberIndex,
     }),
-    name: input.name ?? `${config.mediaType[0]?.toUpperCase() ?? ''}${config.mediaType.slice(1)}`,
-    memberIndex: 0,
-  }]
+    name: count === 1 ? baseName : `${baseName} ${String(memberIndex + 1)}`,
+    memberIndex,
+  }))
   const tasks = resources.map((resource) => {
     const resourcePayload = {
       resourceId: resource.resourceId,
@@ -1311,6 +1322,7 @@ async function planNewMediaGeneration(
       schemaId,
       episodeId,
       requestId,
+      alternatives,
       retry: false,
       resources,
     },
@@ -1468,7 +1480,7 @@ async function planMediaGenerationRetry(
     projectId: ctx.projectId,
     episodeId,
     turnId: ctx.context.turnId?.trim() || null,
-    toolCallId: ctx.toolCallId?.trim() || null,
+    intentId: ctx.toolCallId?.trim() || ctx.requestId?.trim() || null,
     resources: targets.map((target) => ({
       resourceId: target.resourceId,
       sourceTaskId: target.sourceTaskId,
@@ -1511,6 +1523,7 @@ async function planMediaGenerationRetry(
       schemaId,
       episodeId,
       requestId,
+      alternatives: false,
       retry: true,
       resources: targets.map((target) => ({
         resourceId: target.resourceId,
@@ -1716,6 +1729,7 @@ async function planVideoPromptSetGeneration(
       ? {
           kind: 'new',
           prompt: segment.prompt,
+          count: 1,
           durationSeconds: segment.durationSeconds,
           contextReferences: [{ resourceId: promptSetResource.id }],
           imageReferences,
@@ -1724,6 +1738,7 @@ async function planVideoPromptSetGeneration(
       : {
           kind: 'new',
           prompt: segment.prompt,
+          count: 1,
           durationSeconds: segment.durationSeconds,
           contextReferences: [{ resourceId: promptSetResource.id }],
           imageReferences,
@@ -1820,6 +1835,7 @@ async function planVideoPromptSetGeneration(
       schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
       episodeId: promptSetResource.episodeId,
       requestId,
+      alternatives: false,
       retry: false,
       resources,
     },
@@ -2183,6 +2199,7 @@ async function planManifestAssetImageGeneration(
       schemaId: firstResource.schemaId,
       episodeId: null,
       requestId,
+      alternatives: false,
       retry: false,
       resources,
     },
@@ -2344,6 +2361,7 @@ async function planMusicDirectionAudioGeneration(
       ? { videoReferences: [{ resourceId: videoResource.id, role: 'score_target' }] }
       : {}),
     ...(videoResource.episodeId ? { episodeId: videoResource.episodeId } : {}),
+    count: 1,
   }
   return await planNewMediaGeneration(ctx, request, AUDIO_CONFIG, {
     scoreCue: { key: cue.key, startMs: cueStartMs, endMs: cueEndMs },
@@ -2410,6 +2428,9 @@ async function commitMediaGeneration(
         schemaId,
         operationId: config.operationId,
         requestId: metadata.requestId,
+        alternativeGroupExecutionId: metadata.alternatives
+          ? authorization.operationExecutionId
+          : null,
         members,
       })
     }
@@ -2490,9 +2511,9 @@ const MEDIA_EFFECTS = {
   longRunning: true,
 } as const
 
-// v2 broadens the canonical initial-generation root from request.kind=new to
-// every non-retry request branch, including prompt_set and manifest_assets.
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'creative-resource-generation/v3'
+// v4 adds explicit alternatives fan-out to request.kind=new while preserving
+// every other non-retry branch as a domain batch or single target.
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'creative-resource-generation/v4'
 
 export function createCreativeResourceGenerationOperations(): ProjectAgentOperationRegistryDraft {
   return {
@@ -2528,7 +2549,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_image: defineOperation({
       id: 'create_image',
-      summary: 'Generate image Resources. Use request.kind=new for independent images. Use request.kind=manifest_assets with only the adopted project.asset_manifest resourceId to generate Project asset reference images; the server compiles every selected asset from its stable design, frozen Creative Direction, fixed format, ratio, and defaults. Use request.kind=asset with the exact assetBinding only for one asset image that has no manifest entry. To retry, use request.kind=retry with only exact failed Resource IDs.',
+      summary: 'Generate image Resources. Use request.kind=new with count 1-6 for independent alternatives from one exact input; every result is a separate Resource and Task. Use request.kind=manifest_assets with only the adopted project.asset_manifest resourceId to generate Project asset reference images; the server compiles every selected asset from its stable design, frozen Creative Direction, fixed format, ratio, and defaults. Use request.kind=asset with the exact assetBinding only for one asset image that has no manifest entry. To retry, use request.kind=retry with only exact failed Resource IDs.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -2537,6 +2558,13 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['image'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'image'),
+        alternativeGeneration: {
+          kind: 'request_count',
+          mediaKind: 'image',
+          requestKind: 'new',
+          minCount: 1,
+          maxCount: 6,
+        },
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
@@ -2547,7 +2575,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate exactly one project.bgm_audio music Resource per call; the server owns the schema identity. To execute a completed music direction, use request.kind=music_direction with only the direction resourceId, one exact cueKey, and the exact final video Resource. The server reads that cue instruction unchanged, derives duration from its time window, freezes the window, and lets a video-capable music model watch only that portion — never copy, merge, or rewrite cue instructions. Submit one call per selected cue; an empty cue list intentionally means no music. For music without a direction, provide the complete prompt and lineage inside request.kind=new; when the configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReferences and set durationSeconds to that video duration. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate project.bgm_audio music Resources. For independent music, use request.kind=new with count 1-6; every alternative is a separate Resource and Task. To execute a completed music direction, use request.kind=music_direction with only the direction resourceId, one exact cueKey, and the exact final video Resource; that domain cue remains one Resource per call. The server reads the cue instruction unchanged, derives duration from its time window, freezes the window, and lets a video-capable music model watch only that portion. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -2556,6 +2584,16 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['audio'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO],
+        alternativeGeneration: {
+          kind: 'request_count',
+          mediaKind: 'music',
+          requestKind: 'new',
+          minCount: 1,
+          maxCount: 6,
+          inputLimits: {
+            durationSeconds: NEW_AUDIO_DURATION_SECONDS,
+          },
+        },
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
@@ -2566,7 +2604,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_video: defineOperation({
       id: 'create_video',
-      summary: 'Generate video Resources. Use request.kind=prompt_set with one exact project.video_prompt_set Resource to let the server directly validate and execute every stored segment prompt, duration, and media Resource ID without Primary-Agent mapping. Use request.kind=new only for independent one-off video generation. To retry, provide only exact failed Resource IDs; the server restores every frozen input.',
+      summary: 'Generate video Resources. Use request.kind=new with count 1-6 for independent alternatives from one exact input; every result is a separate Resource and Task. Use request.kind=prompt_set with one exact project.video_prompt_set Resource to let the server directly validate and execute every distinct stored segment without Primary-Agent mapping. To retry, provide only exact failed Resource IDs; the server restores every frozen input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -2575,6 +2613,19 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['video'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'video'),
+        alternativeGeneration: {
+          kind: 'request_count',
+          mediaKind: 'video',
+          requestKind: 'new',
+          minCount: 1,
+          maxCount: 6,
+          inputLimits: {
+            durationSeconds: {
+              min: 1,
+              max: CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS,
+            },
+          },
+        },
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,

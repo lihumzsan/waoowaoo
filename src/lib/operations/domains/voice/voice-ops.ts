@@ -8,6 +8,10 @@ import {
   buildCreativeResourceId,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource/identity'
+import {
+  buildCreativeResourceRetryTaskPayload,
+  loadCreativeResourceRetryTargets,
+} from '@/lib/creative-resource/generation-retry'
 import { reserveCreativeResourcesInTransaction } from '@/lib/creative-resource/persistence'
 import { CREATIVE_RESOURCE_SCHEMA } from '@/lib/creative-resource/schema-registry'
 import { buildCreativeResourceLifecycleProjection } from '@/lib/creative-resource/task-runtime-envelope'
@@ -45,15 +49,18 @@ const voiceTargetSchema = z.discriminatedUnion('kind', [
   }).strict(),
 ])
 
+const VOICE_DESCRIPTION_MAX_LENGTH = 4_000
+const VOICE_PREVIEW_TEXT_MAX_LENGTH = 10_000
+
 const voiceResourceCommandSchema = z.object({
   name: z.string().trim().min(1).max(191)
     .describe('Display name for the new immutable voice Resource.'),
 }).strict()
 
 const voiceDesignMemberShape = {
-  description: z.string().trim().min(1).max(4_000)
+  description: z.string().trim().min(1).max(VOICE_DESCRIPTION_MAX_LENGTH)
     .describe('Natural-language design of the voice identity, such as age, timbre, accent, pace, energy, and emotional texture.'),
-  previewText: z.string().trim().min(1).max(10_000)
+  previewText: z.string().trim().min(1).max(VOICE_PREVIEW_TEXT_MAX_LENGTH)
     .describe('Short multilingual sample to render with the designed voice. This exact text is billed by character count.'),
   language: z.enum(VOICE_DESIGN_LANGUAGE_OPTIONS)
     .describe('Language of previewText. Use Auto only when language cannot be determined reliably.'),
@@ -63,6 +70,8 @@ const voiceDesignMemberShape = {
 const singleVoiceRequestSchema = z.object({
   kind: z.literal('single'),
   ...voiceDesignMemberShape,
+  count: z.number().int().min(1).max(6).default(1)
+    .describe('Number of independent voice alternatives. Must be 1 when target.kind=character; use standalone to create a browsable alternative group.'),
   target: voiceTargetSchema,
 }).strict()
 
@@ -77,14 +86,32 @@ const charactersVoiceRequestSchema = z.object({
   characters: z.array(characterVoiceMemberSchema).min(1),
 }).strict()
 
+const retryVoiceRequestSchema = z.object({
+  kind: z.literal('retry'),
+  resourceIds: z.array(z.string().trim().min(1)).min(1).max(6)
+    .describe('Exact failed voice Resource IDs whose original frozen generation inputs must be retried.'),
+}).strict()
+
 // generate_voice has no capability binder, so this canonical schema is also
 // the model-facing tool schema. Both branches are complete and strict.
 const generateVoiceInputSchema = z.object({
   request: z.discriminatedUnion('kind', [
     singleVoiceRequestSchema,
     charactersVoiceRequestSchema,
+    retryVoiceRequestSchema,
   ]),
 }).strict().superRefine((input, context) => {
+  if (
+    input.request.kind === 'single'
+    && input.request.target.kind === 'character'
+    && input.request.count !== 1
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['request', 'count'],
+      message: 'VOICE_CHARACTER_ALTERNATIVES_REQUIRE_STANDALONE_TARGET',
+    })
+  }
   if (input.request.kind !== 'characters') return
   const seen = new Set<string>()
   input.request.characters.forEach((character, index) => {
@@ -133,15 +160,29 @@ const generateVoiceOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
   }).passthrough(),
 )
 
-const voicePlanMetadataSchema = z.object({
-  requestId: z.string().min(1),
-  resources: z.array(z.object({
+const voicePlanResourceMetadataSchema = z.object({
     resourceId: z.string().min(1),
     resourceName: z.string().min(1),
     memberIndex: z.number().int().min(0),
     characterId: z.string().min(1).nullable(),
-  }).strict()).min(1),
 }).strict()
+
+const voicePlanMetadataSchema = z.discriminatedUnion('retry', [
+  z.object({
+    requestId: z.string().min(1),
+    alternatives: z.boolean(),
+    retry: z.literal(false),
+    resources: z.array(voicePlanResourceMetadataSchema).min(1),
+  }).strict(),
+  z.object({
+    requestId: z.string().min(1),
+    alternatives: z.literal(false),
+    retry: z.literal(true),
+    resources: z.array(voicePlanResourceMetadataSchema.extend({
+      sourceTaskId: z.string().min(1),
+    }).strict()).min(1),
+  }).strict(),
+])
 
 type GenerateVoiceInput = z.infer<typeof generateVoiceInputSchema>
 
@@ -158,15 +199,23 @@ async function resolveVoiceGenerationMembers(
   ctx: ProjectAgentOperationContext,
   input: GenerateVoiceInput,
 ): Promise<VoiceGenerationMember[]> {
-  const requested = input.request.kind === 'single'
-    ? [{
-        description: input.request.description,
-        previewText: input.request.previewText,
-        language: input.request.language,
-        resource: input.request.resource,
-        target: input.request.target,
-      }]
-    : input.request.characters.map((character) => ({
+  const request = input.request
+  if (request.kind === 'retry') {
+    throw new Error('VOICE_RETRY_REQUEST_REQUIRES_RETRY_PLANNER')
+  }
+  const requested = request.kind === 'single'
+    ? Array.from({ length: request.count }, (_, memberIndex) => ({
+        description: request.description,
+        previewText: request.previewText,
+        language: request.language,
+        resource: {
+          name: request.count === 1
+            ? request.resource.name
+            : `${request.resource.name} ${String(memberIndex + 1)}`,
+        },
+        target: request.target,
+      }))
+    : request.characters.map((character) => ({
         description: character.description,
         previewText: character.previewText,
         language: character.language,
@@ -230,6 +279,89 @@ async function planGenerateVoice(
   ctx: ProjectAgentOperationContext,
   input: GenerateVoiceInput,
 ): Promise<OperationPlan> {
+  if (input.request.kind === 'retry') {
+    const targets = await loadCreativeResourceRetryTargets({
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      callerEpisodeId: ctx.context.episodeId?.trim() || null,
+      operationId: 'generate_voice',
+      taskType: TASK_TYPE.CREATIVE_RESOURCE_VOICE,
+      mediaType: 'audio',
+      resourceIds: input.request.resourceIds,
+    })
+    const invalidTarget = targets.find((target) => (
+      target.schemaId !== CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE
+      || target.payload.resource.schemaId !== CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE
+      || target.payload.voiceModel === undefined
+      || target.payload.previewText === undefined
+      || target.payload.language === undefined
+    ))
+    if (invalidTarget) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_INVALID',
+        field: 'request.resourceIds',
+        resourceId: invalidTarget.resourceId,
+        agentRetryableAfterCorrection: false,
+      })
+    }
+    const requestId = `generation-retry:generate_voice:${stableArgsHash({
+      userId: ctx.userId,
+      projectId: ctx.projectId,
+      turnId: ctx.context.turnId?.trim() || null,
+      intentId: ctx.toolCallId?.trim() || ctx.requestId?.trim() || null,
+      resources: targets.map((target) => ({
+        resourceId: target.resourceId,
+        sourceTaskId: target.sourceTaskId,
+      })),
+    })}`
+    const tasks = targets.map((target) => {
+      const payload = buildCreativeResourceRetryTaskPayload({
+        frozenPayload: target.payload,
+        toolCallId: ctx.toolCallId?.trim() || null,
+      })
+      return createPlannedTask({
+        id: `generate_voice:retry:${target.resourceId}`,
+        taskType: TASK_TYPE.CREATIVE_RESOURCE_VOICE,
+        targetType: 'CreativeResource',
+        targetId: target.resourceId,
+        payload,
+        locale: resolveOperationLocale(ctx.context),
+        episodeId: target.episodeId,
+        dedupeKey: `generate_voice:retry:${stableArgsHash({
+          requestId,
+          resourceId: target.resourceId,
+          sourceTaskId: target.sourceTaskId,
+        })}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.CREATIVE_RESOURCE_VOICE,
+          payload,
+          allowedApiTypes: ['voice'],
+        }),
+      })
+    })
+    return {
+      kind: 'task_submission',
+      operationId: 'generate_voice',
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      tasks,
+      reservedIdentityIds: [],
+      metadata: {
+        requestId,
+        alternatives: false,
+        retry: true,
+        resources: targets.map((target) => ({
+          resourceId: target.resourceId,
+          resourceName: target.name,
+          memberIndex: target.memberIndex,
+          characterId: target.payload.resource.binding?.kind === 'character_voice'
+            ? target.payload.resource.binding.characterId
+            : null,
+          sourceTaskId: target.sourceTaskId,
+        })),
+      },
+    }
+  }
   const voiceModel = await resolveSystemModelKey({
     userId: ctx.userId,
     projectId: ctx.projectId,
@@ -248,7 +380,7 @@ async function planGenerateVoice(
     ctx.userId,
     ctx.projectId,
     ctx.context.turnId?.trim() ?? 'no-turn',
-    ctx.toolCallId?.trim() ?? planFingerprint,
+    ctx.toolCallId?.trim() ?? ctx.requestId?.trim() ?? planFingerprint,
     planFingerprint,
   ].join(':')
   const resources = members.map((member, memberIndex) => ({
@@ -340,6 +472,10 @@ async function planGenerateVoice(
     reservedIdentityIds: resources.map((resource) => resource.resourceId),
     metadata: {
       requestId,
+      alternatives: input.request.kind === 'single'
+        && input.request.target.kind === 'standalone'
+        && input.request.count > 1,
+      retry: false,
       resources,
     },
   }
@@ -355,22 +491,46 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
   ) {
     throw new Error('VOICE_OPERATION_PLAN_CONTRACT_INVALID')
   }
-  await reserveCreativeResourcesInTransaction(authorization.transaction, {
-    scope: resolveProjectCreativeResourceScope({
-      userId: ctx.userId,
-      projectId: ctx.projectId,
-      episodeId: null,
-    }),
-    mediaType: 'audio',
-    schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
-    operationId: 'generate_voice',
-    requestId: metadata.requestId,
-    members: metadata.resources.map((resource) => ({
-      resourceId: resource.resourceId,
-      name: resource.resourceName,
-      memberIndex: resource.memberIndex,
-    })),
-  })
+  if (!metadata.retry) {
+    await reserveCreativeResourcesInTransaction(authorization.transaction, {
+      scope: resolveProjectCreativeResourceScope({
+        userId: ctx.userId,
+        projectId: ctx.projectId,
+        episodeId: null,
+      }),
+      mediaType: 'audio',
+      schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      operationId: 'generate_voice',
+      requestId: metadata.requestId,
+      alternativeGroupExecutionId: metadata.alternatives
+        ? authorization.operationExecutionId
+        : null,
+      members: metadata.resources.map((resource) => ({
+        resourceId: resource.resourceId,
+        name: resource.resourceName,
+        memberIndex: resource.memberIndex,
+      })),
+    })
+  } else {
+    const resourceIds = metadata.resources.map((resource) => resource.resourceId)
+    const retryable = await authorization.transaction.creativeResource.count({
+      where: {
+        id: { in: resourceIds },
+        userId: ctx.userId,
+        projectId: ctx.projectId,
+        status: 'failed',
+        mediaType: 'audio',
+        schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
+      },
+    })
+    if (retryable !== resourceIds.length) {
+      throw new Error('CREATIVE_RESOURCE_RETRY_TARGET_CHANGED:generate_voice')
+    }
+    await authorization.transaction.creativeResource.updateMany({
+      where: { id: { in: resourceIds }, status: 'failed' },
+      data: { status: 'pending', errorCode: null, errorMessage: null },
+    })
+  }
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
   const results = plan.tasks.map((task) => {
     const result = submitted.get(task.id)
@@ -404,7 +564,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design reusable voices and render short preview audio Resources. Use request.kind=single for one standalone or character voice. Use request.kind=characters to submit every selected character in one priced plan and one approval; each member becomes an independent Resource and Task, so partial failure does not discard successful voices and a follow-up can submit only failed characters. A completed character voice becomes current only when it cannot overwrite a newer manual selection.',
+      summary: 'Design reusable voices and render short preview audio Resources. Use request.kind=single with a standalone target and count 1-6 for independent alternatives; count defaults to 1 and every result is a separate Resource and Task. A character target requires count=1 because generation may update that character current voice. Use request.kind=characters for distinct character targets; those members are a domain batch, not alternatives. Use request.kind=retry with only exact failed voice Resource IDs; the server restores each original frozen generation input and submits a new Task for the same Resource.',
       intent: 'act',
       effects: {
         writes: true,
@@ -422,9 +582,20 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         acceptsReferences: false,
         outputMediaTypes: ['audio'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE],
+        alternativeGeneration: {
+          kind: 'request_count',
+          mediaKind: 'voice',
+          requestKind: 'single',
+          minCount: 1,
+          maxCount: 6,
+          inputLimits: {
+            promptMaxLength: VOICE_DESCRIPTION_MAX_LENGTH,
+            previewTextMaxLength: VOICE_PREVIEW_TEXT_MAX_LENGTH,
+          },
+        },
       },
       confirmation: { kind: 'billable_media', required: true },
-      planContractRevision: 'voice-generation/v2',
+      planContractRevision: 'voice-generation/v4',
       inputSchema: generateVoiceInputSchema,
       outputSchema: generateVoiceOutputSchema,
       plan: planGenerateVoice,

@@ -368,36 +368,36 @@ model ProjectAssistantThreadArchive {
 }
 
 model Project {
-  id                      String                          @id @default(uuid())
-  name                    String
-  description             String?                         @db.Text
-  userId                  String
-  analysisModel           String?
-  imageModel              String?
-  videoModel              String?
-  musicModel              String?
-  videoRatio              String?
-  globalAssetText         String?                         @db.LongText
-  characterModel          String?
-  locationModel           String?
-  editModel               String?
-  videoResolution         String                          @default("720p")
-  capabilityOverrides     String?                         @db.LongText
-  lastEpisodeId           String?
-  imageResolution         String                          @default("2K")
-  createdAt               DateTime                        @default(now())
-  updatedAt               DateTime                        @default(now()) @updatedAt
-  lastAccessedAt          DateTime?
-  user                    User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usageCosts              UsageCost[]
-  assistantThreads        ProjectAssistantThread[]
-  mutationBatches         MutationBatch[]
-  episodes                ProjectEpisode[]
-  characters              ProjectCharacter[]
-  locations               ProjectLocation[]
-  canvasLayouts           ProjectCanvasLayout[]
-  creativeResources       CreativeResource[]
-  creativeBindings        CreativeResourceBinding[]
+  id                  String                    @id @default(uuid())
+  name                String
+  description         String?                   @db.Text
+  userId              String
+  analysisModel       String?
+  imageModel          String?
+  videoModel          String?
+  musicModel          String?
+  videoRatio          String?
+  globalAssetText     String?                   @db.LongText
+  characterModel      String?
+  locationModel       String?
+  editModel           String?
+  videoResolution     String                    @default("720p")
+  capabilityOverrides String?                   @db.LongText
+  lastEpisodeId       String?
+  imageResolution     String                    @default("2K")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @default(now()) @updatedAt
+  lastAccessedAt      DateTime?
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageCosts          UsageCost[]
+  assistantThreads    ProjectAssistantThread[]
+  mutationBatches     MutationBatch[]
+  episodes            ProjectEpisode[]
+  characters          ProjectCharacter[]
+  locations           ProjectLocation[]
+  canvasLayouts       ProjectCanvasLayout[]
+  creativeResources   CreativeResource[]
+  creativeBindings    CreativeResourceBinding[]
 
   @@index([userId])
   @@map("projects")
@@ -436,6 +436,7 @@ model ProjectCanvasNodeLayout {
   zIndex     Int                 @default(0)
   locked     Boolean             @default(false)
   collapsed  Boolean             @default(false)
+  hidden     Boolean             @default(false)
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @default(now()) @updatedAt
   layout     ProjectCanvasLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
@@ -760,6 +761,8 @@ model OperationPlanSnapshot {
   projectId                 String?
   episodeId                 String?
   operationId               String               @db.VarChar(128)
+  apiRequestId              String?              @db.VarChar(128)
+  apiRequestContextHash     String?              @db.VarChar(64)
   executionContractRevision String               @db.VarChar(128)
   normalizedInput           Json
   inputHash                 String               @db.VarChar(64)
@@ -771,6 +774,7 @@ model OperationPlanSnapshot {
   approvalGrants            ApprovalGrant[]
   executions                OperationExecution[]
 
+  @@unique([userId, scopeKind, scopeId, operationId, apiRequestId], map: "operation_plan_snapshots_api_request_key")
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
   @@map("operation_plan_snapshots")
 }
@@ -808,32 +812,33 @@ model ApprovalGrant {
 }
 
 model OperationExecution {
-  id                String                 @id @default(uuid())
-  executionKind     String                 @default("approved_plan") @db.VarChar(32)
-  commandId         String?                @unique @db.VarChar(191)
-  payloadHash       String?                @db.VarChar(64)
-  contractRevision  String?                @db.VarChar(128)
-  normalizedInput   Json?
-  contextSnapshot   Json?
-  source            String?                @db.VarChar(64)
-  userId            String
-  scopeKind         String                 @db.VarChar(32)
-  scopeId           String                 @db.VarChar(191)
-  projectId         String?
-  episodeId         String?
-  operationId       String                 @db.VarChar(128)
-  planSnapshotId    String?
-  approvalGrantId   String?                @unique
-  requestId         String                 @db.VarChar(128)
-  status            String                 @db.VarChar(32)
-  output            Json?
-  completedAt       DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  planSnapshot      OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
-  approvalGrant     ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
-  tasks             Task[]
-  creativeResources CreativeResource[]
+  id                   String                 @id @default(uuid())
+  executionKind        String                 @default("approved_plan") @db.VarChar(32)
+  commandId            String?                @unique @db.VarChar(191)
+  payloadHash          String?                @db.VarChar(64)
+  contractRevision     String?                @db.VarChar(128)
+  normalizedInput      Json?
+  contextSnapshot      Json?
+  source               String?                @db.VarChar(64)
+  userId               String
+  scopeKind            String                 @db.VarChar(32)
+  scopeId              String                 @db.VarChar(191)
+  projectId            String?
+  episodeId            String?
+  operationId          String                 @db.VarChar(128)
+  planSnapshotId       String?
+  approvalGrantId      String?                @unique
+  requestId            String                 @db.VarChar(128)
+  status               String                 @db.VarChar(32)
+  output               Json?
+  completedAt          DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  planSnapshot         OperationPlanSnapshot? @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  approvalGrant        ApprovalGrant?         @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  tasks                Task[]
+  creativeResources    CreativeResource[]     @relation("CreativeResourceOperationExecution")
+  alternativeResources CreativeResource[]     @relation("CreativeResourceAlternativeGroupExecution")
 
   @@unique([planSnapshotId, requestId])
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
@@ -1020,54 +1025,60 @@ model MediaObject {
 }
 
 model CreativeResource {
-  id                   String                    @id @db.VarChar(32)
-  userId               String
-  projectId            String?
-  episodeId            String?
-  scopeKind            String                    @db.VarChar(32)
-  scopeId              String                    @db.VarChar(191)
-  mediaType            String                    @db.VarChar(16)
-  schemaId             String                    @db.VarChar(96)
-  name                 String                    @db.VarChar(191)
-  status               String                    @default("pending") @db.VarChar(32)
-  sourceType           String?                   @db.VarChar(96)
-  sourceId             String?                   @db.VarChar(191)
-  memberIndex          Int?
-  contentText          String?                   @db.LongText
-  contentJson          Json?
-  mediaId              String?
-  prompt               String?                   @db.LongText
-  modelKey             String?                   @db.VarChar(191)
-  generationOptions    Json?
-  operationId          String?                   @db.VarChar(128)
-  inputHash            String?                   @db.VarChar(64)
-  taskId               String?
-  operationExecutionId String?
-  toolCallId           String?                   @db.VarChar(191)
-  errorCode            String?                   @db.VarChar(128)
-  errorMessage         String?                   @db.Text
-  creativeData         Json?
-  creativeDataVersion  Int                       @default(0)
-  materializedAt       DateTime?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
-  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project              Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  episode              ProjectEpisode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  media                MediaObject?              @relation(fields: [mediaId], references: [id], onDelete: Restrict)
-  task                 Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  operationExecution   OperationExecution?       @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
-  inputLineage         CreativeResourceLineage[] @relation("CreativeResourceLineageInput")
-  outputLineage        CreativeResourceLineage[] @relation("CreativeResourceLineageOutput")
-  bindings             CreativeResourceBinding[]
+  id                          String                    @id @db.VarChar(32)
+  userId                      String
+  projectId                   String?
+  episodeId                   String?
+  scopeKind                   String                    @db.VarChar(32)
+  scopeId                     String                    @db.VarChar(191)
+  mediaType                   String                    @db.VarChar(16)
+  schemaId                    String                    @db.VarChar(96)
+  name                        String                    @db.VarChar(191)
+  status                      String                    @default("pending") @db.VarChar(32)
+  sourceType                  String?                   @db.VarChar(96)
+  sourceId                    String?                   @db.VarChar(191)
+  memberIndex                 Int?
+  contentText                 String?                   @db.LongText
+  contentJson                 Json?
+  mediaId                     String?
+  prompt                      String?                   @db.LongText
+  modelKey                    String?                   @db.VarChar(191)
+  generationOptions           Json?
+  operationId                 String?                   @db.VarChar(128)
+  inputHash                   String?                   @db.VarChar(64)
+  taskId                      String?
+  operationExecutionId        String?
+  alternativeGroupExecutionId String?
+  toolCallId                  String?                   @db.VarChar(191)
+  errorCode                   String?                   @db.VarChar(128)
+  errorMessage                String?                   @db.Text
+  creativeData                Json?
+  creativeDataVersion         Int                       @default(0)
+  materializedAt              DateTime?
+  archivedAt                  DateTime?
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  user                        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project                     Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  episode                     ProjectEpisode?           @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  media                       MediaObject?              @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  task                        Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  operationExecution          OperationExecution?       @relation("CreativeResourceOperationExecution", fields: [operationExecutionId], references: [id], onDelete: Restrict)
+  alternativeGroupExecution   OperationExecution?       @relation("CreativeResourceAlternativeGroupExecution", fields: [alternativeGroupExecutionId], references: [id], onDelete: Restrict)
+  inputLineage                CreativeResourceLineage[] @relation("CreativeResourceLineageInput")
+  outputLineage               CreativeResourceLineage[] @relation("CreativeResourceLineageOutput")
+  bindings                    CreativeResourceBinding[]
 
   @@unique([sourceType, sourceId], map: "creative_resources_source_key")
+  @@unique([alternativeGroupExecutionId, memberIndex], map: "creative_resources_alternative_member_key")
   @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
   @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
   @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
   @@index([mediaId], map: "creative_resources_media_idx")
   @@index([taskId], map: "creative_resources_task_idx")
   @@index([operationExecutionId], map: "creative_resources_execution_idx")
+  @@index([alternativeGroupExecutionId], map: "creative_resources_alternative_group_idx")
+  @@index([projectId, episodeId, archivedAt, createdAt], map: "creative_resources_project_archive_idx")
   @@index([operationId, inputHash], map: "creative_resources_operation_input_idx")
   @@map("creative_resources")
 }

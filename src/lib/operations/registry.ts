@@ -72,6 +72,66 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (!Array.isArray(resourceContract.outputSchemaIds) || resourceContract.outputSchemaIds.length === 0) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_SCHEMA_MISSING:${operationId}`)
       }
+      const alternativeGeneration = resourceContract.alternativeGeneration
+      if (alternativeGeneration !== undefined) {
+        if (
+          !alternativeGeneration
+          || typeof alternativeGeneration !== 'object'
+          || Array.isArray(alternativeGeneration)
+        ) {
+          throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_INVALID:${operationId}`)
+        }
+        const capability = alternativeGeneration as Record<string, unknown>
+        if (
+          capability.kind !== 'request_count'
+          || !['image', 'video', 'music', 'voice'].includes(String(capability.mediaKind))
+          || !['new', 'single'].includes(String(capability.requestKind))
+          || capability.minCount !== 1
+          || capability.maxCount !== 6
+        ) {
+          throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_INVALID:${operationId}`)
+        }
+        const expectedOutputMediaType = capability.mediaKind === 'music' || capability.mediaKind === 'voice'
+          ? 'audio'
+          : capability.mediaKind
+        if (!(resourceContract.outputMediaTypes as unknown[]).includes(expectedOutputMediaType)) {
+          throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_MEDIA_MISMATCH:${operationId}`)
+        }
+        const inputLimits = capability.inputLimits
+        if (inputLimits !== undefined) {
+          if (!inputLimits || typeof inputLimits !== 'object' || Array.isArray(inputLimits)) {
+            throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_LIMITS_INVALID:${operationId}`)
+          }
+          const limits = inputLimits as Record<string, unknown>
+          const duration = limits.durationSeconds
+          if (duration !== undefined) {
+            if (!duration || typeof duration !== 'object' || Array.isArray(duration)) {
+              throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_LIMITS_INVALID:${operationId}`)
+            }
+            const range = duration as Record<string, unknown>
+            if (
+              typeof range.min !== 'number'
+              || typeof range.max !== 'number'
+              || !Number.isInteger(range.min)
+              || !Number.isInteger(range.max)
+              || range.min < 1
+              || range.max < range.min
+            ) {
+              throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_LIMITS_INVALID:${operationId}`)
+            }
+          }
+          for (const key of ['promptMaxLength', 'previewTextMaxLength'] as const) {
+            const value = limits[key]
+            if (value !== undefined && (
+              typeof value !== 'number'
+              || !Number.isInteger(value)
+              || value < 1
+            )) {
+              throw new Error(`PROJECT_AGENT_OPERATION_ALTERNATIVE_CAPABILITY_LIMITS_INVALID:${operationId}`)
+            }
+          }
+        }
+      }
     } else {
       throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_KIND_INVALID:${operationId}`)
     }

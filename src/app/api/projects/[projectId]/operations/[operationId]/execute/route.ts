@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuthLight } from '@/lib/api-auth'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
+import {
+  assertOperationRequestIdMatches,
+  readOperationRequestId,
+} from '@/lib/operations/api-request-identity'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -20,6 +24,12 @@ export const POST = apiHandler(async (
   const approvalGrantId = typeof body.approvalGrantId === 'string' ? body.approvalGrantId.trim() : ''
   const operationRequestId = typeof body.operationRequestId === 'string' ? body.operationRequestId.trim() : ''
   if (!approvalGrantId || !operationRequestId) throw new ApiError('INVALID_PARAMS')
+  const headerRequestId = readOperationRequestId(request, {
+    required: true,
+    operationId,
+  })
+  assertOperationRequestIdMatches(headerRequestId, operationRequestId, operationId)
+  const routeContext = isRecord(body.context) ? body.context : {}
 
   const result = await executeProjectAgentOperationFromApi({
     request,
@@ -30,6 +40,16 @@ export const POST = apiHandler(async (
       ...body.input,
       approvalGrantId,
       operationRequestId,
+    },
+    context: {
+      locale: typeof routeContext.locale === 'string' ? routeContext.locale : null,
+      episodeId: typeof routeContext.episodeId === 'string' ? routeContext.episodeId : null,
+      selectedScopeRef: typeof routeContext.selectedScopeRef === 'string'
+        ? routeContext.selectedScopeRef
+        : null,
+      selectedAssetId: typeof routeContext.selectedAssetId === 'string'
+        ? routeContext.selectedAssetId
+        : null,
     },
     source: 'project-ui',
   })

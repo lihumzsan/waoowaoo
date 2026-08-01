@@ -141,7 +141,9 @@ export interface CreativeResourceView {
   readonly schemaId: string
   readonly name: string
   readonly status: CreativeResourceStatus
+  readonly alternativeGroupId: string | null
   readonly memberIndex: number | null
+  readonly archivedAt: string | null
   readonly creativeDataVersion: number
   readonly creativeDataKeys: readonly string[]
   readonly materialization: CreativeResourceMaterializationView | null
@@ -223,13 +225,62 @@ export interface CreativeResourceInputSummaryView extends CreativeResourceInputR
   readonly media: CreativeResourceInputMediaPreview | null
 }
 
-export interface CreativeResourceCardView {
+export interface CreativeResourceDownloadView {
+  readonly href: string
+  readonly fileName: string
+}
+
+export type CreativeResourceCanvasOperationKind = 'retry' | 'variant' | 'edit_regenerate'
+
+export interface CreativeResourceCanvasOperationView {
+  readonly kind: CreativeResourceCanvasOperationKind
+  readonly operationId: string
+  readonly confirmation: 'billable_media'
+  readonly input: CreativeResourceJsonObject
+  readonly editableInputPath: readonly string[] | null
+}
+
+export interface CreativeResourceCardMemberView {
   readonly resource: CreativeResourceView
   readonly inputSummaries: readonly CreativeResourceInputSummaryView[]
+  readonly download: CreativeResourceDownloadView | null
   readonly presentation: {
     readonly rendererKey: string
     readonly fallbackMediaType: CreativeResourceMediaType
     readonly summary: CreativeResourceSummaryView
+  }
+}
+
+export interface CreativeResourceAlternativeGroupView {
+  readonly groupId: string
+  readonly total: number
+  readonly members: readonly CreativeResourceCardMemberView[]
+}
+
+export interface CreativeResourceCardView extends CreativeResourceCardMemberView {
+  /**
+   * Browsing relation only. It never identifies a selected/current/adopted
+   * member; the currently visible member belongs to local UI state.
+   */
+  readonly alternativeGroup: CreativeResourceAlternativeGroupView | null
+  readonly canvasOperations: readonly CreativeResourceCanvasOperationView[]
+}
+
+export type CreativeResourceAlternativeMediaKind = 'image' | 'video' | 'music' | 'voice'
+
+export interface CreativeResourceAlternativeGenerationCapability {
+  readonly kind: 'request_count'
+  readonly mediaKind: CreativeResourceAlternativeMediaKind
+  readonly requestKind: 'new' | 'single'
+  readonly minCount: 1
+  readonly maxCount: 6
+  readonly inputLimits?: {
+    readonly durationSeconds?: {
+      readonly min: number
+      readonly max: number
+    }
+    readonly promptMaxLength?: number
+    readonly previewTextMaxLength?: number
   }
 }
 
@@ -244,6 +295,7 @@ export type CreativeResourceOperationContract =
       readonly acceptsReferences: boolean
       readonly outputMediaTypes: readonly CreativeResourceMediaType[]
       readonly outputSchemaIds: readonly string[]
+      readonly alternativeGeneration?: CreativeResourceAlternativeGenerationCapability
     }
 
 export function isCreativeResourceMediaType(value: unknown): value is CreativeResourceMediaType {

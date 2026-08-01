@@ -120,6 +120,7 @@ export async function deleteVoiceResourceInTransaction(
     select: {
       id: true,
       status: true,
+      alternativeGroupExecutionId: true,
       _count: { select: { bindings: true } },
       inputLineage: {
         select: { id: true },
@@ -135,6 +136,9 @@ export async function deleteVoiceResourceInTransaction(
   }
   if (resource.status === 'pending') {
     throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_GENERATION_PENDING' })
+  }
+  if (resource.alternativeGroupExecutionId) {
+    throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_ALTERNATIVE_GROUP_MEMBER' })
   }
   if (resource._count.bindings > 0) {
     throw new ApiError('CONFLICT', { code: 'VOICE_RESOURCE_STILL_BOUND' })

@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type {
   CreativeResourceCardView,
+  CreativeResourceCardMemberView,
   CreativeResourceContent,
   CreativeResourceDataView,
   CreativeResourceInputRef,
@@ -33,6 +34,8 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { parseCreativeResourceVideoMergeTaskPayload } from './video-merge-contract'
 import { CREATIVE_RESOURCE_SCHEMA, getCreativeResourceSchema } from './schema-registry'
 import { projectCreativeResourceSummary } from './summary-projection'
+import { buildCreativeResourceAlternativeGroupId } from './identity'
+import { loadCreativeResourceCanvasOperationViews } from './canvas-action-view'
 
 type CreativeResourceReadClient = Pick<
   Prisma.TransactionClient,
@@ -165,7 +168,13 @@ export function projectCreativeResourceView(
     schemaId: row.schemaId,
     name: row.name,
     status: requireStatus(row.status),
+    alternativeGroupId: row.alternativeGroupExecutionId
+      ? buildCreativeResourceAlternativeGroupId({
+          operationExecutionId: row.alternativeGroupExecutionId,
+        })
+      : null,
     memberIndex: row.memberIndex,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
     creativeDataVersion: row.creativeDataVersion,
     creativeDataKeys: Object.keys(jsonObject(row.creativeData)).sort(),
     materialization: materializationView(row),
@@ -181,11 +190,15 @@ export function projectCreativeResourceView(
 function cardViewFromResource(
   resource: CreativeResourceView,
   inputSummaries: readonly CreativeResourceInputSummaryView[],
-): CreativeResourceCardView {
+): CreativeResourceCardMemberView {
   const schema = getCreativeResourceSchema(resource.schemaId)
+  const content = resource.materialization?.content
   return {
     resource,
     inputSummaries,
+    download: content?.kind === 'media' && content.url
+      ? { href: content.url, fileName: resource.name }
+      : null,
     presentation: {
       rendererKey: schema?.schemaId ?? 'generic.resource',
       fallbackMediaType: resource.mediaType,
@@ -307,6 +320,130 @@ async function loadPendingGenerations(
   return pendingByResourceId
 }
 
+function assertAlternativeGroupRows(
+  executionId: string,
+  rows: readonly ResourceRow[],
+): void {
+  if (rows.length < 2 || rows.length > 6) {
+    throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_SIZE_INVALID:${executionId}`)
+  }
+  const first = rows[0]
+  if (!first) throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_EMPTY:${executionId}`)
+  for (const [index, row] of rows.entries()) {
+    if (
+      row.alternativeGroupExecutionId !== executionId
+      || row.memberIndex !== index
+      || row.userId !== first.userId
+      || row.projectId !== first.projectId
+      || row.episodeId !== first.episodeId
+      || row.scopeKind !== first.scopeKind
+      || row.scopeId !== first.scopeId
+      || row.mediaType !== first.mediaType
+      || row.schemaId !== first.schemaId
+    ) {
+      throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_DIVERGED:${executionId}`)
+    }
+  }
+}
+
+async function projectCreativeResourceCards(
+  client: CreativeResourceReadClient,
+  primaryRows: readonly ResourceRow[],
+  userId: string,
+  includeArchived: boolean,
+): Promise<CreativeResourceCardView[]> {
+  if (primaryRows.length === 0) return []
+  const groupExecutionIds = Array.from(new Set(primaryRows.flatMap((row) => (
+    row.alternativeGroupExecutionId ? [row.alternativeGroupExecutionId] : []
+  ))))
+  const allGroupRows = groupExecutionIds.length === 0
+    ? []
+    : await client.creativeResource.findMany({
+        where: {
+          userId,
+          alternativeGroupExecutionId: { in: groupExecutionIds },
+        },
+        include: resourceInclude,
+        orderBy: [
+          { alternativeGroupExecutionId: 'asc' },
+          { memberIndex: { sort: 'asc', nulls: 'last' } },
+          { id: 'asc' },
+        ],
+      })
+  const allRowsByGroup = new Map<string, ResourceRow[]>()
+  for (const row of allGroupRows) {
+    const executionId = row.alternativeGroupExecutionId
+    if (!executionId) {
+      throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_OWNER_MISSING:${row.id}`)
+    }
+    const members = allRowsByGroup.get(executionId) ?? []
+    members.push(row)
+    allRowsByGroup.set(executionId, members)
+  }
+  for (const executionId of groupExecutionIds) {
+    assertAlternativeGroupRows(executionId, allRowsByGroup.get(executionId) ?? [])
+  }
+
+  const visibleGroupRows = includeArchived
+    ? allGroupRows
+    : allGroupRows.filter((row) => row.archivedAt === null)
+  const combinedRowsById = new Map<string, ResourceRow>()
+  for (const row of [...primaryRows, ...visibleGroupRows]) combinedRowsById.set(row.id, row)
+  const combinedRows = [...combinedRowsById.values()]
+  const pending = await loadPendingGenerations(client, combinedRows.map((row) => row.id))
+  const resources = combinedRows.map((row) => (
+    projectCreativeResourceView(row, pending.get(row.id) ?? null)
+  ))
+  const inputSummaries = await loadInputSummaries(client, resources, userId)
+  const membersByResourceId = new Map(resources.map((resource) => [
+    resource.resourceId,
+    cardViewFromResource(
+      resource,
+      inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
+    ),
+  ]))
+  const canvasOperationsByResourceId = await loadCreativeResourceCanvasOperationViews(
+    client,
+    combinedRows.map((row) => ({
+      id: row.id,
+      status: requireStatus(row.status),
+      operationId: row.operationId,
+    })),
+    userId,
+  )
+  const visibleMembersByGroup = new Map<string, CreativeResourceCardMemberView[]>()
+  for (const row of visibleGroupRows) {
+    const executionId = row.alternativeGroupExecutionId
+    const member = membersByResourceId.get(row.id)
+    if (!executionId || !member) {
+      throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_VIEW_MISSING:${row.id}`)
+    }
+    const members = visibleMembersByGroup.get(executionId) ?? []
+    members.push(member)
+    visibleMembersByGroup.set(executionId, members)
+  }
+
+  return primaryRows.map((row) => {
+    const member = membersByResourceId.get(row.id)
+    if (!member) throw new Error(`CREATIVE_RESOURCE_CARD_VIEW_MISSING:${row.id}`)
+    const executionId = row.alternativeGroupExecutionId
+    const groupMembers = executionId ? visibleMembersByGroup.get(executionId) ?? [] : []
+    return {
+      ...member,
+      canvasOperations: canvasOperationsByResourceId.get(row.id) ?? [],
+      alternativeGroup: executionId && groupMembers.length > 1
+        ? {
+            groupId: buildCreativeResourceAlternativeGroupId({
+              operationExecutionId: executionId,
+            }),
+            total: groupMembers.length,
+            members: groupMembers,
+          }
+        : null,
+    }
+  })
+}
+
 export async function listProjectCreativeResourceCards(input: {
   readonly projectId: string
   readonly userId: string
@@ -316,6 +453,7 @@ export async function listProjectCreativeResourceCards(input: {
   readonly status?: CreativeResourceStatus | null
   readonly limit?: number
   readonly includeParentScopes?: boolean
+  readonly includeArchived?: boolean
   readonly client?: CreativeResourceReadClient
 }): Promise<CreativeResourceCardView[]> {
   const limit = Math.max(1, Math.min(input.limit ?? 100, 200))
@@ -340,6 +478,7 @@ export async function listProjectCreativeResourceCards(input: {
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.schemaId?.trim() ? { schemaId: input.schemaId.trim() } : {}),
       ...(input.status ? { status: input.status } : {}),
+      ...(input.includeArchived ? {} : { archivedAt: null }),
     },
     include: resourceInclude,
     orderBy: [
@@ -349,13 +488,12 @@ export async function listProjectCreativeResourceCards(input: {
     ],
     take: limit,
   })
-  const pending = await loadPendingGenerations(client, rows.map((row) => row.id))
-  const resources = rows.map((row) => projectCreativeResourceView(row, pending.get(row.id) ?? null))
-  const inputSummaries = await loadInputSummaries(client, resources, input.userId)
-  return resources.map((resource) => cardViewFromResource(
-    resource,
-    inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
-  ))
+  return await projectCreativeResourceCards(
+    client,
+    rows,
+    input.userId,
+    input.includeArchived === true,
+  )
 }
 
 export async function getProjectCreativeResourceCard(input: {
@@ -377,13 +515,9 @@ export async function getProjectCreativeResourceCard(input: {
     include: resourceInclude,
   })
   if (!row) return null
-  const pending = await loadPendingGenerations(client, [row.id])
-  const resource = projectCreativeResourceView(row, pending.get(row.id) ?? null)
-  const inputSummaries = await loadInputSummaries(client, [resource], input.userId)
-  return cardViewFromResource(
-    resource,
-    inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
-  )
+  const [card] = await projectCreativeResourceCards(client, [row], input.userId, true)
+  if (!card) throw new Error(`CREATIVE_RESOURCE_CARD_VIEW_MISSING:${row.id}`)
+  return card
 }
 
 export async function getProjectCreativeResourceDataView(input: {
@@ -488,6 +622,7 @@ export async function readProjectCreativeResourceWorkingSet(input: {
       where: {
         userId: input.userId,
         projectId: input.projectId,
+        archivedAt: null,
         OR: resourceScopeWhere,
       },
       _count: { _all: true },

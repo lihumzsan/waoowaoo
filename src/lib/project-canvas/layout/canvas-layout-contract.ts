@@ -56,6 +56,7 @@ export const canvasNodeLayoutInputSchema = z.object({
   zIndex: z.number().int(),
   locked: z.boolean(),
   collapsed: z.boolean(),
+  hidden: z.boolean(),
 })
 
 export type CanvasNodeLayoutInput = z.infer<typeof canvasNodeLayoutInputSchema>

@@ -180,11 +180,20 @@ export async function issueApprovalGrantGroupInTransaction(
         code: 'OPERATION_PLAN_SCOPE_MISMATCH',
       })
     }
+    if (snapshot.apiRequestId !== null && snapshot.apiRequestId !== request.requestId) {
+      throw new ApiError('FORBIDDEN', {
+        code: 'APPROVAL_GRANT_REQUEST_MISMATCH',
+      })
+    }
     const existing = await tx.approvalGrant.findUnique({
       where: { planSnapshotId: snapshot.id },
     })
     if (existing) {
-      if (existing.userId !== params.userId || existing.revokedAt) {
+      if (
+        existing.userId !== params.userId
+        || existing.requestId !== request.requestId
+        || existing.revokedAt
+      ) {
         throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
       }
       issued.push({

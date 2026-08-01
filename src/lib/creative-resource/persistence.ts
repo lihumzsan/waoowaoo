@@ -21,6 +21,7 @@ export type CreativeResourcePersistenceClient = Prisma.TransactionClient
 export interface ReservedCreativeResource {
   readonly resourceId: string
   readonly memberIndex: number | null
+  readonly alternativeGroupExecutionId: string | null
   readonly status: 'pending' | 'ready' | 'failed' | 'canceled'
 }
 
@@ -119,6 +120,7 @@ export async function reserveCreativeResourcesInTransaction(
     readonly schemaId: string
     readonly operationId: string
     readonly requestId: string
+    readonly alternativeGroupExecutionId?: string | null
     readonly members: readonly ReserveCreativeResourceMember[]
   },
 ): Promise<readonly ReservedCreativeResource[]> {
@@ -132,6 +134,35 @@ export async function reserveCreativeResourcesInTransaction(
   if (input.members.length === 0) throw new Error('CREATIVE_RESOURCE_MEMBERS_REQUIRED')
 
   const memberIndexes = new Set<number>()
+  const alternativeGroupExecutionId = input.alternativeGroupExecutionId?.trim() || null
+  if (alternativeGroupExecutionId) {
+    if (input.members.length < 2 || input.members.length > 6) {
+      throw new Error('CREATIVE_RESOURCE_ALTERNATIVE_MEMBER_COUNT_INVALID')
+    }
+    const execution = await tx.operationExecution.findUnique({
+      where: { id: alternativeGroupExecutionId },
+      select: {
+        userId: true,
+        projectId: true,
+        episodeId: true,
+        operationId: true,
+        status: true,
+      },
+    })
+    if (
+      !execution
+      || execution.userId !== input.scope.userId
+      || execution.projectId !== input.scope.projectId
+      || (
+        input.scope.episodeId !== null
+        && execution.episodeId !== input.scope.episodeId
+      )
+      || execution.operationId !== input.operationId
+      || execution.status !== 'committing'
+    ) {
+      throw new Error(`CREATIVE_RESOURCE_ALTERNATIVE_GROUP_OWNER_INVALID:${alternativeGroupExecutionId}`)
+    }
+  }
   const rows = input.members.map((member) => {
     assertMemberIndex(member.memberIndex, memberIndexes)
     const resourceId = buildCreativeResourceId({
@@ -154,8 +185,15 @@ export async function reserveCreativeResourcesInTransaction(
       schemaId: schema.schemaId,
       name: requireNonEmpty(member.name, 'CREATIVE_RESOURCE_NAME_REQUIRED'),
       memberIndex: member.memberIndex,
+      alternativeGroupExecutionId,
     }
   })
+  if (
+    alternativeGroupExecutionId
+    && rows.some((row, index) => row.memberIndex !== index)
+  ) {
+    throw new Error('CREATIVE_RESOURCE_ALTERNATIVE_MEMBER_INDEX_NON_CONTIGUOUS')
+  }
 
   await tx.creativeResource.createMany({ data: rows, skipDuplicates: true })
   const stored = await tx.creativeResource.findMany({
@@ -171,6 +209,7 @@ export async function reserveCreativeResourcesInTransaction(
       schemaId: true,
       name: true,
       memberIndex: true,
+      alternativeGroupExecutionId: true,
       status: true,
     },
   })
@@ -188,6 +227,7 @@ export async function reserveCreativeResourcesInTransaction(
       || row.schemaId !== expected.schemaId
       || row.name !== expected.name
       || row.memberIndex !== expected.memberIndex
+      || row.alternativeGroupExecutionId !== expected.alternativeGroupExecutionId
     ) {
       throw new Error(`CREATIVE_RESOURCE_ID_COLLISION:${expected.id}`)
     }
@@ -197,6 +237,7 @@ export async function reserveCreativeResourcesInTransaction(
     return {
       resourceId: row.id,
       memberIndex: row.memberIndex,
+      alternativeGroupExecutionId: row.alternativeGroupExecutionId,
       status: row.status as ReservedCreativeResource['status'],
     }
   })
@@ -281,6 +322,7 @@ export async function reserveDomainCreativeResourceInTransaction(
     sourceType,
     sourceId,
     memberIndex: stored.memberIndex,
+    alternativeGroupExecutionId: null,
     status: stored.status as ReservedCreativeResource['status'],
   }
 }

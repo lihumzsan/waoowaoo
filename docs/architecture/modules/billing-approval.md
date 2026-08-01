@@ -28,7 +28,7 @@
 - **BA-14 — 一个 Task type 只对应一种成本语义。** 同一 handler 可以复用实现，但文本分析与收费媒体生成必须使用不同 TaskType/Operation identity。`reference_character_description_extract` 属文本直提交流程；`reference_to_character` 属图片 `plan → quote → ApprovalGrant → commit`。payload 布尔值不得在 worker 内把一种 billing policy 变成另一种。
 - **BA-15 — 计划预留 identity 必须显式。** plan 阶段创建、commit 阶段才物化且不等于 Task target 的实体 identity，必须由 `OperationPlan.reservedIdentityIds` 穷尽声明。不可变 snapshot、quote 与 Approval payload 共用这份 identity 契约；禁止只把父实体 ID 藏在 operation-specific metadata。任何合法作用域迁移必须显式重写 reserved identity、Task target、payload、metadata 与 dedupe identity 后再计算 hash，未映射 identity 必须失败或生成新 canonical identity，不得复用另一 project/attempt 的预留主键。
 - **BA-16 — 零新 Task 计划仍走原子 commit。** `billable_media` 的最终计划允许因全部目标已复用而包含零个待提交 Task；Grant、Execution 与 operation-specific plan writes 仍由同一 commit transaction 结算。没有 active dependency 时不创建 FollowUpBatch；存在 `taskDependencies` 时把其精确成员冻结进当前 FollowUpBatch。零新 Task 不得伪造占位 Task、跳过 plan writes 或建立第二条 commit 分支。
-- **BA-17 — 直接 UI 批准只能消费当前展示计划。** 任何直接媒体操作入口若把用户点击视为批准，控件必须持有完整 `OperationPlanView`，Grant 与 execute 消费同一 `planSnapshotId`；禁止预览 plan A、点击后重新 plan B，或用未展示报价的普通按钮提交收费媒体。当前 Canvas 只展示 Resource/Task，没有专用收费 action。
+- **BA-17 — 直接 UI 批准只能消费当前展示计划。** 任何直接媒体操作入口若把用户点击视为批准，控件必须持有完整 `OperationPlanView`，Grant 与 execute 消费同一 `planSnapshotId`；禁止预览 plan A、点击后重新 plan B，或用未展示报价的普通按钮提交收费媒体。Canvas direct-operation controller 以一次用户意图生成的稳定 `Idempotency-Key/operationRequestId` 请求计划、签发 Grant 并执行；plan endpoint 把该 identity 唯一绑定到 `OperationPlanSnapshot`，同 identity 同规范输入与同规范 API context hash 必须返回原 snapshot/quote，不同输入、locale、episode、selection context 或 contract revision 必须 typed conflict，数据库并发碰撞也只回放同一持久快照。Snapshot 有 API identity 时，Grant issuer 必须要求同一 request ID；Grant 与 execute route 必须要求 header identity 与 body `operationRequestId` 完全一致。网络结果不明时只重放同一 identity。alternatives 的 N 个 Task 必须作为一个完整计划显示总报价和成员数量，不能拆成未展示的追加执行。
 - **BA-18 — Episode scope 由计划产物裁决，Resource scope 由动作显式携带。** planner 必须从经过 ownership 校验的 CreativeResource target 与输入 Resource ID 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝混合 episode。registry 在 planner 前回库解析每个 Resource ID，并拒绝缺失 scope、非法 schema 或跨 project 输入，禁止通过默认 Chapter、数组位置或最近记录推断。
 - **BA-19 — 计划只因契约或内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验先比较 Snapshot 的 `executionContractRevision` 与当前 registry definition；不一致时禁止再次调用旧/新 planner解释同一输入，并在 Grant锁事务撤销授权。revision一致时才重新调用当前纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才消费 Grant，任一变化都不得创建 Execution、Task或冻结。已完成 Execution的幂等重放直接返回同一持久 output，不受后续契约或计划变化影响。
 - **BA-20 — 聚合 Approval 不合并执行身份。** 一张 Assistant Approval 卡可以表示同一模型步骤的多个收费成员并合计 quote，但每个成员仍拥有独立的 `toolCallId + OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链。`issueApprovalGrantGroup` 只把“全部成员可授权或全部不授权”放进一个事务；成员 Task 可进入各自 OperationExecution 冻结的 FollowUpBatch，但各自 commit、冻结、Execution 与幂等重放保持独立。
@@ -65,7 +65,7 @@
 
 - 媒体类型和是否属于收费媒体：`src/lib/billing/media-approval-policy.ts`。
 - operation confirmation 分类：`src/lib/operations/types.ts` 和 `src/lib/operations/registry.ts`。
-- 不可变计划、执行契约 revision 与 hash：`src/lib/operations/operation-plan-snapshot.ts`；revision 的生产声明由同一个 Operation registry definition 的 `planContractRevision` 提供。
+- 不可变计划、API request/context identity、执行契约 revision 与 hash：`src/lib/operations/operation-plan-snapshot.ts`；HTTP `Idempotency-Key` 的唯一解析与 header/body 一致性入口是 `src/lib/operations/api-request-identity.ts`；revision 的生产声明由同一个 Operation registry definition 的 `planContractRevision` 提供。
 - Grant 发放、聚合 Approval 的全有或全无 `issueApprovalGrantGroup`、registry 驱动的当前计划重验证、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
 - Assistant 计费确认设置的唯一持久事实是 `UserPreference.assistantBillingConfirmationRequired`；UI只通过既有 `/api/user-preference` Operation writer更新，Agent Turn approval owner通过 `src/lib/project-agent/billing-confirmation.ts`读取。自动模式仍创建同一种不可变 snapshot与精确 Grant，不得建立第二种扣费凭证。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
@@ -96,7 +96,7 @@
 
 | 事实                                                           | 唯一所有者 / 写入者                                                                | 消费者                                        |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------- |
-| 规范化输入、最终新 Task、既有 active Task dependency 与报价   | `OperationPlanSnapshot` / plan endpoint                                            | Grant issuer、Execution、FollowUpBatch、审计 |
+| API plan 请求 identity、规范化 request context hash、规范化输入、最终新 Task、既有 active Task dependency 与报价 | `OperationPlanSnapshot` / plan endpoint | Grant issuer、Execution、FollowUpBatch、审计 |
 | 用户对该计划的授权、内容重验证与单次消费                       | `ApprovalGrant` / `issueApprovalGrant` 发放、`invokeApprovedOperationPlan` 唯一重验证、撤销或消费 | 原子批次提交入口                              |
 | 一次幂等执行与原子 output                                      | `OperationExecution` / `invokeApprovedOperationPlan`                               | 重复调用、审计                                |
 | operation 业务投影、计划内 Task、冻结与Batch成员 | `invokeApprovedOperationPlan` 的同一 transaction；各 commit 只使用授权 transaction | OperationExecutionWorkflow、TaskWorkflow、UI |
@@ -105,6 +105,8 @@
 写入者变化：删除 Task/Job 的 `operationConfirmed`、收费 operation 的 direct execute、OperationExecution lease/attempt/submitted release 状态机和 operation-specific事务外补偿。Grant消费写入者收敛为 `invokeApprovedOperationPlan` 一个；Task transport从 BullMQ/Outbox收敛为 OperationExecutionWorkflow → Scheduler → TaskWorkflow。
 
 ## 历史回归
+
+- Canvas 首版 plan route 接受并回显 `Idempotency-Key`，但 Snapshot writer每次都直接创建新行；同一用户点击在网络 ACK 不明时重放，会形成多个 Snapshot/Grant 家族。execute 端的幂等无法反证这个更早的计划分叉。第一版持久 key 又只比较 input 与 route episode：Episode 从业务输入派生时会误判 ACK replay，locale 改变计划时顺序与并发请求会分别得到旧快照或 conflict。当前 API request identity 由 `OperationPlanSnapshot.apiRequestId` 在 user/scope/operation 内唯一拥有，并以原始 API context 的 canonical hash 区分 locale、episode 与 selection；同输入/同 context/同 contract 直接返回原 plan/quote，任一事实不同 typed conflict，并发创建由同一唯一键收敛。该 identity 还由 Grant service 及 Grant/execute HTTP header-body 一致性校验贯穿到执行。
 
 - 计费 route 曾依赖通用错误 normalizer 从中英文 message 猜测状态，且余额差额以响应顶层临时
   字段返回；删除字符串猜测后，typed `BILLING_IDEMPOTENT_ALREADY_CONFIRMED` 一度退化为 500，
@@ -137,6 +139,7 @@
 - Video Prompt Set retry 的冻结输入识别从 `request.kind=new` 扩展为所有非 retry 初始分支后，本地 Next 长运行进程让审批预检与批准执行分别命中新、旧 route bundle：预检生成了正确的一任务报价，批准后的旧 planner 却返回 `CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_MISSING`。旧防线只用三个内容 Hash 重跑“当前 planner”，默认跨请求 planner 语义相同；代码热更新或滚动发布可以让这个前提失效。当前每个收费 Operation 在生产 registry 声明真实 `planContractRevision`，Snapshot 单点冻结；批准执行先比较 revision，不一致即原子撤销且不调用 planner。迁移以无默认值的 NOT NULL 列阻止旧 runtime 在切换后继续写未版本化快照；首次部署仍必须先排空审批命令并停止旧进程，已完成 Execution 的 durable replay 不受影响。
 - Operation plan 曾只校验 payload、quote 与 episode 一致性，没有从 Task registry 验证每个 Task 的终态资源作用域；因此测试 fixture 和潜在 planner 可以生成引用不存在或跨 project episode 的不可执行计划，直到 Grant 消费后的 Task 提交才失败。旧审批原子性场景证明了“同一计划全有或全无”，却没有反证“计划本身能通过权威 Task 边界”。当前 quote、snapshot 与 Task submitter 复用 `TaskDefinition.terminalResourceImpact` 的同一作用域 resolver，缺失或越权在批准前 fail closed。
 - Segment 新链曾让 Canvas 单卡与 Assistant 批量共用无目标 episode 输入，导致单卡预取的是整集报价、同一次批准也提交整集 Task。旧测试只断言两者调用相同 Operation，没有断言同一 Operation 的 scope 与计划 Task 集合。当前共享 scope contract 让 Canvas 明确单段、Assistant 明确 pending 批量，quote、snapshot、Grant 与 commit 始终消费同一精确计划；批量 planner 在报价前排除同签名 active/completed Segment。
+- Project UI 统一收费 execute route 最初没有转发 plan 时的 UI context；旧 Canvas action 会在业务 input 中重复携带 Episode，因此仍可通过 snapshot scope 校验。Creative Resource exact retry 只允许 Resource ID，调用 Episode 只用于证明资格，plan endpoint 能看到该 context，execute 重验证却看到 null 并把合法同 snapshot 执行拒绝为 scope mismatch。当前 plan 与 execute route 都只转发同一受控 context，canonical Task Episode 仍由 snapshot/Resource 裁决；route 不从 context 重新解释目标。
 - Stripe webhook 最初只处理 Checkout 成功，退款、退款失败和争议不会改变已发额度；签名校验与充值幂等测试只能证明“不会重复加”，无法反证“外部资金逆转后额度仍可消费”。当前充值流水冻结 payment intent 和换算事实，refund 与 Stripe 明确的 `funds_withdrawn/funds_reinstated` 争议资金事件只追加 signed adjustment；`dispute.created/closed`（包括 inquiry）不再被猜成资金移动，退款失败或资金恢复按原 debit 精确恢复。旧充值若没有 payment intent/billingMeta 不会按最近订单猜测而会显式失败并要求人工对账，这是上线前需确认的历史数据盲区。
 - Stripe Checkout 曾手写 form encoding/fetch/response parser，Webhook 又独立实现 signature header、HMAC、timing-safe compare 和 Event JSON parser；这让协议升级与类型解释同时由项目承担，也存在“验签一次、再解析一次”的双入口风险。当前官方 SDK 是 Checkout wire 与 Webhook signature/Event 的唯一解释器，`maxNetworkRetries: 0` 保持单次创建语义；原有双向五分钟时间窗、自定义 fail-closed 错误、payment intent 关联、refund/dispute policy 与 ledger 幂等 writer 均保留。真实 Stripe Checkout 网络调用仍属于付费外部环境盲区，交付只声明本地类型、协议和账本场景证据，不宣称 live API 已验证。
 

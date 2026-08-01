@@ -32,6 +32,7 @@ function mapNodeLayout(row: ProjectCanvasNodeLayout): CanvasNodeLayoutSnapshot {
     zIndex: row.zIndex,
     locked: row.locked,
     collapsed: row.collapsed,
+    hidden: row.hidden,
   }
 }
 
@@ -144,6 +145,7 @@ export async function upsertProjectCanvasLayout(params: {
           zIndex: nodeLayout.zIndex,
           locked: nodeLayout.locked,
           collapsed: nodeLayout.collapsed,
+          hidden: nodeLayout.hidden,
         })),
       })
     }

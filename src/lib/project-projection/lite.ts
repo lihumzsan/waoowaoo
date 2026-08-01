@@ -4,7 +4,7 @@ import { resolveProjectContextPolicy } from '@/lib/project-context/policy'
 import type { ProjectProjectionLite, ProjectProjectionResourceSummary } from './types'
 
 async function resolveResourceSummary(projectId: string, episodeId: string | null): Promise<ProjectProjectionResourceSummary> {
-  const scope = { projectId, episodeId }
+  const scope = { projectId, episodeId, archivedAt: null }
   const [totalCount, readyCount, failedCount] = await Promise.all([
     prisma.creativeResource.count({ where: scope }),
     prisma.creativeResource.count({

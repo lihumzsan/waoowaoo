@@ -22,6 +22,7 @@ import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submi
 import type { SubmitTaskResult } from '@/lib/task/submitter'
 import {
   attachPersistedPlanIdentity,
+  loadOperationPlanSnapshotByApiRequest,
   persistOperationPlanSnapshot,
 } from './operation-plan-snapshot'
 import { freezeProjectVideoRatioIntoPlan } from './project-video-ratio-policy'
@@ -87,6 +88,8 @@ export interface BillingQuoteView {
 }
 
 export interface OperationPlanView {
+  /** Stable API generation intent carried unchanged through plan/grant/execute. */
+  operationRequestId?: string
   planSnapshotId?: string
   inputHash?: string
   planHash?: string
@@ -271,8 +274,10 @@ export function requirePlannedTaskBillingInfo(params: {
   return billingInfo
 }
 
-export async function toOperationPlanView(plan: OperationPlan): Promise<OperationPlanView> {
-  const quote = await quoteOperationPlan(plan)
+function projectOperationPlanView(
+  plan: OperationPlan,
+  quote: BillingQuoteView,
+): OperationPlanView {
   return {
     operationId: plan.operationId,
     kind: plan.kind,
@@ -287,11 +292,17 @@ export async function toOperationPlanView(plan: OperationPlan): Promise<Operatio
   }
 }
 
+export async function toOperationPlanView(plan: OperationPlan): Promise<OperationPlanView> {
+  return projectOperationPlanView(plan, await quoteOperationPlan(plan))
+}
+
 export async function persistOperationPlanView(params: {
   plan: OperationPlan
   executionContractRevision: string
   normalizedInput: unknown
   episodeId?: string | null
+  apiRequestId?: string | null
+  apiRequestContext?: unknown
 }): Promise<OperationPlanView> {
   const quote = await quoteOperationPlan(params.plan)
   const taskEpisodeIds = Array.from(new Set(
@@ -313,8 +324,13 @@ export async function persistOperationPlanView(params: {
     normalizedInput: params.normalizedInput,
     quote,
     episodeId: plannedEpisodeId ?? requestedEpisodeId,
+    apiRequestId: params.apiRequestId,
+    apiRequestContext: params.apiRequestContext,
   })
-  return attachPersistedPlanIdentity(await toOperationPlanView(params.plan), snapshot)
+  return attachPersistedPlanIdentity(
+    projectOperationPlanView(snapshot.plan, snapshot.quote),
+    snapshot,
+  )
 }
 
 export async function submitPlannedOperationTask(params: {
@@ -374,6 +390,7 @@ export async function planProjectAgentOperationFromApi(params: {
   operationId: string
   projectId: string
   userId: string
+  operationRequestId?: string | null
   context?: {
     locale?: string | null
     episodeId?: string | null
@@ -404,17 +421,50 @@ export async function planProjectAgentOperationFromApi(params: {
       issues: parsed.error.issues,
     })
   }
+  const operationRequestId = params.operationRequestId?.trim() || null
+  const apiRequestContext = {
+    locale: params.context?.locale?.trim() || null,
+    episodeId: params.context?.episodeId?.trim() || null,
+    selectedScopeRef: params.context?.selectedScopeRef?.trim() || null,
+    selectedAssetId: params.context?.selectedAssetId?.trim() || null,
+  }
+  const requestedEpisodeId = apiRequestContext.episodeId
+  if (operationRequestId) {
+    const replay = await loadOperationPlanSnapshotByApiRequest({
+      userId: params.userId,
+      projectId: params.projectId,
+      operationId: operation.id,
+      apiRequestId: operationRequestId,
+      executionContractRevision: operation.planContractRevision,
+      normalizedInput: parsed.data,
+      apiRequestContext,
+    })
+    if (replay) {
+      return {
+        ...attachPersistedPlanIdentity(
+          projectOperationPlanView(replay.plan, replay.quote),
+          replay,
+        ),
+        operationRequestId,
+      }
+    }
+  }
   const plan = await planOperation({
     operation,
     ctx: {
       request: params.request,
+      requestId: operationRequestId,
       userId: params.userId,
       projectId: params.projectId,
       context: {
-        ...(params.context?.locale ? { locale: params.context.locale } : {}),
-        ...(params.context?.episodeId ? { episodeId: params.context.episodeId } : {}),
-        ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
-        ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
+        ...(apiRequestContext.locale ? { locale: apiRequestContext.locale } : {}),
+        ...(apiRequestContext.episodeId ? { episodeId: apiRequestContext.episodeId } : {}),
+        ...(apiRequestContext.selectedScopeRef
+          ? { selectedScopeRef: apiRequestContext.selectedScopeRef }
+          : {}),
+        ...(apiRequestContext.selectedAssetId
+          ? { selectedAssetId: apiRequestContext.selectedAssetId }
+          : {}),
       },
       source: params.source || 'project-ui',
       writer: null,
@@ -422,10 +472,15 @@ export async function planProjectAgentOperationFromApi(params: {
     },
     input: parsed.data,
   })
-  return await persistOperationPlanView({
+  const view = await persistOperationPlanView({
     plan,
     executionContractRevision: operation.planContractRevision,
     normalizedInput: parsed.data,
-    episodeId: params.context?.episodeId ?? null,
+    episodeId: requestedEpisodeId,
+    apiRequestId: operationRequestId,
+    apiRequestContext,
   })
+  return operationRequestId
+    ? { ...view, operationRequestId }
+    : view
 }

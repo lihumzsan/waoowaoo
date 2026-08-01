@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { ApiError, getIdempotencyKey } from '@/lib/api-errors'
+import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import {
   invokeProjectAgentOperation,
@@ -20,6 +20,7 @@ import {
   type OperationMutationResponse,
 } from '@/lib/operations/mutation-receipt'
 import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
+import { readOperationRequestId } from '@/lib/operations/api-request-identity'
 
 interface ExecuteProjectAgentOperationFromApiParams {
   request: NextRequest
@@ -35,6 +36,7 @@ interface ExecuteProjectAgentOperationFromApiParams {
   input: unknown
   source?: string
   responseContract?: 'operation_mutation_response_v1'
+  requireIdempotencyKey?: boolean
 }
 
 export async function executeProjectAgentOperationFromApi(
@@ -50,6 +52,10 @@ export async function executeProjectAgentOperationFromApi(
 export async function executeProjectAgentOperationFromApi(
   params: ExecuteProjectAgentOperationFromApiParams,
 ): Promise<unknown> {
+  const apiRequestId = readOperationRequestId(params.request, {
+    required: Boolean(params.requireIdempotencyKey),
+    operationId: params.operationId,
+  })
   const registry = createProjectAgentOperationRegistryForApi()
   const operation = registry[params.operationId]
   const requiresMutationResponse = Boolean(
@@ -71,6 +77,7 @@ export async function executeProjectAgentOperationFromApi(
   }
   const operationContext = {
     request: params.request,
+    requestId: apiRequestId,
     userId: params.userId,
     projectId: params.projectId,
     context: {
@@ -116,7 +123,7 @@ export async function executeProjectAgentOperationFromApi(
       operation?.assistantWriteAuthority?.kind
         === 'temporal_operation_execution'
     ) {
-      const stableSourceId = getIdempotencyKey(params.request)
+      const stableSourceId = apiRequestId
       if (!stableSourceId) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'OPERATION_IDEMPOTENCY_KEY_REQUIRED',
