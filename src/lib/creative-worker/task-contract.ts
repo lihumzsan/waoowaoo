@@ -3,7 +3,10 @@ import { CREATIVE_SKILL_REGISTRY } from '@/lib/creative-skills'
 import { ledgerEntityRefSchema } from '@/lib/edit-ledger'
 import { stableArgsHash } from '@/lib/project-agent/stable-args-hash'
 import { taskRuntimePayloadEnvelopeShape } from '@/lib/task/progress-payload'
-import { CREATIVE_WORK_OUTPUT_KINDS } from './constants'
+import {
+  CREATIVE_WORK_CONSTRAINT_LIMIT,
+  CREATIVE_WORK_OUTPUT_KINDS,
+} from './constants'
 import {
   creativeWorkOutputSchemas,
   readCreativeWorkOutputDefinition,
@@ -19,7 +22,6 @@ import {
   creativeWorkTraceEventSchema,
 } from './trace-contract'
 import { creativeWorkerResearchEvidenceSchema } from './research'
-import { CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT } from './system-constraints'
 
 const creativeWorkOutputSchema = z.discriminatedUnion('kind', [
   creativeWorkOutputSchemas.screenplay,
@@ -110,8 +112,8 @@ const creativeWorkChapterBatchBaseShape = {
   userRequest: z.string().max(30_000)
     .describe('Relevant original user request preserved for every Chapter Worker.'),
   constraints: z.array(z.string().trim().min(1).max(4_000))
-    .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
-    .describe('Shared delivery, safety, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
+    .max(CREATIVE_WORK_CONSTRAINT_LIMIT)
+    .describe('Shared delivery, continuity, or creative constraints. Do not prescribe generation segment count or per-segment durations; the Worker derives them from the server-supplied video production context.'),
   referencedAssets: z.array(z.object({
     resourceId: z.string().trim().min(1),
     entityRef: ledgerEntityRefSchema.nullable(),

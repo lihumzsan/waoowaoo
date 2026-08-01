@@ -7,6 +7,8 @@ export const CREATIVE_WORK_OUTPUT_KINDS = [
   'music_direction',
 ] as const
 
+export const CREATIVE_WORK_CONSTRAINT_LIMIT = 64
+
 // Skill resources are authored in this repository and reviewed with the code
 // that reads them, so their size is an authoring concern rather than a runtime
 // risk. Turn, read-concurrency, and paid-search bounds remain because they

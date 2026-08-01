@@ -81,7 +81,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
     import_web_reference_image: defineOperation({
       id: 'import_web_reference_image',
       summary:
-        'Import one exact image returned by web_search into this project as an owned reference image Resource, so its revision can be passed as an image reference to later image or video generation. Use it only when the visual identity of an unfamiliar subject genuinely cannot be conveyed in words, and only for an image the current run actually received from web_search. Refuse well-known protected characters and franchises, including Disney and Marvel properties. The origin page is recorded, and the result is external reference material, never original project artwork.',
+        'Import one exact image returned by web_search into this project as an owned reference image Resource, so its revision can be passed as an image reference to later image or video generation. Use it only when the visual identity of an unfamiliar subject genuinely cannot be conveyed in words, and only for an image the current run actually received from web_search. The origin page is recorded, and the result is external reference material, never original project artwork.',
       intent: 'act',
       effects: {
         writes: true,

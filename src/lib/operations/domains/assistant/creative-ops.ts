@@ -8,7 +8,6 @@ import {
 } from '@/lib/creative-resource'
 import {
   buildCreativeWorkInputFingerprint,
-  compileCreativeWorkSystemConstraints,
   CREATIVE_WORK_TASK_PROTOCOL,
   creativeWorkDelegationInputSchema,
   creativeWorkTaskPayloadSchema,
@@ -370,22 +369,6 @@ type CreativeWorkTaskItem = CreativeWorkTaskRequest & {
   readonly requestKey: string
 }
 
-function injectCreativeWorkSystemConstraints(
-  request: CreativeWorkHydratedItem,
-): CreativeWorkHydratedItem {
-  const definition = readCreativeWorkOutputDefinition(request.outputKind)
-  return {
-    ...request,
-    context: {
-      ...request.context,
-      constraints: compileCreativeWorkSystemConstraints({
-        callerConstraints: request.context.constraints,
-        systemConstraintIds: definition.systemConstraints,
-      }),
-    },
-  }
-}
-
 function canComposeDuration(
   target: number,
   options: readonly number[],
@@ -438,7 +421,7 @@ async function resolveTaskRequests(input: {
   readonly userId: string
   readonly adoptedCreativeDirection: AdoptedCreativeDirectionSnapshot | null
 }): Promise<CreativeWorkTaskItem[]> {
-  const requests = input.requests.map(injectCreativeWorkSystemConstraints)
+  const requests = input.requests
   const musicContext = requests.some(
     (request) => request.outputKind === 'music_direction',
   )

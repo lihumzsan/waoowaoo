@@ -1,13 +1,13 @@
 import type { Model } from '@openai/agents'
 import { z } from 'zod'
 import { injectedCreativeDirectionSchema } from '@/lib/creative-direction/contracts'
-import { CREATIVE_WORK_OUTPUT_KINDS, DEFAULT_CREATIVE_WORKER_BUDGETS } from './constants'
+import {
+  CREATIVE_WORK_CONSTRAINT_LIMIT,
+  CREATIVE_WORK_OUTPUT_KINDS,
+  DEFAULT_CREATIVE_WORKER_BUDGETS,
+} from './constants'
 import type { CreativeSkillReadTraceEntry, CreativeWorkTraceEvent } from './trace-contract'
 import type { CreativeWorkerResearchEvidence, CreativeWorkerResearchState } from './research'
-import {
-  CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT,
-  CREATIVE_WORK_COMPILED_CONSTRAINT_LIMIT,
-} from './system-constraints'
 import type { WebSearchRequest, WebSearchResponse } from '@/lib/web-search'
 import type { LlmUsageFact } from '@/lib/billing/llm-usage'
 export type { CreativeSkillReadTraceEntry } from './trace-contract'
@@ -190,9 +190,9 @@ export const creativeWorkDelegationRequestSchema = z
           ),
         constraints: z
           .array(z.string().trim().min(1).max(4_000))
-          .max(CREATIVE_WORK_CALLER_CONSTRAINT_LIMIT)
+          .max(CREATIVE_WORK_CONSTRAINT_LIMIT)
           .describe(
-            'Explicit creative, duration, format, continuity, safety, or delivery constraints that the result must satisfy.',
+            'Explicit creative, duration, format, continuity, or delivery constraints that the result must satisfy.',
           ),
       })
       .strict()
@@ -212,7 +212,7 @@ export const creativeWorkHydratedRequestSchema = z
         sourceMaterials: z.array(creativeWorkHydratedSourceMaterialSchema).max(64),
         constraints: z
           .array(z.string().trim().min(1).max(4_000))
-          .max(CREATIVE_WORK_COMPILED_CONSTRAINT_LIMIT),
+          .max(CREATIVE_WORK_CONSTRAINT_LIMIT),
       })
       .strict(),
   })

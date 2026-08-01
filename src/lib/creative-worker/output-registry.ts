@@ -7,7 +7,6 @@ import {
   screenplayWorkerOutputSchema,
 } from '@/lib/screenplay'
 import type { CreativeSkillId } from '@/lib/creative-skills'
-import type { CreativeWorkSystemConstraintId } from './system-constraints'
 import type { CreativeWorkOutputKind } from './types'
 
 const nullableText = (max: number) => z.string().max(max).nullable()
@@ -76,7 +75,6 @@ export interface CreativeWorkOutputDefinition {
   schema: z.ZodObject
   resourceScope: 'project' | 'episode'
   injectCreativeDirection: boolean
-  systemConstraints: readonly CreativeWorkSystemConstraintId[]
   workerTools: readonly ('web_search')[]
   requiredSourceSchemaIds: readonly string[]
 }
@@ -88,7 +86,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.screenplay,
     resourceScope: 'project',
     injectCreativeDirection: true,
-    systemConstraints: [],
     workerTools: [],
     requiredSourceSchemaIds: [],
   },
@@ -98,7 +95,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.chapter_continuity_plan,
     resourceScope: 'episode',
     injectCreativeDirection: true,
-    systemConstraints: [],
     workerTools: [],
     requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
@@ -108,7 +104,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.creative_direction,
     resourceScope: 'project',
     injectCreativeDirection: false,
-    systemConstraints: ['human_visual_safety'],
     workerTools: ['web_search'],
     requiredSourceSchemaIds: [],
   },
@@ -118,7 +113,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.asset_manifest,
     resourceScope: 'project',
     injectCreativeDirection: true,
-    systemConstraints: ['human_visual_safety'],
     workerTools: [],
     requiredSourceSchemaIds: [CREATIVE_RESOURCE_SCHEMA.SCREENPLAY],
   },
@@ -128,7 +122,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.video_prompt_set,
     resourceScope: 'episode',
     injectCreativeDirection: true,
-    systemConstraints: ['human_visual_safety'],
     workerTools: [],
     requiredSourceSchemaIds: [],
   },
@@ -138,7 +131,6 @@ export const creativeWorkOutputRegistry = {
     schema: creativeWorkOutputSchemas.music_direction,
     resourceScope: 'episode',
     injectCreativeDirection: true,
-    systemConstraints: [],
     workerTools: [],
     requiredSourceSchemaIds: [],
   },
