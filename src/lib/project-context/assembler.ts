@@ -30,7 +30,6 @@ async function listOperationResultsForContext(params: {
       payload: true,
       result: true,
       errorCode: true,
-      errorMessage: true,
       operationId: true,
       operationSource: true,
       approvalGrantId: true,

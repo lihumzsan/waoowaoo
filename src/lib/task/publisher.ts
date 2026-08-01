@@ -14,6 +14,7 @@ import {
 } from '@/lib/sse/events'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
+import { resolveUnifiedErrorCode } from '@/lib/errors/codes'
 
 // No writer since the structured canvas stream removal; the type only keeps
 // historical TaskEvent rows replayable as plain stream events.
@@ -101,6 +102,17 @@ function normalizeLifecyclePayload(
     : null
   next.lifecycleType = lifecycleType
   next.intent = coerceTaskIntent(next.intent ?? payloadUi?.intent, taskType)
+  if (lifecycleType === TASK_EVENT_TYPE.FAILED || lifecycleType === TASK_EVENT_TYPE.CANCELED) {
+    // Task.errorMessage remains diagnostic storage. Lifecycle events are
+    // replayed to browsers and tools, so terminal projections expose codes only.
+    delete next.message
+    delete next.errorMessage
+    if (lifecycleType === TASK_EVENT_TYPE.FAILED) {
+      next.errorCode = resolveUnifiedErrorCode(next.errorCode) ?? 'INTERNAL_ERROR'
+    } else {
+      delete next.errorCode
+    }
+  }
 
   return next
 }

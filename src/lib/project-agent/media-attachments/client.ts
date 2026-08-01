@@ -1,9 +1,10 @@
 import { apiFetch } from '@/lib/api-fetch'
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { readClientApiError } from '@/lib/errors/client'
 import type {
   ProjectAssistantMediaAttachment,
   ProjectAssistantMediaAttachmentUploadResponse,
 } from './types'
+import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES } from '@/lib/http/body-size-constants'
 
 interface UploadProjectAssistantMediaAttachmentParams {
   readonly projectId: string
@@ -30,8 +31,35 @@ function isMediaUploadResponse(value: unknown): value is ProjectAssistantMediaAt
  */
 export function isProjectAssistantMediaFile(file: File): boolean {
   const mimeType = file.type.toLowerCase()
-  if (mimeType.startsWith('image/') || mimeType.startsWith('audio/')) return true
+  if ([
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'audio/mpeg',
+    'audio/wav',
+    'audio/ogg',
+  ].includes(mimeType)) return true
   return /\.(png|jpe?g|webp|mp3|wav|ogg)$/i.test(file.name)
+}
+
+export type ProjectAssistantMediaAttachmentValidationCode =
+  | 'PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED'
+  | 'PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE'
+  | 'UPLOAD_FILE_EMPTY'
+
+export function validateProjectAssistantMediaAttachmentFile(
+  file: File,
+): ProjectAssistantMediaAttachmentValidationCode | null {
+  if (file.size <= 0) return 'UPLOAD_FILE_EMPTY'
+  if (!isProjectAssistantMediaFile(file)) {
+    return 'PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE'
+  }
+  const isImage = file.type.toLowerCase().startsWith('image/')
+    || /\.(png|jpe?g|webp)$/i.test(file.name)
+  if (file.size > (isImage ? MAX_IMAGE_BYTES : MAX_AUDIO_BYTES)) {
+    return 'PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED'
+  }
+  return null
 }
 
 export async function uploadProjectAssistantMediaAttachment({
@@ -45,7 +73,7 @@ export async function uploadProjectAssistantMediaAttachment({
     body: formData,
   })
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, 'Failed to upload media'))
+    throw await readClientApiError(response)
   }
   const payload: unknown = await response.json()
   if (!isMediaUploadResponse(payload)) {

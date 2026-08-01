@@ -115,6 +115,7 @@ export async function waitForAsyncProviderResult(input: {
       if (!url) {
         throw new ProviderTerminalFailureError(
           input.externalId,
+          'EMPTY_RESPONSE',
           `External task completed without a result URL: ${input.externalId}`,
         )
       }
@@ -128,10 +129,10 @@ export async function waitForAsyncProviderResult(input: {
     if (status.status === 'failed') {
       const message = status.error || `External task failed: ${input.externalId}`
       if (status.failureDisposition === 'retryable') {
-        throw new ProviderTerminalFailureError(input.externalId, message)
+        throw new ProviderTerminalFailureError(input.externalId, status.errorCode, message)
       }
       if (status.failureDisposition === 'permanent') {
-        throw new ProviderPermanentFailureError(input.externalId, message)
+        throw new ProviderPermanentFailureError(input.externalId, status.errorCode, message)
       }
       throw new Error(`ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED:${input.externalId}`)
     }

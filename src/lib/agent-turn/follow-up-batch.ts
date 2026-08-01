@@ -4,6 +4,7 @@ import type { AgentInputItem } from '@openai/agents'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentFollowUpBatchBinding } from '@/lib/operations/types'
 import type { AgentTurnContextSnapshot } from './contracts'
+import { projectErrorForModel } from '@/lib/errors/projection'
 
 const FOLLOW_UP_BATCH_MAX_MEMBERS = 64
 const FOLLOW_UP_INPUT_MAX_BYTES = 512 * 1_024
@@ -470,7 +471,6 @@ export async function loadAgentTurnFollowUpInput(params: {
                 targetId: true,
                 result: true,
                 errorCode: true,
-                errorMessage: true,
               },
             },
           },
@@ -498,8 +498,9 @@ export async function loadAgentTurnFollowUpInput(params: {
     targetType: member.task.targetType,
     targetId: member.task.targetId,
     result: member.task.result,
-    errorCode: member.task.errorCode,
-    errorMessage: member.task.errorMessage,
+    failure: member.task.status === 'failed'
+      ? projectErrorForModel(member.task.errorCode)
+      : null,
   }))
   const content = [
     '[task_follow_up]',
@@ -508,6 +509,7 @@ export async function loadAgentTurnFollowUpInput(params: {
     `toolCallId=${batch.callId}`,
     `operationId=${batch.operationId}`,
     `tasks=${JSON.stringify(facts)}`,
+    'A failed task never authorizes automatic resubmission or new billing. Explain the structured failure and wait for explicit user direction.',
     '[/task_follow_up]',
   ].join('\n')
   if (Buffer.byteLength(content, 'utf8') > FOLLOW_UP_INPUT_MAX_BYTES) {

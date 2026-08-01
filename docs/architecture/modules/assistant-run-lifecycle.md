@@ -173,6 +173,12 @@ Operation。
   任何非终态Task，就必须以typed conflict失败；已经terminal且RunState已清的历史决定不阻断。
   不能依赖级联删除把仍可产生副作用的执行事实抹掉。全部执行终态后，删除
   事务先取消残余FollowUpBatch恢复权，再删除Project领域关系。
+- **AR-30 — 模型只消费安全失败投影。** Operation Tool、Task follow-up、Project Context 与
+  Subagent View只能向模型提供统一 registry 的 `code/category/retryable/action`；Provider
+  response body、Task/Turn `errorMessage`、stack、HTTP wrapper与用户本地化文案都不得进入
+  模型历史。外层 Tool failure code只表示协议 envelope，不得成为第二错误码表；terminal
+  Task 的 `retryable` 只是事实，不授权模型自动创建新的收费 Operation。输入校验可附带由
+  canonical Tool Schema派生的字段路径、动作和允许键，不附带原始 issue/message。
 
 ## 状态与写入者
 
@@ -325,6 +331,12 @@ RunState 排空是环境盲区；未验证不得宣称架构完成。
 - Assistant媒体附件上传曾把底层`Error.message`直接展示，并以英文硬编码补缺；Provider、
   storage或内部协议文本因此可能泄漏到用户界面且绕过i18n。当前上传层只向Composer传递失败
   事实，最终文案统一取正式`assistantAgent.attachments.mediaUploadFailed`翻译。
+
+- Operation adapter曾维护只有 `OPERATION_EXECUTION_FAILED` 的私有错误系统，Task follow-up
+  又把最多 2000 字符的 Provider 原始 JSON 作为 user message 注入模型；Session View 与
+  Project Context也读取诊断 message。根因是“模型看什么”没有复用统一错误 registry。
+  当前 envelope内嵌唯一 canonical model projection，所有模型/View查询删除 raw message读取；
+  原始 cause只留在持久诊断与结构化日志，未知 code稳定收敛为 `INTERNAL_ERROR`。
 
 ## 修改检查表
 

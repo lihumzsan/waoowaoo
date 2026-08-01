@@ -1,12 +1,32 @@
 import { apiFetch } from '@/lib/api-fetch'
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { readClientApiError } from '@/lib/errors/client'
 import type {
   ProjectAssistantTextAttachment,
   ProjectAssistantTextAttachmentUploadResponse,
 } from './types'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_SIZE_BYTES,
+} from './types'
 
 interface UploadProjectAssistantTextAttachmentParams {
   readonly file: File
+}
+
+export type ProjectAssistantTextAttachmentValidationCode =
+  | 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED'
+  | 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE'
+  | 'UPLOAD_FILE_EMPTY'
+
+export function validateProjectAssistantTextAttachmentFile(
+  file: File,
+): ProjectAssistantTextAttachmentValidationCode | null {
+  if (file.size <= 0) return 'UPLOAD_FILE_EMPTY'
+  if (file.size > PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_SIZE_BYTES) {
+    return 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED'
+  }
+  return /\.(txt|md|markdown|docx)$/i.test(file.name)
+    ? null
+    : 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE'
 }
 
 function isAttachmentUploadResponse(value: unknown): value is ProjectAssistantTextAttachmentUploadResponse {
@@ -26,7 +46,7 @@ export async function uploadProjectAssistantTextAttachment({
     body: formData,
   })
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, 'Failed to upload file'))
+    throw await readClientApiError(response)
   }
   const payload: unknown = await response.json()
   if (!isAttachmentUploadResponse(payload)) {

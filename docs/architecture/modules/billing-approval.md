@@ -55,6 +55,11 @@
   usage；成功run也必须在provider invocation checkpoint transition前写入，外层重放只返回
   同一事实。不得把“Task失败”误解成“供应商没有产生token”。未来若要展示供应商成本，必须
   另行定义产品契约。
+- **BA-29 — 计费失败必须保留 typed 业务语义。** 账本与批准服务只抛出
+  `BillingOperationError` 或更具体的余额错误；统一错误 normalizer 只按其穷尽 code 映射为
+  `INVALID_PARAMS`、`CONFLICT`、`INSUFFICIENT_BALANCE` 或内部错误，禁止从供应商/账本文案
+  猜测分类。公开响应只暴露 registry 允许的安全 details、动作与 request ID；余额不足引导
+  平台充值，Provider 自有账户欠费则引导检查对应 API 配置，二者不得共用同一产品动作。
 
 ## 权威入口
 
@@ -100,6 +105,13 @@
 写入者变化：删除 Task/Job 的 `operationConfirmed`、收费 operation 的 direct execute、OperationExecution lease/attempt/submitted release 状态机和 operation-specific事务外补偿。Grant消费写入者收敛为 `invokeApprovedOperationPlan` 一个；Task transport从 BullMQ/Outbox收敛为 OperationExecutionWorkflow → Scheduler → TaskWorkflow。
 
 ## 历史回归
+
+- 计费 route 曾依赖通用错误 normalizer 从中英文 message 猜测状态，且余额差额以响应顶层临时
+  字段返回；删除字符串猜测后，typed `BILLING_IDEMPOTENT_ALREADY_CONFIRMED` 一度退化为 500，
+  Provider 自有账户欠费也会被混同为平台余额不足。旧 API 契约测试固定了顶层字段，却没有以
+  typed code 作为独立 oracle。当前 `BillingOperationError.code` 由统一 normalizer 穷尽映射，
+  公开数值只进入 registry 允许的 `details`，客户端只消费 canonical code/action 并本地化；未知
+  计费错误 fail closed 为内部错误，不再恢复任何 message 启发式。
 
 - B+ 首版保留了 Agents SDK `Usage`、上下文 usage telemetry 和唯一 `recordUsageFact`
   writer，却没有任何生产调用把 Assistant/Creative Worker 的结果交给该 writer；免费模型

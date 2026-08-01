@@ -10,6 +10,8 @@ import { Prisma } from '@prisma/client'
 import { withTextUsageCollection, type TextUsageEntry } from '@/lib/billing/runtime-usage'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { normalizeAnyError } from '@/lib/errors/normalize'
+import { getErrorSpec, resolveUnifiedErrorCode } from '@/lib/errors/codes'
+import { projectPublicErrorDetails } from '@/lib/errors/projection'
 import { withLogContext } from '@/lib/logging/context'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getTemporalClient } from '@/lib/temporal/client'
@@ -36,6 +38,7 @@ import { AGENT_TURN_PROTOCOL } from '@/lib/agent-turn/contracts'
 import { submitAgentTurnViaTemporal } from '@/lib/temporal/agent-thread/client'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskExecutionData } from '@/lib/task/types'
 import { executeTaskHandler } from '@/lib/task/execution/registry'
+import { projectTaskProgress } from '@/lib/task/execution/progress'
 import type { TaskExecutionContext, TaskExecutionResult } from '@/lib/task/execution/context'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { cancelAcceptedTaskProviderJobsAfterTerminal } from '@/lib/task/execution/provider-media'
@@ -47,6 +50,7 @@ import type {
   InitializeTaskWorkflowInput,
   InitializeTaskWorkflowResult,
   NotifyTaskFollowUpInput,
+  ReportTaskRetryInput,
   ReleaseTaskCapacityInput,
   RunTaskAttemptInput,
   RunTaskAttemptResult,
@@ -84,6 +88,7 @@ type WorkflowTaskRow = {
   operationPlanTaskId: string | null
   operationRequestId: string | null
   status: string
+  progress: number
   attempt: number
   executionFingerprint: string | null
 }
@@ -192,6 +197,7 @@ async function loadTaskRow(taskId: string): Promise<WorkflowTaskRow> {
       operationPlanTaskId: true,
       operationRequestId: true,
       status: true,
+      progress: true,
       attempt: true,
       executionFingerprint: true,
     },
@@ -611,6 +617,29 @@ export async function beginTaskAttempt(input: BeginTaskAttemptInput): Promise<vo
   await claimBusinessAttempt(input)
 }
 
+export async function reportTaskRetry(input: ReportTaskRetryInput): Promise<void> {
+  requireTaskActivity(input)
+  const attempt = requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
+  const row = await loadTaskRow(input.taskId)
+  const data = requireTaskRowIdentity(row, input)
+  if (terminalStatus(row.status)) return
+  if (row.status !== TASK_STATUS.PROCESSING || row.attempt !== attempt) {
+    return failNonRetryable(
+      'TASK_RETRY_PROJECTION_DIVERGED',
+      row.id,
+      attempt,
+      row.status,
+      row.attempt,
+    )
+  }
+  await projectTaskProgress({
+    data,
+    attempt,
+    progress: row.progress,
+    payload: { stage: 'retrying' },
+  })
+}
+
 export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTaskAttemptResult> {
   requireTaskActivity(input)
   const attempt = requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
@@ -735,10 +764,21 @@ export async function runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTas
         }
       }
       const normalized = normalizeAnyError(error, { context: 'worker' })
+      logger.error({
+        action: 'task.attempt.failed',
+        message: 'task attempt returned a classified failure',
+        taskId: input.taskId,
+        errorCode: normalized.code,
+        retryable: normalized.retryable,
+        details: { attempt },
+        error: error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { message: String(error) },
+      })
       const failure: TaskAttemptFailure = {
         errorCode: normalized.code,
-        errorMessage: normalized.message,
-        errorDetails: normalized.details,
+        errorMessage: getErrorSpec(normalized.code).defaultMessage,
+        errorDetails: projectPublicErrorDetails(normalized.details),
         failureClass: normalized.failureClass,
         retryDisposition: shouldRetryTaskFailure({
           taskType: input.taskType,
@@ -828,12 +868,13 @@ export async function commitTaskTerminal(
     requirePositiveInt(input.attempt, 'TASK_ATTEMPT_INVALID')
     requireNonEmpty(input.errorCode, 'TASK_TERMINAL_ERROR_CODE_INVALID')
     requireNonEmpty(input.errorMessage, 'TASK_TERMINAL_ERROR_MESSAGE_INVALID')
+    const errorCode = resolveUnifiedErrorCode(input.errorCode) ?? 'INTERNAL_ERROR'
     const result = await commitBusinessTaskTerminal({
       kind: 'failed',
       taskId: input.taskId,
       fence: { kind: 'attempt', attempt: input.attempt },
       source: input.source,
-      errorCode: input.errorCode,
+      errorCode,
       errorMessage: input.errorMessage,
       errorDetails: input.errorDetails,
       eventPayload: { stage: 'failed', runtime: 'temporal' },
@@ -910,7 +951,7 @@ export async function commitTaskWorkflowFailure(
         taskId: input.task.taskId,
         fence: { kind: 'active' },
         source: 'workflow',
-        errorCode: 'TASK_WORKFLOW_FAILED',
+        errorCode: 'WORKER_EXECUTION_ERROR',
         errorMessage: 'Task Workflow failed before returning a terminal result',
         errorDetails: {
           schedulerWorkflowId: input.schedulerWorkflowId,

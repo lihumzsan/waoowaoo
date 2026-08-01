@@ -5,6 +5,7 @@ import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { normalizeVideoReferenceImages } from '@/lib/video-generation/reference-images'
+import { AppError } from '@/lib/errors/app-error'
 
 const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -277,7 +278,7 @@ export async function arkCreateVideoTask(
   request: ArkVideoTaskRequest,
   options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<{ id: string; [key: string]: unknown }> {
-  if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
+  if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
   validateArkVideoTaskRequest(request)
 
   const { apiKey, timeoutMs, logPrefix = '[Ark Video]' } = options
@@ -307,7 +308,7 @@ export async function arkQueryVideoTask(
   taskId: string,
   options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkVideoTaskResponse> {
-  if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
+  if (!options.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
 
   const { apiKey, timeoutMs } = options
   const url = `${ARK_BASE_URL}/contents/generations/tasks/${taskId}`

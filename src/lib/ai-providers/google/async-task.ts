@@ -41,6 +41,7 @@ export const geminiBatchAsyncTaskProvider: AsyncTaskProviderRegistration = {
     return normalizeAsyncPollResult({
       status: result.status,
       failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       imageUrl: result.imageUrl,
       resultUrl: result.imageUrl,
       error: result.error,
@@ -59,6 +60,7 @@ export const googleVideoAsyncTaskProvider: AsyncTaskProviderRegistration = {
     return normalizeAsyncPollResult({
       status: result.status,
       failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       downloadHeaders: result.videoUrl

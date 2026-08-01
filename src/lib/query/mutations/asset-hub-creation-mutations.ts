@@ -24,7 +24,7 @@ export function useCreateAssetHubLocation() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      }, '创建失败', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -39,7 +39,6 @@ export function useUploadAssetHubTempMedia() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         },
-        '上传失败',
       ),
   })
 }
@@ -53,6 +52,6 @@ export function useCreateAssetHubCharacter() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      }, '创建角色失败', queryClient),
+      }, queryClient),
   })
 }

@@ -43,7 +43,6 @@ function mapCharacterAssetToProjectCharacter(asset: AssetGroupMap['character'][n
             previousDescriptions: null,
             selectedIndex: variant.selectionState.selectedRenderIndex,
             imageTaskRunning: asset.taskState.isRunning || variant.taskState.isRunning,
-            imageErrorMessage: variant.taskState.lastError?.message ?? null,
             lastError: variant.taskState.lastError ?? asset.taskState.lastError,
         })),
         profileData: asset.profileData,
@@ -67,7 +66,6 @@ function mapLocationVariantToProjectImage(
         previousDescription: null,
         isSelected: render?.isSelected ?? false,
         imageTaskRunning: asset.taskState.isRunning || variant.taskState.isRunning,
-        imageErrorMessage: variant.taskState.lastError?.message ?? null,
         lastError: variant.taskState.lastError ?? asset.taskState.lastError,
     }
 }

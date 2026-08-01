@@ -22,7 +22,6 @@ export type TaskRuntimeStateLike = {
   readonly updatedAt?: string | null
   readonly lastError?: {
     readonly code?: string | null
-    readonly message?: string | null
   } | null
 }
 
@@ -64,7 +63,6 @@ export function taskRuntimeStateMapSignature(
       state.runningTaskType ?? '',
       state.progressGroupId ?? '',
       state.lastError?.code ?? '',
-      state.lastError?.message ?? '',
     ].join(':'))
     .sort()
     .join('|')

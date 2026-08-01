@@ -25,6 +25,10 @@
 - **PS-11 — 认证入口与账号初始化唯一。** 产品只有一个登录/注册页面；受信身份已存在时登录，不存在时在同一次认证动作中创建 `User` 与 `UserBalance`。所有认证方式必须复用 `src/lib/auth/account-onboarding.ts` 这一账号初始化 writer。Cloud 只注册手机号与 Google provider，密码 provider、独立注册 route、密码设置 API 必须同时关闭；self-hosted 只注册用户名密码 provider。个人资料可见性不能等同于密码能力：Cloud 仍须允许已登录用户修改非身份显示名称并主动绑定 Google，密码写入则必须继续由 `enablePasswordAuth` 独立失败关闭。手机号 canonical identity 是归一化 E.164，并由 `Account(provider="phone", providerAccountId)` 唯一键持久化；修改 `User.name` 不得改写这一登录 identity。`sms-destinations.ts` 是已启用短信目的地 identity、国内/国际通道与 Sender ID policy 的穷尽 registry；国家/地区选择只帮助构造并验证 canonical E.164，不得成为第二持久 identity。registry 只能声明现有审核能力可直接发送、且不需要额外目的地 Sender/品牌注册的地区；需要新增审核的目的地不得作为潜在实例、隐藏配置或运行时开关预埋。登录页直接穷尽消费该 registry，绕过 UI 的未启用目的地必须在发送前原地失败。腾讯云国内短信必须使用国内模板与签名，国际/港澳台短信必须使用国际模板且不得携带国内签名或 Sender ID。短信验证码只在 Redis 中保存带 TTL 的 HMAC，发送、失败补偿、尝试计数与一次性消费由 `phone-verification.ts` 唯一裁决；发送短信前的图形挑战由 `image-captcha.ts` 生成、绑定可信客户端来源并一次性消费，Redis 或挑战状态不可判定时失败关闭。页面倒计时不承担安全或终态正确性。
 - **PS-12 — 对象存储是必需外部基础设施。** Cloud、self-hosted 与本地开发共用一个预建 S3-compatible bucket；`S3_ENDPOINT` 必须是公网 HTTPS，启动必须在应用/worker 前严格解析配置并完成 HeadBucket。Compose 只编排 MySQL、Redis 与应用，不捆绑 MinIO；启动不得创建桶、回退本地目录、启用 tunnel 或按 deployment edition 选择第二存储协议。供应商切换只改部署级 `S3_*`，不得进入 AI Provider 配置。
 - **PS-13 — 错误identity与本地化copy分离。** HTTP/API只返回稳定typed error code及必要的非敏感identity；当前locale的i18n catalog是用户文案唯一owner。route、Temporal failure、Provider message、Error.cause和英文开发文案不得直接成为用户copy；未知内部错误对外收敛为稳定code，原cause只进入服务端诊断。
+- **PS-14 — 客户端错误只有一个解释入口。** 浏览器只经 `ClientApiError`、
+  `useClientErrorMessage` 与全局 `ToastContext` 把稳定 code 投影为当前 locale 文案、下一步动作
+  和 request/task reference。页面不得展示 `error.message`、响应 `message`、stack、Provider 原文
+  或裸错误码，也不得另建局部 toast/alert；401、离线与 SSE 重连必须产生明确可恢复反馈。
 
 ## 权威入口
 
@@ -33,6 +37,9 @@
 - 部署能力：`src/lib/deployment/config.ts`、`src/lib/deployment/features.ts`、`/api/deployment`；用户 Provider 配置后端能力统一由 `src/lib/user-api/availability.ts` 裁决。
 - 注册/登录和资源 owner：`src/lib/auth/account-onboarding.ts`、`src/lib/auth/password-auth.ts`、`src/lib/auth/phone-verification.ts`、`src/lib/auth/image-captcha.ts`、`src/lib/auth/sms-destinations.ts`、`src/lib/auth/tencent-sms.ts`、生产 auth routes、NextAuth session 与项目鉴权 service。
 - API session、管理员权限和错误边界：`src/lib/api-auth.ts`、`src/lib/auth/admin.ts`、`src/lib/api-errors.ts`。
+- 错误 registry 与三类投影：`src/lib/errors/codes.ts`、`src/lib/errors/projection.ts`；浏览器唯一
+  解析与展示入口：`src/lib/errors/client.ts`、`src/hooks/useClientErrorMessage.ts`、
+  `src/contexts/ToastContext.tsx`；顶层未知页面由 locale `not-found.tsx` 提供返回入口。
 - Assistant命令错误边界：`src/app/api/projects/[projectId]/assistant/command-http.ts`与`messages/{en,zh}/errors.json`。
 - 部署启动边界：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`、`scripts/check-cloud-env.mjs`、`scripts/temporal/**`、`src/lib/temporal/**`、`src/lib/storage/{s3-config,bootstrap,init}.ts` 与 `next.config.ts`。
 - 首页 Project 构造：`create_project` Operation；Episode 行锁与编号由 `src/lib/projects/episode-service.ts` 统一写入，比例初始值和后续 `update_project_config` 共同复用 `video-ratio-write.ts` 的唯一事实 writer。
@@ -85,6 +92,12 @@
   Temporal Cloud的TLS/API key和正式Worker身份，导致已有本地Temporal仍无法启动。当前
   development preflight不再要求外部Temporal账户，runtime只消费显式连接字段；正式发布的
   immutable build与Versioning仍由production profile独立强制。
+- 上线前错误审计发现浏览器同时存在原生 `alert`、局部 toast、十份私有 message parser，
+  已有中英文错误词表却从未接入调用链；页面因而直接展示后端/Provider 原文，或在网络错误、
+  登录过期与 SSE 断线时保持沉默。根因是稳定错误 identity 没有唯一客户端 projector。
+  当前全局入口只接受 registry code，未知值统一显示安全兜底并附带 reference；旧 parser、局部
+  toast 与 alert 已删除，ESLint 禁止全局 `alert` 作为静态边界。真实双 locale、离线和会话过期交互仍需
+  发布前人工产品复验。
 
 ## 修改检查表
 
@@ -96,3 +109,4 @@
 6. 自动创建默认子资源前，是否已经成功读取并鉴权父资源，而不是只看到空列表？
 7. 新认证方式是否复用了唯一 onboarding writer、canonical Account identity 与 deployment capability，而没有恢复独立注册入口？
 8. 新短信目的地是否先证明无需额外目的地审核，再只增加 registry 声明，并完整覆盖 E.164、通道模板、签名/Sender ID policy、失败补偿、i18n 与真实发送盲区？
+9. 用户可见失败是否只由稳定 code 经当前 locale 投影，且提供可执行动作与 reference，而没有原始 message、alert 或局部 parser？

@@ -86,7 +86,7 @@ export function useUploadProjectLocationImage(projectId: string) {
             await requestOperationMutationVoidWithError(`/api/assets/${locationId}/upload-render`, {
                 method: 'POST',
                 body: formData
-            }, 'Failed to upload image', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -116,7 +116,7 @@ export function useSelectProjectLocationImage(projectId: string) {
                     projectId,
                     imageIndex,
                 })
-            }, 'Failed to select image', queryClient)
+            }, queryClient)
         },
         onMutate: async (variables): Promise<SelectProjectLocationImageContext> => {
             const targetKey = variables.locationId
@@ -173,7 +173,7 @@ export function useUndoProjectLocationImage(projectId: string) {
                     kind: 'location',
                     projectId,
                 })
-            }, 'Failed to undo image', queryClient)
+            }, queryClient)
         },
     })
 }

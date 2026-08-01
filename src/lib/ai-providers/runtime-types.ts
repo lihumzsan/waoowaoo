@@ -184,12 +184,23 @@ export type AiProviderLlmSessionContext = {
 
 export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
 
+export type AiProviderConnectionTestMessageKey =
+  | 'connectionTest.authInvalid'
+  | 'connectionTest.emptyResponse'
+  | 'connectionTest.modelsOk'
+  | 'connectionTest.networkError'
+  | 'connectionTest.providerError'
+  | 'connectionTest.rateLimited'
+  | 'connectionTest.skippedModelsFailure'
+  | 'connectionTest.skippedSpend'
+  | 'connectionTest.textGenerationOk'
+  | 'connectionTest.timeout'
+
 export type AiProviderConnectionTestStep = {
   name: AiProviderConnectionTestStepName
   status: 'pass' | 'fail' | 'skip'
-  message: string
+  messageKey: AiProviderConnectionTestMessageKey
   model?: string
-  detail?: string
 }
 
 export type AiProviderConnectionTestReport = {

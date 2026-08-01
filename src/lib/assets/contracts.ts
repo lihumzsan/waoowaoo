@@ -8,7 +8,6 @@ export type AssetFamily = 'visual'
 
 export type AssetTaskError = {
   code: string
-  message: string
 }
 
 export type AssetTaskState = {

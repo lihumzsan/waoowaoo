@@ -28,7 +28,6 @@ export interface AgentSessionTurnView {
   assistantMessageId: string | null
   stopReason: string | null
   errorCode: string | null
-  errorMessage: string | null
   cancelReason: string | null
   startedAt: string | null
   finishedAt: string | null
@@ -70,7 +69,6 @@ export interface AgentSessionTaskView {
   status: TaskStatus
   terminal: boolean
   errorCode: string | null
-  errorMessage: string | null
   createdAt: string
   finishedAt: string | null
 }
@@ -218,10 +216,6 @@ function parseTurn(value: unknown): AgentSessionTurnView {
       record.errorCode,
       'AGENT_SESSION_VIEW_TURN_ERROR_CODE_INVALID',
     ),
-    errorMessage: requireNullableString(
-      record.errorMessage,
-      'AGENT_SESSION_VIEW_TURN_ERROR_MESSAGE_INVALID',
-    ),
     cancelReason: requireNullableString(
       record.cancelReason,
       'AGENT_SESSION_VIEW_TURN_CANCEL_REASON_INVALID',
@@ -311,10 +305,6 @@ function parseTask(value: unknown): AgentSessionTaskView {
     errorCode: requireNullableString(
       record.errorCode,
       'AGENT_SESSION_VIEW_TASK_ERROR_CODE_INVALID',
-    ),
-    errorMessage: requireNullableString(
-      record.errorMessage,
-      'AGENT_SESSION_VIEW_TASK_ERROR_MESSAGE_INVALID',
     ),
     createdAt: requireTimestamp(record.createdAt, 'AGENT_SESSION_VIEW_TASK_CREATED_AT_INVALID'),
     finishedAt: requireNullableTimestamp(

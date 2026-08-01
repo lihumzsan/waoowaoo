@@ -1,3 +1,5 @@
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
+
 type ProviderAsyncTaskStatusFields = {
   imageUrl?: string
   videoUrl?: string
@@ -13,5 +15,6 @@ export type ProviderAsyncTaskStatus = ProviderAsyncTaskStatusFields & (
   | {
     status: 'failed'
     failureDisposition: 'retryable' | 'permanent'
+    errorCode: UnifiedErrorCode
   }
 )

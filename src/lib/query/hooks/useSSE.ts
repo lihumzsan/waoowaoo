@@ -20,6 +20,8 @@ import {
   serializeWorkspaceSseCursor,
   type WorkspaceSseCursor,
 } from '@/lib/sse/protocol'
+import { useToast } from '@/contexts/ToastContext'
+import { useTranslations } from 'next-intl'
 
 type UseSSEOptions = {
   projectId?: string | null
@@ -51,12 +53,16 @@ function persistCursor(projectId: string, episodeId: string | null | undefined, 
 
 export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
   const queryClient = useQueryClient()
+  const tErrors = useTranslations('errors')
+  const { dismissToast, showToast } = useToast()
   const sourceRef = useRef<EventSource | null>(null)
+  const reconnectToastRef = useRef<string | null>(null)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const stabilityTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
   const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'reconnecting'>('connecting')
 
   const connection = useMemo(() => {
     if (!projectId) return null
@@ -108,11 +114,16 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   useEffect(() => {
     if (!enabled || !connection || !projectId) return
 
+    setConnectionState('connecting')
     cursorRef.current = readStoredCursor(projectId, episodeId)
     const source = new EventSource(connection.url)
     sourceRef.current = source
 
     const scheduleResync = (context: string) => {
+      setConnectionState('reconnecting')
+      if (!reconnectToastRef.current) {
+        reconnectToastRef.current = showToast(tErrors('sseDisconnected'), 'warning', 0)
+      }
       const attempt = reconnectAttemptRef.current + 1
       reconnectAttemptRef.current = attempt
       const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5))
@@ -149,6 +160,12 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       listeners.push({ type, handler })
     }
     source.onopen = () => {
+      setConnectionState('connected')
+      if (reconnectToastRef.current) {
+        dismissToast(reconnectToastRef.current)
+        reconnectToastRef.current = null
+        showToast(tErrors('sseRestored'), 'success', 3000)
+      }
       // 不能在每个事件/每次 open 时立刻清零:毒事件循环里每一轮都会短暂"健康",
       // 立刻清零会把退避锁死在 1s。只有连接稳定存活 60s 才认为恢复。
       if (stabilityTimerRef.current !== null) window.clearTimeout(stabilityTimerRef.current)
@@ -180,9 +197,17 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.close()
       sourceRef.current = null
     }
-  }, [connection, enabled, projectId, episodeId, handleParsedEvent, requestSnapshotResync])
+  }, [connection, dismissToast, enabled, episodeId, handleParsedEvent, projectId, requestSnapshotResync, showToast, tErrors])
+
+  useEffect(() => () => {
+    if (reconnectToastRef.current) {
+      dismissToast(reconnectToastRef.current)
+      reconnectToastRef.current = null
+    }
+  }, [dismissToast])
 
   return {
-    connected: !!sourceRef.current && sourceRef.current.readyState === EventSource.OPEN,
+    connected: connectionState === 'connected',
+    connectionState,
   }
 }

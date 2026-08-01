@@ -22,7 +22,6 @@ interface ApplyTaskTargetTerminalStateInput {
   readonly stage: string | null
   readonly stageLabel: string | null
   readonly errorCode: string | null
-  readonly errorMessage: string | null
   readonly eventTs: string | null
 }
 
@@ -138,11 +137,9 @@ function shouldApplyTerminalState(params: {
 function terminalLastError(input: ApplyTaskTargetTerminalStateInput): TaskTargetState['lastError'] {
   const isHandoffContractError = input.errorCode?.startsWith('CANVAS_TERMINAL_RESOURCE_') === true
   if (input.phase !== 'failed' && !isHandoffContractError) return null
-  const message = input.errorMessage || input.errorCode
-  if (!message) return null
+  if (!input.errorCode) return null
   return {
-    code: input.errorCode || 'TASK_FAILED',
-    message,
+    code: input.errorCode,
   }
 }
 

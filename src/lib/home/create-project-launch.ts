@@ -1,4 +1,4 @@
-import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { readClientApiError } from '@/lib/errors/client'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY,
   readProjectAssistantTextAttachmentsFromMetadata,
@@ -188,7 +188,7 @@ export async function createHomeProjectLaunch({
   })
 
   if (!projectResponse.ok) {
-    throw new Error(await readApiErrorMessage(projectResponse, 'Failed to create project'))
+    throw await readClientApiError(projectResponse)
   }
 
   const { projectId, episodeId } = await readHomeProjectLaunchIds(projectResponse)

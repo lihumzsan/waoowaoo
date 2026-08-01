@@ -1,5 +1,6 @@
 import { TASK_STATUS, TASK_TYPE } from './types'
 import type { OperationResultStatus, RecentOperationMedia, RecentOperationMediaType, RecentOperationResult } from './operation-result-types'
+import { projectErrorForModel } from '@/lib/errors/projection'
 
 export interface OperationResultTaskRow {
   id: string
@@ -11,7 +12,6 @@ export interface OperationResultTaskRow {
   payload: unknown
   result: unknown
   errorCode: string | null
-  errorMessage: string | null
   operationId: string | null
   operationSource: string | null
   approvalGrantId: string | null
@@ -35,11 +35,6 @@ function readString(source: Record<string, unknown> | null, key: string): string
 function readNumber(source: Record<string, unknown> | null, key: string): number | null {
   const value = source?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function readBoolean(source: Record<string, unknown> | null, key: string): boolean | null {
-  const value = source?.[key]
-  return typeof value === 'boolean' ? value : null
 }
 
 function normalizeStatus(status: string): OperationResultStatus {
@@ -131,7 +126,6 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
   const payload = isRecord(task.payload) ? task.payload : null
   const result = isRecord(task.result) ? task.result : null
   const model = readModel(payload, result)
-  const errorMessage = task.errorMessage?.trim() || readString(result, 'errorMessage')
   const errorCode = task.errorCode?.trim() || readString(result, 'errorCode')
 
   return {
@@ -148,12 +142,8 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
     provider: readProvider(model, result),
     model,
     media: buildMedia(task.type, result),
-    error: errorMessage
-      ? {
-          ...(errorCode ? { code: errorCode } : {}),
-          message: errorMessage,
-          ...(readBoolean(result, 'retryable') !== null ? { retryable: readBoolean(result, 'retryable') } : {}),
-        }
+    error: task.status === TASK_STATUS.FAILED
+      ? projectErrorForModel(errorCode)
       : null,
     submittedAt: task.queuedAt.toISOString(),
     completedAt: task.finishedAt?.toISOString() ?? null,

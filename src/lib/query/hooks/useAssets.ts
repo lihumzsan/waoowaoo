@@ -85,7 +85,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    }, 'Failed to create asset', queryClient)
+    }, queryClient)
   }
 
   const remove = async (assetId: string) => {
@@ -97,7 +97,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         kind: input.kind,
         projectId: input.projectId,
       }),
-    }, 'Failed to delete asset', queryClient)
+    }, queryClient)
   }
 
   const update = async (assetId: string, payload: Record<string, unknown>) => {
@@ -110,7 +110,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    }, 'Failed to update asset', queryClient)
+    }, queryClient)
   }
 
   const uploadRender = async (assetId: string, file: File, imageIndex?: number) => {
@@ -123,7 +123,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     await requestOperationMutationVoidWithError(`/api/assets/${assetId}/upload-render`, {
       method: 'POST',
       body: formData,
-    }, 'Failed to upload asset render', queryClient)
+    }, queryClient)
   }
 
   const selectRender = async (payload: Record<string, unknown>) => {
@@ -136,7 +136,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    }, 'Failed to select asset render', queryClient)
+    }, queryClient)
   }
 
   const revertRender = async (payload: Record<string, unknown>) => {
@@ -149,7 +149,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    }, 'Failed to revert asset render', queryClient)
+    }, queryClient)
   }
 
   const copyFromGlobal = async (payload: { targetId: string; globalAssetId: string }) => {
@@ -164,7 +164,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         globalAssetId: payload.globalAssetId,
       }),
-    }, 'Failed to copy asset from global library', queryClient)
+    }, queryClient)
   }
 
   const updateVariant = async (assetId: string, variantId: string, payload: Record<string, unknown>) => {
@@ -177,7 +177,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         projectId: input.projectId,
         ...payload,
       }),
-    }, 'Failed to update asset variant', queryClient)
+    }, queryClient)
   }
 
   return {

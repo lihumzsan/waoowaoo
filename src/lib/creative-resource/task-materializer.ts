@@ -187,12 +187,15 @@ export async function materializeCreativeResourceTaskTerminalInTransaction(
     throw new Error(`CREATIVE_RESOURCE_TASK_TARGET_MISMATCH:${input.task.id}`)
   }
   if (input.kind !== 'completed') {
+    if (input.kind === 'failed' && (!input.errorCode || !input.errorMessage)) {
+      throw new Error(`CREATIVE_RESOURCE_TASK_FAILURE_REQUIRED:${input.task.id}`)
+    }
     await settleCreativeResourceFailureInTransaction(tx, {
       resourceId: payload.resource.resourceId,
       userId: input.task.userId,
       status: input.kind === 'canceled' ? 'canceled' : 'failed',
-      errorCode: input.errorCode ?? (input.kind === 'canceled' ? 'TASK_CANCELLED' : 'TASK_FAILED'),
-      errorMessage: input.errorMessage ?? input.kind,
+      errorCode: input.kind === 'canceled' ? null : input.errorCode,
+      errorMessage: input.kind === 'canceled' ? null : input.errorMessage,
     })
     return {
       resourceId: payload.resource.resourceId,

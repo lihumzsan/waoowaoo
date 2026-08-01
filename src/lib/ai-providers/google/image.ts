@@ -11,6 +11,7 @@ import {
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { AppError } from '@/lib/errors/app-error'
 
 type GoogleImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 
@@ -72,7 +73,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     const generatedImages = (response as ImagenResponse).generatedImages
     const imageBytes = generatedImages?.[0]?.image?.imageBytes
     if (!imageBytes) {
-      throw new Error('Imagen 未返回图片')
+      throw new AppError('EMPTY_RESPONSE', 'Imagen returned no image', { provider: 'google' })
     }
     return {
       success: true,
@@ -136,10 +137,10 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   const finishReason = candidate?.finishReason
   if (finishReason === 'IMAGE_SAFETY' || finishReason === 'SAFETY') {
-    throw new Error('内容因安全策略被过滤')
+    throw new AppError('SENSITIVE_CONTENT', 'Google blocked image generation by policy', { provider: 'google' })
   }
 
-  throw new Error('Gemini 未返回图片')
+  throw new AppError('EMPTY_RESPONSE', 'Gemini returned no image', { provider: 'google' })
 }
 
 export async function executeGoogleImageGeneration(input: AiProviderImageExecutionContext): Promise<GenerateResult> {

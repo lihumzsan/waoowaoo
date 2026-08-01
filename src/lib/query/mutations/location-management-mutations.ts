@@ -42,7 +42,6 @@ export function useDeleteProjectLocation(projectId: string) {
             await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/location?id=${encodeURIComponent(locationId)}`,
                 { method: 'DELETE' },
-                'Failed to delete location',
                 queryClient,
             )
         },
@@ -94,7 +93,7 @@ export function useUpdateProjectLocationName(projectId: string) {
                     projectId,
                     name,
                 })
-            }, 'Failed to update location name', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -124,7 +123,7 @@ export function useUpdateProjectLocationDescription(projectId: string) {
                     imageIndex: typeof imageIndex === 'number' ? imageIndex : 0,
                     description,
                 }),
-            }, 'Failed to update location description', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -148,7 +147,6 @@ export function useCreateProjectLocation(projectId: string) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 },
-                'Failed to create location',
                 queryClient,
             ),
     })
@@ -173,7 +171,6 @@ export function useConfirmProjectLocationSelection(
                         confirm: true,
                     }),
                 },
-                '确认选择失败',
                 queryClient,
             ),
     })

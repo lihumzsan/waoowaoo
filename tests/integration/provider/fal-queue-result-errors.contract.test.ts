@@ -19,8 +19,12 @@ describe('provider contract - fal queue result and failure boundaries', () => {
   })
 
   it('rejects missing credentials before any provider request', async () => {
-    await expect(submitFalTask('fal-ai/model', {}, '')).rejects.toThrow('请配置 FAL API Key')
-    await expect(queryFalStatus('fal-ai/model', 'request-1', '')).rejects.toThrow('请配置 FAL API Key')
+    await expect(submitFalTask('fal-ai/model', {}, '')).rejects.toMatchObject({
+      code: 'PROVIDER_AUTH_INVALID',
+    })
+    await expect(queryFalStatus('fal-ai/model', 'request-1', '')).rejects.toMatchObject({
+      code: 'PROVIDER_AUTH_INVALID',
+    })
     expect(server!.getRequests('POST', '/fal/fal-ai/model')).toEqual([])
     expect(server!.getRequests('GET', '/fal/fal-ai/model/requests/request-1/status')).toEqual([])
   })
@@ -128,6 +132,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
       } : {
         status: 'COMPLETED', completed: true, failed: true,
         failureDisposition: 'retryable',
+        errorCode: 'EMPTY_RESPONSE',
         error: 'FAL任务完成但未返回媒体URL',
       })
     }
@@ -176,6 +181,9 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         completed: true,
         failed: true,
         failureDisposition: 'permanent',
+        errorCode: testCase.id === 'policy'
+          ? 'SENSITIVE_CONTENT'
+          : 'PROVIDER_SUBMISSION_REJECTED',
         error: testCase.error,
       })
     }
@@ -226,6 +234,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         completed: false,
         failed: true,
         failureDisposition: 'retryable',
+        errorCode: 'EXTERNAL_ERROR',
         error: '任务失败',
       })
     }

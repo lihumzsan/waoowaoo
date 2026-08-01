@@ -139,7 +139,7 @@ export function useSelectLocationImage() {
           imageIndex,
           confirm,
         }),
-      }, 'Failed to select image', queryClient)
+      }, queryClient)
     },
     onMutate: async (variables): Promise<SelectLocationImageContext> => {
       const targetKey = variables.locationId
@@ -206,7 +206,7 @@ export function useUndoLocationImage() {
           scope: 'global',
           kind: 'location',
         }),
-      }, 'Failed to undo image', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -238,7 +238,7 @@ export function useUploadLocationImage() {
       await requestOperationMutationVoidWithError('/api/asset-hub/upload-image', {
         method: 'POST',
         body: formData,
-      }, 'Failed to upload image', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -251,7 +251,6 @@ export function useDeleteLocation() {
       await requestOperationMutationVoidWithError(
         `/api/asset-hub/locations/${locationId}`,
         { method: 'DELETE' },
-        'Failed to delete location',
         queryClient,
       )
     },

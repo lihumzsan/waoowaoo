@@ -242,7 +242,7 @@ export async function waitExternalResult(
       throw queueError
     }
     if (error instanceof ProviderTerminalFailureError) {
-      const terminalError = new AppError('EXTERNAL_ERROR', error.message, {
+      const terminalError = new AppError(error.code, error.message, {
         details: { externalId, externalStatus: 'failed' },
         cause: error,
       })
@@ -263,7 +263,7 @@ export async function waitExternalResult(
       throw terminalError
     }
     if (error instanceof ProviderPermanentFailureError) {
-      throw new AppError('PROVIDER_SUBMISSION_REJECTED', error.message, {
+      throw new AppError(error.code, error.message, {
         details: { externalId, externalStatus: 'failed' },
         cause: error,
       })
@@ -357,7 +357,8 @@ export async function resolveImageSourceFromGeneration(
       typeof (finalOptions as { provider?: unknown }).provider === 'string'
         ? (finalOptions as { provider: string }).provider
         : params.options?.provider || ''
-    throw new Error(
+    throw new AppError(
+      'EXTERNAL_ERROR',
       [
         'IMAGE_GENERATION_THROWN',
         `modelKey=${params.modelId}`,
@@ -366,7 +367,7 @@ export async function resolveImageSourceFromGeneration(
         `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
         `cause=${describeUnknownError(error)}`,
       ].join(' '),
-      { cause: error },
+      { provider: providerKey || null, cause: error },
     )
   }
   if (!result.success) {
@@ -374,7 +375,8 @@ export async function resolveImageSourceFromGeneration(
       typeof (finalOptions as { provider?: unknown }).provider === 'string'
         ? (finalOptions as { provider: string }).provider
         : params.options?.provider || ''
-    throw new Error(
+    throw new AppError(
+      'GENERATION_FAILED',
       [
         'IMAGE_GENERATION_FAILED',
         `modelKey=${params.modelId}`,
@@ -383,6 +385,7 @@ export async function resolveImageSourceFromGeneration(
         `capabilityOptions=${jsonStringifySafe(capabilityOptions)}`,
         `error=${result.error || '<empty>'}`,
       ].join(' '),
+      { provider: providerKey || null },
     )
   }
 

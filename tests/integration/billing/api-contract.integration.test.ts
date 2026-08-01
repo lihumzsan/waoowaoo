@@ -39,8 +39,9 @@ describe('billing/api contract integration', () => {
 
     expect(response.status).toBe(402)
     expect(body?.error?.code).toBe('INSUFFICIENT_BALANCE')
-    expect(typeof body?.required).toBe('number')
-    expect(typeof body?.available).toBe('number')
+    expect(typeof body?.error?.details?.required).toBe('number')
+    expect(typeof body?.error?.details?.available).toBe('number')
+    expect(body?.error?.action).toBe('recharge')
   })
 
   it('rejects duplicate retry with same request id and prevents duplicate charge', async () => {
@@ -75,7 +76,8 @@ describe('billing/api contract integration', () => {
     expect(resp1.status).toBe(200)
     expect(resp2.status).toBe(409)
     expect(body2?.error?.code).toBe('CONFLICT')
-    expect(String(body2?.error?.message || '')).toContain('duplicate billing request already confirmed')
+    expect(body2?.error?.message).toBe('Conflict')
+    expect(body2?.error?.details?.requestId).toBe('same_request_id')
 
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
     const expectedCharge = calcText('anthropic/claude-sonnet-4', 1000, 0)

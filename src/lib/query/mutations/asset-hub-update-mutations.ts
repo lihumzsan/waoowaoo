@@ -17,7 +17,7 @@ export function useUpdateCharacterName() {
           kind: 'character',
           name,
         }),
-      }, 'Failed to update character name', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -35,7 +35,7 @@ export function useUpdateLocationName() {
           kind: 'location',
           name,
         }),
-      }, 'Failed to update location name', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -60,7 +60,6 @@ export function useUpdateCharacterAppearanceDescription() {
       const assets = await requestJsonWithError<{ assets?: Array<{ id: string; variants?: Array<{ index: number; id: string }> }> }>(
         `/api/assets?${assetQuery.toString()}`,
         { method: 'GET' },
-        'Failed to resolve appearance variant',
       )
       const asset = (assets.assets ?? []).find((item) => item.id === characterId)
       const variantId = asset?.variants?.find((variant) => variant.index === appearanceIndex)?.id
@@ -75,7 +74,7 @@ export function useUpdateCharacterAppearanceDescription() {
           kind: 'character',
           description,
         }),
-      }, 'Failed to update appearance description', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -99,7 +98,7 @@ export function useUpdateLocationSummary() {
           kind: 'location',
           summary,
         }),
-      }, 'Failed to update location summary', queryClient)
+      }, queryClient)
     },
   })
 }

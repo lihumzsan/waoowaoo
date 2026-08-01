@@ -6,6 +6,7 @@ import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 import { getImageBase64Cached } from '@/lib/image-cache'
 import { logInternal } from '@/lib/logging/semantic'
+import { AppError } from '@/lib/errors/app-error'
 
 type GeminiBatchClient = {
   batches: {
@@ -20,7 +21,7 @@ export async function submitGeminiBatch(
   prompt: string,
   options?: { referenceImages?: string[]; aspectRatio?: string; resolution?: string },
 ): Promise<{ batchName: string }> {
-  if (!apiKey) throw new Error('GOOGLE_API_KEY_REQUIRED')
+  if (!apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'google' })
 
   try {
     const ai = new GoogleGenAI({ apiKey })

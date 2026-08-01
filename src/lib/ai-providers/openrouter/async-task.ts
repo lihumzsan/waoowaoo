@@ -34,6 +34,7 @@ export const openRouterAsyncTaskProvider: AsyncTaskProviderRegistration = {
     return normalizeAsyncPollResult({
       status: result.status,
       failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.resultUrl,
       downloadHeaders: result.downloadHeaders,

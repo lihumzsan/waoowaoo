@@ -27,6 +27,7 @@ export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
     return normalizeAsyncPollResult({
       status: result.status,
       failureDisposition: result.failureDisposition,
+      ...(result.status === 'failed' ? { errorCode: result.errorCode } : {}),
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       ...(typeof result.actualVideoTokens === 'number' ? { actualVideoTokens: result.actualVideoTokens } : {}),

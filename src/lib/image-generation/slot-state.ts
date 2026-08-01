@@ -3,8 +3,7 @@ export type ImageSlotLike = {
 }
 
 export type DisplayableImageSlotLike = ImageSlotLike & {
-  lastError?: { code: string; message: string } | null
-  imageErrorMessage?: string | null
+  lastError?: { code: string } | null
 }
 
 export type ImageSlotPhase =
@@ -18,7 +17,7 @@ export function countGeneratedImageSlots<T extends ImageSlotLike>(slots: readonl
 }
 
 function hasImageSlotError(slot: DisplayableImageSlotLike): boolean {
-  return Boolean(slot.lastError || slot.imageErrorMessage)
+  return Boolean(slot.lastError)
 }
 
 export function resolveDisplayImageSlots<T extends DisplayableImageSlotLike>(

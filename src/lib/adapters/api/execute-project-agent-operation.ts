@@ -13,9 +13,8 @@ import {
 import { isBillablePlannedOperation } from '@/lib/operations/types'
 import {
   extractPrismaMissingColumn,
-  inferApiErrorCodeFromMessage,
-  toOperationErrorMessage,
 } from '@/lib/adapters/operation-error-normalizer'
+import { normalizeAnyError } from '@/lib/errors/normalize'
 import {
   OPERATION_MUTATION_RESPONSE_PROTOCOL,
   type OperationMutationResponse,
@@ -180,17 +179,14 @@ export async function executeProjectAgentOperationFromApi(
       throw new ApiError('EXTERNAL_ERROR', {
         code: 'DATABASE_SCHEMA_MISMATCH',
         field: missingColumn,
-        message: `database schema mismatch: missing column ${missingColumn}; run the latest Prisma migration before starting the app`,
       })
     }
-    const message = toOperationErrorMessage(error, 'OPERATION_FAILED')
-    const inferred = inferApiErrorCodeFromMessage(message)
-    if (inferred) {
-      throw new ApiError(inferred, { message })
-    }
-    throw new ApiError('EXTERNAL_ERROR', {
+    const normalized = normalizeAnyError(error, {
+      context: 'api',
+      fallbackCode: 'EXTERNAL_ERROR',
+    })
+    throw new ApiError(normalized.code, {
       code: 'OPERATION_EXECUTION_FAILED',
-      message,
     })
   }
 }

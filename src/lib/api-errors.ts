@@ -3,6 +3,7 @@ import { withLogContext } from '@/lib/logging/context'
 import { NextRequest, NextResponse } from 'next/server'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { normalizeAnyError } from '@/lib/errors/normalize'
+import { projectErrorForUser, projectPublicErrorDetails } from '@/lib/errors/projection'
 
 type RouteParamValue = string | string[] | undefined
 type RouteParams = Record<string, RouteParamValue>
@@ -85,28 +86,6 @@ async function extractRouteContext<TParams extends RouteParams>(
 
   return { projectId, taskId }
 }
-
-export const API_ERROR_CODES = {
-  UNAUTHORIZED: { status: getErrorSpec('UNAUTHORIZED').httpStatus },
-  FORBIDDEN: { status: getErrorSpec('FORBIDDEN').httpStatus },
-  NOT_FOUND: { status: getErrorSpec('NOT_FOUND').httpStatus },
-  INSUFFICIENT_BALANCE: { status: getErrorSpec('INSUFFICIENT_BALANCE').httpStatus },
-  RATE_LIMIT: { status: getErrorSpec('RATE_LIMIT').httpStatus },
-  MODEL_NOT_OPEN: { status: getErrorSpec('MODEL_NOT_OPEN').httpStatus },
-  QUOTA_EXCEEDED: { status: getErrorSpec('QUOTA_EXCEEDED').httpStatus },
-  GENERATION_FAILED: { status: getErrorSpec('GENERATION_FAILED').httpStatus },
-  GENERATION_TIMEOUT: { status: getErrorSpec('GENERATION_TIMEOUT').httpStatus },
-  SENSITIVE_CONTENT: { status: getErrorSpec('SENSITIVE_CONTENT').httpStatus },
-  INVALID_PARAMS: { status: getErrorSpec('INVALID_PARAMS').httpStatus },
-  MISSING_CONFIG: { status: getErrorSpec('MISSING_CONFIG').httpStatus },
-  TASK_NOT_READY: { status: getErrorSpec('TASK_NOT_READY').httpStatus },
-  NO_RESULT: { status: getErrorSpec('NO_RESULT').httpStatus },
-  EXTERNAL_ERROR: { status: getErrorSpec('EXTERNAL_ERROR').httpStatus },
-  CONFLICT: { status: getErrorSpec('CONFLICT').httpStatus },
-  INTERNAL_ERROR: { status: getErrorSpec('INTERNAL_ERROR').httpStatus },
-  NETWORK_ERROR: { status: getErrorSpec('NETWORK_ERROR').httpStatus },
-  EMPTY_RESPONSE: { status: getErrorSpec('EMPTY_RESPONSE').httpStatus },
-} as const
 
 export type ApiErrorCode = UnifiedErrorCode
 
@@ -248,13 +227,9 @@ export function apiHandler<TParams extends RouteParams>(handler: ApiHandler<TPar
                 : undefined,
           })
 
-          const exposeDetails = apiError.status < 500
-          const rawDetails = exposeDetails
-            ? (apiError.details || {}) as Record<string, unknown>
-            : {}
-          const responseMessage = exposeDetails
-            ? apiError.message
-            : getErrorSpec(apiError.code).defaultMessage
+          const publicDetails = projectPublicErrorDetails(apiError.details)
+          const userProjection = projectErrorForUser(apiError.code, requestId)
+          const responseMessage = getErrorSpec(apiError.code).defaultMessage
 
           const response = NextResponse.json(
             {
@@ -266,15 +241,12 @@ export function apiHandler<TParams extends RouteParams>(handler: ApiHandler<TPar
                 retryable: apiError.retryable,
                 category: apiError.category,
                 userMessageKey: apiError.userMessageKey,
+                action: userProjection.action,
                 details: {
-                  ...rawDetails,
+                  ...publicDetails,
                   requestId,
                 },
               },
-              // Backward-compatible flattened fields.
-              code: apiError.code,
-              message: responseMessage,
-              ...rawDetails,
             },
             { status: apiError.status }
           )

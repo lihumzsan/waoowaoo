@@ -21,7 +21,7 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
   if (!apiKey) {
     return {
       success: false,
-      steps: [{ name: 'models', status: 'fail', message: 'Missing apiKey' }],
+      steps: [{ name: 'models', status: 'fail', messageKey: 'connectionTest.authInvalid' }],
     }
   }
 
@@ -29,7 +29,7 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
   if (!diagnose) {
     return {
       success: false,
-      steps: [{ name: 'models', status: 'fail', message: `Unsupported API type: ${String(payload.apiType)}` }],
+      steps: [{ name: 'models', status: 'fail', messageKey: 'connectionTest.providerError' }],
     }
   }
 

@@ -7,6 +7,7 @@ import {
   TimeoutFailure,
   condition,
   defineUpdate,
+  log,
   proxyActivities,
   setHandler,
   workflowInfo,
@@ -33,6 +34,7 @@ const lifecycleActivities = proxyActivities<
     TaskWorkflowActivities,
     | 'initializeTaskWorkflow'
     | 'beginTaskAttempt'
+    | 'reportTaskRetry'
     | 'commitTaskTerminal'
     | 'commitTaskWorkflowFailure'
   >
@@ -506,6 +508,24 @@ async function runTaskWorkflow(input: TaskWorkflowInput): Promise<TaskWorkflowRe
     const canRetry = failure.retryDisposition === 'retryable' && view.attempt < policy.maxAttempts
     if (canRetry) {
       view.status = 'retry_wait'
+      try {
+        await CancellationScope.nonCancellable(async () => {
+          await lifecycleActivities.reportTaskRetry({
+            workflowId: input.workflowId,
+            taskId: input.taskId,
+            userId: input.userId,
+            taskType: input.taskType,
+            attempt: view.attempt,
+          })
+        })
+      } catch (error) {
+        log.warn('Task retry progress projection failed', {
+          workflowId: input.workflowId,
+          taskId: input.taskId,
+          attempt: view.attempt,
+          errorType: error instanceof Error ? error.name : typeof error,
+        })
+      }
       try {
         await condition(
           () => view.cancelRequested,

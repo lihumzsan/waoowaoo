@@ -19,7 +19,7 @@ export function useUpdateProjectCharacterIntroduction(projectId: string) {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ characterId, introduction }),
-            }, 'Failed to update character introduction', queryClient)
+            }, queryClient)
         },
   })
 }
@@ -38,7 +38,6 @@ export function useUploadProjectTempMedia() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 },
-                '上传失败',
             )
         },
     })
@@ -63,7 +62,6 @@ export function useCreateProjectCharacter(projectId: string) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 },
-                'Failed to create character',
                 queryClient,
             ),
   })
@@ -89,7 +87,6 @@ export function useCreateProjectCharacterAppearance(projectId: string) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 },
-                'Failed to create character appearance',
                 queryClient,
             ),
   })
@@ -106,7 +103,6 @@ export function useConfirmProjectCharacterSelection(projectId: string) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ characterId, appearanceId }),
                 },
-                '确认选择失败',
                 queryClient,
             ),
   })

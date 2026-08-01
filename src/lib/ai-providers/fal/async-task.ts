@@ -44,13 +44,26 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     if (!parsed.endpoint) throw new Error('FAL_ENDPOINT_MISSING')
     const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
     const result = await queryFalStatus(parsed.endpoint, parsed.requestId, apiKey)
+    if (result.failed) {
+      if (!result.errorCode || !result.failureDisposition) {
+        throw new Error('FAL_FAILED_STATUS_CLASSIFICATION_REQUIRED')
+      }
+      return normalizeAsyncPollResult({
+        status: 'failed',
+        errorCode: result.errorCode,
+        failureDisposition: result.failureDisposition,
+        resultUrl: result.resultUrl,
+        imageUrl: result.resultUrl,
+        videoUrl: result.resultUrl,
+        error: result.error,
+      })
+    }
     const pending = !result.failed && !result.completed
     return normalizeAsyncPollResult({
-      status: result.failed ? 'failed' : result.completed ? 'completed' : 'pending',
+      status: result.completed ? 'completed' : 'pending',
       // FAL 官方队列区分 IN_QUEUE（排队）与 IN_PROGRESS（生成中）；分别计入
       // 排队预算与生成预算（async-wait 的双计时协议）。
       ...(pending ? { pendingPhase: result.status === 'IN_QUEUE' ? 'queued' as const : 'running' as const } : {}),
-      failureDisposition: result.failureDisposition,
       resultUrl: result.resultUrl,
       imageUrl: result.resultUrl,
       videoUrl: result.resultUrl,

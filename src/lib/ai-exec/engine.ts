@@ -365,14 +365,14 @@ export async function executeMediaGeneration(
       if (taskId && invocation) {
         await markTaskProviderInvocationRetryable({ taskId, invocation, error })
       }
-      throw new AppError('EXTERNAL_ERROR', error.message, {
+      throw new AppError(error.code, error.message, {
         provider: selection.provider,
         details: { externalId },
         cause: error,
       })
     }
     if (error instanceof ProviderPermanentFailureError) {
-      throw new AppError('PROVIDER_SUBMISSION_REJECTED', error.message, {
+      throw new AppError(error.code, error.message, {
         provider: selection.provider,
         details: { externalId },
         cause: error,

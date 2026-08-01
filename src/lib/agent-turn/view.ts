@@ -16,6 +16,7 @@ import {
 import { parseProjectAgentPlanSnapshot } from '@/lib/project-agent/plan'
 import { TASK_TYPE } from '@/lib/task/types'
 import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
+import { resolveUnifiedErrorCode } from '@/lib/errors/codes'
 import { parseAgentTurnApprovalPayload } from './approval'
 import { parseAgentTurnChoiceOfferPayload } from './choice'
 import {
@@ -88,6 +89,11 @@ function isTaskTerminal(status: TaskStatus): boolean {
   )
 }
 
+function projectFailureCode(code: string | null, failed: boolean): string | null {
+  if (!failed) return null
+  return resolveUnifiedErrorCode(code) ?? 'INTERNAL_ERROR'
+}
+
 function parseBatchStatus(value: string): AgentSessionFollowUpBatchStatus {
   if (value === 'pending' || value === 'ready' || value === 'notified' || value === 'cancelled') {
     return value
@@ -105,7 +111,6 @@ function toTurnView(turn: {
   assistantMessageId: string | null
   stopReason: string | null
   errorCode: string | null
-  errorMessage: string | null
   cancelReason: string | null
   startedAt: Date | null
   finishedAt: Date | null
@@ -121,8 +126,10 @@ function toTurnView(turn: {
     attempt: turn.attempt,
     assistantMessageId: turn.assistantMessageId,
     stopReason: turn.stopReason,
-    errorCode: turn.errorCode,
-    errorMessage: turn.errorMessage,
+    errorCode: projectFailureCode(
+      turn.errorCode,
+      turn.status === 'failed' || turn.status === 'interrupted',
+    ),
     cancelReason: turn.cancelReason,
     startedAt: turn.startedAt?.toISOString() ?? null,
     finishedAt: turn.finishedAt?.toISOString() ?? null,
@@ -282,7 +289,6 @@ export async function getAgentSessionView(input: AgentSessionViewScope): Promise
                       targetId: true,
                       status: true,
                       errorCode: true,
-                      errorMessage: true,
                       createdAt: true,
                       finishedAt: true,
                     },
@@ -361,8 +367,10 @@ export async function getAgentSessionView(input: AgentSessionViewScope): Promise
             targetId: task.targetId,
             status,
             terminal: isTaskTerminal(status),
-            errorCode: task.errorCode,
-            errorMessage: task.errorMessage,
+            errorCode: projectFailureCode(
+              task.errorCode,
+              status === TASK_STATUS.FAILED || status === TASK_STATUS.DISMISSED,
+            ),
             createdAt: task.createdAt.toISOString(),
             finishedAt: task.finishedAt?.toISOString() ?? null,
           }
@@ -430,7 +438,7 @@ export async function getAgentSessionView(input: AgentSessionViewScope): Promise
             taskId: task.id,
             status,
             summary: result.success ? result.data.summary : null,
-            errorCode: task.errorCode,
+            errorCode: projectFailureCode(task.errorCode, status === TASK_STATUS.FAILED),
             finishedAt: task.finishedAt?.toISOString() ?? null,
           }
         }),

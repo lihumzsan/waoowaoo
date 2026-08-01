@@ -1,17 +1,13 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import { resolveTaskErrorMessage } from '@/lib/task/error-message'
+import { createClientApiError, type ClientApiError } from '@/lib/errors/client'
 import { isTaskType, type TaskType } from '@/lib/task/types'
 import { requireOperationMutationResponse } from '@/lib/operations/mutation-receipt'
 import { syncWorkspaceResourceChanges } from '@/lib/query/resource-change-sync'
 
 export { getPageLocale } from '@/lib/api-fetch'
 
-export type MutationRequestError = Error & {
-  status?: number
-  payload?: Record<string, unknown>
-  detail?: string
-}
+export type MutationRequestError = ClientApiError
 
 export type TaskSubmissionReceipt = {
   taskId: string
@@ -38,38 +34,29 @@ async function parseJsonSafe(response: Response): Promise<Record<string, unknown
 function createRequestError(
   status: number,
   payload: Record<string, unknown>,
-  fallbackMessage: string,
 ): MutationRequestError {
-  const error = new Error(resolveTaskErrorMessage(payload, fallbackMessage)) as MutationRequestError
-  error.status = status
-  error.payload = payload
-  if (typeof payload.detail === 'string') {
-    error.detail = payload.detail
-  }
-  return error
+  return createClientApiError(payload, status)
 }
 
 export async function requestJsonWithError<T>(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
 ): Promise<T> {
   const response = await apiFetch(input, init)
   const data = await parseJsonSafe(response)
   if (!response.ok) {
-    throw createRequestError(response.status, data, fallbackMessage)
+    throw createRequestError(response.status, data)
   }
   return data as T
 }
 
 export async function readOperationMutationResponseWithError(
   response: Response,
-  fallbackMessage: string,
   queryClient: QueryClient,
 ): Promise<unknown> {
   const payload = await parseJsonSafe(response)
   if (!response.ok) {
-    throw createRequestError(response.status, payload, fallbackMessage)
+    throw createRequestError(response.status, payload)
   }
   const result = requireOperationMutationResponse(payload)
   await syncWorkspaceResourceChanges({
@@ -87,13 +74,11 @@ export async function readOperationMutationResponseWithError(
 export async function requestOperationMutationWithError(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
   queryClient: QueryClient,
 ): Promise<unknown> {
   const response = await apiFetch(input, init)
   return await readOperationMutationResponseWithError(
     response,
-    fallbackMessage,
     queryClient,
   )
 }
@@ -101,13 +86,11 @@ export async function requestOperationMutationWithError(
 export async function requestOperationMutationVoidWithError(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
   queryClient: QueryClient,
 ): Promise<void> {
   await requestOperationMutationWithError(
     input,
     init,
-    fallbackMessage,
     queryClient,
   )
 }
@@ -115,29 +98,26 @@ export async function requestOperationMutationVoidWithError(
 export async function requestVoidWithError(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
 ): Promise<void> {
   const response = await apiFetch(input, init)
   if (response.ok) return
   const data = await parseJsonSafe(response)
-  throw createRequestError(response.status, data, fallbackMessage)
+  throw createRequestError(response.status, data)
 }
 
 export async function requestTaskResponseWithError(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
 ): Promise<Response> {
   const response = await apiFetch(input, init)
   if (response.ok) return response
   const data = await parseJsonSafe(response)
-  throw createRequestError(response.status, data, fallbackMessage)
+  throw createRequestError(response.status, data)
 }
 
 export async function requestBlobWithError(
   input: RequestInfo | URL,
   init: RequestInit,
-  fallbackMessage: string,
 ): Promise<Blob> {
   const response = await apiFetch(input, init)
   if (response.ok) {
@@ -145,7 +125,7 @@ export async function requestBlobWithError(
   }
 
   const data = await parseJsonSafe(response)
-  throw createRequestError(response.status, data, fallbackMessage)
+  throw createRequestError(response.status, data)
 }
 
 export async function invalidateQueryTemplates(

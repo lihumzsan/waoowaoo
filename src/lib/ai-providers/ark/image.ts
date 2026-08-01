@@ -4,6 +4,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+import { AppError } from '@/lib/errors/app-error'
 
 const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -29,7 +30,7 @@ export async function arkImageGeneration(
   request: ArkImageGenerationRequest,
   options?: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkImageGenerationResponse> {
-  if (!options?.apiKey) throw new Error('请配置火山引擎 API Key')
+  if (!options?.apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
 
   const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, logPrefix = '[Ark Image]' } = options
   const url = `${ARK_BASE_URL}/images/generations`

@@ -122,7 +122,7 @@ export function useUploadProjectCharacterImage(projectId: string) {
             await requestOperationMutationVoidWithError(`/api/assets/${characterId}/upload-render`, {
                 method: 'POST',
                 body: formData
-            }, 'Failed to upload image', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -154,7 +154,7 @@ export function useSelectProjectCharacterImage(projectId: string) {
                     appearanceId,
                     imageIndex,
                 })
-            }, 'Failed to select image', queryClient)
+            }, queryClient)
         },
         onMutate: async (variables): Promise<SelectProjectCharacterImageContext> => {
             const targetKey = `${variables.characterId}:${variables.appearanceId}`
@@ -212,7 +212,7 @@ export function useUndoProjectCharacterImage(projectId: string) {
                     projectId,
                     appearanceId
                 })
-            }, 'Failed to undo image', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -229,7 +229,6 @@ export function useDeleteProjectCharacter(projectId: string) {
             await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character?id=${encodeURIComponent(characterId)}`,
                 { method: 'DELETE' },
-                'Failed to delete character',
                 queryClient,
             )
         },
@@ -275,7 +274,6 @@ export function useDeleteProjectAppearance(projectId: string) {
             await requestOperationMutationVoidWithError(
                 `/api/projects/${projectId}/character/appearance?characterId=${encodeURIComponent(characterId)}&appearanceId=${encodeURIComponent(appearanceId)}`,
                 { method: 'DELETE' },
-                'Failed to delete appearance',
                 queryClient,
             )
         },
@@ -300,7 +298,7 @@ export function useUpdateProjectCharacterName(projectId: string) {
                     projectId,
                     name,
                 })
-            }, 'Failed to update character name', queryClient)
+            }, queryClient)
         },
     })
 }

@@ -98,7 +98,7 @@ async function uploadMurekaSoundtrackVideo(input: {
 export async function executeMurekaMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
   const options = input.options ?? {}
   const { apiKey, baseUrl } = await getProviderConfig(input.userId, input.selection.provider)
-  if (!apiKey) throw new Error('MUREKA_API_KEY_MISSING')
+  if (!apiKey) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'mureka' })
   const modelId = requireSelectedModelId(input.selection, 'mureka:music')
   if (modelId !== MUREKA_9_MODEL_ID) {
     throw new AppError('INVALID_PARAMS', `Mureka music model is unsupported: ${modelId}`, { provider: 'mureka' })

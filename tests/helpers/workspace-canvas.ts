@@ -11,6 +11,6 @@ export function canvasLifecycle(
     taskId: running ? 'task-test' : null,
     taskType: running ? 'test_task' : null,
     progress: running ? 50 : null,
-    error: phase === 'failed' ? { code: 'TEST_FAILED', message: 'Test failed' } : null,
+    error: phase === 'failed' ? { code: 'TEST_FAILED' } : null,
   }
 }

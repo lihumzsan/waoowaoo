@@ -4,6 +4,8 @@ import { FetchStatusError } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getErrorMessage } from '@/lib/ai-providers/shared/helpers'
 import { describeUnknownError } from '@/lib/errors/normalize'
+import { AppError } from '@/lib/errors/app-error'
+import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -11,6 +13,46 @@ interface UnknownRecord {
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === 'object' ? (value as UnknownRecord) : null
+}
+
+function codeFromArkErrorToken(value: unknown): UnifiedErrorCode | null {
+  if (typeof value !== 'string') return null
+  const token = value.trim().split(':', 1)[0]?.trim().toUpperCase()
+  if (token === 'ACCOUNTOVERDUEERROR' || token === 'ACCOUNT_OVERDUE_ERROR') {
+    return 'PROVIDER_BILLING_REQUIRED'
+  }
+  if (token === 'MODELNOTOPEN' || token === 'MODEL_NOT_OPEN') return 'MODEL_NOT_OPEN'
+  return null
+}
+
+function readArkErrorCode(value: unknown): UnifiedErrorCode | null {
+  const record = asRecord(value)
+  if (!record) return codeFromArkErrorToken(value)
+  const nested = asRecord(record.error)
+  return codeFromArkErrorToken(nested?.code)
+    ?? codeFromArkErrorToken(nested?.message)
+    ?? codeFromArkErrorToken(record.code)
+    ?? codeFromArkErrorToken(record.message)
+}
+
+function toArkHttpError(status: number, responseText: string): Error {
+  const statusError = new FetchStatusError(status, responseText)
+  let payload: unknown = responseText
+  try {
+    payload = JSON.parse(responseText) as unknown
+  } catch {}
+  const providerCode = readArkErrorCode(payload)
+  const code = providerCode
+    ?? (status === 401 || status === 403
+      ? 'PROVIDER_AUTH_INVALID'
+      : status === 402
+        ? 'PROVIDER_BILLING_REQUIRED'
+        : status === 429
+          ? 'RATE_LIMIT'
+          : null)
+  return code
+    ? new AppError(code, undefined, { provider: 'ark', cause: statusError })
+    : statusError
 }
 
 function readArkVideoUrl(content: unknown): string | undefined {
@@ -32,7 +74,7 @@ function readArkVideoUrl(content: unknown): string | undefined {
 
 export async function querySeedanceVideoStatus(taskId: string, apiKey: string): Promise<ProviderAsyncTaskStatus> {
   if (!apiKey) {
-    throw new Error('请配置火山引擎 API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'ark' })
   }
 
   try {
@@ -51,14 +93,14 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
     if (!queryResponse.ok) {
       const errorText = await queryResponse.text()
       logInternal('Seedance', 'ERROR', `Status query failed: ${queryResponse.status}`)
-      throw new FetchStatusError(queryResponse.status, errorText)
+      throw toArkHttpError(queryResponse.status, errorText)
     }
 
     const queryData = await queryResponse.json() as {
       status?: unknown
       usage?: { total_tokens?: unknown }
       content?: unknown
-      error?: { message?: unknown }
+      error?: { code?: unknown; message?: unknown }
     }
     const status = queryData.status
     const actualVideoTokens = typeof queryData.usage?.total_tokens === 'number'
@@ -76,7 +118,7 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
         }
       }
 
-      return { status: 'failed', failureDisposition: 'retryable', error: 'No video URL in response' }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EMPTY_RESPONSE', error: 'No video URL in response' }
     }
 
     if (status === 'failed') {
@@ -85,11 +127,17 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
         : queryData.error
           ? describeUnknownError(queryData.error)
           : 'Unknown error'
-      return { status: 'failed', failureDisposition: 'retryable', error: errorMessage }
+      const errorCode = readArkErrorCode(queryData.error) ?? 'EXTERNAL_ERROR'
+      return {
+        status: 'failed',
+        failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
+        errorCode,
+        error: errorMessage,
+      }
     }
 
     if (status === 'cancelled' || status === 'canceled') {
-      return { status: 'failed', failureDisposition: 'retryable', error: `Ark task ${status}` }
+      return { status: 'failed', failureDisposition: 'retryable', errorCode: 'EXTERNAL_ERROR', error: `Ark task ${status}` }
     }
 
     if (status === 'queued' || status === 'running') return { status: 'pending' }

@@ -1,11 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
-
-export const MAX_IMAGE_BYTES = 25 * 1024 * 1024
-export const MAX_AUDIO_BYTES = 100 * 1024 * 1024
-export const MAX_VIDEO_BYTES = 512 * 1024 * 1024
-export const MAX_MULTIPART_IMAGE_REQUEST_BYTES = MAX_IMAGE_BYTES + 1024 * 1024
-export const MAX_MULTIPART_MEDIA_UPLOAD_REQUEST_BYTES = MAX_AUDIO_BYTES + 1024 * 1024
-export const MAX_BASE64_IMAGE_REQUEST_BYTES = Math.ceil(MAX_IMAGE_BYTES * 4 / 3) + 1024 * 1024
+export * from './body-size-constants'
 
 function payloadTooLarge(label: string, maxBytes: number): ApiError {
   return new ApiError('INVALID_PARAMS', {

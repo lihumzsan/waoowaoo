@@ -92,9 +92,23 @@ export async function reportTaskProgress(
   payload?: Record<string, unknown>,
 ): Promise<void> {
   context.heartbeat()
-  const data = context.data
-  const value = Math.max(0, Math.min(99, Math.floor(progress)))
-  const nextPayload = buildProgressPayload(data, payload)
+  await projectTaskProgress({
+    data: context.data,
+    attempt: context.attempt,
+    progress,
+    payload,
+  })
+}
+
+export async function projectTaskProgress(input: {
+  data: TaskExecutionData
+  attempt: number
+  progress: number
+  payload?: Record<string, unknown>
+}): Promise<void> {
+  const data = input.data
+  const value = Math.max(0, Math.min(99, Math.floor(input.progress)))
+  const nextPayload = buildProgressPayload(data, input.payload)
   const stage = typeof nextPayload.stage === 'string'
     ? nextPayload.stage
     : null
@@ -114,12 +128,12 @@ export async function reportTaskProgress(
     })
   }
 
-  if (!Number.isInteger(context.attempt) || context.attempt < 1) {
+  if (!Number.isInteger(input.attempt) || input.attempt < 1) {
     throw new Error(`TASK_ATTEMPT_CONTEXT_REQUIRED:${data.taskId}`)
   }
   const updated = await tryUpdateTaskProgress(
     data.taskId,
-    context.attempt,
+    input.attempt,
     value,
     nextPayload,
   )

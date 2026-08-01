@@ -4,10 +4,7 @@ import {
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
 import type { OperationPlanView } from '@/lib/operations/planning'
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
+import { readClientApiError } from '@/lib/errors/client'
 
 export async function fetchOperationPlanView(params: {
   projectId: string
@@ -24,11 +21,7 @@ export async function fetchOperationPlanView(params: {
     }),
   })
   if (!response.ok) {
-    const payload: unknown = await response.json().catch(() => ({}))
-    const message = isRecord(payload) && typeof payload.message === 'string'
-      ? payload.message
-      : 'OPERATION_PLAN_FAILED'
-    throw new Error(message)
+    throw await readClientApiError(response)
   }
   return await response.json() as OperationPlanView
 }
@@ -44,11 +37,7 @@ export async function fetchAssetOperationPlanView(params: {
     body: JSON.stringify(params.input),
   })
   if (!response.ok) {
-    const payload: unknown = await response.json().catch(() => ({}))
-    const message = isRecord(payload) && typeof payload.message === 'string'
-      ? payload.message
-      : 'OPERATION_PLAN_FAILED'
-    throw new Error(message)
+    throw await readClientApiError(response)
   }
   return await response.json() as OperationPlanView
 }
@@ -63,11 +52,7 @@ export async function fetchAssetHubOperationPlanView(params: {
     body: JSON.stringify({ input: params.input }),
   })
   if (!response.ok) {
-    const payload: unknown = await response.json().catch(() => ({}))
-    const message = isRecord(payload) && typeof payload.message === 'string'
-      ? payload.message
-      : 'OPERATION_PLAN_FAILED'
-    throw new Error(message)
+    throw await readClientApiError(response)
   }
   return await response.json() as OperationPlanView
 }
@@ -87,11 +72,7 @@ export async function issueOperationApprovalGrant(plan: OperationPlanView): Prom
     }),
   })
   if (!response.ok) {
-    const payload: unknown = await response.json().catch(() => ({}))
-    const message = isRecord(payload) && typeof payload.message === 'string'
-      ? payload.message
-      : 'OPERATION_APPROVAL_GRANT_FAILED'
-    throw new Error(message)
+    throw await readClientApiError(response)
   }
   return await response.json() as {
     approvalGrantId: string

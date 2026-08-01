@@ -5,6 +5,7 @@ import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selectio
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
 import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
+import { AppError } from '@/lib/errors/app-error'
 
 type GoogleMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
 
@@ -91,9 +92,12 @@ export function extractGoogleMusicResult(response: unknown): {
 
   const finishReason = getFinishReason(safe)
   if (isSafetyFinishReason(finishReason)) {
-    throw new Error(`GOOGLE_MUSIC_BLOCKED:${finishReason}`)
+    throw new AppError('SENSITIVE_CONTENT', 'Google blocked music generation by policy', {
+      provider: 'google',
+      details: { finishReason: finishReason ?? null },
+    })
   }
-  throw new Error('GOOGLE_MUSIC_EMPTY_RESPONSE: no audio inlineData returned')
+  throw new AppError('EMPTY_RESPONSE', 'Google returned no audio', { provider: 'google' })
 }
 
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {

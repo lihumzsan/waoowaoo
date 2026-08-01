@@ -14,9 +14,10 @@ export interface RecentOperationMedia {
 }
 
 export interface RecentOperationError {
-  code?: string | null
-  message: string
-  retryable?: boolean | null
+  code: string
+  category: string
+  retryable: boolean
+  action: 'ask_user' | 'inform_user' | 'revise_input' | 'stop' | 'wait'
 }
 
 export interface RecentOperationResult {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
-import { apiHandler } from '@/lib/api-errors'
+import { apiHandler, ApiError } from '@/lib/api-errors'
 import { readAllLogs } from '@/lib/logging/file-writer'
 import { requireAdminUserId } from '@/lib/admin/admin-auth'
 
@@ -14,7 +14,7 @@ export const GET = apiHandler(async () => {
 
     const logs = await readAllLogs()
     if (!logs) {
-        return NextResponse.json({ error: 'No logs available' }, { status: 404 })
+        throw new ApiError('NOT_FOUND', { code: 'LOGS_NOT_AVAILABLE' })
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)

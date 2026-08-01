@@ -16,6 +16,7 @@ import PLATFORM_PROVIDER_ENV from '@/lib/deployment/platform-provider-env.json'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import { isUnifiedModelType } from '@/lib/user-api/api-config-shared'
+import { AppError } from '@/lib/errors/app-error'
 import {
   findRuntimeModelByKey,
   normalizeProviderRuntimeBaseUrl,
@@ -296,7 +297,9 @@ export async function getProviderConfig(userId: string, providerId: string): Pro
   const provider = pickProviderStrict(providers, providerId)
 
   if (!provider.apiKey) {
-    throw new Error(`PROVIDER_API_KEY_MISSING: ${provider.id}`)
+    throw new AppError('PROVIDER_AUTH_INVALID', 'Provider API key is missing', {
+      provider: provider.id,
+    })
   }
 
   return {

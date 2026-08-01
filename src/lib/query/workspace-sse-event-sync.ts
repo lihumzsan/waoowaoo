@@ -124,12 +124,6 @@ export function applyWorkspaceSSEEvent(params: {
     typeof payloadRecord?.errorCode === 'string' && payloadRecord.errorCode.trim()
       ? payloadRecord.errorCode.trim()
       : null
-  const payloadErrorMessage =
-    typeof payloadRecord?.errorMessage === 'string' && payloadRecord.errorMessage.trim()
-      ? payloadRecord.errorMessage.trim()
-      : typeof payloadRecord?.message === 'string' && payloadRecord.message.trim()
-        ? payloadRecord.message.trim()
-        : null
   const lifecycleTargets = resolveLifecycleTargets({
     targetType,
     targetId,
@@ -178,7 +172,6 @@ export function applyWorkspaceSSEEvent(params: {
         stage: typeof payloadRecord?.stage === 'string' ? payloadRecord.stage : null,
         stageLabel: typeof payloadRecord?.stageLabel === 'string' ? payloadRecord.stageLabel : null,
         errorCode: payloadErrorCode,
-        errorMessage: payloadErrorMessage,
         eventTs: typeof event.ts === 'string' ? event.ts : null,
       })
     }

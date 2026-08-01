@@ -27,7 +27,6 @@ export type TaskTargetState = {
   stageLabel: string | null
   lastError: {
     code: string
-    message: string
   } | null
   updatedAt: string | null
 }
@@ -109,7 +108,6 @@ export function normalizeFailedError(task: {
   if (!normalized) return null
   return {
     code: normalized.code,
-    message: normalized.message,
   }
 }
 

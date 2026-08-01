@@ -154,7 +154,8 @@ describe('provider contract - fal queue', () => {
       status: 'FAILED',
       completed: false,
       failed: true,
-      failureDisposition: 'retryable',
+      failureDisposition: 'permanent',
+      errorCode: 'SENSITIVE_CONTENT',
       error: 'content moderation failed',
     })
   })
@@ -193,7 +194,8 @@ describe('provider contract - fal queue', () => {
 
     expect(result).toEqual({
       status: 'failed',
-      failureDisposition: 'retryable',
+      failureDisposition: 'permanent',
+      errorCode: 'PROVIDER_BILLING_REQUIRED',
       resultUrl: undefined,
       imageUrl: undefined,
       videoUrl: undefined,
@@ -249,6 +251,7 @@ describe('provider contract - fal queue', () => {
       completed: true,
       failed: true,
       failureDisposition: 'retryable',
+      errorCode: 'EMPTY_RESPONSE',
       error: 'FAL任务完成但未返回媒体URL',
     })
   })

@@ -15,6 +15,10 @@
 - **LG-05 — `alert.*` action 命名空间保留。** 需要外部告警路由（如接入监控/on-call）的事件使用 `alert.` 前缀 action；普通事件不得占用该前缀，告警筛选只按 action 命名空间，不按 message 文本匹配。
 - **LG-06 — no-console 由 ESLint 唯一裁决。** `eslint.config.mjs` 对 `src/**` 强制 `no-console: error`；唯一豁免为 `src/lib/logging/core.ts`、`src/lib/logging/file-writer.ts`（权威流最终写出点）、`src/lib/storage/init.ts`（logger 就绪前的独立 bootstrap 进程）与 `scripts/**`。禁止另建自研 console 扫描脚本。
 - **LG-07 — 语义 action 由所属生命周期契约拥有。** 关键 action 必须与其唯一生命周期 owner 同步演进；禁止以源码字符串或文件存在性脚本冒充运行协议 oracle。
+- **LG-08 — 用户 reference 与内部 cause 分离。** API错误响应和用户可见终态携带可公开的
+  requestId/taskId/turnId，供用户报障；原始 cause、Provider detail与stack只进入服务端日志或
+  既有持久诊断字段。客户端未知异常经 `/api/client-log` 上报同一 reference，不得为了可观测
+  性把内部 message复制回 toast、模型历史或公开 response。
 
 ## 权威入口
 
@@ -24,6 +28,8 @@
 - 配置：`src/lib/logging/config.ts`（`LOG_LEVEL` 默认 `INFO`、`LOG_DEBUG_ENABLED`、`LOG_AUDIT_ENABLED`、`LOG_REDACT_KEYS`、`LOG_SERVICE`）。
 - 脱敏：`src/lib/logging/redact.ts`。
 - 便利副本与管理员下载：`src/lib/logging/file-writer.ts`（写入与 `readAllLogs`，下载 route 需管理员授权）。
+- 浏览器未知异常上报：`src/lib/client-reporter.ts` 与 `/api/client-log`；只承担诊断，不拥有
+  UI状态或业务终态。
 - 服务启动挂载：`src/instrumentation.ts` 只做 runtime 分流；Node-only process observer 位于 `src/instrumentation-node.ts`，避免把 Node API 编进 Edge instrumentation bundle。
 - 守卫：`eslint.config.mjs`（no-console）与结构化 logger 共享类型。
 

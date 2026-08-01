@@ -60,8 +60,8 @@ type LockedResourceRow = {
   materializedAt: Date | null
 }
 
-function requireNonEmpty(value: string, code: string): string {
-  const normalized = value.trim()
+function requireNonEmpty(value: string | null | undefined, code: string): string {
+  const normalized = typeof value === 'string' ? value.trim() : ''
   if (!normalized) throw new Error(code)
   return normalized
 }
@@ -501,8 +501,8 @@ export async function settleCreativeResourceFailureInTransaction(
     readonly resourceId: string
     readonly userId: string
     readonly status: 'failed' | 'canceled'
-    readonly errorCode: string
-    readonly errorMessage: string
+    readonly errorCode: string | null
+    readonly errorMessage: string | null
   },
 ): Promise<void> {
   const resource = await lockResource(
@@ -511,6 +511,15 @@ export async function settleCreativeResourceFailureInTransaction(
   )
   if (resource.userId !== input.userId) throw new Error('CREATIVE_RESOURCE_NOT_OWNED')
   if (resource.status === 'ready') return
+  const errorCode = input.status === 'failed'
+    ? requireNonEmpty(input.errorCode, 'CREATIVE_RESOURCE_ERROR_CODE_REQUIRED')
+    : null
+  const errorMessage = input.status === 'failed'
+    ? requireNonEmpty(
+        input.errorMessage,
+        'CREATIVE_RESOURCE_ERROR_MESSAGE_REQUIRED',
+      ).slice(0, 2_000)
+    : null
   const updated = await tx.creativeResource.updateMany({
     where: {
       id: resource.id,
@@ -520,11 +529,8 @@ export async function settleCreativeResourceFailureInTransaction(
     },
     data: {
       status: input.status,
-      errorCode: requireNonEmpty(input.errorCode, 'CREATIVE_RESOURCE_ERROR_CODE_REQUIRED'),
-      errorMessage: requireNonEmpty(
-        input.errorMessage,
-        'CREATIVE_RESOURCE_ERROR_MESSAGE_REQUIRED',
-      ).slice(0, 2_000),
+      errorCode,
+      errorMessage,
     },
   })
   if (updated.count !== 1) {

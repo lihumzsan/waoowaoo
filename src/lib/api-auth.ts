@@ -11,6 +11,7 @@ import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { extractModelKey } from '@/lib/config-service'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { getLogContext, setLogContext } from '@/lib/logging/context'
+import { projectPublicErrorDetails } from '@/lib/errors/projection'
 
 // ============================================================
 // 类型定义
@@ -131,46 +132,47 @@ export type ProjectAuthContext = ProjectAuthContextWithIncludes<ProjectAuthInclu
 // 错误响应工具
 // ============================================================
 
-function buildErrorResponse(code: UnifiedErrorCode, message?: string, details: Record<string, unknown> = {}) {
+function buildErrorResponse(code: UnifiedErrorCode, details: Record<string, unknown> = {}) {
     const spec = getErrorSpec(code)
-    const finalMessage = message?.trim() || spec.defaultMessage
+    const requestId = getLogContext().requestId ?? null
+    const publicDetails = {
+        ...projectPublicErrorDetails(details),
+        ...(requestId ? { requestId } : {}),
+    }
     return NextResponse.json(
         {
             success: false,
             error: {
                 code,
-                message: finalMessage,
+                message: spec.defaultMessage,
                 retryable: spec.retryable,
                 category: spec.category,
                 userMessageKey: spec.userMessageKey,
-                details,
+                details: publicDetails,
             },
-            code,
-            message: finalMessage,
-            ...details,
         },
         { status: spec.httpStatus },
     )
 }
 
-export function unauthorized(message = 'Unauthorized') {
-    return buildErrorResponse('UNAUTHORIZED', message)
+export function unauthorized() {
+    return buildErrorResponse('UNAUTHORIZED')
 }
 
-export function forbidden(message = 'Forbidden') {
-    return buildErrorResponse('FORBIDDEN', message)
+export function forbidden() {
+    return buildErrorResponse('FORBIDDEN')
 }
 
-export function notFound(resource = 'Resource') {
-    return buildErrorResponse('NOT_FOUND', `${resource} not found`)
+export function notFound() {
+    return buildErrorResponse('NOT_FOUND')
 }
 
-export function badRequest(message: string) {
-    return buildErrorResponse('INVALID_PARAMS', message)
+export function badRequest() {
+    return buildErrorResponse('INVALID_PARAMS')
 }
 
-export function serverError(message = 'Internal server error') {
-    return buildErrorResponse('INTERNAL_ERROR', message)
+export function serverError() {
+    return buildErrorResponse('INTERNAL_ERROR')
 }
 
 // ============================================================
@@ -255,7 +257,7 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
 
     // 4. 项目存在检查
     if (!project) {
-        return notFound('Project')
+        return notFound()
     }
 
     // 5. 所有权验证
@@ -340,7 +342,7 @@ export async function requireProjectAuthLight(
     })
 
     if (!project) {
-        return notFound('Project')
+        return notFound()
     }
 
     if (project.userId !== session.user.id) {

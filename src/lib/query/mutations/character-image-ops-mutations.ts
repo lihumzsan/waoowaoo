@@ -28,7 +28,7 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
                     description,
                     descriptionIndex: typeof descriptionIndex === 'number' ? descriptionIndex : 0,
                 }),
-            }, 'Failed to update appearance description', queryClient)
+            }, queryClient)
         },
     })
 }

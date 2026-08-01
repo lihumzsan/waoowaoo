@@ -30,7 +30,6 @@ export function useUpdateProjectEpisodeField(projectId: string) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [key]: value }),
         },
-        'Failed to update episode',
       ),
     onMutate: async (variables) => {
       const episodeQueryKey = queryKeys.episodeData(projectId, variables.episodeId)
@@ -94,7 +93,6 @@ export function useDownloadRemoteBlob() {
       await requestBlobWithError(
         url,
         { method: 'GET' },
-        '下载失败',
       ),
   })
 }

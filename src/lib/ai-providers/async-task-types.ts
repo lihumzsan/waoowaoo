@@ -1,4 +1,5 @@
 import type { AiLlmProviderConfig } from '@/lib/ai-registry/types'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
 
 export type AsyncExternalIdProvider =
   | 'FAL'
@@ -49,6 +50,7 @@ export type AsyncPollResult = AsyncPollResultFields & (
     status: 'failed'
     pendingPhase?: never
     failureDisposition: 'retryable' | 'permanent'
+    errorCode: UnifiedErrorCode
   }
 )
 
@@ -56,12 +58,14 @@ export function normalizeAsyncPollResult(input: AsyncPollResultFields & {
   readonly status: 'pending' | 'completed' | 'failed'
   readonly pendingPhase?: AsyncPendingPhase
   readonly failureDisposition?: 'retryable' | 'permanent'
+  readonly errorCode?: UnifiedErrorCode
 }): AsyncPollResult {
   if (input.status !== 'pending' && input.pendingPhase) {
     throw new Error('ASYNC_PROVIDER_PENDING_PHASE_FORBIDDEN')
   }
   if (input.status === 'failed') {
     if (!input.failureDisposition) throw new Error('ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED')
+    if (!input.errorCode) throw new Error('ASYNC_PROVIDER_FAILURE_CODE_REQUIRED')
     return input as AsyncPollResult
   }
   if (input.failureDisposition) throw new Error('ASYNC_PROVIDER_NON_FAILURE_DISPOSITION_FORBIDDEN')

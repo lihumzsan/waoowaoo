@@ -43,6 +43,11 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-16 — Voice Design 是独立固定模态。** `voice` 不能伪装成 music 或 video audio。Qwen Voice Design 1.7B 的模型 identity、多语言枚举和按字符价格由 FAL production catalog 唯一声明；Agent-facing `generate_voice` 不接受 provider/model/temperature/seed 等参数。adapter 只映射 canonical `description + text + language` 为 FAL `prompt + text + language`，通过共享 FAL external id/poll 协议恢复，完成后仍进入共享音频字节上限和稳定 Task artifact 持久化。
 - **PG-17 — 视频参考声音能力由 registry 穷尽声明。** `VideoCapabilities.maxReferenceAudios` 是是否允许参考声音及其上限的唯一裁判；缺失即不支持，提交计费 Task 前失败。当前 Seedance 2.0 provider variants 声明最多 3 个声音参考且至少需要 1 个图片参考。统一执行输入是 `referenceImages + referenceAudios`：OpenRouter adapter 映射为一个多模态 `input_references`，FAL 映射为 reference-to-video 的 `image_urls + audio_urls`，Ark 映射为带 `role=reference_audio` 的 content；adapter 必须拒绝超限、不支持的模型和声音无图片组合，禁止静默截断或降级。私有图片、音频和视频引用在进入 Gateway 前必须共同经过 owner-aware outbound media 入口，按模态校验对象 metadata 后投影为有界时效的绝对 HTTPS 签名 URL；Gateway 对所有产品媒体引用再次拒绝 HTTP、相对路径、Data URL 与内嵌凭据。FAL、Ark、OpenRouter Video 直接消费 URL；只有外部 SDK wire 明确要求 inline bytes 的 adapter（当前 Google Image/Video 与 OpenRouter Image）可在自身内部有界下载并编码，Base64 不能成为 Task、Task Activity、Gateway 或跨 provider 的媒体协议。
 - **PG-18 — Provider result 下载只有一个 SSRF-safe 出口。** 应用主动下载外部图片、音频或视频结果时只能调用 `src/lib/media/outbound-fetch.ts`：URL scheme、凭据、私网/保留地址、DNS 全结果与每次 redirect 都必须 fail closed，实际 socket lookup 必须再次执行同一地址 policy，避免 DNS precheck 与连接解析之间的 rebinding。透明代理把公网 DNS 映射到 `198.18.0.0/15` 时，只能由固定 TLS 认证的公共 DNS JSON 入口重解并继续校验其公网结果，失败仍原地拒绝；禁止把该保留网段直接加入 allowlist。禁止 hostname-only 内网例外、普通 `fetch` 旁路或只检查首跳；owner-aware 自有媒体仍先由 ASO policy 投影为外部 HTTPS URL，再进入同一下载边界。
+- **PG-19 — Provider 边界产出 typed failure。** adapter必须在最了解协议的位置把鉴权、
+  Provider账户欠费/配额、限流、内容策略、超时与畸形结果映射为统一 registry code；异步
+  `failed` poll结果必须携带 code。共享 normalize只接受 typed code/status作为兜底，不得以
+  Provider英文/中文 message子串猜业务语义。原始响应只进入受限内部诊断，用户和模型投影
+  不得读取。连接诊断也只返回有限 `messageKey`，不得把 Provider detail交给浏览器。
 
 ## 权威入口
 
@@ -125,6 +130,20 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 - Assistant reasoning 首次展示只改了 renderer 与终态投影，OpenRouter 请求没有声明 `summary:auto`，真实 GPT 只返回 encrypted block；随后虽增加占位状态，SDK UI converter 又忽略嵌套 `model/reasoning-delta`，真实组合仍在长推理期间保持空白。当前 capability registry 决定请求语义，共享 normalizer 只接收可读 delta，provider wire contract 与 wakeable stream logic 分别反证“没有摘要”和“摘要被缓冲”两种复发；真实外部 provider 仍需发布前复验。
 - 媒体 SSRF 首轮防线只在 `outbound-image` 中做“DNS 预检后普通 fetch”，实际连接会再次解析 hostname，且对配置过的 internal hostname 按 host 放行任意端口；Provider result 的 storage image/video 与 audio 下载还完全绕过该 policy。旧安全测试 mock 了 DNS 与 fetch，只证明预检被调用，无法反证 DNS rebinding 或旁路。当前全部主动媒体下载收敛到 `outbound-fetch`：每一跳先检查全部解析结果，socket lookup 再执行同一 policy 并只连接通过的地址；hostname-only 例外和三条普通 fetch 已删除。
+
+- Provider错误过去主要由共享 normalizer 对四十余个中英文 message子串分类，导致自部署
+  Provider账户欠费被误判为平台余额不足；Ark、Google、OpenRouter、FAL的异步失败又只传
+  message，无法稳定到达终态。当前 adapter在协议边界产出 canonical code，平台余额与
+  Provider凭证/账单分离，所有异步 poll union强制携带 errorCode；字符串猜测分支已删除。
+  真实各 Provider 的拒绝 body仍可能随外部协议变化，需在发布监控中以内部诊断补充分类，
+  不得把未知 message再次暴露或加入共享子串规则。
+- Adapter 已开始抛出 typed `AppError` 后，durable provider fence 仍只用它判断
+  `retryable_rejected/rejected`，随后却重新包装为通用 `PROVIDER_SUBMIT_FAILED` 或
+  `PROVIDER_SUBMISSION_REJECTED`；进程若在 checkpoint commit 后重放，checkpoint 又只保存
+  name/message，连本次进程内尚能保留的 code 也会丢失。这是同一“分类在调用层被覆盖”根因
+  的换形式复发，旧 at-most-once 场景只反证重复 POST 与 checkpoint 状态，没有把 canonical
+  code 当独立 oracle。当前 fence 将 typed code 与 disposition 写入同一 checkpoint，立即返回
+  和重放都重建同一 `AppError`；未知错误仍保持 `outcome_unknown`，没有新增提交或重试入口。
 
 ## 修改检查表
 

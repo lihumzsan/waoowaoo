@@ -18,7 +18,7 @@ async function fetchProjectStoryCanonResponse(
   const search = new URLSearchParams({ episodeId })
   const response = await apiFetch(`/api/projects/${projectId}/story-canon?${search.toString()}`)
   if (!response.ok) {
-    throw await readProjectStoryCanonJsonError(response, 'Failed to load episode planning context')
+    throw await readProjectStoryCanonJsonError(response)
   }
   const data = await response.json() as {
     storyCanon: ProjectStoryCanon | null

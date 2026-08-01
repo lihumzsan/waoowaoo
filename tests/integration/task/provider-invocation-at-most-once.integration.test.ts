@@ -556,6 +556,7 @@ describe('provider invocation at-most-once DB integration', () => {
       details: { requested: 1035, allowed: 1024 },
     })
     await expect(invoke('provider-typed-validation-task', laterAttempt, 2)).rejects.toMatchObject({
+      code: 'MUSIC_PROMPT_TOO_LONG',
       retryable: false,
     })
 
@@ -564,9 +565,12 @@ describe('provider invocation at-most-once DB integration', () => {
     await expect(
       prisma.taskExecutionCheckpoint.findFirstOrThrow({
         where: { taskId: 'provider-typed-validation-task' },
-        select: { state: true },
+        select: { state: true, output: true },
       }),
-    ).resolves.toEqual({ state: 'rejected' })
+    ).resolves.toMatchObject({
+      state: 'rejected',
+      output: { error: { code: 'MUSIC_PROMPT_TOO_LONG' } },
+    })
   })
 
   it('persists and replays an LLM completion before handler checkpoint settlement', async () => {

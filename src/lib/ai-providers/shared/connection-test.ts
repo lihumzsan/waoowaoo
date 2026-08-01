@@ -1,4 +1,4 @@
-import { describeUnknownError } from '@/lib/errors/normalize'
+import { normalizeAnyError } from '@/lib/errors/normalize'
 import { generateText, type LanguageModel } from 'ai'
 import { composeModelKey } from '@/lib/ai-registry/selection'
 import { DEFAULT_REASONING_EFFORT } from '@/lib/ai-registry/reasoning-effort'
@@ -6,28 +6,28 @@ import type { AiLlmProtocol } from '@/lib/ai-registry/types'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import type {
   AiProviderConnectionTester,
+  AiProviderConnectionTestMessageKey,
   AiProviderConnectionTestStep,
   AiProviderLanguageModelContext,
 } from '@/lib/ai-providers/runtime-types'
 
-export function connectionTestErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    if (error.message.includes('fetch failed') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-      return 'Network error - check your internet connection'
-    }
-    if (error.message.includes('Connection error')) return 'Network error - temporary connection failure, please retry'
-    if (error.message.includes('401')) return 'Authentication failed - check API Key'
-    if (error.message.includes('403')) return 'Access denied - check API Key permissions'
-    if (error.message.includes('timeout') || error.name === 'TimeoutError') return 'Request timed out'
-    return error.message.slice(0, 200)
+export function connectionTestFailureMessageKey(error: unknown): AiProviderConnectionTestMessageKey {
+  const normalized = normalizeAnyError(error, { context: 'worker', fallbackCode: 'EXTERNAL_ERROR' })
+  if (normalized.code === 'PROVIDER_AUTH_INVALID' || normalized.code === 'MODEL_NOT_OPEN') {
+    return 'connectionTest.authInvalid'
   }
-  return describeUnknownError(error).slice(0, 200)
+  if (normalized.code === 'RATE_LIMIT' || normalized.code === 'QUOTA_EXCEEDED') {
+    return 'connectionTest.rateLimited'
+  }
+  if (normalized.code === 'GENERATION_TIMEOUT') return 'connectionTest.timeout'
+  if (normalized.code === 'NETWORK_ERROR') return 'connectionTest.networkError'
+  return 'connectionTest.providerError'
 }
 
-export function classifyConnectionProbeFailure(status: number): string {
-  if (status === 401 || status === 403) return `Authentication failed (${status})`
-  if (status === 429) return `Rate limited (${status})`
-  return `Provider error (${status})`
+export function classifyConnectionProbeFailure(status: number): AiProviderConnectionTestMessageKey {
+  if (status === 401 || status === 403) return 'connectionTest.authInvalid'
+  if (status === 429) return 'connectionTest.rateLimited'
+  return 'connectionTest.providerError'
 }
 
 function buildModelsUrl(baseUrl: string): string {
@@ -92,15 +92,15 @@ export function createAiSdkConnectionTester(defaults: {
           steps.push({
             name: 'models',
             status: 'fail',
-            message: connectionTestErrorMessage(new Error(String(response.status))),
+            messageKey: classifyConnectionProbeFailure(response.status),
           })
-          steps.push({ name: 'textGen', status: 'skip', message: 'Skipped because models probe failed', model })
+          steps.push({ name: 'textGen', status: 'skip', messageKey: 'connectionTest.skippedModelsFailure', model })
           return { success: false, steps }
         }
-        steps.push({ name: 'models', status: 'pass', message: `${defaults.displayName} models endpoint ok` })
+        steps.push({ name: 'models', status: 'pass', messageKey: 'connectionTest.modelsOk' })
       } catch (error) {
-        steps.push({ name: 'models', status: 'fail', message: connectionTestErrorMessage(error) })
-        steps.push({ name: 'textGen', status: 'skip', message: 'Skipped because models probe failed', model })
+        steps.push({ name: 'models', status: 'fail', messageKey: connectionTestFailureMessageKey(error) })
+        steps.push({ name: 'textGen', status: 'skip', messageKey: 'connectionTest.skippedModelsFailure', model })
         return { success: false, steps }
       }
 
@@ -109,11 +109,11 @@ export function createAiSdkConnectionTester(defaults: {
         steps.push({
           name: 'textGen',
           status: response.answer ? 'pass' : 'fail',
-          message: response.answer ? 'Text generation ok' : 'Text generation returned empty response',
+          messageKey: response.answer ? 'connectionTest.textGenerationOk' : 'connectionTest.emptyResponse',
           model: response.model,
         })
       } catch (error) {
-        steps.push({ name: 'textGen', status: 'fail', message: connectionTestErrorMessage(error), model })
+        steps.push({ name: 'textGen', status: 'fail', messageKey: connectionTestFailureMessageKey(error), model })
       }
       return { success: steps.every((step) => step.status !== 'fail'), steps }
     },

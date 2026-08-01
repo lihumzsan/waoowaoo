@@ -1,4 +1,5 @@
 import { describeUnknownError } from '@/lib/errors/normalize'
+import { resolveUnifiedErrorCode, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors/app-error'
@@ -51,6 +52,7 @@ type ProviderInvocationOutput = ProviderInvocationDescriptor & {
   readonly error?: {
     readonly name: string
     readonly message: string
+    readonly code?: UnifiedErrorCode
   }
 }
 
@@ -537,7 +539,7 @@ async function reclaimRetryableCheckpoint(params: {
     )
   }
   if (params.taskAttempt <= previousAttempt!) {
-    throw retryableSubmissionFailure(params.descriptor, readStoredError(output))
+    throwStoredRetryableFailure(params.descriptor, output)
   }
 
   const nextOutput: ProviderInvocationOutput = {
@@ -572,12 +574,7 @@ async function transitionCheckpoint(params: {
   readonly result?: unknown
   readonly error?: unknown
 }): Promise<void> {
-  const error =
-    params.error instanceof Error
-      ? { name: params.error.name || 'Error', message: params.error.message.slice(0, 2_000) }
-      : params.error === undefined
-        ? undefined
-        : { name: typeof params.error, message: String(params.error).slice(0, 2_000) }
+  const error = params.error === undefined ? undefined : toStoredError(params.error)
   const output: ProviderInvocationOutput = {
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
@@ -685,11 +682,54 @@ function readStoredError(output: ProviderInvocationOutput): string {
   return output.error?.message || 'Provider rejected the generation request'
 }
 
+function readStoredTypedError(
+  descriptor: ProviderInvocationDescriptor,
+  output: ProviderInvocationOutput,
+): AppError | null {
+  const code = resolveUnifiedErrorCode(output.error?.code)
+  return code
+    ? new AppError(code, readStoredError(output), { provider: descriptor.provider })
+    : null
+}
+
+function throwStoredRejected(
+  descriptor: ProviderInvocationDescriptor,
+  output: ProviderInvocationOutput,
+): never {
+  throw readStoredTypedError(descriptor, output)
+    ?? rejected(descriptor, readStoredError(output))
+}
+
+function throwStoredRetryableFailure(
+  descriptor: ProviderInvocationDescriptor,
+  output: ProviderInvocationOutput,
+): never {
+  throw readStoredTypedError(descriptor, output)
+    ?? retryableSubmissionFailure(descriptor, readStoredError(output))
+}
+
 function readErrorMessage(error: unknown): string {
   return describeUnknownError(error)
 }
 
 function toStoredError(error: unknown): NonNullable<ProviderInvocationOutput['error']> {
+  if (error instanceof AppError) {
+    return {
+      name: error.name || 'AppError',
+      message: error.message.slice(0, 2_000),
+      code: error.code,
+    }
+  }
+  if (error instanceof ProviderPreAcceptRejectedError) {
+    const code: UnifiedErrorCode = error.reason === 'provider_account_limit'
+      ? 'PROVIDER_BILLING_REQUIRED'
+      : 'PROVIDER_SUBMISSION_REJECTED'
+    return {
+      name: error.name,
+      message: error.message.slice(0, 2_000),
+      code,
+    }
+  }
   return error instanceof Error
     ? { name: error.name || 'Error', message: error.message.slice(0, 2_000) }
     : { name: typeof error, message: describeUnknownError(error).slice(0, 2_000) }
@@ -964,7 +1004,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   }
 
   if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
-  if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
+  if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
   if (checkpoint.state === 'retryable_rejected') {
     claim = await reclaimRetryableCheckpoint({ checkpoint, descriptor, taskAttempt })
     checkpoint = claim.checkpoint
@@ -976,9 +1016,9 @@ export async function executeTaskDurableInvocation<TResult>(params: {
       )
     }
     if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
-    if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
+    if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
     if (checkpoint.state === 'retryable_rejected') {
-      throw retryableSubmissionFailure(descriptor, readStoredError(output))
+      throwStoredRetryableFailure(descriptor, output)
     }
   }
   if (!claim.claimed) throw outcomeUnknown(descriptor)
@@ -988,8 +1028,10 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   try {
     result = await params.execute()
   } catch (error) {
+    const typedAppError = error instanceof AppError ? error : null
     const explicitHttpStatus = readExplicitHttpStatus(error)
     if (
+      typedAppError?.retryable === true ||
       (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)) ||
       params.resultPolicy.isKnownRetryableFailureError?.(error) === true
     ) {
@@ -1004,9 +1046,11 @@ export async function executeTaskDurableInvocation<TResult>(params: {
       } catch (transitionError) {
         throw outcomeUnknown(descriptor, transitionError)
       }
+      if (typedAppError) throw typedAppError
       throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
     }
     if (
+      typedAppError !== null ||
       explicitHttpStatus !== null ||
       params.resultPolicy.isKnownRejectionError?.(error) === true
     ) {
@@ -1021,6 +1065,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
       } catch (transitionError) {
         throw outcomeUnknown(descriptor, transitionError)
       }
+      if (typedAppError) throw typedAppError
       throw rejected(descriptor, readErrorMessage(error), error)
     }
     try {
@@ -1208,12 +1253,12 @@ export async function executeTaskProviderInvocation<
   }
 
   if (checkpoint.state === 'submitted') return parseMediaProviderResult<TResult>(output.result)
-  if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
+  if (checkpoint.state === 'rejected') throwStoredRejected(descriptor, output)
   if (checkpoint.state === 'outcome_unknown') throw outcomeUnknown(descriptor)
   if (checkpoint.state === 'retryable_rejected') {
     const previousAttempt = output.taskAttempt
     if (!Number.isInteger(previousAttempt) || taskAttempt <= previousAttempt!) {
-      throw retryableSubmissionFailure(descriptor, readStoredError(output))
+      throwStoredRetryableFailure(descriptor, output)
     }
     const routeReadyOutput: MediaProviderRouteInvocationOutput = {
       ...output,
@@ -1301,17 +1346,19 @@ export async function executeTaskProviderInvocation<
           },
           error: { name: error.name, message: error.message },
         })
-        if (nextState === 'rejected') throw rejected(descriptor, error.message, error)
+        if (nextState === 'rejected') throwStoredRejected(descriptor, nextOutput)
         checkpoint = { ...checkpoint, state: 'route_ready', output: nextOutput }
         output = nextOutput
         continue
       }
 
+      const typedAppError = error instanceof AppError ? error : null
       const explicitHttpStatus = readExplicitHttpStatus(error)
       const retryableFailure =
-        explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus)
+        typedAppError?.retryable === true
+        || (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus))
       const permanentRejection =
-        explicitHttpStatus !== null || (error instanceof AppError && !error.retryable)
+        typedAppError?.retryable === false || explicitHttpStatus !== null
       const nextOutput: MediaProviderRouteInvocationOutput = {
         ...output,
         routeAttempts: replaceLastRouteAttempt(output, {
@@ -1341,6 +1388,7 @@ export async function executeTaskProviderInvocation<
         output: nextOutput,
       })
       if (!transitioned) throw outcomeUnknown(descriptor)
+      if (typedAppError) throw typedAppError
       if (retryableFailure)
         throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
       if (permanentRejection) throw rejected(descriptor, readErrorMessage(error), error)
@@ -1409,5 +1457,5 @@ export async function executeTaskProviderInvocation<
     return routedResult
   }
 
-  throw rejected(descriptor, readStoredError(output))
+  throwStoredRejected(descriptor, output)
 }

@@ -115,6 +115,11 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
   事务之前成为持久重试owner；它用stable execution identity exact replay persistence
   Activity，并在commit后可靠调度Task。无法确认Temporal接受时route/model Activity不得
   宣称Task已提交，禁止fire-and-forget、BullMQ、Outbox或周期扫描兜底。
+- **TL-23 — 失败、重试与取消是三种事实。** 单次 attempt 的 typed failure 只供 Workflow
+  retry policy 裁决；仍可重试时通过现有 progress envelope 投影 `stage=retrying`，不得写
+  terminal failure。最终失败只持久化 registry code 与内部诊断 message，对外 Task View、
+  TaskEvent/SSE 和 Agent continuation 只投影 code。用户取消只写 `status=canceled`，Task 与
+  Resource 的 errorCode/errorMessage 必须为空，消费者不得再从“任务已取消”等文案反解状态。
 
 ## 状态与写入者
 
@@ -129,6 +134,7 @@ gate。Temporal transport 不拥有业务结果，MySQL Task/Resource/Billing/Pr
 | Billing settlement | Billing owner + Terminal事务 | profile、approval |
 | FollowUpBatch/member | Task创建/terminal事务 | Coordinator |
 | progress envelope | Task service | Task View |
+| terminal failure code / diagnostic message | Terminal Service（同一事务） | View/Agent 投影 / 内部诊断 |
 | SSE delta | stream publisher | UI overlay |
 
 ## 权威入口
@@ -257,6 +263,11 @@ migration、回填、删除或清理。
 - OperationExecution首版在循环中边校验receipt边schedule，前一Task已投递后遇到后续确定性
   分歧会留下部分调度；当前先验证完整集合，再逐个使用稳定Task identity投递，transport ACK
   不明由同Activity重试，已调度成员exact replay。
+- 旧 Task 链路把 Provider 原始 JSON 同时写入 TaskEvent/SSE、前端卡片和 FollowUp 模型消息，
+  retry_wait 又只存在于 Workflow 内存；取消则被写成 `TASK_CANCELLED/CONFLICT`，英文 locale
+  还无法用中文字符串反解。当前 Terminal Service仍是唯一 writer，但 transport/View/模型只
+  消费 canonical code，重试经既有 progress envelope 可见，取消成为无 error payload 的独立
+  终态。历史 Task 的诊断 message 继续留库，不再被新 reader 读取或外发。
 
 ## 修改检查表
 
@@ -268,3 +279,4 @@ migration、回填、删除或清理。
 6. 是否重新引入queue/outbox/reconcile/lease/timer或第二terminal writer？
 7. handler业务是否从旧Bull wrapper拆出且没有复制一份？
 8. 旧入口、writer、reader和测试治理引用是否一起删除？
+9. retrying、failed与canceled是否由同一权威事实分别投影，而非由 message 或 UI timer猜测？

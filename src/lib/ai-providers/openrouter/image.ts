@@ -6,6 +6,7 @@ import type {
 } from '@openrouter/sdk/models'
 import { BadRequestResponseError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
+import { AppError } from '@/lib/errors/app-error'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
@@ -157,7 +158,7 @@ export async function requestOpenRouterImage(input: {
   prompt: string
   options: OpenRouterImageOptions
 }): Promise<GenerateResult> {
-  if (!input.apiKey.trim()) throw new Error('OPENROUTER_API_KEY_REQUIRED')
+  if (!input.apiKey.trim()) throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   if (input.modelId !== OPENROUTER_GPT_IMAGE_2_MODEL_ID) {
     throw new Error(`OPENROUTER_IMAGE_MODEL_UNSUPPORTED: ${input.modelId}`)
   }

@@ -14,11 +14,6 @@ describe('normalizeAnyError network termination mapping', () => {
     expect(normalized.retryable).toBe(true)
   })
 
-  it('maps wrapped terminated message to NETWORK_ERROR', () => {
-    const normalized = normalizeAnyError(new Error('exception TypeError: terminated'))
-    expect(normalized.code).toBe('NETWORK_ERROR')
-    expect(normalized.retryable).toBe(true)
-  })
 })
 
 describe('normalizeAnyError database retry mapping', () => {
@@ -45,21 +40,6 @@ describe('normalizeAnyError provider-specific mapping', () => {
     expect(normalized.retryable).toBe(false)
   })
 
-  it('maps Gemini empty response payload to EMPTY_RESPONSE even when status is 429', () => {
-    const normalized = normalizeAnyError({
-      status: 429,
-      message: 'received empty response from Gemini: no meaningful content in candidates (code: channel:empty_response)',
-    })
-    expect(normalized.code).toBe('EMPTY_RESPONSE')
-    expect(normalized.retryable).toBe(true)
-  })
-
-  it('maps template status 500 message to EXTERNAL_ERROR instead of INTERNAL_ERROR', () => {
-    const normalized = normalizeAnyError(new Error('Template request failed with status 500: upstream overloaded'))
-    expect(normalized.code).toBe('EXTERNAL_ERROR')
-    expect(normalized.retryable).toBe(true)
-  })
-
   it('maps numeric provider code 500 to retryable EXTERNAL_ERROR', () => {
     const normalized = normalizeAnyError({
       code: 500,
@@ -80,30 +60,4 @@ describe('normalizeAnyError provider-specific mapping', () => {
     expect(normalized.retryable).toBe(true)
   })
 
-  it('preserves Ark overdue classification when AI SDK reports statusCode 403', () => {
-    const error = Object.assign(new Error('AccountOverdueError: account has an overdue balance'), {
-      statusCode: 403,
-    })
-
-    const normalized = normalizeAnyError(error)
-
-    expect(normalized.code).toBe('INSUFFICIENT_BALANCE')
-    expect(normalized.retryable).toBe(false)
-  })
-
-  it('maps explicit video API format errors to VIDEO_API_FORMAT_UNSUPPORTED', () => {
-    const normalized = normalizeAnyError(
-      new Error('VIDEO_API_FORMAT_UNSUPPORTED: provider response did not include a task id'),
-    )
-    expect(normalized.code).toBe('VIDEO_API_FORMAT_UNSUPPORTED')
-    expect(normalized.retryable).toBe(false)
-  })
-
-  it('maps template status 415 message to VIDEO_API_FORMAT_UNSUPPORTED', () => {
-    const normalized = normalizeAnyError(
-      new Error('Template request failed with status 415: unsupported media type'),
-    )
-    expect(normalized.code).toBe('VIDEO_API_FORMAT_UNSUPPORTED')
-    expect(normalized.retryable).toBe(false)
-  })
 })

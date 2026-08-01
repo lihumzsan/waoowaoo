@@ -88,6 +88,14 @@ export interface RunTaskAttemptInput {
 
 export type BeginTaskAttemptInput = Omit<RunTaskAttemptInput, 'executionDeadlineMs'>
 
+export interface ReportTaskRetryInput {
+  workflowId: string
+  taskId: string
+  userId: string
+  taskType: TaskType
+  attempt: number
+}
+
 export interface TaskAttemptFailure {
   errorCode: string
   errorMessage: string
@@ -160,6 +168,7 @@ export interface CancelTaskProviderJobsInput {
 export interface TaskWorkflowActivities {
   initializeTaskWorkflow(input: InitializeTaskWorkflowInput): Promise<InitializeTaskWorkflowResult>
   beginTaskAttempt(input: BeginTaskAttemptInput): Promise<void>
+  reportTaskRetry(input: ReportTaskRetryInput): Promise<void>
   runTaskAttempt(input: RunTaskAttemptInput): Promise<RunTaskAttemptResult>
   commitTaskTerminal(input: CommitTaskTerminalInput): Promise<TaskTerminalReceipt>
   commitTaskWorkflowFailure(input: CommitTaskWorkflowFailureInput): Promise<TaskWorkflowResult>

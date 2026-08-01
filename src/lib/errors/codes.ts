@@ -17,6 +17,22 @@ export const ERROR_FAILURE_CLASS = {
 
 export type ErrorFailureClass = (typeof ERROR_FAILURE_CLASS)[keyof typeof ERROR_FAILURE_CLASS]
 
+function defineErrorSpec<const Code extends string>(
+  code: Code,
+  httpStatus: number,
+  retryable: boolean,
+  category: ErrorCategory,
+  defaultMessage: string,
+) {
+  return {
+    httpStatus,
+    retryable,
+    category,
+    userMessageKey: `errors.${code}` as const,
+    defaultMessage,
+  }
+}
+
 export const ERROR_CATALOG = {
   UNAUTHORIZED: {
     httpStatus: 401,
@@ -46,6 +62,18 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INVALID_PARAMS',
     defaultMessage: 'Invalid parameters',
   },
+  PAYLOAD_TOO_LARGE: defineErrorSpec('PAYLOAD_TOO_LARGE', 413, false, ERROR_CATEGORY.VALIDATION, 'Payload is too large'),
+  UPLOAD_FILE_EMPTY: defineErrorSpec('UPLOAD_FILE_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Uploaded file is empty'),
+  UPLOAD_MEDIA_TYPE_UNSUPPORTED: defineErrorSpec('UPLOAD_MEDIA_TYPE_UNSUPPORTED', 415, false, ERROR_CATEGORY.VALIDATION, 'Uploaded media type is unsupported'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_FILE_NAME_EMPTY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_FILE_NAME_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Text attachment file name is empty'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_UNSUPPORTED_TYPE', 415, false, ERROR_CATEGORY.VALIDATION, 'Text attachment type is unsupported'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_EMPTY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_EMPTY', 400, false, ERROR_CATEGORY.VALIDATION, 'Text attachment is empty'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_SIZE_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Text attachment exceeds the size limit'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_CHAR_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENT_CHAR_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Text attachment exceeds the character limit'),
+  PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY: defineErrorSpec('PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY', 400, false, ERROR_CATEGORY.VALIDATION, 'Too many text attachments'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UNSUPPORTED_TYPE', 415, false, ERROR_CATEGORY.VALIDATION, 'Media attachment type is unsupported'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_SIZE_LIMIT_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Media attachment exceeds the size limit'),
+  PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY: defineErrorSpec('PROJECT_ASSISTANT_MEDIA_ATTACHMENTS_TOO_MANY', 400, false, ERROR_CATEGORY.VALIDATION, 'Too many media attachments'),
   MISSING_CONFIG: {
     httpStatus: 400,
     retryable: false,
@@ -108,6 +136,20 @@ export const ERROR_CATALOG = {
     category: ERROR_CATEGORY.PROVIDER,
     userMessageKey: 'errors.MODEL_NOT_CONFIGURED',
     defaultMessage: 'Model is not configured. Please add a model in the settings first.',
+  },
+  PROVIDER_AUTH_INVALID: {
+    httpStatus: 400,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_AUTH_INVALID',
+    defaultMessage: 'Provider credentials are missing or invalid',
+  },
+  PROVIDER_BILLING_REQUIRED: {
+    httpStatus: 402,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_BILLING_REQUIRED',
+    defaultMessage: 'Provider account billing requires attention',
   },
   QUOTA_EXCEEDED: {
     httpStatus: 429,
@@ -272,6 +314,35 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.INTERNAL_ERROR',
     defaultMessage: 'Internal server error',
   },
+  AGENT_TEMPORAL_UNAVAILABLE: defineErrorSpec('AGENT_TEMPORAL_UNAVAILABLE', 503, true, ERROR_CATEGORY.SYSTEM, 'Assistant execution service is unavailable'),
+  AGENT_THREAD_BUSY: defineErrorSpec('AGENT_THREAD_BUSY', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant thread is busy'),
+  AGENT_TURN_COMMAND_REPLAY_DIVERGED: defineErrorSpec('AGENT_TURN_COMMAND_REPLAY_DIVERGED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant command identity conflicts with an earlier command'),
+  PROJECT_AGENT_RUNTIME_FAILED: defineErrorSpec('PROJECT_AGENT_RUNTIME_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant runtime failed'),
+  PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model is not configured'),
+  PROJECT_AGENT_ASSISTANT_MODEL_INVALID: defineErrorSpec('PROJECT_AGENT_ASSISTANT_MODEL_INVALID', 400, false, ERROR_CATEGORY.PROVIDER, 'Assistant model configuration is invalid'),
+  PROJECT_ASSISTANT_EPISODE_SCOPE_INVALID: defineErrorSpec('PROJECT_ASSISTANT_EPISODE_SCOPE_INVALID', 400, false, ERROR_CATEGORY.VALIDATION, 'Assistant episode scope is invalid'),
+  PROJECT_DELETE_ACTIVE_EXECUTION: defineErrorSpec('PROJECT_DELETE_ACTIVE_EXECUTION', 409, false, ERROR_CATEGORY.VALIDATION, 'Project has active work'),
+  PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED: defineErrorSpec('PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant turn protocol requires another user instruction'),
+  PROJECT_AGENT_RUN_ACTIVE: defineErrorSpec('PROJECT_AGENT_RUN_ACTIVE', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant run is already active'),
+  PROJECT_AGENT_CONTROL_ALREADY_RESOLVED: defineErrorSpec('PROJECT_AGENT_CONTROL_ALREADY_RESOLVED', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant control was already resolved'),
+  PROJECT_AGENT_INTERRUPTION_NOT_PENDING: defineErrorSpec('PROJECT_AGENT_INTERRUPTION_NOT_PENDING', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant interruption is no longer pending'),
+  PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING: defineErrorSpec('PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant choice interruption is no longer pending'),
+  PROJECT_AGENT_CHOICE_OFFER_STALE: defineErrorSpec('PROJECT_AGENT_CHOICE_OFFER_STALE', 409, false, ERROR_CATEGORY.SYSTEM, 'Assistant choice offer is stale'),
+  PROJECT_ASSISTANT_CARD_RESPONSE_FAILED: defineErrorSpec('PROJECT_ASSISTANT_CARD_RESPONSE_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant card response failed'),
+  PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED: defineErrorSpec('PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED', 502, true, ERROR_CATEGORY.SYSTEM, 'Assistant background follow-up failed'),
+  CREATIVE_CONTEXT_INPUT_INVALID: defineErrorSpec('CREATIVE_CONTEXT_INPUT_INVALID', 400, false, ERROR_CATEGORY.VALIDATION, 'Creative context input is invalid'),
+  CREATIVE_CONTEXT_SOURCE_MISMATCH: defineErrorSpec('CREATIVE_CONTEXT_SOURCE_MISMATCH', 409, false, ERROR_CATEGORY.VALIDATION, 'Creative context source does not match'),
+  CREATIVE_CONTEXT_CHAPTER_NOT_FOUND: defineErrorSpec('CREATIVE_CONTEXT_CHAPTER_NOT_FOUND', 404, false, ERROR_CATEGORY.VALIDATION, 'Creative context chapter was not found'),
+  CREATIVE_CONTEXT_RESOURCE_NOT_FOUND: defineErrorSpec('CREATIVE_CONTEXT_RESOURCE_NOT_FOUND', 404, false, ERROR_CATEGORY.VALIDATION, 'Creative context resource was not found'),
+  CREATIVE_CONTEXT_RESOURCE_REVISION_CHANGED: defineErrorSpec('CREATIVE_CONTEXT_RESOURCE_REVISION_CHANGED', 409, false, ERROR_CATEGORY.VALIDATION, 'Creative context resource revision changed'),
+  CREATIVE_CONTEXT_CHAPTER_RANGE_INVALID: defineErrorSpec('CREATIVE_CONTEXT_CHAPTER_RANGE_INVALID', 400, false, ERROR_CATEGORY.VALIDATION, 'Creative context chapter range is invalid'),
+  CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID: defineErrorSpec('CREATIVE_CONTEXT_BEAT_COVERAGE_INVALID', 400, false, ERROR_CATEGORY.VALIDATION, 'Creative context beat coverage is invalid'),
+  CREATIVE_CONTEXT_EVENT_MISMATCH: defineErrorSpec('CREATIVE_CONTEXT_EVENT_MISMATCH', 409, false, ERROR_CATEGORY.VALIDATION, 'Creative context events do not match'),
+  CREATIVE_CONTEXT_SNAPSHOT_MISMATCH: defineErrorSpec('CREATIVE_CONTEXT_SNAPSHOT_MISMATCH', 409, false, ERROR_CATEGORY.VALIDATION, 'Creative context snapshot does not match'),
+  CREATIVE_CONTEXT_ENTITY_AMBIGUOUS: defineErrorSpec('CREATIVE_CONTEXT_ENTITY_AMBIGUOUS', 400, false, ERROR_CATEGORY.VALIDATION, 'Creative context entity is ambiguous'),
+  CREATIVE_CONTEXT_ENTITY_MISSING: defineErrorSpec('CREATIVE_CONTEXT_ENTITY_MISSING', 400, false, ERROR_CATEGORY.VALIDATION, 'Creative context entity is missing'),
+  CREATIVE_CONTEXT_ASSET_CONFLICT: defineErrorSpec('CREATIVE_CONTEXT_ASSET_CONFLICT', 409, false, ERROR_CATEGORY.VALIDATION, 'Creative context assets conflict'),
+  CREATIVE_CONTEXT_BUDGET_EXCEEDED: defineErrorSpec('CREATIVE_CONTEXT_BUDGET_EXCEEDED', 413, false, ERROR_CATEGORY.VALIDATION, 'Creative context exceeds the budget'),
   // Creative Worker 精确错误码:未登记时会被 normalizeAnyError 降级成 INTERNAL_ERROR,
   // 用户只能看到模糊失败(zh/en errors.json 的精确文案早已存在却永远命中不了)。
   // retryable 按语义分:模型行为类(输出/轮数/读取预算)重试可能成功;请求/配置类不会。
@@ -303,6 +374,8 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.CREATIVE_WORK_READ_BUDGET_EXCEEDED',
     defaultMessage: 'Creative work exceeded its skill read budget',
   },
+  CREATIVE_WORK_RESOURCE_BUDGET_EXCEEDED: defineErrorSpec('CREATIVE_WORK_RESOURCE_BUDGET_EXCEEDED', 500, true, ERROR_CATEGORY.PROVIDER, 'A creative work resource exceeded the read budget'),
+  CREATIVE_WORK_CONTENT_BUDGET_EXCEEDED: defineErrorSpec('CREATIVE_WORK_CONTENT_BUDGET_EXCEEDED', 500, true, ERROR_CATEGORY.PROVIDER, 'Creative work content exceeded the read budget'),
   CREATIVE_WORK_CONTEXT_MISSING: {
     httpStatus: 400,
     retryable: false,
@@ -386,10 +459,6 @@ export type UnifiedErrorCode = keyof typeof ERROR_CATALOG
 
 export const DEFAULT_ERROR_CODE: UnifiedErrorCode = 'INTERNAL_ERROR'
 
-export const LEGACY_ERROR_CODE_ALIASES: Record<string, UnifiedErrorCode> = {
-  OPERATION_FAILED: 'INTERNAL_ERROR',
-}
-
 export function isKnownErrorCode(code: unknown): code is UnifiedErrorCode {
   return typeof code === 'string' && code in ERROR_CATALOG
 }
@@ -398,7 +467,7 @@ export function resolveUnifiedErrorCode(code: unknown): UnifiedErrorCode | null 
   if (isKnownErrorCode(code)) return code
   if (typeof code !== 'string') return null
   const normalized = code.trim().toUpperCase()
-  return LEGACY_ERROR_CODE_ALIASES[normalized] || null
+  return isKnownErrorCode(normalized) ? normalized : null
 }
 
 export function getErrorSpec(code: UnifiedErrorCode) {

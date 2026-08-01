@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { normalizeTaskError } from '@/lib/errors/normalize'
+import { projectErrorForModel } from '@/lib/errors/projection'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { getTaskById, queryTasks } from '@/lib/task/service'
 import { cancelTemporalTask } from '@/lib/temporal/task-client'
@@ -86,9 +86,15 @@ const getTaskInputSchema = z
 export type GetTaskInput = z.infer<typeof getTaskInputSchema>
 
 function withTaskError(task: Awaited<ReturnType<typeof queryTasks>>[number]) {
-  const error = normalizeTaskError(task.errorCode, task.errorMessage)
+  const publicTask: Partial<typeof task> = { ...task }
+  delete publicTask.errorCode
+  delete publicTask.errorMessage
+  const error = task.status === TASK_STATUS.FAILED
+    ? projectErrorForModel(task.errorCode)
+    : null
   return {
-    ...task,
+    ...publicTask,
+    errorCode: error?.code ?? null,
     error,
   }
 }
@@ -175,8 +181,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
 
         return {
           task: {
-            ...task,
-            error: normalizeTaskError(task.errorCode, task.errorMessage),
+            ...withTaskError(task),
           },
           ...(events ? { events } : {}),
         }
@@ -235,8 +240,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           success: true,
           cancelAccepted: workflow?.cancelRequested === true || workflow?.status === 'canceled',
           task: {
-            ...updatedTask,
-            error: normalizeTaskError(updatedTask.errorCode, updatedTask.errorMessage),
+            ...withTaskError(updatedTask),
           },
         }
       },

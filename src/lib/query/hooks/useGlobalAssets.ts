@@ -212,7 +212,7 @@ export function useCreateFolder() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
-            }, 'Failed to create folder', queryClient),
+            }, queryClient),
     })
 }
 
@@ -228,7 +228,7 @@ export function useUpdateFolder() {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
-            }, 'Failed to update folder', queryClient),
+            }, queryClient),
     })
 }
 
@@ -242,7 +242,7 @@ export function useDeleteFolder() {
         mutationFn: async ({ folderId }: { folderId: string }) =>
             await requestOperationMutationVoidWithError(`/api/asset-hub/folders/${folderId}`, {
                 method: 'DELETE',
-            }, 'Failed to delete folder', queryClient),
+            }, queryClient),
     })
 }
 

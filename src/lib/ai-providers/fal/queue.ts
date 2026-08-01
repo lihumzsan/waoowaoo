@@ -2,6 +2,8 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
+import { AppError } from '@/lib/errors/app-error'
+import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 
 const falLogger = createScopedLogger({ module: 'ai-provider.fal', provider: 'fal' })
 
@@ -10,6 +12,7 @@ export interface FalQueueStatus {
   completed: boolean
   failed: boolean
   failureDisposition?: 'retryable' | 'permanent'
+  errorCode?: UnifiedErrorCode
   resultUrl?: string
   error?: string
 }
@@ -20,21 +23,30 @@ interface FalQueueInput {
 
 export async function submitFalTask(endpoint: string, input: FalQueueInput, apiKey: string): Promise<string> {
   if (!apiKey) {
-    throw new Error('请配置 FAL API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal' })
   }
 
-  const response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Key ${apiKey}`,
-    },
-    body: JSON.stringify(input),
-    policy: RETRY_POLICY.providerSubmit,
-    // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
-    scope: `fal:submit:${endpoint}`,
-    fetchFn: fetchWithProviderProxy,
-  })
+  let response: Response
+  try {
+    response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Key ${apiKey}`,
+      },
+      body: JSON.stringify(input),
+      policy: RETRY_POLICY.providerSubmit,
+      // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
+      scope: `fal:submit:${endpoint}`,
+      fetchFn: fetchWithProviderProxy,
+    })
+  } catch (error) {
+    if (error instanceof FetchStatusError) {
+      const typed = toFalHttpAppError(error)
+      if (typed) throw typed
+    }
+    throw error
+  }
 
   const data = await response.json() as { request_id?: unknown }
   const requestId = typeof data.request_id === 'string' ? data.request_id : ''
@@ -93,9 +105,43 @@ function readFalErrorType(errorText: string): string | null {
   return typeof errorType === 'string' ? errorType : null
 }
 
+function toFalHttpAppError(error: FetchStatusError): AppError | null {
+  if (error.status === 401 || error.status === 403) {
+    return new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal', cause: error })
+  }
+  if (error.status === 402) {
+    return new AppError('PROVIDER_BILLING_REQUIRED', undefined, { provider: 'fal', cause: error })
+  }
+  if (error.status === 429) {
+    return new AppError('RATE_LIMIT', undefined, { provider: 'fal', cause: error })
+  }
+  if (error.status === 422 && readFalErrorType(error.responseText) === 'content_policy_violation') {
+    return new AppError('SENSITIVE_CONTENT', undefined, { provider: 'fal', cause: error })
+  }
+  return null
+}
+
+function codeFromFalFailureToken(error: string): UnifiedErrorCode {
+  switch (error.trim().toLowerCase()) {
+    case 'insufficient balance':
+    case 'insufficient credit':
+      return 'PROVIDER_BILLING_REQUIRED'
+    case 'content moderation failed':
+    case 'content policy violation':
+    case 'content_policy_violation':
+    case 'nsfw content detected':
+      return 'SENSITIVE_CONTENT'
+    default:
+      return 'EXTERNAL_ERROR'
+  }
+}
+
 function parseFalResultFetchError(status: number, errorText: string): FalQueueStatus | null {
   if (status === 422) {
     const errorType = readFalErrorType(errorText)
+    const errorCode = errorType === 'content_policy_violation'
+      ? 'SENSITIVE_CONTENT'
+      : 'PROVIDER_SUBMISSION_REJECTED'
     const errorMessage = errorType === 'content_policy_violation'
       ? '⚠️ 内容审核未通过：生成结果被拦截'
       : errorType
@@ -112,7 +158,8 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
       status: 'COMPLETED',
       completed: true,
       failed: true,
-      failureDisposition: 'permanent',
+      failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
+      errorCode,
       error: errorMessage,
     }
   }
@@ -136,7 +183,7 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
 
 export async function queryFalStatus(endpoint: string, requestId: string, apiKey: string): Promise<FalQueueStatus> {
   if (!apiKey) {
-    throw new Error('请配置 FAL API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal' })
   }
 
   const baseEndpoint = readFalBaseEndpoint(endpoint)
@@ -151,7 +198,8 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new FetchStatusError(response.status, errorText)
+    const statusError = new FetchStatusError(response.status, errorText)
+    throw toFalHttpAppError(statusError) ?? statusError
   }
 
   const data = await response.json() as {
@@ -211,6 +259,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
           completed: true,
           failed: true,
           failureDisposition: 'retryable',
+          errorCode: 'EMPTY_RESPONSE',
           error: 'FAL任务完成但未返回媒体URL',
         }
       }
@@ -240,16 +289,20 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       return terminalError
     }
 
-    throw new FetchStatusError(resultResponse.status, errorText)
+    const statusError = new FetchStatusError(resultResponse.status, errorText)
+    throw toFalHttpAppError(statusError) ?? statusError
   }
 
   if (status === 'FAILED') {
+    const error = typeof data.error === 'string' && data.error.trim() ? data.error : '任务失败'
+    const errorCode = codeFromFalFailureToken(error)
     return {
       status: 'FAILED',
       completed: false,
       failed: true,
-      failureDisposition: 'retryable',
-      error: typeof data.error === 'string' && data.error.trim() ? data.error : '任务失败',
+      failureDisposition: getErrorSpec(errorCode).retryable ? 'retryable' : 'permanent',
+      errorCode,
+      error,
     }
   }
 
@@ -270,7 +323,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
  */
 export async function cancelFalTask(endpoint: string, requestId: string, apiKey: string): Promise<void> {
   if (!apiKey) {
-    throw new Error('请配置 FAL API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'fal' })
   }
 
   const baseEndpoint = readFalBaseEndpoint(endpoint)

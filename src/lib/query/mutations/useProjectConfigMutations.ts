@@ -32,7 +32,7 @@ export function useCopyProjectAssetFromGlobal(projectId: string) {
                     projectId,
                     globalAssetId,
                 }),
-            }, 'Failed to copy from global', queryClient)
+            }, queryClient)
         },
     })
 }
@@ -72,7 +72,6 @@ export function useUpdateProjectConfig(projectId: string) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(serializeProjectConfigPatch(resolveProjectConfigPatch(input))),
                 },
-                'Failed to update config',
                 queryClient,
             ),
         onMutate: async (input) => {

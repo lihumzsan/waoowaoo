@@ -80,11 +80,11 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       expect(result.success).toBe(false)
       expect(result.steps).toEqual([
-        { name: 'models', status: 'fail', message: 'Authentication failed - check API Key' },
+        { name: 'models', status: 'fail', messageKey: 'connectionTest.authInvalid' },
         {
           name: 'textGen',
           status: 'skip',
-          message: 'Skipped because models probe failed',
+          messageKey: 'connectionTest.skippedModelsFailure',
           model: 'doubao-seed-2-0-lite-260215',
         },
       ])
@@ -99,8 +99,8 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       expect(result.success).toBe(true)
       expect(result.steps).toEqual([
-        { name: 'models', status: 'pass', message: 'FAL credential accepted for provider probe' },
-        { name: 'imageGen', status: 'skip', message: 'Generation probe skipped to avoid spend' },
+        { name: 'models', status: 'pass', messageKey: 'connectionTest.modelsOk' },
+        { name: 'imageGen', status: 'skip', messageKey: 'connectionTest.skippedSpend' },
       ])
       const [input, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit]
       expect(String(input)).toBe('https://fal.run/fal-ai/flux/dev')
@@ -115,7 +115,7 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
 
       expect(result.success).toBe(false)
       expect(result.steps).toEqual([
-        { name: 'models', status: 'fail', message: 'Authentication failed (403)' },
+        { name: 'models', status: 'fail', messageKey: 'connectionTest.authInvalid' },
       ])
     })
 
@@ -123,11 +123,11 @@ describe('provider contract - gateway dispatch (connection tests, session, capab
       const elevenlabs = await testProviderConnection({ apiType: 'elevenlabs', apiKey: 'k' })
       expect(elevenlabs).toEqual({
         success: false,
-        steps: [{ name: 'models', status: 'fail', message: 'Unsupported API type: elevenlabs' }],
+        steps: [{ name: 'models', status: 'fail', messageKey: 'connectionTest.providerError' }],
       })
 
       const unknown = await testProviderConnection({ apiType: 'nope', apiKey: 'k' })
-      expect(unknown.steps[0]?.message).toBe('Unsupported API type: nope')
+      expect(unknown.steps[0]?.messageKey).toBe('connectionTest.providerError')
       expect(fetchMock.mock.calls).toEqual([])
     })
   })

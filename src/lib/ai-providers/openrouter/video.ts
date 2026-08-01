@@ -3,6 +3,7 @@ import { ResponseValidationError } from '@openrouter/sdk/models/errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { AppError } from '@/lib/errors/app-error'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
 import { FetchStatusError } from '@/lib/retry'
 import type {
   AiProviderVideoExecutionContext,
@@ -30,6 +31,7 @@ export type OpenRouterVideoPollResult = {
   resultUrl?: string
   downloadHeaders?: Record<string, string>
   error?: string
+  errorCode?: UnifiedErrorCode
 }
 
 const OPENROUTER_VIDEO_SUBMIT_TIMEOUT_MS = 5 * 60_000
@@ -326,7 +328,7 @@ export async function submitOpenRouterVideoTask(input: {
   payload: OpenRouterVideoRequest
 }): Promise<string> {
   if (!input.apiKey) {
-    throw new Error('请配置 OpenRouter API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   }
 
   let requestId: string
@@ -353,7 +355,7 @@ export async function queryOpenRouterVideoStatus(input: {
   requestId: string
 }): Promise<OpenRouterVideoPollResult> {
   if (!input.apiKey) {
-    throw new Error('请配置 OpenRouter API Key')
+    throw new AppError('PROVIDER_AUTH_INVALID', undefined, { provider: 'openrouter' })
   }
 
   const response = await createOpenRouterVideoClient({
@@ -374,6 +376,7 @@ export async function queryOpenRouterVideoStatus(input: {
       return {
         status: 'failed',
         failureDisposition: 'retryable',
+        errorCode: 'EMPTY_RESPONSE',
         error: 'OPENROUTER_VIDEO_COMPLETED_WITHOUT_URL',
       }
     }
@@ -393,6 +396,7 @@ export async function queryOpenRouterVideoStatus(input: {
     return {
       status: 'failed',
       failureDisposition: 'retryable',
+      errorCode: 'EXTERNAL_ERROR',
       error: response.error?.trim() || `OpenRouter video generation ${status}`,
     }
   }

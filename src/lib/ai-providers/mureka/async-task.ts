@@ -98,6 +98,7 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
         return normalizeAsyncPollResult({
           status: 'failed',
           failureDisposition: 'retryable',
+          errorCode: 'EMPTY_RESPONSE',
           error: `MUREKA_RESULT_URL_MISSING:${parsed.requestId}`,
         })
       }
@@ -110,6 +111,7 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
       return normalizeAsyncPollResult({
         status: 'failed',
         failureDisposition: 'permanent',
+        errorCode: 'PROVIDER_SUBMISSION_REJECTED',
         error: reason,
       })
     }
@@ -117,6 +119,7 @@ export const murekaAsyncTaskProvider: AsyncTaskProviderRegistration = {
       return normalizeAsyncPollResult({
         status: 'failed',
         failureDisposition: 'retryable',
+        errorCode: 'GENERATION_TIMEOUT',
         error: `MUREKA_TASK_TIMEOUTED:${parsed.requestId}`,
       })
     }

@@ -149,7 +149,7 @@ export function useSelectCharacterImage() {
           imageIndex,
           confirm,
         }),
-      }, 'Failed to select image', queryClient)
+      }, queryClient)
     },
     onMutate: async (variables): Promise<SelectCharacterImageContext> => {
       const targetKey = `${variables.characterId}:${variables.appearanceIndex}`
@@ -227,7 +227,7 @@ export function useUndoCharacterImage() {
           kind: 'character',
           appearanceIndex,
         }),
-      }, 'Failed to undo image', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -262,7 +262,7 @@ export function useUploadCharacterImage() {
       await requestOperationMutationVoidWithError('/api/asset-hub/upload-image', {
         method: 'POST',
         body: formData,
-      }, 'Failed to upload image', queryClient)
+      }, queryClient)
     },
   })
 }
@@ -275,7 +275,6 @@ export function useDeleteCharacter() {
       await requestOperationMutationVoidWithError(
         `/api/asset-hub/characters/${characterId}`,
         { method: 'DELETE' },
-        'Failed to delete character',
         queryClient,
       )
     },
@@ -325,7 +324,6 @@ export function useDeleteCharacterAppearance() {
       await requestOperationMutationVoidWithError(
         `/api/asset-hub/appearances?characterId=${characterId}&appearanceIndex=${appearanceIndex}`,
         { method: 'DELETE' },
-        'Failed to delete appearance',
         queryClient,
       )
     },

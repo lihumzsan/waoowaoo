@@ -259,10 +259,8 @@ export async function commitTaskTerminal(
           targetId: task.targetId,
         })
       } else {
-        errorCode =
-          intent.kind === 'failed' ? intent.errorCode : 'TASK_CANCELLED'
-        errorMessage =
-          intent.kind === 'failed' ? intent.errorMessage : intent.reason
+        errorCode = intent.kind === 'failed' ? intent.errorCode : null
+        errorMessage = intent.kind === 'failed' ? intent.errorMessage : null
         materializedOutput =
           await materializeCreativeResourceTaskTerminalInTransaction(tx, {
             kind: intent.kind,
@@ -374,7 +372,6 @@ export async function commitTaskTerminal(
           ...(materializedOutput ?? {}),
           billing: nextBillingInfo,
           ...(errorCode ? { errorCode } : {}),
-          ...(errorMessage ? { message: errorMessage } : {}),
           terminalSource:
             intent.kind === 'completed' ? 'worker' : intent.source,
         }),
