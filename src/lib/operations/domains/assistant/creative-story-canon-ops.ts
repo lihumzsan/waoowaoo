@@ -60,7 +60,6 @@ export function createAssistantStoryCanonOperations(): ProjectAgentOperationRegi
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CHAPTER_CONTINUITY_PLAN],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       prerequisites: { episodeId: 'required' },

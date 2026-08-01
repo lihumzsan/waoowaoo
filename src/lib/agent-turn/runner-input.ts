@@ -117,8 +117,8 @@ function buildStateVersion(params: {
     params.facts.planning.storyCanonResourceId ?? 'none',
     String(params.facts.planning.chapterCount),
     params.creativeWorkingSet.adoptedCreativeDirection?.resourceId ?? 'none',
-    ...params.creativeWorkingSet.bindings.map(
-      (binding) => `${binding.bindingId}:${String(binding.version)}`,
+    ...params.creativeWorkingSet.currentSelections.map(
+      (selection) => `${selection.kind}:${selection.targetId}:${selection.resourceId}`,
     ),
   ].map(display).join(':')
 }
@@ -157,7 +157,7 @@ export async function buildAgentTurnProjectStateInput(params: {
       `planning.chapterCount=${String(facts.planning.chapterCount)}`,
       `creativeWorkingSet.adoptedCreativeDirection=${JSON.stringify(creativeWorkingSet.adoptedCreativeDirection)}`,
       `creativeWorkingSet.adoptedAssetManifest=${JSON.stringify(creativeWorkingSet.adoptedAssetManifest)}`,
-      `creativeWorkingSet.bindings=${JSON.stringify(creativeWorkingSet.bindings)}`,
+      `creativeWorkingSet.currentSelections=${JSON.stringify(creativeWorkingSet.currentSelections)}`,
       `creativeWorkingSet.availableResources=${JSON.stringify(creativeWorkingSet.availableResources)}`,
       '[/project_state_snapshot]',
     ].join('\n'),

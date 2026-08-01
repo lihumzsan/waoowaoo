@@ -110,26 +110,10 @@ const bindVoiceInputSchema = z.object({
   ]),
 }).strict()
 
-const voiceBindingOutputSchema = z.object({
-  bindingId: z.string().min(1),
-  scope: z.object({
-    kind: z.enum(['user', 'project', 'episode']),
-    id: z.string().min(1),
-    userId: z.string().min(1),
-    projectId: z.string().nullable(),
-    episodeId: z.string().nullable(),
-  }).strict(),
-  role: z.literal(CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE),
-  slotKey: z.string().min(1),
-  resourceId: z.string().min(1),
-  version: z.number().int().min(0),
-  source: z.string().min(1),
-}).strict()
-
 const bindVoiceOutputSchema = z.object({
   success: z.literal(true),
   characterId: z.string().min(1),
-  binding: voiceBindingOutputSchema.nullable(),
+  currentVoiceResourceId: z.string().min(1).nullable(),
 }).strict()
 
 const generateVoiceOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
@@ -142,9 +126,9 @@ const generateVoiceOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
     }).passthrough()).min(1),
     resources: z.array(z.object({
       resourceId: z.string().min(1),
-      candidateIndex: z.number().int().min(0),
+      memberIndex: z.number().int().min(0),
       characterId: z.string().min(1).nullable(),
-      bindingRequested: z.boolean(),
+      currentVoiceRequested: z.boolean(),
     }).strict()).min(1),
   }).passthrough(),
 )
@@ -154,7 +138,7 @@ const voicePlanMetadataSchema = z.object({
   resources: z.array(z.object({
     resourceId: z.string().min(1),
     resourceName: z.string().min(1),
-    candidateIndex: z.number().int().min(0),
+    memberIndex: z.number().int().min(0),
     characterId: z.string().min(1).nullable(),
   }).strict()).min(1),
 }).strict()
@@ -267,19 +251,19 @@ async function planGenerateVoice(
     ctx.toolCallId?.trim() ?? planFingerprint,
     planFingerprint,
   ].join(':')
-  const resources = members.map((member, candidateIndex) => ({
+  const resources = members.map((member, memberIndex) => ({
     resourceId: buildCreativeResourceId({
       operationId: 'generate_voice',
       requestId,
-      candidateIndex,
+      memberIndex,
     }),
     resourceName: member.resource.name,
-    candidateIndex,
+    memberIndex,
     characterId: member.target.kind === 'character' ? member.target.characterId : null,
   }))
-  const tasks = members.map((member, candidateIndex) => {
-    const resource = resources[candidateIndex]
-    if (!resource) throw new Error(`VOICE_RESOURCE_PLAN_MISSING:${String(candidateIndex)}`)
+  const tasks = members.map((member, memberIndex) => {
+    const resource = resources[memberIndex]
+    if (!resource) throw new Error(`VOICE_RESOURCE_PLAN_MISSING:${String(memberIndex)}`)
     const inputHash = stableArgsHash({
       operationId: 'generate_voice',
       projectId: ctx.projectId,
@@ -381,10 +365,10 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
     schemaId: CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
     operationId: 'generate_voice',
     requestId: metadata.requestId,
-    candidates: metadata.resources.map((resource) => ({
+    members: metadata.resources.map((resource) => ({
       resourceId: resource.resourceId,
       name: resource.resourceName,
-      candidateIndex: resource.candidateIndex,
+      memberIndex: resource.memberIndex,
     })),
   })
   const submitted = await submitPlannedOperationTasks({ ctx, operationId: 'generate_voice' })
@@ -409,9 +393,9 @@ async function commitGenerateVoice(ctx: ProjectAgentOperationContext, plan: Oper
     }),
     resources: metadata.resources.map((resource) => ({
       resourceId: resource.resourceId,
-      candidateIndex: resource.candidateIndex,
+      memberIndex: resource.memberIndex,
       characterId: resource.characterId,
-      bindingRequested: resource.characterId !== null,
+      currentVoiceRequested: resource.characterId !== null,
     })),
   })
 }
@@ -420,7 +404,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     generate_voice: defineOperation({
       id: 'generate_voice',
-      summary: 'Design reusable voices and render short preview audio Resources. Use request.kind=single for one standalone or character voice. Use request.kind=characters to submit every selected character in one priced plan and one approval; each member becomes an independent Resource and Task, so partial failure does not discard successful voices and a follow-up can submit only failed characters. Completed character voices bind automatically without overwriting a newer manual binding.',
+      summary: 'Design reusable voices and render short preview audio Resources. Use request.kind=single for one standalone or character voice. Use request.kind=characters to submit every selected character in one priced plan and one approval; each member becomes an independent Resource and Task, so partial failure does not discard successful voices and a follow-up can submit only failed characters. A completed character voice becomes current only when it cannot overwrite a newer manual selection.',
       intent: 'act',
       effects: {
         writes: true,
@@ -438,7 +422,6 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         acceptsReferences: false,
         outputMediaTypes: ['audio'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: 'voice-generation/v2',
@@ -449,9 +432,9 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
     }),
     bind_voice: defineOperation({
       id: 'bind_voice',
-      summary: 'Bind, replace, or unbind the exact immutable audio Resource used as one project character\'s voice. Accepts a designed project.voice_reference Resource or a user-uploaded project.upload_audio Resource. Use selection.kind=none to unbind. This never generates audio and never creates another voice Resource.',
+      summary: 'Select, replace, or clear the exact immutable audio Resource currently used as one project character\'s voice. Accepts a designed project.voice_reference Resource or a user-uploaded project.upload_audio Resource. Use selection.kind=none to clear it. This never generates audio and never creates another voice Resource.',
       intent: 'act',
-      toolContractRevision: 'bind_voice/v1',
+      toolContractRevision: 'bind_voice/v2',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',
@@ -464,13 +447,13 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
       },
       resourceContract: {
         kind: 'none',
-        reason: 'updates only the canonical character voice Binding and never creates a Resource',
+        reason: 'updates only the character current-voice selection and never creates a Resource',
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: bindVoiceInputSchema,
       outputSchema: bindVoiceOutputSchema,
       executeInTransaction: async (ctx, input, tx) => {
-        const binding = await bindCharacterVoiceInTransaction(tx, {
+        const current = await bindCharacterVoiceInTransaction(tx, {
           userId: ctx.userId,
           projectId: ctx.projectId,
           characterId: input.characterId,
@@ -479,7 +462,7 @@ export function createVoiceOperations(): ProjectAgentOperationRegistryDraft {
         return bindVoiceOutputSchema.parse({
           success: true,
           characterId: input.characterId,
-          binding,
+          currentVoiceResourceId: current?.resourceId ?? null,
         })
       },
     }),

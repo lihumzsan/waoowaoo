@@ -1,15 +1,11 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { bindCreativeResourceInTransaction } from '@/lib/creative-resource/binding-service'
 import {
   editCreativeResourceDataInTransaction,
   parseCreativeResourceDataValueJson,
   type CreativeResourceDataEdit,
 } from '@/lib/creative-resource/creative-data'
 import {
-  CREATIVE_RESOURCE_CANONICAL_BINDINGS,
-  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
-  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
   CREATIVE_RESOURCE_MEDIA_TYPES,
   CREATIVE_RESOURCE_STATUSES,
   type CreativeResourceCardView,
@@ -17,7 +13,6 @@ import {
   type CreativeResourceView,
   type CreativeResourceSummaryView,
 } from '@/lib/creative-resource/contracts'
-import { resolveProjectCreativeResourceScope } from '@/lib/creative-resource/identity'
 import {
   getProjectCreativeResourceCard,
   getProjectCreativeResourceDataView,
@@ -28,24 +23,6 @@ import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import {
   CREATIVE_RESOURCE_SCHEMAS,
 } from '@/lib/creative-resource/schema-registry'
-
-const RESERVED_CREATIVE_RESOURCE_BINDING_ROLES = [
-  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
-  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
-  ...Object.values(CREATIVE_RESOURCE_CANONICAL_BINDINGS).map((binding) => binding.role),
-] as const
-const RESERVED_CREATIVE_RESOURCE_BINDING_ROLE_PATTERN = RESERVED_CREATIVE_RESOURCE_BINDING_ROLES
-  .map((role) => role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  .join('|')
-
-const adoptableCreativeResourceBindingRoleSchema = z.string()
-  .trim()
-  .min(1)
-  .max(64)
-  .regex(new RegExp(
-    `^(?!(?:${RESERVED_CREATIVE_RESOURCE_BINDING_ROLE_PATTERN})$).+$`,
-  ))
-  .describe('A non-reserved project or episode binding role. Character voice, project asset image, Creative Direction, and Asset Manifest roles use their dedicated operations.')
 
 const creativeResourceSchemaIds = CREATIVE_RESOURCE_SCHEMAS.map((definition) => definition.schemaId)
 
@@ -87,14 +64,6 @@ const editResourceInputSchema = z.object({
     }).strict(),
   ])).min(1).max(50)
     .describe('Minimal object-path changes only. Preserve every unrelated field from the Resource you read.'),
-}).strict()
-
-const adoptResourceInputSchema = z.object({
-  episodeId: z.string().trim().min(1).nullable().optional(),
-  resourceId: z.string().trim().min(1),
-  role: adoptableCreativeResourceBindingRoleSchema,
-  slotKey: z.string().trim().min(1).max(128),
-  expectedVersion: z.number().int().min(0).nullable().optional(),
 }).strict()
 
 export function projectCreativeResourceMaterializationForAgent(
@@ -144,16 +113,6 @@ export function projectCreativeResourceCardForAgent(
 ) {
   return {
     resource: projectCreativeResourceForAgent(card.resource),
-    candidates: card.candidates
-      ? {
-          ...card.candidates,
-          resources: card.candidates.resources.map(projectCreativeResourceForAgent),
-          summaries: card.candidates.summaries.map((candidate) => ({
-            ...candidate,
-            summary: projectCreativeResourceSummaryForAgent(candidate.summary),
-          })),
-        }
-      : null,
     presentation: {
       ...card.presentation,
       summary: projectCreativeResourceSummaryForAgent(card.presentation.summary),
@@ -179,18 +138,15 @@ const resourceCardSchema = z.object({
     schemaId: z.string().min(1),
     name: z.string().min(1),
     status: z.enum(CREATIVE_RESOURCE_STATUSES),
-    candidateSetId: z.string().nullable(),
-    candidateIndex: z.number().int().min(0).nullable(),
+    memberIndex: z.number().int().min(0).nullable(),
     creativeDataVersion: z.number().int().min(0),
     creativeDataKeys: z.array(z.string()),
     materialization: z.unknown().nullable(),
     pendingGeneration: z.unknown().nullable(),
-    bindings: z.array(z.unknown()),
     error: z.object({ code: z.string().nullable(), message: z.string() }).strict().nullable(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
   }).strict(),
-  candidates: z.unknown().nullable(),
   presentation: z.object({
     rendererKey: z.string().min(1),
     fallbackMediaType: z.enum(CREATIVE_RESOURCE_MEDIA_TYPES),
@@ -233,30 +189,11 @@ const editResourceOutputSchema = z.object({
   creativeData: z.record(z.string(), z.unknown()),
 }).strict()
 
-const adoptResourceOutputSchema = z.object({
-  success: z.literal(true),
-  binding: z.object({
-    bindingId: z.string().min(1),
-    scope: z.object({
-      kind: z.enum(['user', 'project', 'episode']),
-      id: z.string().min(1),
-      userId: z.string().min(1),
-      projectId: z.string().nullable(),
-      episodeId: z.string().nullable(),
-    }).strict(),
-    role: z.string().min(1),
-    slotKey: z.string().min(1),
-    resourceId: z.string().min(1),
-    version: z.number().int().min(0),
-    source: z.string().min(1),
-  }).strict(),
-}).strict()
-
 export function createCreativeResourceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     list_resources: defineOperation({
       id: 'list_resources',
-      summary: 'Browse the persistent Resource index: candidates, history, reusable outputs, and unbound assets. Filter by media/schema/status, then call get_resource for one exact full resource. This does not decide which Resource is currently adopted; get_project_context owns that compact working-set projection.',
+      summary: 'Browse durable creative Resources and reusable outputs. Filter by media/schema/status, then call get_resource for one exact full Resource. This does not decide which Resource is current; get_project_context owns that compact projection.',
       intent: 'query',
       effects: {
         writes: false,
@@ -289,7 +226,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
     }),
     get_resource: defineOperation({
       id: 'get_resource',
-      summary: 'Read one persistent immutable creative Resource with full content, provenance, lineage, candidates, bindings, and its separately editable creativeData document/version. Call this immediately before edit_resource; never guess creativeDataVersion.',
+      summary: 'Read one durable immutable creative Resource with its content, provenance, lineage, and separately editable creativeData document/version. Call this immediately before edit_resource; never guess creativeDataVersion.',
       intent: 'query',
       toolExposure: 'direct',
       effects: {
@@ -336,7 +273,7 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
     }),
     edit_resource: defineOperation({
       id: 'edit_resource',
-      summary: 'Edit only the AI/user-owned creativeData document of one existing Resource without generating media, creating a Task, charging credits, changing the current file, or rewriting immutable history. Use this sparingly: call it only when the user explicitly asks to save or change Resource creative data, or when saving that data is strictly necessary to complete the user’s stated goal. If the user says not to modify or save Resource data, never call this tool. Do not call it to summarize conversation, restate facts already stored elsewhere, improve wording without a request, infer missing facts, manufacture provenance, or pre-emptively add speculative fields. Always call get_resource first, copy its exact creativeDataVersion into expectedVersion, preserve unrelated fields, and apply the smallest possible paths. Use exact $resourceRef objects for Resource references. This tool cannot modify Resource identity/scope/status, media, head Resource, actual generation prompt/model/options, lineage, Binding, Task, billing, or timestamps. A successful edit is data storage only and must never be described as generation, adoption, rendering, or completion.',
+      summary: 'Edit only the AI/user-owned creativeData document of one existing Resource without generating media, creating a Task, charging credits, changing any current selection, or rewriting immutable history. Use this sparingly: call it only when the user explicitly asks to save or change Resource creative data, or when saving that data is strictly necessary to complete the user’s stated goal. If the user says not to modify or save Resource data, never call this tool. Do not call it to summarize conversation, restate facts already stored elsewhere, improve wording without a request, infer missing facts, manufacture provenance, or pre-emptively add speculative fields. Always call get_resource first, copy its exact creativeDataVersion into expectedVersion, preserve unrelated fields, and apply the smallest possible paths. Use exact $resourceRef objects for Resource references. This tool cannot modify Resource identity/scope/status, media, current selections, actual generation prompt/model/options, lineage, Task, billing, or timestamps. A successful edit is data storage only and must never be described as generation, selection, rendering, or completion.',
       intent: 'act',
       toolContractRevision: 'edit_resource/v1',
       effects: {
@@ -372,41 +309,6 @@ export function createCreativeResourceOperations(): ProjectAgentOperationRegistr
           edits,
         })
         return editResourceOutputSchema.parse({ success: true, ...result })
-      },
-    }),
-    adopt_resource: defineOperation({
-      id: 'adopt_resource',
-      summary: 'Adopt an exact immutable Resource into a named project or episode role. Generation and adoption remain separate; this does not modify the Resource.',
-      intent: 'act',
-      toolContractRevision: 'adopt_resource/v1',
-      effects: {
-        writes: true,
-        workspaceResourceImpact: 'creative_resources',
-        billable: false,
-        destructive: false,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      confirmation: { kind: 'none', required: false },
-      inputSchema: adoptResourceInputSchema,
-      outputSchema: adoptResourceOutputSchema,
-      executeInTransaction: async (ctx, input, tx) => {
-        const episodeId = input.episodeId === undefined ? (ctx.context.episodeId ?? null) : input.episodeId
-        const binding = await bindCreativeResourceInTransaction(tx, {
-          scope: resolveProjectCreativeResourceScope({
-            userId: ctx.userId,
-            projectId: ctx.projectId,
-            episodeId,
-          }),
-          role: input.role,
-          slotKey: input.slotKey,
-          resourceId: input.resourceId,
-          source: 'agent',
-          expectedVersion: input.expectedVersion ?? null,
-        })
-        return adoptResourceOutputSchema.parse({ success: true, binding })
       },
     }),
   }

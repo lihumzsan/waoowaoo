@@ -71,7 +71,7 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
 }
 
 function resolveWorkspaceCanvasGroupId(node: WorkspaceCanvasFlowNode): string {
-  return node.data.resourceDetails.resource.candidateSetId ?? node.data.targetId
+  return node.data.targetId
 }
 
 function resolveAnchorMode(

@@ -6,20 +6,20 @@
 
 音乐是可自由组合的音频 Resource，不是视频流水线中的固定阶段。音乐方向等创意判断由 `music-direction` Skill + `creative_work(outputKind=music_direction)` 完成；Primary 也可在用户意图已经充分明确时直接调用独立媒体 Operation。系统不自动从剧本生成 BGM plan，不在音乐 Task 完成后启动渲染，也不保存第二套声音工作流。
 
-最终混音仍是确定性执行能力：它只消费调用方显式给出的精确视频/音频 Resources 与时间线。角色音色继续是独立的 `project.voice_reference` Resource，不自动进入对白或最终混音；只有 Primary 读取精确角色 Binding、Creative Worker 在唯一最终视频 Prompt 中显式引用且视频执行冻结该声音 Resource 时，才作为视频模型的参考音色。
+最终混音仍是确定性执行能力：它只消费调用方显式给出的精确视频/音频 Resources 与时间线。角色音色继续是独立的 `project.voice_reference` Resource，不自动进入对白或最终混音；只有 Primary 从 Project Context 读取精确角色当前音色、Creative Worker 在唯一最终视频 Prompt 中显式引用且视频执行冻结该声音 Resource 时，才作为视频模型的参考音色。
 
 ## 不变量
 
 - **AP-01 — 创意方向只有 Skill + Creative Worker。** 不存在 `BGM_DESIGN_PLAN`、固定 BgmDesign writer、`plan_episode_bgm_design` 或“规划完成后生成”链。需要专业音乐方向时，Primary 显式委派 `music_direction`；完整结果保存在 Creative Task/Resource，其中 `cues[]` 是唯一可执行配乐指令集合，每个 cue 的 `generationPrompt` 只负责该时间窗，空数组表示刻意不配乐。后续是否及生成哪些 cue 仍由 Primary 另一次显式调用决定，但执行只传 direction 引用与精确 `cueKey`（`create_audio.request.kind=music_direction`），Primary 不改写、不压缩、不补充生成指令。
-- **AP-02 — 音乐生成是独立 Operation，且只铸造 BGM。** `create_audio` 每次调用恰好创建一个 `project.bgm_audio` Resource/Task：`schemaId` 不是 Agent 输入，由服务端固定；`generic.audio` 已从词汇表删除；音频请求没有 `count`/候选扇出（`supportsCandidates=false`，候选机制只保留在图片与视频），需要多条音频时由调用方发起多次独立请求。`request.kind=new` 只消费本次完整输入和显式 context Resources；`request.kind=music_direction` 是同一 planner 内的引用执行窄分支（CR-22）：只传完成的 `music_direction` Resource ID、精确 `cueKey` 与目标视频，服务端原样读取该 cue 的 `generationPrompt`，从 `startSeconds/endSeconds` 导出单次时长并冻结 `scoreCue` 窗口；空 cues、未知 cue、时长缺失/越界或 prompt 超出当前模型正式预算均在提交计费 Task 前原地失败。`project.voice_reference` 属于专属入口词汇，只由 `generate_voice` 铸造，通用生成词汇表在 schema registry 用 dedicated-origin 排除集穷尽声明。两种输入都不要求 Chapter、Creative Direction 或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
+- **AP-02 — 音乐生成是独立 Operation，且只铸造 BGM。** `create_audio` 每次调用恰好创建一个 `project.bgm_audio` Resource/Task：`schemaId` 不是 Agent 输入，由服务端固定；`generic.audio` 已从词汇表删除；音频请求没有 `count` 或候选协议，需要多条音频时由调用方发起多次独立请求。`request.kind=new` 只消费本次完整输入和显式 context Resources；`request.kind=music_direction` 是同一 planner 内的引用执行窄分支（CR-22）：只传完成的 `music_direction` Resource ID、精确 `cueKey` 与目标视频，服务端原样读取该 cue 的 `generationPrompt`，从 `startSeconds/endSeconds` 导出单次时长并冻结 `scoreCue` 窗口；空 cues、未知 cue、时长缺失/越界或 prompt 超出当前模型正式预算均在提交计费 Task 前原地失败。`project.voice_reference` 属于专属入口词汇，只由 `generate_voice` 铸造，通用生成词汇表在 schema registry 用 dedicated-origin 排除集穷尽声明。两种输入都不要求 Chapter、Creative Direction 或固定剧本状态，也不自动调用混音。成功、失败和重试继续服从通用 Resource/Task 契约。
 - **AP-03 — 没有隐藏媒体分析。** 除非用户明确请求一种分析能力，音乐方向不得观看视频帧、分析原生波形或最终混音来写第二份状态；输入 Resource 只按其显式用途和 lineage 被消费。
 - **AP-04 — Provider 能力不是创作流程。** Agent-facing Operation 不接受 provider/model；模型由服务端配置解析。FAL Lyria 的 120–180 秒连续能力属于单次执行约束：短目标可生成后确定性裁切，范围内按目标生成，超范围调用原地失败或由 Primary 显式拆成多个独立请求。该限制不得被解释为 `>180s` 自动 Chapter/Story Canon/连续性分支。
 - **AP-05 — 最终混音只消费精确输入。** 混音必须显式列出有序视频 Resource ID、可选音乐 Resource ID、时间范围和 automation；stitched video duration 是输出时长权威。所有输入先由服务端回库验证 owner/scope/content，统一 48 kHz、pad/trim/reset PTS 和显式 `-t`。不得从“当前 BGM”“最近音乐”或旧 BgmDesign 推断。
 - **AP-06 — 声音能力不产生后续链。** 音乐 Task 终态只恢复 Primary；Choice 只处理当前音频选择决定；采用某个音频 Resource 不渲染视频。收费 Approval 只授权当前精确媒体计划，不能授权未来混音或渲染。
 - **AP-07 — 被删除能力不得残留入口。** 旧固定 BGM plan/generate、环境音/音效规划、专用 Canvas stage、TaskType、worker writer、状态字段和 Workflow recommendation 必须删除；历史名字只可出现在迁移删除语句或历史说明。
 - **AP-08 — 音色生成只有一个入口和固定模型。** `generate_voice.request.kind=single|characters` 是唯一生成契约：`single` 创建一个新的不可变音色 Resource，`characters` 在一个精确 Operation Plan 中展开所列角色，每个成员创建一个独立 Resource 与 Task；整批只形成一次总报价和一次批准，成员终态彼此独立，部分失败不会撤销成功成员。两种分支都复用通用 FollowUpBatch，不建立音色专用批次状态。
-- **AP-09 — 音色 Resource 与角色 Binding 解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 复用 Binding service CAS 写 `role=character_voice + slotKey=characterId`。单个或批量生成都在计划时分别冻结每个角色的 Binding version；生成期间发生较新换绑时保留对应的新 Resource 并返回显式 conflict，其他成员不受影响。
-- **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前检查 `character_voice` Binding，已有绑定则读取精确 Resource，缺失一个时按剧本、用户要求和已有角色事实调用 `generate_voice` 的 `request.kind=single + request.target.kind=character`，同时缺失多个时使用一次 `request.kind=characters`，Task 成功终态后重新读取精确 Binding。Primary 把声音 Resource 与音色设计描述作为 Worker source material，Worker 把精确 Resource ID 写入 Prompt Set，执行层按顺序映射为 `@AudioN`；试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须绑定的门禁，只校验、冻结和传输调用方显式选择的 Resource，也不从角色名、最新音色或试听内容推断引用。
+- **AP-09 — 音色 Resource 与角色当前选择解耦。** 音色事实只存在于 `CreativeResource(mediaType=audio,schemaId=project.voice_reference)`；`bind_voice` 只接收角色与精确 Resource/clear 意图，服务端内部复用 Binding CAS 写 `character_voice` current selection，不把 version 暴露给模型。单个或批量生成都在计划时分别冻结每个角色的内部 current version；生成期间发生较新人工选择时保留对应的新 Resource 并返回显式 conflict，其他成员不受影响。
+- **AP-11 — 跨镜头稳定音色由 Primary 显式组合。** 同一角色的说话声音将出现在两个或以上不同镜头或独立视频生成段时，Primary 把稳定音色视为当前创作真正需要的身份参考；在委派最终 `video_prompt_set` 前从 Project Context 检查角色当前音色，已有选择则读取精确 Resource，缺失一个时按剧本、用户要求和已有角色事实调用 `generate_voice` 的 `request.kind=single + request.target.kind=character`，同时缺失多个时使用一次 `request.kind=characters`，Task 成功终态后重新读取 current selection。Primary 把声音 Resource 与音色设计描述作为 Worker source material，Worker 把精确 Resource ID 写入 Prompt Set，执行层按顺序映射为 `@AudioN`；试听文字不得成为剧情对白。单个孤立说话镜头不强制生成音色；执行层不设置有对白即必须选择的门禁，只校验、冻结和传输调用方显式选择的 Resource，也不从角色名、最新音色或试听内容推断引用。
 - **AP-10 — 删除不物理清理媒体。** `delete_asset(kind=voice)` 只允许删除未生成中、未绑定且未被 Lineage 引用的音色 Resource；MediaObject 仍由独立生命周期拥有。
 - **AP-12 — 视频条件音乐生成由 capability registry 与正式 option schema 共同裁决。** `create_audio` 只可携带恰好一个 ready 视频 Resource 作为音乐模型的画面条件输入；是否允许只由生产 music capability 的 `maxReferenceVideos` 声明。视频引用作为 `videoInputPositions` 冻结进 Task payload，Task Activity 回库校验 owner/ready/mediaType 后经共享 outbound media入口投影为有界 HTTPS签名 URL，再交给 provider adapter。
 
@@ -30,7 +30,7 @@
 - 音乐 Task 执行与视频条件装载：`src/lib/task/execution/handlers/creative-resource-audio.ts`；视频条件 soundtrack 的唯一 provider adapter：`src/lib/ai-providers/mureka/**`。
 - 模型时长能力：生产 capability registry 与 provider adapter；调用方不得复制范围。
 - 确定性混音 primitive：`src/lib/video-compose/video-merge-audio.ts`；只由通用 `merge_videos` Resource Task 显式消费，没有固定最终渲染阶段。
-- 角色音色：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts` 与共享 Binding service。
+- 角色音色：`src/lib/operations/domains/voice/voice-ops.ts`、`src/lib/voice/voice-resource-service.ts`；模型只见 typed selection，服务端内部复用共享 Binding service。
 
 ## 验证
 
@@ -61,4 +61,4 @@
 3. provider 的单次时长能力是否只作为执行约束，而非创作分支？
 4. 混音是否只消费显式精确 Resources 与时间线？
 5. 是否仍有旧 BgmDesign/环境音 Workflow、Task、Canvas 或 writer 回流？
-6. 音色是否仍只由 `generate_voice` 与 Binding service 拥有，多个角色是否由一次 `request.kind=characters` 形成一个计划和一次审批、每个成员保持独立 Task/终态，且 Primary 会为跨镜头复用的说话声音先取得精确 Binding、不会把单个孤立对白变成固定门禁？
+6. 音色是否仍只由 `generate_voice` 与 typed current-selection service 拥有，模型没有看到 Binding/version；多个角色是否由一次 `request.kind=characters` 形成一个计划和一次审批、每个成员保持独立 Task/终态，且 Primary 会为跨镜头复用的说话声音先取得精确当前选择、不会把单个孤立对白变成固定门禁？

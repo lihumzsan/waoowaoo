@@ -1,7 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type {
-  CreativeResourceBindingView,
   CreativeResourceCardView,
   CreativeResourceContent,
   CreativeResourceDataView,
@@ -15,11 +14,13 @@ import type {
   CreativeResourceScopeRef,
   CreativeResourceStatus,
   CreativeResourceView,
-  CreativeResourceWorkingBindingView,
+  CreativeResourceCurrentSelectionView,
   CreativeResourceWorkingSetView,
 } from './contracts'
 import {
+  CREATIVE_RESOURCE_BINDING_ROLES,
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
+  isCreativeResourceBindingRole,
   isCreativeResourceMediaType,
   isCreativeResourceScopeKind,
   isCreativeResourceStatus,
@@ -56,9 +57,6 @@ const resourceInclude = {
         select: { id: true },
       },
     },
-  },
-  bindings: {
-    orderBy: [{ role: 'asc' as const }, { slotKey: 'asc' as const }],
   },
 } satisfies Prisma.CreativeResourceInclude
 
@@ -152,21 +150,6 @@ function materializationView(row: ResourceRow): CreativeResourceMaterializationV
   }
 }
 
-function bindingView(
-  row: ResourceRow['bindings'][number],
-  scope: CreativeResourceScopeRef,
-): CreativeResourceBindingView {
-  return {
-    bindingId: row.id,
-    scope,
-    role: row.role,
-    slotKey: row.slotKey,
-    resourceId: row.resourceId,
-    version: row.version,
-    source: row.source,
-  }
-}
-
 export function projectCreativeResourceView(
   row: ResourceRow,
   pendingGeneration: CreativeResourcePendingGeneration | null = null,
@@ -182,13 +165,11 @@ export function projectCreativeResourceView(
     schemaId: row.schemaId,
     name: row.name,
     status: requireStatus(row.status),
-    candidateSetId: row.candidateSetId,
-    candidateIndex: row.candidateIndex,
+    memberIndex: row.memberIndex,
     creativeDataVersion: row.creativeDataVersion,
     creativeDataKeys: Object.keys(jsonObject(row.creativeData)).sort(),
     materialization: materializationView(row),
     pendingGeneration,
-    bindings: row.bindings.map((binding) => bindingView(binding, scope)),
     error: row.errorCode || row.errorMessage
       ? { code: row.errorCode, message: row.errorMessage ?? row.errorCode ?? '' }
       : null,
@@ -204,7 +185,6 @@ function cardViewFromResource(
   const schema = getCreativeResourceSchema(resource.schemaId)
   return {
     resource,
-    candidates: null,
     inputSummaries,
     presentation: {
       rendererKey: schema?.schemaId ?? 'generic.resource',
@@ -364,7 +344,7 @@ export async function listProjectCreativeResourceCards(input: {
     include: resourceInclude,
     orderBy: [
       { createdAt: 'asc' },
-      { candidateIndex: { sort: 'asc', nulls: 'last' } },
+      { memberIndex: { sort: 'asc', nulls: 'last' } },
       { id: 'asc' },
     ],
     take: limit,
@@ -372,37 +352,10 @@ export async function listProjectCreativeResourceCards(input: {
   const pending = await loadPendingGenerations(client, rows.map((row) => row.id))
   const resources = rows.map((row) => projectCreativeResourceView(row, pending.get(row.id) ?? null))
   const inputSummaries = await loadInputSummaries(client, resources, input.userId)
-  const views = resources.map((resource) => cardViewFromResource(
+  return resources.map((resource) => cardViewFromResource(
     resource,
     inputSummaries.get(resource.resourceId) ?? EMPTY_INPUT_SUMMARIES,
   ))
-  const byCandidateSet = new Map<string, CreativeResourceCardView[]>()
-  for (const view of views) {
-    const candidateSetId = view.resource.candidateSetId
-    if (!candidateSetId) continue
-    const group = byCandidateSet.get(candidateSetId) ?? []
-    group.push(view)
-    byCandidateSet.set(candidateSetId, group)
-  }
-  return views.map((view) => {
-    const candidateSetId = view.resource.candidateSetId
-    if (!candidateSetId) return view
-    const candidateViews = byCandidateSet.get(candidateSetId) ?? [view]
-    const resources = candidateViews.map((candidate) => candidate.resource)
-    return {
-      ...view,
-      candidates: {
-        candidateSetId,
-        resources,
-        summaries: candidateViews.map((candidate) => ({
-          resourceId: candidate.resource.resourceId,
-          summary: candidate.presentation.summary,
-        })),
-        selectedResourceId: resources
-          .flatMap((resource) => resource.bindings.map((binding) => binding.resourceId))[0] ?? null,
-      },
-    }
-  })
 }
 
 export async function getProjectCreativeResourceCard(input: {
@@ -459,50 +412,22 @@ export async function getProjectCreativeResourceDataView(input: {
   }
 }
 
-function bindingScopeFromRow(row: {
-  readonly scopeKind: string
-  readonly scopeId: string
-  readonly userId: string
-  readonly projectId: string | null
-  readonly episodeId: string | null
-}): CreativeResourceScopeRef {
-  if (!isCreativeResourceScopeKind(row.scopeKind)) {
-    throw new Error(`CREATIVE_RESOURCE_BINDING_SCOPE_KIND_INVALID:${row.scopeKind}`)
-  }
-  return {
-    kind: row.scopeKind,
-    id: row.scopeId,
-    userId: row.userId,
-    projectId: row.projectId,
-    episodeId: row.episodeId,
-  }
-}
-
-function workingBindingView(row: {
-  readonly id: string
-  readonly userId: string
-  readonly projectId: string | null
-  readonly episodeId: string | null
-  readonly scopeKind: string
-  readonly scopeId: string
+function currentSelectionView(row: {
   readonly role: string
   readonly slotKey: string
-  readonly source: string
-  readonly version: number
   readonly resourceId: string
   readonly resource: {
     readonly name: string
     readonly mediaType: string
     readonly schemaId: string
   }
-}): CreativeResourceWorkingBindingView {
+}): CreativeResourceCurrentSelectionView {
+  if (!isCreativeResourceBindingRole(row.role)) {
+    throw new Error(`CREATIVE_RESOURCE_CURRENT_SELECTION_KIND_INVALID:${row.role}`)
+  }
   return {
-    bindingId: row.id,
-    scope: bindingScopeFromRow(row),
-    role: row.role,
-    slotKey: row.slotKey,
-    version: row.version,
-    source: row.source,
+    kind: row.role,
+    targetId: row.slotKey,
     resourceId: row.resourceId,
     schemaId: row.resource.schemaId,
     mediaType: requireMediaType(row.resource.mediaType),
@@ -510,20 +435,20 @@ function workingBindingView(row: {
   }
 }
 
-function canonicalBinding(
-  bindings: readonly CreativeResourceWorkingBindingView[],
+function canonicalSelection(
+  selections: readonly CreativeResourceCurrentSelectionView[],
   target: { readonly role: string; readonly slotKey: string },
   expectedSchemaId: string,
-): CreativeResourceWorkingBindingView | null {
-  const binding = bindings.find((candidate) => (
-    candidate.role === target.role && candidate.slotKey === target.slotKey
+): CreativeResourceCurrentSelectionView | null {
+  const selection = selections.find((candidate) => (
+    candidate.kind === target.role && candidate.targetId === target.slotKey
   )) ?? null
-  if (binding && binding.schemaId !== expectedSchemaId) {
+  if (selection && selection.schemaId !== expectedSchemaId) {
     throw new Error(
-      `CREATIVE_RESOURCE_CANONICAL_BINDING_SCHEMA_INVALID:${target.role}:${binding.schemaId}`,
+      `CREATIVE_RESOURCE_CURRENT_SELECTION_SCHEMA_INVALID:${target.role}:${selection.schemaId}`,
     )
   }
-  return binding
+  return selection
 }
 
 export async function readProjectCreativeResourceWorkingSet(input: {
@@ -547,19 +472,12 @@ export async function readProjectCreativeResourceWorkingSet(input: {
       where: {
         userId: input.userId,
         projectId: input.projectId,
+        role: { in: [...CREATIVE_RESOURCE_BINDING_ROLES] },
         OR: scopeWhere,
       },
       select: {
-        id: true,
-        userId: true,
-        projectId: true,
-        episodeId: true,
-        scopeKind: true,
-        scopeId: true,
         role: true,
         slotKey: true,
-        source: true,
-        version: true,
         resourceId: true,
         resource: { select: { name: true, mediaType: true, schemaId: true } },
       },
@@ -576,31 +494,28 @@ export async function readProjectCreativeResourceWorkingSet(input: {
       orderBy: { schemaId: 'asc' },
     }),
   ])
-  const bindings = rows
-    .map(workingBindingView)
+  const currentSelections = rows
+    .map(currentSelectionView)
     .sort((left, right) => {
-      const leftPriority = left.scope.kind === 'episode' ? 0 : 1
-      const rightPriority = right.scope.kind === 'episode' ? 0 : 1
-      return leftPriority - rightPriority
-        || left.role.localeCompare(right.role)
-        || left.slotKey.localeCompare(right.slotKey)
+      return left.kind.localeCompare(right.kind)
+        || left.targetId.localeCompare(right.targetId)
     })
   const bySchema = resourceCounts.map((entry) => ({
     schemaId: entry.schemaId,
     count: entry._count._all,
   }))
   return {
-    adoptedCreativeDirection: canonicalBinding(
-      bindings,
+    adoptedCreativeDirection: canonicalSelection(
+      currentSelections,
       CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
       CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
     ),
-    adoptedAssetManifest: canonicalBinding(
-      bindings,
+    adoptedAssetManifest: canonicalSelection(
+      currentSelections,
       CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest,
       CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST,
     ),
-    bindings,
+    currentSelections,
     availableResources: {
       total: bySchema.reduce((sum, entry) => sum + entry.count, 0),
       bySchema,

@@ -1032,8 +1032,7 @@ model CreativeResource {
   status               String                    @default("pending") @db.VarChar(32)
   sourceType           String?                   @db.VarChar(96)
   sourceId             String?                   @db.VarChar(191)
-  candidateSetId       String?                   @db.VarChar(32)
-  candidateIndex       Int?
+  memberIndex          Int?
   contentText          String?                   @db.LongText
   contentJson          Json?
   mediaId              String?
@@ -1066,7 +1065,6 @@ model CreativeResource {
   @@index([userId, scopeKind, scopeId, createdAt], map: "creative_resources_scope_created_idx")
   @@index([projectId, episodeId, createdAt], map: "creative_resources_project_episode_idx")
   @@index([schemaId, mediaType, createdAt], map: "creative_resources_schema_media_idx")
-  @@index([candidateSetId, candidateIndex], map: "creative_resources_candidate_idx")
   @@index([mediaId], map: "creative_resources_media_idx")
   @@index([taskId], map: "creative_resources_task_idx")
   @@index([operationExecutionId], map: "creative_resources_execution_idx")

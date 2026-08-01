@@ -36,8 +36,7 @@ export interface CreativeWorkResourceMaterializationOutput {
   readonly sourceType: 'CreativeWorkResult'
   readonly sourceId: string
   readonly name: string
-  readonly candidateSetId: string | null
-  readonly candidateIndex: number | null
+  readonly memberIndex: number | null
   readonly content: CreativeResourceContent
   readonly generationOptions: CreativeResourceJsonValue
 }
@@ -132,8 +131,7 @@ export function planCreativeWorkResourceMaterialization(input: {
         sourceType: 'CreativeWorkResult',
         sourceId: input.taskId,
         name: truncateResourceName(output.title),
-        candidateSetId: null,
-        candidateIndex: null,
+        memberIndex: null,
         content: { kind: 'structured', data: toCreativeJson(screenplay) },
         generationOptions: toCreativeJson({
           outputKind: output.kind,
@@ -220,8 +218,7 @@ export function planCreativeWorkResourceMaterialization(input: {
       sourceType: 'CreativeWorkResult',
       sourceId: input.taskId,
       name: truncateResourceName(output.creativeDirection.styleSummary),
-      candidateSetId: null,
-      candidateIndex: null,
+      memberIndex: null,
       content: {
         kind: 'structured',
         data: toCreativeJson(output.creativeDirection),
@@ -263,8 +260,7 @@ function structuredOutput(input: {
       sourceType: 'CreativeWorkResult',
       sourceId: input.taskId,
       name: truncateResourceName(input.name),
-      candidateSetId: null,
-      candidateIndex: null,
+      memberIndex: null,
       content: { kind: 'structured', data: toCreativeJson(input.data) },
       generationOptions: toCreativeJson(input.generationOptions),
     }],

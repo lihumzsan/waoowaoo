@@ -62,27 +62,18 @@ export function resolveProjectCreativeResourceScope(input: {
 export function buildCreativeResourceId(input: {
   readonly operationId: string
   readonly requestId: string
-  readonly candidateIndex: number
+  readonly memberIndex: number
 }): string {
   const operationId = requireIdentity(input.operationId, 'CREATIVE_RESOURCE_OPERATION_ID_REQUIRED')
   const requestId = requireIdentity(input.requestId, 'CREATIVE_RESOURCE_REQUEST_ID_REQUIRED')
-  if (!Number.isSafeInteger(input.candidateIndex) || input.candidateIndex < 0) {
-    throw new Error('CREATIVE_RESOURCE_CANDIDATE_INDEX_INVALID')
+  if (!Number.isSafeInteger(input.memberIndex) || input.memberIndex < 0) {
+    throw new Error('CREATIVE_RESOURCE_MEMBER_INDEX_INVALID')
   }
   return buildShortIdentity('r_', 'operation', [
     operationId,
     requestId,
-    String(input.candidateIndex),
+    String(input.memberIndex),
   ])
-}
-
-export function buildCreativeResourceCandidateSetId(input: {
-  readonly operationId: string
-  readonly requestId: string
-}): string {
-  const operationId = requireIdentity(input.operationId, 'CREATIVE_RESOURCE_OPERATION_ID_REQUIRED')
-  const requestId = requireIdentity(input.requestId, 'CREATIVE_RESOURCE_REQUEST_ID_REQUIRED')
-  return buildShortIdentity('rs_', 'candidate-set', [operationId, requestId])
 }
 
 export function buildDomainCreativeResourceId(input: {

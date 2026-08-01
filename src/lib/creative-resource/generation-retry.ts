@@ -18,13 +18,12 @@ const initialGenerationInputIdentitySchema = z.object({
   }).passthrough(),
 }).passthrough()
 
-export interface CreativeResourceRetryCandidate {
+export interface CreativeResourceRetryTarget {
   readonly resourceId: string
   readonly name: string
   readonly schemaId: string
   readonly episodeId: string | null
-  readonly candidateIndex: number
-  readonly candidateSetId: string | null
+  readonly memberIndex: number
   readonly sourceTaskId: string
   readonly payload: CreativeResourceGenerationTaskPayload
 }
@@ -58,7 +57,7 @@ function retryError(code: string, resourceId: string): ApiError {
  * persisted non-retry OperationPlan input), never by row order.
  * A retry cannot provide or reinterpret any creative/provider fields.
  */
-export async function loadCreativeResourceRetryCandidates(params: {
+export async function loadCreativeResourceRetryTargets(params: {
   readonly userId: string
   readonly projectId: string
   readonly callerEpisodeId: string | null
@@ -66,7 +65,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
   readonly taskType: TaskType
   readonly mediaType: Exclude<CreativeResourceMediaType, 'text'>
   readonly resourceIds: readonly string[]
-}): Promise<CreativeResourceRetryCandidate[]> {
+}): Promise<CreativeResourceRetryTarget[]> {
   if (new Set(params.resourceIds).size !== params.resourceIds.length) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CREATIVE_RESOURCE_RETRY_TARGET_DUPLICATE',
@@ -88,8 +87,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
       schemaId: true,
       status: true,
       episodeId: true,
-      candidateIndex: true,
-      candidateSetId: true,
+      memberIndex: true,
     },
   })
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]))
@@ -108,7 +106,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
     }
   }
 
-  const candidateTasks = await prisma.task.findMany({
+  const taskRows = await prisma.task.findMany({
     where: {
       userId: params.userId,
       projectId: params.projectId,
@@ -134,8 +132,8 @@ export async function loadCreativeResourceRetryCandidates(params: {
       },
     },
   })
-  const originalTasksByResource = new Map<string, typeof candidateTasks>()
-  for (const task of candidateTasks) {
+  const originalTasksByResource = new Map<string, typeof taskRows>()
+  for (const task of taskRows) {
     const resource = resourceById.get(task.targetId)
     if (
       !resource
@@ -183,8 +181,7 @@ export async function loadCreativeResourceRetryCandidates(params: {
       name: resource.name,
       schemaId: resource.schemaId,
       episodeId: resource.episodeId,
-      candidateIndex: resource.candidateIndex ?? position,
-      candidateSetId: resource.candidateSetId,
+      memberIndex: resource.memberIndex ?? position,
       sourceTaskId: root.id,
       payload,
     }

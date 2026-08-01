@@ -32,7 +32,7 @@ function resourcePresentation(resource: CreativeResourceView) {
 }
 
 function groupingKey(card: CreativeResourceCardView): string {
-  return card.resource.candidateSetId ?? card.resource.resourceId
+  return card.resource.resourceId
 }
 
 function resourceGenerationOptions(resource: CreativeResourceView) {
@@ -65,7 +65,7 @@ export function appendWorkspaceResourceProjection(context: WorkspaceNodeProjecti
   const nodeIdByResourceId = new Map<string, string>()
 
   cards.forEach((card, index) => {
-    const groupResources = card.candidates?.resources ?? [card.resource]
+    const groupResources = [card.resource]
     const nodeId = workspaceNodeId.resourceCard(groupingKey(card))
     groupResources.forEach((resource) => nodeIdByResourceId.set(resource.resourceId, nodeId))
     const column = index % RESOURCE_COLUMNS

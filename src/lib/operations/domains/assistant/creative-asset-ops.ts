@@ -11,7 +11,7 @@ import {
   CREATIVE_RESOURCE_SCHEMA,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource'
-import { bindCreativeResourceInTransaction } from '@/lib/creative-resource/binding-service'
+import { replaceCreativeResourceBindingInTransaction } from '@/lib/creative-resource/binding-service'
 import { creativeWorkTaskPayloadSchema } from '@/lib/creative-worker'
 import { defineOperation } from '@/lib/operations/define-operation'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -20,14 +20,12 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 const adoptAssetManifestInputSchema = z.object({
   resourceId: z.string().trim().min(1)
     .describe('Exact immutable project.asset_manifest resource to adopt and materialize into project asset identities.'),
-  expectedVersion: z.number().int().nonnegative().nullable().optional()
-    .describe('Use null for first adoption, or the current adopted asset-manifest binding version when replacing it.'),
 }).strict()
 
 const adoptAssetManifestOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().trim().min(1),
-  bindingVersion: z.number().int().nonnegative(),
+  selected: z.literal(true),
   assets: z.array(z.object({
     manifestAssetId: z.string().trim().min(1),
     kind: z.enum(['character', 'location', 'prop']),
@@ -44,7 +42,7 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
       id: 'adopt_asset_manifest',
       summary: 'Adopt one exact project.asset_manifest Resource grounded in one exact screenplay, then create or reuse the corresponding Project asset identities. Any adopted Creative Direction was already frozen into the generating Task by the server and is not an adoption gate. This operation never generates images or starts downstream Tasks.',
       intent: 'act',
-      toolContractRevision: 'adopt_asset_manifest/v1',
+      toolContractRevision: 'adopt_asset_manifest/v2',
       effects: {
         writes: true,
         workspaceResourceImpact: 'project_assets',
@@ -61,7 +59,6 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.ASSET_MANIFEST],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: adoptAssetManifestInputSchema,
@@ -176,17 +173,16 @@ export function createAssistantCreativeAssetOperations(): ProjectAgentOperationR
             created: written.created,
           })
         }
-        const binding = await bindCreativeResourceInTransaction(tx, {
+        await replaceCreativeResourceBindingInTransaction(tx, {
           scope,
           ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest,
           resourceId: resource.id,
           source: 'asset_manifest_adoption',
-          expectedVersion: input.expectedVersion ?? null,
         })
         return adoptAssetManifestOutputSchema.parse({
           success: true,
           resourceId: resource.id,
-          bindingVersion: binding.version,
+          selected: true,
           assets,
           imageGenerationStarted: false,
         })

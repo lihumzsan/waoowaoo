@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
-import type { CreativeResourceBindingView, CreativeResourceScopeRef } from './contracts'
+import {
+  CREATIVE_RESOURCE_BINDING_ROLES,
+  type CreativeResourceBindingRole,
+  type CreativeResourceBindingView,
+  type CreativeResourceScopeRef,
+} from './contracts'
 import type { CreativeResourcePersistenceClient } from './persistence'
 
 type LockedBindingRow = {
@@ -17,7 +22,19 @@ function requireNonEmpty(value: string, code: string): string {
   return normalized
 }
 
-function bindingView(row: LockedBindingRow, scope: CreativeResourceScopeRef, role: string, slotKey: string): CreativeResourceBindingView {
+function requireBindingRole(value: string): CreativeResourceBindingRole {
+  const role = requireNonEmpty(value, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const known = CREATIVE_RESOURCE_BINDING_ROLES.find((candidate) => candidate === role)
+  if (!known) throw new Error(`CREATIVE_RESOURCE_BINDING_ROLE_UNSUPPORTED:${role}`)
+  return known
+}
+
+function bindingView(
+  row: LockedBindingRow,
+  scope: CreativeResourceScopeRef,
+  role: CreativeResourceBindingRole,
+  slotKey: string,
+): CreativeResourceBindingView {
   return {
     bindingId: row.id,
     scope,
@@ -33,7 +50,7 @@ async function lockBinding(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
-    readonly role: string
+    readonly role: CreativeResourceBindingRole
     readonly slotKey: string
   },
 ): Promise<LockedBindingRow | null> {
@@ -57,11 +74,11 @@ export async function getCreativeResourceBindingInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
-    readonly role: string
+    readonly role: CreativeResourceBindingRole
     readonly slotKey: string
   },
 ): Promise<CreativeResourceBindingView | null> {
-  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const role = requireBindingRole(input.role)
   const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
   const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
   return existing ? bindingView(existing, input.scope, role, slotKey) : null
@@ -71,12 +88,12 @@ export async function unbindCreativeResourceInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
-    readonly role: string
+    readonly role: CreativeResourceBindingRole
     readonly slotKey: string
     readonly expectedVersion: number | null
   },
 ): Promise<CreativeResourceBindingView | null> {
-  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const role = requireBindingRole(input.role)
   const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
   const existing = await lockBinding(tx, { scope: input.scope, role, slotKey })
   if (!existing) {
@@ -99,11 +116,11 @@ export async function deleteCreativeResourceBindingSlotInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
-    readonly role: string
+    readonly role: CreativeResourceBindingRole
     readonly slotKey: string
   },
 ): Promise<number> {
-  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const role = requireBindingRole(input.role)
   const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
   const deleted = await tx.creativeResourceBinding.deleteMany({
     where: {
@@ -121,14 +138,14 @@ export async function bindCreativeResourceInTransaction(
   tx: CreativeResourcePersistenceClient,
   input: {
     readonly scope: CreativeResourceScopeRef
-    readonly role: string
+    readonly role: CreativeResourceBindingRole
     readonly slotKey: string
     readonly resourceId: string
     readonly source: string
     readonly expectedVersion: number | null
   },
 ): Promise<CreativeResourceBindingView> {
-  const role = requireNonEmpty(input.role, 'CREATIVE_RESOURCE_BINDING_ROLE_REQUIRED')
+  const role = requireBindingRole(input.role)
   const slotKey = requireNonEmpty(input.slotKey, 'CREATIVE_RESOURCE_BINDING_SLOT_REQUIRED')
   const resourceId = requireNonEmpty(input.resourceId, 'CREATIVE_RESOURCE_ID_REQUIRED')
   const source = requireNonEmpty(input.source, 'CREATIVE_RESOURCE_BINDING_SOURCE_REQUIRED')
@@ -222,4 +239,26 @@ export async function bindCreativeResourceInTransaction(
     source,
     version: existing.version + 1,
   }, input.scope, role, slotKey)
+}
+
+/**
+ * Foreground selections do not expose persistence versions to the model. The
+ * transaction locks the current slot, derives its CAS version, and replaces it
+ * through the same single writer used by background completion fences.
+ */
+export async function replaceCreativeResourceBindingInTransaction(
+  tx: CreativeResourcePersistenceClient,
+  input: {
+    readonly scope: CreativeResourceScopeRef
+    readonly role: CreativeResourceBindingRole
+    readonly slotKey: string
+    readonly resourceId: string
+    readonly source: string
+  },
+): Promise<CreativeResourceBindingView> {
+  const current = await getCreativeResourceBindingInTransaction(tx, input)
+  return await bindCreativeResourceInTransaction(tx, {
+    ...input,
+    expectedVersion: current?.version ?? null,
+  })
 }

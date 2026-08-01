@@ -90,7 +90,6 @@ export function createCreativeResourceUploadedMediaOperations(): ProjectAgentOpe
           userUploadSchemaIdForMediaType('image'),
           userUploadSchemaIdForMediaType('audio'),
         ],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: registerUploadedMediaInputSchema,

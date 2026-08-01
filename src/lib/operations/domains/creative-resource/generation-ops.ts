@@ -33,10 +33,9 @@ import {
 } from '@/lib/creative-resource/generation-contract'
 import {
   buildCreativeResourceRetryTaskPayload,
-  loadCreativeResourceRetryCandidates,
+  loadCreativeResourceRetryTargets,
 } from '@/lib/creative-resource/generation-retry'
 import {
-  buildCreativeResourceCandidateSetId,
   buildCreativeResourceId,
   resolveProjectCreativeResourceScope,
 } from '@/lib/creative-resource/identity'
@@ -108,16 +107,11 @@ const commonNewMediaGenerationShape = {
   kind: z.literal('new'),
   episodeId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).max(200).optional()
-    .describe('Optional display name for the generated Resource or candidate set.'),
+    .describe('Optional display name for the generated Resource.'),
   prompt: z.string().trim().min(1)
     .describe('Complete generation instruction for the configured media model.'),
   contextReferences: contextReferenceSchema,
 } as const
-
-// Audio is deliberately excluded: create_audio produces exactly one Resource
-// per call, so only image and video requests carry a candidate count.
-const candidateCountSchema = z.number().int().min(1).max(6).optional()
-  .describe('Number of new candidates to generate. Defaults to 1.')
 
 const retryMediaGenerationRequestSchema = z.object({
   kind: z.literal('retry'),
@@ -134,23 +128,13 @@ if (independentImageSchemaIds.length === 0) {
 const createTextInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).max(200).optional()
-    .describe('Optional display name for the text Resource or candidate set.'),
+    .describe('Optional display name for the text Resource.'),
   prompt: z.string().trim().min(1)
     .describe('The user request or authoring instruction that produced this text.'),
   content: z.discriminatedUnion('kind', [
     z.object({
       kind: z.literal('single'),
       text: z.string().trim().min(1).describe('One completed text result.'),
-    }).strict(),
-    z.object({
-      kind: z.literal('candidates'),
-      candidates: z.array(z.object({
-        name: z.string().trim().min(1).max(200).optional()
-          .describe('Optional candidate display name.'),
-        text: z.string().trim().min(1)
-          .describe('Completed candidate text.'),
-      }).strict()).min(2).max(6)
-        .describe('Two to six independently selectable completed text candidates.'),
     }).strict(),
     z.object({
       kind: z.literal('current_user_text'),
@@ -186,13 +170,12 @@ const createTextInputSchema = z.object({
       text: z.string().trim().min(1)
         .describe('Faithful transcription of the current attached image. Do not rewrite, summarize, or invent text that is not visible in that image.'),
     }).strict(),
-  ]).describe('Choose one completed result or a selectable candidate set.'),
+  ]).describe('Persist exactly one completed text result.'),
   contextReferences: contextReferenceSchema,
 }).strict()
 
 const createImageNewRequestSchema = z.object({
   ...commonNewMediaGenerationShape,
-  count: candidateCountSchema,
   imageReferences: imageReferenceSchema,
   schemaId: z.enum(independentImageSchemaIds as [string, ...string[]]).optional()
     .describe('Professional meaning of an independent image Resource. Omit to use generic.image.'),
@@ -214,9 +197,8 @@ const createAssetImageRequestSchema = z.object({
     assetKind: z.enum(['character', 'location', 'prop']),
     assetId: z.string().trim().min(1),
     variantId: z.string().trim().min(1),
-    expectedVersion: z.number().int().nonnegative().nullable(),
   }).strict()
-    .describe('Exact Project asset variant that receives the completed image Resource binding. It never changes the asset design.'),
+    .describe('Exact Project asset variant that receives the completed image as its current Resource. The server owns concurrency; this never changes the asset design.'),
 }).strict()
 
 const createImageManifestAssetsRequestSchema = z.object({
@@ -273,7 +255,6 @@ const createAudioInputSchema = z.object({
 
 const createVideoNewRequestBaseShape = {
   ...commonNewMediaGenerationShape,
-  count: candidateCountSchema,
   schemaId: z.enum(CREATIVE_RESOURCE_GENERATION_SCHEMA_IDS_BY_MEDIA.video as [string, ...string[]]).optional()
     .describe('Professional meaning of the video Resource. Omit to use generic.video.'),
   durationSeconds: z.number().int().min(1).max(CREATIVE_VIDEO_SEGMENT_DURATION_CEILING_SECONDS)
@@ -323,7 +304,7 @@ type NewMediaGenerationRequest = CreateImageGenerationRequest | CreateAudioNewRe
 
 const resourceRefOutputSchema = z.object({
   resourceId: z.string().min(1),
-  candidateIndex: z.number().int().min(0).nullable(),
+  memberIndex: z.number().int().min(0).nullable(),
 }).strict()
 
 const createTextOutputSchema = z.object({
@@ -341,7 +322,7 @@ const mediaTaskOutputSchema = refineTaskSubmitOperationOutputSchema(
 const generationPlanResourceSchema = z.object({
   resourceId: z.string().min(1),
   name: z.string().min(1),
-  candidateIndex: z.number().int().min(0),
+  memberIndex: z.number().int().min(0),
   // Manifest asset batches mix character/location/prop image schemas inside
   // one plan; absent means the plan-level schemaId applies.
   schemaId: z.string().min(1).optional(),
@@ -352,7 +333,6 @@ const generationPlanMetadataBaseShape = {
   schemaId: z.string().min(1),
   episodeId: z.string().nullable(),
   requestId: z.string().min(1),
-  candidateSetId: z.string().nullable(),
   projectVideoRatio: z.object({
     value: z.string().min(1),
     fingerprint: z.string().length(64),
@@ -693,80 +673,70 @@ async function createTextResources(
         position: 0,
       }, ...contextReferences]
     : contextReferences
-  const candidates = input.content.kind === 'candidates'
-    ? input.content.candidates
-    : [{
-        name: suppliedScreenplayTitle ?? input.name,
-        text: currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text,
-      }]
+  const text = currentUserTextMatch?.ok ? currentUserTextMatch.text : input.content.text
   const requestId = ctx.toolCallId?.trim()
     ? `${ctx.context.turnId ?? 'turn'}:${ctx.toolCallId.trim()}`
     : randomUUID()
-  const candidateSetId = candidates.length > 1
-    ? buildCreativeResourceCandidateSetId({ operationId: 'create_text', requestId })
-    : null
   const reserved = await reserveCreativeResourcesInTransaction(tx, {
     scope,
     mediaType: 'text',
     schemaId,
     operationId: 'create_text',
     requestId,
-    candidateSetId,
-    candidates: candidates.map((candidate, candidateIndex) => ({
-      name: candidate.name ?? input.name ?? `Text ${String(candidateIndex + 1)}`,
-      candidateIndex,
-    })),
+    members: [{
+      name: suppliedScreenplayTitle ?? input.name ?? 'Text',
+      memberIndex: 0,
+    }],
   })
   const inputHash = stableArgsHash(input)
-  const resources = []
-  for (const [candidateIndex, candidate] of candidates.entries()) {
-    const reservedResource = reserved[candidateIndex]
-    if (!reservedResource) throw new Error(`CREATIVE_RESOURCE_RESERVATION_MISSING:${String(candidateIndex)}`)
-    const materialized = await materializeCreativeResourceInTransaction(tx, {
-      resourceId: reservedResource.resourceId,
-      userId: ctx.userId,
-      mediaType: 'text',
-      schemaId,
-      content: suppliedScreenplay
-        ? {
-            kind: 'structured',
-            data: {
-              kind: 'screenplay',
-              title: suppliedScreenplayTitle ?? candidate.text.trim().slice(0, 300),
-              logline: null,
-              synopsis: '',
-              screenplayText: candidate.text,
-              source: {
-                kind: 'provided',
-                label: suppliedScreenplayTitle ?? candidate.text.trim().slice(0, 500),
-              },
-              assumptions: [],
-              openQuestions: [],
+  const reservedResource = reserved[0]
+  if (!reservedResource) throw new Error('CREATIVE_RESOURCE_RESERVATION_MISSING:0')
+  const materialized = await materializeCreativeResourceInTransaction(tx, {
+    resourceId: reservedResource.resourceId,
+    userId: ctx.userId,
+    mediaType: 'text',
+    schemaId,
+    content: suppliedScreenplay
+      ? {
+          kind: 'structured',
+          data: {
+            kind: 'screenplay',
+            title: suppliedScreenplayTitle ?? text.trim().slice(0, 300),
+            logline: null,
+            synopsis: '',
+            screenplayText: text,
+            source: {
+              kind: 'provided',
+              label: suppliedScreenplayTitle ?? text.trim().slice(0, 500),
             },
-          }
-        : { kind: 'text', text: candidate.text },
-      inputs: references,
-      provenance: {
-        operationId: 'create_text',
-        inputHash,
-        taskId: null,
-        operationExecutionId: null,
-        toolCallId: ctx.toolCallId ?? null,
-        prompt: input.prompt,
-        modelKey: null,
-        generationOptions: input.content.kind === 'current_user_text'
-          ? { source: 'current_user_turn' }
-          : input.content.kind === 'current_user_media_transcription'
-            ? {
-                source: 'current_user_media_transcription',
-                sourceResourceId: input.content.sourceResourceId,
-              }
-            : null,
-      },
-    })
-    resources.push({ ...materialized, candidateIndex })
-  }
-  return createTextOutputSchema.parse({ success: true, resources })
+            assumptions: [],
+            openQuestions: [],
+          },
+        }
+      : { kind: 'text', text },
+    inputs: references,
+    provenance: {
+      operationId: 'create_text',
+      inputHash,
+      taskId: null,
+      operationExecutionId: null,
+      toolCallId: ctx.toolCallId ?? null,
+      prompt: input.prompt,
+      modelKey: null,
+      generationOptions: input.content.kind === 'current_user_text'
+        ? { source: 'current_user_turn' }
+        : input.content.kind === 'current_user_media_transcription'
+          ? {
+              source: 'current_user_media_transcription',
+              sourceResourceId: input.content.sourceResourceId,
+            }
+          : null,
+    },
+  })
+  return createTextOutputSchema.parse({
+    success: true,
+    resources: [{ ...materialized, memberIndex: 0 }],
+  })
 }
 
 interface MediaPlanConfig {
@@ -1065,27 +1035,30 @@ async function planNewMediaGeneration(
   const schemaId = input.kind === 'asset'
     ? getAssetImageFormatPolicy(input.assetBinding.assetKind).schemaId
     : requireSchemaForMedia(('schemaId' in input ? input.schemaId : undefined) ?? config.schemaId, config.mediaType)
-  const requestedAssetBinding = assetImageRequest?.assetBinding
+  const requestedAssetTarget = assetImageRequest?.assetBinding
+  let requestedAssetBinding:
+    | (NonNullable<typeof requestedAssetTarget> & { readonly expectedVersion: number | null })
+    | undefined
   const episodeId = input.kind === 'asset' ? null : resolveEpisodeId(input, ctx)
   const assetImageKind = config.mediaType === 'image'
     ? resolveAssetImageKindForSchemaId(schemaId)
     : null
-  if (requestedAssetBinding) {
-    const targetExists = requestedAssetBinding.assetKind === 'character'
+  if (requestedAssetTarget) {
+    const targetExists = requestedAssetTarget.assetKind === 'character'
       ? await prisma.characterAppearance.count({
           where: {
-            id: requestedAssetBinding.variantId,
-            characterId: requestedAssetBinding.assetId,
+            id: requestedAssetTarget.variantId,
+            characterId: requestedAssetTarget.assetId,
             character: { projectId: ctx.projectId, project: { userId: ctx.userId } },
           },
         })
       : await prisma.locationImage.count({
           where: {
-            id: requestedAssetBinding.variantId,
-            locationId: requestedAssetBinding.assetId,
+            id: requestedAssetTarget.variantId,
+            locationId: requestedAssetTarget.assetId,
             location: {
               projectId: ctx.projectId,
-              assetKind: requestedAssetBinding.assetKind,
+              assetKind: requestedAssetTarget.assetKind,
               project: { userId: ctx.userId },
             },
           },
@@ -1095,6 +1068,21 @@ async function planNewMediaGeneration(
         code: 'ASSET_IMAGE_BINDING_TARGET_NOT_FOUND',
         field: 'assetBinding.variantId',
       })
+    }
+    const current = await prisma.creativeResourceBinding.findUnique({
+      where: {
+        scopeKind_scopeId_role_slotKey: {
+          scopeKind: 'project',
+          scopeId: ctx.projectId,
+          role: CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
+          slotKey: requestedAssetTarget.variantId,
+        },
+      },
+      select: { version: true },
+    })
+    requestedAssetBinding = {
+      ...requestedAssetTarget,
+      expectedVersion: current?.version ?? null,
     }
   }
   const prompt = assetImageKind
@@ -1240,19 +1228,15 @@ async function planNewMediaGeneration(
     ctx.toolCallId?.trim() || stableArgsHash({ input: effectiveInput, modelKey, schemaId, references, generationOptions }),
     inputHash,
   ].join(':')
-  const count = 'count' in input ? input.count ?? 1 : 1
-  const resources = Array.from({ length: count }, (_, candidateIndex) => ({
+  const resources = [{
     resourceId: buildCreativeResourceId({
       operationId: config.operationId,
       requestId,
-      candidateIndex,
+      memberIndex: 0,
     }),
-    name: input.name ?? `${config.mediaType[0]?.toUpperCase() ?? ''}${config.mediaType.slice(1)} ${String(candidateIndex + 1)}`,
-    candidateIndex,
-  }))
-  const candidateSetId = resources.length > 1
-    ? buildCreativeResourceCandidateSetId({ operationId: config.operationId, requestId })
-    : null
+    name: input.name ?? `${config.mediaType[0]?.toUpperCase() ?? ''}${config.mediaType.slice(1)}`,
+    memberIndex: 0,
+  }]
   const tasks = resources.map((resource) => {
     const resourcePayload = {
       resourceId: resource.resourceId,
@@ -1327,7 +1311,6 @@ async function planNewMediaGeneration(
       schemaId,
       episodeId,
       requestId,
-      candidateSetId,
       retry: false,
       resources,
     },
@@ -1340,7 +1323,7 @@ async function planMediaGenerationRetry(
   config: MediaPlanConfig,
 ): Promise<OperationPlan> {
   const callerEpisodeId = ctx.context.episodeId?.trim() || null
-  const candidates = await loadCreativeResourceRetryCandidates({
+  const targets = await loadCreativeResourceRetryTargets({
     userId: ctx.userId,
     projectId: ctx.projectId,
     callerEpisodeId,
@@ -1349,7 +1332,7 @@ async function planMediaGenerationRetry(
     mediaType: config.mediaType,
     resourceIds: input.resourceIds,
   })
-  const schemaIds = new Set(candidates.map((candidate) => candidate.schemaId))
+  const schemaIds = new Set(targets.map((target) => target.schemaId))
   if (schemaIds.size !== 1) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CREATIVE_RESOURCE_RETRY_SCHEMA_MIXED',
@@ -1358,7 +1341,7 @@ async function planMediaGenerationRetry(
       agentRetryableAfterCorrection: true,
     })
   }
-  const episodeIds = new Set(candidates.map((candidate) => candidate.episodeId))
+  const episodeIds = new Set(targets.map((target) => target.episodeId))
   if (episodeIds.size !== 1) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'CREATIVE_RESOURCE_RETRY_SCOPE_MIXED',
@@ -1367,47 +1350,47 @@ async function planMediaGenerationRetry(
       agentRetryableAfterCorrection: true,
     })
   }
-  const episodeId = candidates[0]?.episodeId ?? null
-  const schemaId = requireSchemaForMedia(candidates[0]?.schemaId ?? config.schemaId, config.mediaType)
-  for (const candidate of candidates) {
+  const episodeId = targets[0]?.episodeId ?? null
+  const schemaId = requireSchemaForMedia(targets[0]?.schemaId ?? config.schemaId, config.mediaType)
+  for (const target of targets) {
     const targetScope = resolveProjectCreativeResourceScope({
       userId: ctx.userId,
       projectId: ctx.projectId,
-      episodeId: candidate.episodeId,
+      episodeId: target.episodeId,
     })
-    const references = candidate.payload.resource.inputs
+    const references = target.payload.resource.inputs
     const inputByPosition = new Map(references.map((reference) => [reference.position, reference]))
-    const imageInputs = candidate.payload.resource.imageInputPositions.map((position) => {
+    const imageInputs = target.payload.resource.imageInputPositions.map((position) => {
       const reference = inputByPosition.get(position)
       if (!reference) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_INVALID',
           field: 'request.resourceIds',
-          resourceId: candidate.resourceId,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
       return reference
     })
-    const audioInputs = candidate.payload.resource.audioInputPositions.map((position) => {
+    const audioInputs = target.payload.resource.audioInputPositions.map((position) => {
       const reference = inputByPosition.get(position)
       if (!reference) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_INVALID',
           field: 'request.resourceIds',
-          resourceId: candidate.resourceId,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
       return reference
     })
-    const videoInputs = candidate.payload.resource.videoInputPositions.map((position) => {
+    const videoInputs = target.payload.resource.videoInputPositions.map((position) => {
       const reference = inputByPosition.get(position)
       if (!reference) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'CREATIVE_RESOURCE_RETRY_FROZEN_INPUT_INVALID',
           field: 'request.resourceIds',
-          resourceId: candidate.resourceId,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
@@ -1423,14 +1406,14 @@ async function planMediaGenerationRetry(
     await assertInputReferences(targetScope, audioInputs, 'audio', 'audioReferences')
     await assertInputReferences(targetScope, videoInputs, 'video', 'videoReferences')
     if (config.mediaType === 'audio') {
-      const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', candidate.payload.resource.modelKey)
+      const maxReferenceVideos = resolveBuiltinCapabilitiesByModelKey('music', target.payload.resource.modelKey)
         ?.music?.maxReferenceVideos
       if (videoInputs.length > 0 && (!maxReferenceVideos || videoInputs.length > maxReferenceVideos)) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'MUSIC_MODEL_VIDEO_REFERENCE_LIMIT_EXCEEDED',
           field: 'request.resourceIds',
-          modelKey: candidate.payload.resource.modelKey,
-          resourceId: candidate.resourceId,
+          modelKey: target.payload.resource.modelKey,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
@@ -1440,8 +1423,8 @@ async function planMediaGenerationRetry(
         throw new ApiError('INVALID_PARAMS', {
           code: 'VIDEO_MODEL_REFERENCE_AUDIO_REQUIRES_IMAGE',
           field: 'request.resourceIds',
-          modelKey: candidate.payload.resource.modelKey,
-          resourceId: candidate.resourceId,
+          modelKey: target.payload.resource.modelKey,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
@@ -1452,20 +1435,20 @@ async function planMediaGenerationRetry(
         throw new ApiError('INVALID_PARAMS', {
           code: 'VIDEO_MODEL_REFERENCE_AUDIO_FRAME_ROLE_CONFLICT',
           field: 'request.resourceIds',
-          modelKey: candidate.payload.resource.modelKey,
-          resourceId: candidate.resourceId,
+          modelKey: target.payload.resource.modelKey,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
-      const capabilities = resolveBuiltinCapabilitiesByModelKey('video', candidate.payload.resource.modelKey)?.video
+      const capabilities = resolveBuiltinCapabilitiesByModelKey('video', target.payload.resource.modelKey)?.video
       const maxReferenceImages = capabilities?.maxReferenceImages ?? 1
       const maxReferenceAudios = capabilities?.maxReferenceAudios
       if (imageInputs.length > maxReferenceImages) {
         throw new ApiError('INVALID_PARAMS', {
           code: 'VIDEO_MODEL_REFERENCE_LIMIT_EXCEEDED',
           field: 'request.resourceIds',
-          modelKey: candidate.payload.resource.modelKey,
-          resourceId: candidate.resourceId,
+          modelKey: target.payload.resource.modelKey,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
@@ -1473,8 +1456,8 @@ async function planMediaGenerationRetry(
         throw new ApiError('INVALID_PARAMS', {
           code: 'VIDEO_MODEL_AUDIO_REFERENCE_LIMIT_EXCEEDED',
           field: 'request.resourceIds',
-          modelKey: candidate.payload.resource.modelKey,
-          resourceId: candidate.resourceId,
+          modelKey: target.payload.resource.modelKey,
+          resourceId: target.resourceId,
           agentRetryableAfterCorrection: false,
         })
       }
@@ -1486,28 +1469,28 @@ async function planMediaGenerationRetry(
     episodeId,
     turnId: ctx.context.turnId?.trim() || null,
     toolCallId: ctx.toolCallId?.trim() || null,
-    resources: candidates.map((candidate) => ({
-      resourceId: candidate.resourceId,
-      sourceTaskId: candidate.sourceTaskId,
+    resources: targets.map((target) => ({
+      resourceId: target.resourceId,
+      sourceTaskId: target.sourceTaskId,
     })),
   })}`
-  const tasks = candidates.map((candidate) => {
+  const tasks = targets.map((target) => {
     const payload = buildCreativeResourceRetryTaskPayload({
-      frozenPayload: candidate.payload,
+      frozenPayload: target.payload,
       toolCallId: ctx.toolCallId?.trim() || null,
     })
     return createPlannedTask({
-      id: `${config.operationId}:retry:${candidate.resourceId}`,
+      id: `${config.operationId}:retry:${target.resourceId}`,
       taskType: config.taskType,
       targetType: 'CreativeResource',
-      targetId: candidate.resourceId,
+      targetId: target.resourceId,
       payload,
       locale: resolveOperationLocale(ctx.context),
-      episodeId: candidate.episodeId,
+      episodeId: target.episodeId,
       dedupeKey: `${config.operationId}:retry:${stableArgsHash({
         requestId,
-        resourceId: candidate.resourceId,
-        sourceTaskId: candidate.sourceTaskId,
+        resourceId: target.resourceId,
+        sourceTaskId: target.sourceTaskId,
       })}`,
       billingInfo: requirePlannedTaskBillingInfo({
         taskType: config.taskType,
@@ -1516,7 +1499,6 @@ async function planMediaGenerationRetry(
       }),
     })
   })
-  const candidateSetIds = new Set(candidates.map((candidate) => candidate.candidateSetId))
   return {
     kind: 'task_submission',
     operationId: config.operationId,
@@ -1529,13 +1511,12 @@ async function planMediaGenerationRetry(
       schemaId,
       episodeId,
       requestId,
-      candidateSetId: candidateSetIds.size === 1 ? candidates[0]?.candidateSetId ?? null : null,
       retry: true,
-      resources: candidates.map((candidate) => ({
-        resourceId: candidate.resourceId,
-        name: candidate.name,
-        candidateIndex: candidate.candidateIndex,
-        sourceTaskId: candidate.sourceTaskId,
+      resources: targets.map((target) => ({
+        resourceId: target.resourceId,
+        name: target.name,
+        memberIndex: target.memberIndex,
+        sourceTaskId: target.sourceTaskId,
       })),
     },
   }
@@ -1629,16 +1610,16 @@ async function planVideoPromptSetGeneration(
     ctx.toolCallId?.trim() || planFingerprint,
     planFingerprint,
   ].join(':')
-  const resources = promptSet.segments.map((segment, candidateIndex) => ({
+  const resources = promptSet.segments.map((segment, memberIndex) => ({
     resourceId: buildCreativeResourceId({
       operationId: VIDEO_CONFIG.operationId,
       requestId,
-      candidateIndex,
+      memberIndex,
     }),
     name: `Video ${segment.key}`.slice(0, 191),
-    candidateIndex,
+    memberIndex,
   }))
-  const tasks = await Promise.all(promptSet.segments.map(async (segment, candidateIndex) => {
+  const tasks = await Promise.all(promptSet.segments.map(async (segment, memberIndex) => {
     const seen = new Set<string>()
     const mediaSources = segment.mediaResourceIds.map((resourceId) => {
       if (seen.has(resourceId)) {
@@ -1783,8 +1764,8 @@ async function planVideoPromptSetGeneration(
       audioInputPositions,
       generationOptions,
     })
-    const resource = resources[candidateIndex]
-    if (!resource) throw new Error(`VIDEO_PROMPT_SET_RESOURCE_PLAN_MISSING:${String(candidateIndex)}`)
+    const resource = resources[memberIndex]
+    if (!resource) throw new Error(`VIDEO_PROMPT_SET_RESOURCE_PLAN_MISSING:${String(memberIndex)}`)
     const payload = {
       lifecycleProjection: buildCreativeResourceLifecycleProjection([{
         resourceId: resource.resourceId,
@@ -1839,7 +1820,6 @@ async function planVideoPromptSetGeneration(
       schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
       episodeId: promptSetResource.episodeId,
       requestId,
-      candidateSetId: null,
       retry: false,
       resources,
     },
@@ -2083,21 +2063,21 @@ async function planManifestAssetImageGeneration(
     ctx.toolCallId?.trim() || planFingerprint,
     planFingerprint,
   ].join(':')
-  const resources = entries.map((entry, candidateIndex) => ({
+  const resources = entries.map((entry, memberIndex) => ({
     resourceId: buildCreativeResourceId({
       operationId: IMAGE_CONFIG.operationId,
       requestId,
-      candidateIndex,
+      memberIndex,
     }),
     name: entry.asset.canonicalName.slice(0, 191),
-    candidateIndex,
+    memberIndex,
     schemaId: getAssetImageFormatPolicy(entry.asset.kind).schemaId,
   }))
   const firstResource = resources[0]
   if (!firstResource) throw new Error('ASSET_MANIFEST_IMAGE_PLAN_EMPTY')
-  const tasks = await Promise.all(entries.map(async (entry, candidateIndex) => {
-    const resource = resources[candidateIndex]
-    if (!resource) throw new Error(`ASSET_MANIFEST_IMAGE_RESOURCE_PLAN_MISSING:${String(candidateIndex)}`)
+  const tasks = await Promise.all(entries.map(async (entry, memberIndex) => {
+    const resource = resources[memberIndex]
+    if (!resource) throw new Error(`ASSET_MANIFEST_IMAGE_RESOURCE_PLAN_MISSING:${String(memberIndex)}`)
     const schemaId = getAssetImageFormatPolicy(entry.asset.kind).schemaId
     const prompt = compileAssetImagePrompt({
       stableDescription: entry.asset.stableDescription,
@@ -2203,7 +2183,6 @@ async function planManifestAssetImageGeneration(
       schemaId: firstResource.schemaId,
       episodeId: null,
       requestId,
-      candidateSetId: null,
       retry: false,
       resources,
     },
@@ -2409,30 +2388,29 @@ async function commitMediaGeneration(
   if (!metadata.retry) {
     // Manifest asset batches mix per-kind image schemas inside one plan;
     // reserve per exact schema through the same single persistence entry.
-    const candidatesBySchemaId = new Map<string, Array<{
+    const membersBySchemaId = new Map<string, Array<{
       resourceId: string
       name: string
-      candidateIndex: number
+      memberIndex: number
     }>>()
     for (const resource of metadata.resources) {
       const schemaId = requireSchemaForMedia(resource.schemaId ?? metadata.schemaId, config.mediaType)
-      const group = candidatesBySchemaId.get(schemaId) ?? []
+      const group = membersBySchemaId.get(schemaId) ?? []
       group.push({
         resourceId: resource.resourceId,
         name: resource.name,
-        candidateIndex: resource.candidateIndex,
+        memberIndex: resource.memberIndex,
       })
-      candidatesBySchemaId.set(schemaId, group)
+      membersBySchemaId.set(schemaId, group)
     }
-    for (const [schemaId, candidates] of candidatesBySchemaId) {
+    for (const [schemaId, members] of membersBySchemaId) {
       await reserveCreativeResourcesInTransaction(authorization.transaction, {
         scope,
         mediaType: config.mediaType,
         schemaId,
         operationId: config.operationId,
         requestId: metadata.requestId,
-        candidateSetId: metadata.candidateSetId,
-        candidates,
+        members,
       })
     }
   } else {
@@ -2467,7 +2445,7 @@ async function commitMediaGeneration(
     taskIds: results.map((result) => result.taskId),
     resources: metadata.resources.map((resource) => ({
       resourceId: resource.resourceId,
-      candidateIndex: resource.candidateIndex,
+      memberIndex: resource.memberIndex,
     })),
   })
 }
@@ -2514,22 +2492,22 @@ const MEDIA_EFFECTS = {
 
 // v2 broadens the canonical initial-generation root from request.kind=new to
 // every non-retry request branch, including prompt_set and manifest_assets.
-const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'creative-resource-generation/v2'
+const MEDIA_GENERATION_PLAN_CONTRACT_REVISION = 'creative-resource-generation/v3'
 
 export function createCreativeResourceGenerationOperations(): ProjectAgentOperationRegistryDraft {
   return {
     create_text: defineOperation({
       id: 'create_text',
-      summary: 'Persist one or more generic text Resources authored in this Agent turn; persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text; or faithfully transcribe an image attached to this exact user turn with content.kind=current_user_media_transcription and its sourceResourceId. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text otherwise. Creative authoring and resource still belong to Creative Work; contextReferences record exact creative lineage and are never treated as media input.',
+      summary: 'Persist one generic text Resource authored in this Agent turn; persist an exact contiguous excerpt of the current visible user turn with content.kind=current_user_text; or faithfully transcribe an image attached to this exact user turn with content.kind=current_user_media_transcription and its sourceResourceId. Classify a complete project screenplay as content.classification.kind=screenplay so it becomes the same project.screenplay Resource contract without a Creative Subagent; use generic_text otherwise. Choice options belong to request_choice and are not durable text Resources.',
       intent: 'act',
-      toolContractRevision: 'create_text/v1',
+      toolContractRevision: 'create_text/v2',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',
         billable: false,
         destructive: false,
         overwrite: false,
-        bulk: true,
+        bulk: false,
         externalSideEffects: false,
         longRunning: false,
       },
@@ -2542,7 +2520,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
           CREATIVE_RESOURCE_SCHEMA.GENERIC_TEXT,
           CREATIVE_RESOURCE_SCHEMA.SCREENPLAY,
         ],
-        supportsCandidates: true,
       },
       confirmation: { kind: 'none', required: false },
       inputSchema: createTextInputSchema,
@@ -2560,7 +2537,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['image'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'image'),
-        supportsCandidates: true,
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
@@ -2571,7 +2547,7 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
     }),
     create_audio: defineOperation({
       id: 'create_audio',
-      summary: 'Generate one project.bgm_audio music Resource per call; the server owns the schema identity and audio has no candidate fan-out. To execute a completed music direction, use request.kind=music_direction with only the direction resourceId, one exact cueKey, and the exact final video Resource. The server reads that cue instruction unchanged, derives duration from its time window, freezes the window, and lets a video-capable music model watch only that portion — never copy, merge, or rewrite cue instructions. Submit one call per selected cue; an empty cue list intentionally means no music. For music without a direction, provide the complete prompt and lineage inside request.kind=new; when the configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReferences and set durationSeconds to that video duration. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
+      summary: 'Generate exactly one project.bgm_audio music Resource per call; the server owns the schema identity. To execute a completed music direction, use request.kind=music_direction with only the direction resourceId, one exact cueKey, and the exact final video Resource. The server reads that cue instruction unchanged, derives duration from its time window, freezes the window, and lets a video-capable music model watch only that portion — never copy, merge, or rewrite cue instructions. Submit one call per selected cue; an empty cue list intentionally means no music. For music without a direction, provide the complete prompt and lineage inside request.kind=new; when the configured music model supports video-conditioned soundtracks, pass one ready video Resource in videoReferences and set durationSeconds to that video duration. To retry, provide only exact failed Resource IDs in request.kind=retry; the server restores every frozen generation input.',
       intent: 'act',
       effects: MEDIA_EFFECTS,
       resourceContract: {
@@ -2580,7 +2556,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['audio'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.BGM_AUDIO],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,
@@ -2600,7 +2575,6 @@ export function createCreativeResourceGenerationOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['video'],
         outputSchemaIds: Object.values(CREATIVE_RESOURCE_SCHEMA).filter((schemaId) => requireCreativeResourceSchema(schemaId).mediaType === 'video'),
-        supportsCandidates: true,
       },
       confirmation: { kind: 'billable_media', required: true },
       planContractRevision: MEDIA_GENERATION_PLAN_CONTRACT_REVISION,

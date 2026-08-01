@@ -148,6 +148,7 @@
         "src/lib/query/keys.ts",
         "src/lib/video-generation/reference-images.ts",
         "src/features/project-workspace/canvas/nodes/renderers/resource-card.tsx",
+        "src/features/project-workspace/canvas/layout/workspace-layout-model.ts",
         "src/features/project-workspace/canvas/projection/workspace-node-resource-projection.ts",
         "messages/en/project-workflow.json",
         "messages/zh/project-workflow.json",
@@ -158,7 +159,8 @@
         "prisma/migrations/20260722230000_canonical_screenplay_asset_manifest/migration.sql",
         "prisma/migrations/20260724190000_decouple_screenplay_asset_manifest/migration.sql",
         "prisma/migrations/20260724223000_creative_direction_cutover/migration.sql",
-        "prisma/migrations/20260729090000_collapse_creative_resource_identity/migration.sql"
+        "prisma/migrations/20260729090000_collapse_creative_resource_identity/migration.sql",
+        "prisma/migrations/20260801090000_remove_resource_candidate_sets/migration.sql"
       ]
     },
     {
@@ -392,6 +394,7 @@
         "scripts/check-outbound-image-runtime-sample.ts",
         "scripts/check-outbound-image-success-rate.ts",
         "src/lib/task/provider-invocation.ts",
+        "src/lib/task/provider-invocation-identity.ts",
         "src/lib/task/artifact-storage.ts",
         "src/lib/user-api",
         "src/app/api/user/api-config",

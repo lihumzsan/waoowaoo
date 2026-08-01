@@ -66,9 +66,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (resourceContract.acceptsReferences !== true && resourceContract.acceptsReferences !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_REFERENCES_INVALID:${operationId}`)
       }
-      if (resourceContract.supportsCandidates !== true && resourceContract.supportsCandidates !== false) {
-        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_CANDIDATES_INVALID:${operationId}`)
-      }
       if (!Array.isArray(resourceContract.outputMediaTypes) || resourceContract.outputMediaTypes.length === 0) {
         throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_CONTRACT_MEDIA_MISSING:${operationId}`)
       }

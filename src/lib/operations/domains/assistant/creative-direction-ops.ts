@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { bindCreativeResourceInTransaction } from '@/lib/creative-resource/binding-service'
+import { replaceCreativeResourceBindingInTransaction } from '@/lib/creative-resource/binding-service'
 import {
   CREATIVE_RESOURCE_CANONICAL_BINDINGS,
   CREATIVE_RESOURCE_SCHEMA,
@@ -14,38 +14,22 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 const adoptCreativeDirectionInputSchema = z.object({
   resourceId: z.string().trim().min(1)
     .describe('Exact immutable Creative Direction resource selected by the current choice.'),
-  expectedVersion: z.number().int().min(0).nullable().optional()
-    .describe('Pass null for the first adoption; pass the current adopted Creative Direction binding version when replacing it.'),
 }).strict()
 
 const adoptCreativeDirectionOutputSchema = z.object({
   success: z.literal(true),
   resourceId: z.string().trim().min(1),
   schemaId: z.literal(CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION),
-  binding: z.object({
-    bindingId: z.string().trim().min(1),
-    scope: z.object({
-      kind: z.enum(['user', 'project', 'episode']),
-      id: z.string().trim().min(1),
-      userId: z.string().trim().min(1),
-      projectId: z.string().trim().min(1).nullable(),
-      episodeId: z.string().trim().min(1).nullable(),
-    }).strict(),
-    role: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.role),
-    slotKey: z.literal(CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.slotKey),
-    resourceId: z.string().trim().min(1),
-    version: z.number().int().min(0),
-    source: z.string().trim().min(1),
-  }).strict(),
+  selected: z.literal(true),
 }).strict()
 
 export function createAssistantCreativeDirectionOperations(): ProjectAgentOperationRegistryDraft {
   return {
     adopt_creative_direction: defineOperation({
       id: 'adopt_creative_direction',
-      summary: 'Adopt one exact immutable project.creative_direction Resource selected by the current action. The Creative Task already materialized it; this operation only updates the canonical adopted_creative_direction Binding and starts no downstream work.',
+      summary: 'Select one exact project.creative_direction Resource as the project\'s current Creative Direction. The Creative Task already materialized it; this operation starts no downstream work.',
       intent: 'act',
-      toolContractRevision: 'adopt_creative_direction/v1',
+      toolContractRevision: 'adopt_creative_direction/v2',
       effects: {
         writes: true,
         workspaceResourceImpact: 'creative_resources',
@@ -62,7 +46,6 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['text'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       choiceCommit: { enabled: true },
@@ -120,18 +103,17 @@ export function createAssistantCreativeDirectionOperations(): ProjectAgentOperat
           projectId: context.projectId,
           episodeId: null,
         })
-        const binding = await bindCreativeResourceInTransaction(transaction, {
+        await replaceCreativeResourceBindingInTransaction(transaction, {
           scope,
           ...CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection,
           resourceId: resource.id,
           source: 'creative_direction_adoption',
-          expectedVersion: input.expectedVersion ?? null,
         })
         return adoptCreativeDirectionOutputSchema.parse({
           success: true,
           resourceId: resource.id,
           schemaId: CREATIVE_RESOURCE_SCHEMA.CREATIVE_DIRECTION,
-          binding,
+          selected: true,
         })
       },
     }),

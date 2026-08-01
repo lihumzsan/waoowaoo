@@ -121,8 +121,7 @@ async function materializeDomainOutputs(
         sourceType: output.sourceType,
         sourceId: output.sourceId,
         name: output.name,
-        candidateSetId: output.candidateSetId,
-        candidateIndex: output.candidateIndex,
+        memberIndex: output.memberIndex,
       })
       const materialized = await materializeCreativeResourceInTransaction(tx, {
         resourceId: reserved.resourceId,

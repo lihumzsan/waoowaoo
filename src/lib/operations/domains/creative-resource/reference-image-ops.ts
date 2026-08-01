@@ -99,7 +99,6 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
         acceptsReferences: false,
         outputMediaTypes: ['image'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
@@ -132,7 +131,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
         const resourceId = buildCreativeResourceId({
           operationId: 'import_web_reference_image',
           requestId,
-          candidateIndex: 0,
+          memberIndex: 0,
         })
         const payload = {
           lifecycleProjection: buildCreativeResourceLifecycleProjection([
@@ -188,7 +187,7 @@ export function createCreativeResourceReferenceImageOperations(): ProjectAgentOp
               schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
               operationId: 'import_web_reference_image',
               requestId,
-              candidates: [{ resourceId, name: input.name, candidateIndex: 0 }],
+              members: [{ resourceId, name: input.name, memberIndex: 0 }],
             })
           },
         })

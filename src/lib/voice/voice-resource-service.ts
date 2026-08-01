@@ -1,8 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
 import {
-  bindCreativeResourceInTransaction,
   getCreativeResourceBindingInTransaction,
+  replaceCreativeResourceBindingInTransaction,
   unbindCreativeResourceInTransaction,
 } from '@/lib/creative-resource/binding-service'
 import {
@@ -72,8 +72,8 @@ export async function bindCharacterVoiceInTransaction(
       mediaType: 'audio',
       // A character voice is either a designed voice or a user-uploaded
       // audio sample; both bind the same way and feed video generation as
-      // reference audio, so the Binding — not the schema — stays the single
-      // authority for "this character's current voice".
+      // reference audio, so this one typed current-selection relation stays
+      // the authority for "this character's current voice".
       schemaId: {
         in: [
           CREATIVE_RESOURCE_SCHEMA.VOICE_REFERENCE,
@@ -89,13 +89,12 @@ export async function bindCharacterVoiceInTransaction(
       field: 'selection.resourceId',
     })
   }
-  return await bindCreativeResourceInTransaction(tx, {
+  return await replaceCreativeResourceBindingInTransaction(tx, {
     scope,
     role: CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
     slotKey: input.characterId,
     resourceId: input.selection.resourceId,
     source: 'bind_voice',
-    expectedVersion: current?.version ?? null,
   })
 }
 

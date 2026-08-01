@@ -21,6 +21,15 @@ export const CREATIVE_RESOURCE_CANONICAL_BINDINGS = {
 export const CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE = 'character_voice'
 export const CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE = 'project_asset_image'
 
+export const CREATIVE_RESOURCE_BINDING_ROLES = [
+  CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedCreativeDirection.role,
+  CREATIVE_RESOURCE_CANONICAL_BINDINGS.adoptedAssetManifest.role,
+  CREATIVE_RESOURCE_CHARACTER_VOICE_BINDING_ROLE,
+  CREATIVE_RESOURCE_ASSET_IMAGE_BINDING_ROLE,
+] as const
+
+export type CreativeResourceBindingRole = typeof CREATIVE_RESOURCE_BINDING_ROLES[number]
+
 export type CreativeResourceCanonicalBinding = typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS[
   keyof typeof CREATIVE_RESOURCE_CANONICAL_BINDINGS
 ]
@@ -114,7 +123,7 @@ export interface CreativeResourceMaterializationView {
 export interface CreativeResourceBindingView {
   readonly bindingId: string
   readonly scope: CreativeResourceScopeRef
-  readonly role: string
+  readonly role: CreativeResourceBindingRole
   readonly slotKey: string
   readonly resourceId: string
   readonly version: number
@@ -132,13 +141,11 @@ export interface CreativeResourceView {
   readonly schemaId: string
   readonly name: string
   readonly status: CreativeResourceStatus
-  readonly candidateSetId: string | null
-  readonly candidateIndex: number | null
+  readonly memberIndex: number | null
   readonly creativeDataVersion: number
   readonly creativeDataKeys: readonly string[]
   readonly materialization: CreativeResourceMaterializationView | null
   readonly pendingGeneration: CreativeResourcePendingGeneration | null
-  readonly bindings: readonly CreativeResourceBindingView[]
   readonly error: {
     readonly code: string | null
     readonly message: string
@@ -175,25 +182,9 @@ export type CreativeResourceSummaryView =
       readonly kind: 'empty'
     }
 
-export interface CreativeResourceCandidateSummaryView {
-  readonly resourceId: string
-  readonly summary: CreativeResourceSummaryView
-}
-
-export interface CreativeResourceCandidateView {
-  readonly candidateSetId: string
-  readonly resources: readonly CreativeResourceView[]
-  readonly summaries: readonly CreativeResourceCandidateSummaryView[]
-  readonly selectedResourceId: string | null
-}
-
-export interface CreativeResourceWorkingBindingView {
-  readonly bindingId: string
-  readonly scope: CreativeResourceScopeRef
-  readonly role: string
-  readonly slotKey: string
-  readonly version: number
-  readonly source: string
+export interface CreativeResourceCurrentSelectionView {
+  readonly kind: CreativeResourceBindingRole
+  readonly targetId: string
   readonly resourceId: string
   readonly schemaId: string
   readonly mediaType: CreativeResourceMediaType
@@ -201,9 +192,9 @@ export interface CreativeResourceWorkingBindingView {
 }
 
 export interface CreativeResourceWorkingSetView {
-  readonly adoptedCreativeDirection: CreativeResourceWorkingBindingView | null
-  readonly adoptedAssetManifest: CreativeResourceWorkingBindingView | null
-  readonly bindings: readonly CreativeResourceWorkingBindingView[]
+  readonly adoptedCreativeDirection: CreativeResourceCurrentSelectionView | null
+  readonly adoptedAssetManifest: CreativeResourceCurrentSelectionView | null
+  readonly currentSelections: readonly CreativeResourceCurrentSelectionView[]
   readonly availableResources: {
     readonly total: number
     readonly bySchema: ReadonlyArray<{
@@ -234,7 +225,6 @@ export interface CreativeResourceInputSummaryView extends CreativeResourceInputR
 
 export interface CreativeResourceCardView {
   readonly resource: CreativeResourceView
-  readonly candidates: CreativeResourceCandidateView | null
   readonly inputSummaries: readonly CreativeResourceInputSummaryView[]
   readonly presentation: {
     readonly rendererKey: string
@@ -254,7 +244,6 @@ export type CreativeResourceOperationContract =
       readonly acceptsReferences: boolean
       readonly outputMediaTypes: readonly CreativeResourceMediaType[]
       readonly outputSchemaIds: readonly string[]
-      readonly supportsCandidates: boolean
     }
 
 export function isCreativeResourceMediaType(value: unknown): value is CreativeResourceMediaType {
@@ -267,4 +256,9 @@ export function isCreativeResourceScopeKind(value: unknown): value is CreativeRe
 
 export function isCreativeResourceStatus(value: unknown): value is CreativeResourceStatus {
   return typeof value === 'string' && CREATIVE_RESOURCE_STATUSES.some((item) => item === value)
+}
+
+export function isCreativeResourceBindingRole(value: unknown): value is CreativeResourceBindingRole {
+  return typeof value === 'string'
+    && CREATIVE_RESOURCE_BINDING_ROLES.some((role) => role === value)
 }

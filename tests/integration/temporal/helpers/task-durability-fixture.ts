@@ -60,7 +60,7 @@ async function submitFixtureTask(input: {
   const resourceId = buildCreativeResourceId({
     operationId,
     requestId,
-    candidateIndex: 0,
+    memberIndex: 0,
   })
   const results = await prisma.$transaction(
     async (transaction) =>
@@ -117,11 +117,11 @@ async function submitFixtureTask(input: {
               schemaId: CREATIVE_RESOURCE_SCHEMA.WEB_REFERENCE_IMAGE,
               operationId,
               requestId,
-              candidates: [
+              members: [
                 {
                   resourceId,
                   name: `Task durability ${input.suffix}`,
-                  candidateIndex: 0,
+                  memberIndex: 0,
                 },
               ],
             })

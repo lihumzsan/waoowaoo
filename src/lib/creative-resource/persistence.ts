@@ -20,8 +20,7 @@ export type CreativeResourcePersistenceClient = Prisma.TransactionClient
 
 export interface ReservedCreativeResource {
   readonly resourceId: string
-  readonly candidateSetId: string | null
-  readonly candidateIndex: number | null
+  readonly memberIndex: number | null
   readonly status: 'pending' | 'ready' | 'failed' | 'canceled'
 }
 
@@ -30,10 +29,10 @@ export interface ReservedDomainCreativeResource extends ReservedCreativeResource
   readonly sourceId: string
 }
 
-export interface ReserveCreativeResourceCandidate {
+export interface ReserveCreativeResourceMember {
   readonly resourceId?: string
   readonly name: string
-  readonly candidateIndex: number
+  readonly memberIndex: number
 }
 
 export interface MaterializeCreativeResourceInput {
@@ -102,12 +101,12 @@ async function assertScopeOwnership(
   if (!episode) throw new Error('CREATIVE_RESOURCE_EPISODE_NOT_OWNED')
 }
 
-function assertCandidateIndex(index: number, seen?: Set<number>): void {
+function assertMemberIndex(index: number, seen?: Set<number>): void {
   if (!Number.isSafeInteger(index) || index < 0) {
-    throw new Error('CREATIVE_RESOURCE_CANDIDATE_INDEX_INVALID')
+    throw new Error('CREATIVE_RESOURCE_MEMBER_INDEX_INVALID')
   }
   if (seen?.has(index)) {
-    throw new Error(`CREATIVE_RESOURCE_CANDIDATE_INDEX_DUPLICATE:${String(index)}`)
+    throw new Error(`CREATIVE_RESOURCE_MEMBER_INDEX_DUPLICATE:${String(index)}`)
   }
   seen?.add(index)
 }
@@ -120,8 +119,7 @@ export async function reserveCreativeResourcesInTransaction(
     readonly schemaId: string
     readonly operationId: string
     readonly requestId: string
-    readonly candidateSetId?: string | null
-    readonly candidates: readonly ReserveCreativeResourceCandidate[]
+    readonly members: readonly ReserveCreativeResourceMember[]
   },
 ): Promise<readonly ReservedCreativeResource[]> {
   await assertScopeOwnership(tx, input.scope)
@@ -131,18 +129,17 @@ export async function reserveCreativeResourcesInTransaction(
   if (schema.mediaType !== input.mediaType) {
     throw new Error(`CREATIVE_RESOURCE_SCHEMA_MEDIA_MISMATCH:${schema.schemaId}:${input.mediaType}`)
   }
-  if (input.candidates.length === 0) throw new Error('CREATIVE_RESOURCE_CANDIDATES_REQUIRED')
+  if (input.members.length === 0) throw new Error('CREATIVE_RESOURCE_MEMBERS_REQUIRED')
 
-  const candidateIndexes = new Set<number>()
-  const candidateSetId = input.candidateSetId?.trim() || null
-  const rows = input.candidates.map((candidate) => {
-    assertCandidateIndex(candidate.candidateIndex, candidateIndexes)
+  const memberIndexes = new Set<number>()
+  const rows = input.members.map((member) => {
+    assertMemberIndex(member.memberIndex, memberIndexes)
     const resourceId = buildCreativeResourceId({
       operationId: input.operationId,
       requestId: input.requestId,
-      candidateIndex: candidate.candidateIndex,
+      memberIndex: member.memberIndex,
     })
-    const requestedId = candidate.resourceId?.trim() || resourceId
+    const requestedId = member.resourceId?.trim() || resourceId
     if (requestedId !== resourceId) {
       throw new Error(`CREATIVE_RESOURCE_ID_MISMATCH:${requestedId}:${resourceId}`)
     }
@@ -155,9 +152,8 @@ export async function reserveCreativeResourcesInTransaction(
       scopeId: input.scope.id,
       mediaType: input.mediaType,
       schemaId: schema.schemaId,
-      name: requireNonEmpty(candidate.name, 'CREATIVE_RESOURCE_NAME_REQUIRED'),
-      candidateSetId,
-      candidateIndex: candidate.candidateIndex,
+      name: requireNonEmpty(member.name, 'CREATIVE_RESOURCE_NAME_REQUIRED'),
+      memberIndex: member.memberIndex,
     }
   })
 
@@ -174,8 +170,7 @@ export async function reserveCreativeResourcesInTransaction(
       mediaType: true,
       schemaId: true,
       name: true,
-      candidateSetId: true,
-      candidateIndex: true,
+      memberIndex: true,
       status: true,
     },
   })
@@ -192,8 +187,7 @@ export async function reserveCreativeResourcesInTransaction(
       || row.mediaType !== expected.mediaType
       || row.schemaId !== expected.schemaId
       || row.name !== expected.name
-      || row.candidateSetId !== expected.candidateSetId
-      || row.candidateIndex !== expected.candidateIndex
+      || row.memberIndex !== expected.memberIndex
     ) {
       throw new Error(`CREATIVE_RESOURCE_ID_COLLISION:${expected.id}`)
     }
@@ -202,8 +196,7 @@ export async function reserveCreativeResourcesInTransaction(
     }
     return {
       resourceId: row.id,
-      candidateSetId: row.candidateSetId,
-      candidateIndex: row.candidateIndex,
+      memberIndex: row.memberIndex,
       status: row.status as ReservedCreativeResource['status'],
     }
   })
@@ -218,8 +211,7 @@ export async function reserveDomainCreativeResourceInTransaction(
     readonly sourceType: string
     readonly sourceId: string
     readonly name: string
-    readonly candidateSetId?: string | null
-    readonly candidateIndex?: number | null
+    readonly memberIndex?: number | null
   },
 ): Promise<ReservedDomainCreativeResource> {
   await assertScopeOwnership(tx, input.scope)
@@ -232,8 +224,8 @@ export async function reserveDomainCreativeResourceInTransaction(
   const sourceType = requireNonEmpty(input.sourceType, 'CREATIVE_RESOURCE_SOURCE_TYPE_REQUIRED')
   const sourceId = requireNonEmpty(input.sourceId, 'CREATIVE_RESOURCE_SOURCE_ID_REQUIRED')
   const resourceId = buildDomainCreativeResourceId({ sourceType, sourceId })
-  const candidateIndex = input.candidateIndex ?? null
-  if (candidateIndex !== null) assertCandidateIndex(candidateIndex)
+  const memberIndex = input.memberIndex ?? null
+  if (memberIndex !== null) assertMemberIndex(memberIndex)
   const expected = {
     id: resourceId,
     userId: input.scope.userId,
@@ -246,8 +238,7 @@ export async function reserveDomainCreativeResourceInTransaction(
     name: requireNonEmpty(input.name, 'CREATIVE_RESOURCE_NAME_REQUIRED'),
     sourceType,
     sourceId,
-    candidateSetId: input.candidateSetId?.trim() || null,
-    candidateIndex,
+    memberIndex,
   }
   await tx.creativeResource.createMany({ data: [expected], skipDuplicates: true })
   const stored = await tx.creativeResource.findUnique({
@@ -263,8 +254,7 @@ export async function reserveDomainCreativeResourceInTransaction(
       schemaId: true,
       sourceType: true,
       sourceId: true,
-      candidateSetId: true,
-      candidateIndex: true,
+      memberIndex: true,
       status: true,
     },
   })
@@ -279,8 +269,7 @@ export async function reserveDomainCreativeResourceInTransaction(
     || stored.schemaId !== expected.schemaId
     || stored.sourceType !== expected.sourceType
     || stored.sourceId !== expected.sourceId
-    || stored.candidateSetId !== expected.candidateSetId
-    || stored.candidateIndex !== expected.candidateIndex
+    || stored.memberIndex !== expected.memberIndex
   ) {
     throw new Error(`CREATIVE_RESOURCE_DOMAIN_COLLISION:${sourceType}:${sourceId}`)
   }
@@ -291,8 +280,7 @@ export async function reserveDomainCreativeResourceInTransaction(
     resourceId: stored.id,
     sourceType,
     sourceId,
-    candidateSetId: stored.candidateSetId,
-    candidateIndex: stored.candidateIndex,
+    memberIndex: stored.memberIndex,
     status: stored.status as ReservedCreativeResource['status'],
   }
 }

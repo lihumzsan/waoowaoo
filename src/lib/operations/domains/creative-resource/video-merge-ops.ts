@@ -103,7 +103,6 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
         acceptsReferences: true,
         outputMediaTypes: ['video'],
         outputSchemaIds: [CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO],
-        supportsCandidates: false,
       },
       confirmation: { kind: 'none', required: false },
       assistantWriteAuthority: {
@@ -144,7 +143,7 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
         const resourceId = buildCreativeResourceId({
           operationId: 'merge_videos',
           requestId,
-          candidateIndex: 0,
+          memberIndex: 0,
         })
         const resourceName = input.name ?? 'Merged video'
         const generationOptions = input.music
@@ -226,8 +225,8 @@ export function createCreativeResourceVideoMergeOperations(): ProjectAgentOperat
               schemaId: CREATIVE_RESOURCE_SCHEMA.GENERIC_VIDEO,
               operationId: 'merge_videos',
               requestId,
-              candidates: [
-                { resourceId, name: resourceName, candidateIndex: 0 },
+              members: [
+                { resourceId, name: resourceName, memberIndex: 0 },
               ],
             })
           },
