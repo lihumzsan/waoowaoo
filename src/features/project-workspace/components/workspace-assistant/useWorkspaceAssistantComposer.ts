@@ -29,15 +29,22 @@ export function useWorkspaceAssistantComposer(
     setMediaAttachments([])
   }, [scopeKey])
 
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (options?: {
+    readonly extraMediaAttachments?: readonly ProjectAssistantMediaAttachment[]
+  }) => {
     const submitScopeKey = scopeKey
     const normalizedText = text.trim()
-    if (!normalizedText && attachments.length === 0 && mediaAttachments.length === 0) return
+    const extras = (options?.extraMediaAttachments ?? []).filter((extra) => (
+      !mediaAttachments.some((item) => item.resourceId === extra.resourceId)
+    ))
+    const mergedMediaAttachments = [...mediaAttachments, ...extras]
+      .slice(0, PROJECT_ASSISTANT_MEDIA_ATTACHMENT_MAX_FILES)
+    if (!normalizedText && attachments.length === 0 && mergedMediaAttachments.length === 0) return
     setText('')
     setAttachments([])
     setMediaAttachments([])
     try {
-      await sendMessage({ text: normalizedText, attachments, mediaAttachments })
+      await sendMessage({ text: normalizedText, attachments, mediaAttachments: mergedMediaAttachments })
     } catch (error) {
       if (scopeKeyRef.current === submitScopeKey) {
         setText(normalizedText)

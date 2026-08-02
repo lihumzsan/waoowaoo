@@ -155,8 +155,89 @@ async function prepareUserMediaUpload(request: Request): Promise<PreparedUserUpl
   return prepared
 }
 
+const resourceAttachmentInputSchema = z.object({
+  resourceId: z.string().min(1).max(64),
+}).strict()
+
 export function createMediaUploadApiOperations(): ProjectAgentOperationRegistryDraft {
   return {
+    api_project_resource_attachment: defineOperation({
+      id: 'api_project_resource_attachment',
+      summary: 'API-only: Issue a signed chat-attachment receipt for an existing project image Resource so the selected canvas image can enter the model input protocol. Read-only: verifies ownership, media identity and the upload media whitelist, then signs the same attachment token the upload flow issues. No Resource or MediaObject is written.',
+      intent: 'query',
+      effects: {
+        writes: false,
+        billable: false,
+        destructive: false,
+        overwrite: false,
+        bulk: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      inputSchema: resourceAttachmentInputSchema,
+      outputSchema: uploadMediaOutputSchema,
+      execute: async (ctx, input) => {
+        const resource = await prisma.creativeResource.findUnique({
+          where: { id: input.resourceId },
+          select: {
+            id: true,
+            projectId: true,
+            mediaType: true,
+            name: true,
+            status: true,
+            media: {
+              select: {
+                publicId: true,
+                sha256: true,
+                mimeType: true,
+              },
+            },
+          },
+        })
+        if (!resource || resource.projectId !== ctx.projectId) {
+          throw new ApiError('NOT_FOUND', {
+            code: 'CREATIVE_RESOURCE_NOT_FOUND',
+            field: 'resourceId',
+          })
+        }
+        if (resource.mediaType !== 'image' || resource.status !== 'ready' || !resource.media) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'RESOURCE_ATTACHMENT_NOT_ELIGIBLE',
+            field: 'resourceId',
+            message: 'only ready image Resources with stored media can be attached to the assistant',
+          })
+        }
+        const accepted = resolveUserUploadAcceptedMedia(resource.media.mimeType)
+        if (!accepted || accepted.mediaType !== 'image' || !resource.media.sha256) {
+          throw new ApiError('INVALID_PARAMS', {
+            code: 'RESOURCE_ATTACHMENT_MEDIA_UNSUPPORTED',
+            field: 'resourceId',
+            message: 'the stored media format cannot enter the attachment protocol',
+          })
+        }
+        const name = resource.name.trim().slice(0, 200) || 'Image'
+        const attachmentToken = buildProjectAssistantAttachmentToken({
+          v: 1,
+          publicId: resource.media.publicId,
+          resourceId: resource.id,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+          mediaType: 'image',
+          fileName: `${name.slice(0, 190)}.${accepted.extension}`,
+          name,
+          sha256: resource.media.sha256.toLowerCase(),
+        })
+        return uploadMediaOutputSchema.parse({
+          success: true,
+          attachment: {
+            resourceId: resource.id,
+            attachmentToken,
+            mediaType: 'image',
+            name,
+          },
+        })
+      },
+    }),
     api_project_upload_media: defineOperation({
       id: 'api_project_upload_media',
       summary: 'API-only: Register one user-uploaded image or audio file (sniffed, sanitized, content-addressed, MediaObject-registered) as a chat attachment and return its signed registration receipt. No CreativeResource is created here; the Agent materializes an attachment on demand through register_uploaded_media.',

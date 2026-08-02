@@ -62,6 +62,47 @@ export function validateProjectAssistantMediaAttachmentFile(
   return null
 }
 
+interface MintProjectAssistantResourceAttachmentParams {
+  readonly projectId: string
+  readonly resourceId: string
+  /** Composer-only preview URL for the chip/thumb; never persisted. */
+  readonly previewUrl: string | null
+}
+
+/**
+ * Issues a signed attachment receipt for an existing project image Resource
+ * (the canvas selection), so it enters the message exactly like an uploaded
+ * attachment. The server is the only token authority; this is a plain fetch.
+ */
+export async function mintProjectAssistantResourceAttachment({
+  projectId,
+  resourceId,
+  previewUrl,
+}: MintProjectAssistantResourceAttachmentParams): Promise<ProjectAssistantMediaAttachment> {
+  const response = await apiFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/assistant/resource-attachments`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resourceId }),
+    },
+  )
+  if (!response.ok) {
+    throw await readClientApiError(response)
+  }
+  const payload: unknown = await response.json()
+  if (!isMediaUploadResponse(payload)) {
+    throw new Error('PROJECT_ASSISTANT_MEDIA_ATTACHMENT_UPLOAD_RESPONSE_INVALID')
+  }
+  return {
+    resourceId: payload.attachment.resourceId,
+    attachmentToken: payload.attachment.attachmentToken,
+    mediaType: payload.attachment.mediaType,
+    name: payload.attachment.name,
+    href: previewUrl,
+  }
+}
+
 export async function uploadProjectAssistantMediaAttachment({
   projectId,
   file,

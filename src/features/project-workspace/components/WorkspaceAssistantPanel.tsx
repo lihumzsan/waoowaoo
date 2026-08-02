@@ -23,6 +23,7 @@ import {
 } from '@/lib/project-agent/media-attachments'
 import {
   isProjectAssistantMediaFile,
+  mintProjectAssistantResourceAttachment,
   uploadProjectAssistantMediaAttachment,
   validateProjectAssistantMediaAttachmentFile,
 } from '@/lib/project-agent/media-attachments/client'
@@ -593,10 +594,35 @@ export default function WorkspaceAssistantPanel({
                         onChange={composer.setText}
                         onSubmit={async () => {
                           setAttachmentError(null)
+                          // The selected canvas image is delivered as a real
+                          // media attachment (signed receipt from the single
+                          // token authority), so the model actually sees it.
+                          // A mint failure blocks the send with a visible
+                          // error instead of silently sending a blind message.
+                          let extraMediaAttachments: readonly ProjectAssistantMediaAttachment[] = []
+                          if (selection?.mediaType === 'image') {
+                            try {
+                              extraMediaAttachments = [await mintProjectAssistantResourceAttachment({
+                                projectId,
+                                resourceId: selection.targetId,
+                                previewUrl: selection.previewUrl,
+                              })]
+                            } catch (error) {
+                              setAttachmentError(resolveClientError(error, t('attachments.mediaUploadFailed')))
+                              return
+                            }
+                          }
                           // Send failures surface through chat.error/controlError
                           // (rendered under the composer); never as an unhandled
                           // rejection reaching the React overlay.
-                          await composer.submit().catch(() => undefined)
+                          try {
+                            await composer.submit({ extraMediaAttachments })
+                          } catch {
+                            return
+                          }
+                          // The selection is consumed by the delivered message;
+                          // a lingering chip after send reads as "still pending".
+                          if (selection) onClearSelection()
                         }}
                         onStopReply={assistantRuntime.stopReply}
                         onAttachClick={attachmentPicker.open}
