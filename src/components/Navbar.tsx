@@ -1,96 +1,50 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { useSession } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
-import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import { AppIcon } from '@/components/ui/icons'
 import { BrandLogoShape } from '@/components/ui/icons/BrandLogoShape'
 import UpdateNoticeModal from './UpdateNoticeModal'
 import { useGithubReleaseUpdate } from '@/hooks/common/useGithubReleaseUpdate'
-import { Link } from '@/i18n/navigation'
+import { Link, useRouter } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 import {
   fetchPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
-import type { ProfileSection } from '@/lib/profile/sections'
+import NavbarAccountMenu, { NavbarUserAvatar } from './navbar/NavbarAccountMenu'
+import {
+  buildNavbarSettingsMenuItems,
+  isNavbarBalancePayload,
+  shouldCloseNavbarSettingsMenu,
+  type NavbarUserBalance,
+} from './navbar/account-menu-model'
 
-interface NavbarSettingsBoundary {
-  contains(target: Node | null): boolean
-}
+// 单测/调用方契约:纯投影 helper 的权威实现在 navbar/account-menu-model.ts。
+export {
+  buildNavbarSettingsMenuItems,
+  formatCompactCreditAmount,
+  formatCreditAmount,
+  shouldCloseNavbarSettingsMenu,
+  type NavbarSettingsMenuItem,
+} from './navbar/account-menu-model'
+
+const ACCOUNT_MENU_WIDTH = 300
 
 interface NavbarProps {
   reserveLayoutSpace?: boolean
   initialDeploymentFeatures?: PublicDeploymentFeatures | null
-}
-
-interface NavbarSettingsLabels {
-  apiConfig: string
-  personalCenter: string
-}
-
-export interface NavbarSettingsMenuItem {
-  section: ProfileSection
-  icon: AppIconName
-  label: string
-}
-
-export function shouldCloseNavbarSettingsMenu(
-  target: Node | null,
-  trigger: NavbarSettingsBoundary | null | undefined,
-  menu: NavbarSettingsBoundary | null | undefined,
-) {
-  if (target === null) return false
-  if (trigger?.contains(target)) return false
-  if (menu?.contains(target)) return false
-  return true
-}
-
-interface NavbarUserBalance {
-  currency: string
-  balance: number
-  frozenAmount: number
-  totalSpent: number
-}
-
-function isNavbarBalancePayload(value: unknown): value is { success: boolean } & NavbarUserBalance {
-  if (!value || typeof value !== 'object') return false
-  const record = value as Record<string, unknown>
-  return (
-    record.success === true &&
-    typeof record.balance === 'number' &&
-    typeof record.frozenAmount === 'number' &&
-    typeof record.totalSpent === 'number'
-  )
-}
-
-export function formatCreditAmount(value: number, unit: string): string {
-  const amount = Number.isFinite(value) ? value : 0
-  const normalizedUnit = unit.trim()
-  if (normalizedUnit.length === 0) return amount.toFixed(2)
-  return `${amount.toFixed(2)} ${normalizedUnit}`
-}
-
-export function formatCompactCreditAmount(value: number): string {
-  return formatCreditAmount(value, '')
-}
-
-export function buildNavbarSettingsMenuItems(
-  features: PublicDeploymentFeatures | null,
-  labels: NavbarSettingsLabels,
-): NavbarSettingsMenuItem[] {
-  return [
-    ...(features?.showApiConfig === true
-      ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: labels.apiConfig }]
-      : []),
-    ...(features?.showBilling === true
-      ? [{ section: 'overview' as const, icon: 'user' as const, label: labels.personalCenter }]
-      : []),
-  ]
+  /**
+   * viewport(默认):dock 停靠视口右上角。
+   * assistant-panel:画布页专用,dock 贴住助手玻璃塔左上外缘,
+   * 通过面板写入的 --workspace-assistant-panel-width 跟随面板拖宽。
+   */
+  dockAnchor?: 'viewport' | 'assistant-panel'
 }
 
 function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
@@ -98,10 +52,9 @@ function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
     'block rounded-full border border-[var(--glass-stroke-base)] bg-[var(--glass-tone-neutral-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] motion-safe:animate-pulse'
 
   return (
-    <div role="status" aria-label={label} className="flex items-center gap-2.5">
-      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-20`} />
-      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-24`} />
-      <span aria-hidden="true" className={`${skeletonClassName} h-8 w-10`} />
+    <div role="status" aria-label={label} className="flex items-center gap-1.5">
+      <span aria-hidden="true" className={`${skeletonClassName} h-9 w-9`} />
+      <span aria-hidden="true" className={`${skeletonClassName} h-9 w-9`} />
       <span className="sr-only">{label}</span>
     </div>
   )
@@ -110,10 +63,12 @@ function NavbarSessionLoadingSkeleton({ label }: { label: string }) {
 export default function Navbar({
   reserveLayoutSpace = true,
   initialDeploymentFeatures = null,
+  dockAnchor = 'viewport',
 }: NavbarProps) {
   const { data: session, status } = useSession()
   const t = useTranslations('nav')
   const tc = useTranslations('common')
+  const router = useRouter()
   const logoUid = `navbar-logo-${useId().replace(/:/g, '')}`
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(initialDeploymentFeatures)
   const showUpdateCheck = deploymentFeatures?.showUpdateCheck === true
@@ -131,13 +86,13 @@ export default function Navbar({
   const settingsMenuRef = useRef<HTMLDivElement>(null)
   const downloadLogsHref = '/api/admin/download-logs'
   const settingsMenuId = 'navbar-settings-menu'
-  const navControlClass = 'glass-selection-control inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium'
 
   const showPricingLink = deploymentFeatures?.showPricingPage === true
   const showRecharge = deploymentFeatures?.showRecharge === true
   const showBilling = deploymentFeatures?.showBilling === true
   const showDownloadLogs = deploymentFeatures?.showDownloadLogs === true
   const userName = session?.user?.name ?? t('profile')
+  const userEmail = session?.user?.email ?? null
   const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
@@ -157,6 +112,13 @@ export default function Navbar({
       setTimeout(() => { setCheckMsg(null); setCheckMsgFading(false) }, 3000)
     }, 100)
   }
+
+  const handleSignOut = useCallback(async () => {
+    setSettingsOpen(false)
+    await signOut({ redirect: false, callbackUrl: '/' })
+    router.replace({ pathname: '/' })
+    router.refresh()
+  }, [router])
 
   useEffect(() => {
     setMounted(true)
@@ -209,7 +171,7 @@ export default function Navbar({
       if (!trigger) return
 
       const rect = trigger.getBoundingClientRect()
-      const width = 280
+      const width = ACCOUNT_MENU_WIDTH
       const viewportPadding = 16
       const maxLeft = Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
       const left = Math.min(Math.max(viewportPadding, rect.right - width), maxLeft)
@@ -250,97 +212,14 @@ export default function Navbar({
     }
   }, [settingsOpen])
 
-  const settingsMenu = (
-    <div
-      id={settingsMenuId}
-      ref={settingsMenuRef}
-      role="menu"
-      aria-label={t('profile')}
-      style={settingsMenuStyle ?? undefined}
-      className="z-[1000] rounded-xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface-strong)] p-2 shadow-[0_18px_50px_-24px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-    >
-      {/* 账户头部：仅用户名 */}
-      <div className="rounded-lg px-3 py-2">
-        <div className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{userName}</div>
-      </div>
-
-      {/* 余额信息 */}
-      {balance ? (
-        <div className="mt-1 rounded-lg border border-[var(--glass-stroke-soft)] bg-[var(--glass-bg-muted)] px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs text-[var(--glass-text-secondary)]">
-              <AppIcon name="coins" className="h-3.5 w-3.5" />
-              {t('account.balance')}
-            </span>
-            {showRecharge ? (
-              <Link
-                href={{ pathname: '/profile', query: { section: 'overview', recharge: 'open' } }}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setSettingsOpen(false)}
-                className="glass-btn-base glass-btn-primary px-2.5 py-1 text-xs font-medium"
-              >
-                {t('account.recharge')}
-              </Link>
-            ) : null}
-          </div>
-          <div className="mt-1 text-lg font-semibold text-[var(--glass-text-primary)]">
-            {formatCreditAmount(balance.balance, creditsUnit)}
-          </div>
-          {showBilling ? (
-            <div className="mt-1.5 flex items-center gap-3 text-[11px] text-[var(--glass-text-tertiary)]">
-              <span>{t('account.frozen')}: {formatCreditAmount(balance.frozenAmount, creditsUnit)}</span>
-              <span>{t('account.totalSpent')}: {formatCreditAmount(balance.totalSpent, creditsUnit)}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {settingsMenuItems.length > 0 || balance ? <div className="my-2 h-px bg-[var(--glass-stroke-base)]" /> : null}
-
-      {settingsMenuItems.map(item => (
-        <Link
-          key={item.section}
-          href={{ pathname: '/profile', query: { section: item.section } }}
-          target="_blank"
-          rel="noopener noreferrer"
-          role="menuitem"
-          onClick={() => setSettingsOpen(false)}
-          className="glass-selection-control group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
-        >
-          <AppIcon name={item.icon} className="h-4 w-4 transition-transform group-hover:scale-110" />
-          <span>{item.label}</span>
-        </Link>
-      ))}
-      {showDownloadLogs ? (
-        <>
-          <div className="my-2 h-px bg-[var(--glass-stroke-base)]" />
-          <a
-            href={downloadLogsHref}
-            download
-            role="menuitem"
-            className="glass-selection-control group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
-            title={t('downloadLogs')}
-          >
-            <AppIcon name="download" className="h-4 w-4 transition-transform group-hover:scale-110" />
-            <span>{t('downloadLogs')}</span>
-          </a>
-        </>
-      ) : null}
-      {showUpdateCheck ? (
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => void handleCheckUpdate()}
-          disabled={manualChecking}
-          className="glass-selection-control group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium disabled:opacity-50"
-        >
-          <AppIcon name="refresh" className={`h-4 w-4 transition-transform group-hover:scale-110 ${manualChecking ? 'animate-spin' : ''}`} />
-          <span>{tc('updateNotice.checkUpdate')}</span>
-        </button>
-      ) : null}
-    </div>
-  )
+  const dockStyle: CSSProperties | undefined =
+    dockAnchor === 'assistant-panel'
+      ? {
+          position: 'fixed',
+          top: '0.75rem',
+          right: 'calc(var(--workspace-assistant-panel-width, 0px) + 0.75rem)',
+        }
+      : undefined
 
   return (
     <>
@@ -381,38 +260,20 @@ export default function Navbar({
             ) : null}
             <span className="sr-only">{tc('betaVersion', { version: currentVersion })}</span>
           </div>
-          <div className="glass-surface-nav pointer-events-auto flex min-h-[52px] items-center gap-2 px-2 py-2">
+          <div className="glass-dock-capsule pointer-events-auto" style={dockStyle}>
             {status === 'loading' ? (
               <NavbarSessionLoadingSkeleton label={tc('loading')} />
             ) : session ? (
               <>
-                {showPricingLink ? (
-                  <Link
-                    href={{ pathname: '/pricing' }}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={navControlClass}
-                  >
-                    {t('pricing')}
-                  </Link>
-                ) : null}
                 <Link
                   href={{ pathname: '/workspace' }}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={navControlClass}
+                  className="glass-dock-item"
+                  title={t('workspace')}
+                  aria-label={t('workspace')}
                 >
-                  <AppIcon name="monitor" className="w-4 h-4" />
-                  {t('workspace')}
-                </Link>
-                <Link
-                  href={{ pathname: '/workspace/asset-hub' }}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={navControlClass}
-                >
-                  <AppIcon name="folderHeart" className="w-4 h-4" />
-                  {t('assetHub')}
+                  <AppIcon name="monitor" className="h-[18px] w-[18px]" />
                 </Link>
                 <div ref={settingsTriggerRef} className="relative">
                   <button
@@ -421,20 +282,13 @@ export default function Navbar({
                     aria-expanded={settingsOpen}
                     aria-controls={settingsMenuId}
                     onClick={() => setSettingsOpen(open => !open)}
-                    className={navControlClass}
+                    className="glass-dock-item"
                     title={userName}
+                    aria-label={userName}
                   >
-                    <span className="max-w-[10rem] truncate">{userName}</span>
-                    {balance ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--glass-tone-info-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--glass-tone-info-fg)]">
-                        <AppIcon name="coins" className="h-3 w-3" />
-                        {formatCompactCreditAmount(balance.balance)}
-                      </span>
-                    ) : null}
-                    <AppIcon name="chevronDown" className={`h-3.5 w-3.5 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
+                    <NavbarUserAvatar name={userName} />
                   </button>
                 </div>
-                <LanguageSwitcher />
                 {!mounted ? (
                   <div className="hidden" aria-hidden="true">
                     {settingsMenuItems.map(item => (
@@ -452,7 +306,6 @@ export default function Navbar({
                   </div>
                 ) : null}
               </>
-
             ) : (
               <>
                 {showPricingLink ? (
@@ -465,7 +318,7 @@ export default function Navbar({
                 ) : null}
                 <Link
                   href={{ pathname: '/auth/signin' }}
-                  className="glass-btn-base glass-btn-primary px-4 py-2 text-sm font-medium"
+                  className="glass-btn-base glass-btn-cta rounded-full px-4 py-2 text-sm font-medium"
                 >
                   {t('authEntry')}
                 </Link>
@@ -487,7 +340,29 @@ export default function Navbar({
           onDismiss={dismissCurrentUpdate}
         />
       ) : null}
-      {mounted && settingsOpen && settingsMenuStyle ? createPortal(settingsMenu, document.body) : null}
+      {mounted && settingsOpen && settingsMenuStyle ? createPortal(
+        <NavbarAccountMenu
+          menuId={settingsMenuId}
+          menuRef={settingsMenuRef}
+          style={settingsMenuStyle}
+          userName={userName}
+          userEmail={userEmail}
+          balance={balance}
+          creditsUnit={creditsUnit}
+          showBilling={showBilling}
+          showRecharge={showRecharge}
+          showPricingLink={showPricingLink}
+          showDownloadLogs={showDownloadLogs}
+          showUpdateCheck={showUpdateCheck}
+          manualChecking={manualChecking}
+          downloadLogsHref={downloadLogsHref}
+          settingsMenuItems={settingsMenuItems}
+          onCheckUpdate={() => void handleCheckUpdate()}
+          onClose={() => setSettingsOpen(false)}
+          onSignOut={() => void handleSignOut()}
+        />,
+        document.body,
+      ) : null}
     </>
   )
 }

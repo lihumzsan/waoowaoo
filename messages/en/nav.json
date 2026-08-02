@@ -5,11 +5,12 @@
     "profile": "Settings",
     "settingsMenu": {
         "apiConfig": "API Configuration",
-        "personalCenter": "Profile"
+        "personalCenter": "Profile",
+        "language": "Language"
     },
     "account": {
         "balance": "Balance",
-        "recharge": "Top Up",
+        "upgrade": "Upgrade",
         "frozen": "Frozen",
         "totalSpent": "Spent",
         "creditsUnit": "credits"

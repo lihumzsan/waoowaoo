@@ -70,13 +70,6 @@ async function writeCanvasLayout(
   return payload.layout
 }
 
-async function resetCanvasLayout(projectId: string, episodeId: string): Promise<void> {
-  const search = new URLSearchParams({ episodeId })
-  const response = await apiFetch(`/api/projects/${projectId}/canvas-layout?${search.toString()}`, {
-    method: 'DELETE',
-  })
-  await requireSuccessfulResponse(response)
-}
 
 export function useCanvasLayoutPersistence(params: {
   readonly projectId: string
@@ -123,21 +116,6 @@ export function useCanvasLayoutPersistence(params: {
       restoreLayoutCache(context)
     },
   })
-  const resetMutation = useMutation({
-    mutationFn: () => resetCanvasLayout(params.projectId, params.episodeId),
-    onMutate: async (): Promise<CanvasLayoutMutationContext> => {
-      await queryClient.cancelQueries({ queryKey: layoutQueryKey })
-      const previous = queryClient.getQueryData<CanvasLayoutPersistenceResult>(layoutQueryKey)
-      setLayoutCache(null)
-      return { previous }
-    },
-    onSuccess: () => {
-      setLayoutCache(null)
-    },
-    onError: (_error, _input, context) => {
-      restoreLayoutCache(context)
-    },
-  })
 
   return {
     layout: query.data?.layout ?? null,
@@ -145,8 +123,7 @@ export function useCanvasLayoutPersistence(params: {
     isLoading: query.isLoading,
     loadError: query.error,
     saveLayout: mutation.mutateAsync,
-    resetLayout: resetMutation.mutateAsync,
-    isSaving: mutation.isPending || resetMutation.isPending,
-    saveError: mutation.error || resetMutation.error,
+    isSaving: mutation.isPending,
+    saveError: mutation.error,
   }
 }

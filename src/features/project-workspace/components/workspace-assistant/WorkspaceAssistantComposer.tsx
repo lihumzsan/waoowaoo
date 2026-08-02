@@ -66,7 +66,7 @@ export function WorkspaceAssistantComposer({
 
   return (
     <div>
-      <div className="flex flex-col rounded-[22px] border border-[var(--glass-stroke-base)] bg-white/95 px-4 pb-2.5 pt-3 shadow-[0_6px_20px_rgba(15,23,42,0.07)]">
+      <div className="flex flex-col rounded-2xl border border-white/70 bg-white/85 px-4 pb-2.5 pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_6px_20px_-8px_rgba(15,23,42,0.12)] backdrop-blur-xl">
         {selection ? (
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 ring-1 ring-slate-200">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white text-[var(--glass-text-tertiary)] ring-1 ring-slate-200">

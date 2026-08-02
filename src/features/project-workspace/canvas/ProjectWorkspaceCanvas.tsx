@@ -126,7 +126,6 @@ function ProjectWorkspaceCanvasContent({
   const episodeName = typeof episodeData?.name === 'string' ? episodeData.name : undefined
   const { data: projectData } = useProjectData(projectId)
   const projectAspectRatio = projectData?.videoRatio ?? null
-  const [showArchivedResources, setShowArchivedResources] = useState(false)
   const {
     data: canvasActions,
     isLoading: canvasActionsLoading,
@@ -145,9 +144,7 @@ function ProjectWorkspaceCanvasContent({
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
-  const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [hiddenNodeKeys, setHiddenNodeKeys] = useState<ReadonlySet<string>>(() => new Set())
-  const [showHiddenNodes, setShowHiddenNodes] = useState(false)
   const [preview, setPreview] = useState<{
     readonly members: readonly WorkspaceCreativeResourceCardMemberView[]
     readonly initialResourceId: string
@@ -189,7 +186,6 @@ function ProjectWorkspaceCanvasContent({
   const {
     layout,
     saveLayout,
-    resetLayout: resetSavedLayout,
   } = useCanvasLayoutPersistence({
     projectId,
     episodeId: episodeId ?? '',
@@ -239,10 +235,10 @@ function ProjectWorkspaceCanvasContent({
   userNodePositionsRef.current = userNodePositions
   const visibleResolvedProjectedNodes = useMemo(
     () => resolvedProjectedNodes.filter((node) => (
-      (showHiddenNodes || !hiddenNodeKeys.has(node.id))
-      && (showArchivedResources || !node.data.resourceDetails.resource.archivedAt)
+      !hiddenNodeKeys.has(node.id)
+      && !node.data.resourceDetails.resource.archivedAt
     )),
-    [hiddenNodeKeys, resolvedProjectedNodes, showArchivedResources, showHiddenNodes],
+    [hiddenNodeKeys, resolvedProjectedNodes],
   )
   const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
     nodes: visibleResolvedProjectedNodes,
@@ -307,7 +303,7 @@ function ProjectWorkspaceCanvasContent({
   } = useCanvasFocusFollow({
     reactFlow,
     containerRef: canvasRef,
-    enabled: autoFollowEnabled,
+    enabled: true,
     focusNodeIds,
     focusRequestKey: activeAssistantFocusRequest?.requestKey ?? null,
   })
@@ -481,15 +477,6 @@ function ProjectWorkspaceCanvasContent({
     void reactFlow.setViewport(nextViewport)
   }, [notifyCanvasUserInteraction, reactFlow])
 
-  const resetLayout = useCallback(() => {
-    if (!episodeId) return
-    notifyCanvasUserInteraction()
-    setUserNodePositions(new Map())
-    void resetSavedLayout().catch((error: unknown) => {
-      _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
-    })
-  }, [episodeId, notifyCanvasUserInteraction, resetSavedLayout])
-
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
     void reactFlow.fitView({ padding: 0.14, duration: 180 })
@@ -502,18 +489,6 @@ function ProjectWorkspaceCanvasContent({
     notifyCanvasUserInteraction()
     void reactFlow.zoomOut({ duration: 160 })
   }, [notifyCanvasUserInteraction, reactFlow])
-  const toggleAutoFollow = useCallback(() => {
-    notifyCanvasUserInteraction()
-    setAutoFollowEnabled((current) => !current)
-  }, [notifyCanvasUserInteraction])
-  const toggleHiddenNodes = useCallback(() => {
-    notifyCanvasUserInteraction()
-    setShowHiddenNodes((current) => !current)
-  }, [notifyCanvasUserInteraction])
-  const toggleArchivedResources = useCallback(() => {
-    notifyCanvasUserInteraction()
-    setShowArchivedResources((current) => !current)
-  }, [notifyCanvasUserInteraction])
   const selectedNode = useMemo(
     () => flowNodes.find((node) => node.id === selection?.nodeId) ?? null,
     [flowNodes, selection?.nodeId],
@@ -539,7 +514,7 @@ function ProjectWorkspaceCanvasContent({
     if (hidden) next.add(nodeId)
     else next.delete(nodeId)
     setHiddenNodeKeys(next)
-    if (hidden && !showHiddenNodes && selection?.nodeId === nodeId) onSelectionChange(null)
+    if (hidden && selection?.nodeId === nodeId) onSelectionChange(null)
     const positionedNodes = applyWorkspaceCanvasUserPositions({
       nodes: resolvedProjectedNodesRef.current,
       positions: userNodePositionsRef.current,
@@ -549,7 +524,7 @@ function ProjectWorkspaceCanvasContent({
       setHiddenNodeKeys((current) => current === next ? previous : current)
       showError(error, t('layoutSaveFailed'))
     })
-  }, [onSelectionChange, persistCurrentLayout, selection?.nodeId, showError, showHiddenNodes, t])
+  }, [onSelectionChange, persistCurrentLayout, selection?.nodeId, showError, t])
 
   const beginResourceOperation = useCallback((operation: WorkspaceCanvasResourceOperationView) => {
     void operationAction.begin({
@@ -678,11 +653,8 @@ function ProjectWorkspaceCanvasContent({
                   const card = selectedNode.data.resourceDetails
                   const members = (card.alternativeGroup?.members ?? [card])
                     .filter((member) => (
-                      (showArchivedResources || !member.resource.archivedAt)
-                      && (
-                        showHiddenNodes
-                        || !hiddenNodeKeys.has(workspaceNodeId.resourceCard(member.resource.resourceId))
-                      )
+                      !member.resource.archivedAt
+                      && !hiddenNodeKeys.has(workspaceNodeId.resourceCard(member.resource.resourceId))
                     ))
                   setPreview({
                     members,
@@ -728,23 +700,12 @@ function ProjectWorkspaceCanvasContent({
             }}
           >
             <CanvasViewportControls
-              resetLabel={t('toolbar.resetLayout')}
               fitViewLabel={t('toolbar.fitView')}
               zoomInLabel={t('toolbar.zoomIn')}
               zoomOutLabel={t('toolbar.zoomOut')}
-              autoFollowLabel={t('toolbar.autoFollow')}
-              autoFollowEnabled={autoFollowEnabled}
-              showHiddenLabel={t('toolbar.showHidden')}
-              showArchivedLabel={t('toolbar.showArchived')}
-              showHiddenNodes={showHiddenNodes}
-              showArchivedResources={showArchivedResources}
-              onResetLayout={resetLayout}
               onFitView={fitView}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
-              onToggleAutoFollow={toggleAutoFollow}
-              onToggleHiddenNodes={toggleHiddenNodes}
-              onToggleArchivedResources={toggleArchivedResources}
             />
           </Panel>
         </ReactFlow>

@@ -82,6 +82,26 @@
   --glass-selection-border: transparent;
   --glass-selection-focus-ring: rgba(10, 10, 10, 0.1);
   --glass-selection-shadow: none;
+
+  /* V3 — Arc/Raycast creative-tool layer */
+  --glass-accent-deep: #1d63e8;
+  --glass-cta-gradient: linear-gradient(135deg, var(--glass-accent-from) 0%, var(--glass-accent-deep) 100%);
+  --glass-cta-shadow: 0 10px 26px -10px rgba(47, 123, 255, 0.5);
+  --glass-cta-shadow-hover: 0 14px 30px -10px rgba(47, 123, 255, 0.6);
+  --glass-tower-bg: rgba(255, 255, 255, 0.78);
+  --glass-tower-blur: 28px;
+  --glass-tower-saturate: 1.5;
+  --glass-tower-radius: 20px;
+  --glass-tower-highlight: rgba(255, 255, 255, 0.6);
+  --glass-tower-shadow: -10px 0 30px -22px rgba(15, 23, 42, 0.14);
+  --glass-dock-bg: rgba(255, 255, 255, 0.85);
+  --glass-dock-blur: 20px;
+  --glass-dock-shadow: 0 10px 30px -14px rgba(15, 23, 42, 0.35);
+  --glass-menu-card-bg: rgba(255, 255, 255, 0.92);
+  --glass-menu-card-shadow:
+    0 24px 60px -24px rgba(15, 23, 42, 0.4),
+    0 4px 14px -8px rgba(15, 23, 42, 0.14);
+  --glass-meter-track: rgba(15, 23, 42, 0.08);
 }
 
 /* Low-cost preset for performance-sensitive environments */

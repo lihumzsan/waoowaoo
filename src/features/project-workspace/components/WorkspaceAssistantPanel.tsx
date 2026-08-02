@@ -51,7 +51,7 @@ import { WorkspaceAssistantRepeatedToolCallGroupProvider } from './workspace-ass
 import { WorkspaceAssistantRunningSurfaceProvider } from './workspace-assistant/WorkspaceAssistantReasoning'
 import {
   buildWorkspaceAssistantPanelLayout,
-  WORKSPACE_ASSISTANT_TOP_OFFSET,
+  WORKSPACE_ASSISTANT_PANEL_WIDTH_CSS_VAR,
 } from './workspace-assistant/panel-layout'
 import { useWorkspaceAssistantCanvasFocus } from './workspace-assistant/useWorkspaceAssistantCanvasFocus'
 import { useWorkspaceAssistantComposer } from './workspace-assistant/useWorkspaceAssistantComposer'
@@ -584,6 +584,14 @@ export default function WorkspaceAssistantPanel({
   panelScopeKeyRef.current = panelScopeKey
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
+  // 把面板实际宽度发布到 root CSS 变量,画布页 dock 依赖它贴靠面板左缘。
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty(WORKSPACE_ASSISTANT_PANEL_WIDTH_CSS_VAR, `${panelLayout.panelWidthPx}px`)
+    return () => {
+      root.style.removeProperty(WORKSPACE_ASSISTANT_PANEL_WIDTH_CSS_VAR)
+    }
+  }, [panelLayout.panelWidthPx])
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage, panelScopeKey)
   const { applyDraftRequest } = composer
   useEffect(() => {
@@ -799,11 +807,9 @@ export default function WorkspaceAssistantPanel({
       data-state={panelLayout.state}
     >
       <div
-        className={`pointer-events-auto fixed right-4 z-20 overflow-hidden rounded-[34px] border border-white/80 bg-white/82 ring-1 ring-[var(--glass-stroke-base)]/70 backdrop-blur-2xl ${panelResize.isResizing ? '' : 'transition-[width] duration-300 ease-out'}`}
+        className={`glass-tower pointer-events-auto fixed inset-y-0 right-0 z-20 overflow-hidden ${panelResize.isResizing ? '' : 'transition-[width] duration-200 ease-out'}`}
         style={{
-          top: WORKSPACE_ASSISTANT_TOP_OFFSET,
           width: `${panelLayout.panelWidthPx}px`,
-          height: `calc(100vh - ${WORKSPACE_ASSISTANT_TOP_OFFSET} - 1.5rem)`,
         }}
         data-state={panelLayout.state}
       >

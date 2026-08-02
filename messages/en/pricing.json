@@ -67,12 +67,8 @@
     "estimatePrefix": "Estimated charge {amount}",
     "estimateAmount": "{amount}",
     "unitValue": "1 credit = ¥1",
-    "infoFooterTitle": "Pricing Rules, Policies, and Merchant Information",
-    "infoFooterDescription": "Open any section below to review the full details.",
-    "creditRulesTitle": "Credits and pricing rules",
-    "creditRulesHint": "How credits are billed",
     "paymentTitle": "Top-up and payment",
-    "paymentHint": "Stripe · payment methods · settlement",
-    "merchantHint": "Merchant"
+    "compareTitle": "Plan comparison",
+    "merchantMoreLink": "More merchant details"
   }
 }

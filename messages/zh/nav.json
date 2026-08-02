@@ -5,11 +5,12 @@
     "profile": "设置中心",
     "settingsMenu": {
         "apiConfig": "API 配置",
-        "personalCenter": "个人中心"
+        "personalCenter": "个人中心",
+        "language": "语言"
     },
     "account": {
         "balance": "可用余额",
-        "recharge": "充值",
+        "upgrade": "升级",
         "frozen": "冻结",
         "totalSpent": "累计消费",
         "creditsUnit": "额度"

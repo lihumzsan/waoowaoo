@@ -29,13 +29,9 @@
   "canvas": {
     "workspace": {
       "toolbar": {
-        "resetLayout": "Reset layout",
         "fitView": "Fit view",
         "zoomIn": "Zoom in",
-        "zoomOut": "Zoom out",
-        "autoFollow": "Fit when new content appears",
-        "showHidden": "Show hidden",
-        "showArchived": "Show archived"
+        "zoomOut": "Zoom out"
       },
       "actions": {
         "discuss": "Discuss with AI",

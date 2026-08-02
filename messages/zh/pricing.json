@@ -67,12 +67,8 @@
     "estimatePrefix": "预计支付 {amount}",
     "estimateAmount": "{amount}",
     "unitValue": "1 credit = ¥1",
-    "infoFooterTitle": "价格规则、政策与商户信息",
-    "infoFooterDescription": "点击下方任意条目展开查看完整内容。",
-    "creditRulesTitle": "额度与价格规则",
-    "creditRulesHint": "credits 如何计费",
     "paymentTitle": "充值与支付",
-    "paymentHint": "Stripe · 支付方式 · 结算",
-    "merchantHint": "Merchant"
+    "compareTitle": "套餐对比",
+    "merchantMoreLink": "查看更多商户信息"
   }
 }

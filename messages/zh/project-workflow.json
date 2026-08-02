@@ -29,13 +29,9 @@
   "canvas": {
     "workspace": {
       "toolbar": {
-        "resetLayout": "重置布局",
         "fitView": "适应画布",
         "zoomIn": "放大",
-        "zoomOut": "缩小",
-        "autoFollow": "新增内容时适应画布",
-        "showHidden": "显示已隐藏",
-        "showArchived": "显示已归档"
+        "zoomOut": "缩小"
       },
       "actions": {
         "discuss": "和 AI 讨论",

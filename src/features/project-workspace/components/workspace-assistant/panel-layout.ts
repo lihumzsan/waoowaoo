@@ -1,7 +1,12 @@
 export const WORKSPACE_ASSISTANT_PANEL_WIDTH_PX = 500
 export const WORKSPACE_ASSISTANT_PANEL_MIN_WIDTH_PX = 380
 export const WORKSPACE_ASSISTANT_PANEL_MAX_WIDTH_PX = 760
-export const WORKSPACE_ASSISTANT_TOP_OFFSET = '6rem'
+
+/**
+ * 面板把当前宽度写到 root 的这个 CSS 变量上;
+ * 画布页 dock(Navbar dockAnchor="assistant-panel")用它贴住面板左缘并跟随拖宽。
+ */
+export const WORKSPACE_ASSISTANT_PANEL_WIDTH_CSS_VAR = '--workspace-assistant-panel-width'
 
 export interface WorkspaceAssistantPanelLayoutState {
   occupiedWidthPx: number

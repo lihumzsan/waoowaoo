@@ -1,6 +1,5 @@
 import type {
   OfficialContactPageContent,
-  OfficialLegalPageContent,
   OfficialPricingPageContent,
 } from '@/lib/public-site/official-content'
 
@@ -16,16 +15,9 @@ export interface GlassPlan {
   readonly details: readonly string[]
 }
 
-export interface GlassPolicy {
-  readonly id: 'terms' | 'privacy' | 'refund'
-  readonly title: string
-  readonly updatedAt: string
-  readonly sections: ReadonlyArray<{ readonly title: string; readonly body: string }>
-}
-
 export interface GlassPricingContent {
   readonly brand: string
-  readonly eyebrow: string
+  readonly title: string
   readonly subtitle: string
   readonly plans: readonly GlassPlan[]
   readonly compareRows: ReadonlyArray<{ readonly label: string; readonly values: readonly string[] }>
@@ -45,37 +37,21 @@ export interface GlassPricingContent {
       readonly items: readonly string[]
     }
   }
-  readonly policies: readonly GlassPolicy[]
 }
 
 export interface BuildGlassPricingInput {
   readonly pricing: OfficialPricingPageContent
   readonly contact: OfficialContactPageContent
-  readonly terms: OfficialLegalPageContent
-  readonly privacy: OfficialLegalPageContent
-  readonly refund: OfficialLegalPageContent
 }
 
 function formatCreditsLabel(creditsAmount: number): string {
   return `${creditsAmount.toLocaleString()} credits`
 }
 
-function buildPolicy(
-  id: GlassPolicy['id'],
-  page: OfficialLegalPageContent,
-): GlassPolicy {
-  return {
-    id,
-    title: page.title,
-    updatedAt: page.updatedAt,
-    sections: page.sections,
-  }
-}
-
 export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPricingContent {
   return {
     brand: input.pricing.brand,
-    eyebrow: input.pricing.eyebrow,
+    title: input.pricing.title,
     subtitle: input.pricing.description,
     plans: input.pricing.plans.map((plan) => ({
       id: plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
@@ -101,10 +77,5 @@ export function buildGlassPricingContent(input: BuildGlassPricingInput): GlassPr
       fields: input.contact.publicInfo.fields,
       portalOnly: input.contact.portalOnly,
     },
-    policies: [
-      buildPolicy('terms', input.terms),
-      buildPolicy('privacy', input.privacy),
-      buildPolicy('refund', input.refund),
-    ],
   }
 }

@@ -109,7 +109,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             : ''
         const actionHandlers: Partial<Record<Exclude<UserErrorAction, null>, () => void>> = {
             open_provider_settings: () => router.push('/profile?section=apiConfig'),
-            recharge: () => router.push('/profile?section=overview&recharge=open'),
+            recharge: () => router.push('/pricing'),
             relogin: () => router.push('/auth/signin'),
             retry: onRetry,
         }

@@ -4,7 +4,6 @@ import { readPublicDeploymentFeatures } from '@/lib/deployment/server-features'
 import {
   normalizeOfficialLocale,
   readOfficialContactPage,
-  readOfficialLegalPage,
   readOfficialPricingPage,
 } from '@/lib/public-site/official-content'
 import { requireOfficialCloudPricingPage } from '@/lib/public-site/visibility'
@@ -24,9 +23,6 @@ export async function PricingGlassPageContent({ params }: PricingGlassPageConten
   const content = buildGlassPricingContent({
     pricing: readOfficialPricingPage(officialLocale),
     contact: readOfficialContactPage(officialLocale),
-    terms: readOfficialLegalPage('terms', officialLocale),
-    privacy: readOfficialLegalPage('privacy', officialLocale),
-    refund: readOfficialLegalPage('refund-policy', officialLocale),
   })
 
   return (
